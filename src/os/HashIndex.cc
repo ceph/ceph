@@ -163,6 +163,16 @@ int HashIndex::_collection_list(vector<hobject_t> *ls) {
   return list(path, NULL, NULL, NULL, NULL, ls);
 }
 
+int HashIndex::_collection_list_partial(const hobject_t &start,
+					int min_count,
+					int max_count,
+					vector<hobject_t> *ls,
+					hobject_t *next) {
+  vector<string> path;
+  *next = start;
+  return list_by_hash(path, min_count, max_count, next, ls);
+}
+
 int HashIndex::start_split(const vector<string> &path) {
   bufferlist bl;
   InProgressOp op_tag(InProgressOp::SPLIT, path);
@@ -371,12 +381,12 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 void HashIndex::get_path_components(const hobject_t &hoid,
 				    vector<string> *path) {
   char buf[MAX_HASH_LEVEL + 1];
-  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, hoid.hash);
+  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, hoid.get_filestore_key());
 
-  // Path components are the hex characters of hoid.hash in, least
+  // Path components are the hex characters of hoid.hash, least
   // significant first
   for (int i = 0; i < MAX_HASH_LEVEL; ++i) {
-    path->push_back(string(&buf[MAX_HASH_LEVEL - 1 - i], 1));
+    path->push_back(string(&buf[i], 1));
   }
 }
 
@@ -394,6 +404,126 @@ string HashIndex::get_path_str(const hobject_t &hoid) {
   return get_hash_str(hoid.hash);
 }
 
+uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
+  while (prefix.size() < sizeof(uint32_t) * 2) {
+    prefix.push_back('0');
+  }
+  uint32_t hash;
+  sscanf(prefix.c_str(), "%x", &hash);
+  // nibble reverse
+  hash = ((hash & 0x0f0f0f0f) << 4) | ((hash & 0xf0f0f0f0) >> 4);
+  hash = ((hash & 0x00ff00ff) << 8) | ((hash & 0xff00ff00) >> 8);
+  hash = ((hash & 0x0000ffff) << 16) | ((hash & 0xffff0000) >> 16);
+  return hash;
+}
+
+int HashIndex::get_path_contents_by_hash(const vector<string> &path,
+					 const string *lower_bound,
+					 const hobject_t *next_object,
+					 const snapid_t *seq,
+					 set<string> *hash_prefixes,
+					 multimap<string, hobject_t> *objects) {
+  set<string> subdirs;
+  map<string, hobject_t> rev_objects;
+  int r;
+  string cur_prefix;
+  for (vector<string>::const_iterator i = path.begin();
+       i != path.end();
+       ++i) {
+    cur_prefix.append(*i);
+  }
+  r = list_objects(path, 0, 0, &rev_objects);
+  if (r < 0)
+    return r;
+  for (map<string, hobject_t>::iterator i = rev_objects.begin();
+       i != rev_objects.end();
+       ++i) {
+    string hash_prefix = get_path_str(i->second);
+    if (lower_bound && hash_prefix < *lower_bound)
+      continue;
+    if (next_object && i->second < *next_object)
+      continue;
+    if (seq && i->second.snap < *seq)
+      continue;
+    hash_prefixes->insert(hash_prefix);
+    objects->insert(pair<string, hobject_t>(hash_prefix, i->second));
+  }
+  r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+  for (set<string>::iterator i = subdirs.begin();
+       i != subdirs.end();
+       ++i) {
+    string candidate = cur_prefix + *i;
+    if (lower_bound && candidate < lower_bound->substr(0, candidate.size()))
+      continue;
+    if (next_object &&
+	candidate < get_path_str(*next_object).substr(0, candidate.size()))
+      continue;
+    hash_prefixes->insert(cur_prefix + *i);
+  }
+  return 0;
+}
+
+int HashIndex::list_by_hash(const vector<string> &path,
+			    int min_count,
+			    int max_count,
+			    hobject_t *next,
+			    vector<hobject_t> *out) {
+  assert(next);
+  assert(out);
+  vector<string> next_path = path;
+  next_path.push_back("");
+  set<string> hash_prefixes;
+  multimap<string, hobject_t> objects;
+  int r = get_path_contents_by_hash(path,
+				    NULL,
+				    next,
+				    NULL,
+				    &hash_prefixes,
+				    &objects);
+  if (r < 0)
+    return r;
+  for (set<string>::iterator i = hash_prefixes.begin();
+       i != hash_prefixes.end();
+       ++i) {
+    multimap<string, hobject_t>::iterator j = objects.find(*i);
+    if (j == objects.end()) {
+      if (out->size() > (unsigned)min_count) {
+	*next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i));
+	return 0;
+      }
+      *(next_path.rbegin()) = *(i->rbegin());
+      hobject_t next_recurse = *next;
+      r = list_by_hash(next_path,
+		       min_count,
+		       max_count,
+		       &next_recurse,
+		       out);
+
+      if (r < 0)
+	return r;
+      if (!next_recurse.max) {
+	*next = next_recurse;
+	return 0;
+      }
+    } else {
+      while (j != objects.end() && j->first == *i) {
+	if (out->size() == (unsigned)max_count) {
+	  *next = j->second;
+	  return 0;
+	}
+	if (j->second >= *next) {
+	  out->push_back(j->second);
+	}
+	++j;
+      }
+    }
+  }
+  *next = hobject_t::get_max();
+  return 0;
+}
+
 int HashIndex::list(const vector<string> &path,
 		    const int *max_count,
 		    const snapid_t *seq,
@@ -404,45 +534,15 @@ int HashIndex::list(const vector<string> &path,
     assert(index);
   vector<string> next_path = path;
   next_path.push_back("");
+  int max = max_count ? *max_count : 0;
   set<string> hash_prefixes;
   multimap<string, hobject_t> objects;
-  map<string, hobject_t> rev_objects;
-  int r;
-  int max = max_count ? *max_count : 0;
-  string cur_prefix;
-  for (vector<string>::const_iterator i = path.begin();
-       i != path.end();
-       ++i) {
-    cur_prefix.append(*i);
-  }
-
-  r = list_objects(path, 0, 0, &rev_objects);
-  if (r < 0)
-    return r;
-  for (map<string, hobject_t>::iterator i = rev_objects.begin();
-       i != rev_objects.end();
-       ++i) {
-    string hash_prefix = get_path_str(i->second);
-    if (lower_bound && hash_prefix < *lower_bound)
-      continue;
-    if (seq && i->second.snap < *seq)
-      continue;
-    hash_prefixes.insert(hash_prefix);
-    objects.insert(pair<string, hobject_t>(hash_prefix, i->second));
-  }
-  set<string> subdirs;
-  r = list_subdirs(path, &subdirs);
-  if (r < 0)
-    return r;
-  for (set<string>::iterator i = subdirs.begin();
-       i != subdirs.end();
-       ++i) {
-    string candidate = cur_prefix + *i;
-    if (lower_bound && candidate < lower_bound->substr(0, candidate.size()))
-      continue;
-    hash_prefixes.insert(cur_prefix + *i);
-  }
-
+  int r = get_path_contents_by_hash(path,
+				    lower_bound,
+				    NULL,
+				    seq,
+				    &hash_prefixes,
+				    &objects);
   uint32_t counter = 0;
   for (set<string>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end() && (!max_count || max > 0);

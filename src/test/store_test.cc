@@ -369,9 +369,26 @@ public:
       if (objects.size() < 50) break;
       objects.clear();
     }
+    hobject_t next, current;
+    set<hobject_t> objects_set2;
+    while (1) {
+      cerr << "scanning (by hash)..." << std::endl;
+      int r = store->collection_list_partial(cid, current, 50, 100, &objects, &next);
+      ASSERT_EQ(r, 0);
+      objects_set2.insert(objects.begin(), objects.end());
+      if (next.max) break;
+      objects.clear();
+      current = next;
+    }
     ASSERT_EQ(objects_set.size(), available_objects.size());
+    ASSERT_EQ(objects_set2.size(), available_objects.size());
     for (set<hobject_t>::iterator i = objects_set.begin();
 	 i != objects_set.end();
+	 ++i) {
+      ASSERT_GT(available_objects.count(*i), (unsigned)0);
+    }
+    for (set<hobject_t>::iterator i = objects_set2.begin();
+	 i != objects_set2.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
     }

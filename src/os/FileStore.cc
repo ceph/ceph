@@ -3740,6 +3740,23 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>
   return 0;
 }
 
+int FileStore::collection_list_partial(coll_t c, hobject_t start,
+				       int min, int max,
+				       vector<hobject_t> *ls, hobject_t *next)
+{
+  if (fake_collections) return -1;
+  Index index;
+  int r = get_index(c, &index);
+  if (r < 0)
+    return r;
+  r = index->collection_list_partial(start,
+				     min, max,
+				     ls, next);
+  if (r < 0)
+    return r;
+  return 0;
+}
+
 int FileStore::collection_list(coll_t c, vector<hobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);

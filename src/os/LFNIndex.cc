@@ -123,6 +123,15 @@ int LFNIndex::collection_list(vector<hobject_t> *ls) {
   return _collection_list(ls);
 }
 
+
+int LFNIndex::collection_list_partial(const hobject_t &start,
+				      int min_count,
+				      int max_count,
+				      vector<hobject_t> *ls,
+				      hobject_t *next) {
+  return _collection_list_partial(start, min_count, max_count, ls, next);
+}
+
 /* Derived class utility methods */
 
 int LFNIndex::fsync_dir(const vector<string> &path) {

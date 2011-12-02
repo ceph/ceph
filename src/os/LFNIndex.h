@@ -140,6 +140,15 @@ public:
     vector<hobject_t> *ls
     );
 
+  /// @see CollectionIndex
+  int collection_list_partial(
+    const hobject_t &start,
+    int min_count,
+    int max_count,
+    vector<hobject_t> *ls,
+    hobject_t *next
+    );
+
 protected:
   virtual int _init() = 0;
 
@@ -185,6 +194,15 @@ protected:
   /// List contents of collection.
   virtual int _collection_list(
     vector<hobject_t> *ls ///< [out] Listed objects.
+    ) = 0;
+
+  /// @see CollectionIndex
+  virtual int _collection_list_partial(
+    const hobject_t &start,
+    int min_count,
+    int max_count,
+    vector<hobject_t> *ls,
+    hobject_t *next
     ) = 0;
 
 protected:

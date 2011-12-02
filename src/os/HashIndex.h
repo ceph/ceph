@@ -167,6 +167,13 @@ protected:
   int _collection_list(
     vector<hobject_t> *ls
     );
+  int _collection_list_partial(
+    const hobject_t &start,
+    int min_count,
+    int max_count,
+    vector<hobject_t> *ls,
+    hobject_t *next
+    );
 private:
   /// Tag root directory at beginning of split
   int start_split(
@@ -246,7 +253,22 @@ private:
     uint32_t hash ///< [in] Hash to convert to a string.
     ); ///< @return String representation of hash
 
-  /** 
+  /// Get hash from hash prefix string e.g. "FFFFAB" -> 0xFFFFAB00
+  uint32_t hash_prefix_to_hash(
+    string prefix ///< [in] string to convert
+    ); ///< @return Hash
+
+  /// Get path contents by hash
+  int get_path_contents_by_hash(
+    const vector<string> &path,          /// [in] Path to list
+    const string *lower_bound,           /// [in] list > *lower_bound
+    const hobject_t *next_object,        /// [in] list > *next_object
+    const snapid_t *seq,                 /// [in] list >= *seq
+    set<string> *hash_prefixes,          /// [out] prefixes in dir
+    multimap<string, hobject_t> *objects /// [out] objects
+    );
+
+  /**
    * Recursively lists all objects in path.
    *
    * Lists all objects in path or a subdirectory of path which
@@ -266,6 +288,15 @@ private:
     const string *lower_bound,	///< [in] Last hash listed (NULL if not needed)
     uint32_t *index,		///< [in,out] last index (NULL iff !lower_bound)
     vector<hobject_t> *out	///< [out] Listed objects
+    ); ///< @return Error Code, 0 on success
+
+  /// List objects in collection in hobject_t order
+  int list_by_hash(
+    const vector<string> &path, /// [in] Path to list
+    int min_count,              /// [in] List at least min_count
+    int max_count,              /// [in] List at most max_count
+    hobject_t *next,            /// [in,out] List objects >= *next
+    vector<hobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
 };
 

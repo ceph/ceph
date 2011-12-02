@@ -142,6 +142,15 @@ protected:
     collection_list_handle_t *last
     ) = 0;
 
+  /// List contents of collection by hash
+  virtual int collection_list_partial(
+    const hobject_t &start, ///< [in] object at which to start
+    int min_count,          ///< [in] get at least min_count objects
+    int max_count,          ///< [in] return at most max_count objects
+    vector<hobject_t> *ls,  ///< [out] Listed objects
+    hobject_t *next         ///< [out] Next object to list
+    ) = 0;
+
   /// List contents of collection.
   virtual int collection_list(
     vector<hobject_t> *ls ///< [out] Listed Objects
