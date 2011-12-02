@@ -65,14 +65,6 @@ public:
     );
 
   /// @see CollectionIndex
-  int collection_list_partial(
-    snapid_t seq,
-    int max_count,
-    vector<hobject_t> *ls, 
-    collection_list_handle_t *last
-    );
-
-  /// @see CollectionIndex
   int collection_list(
     vector<hobject_t> *ls
     );
@@ -82,6 +74,7 @@ public:
     const hobject_t &start,
     int min_count,
     int max_count,
+    snapid_t seq,
     vector<hobject_t> *ls,
     hobject_t *next
     );

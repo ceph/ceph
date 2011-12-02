@@ -128,14 +128,6 @@ public:
     );
 
   /// @see CollectionIndex
-  int collection_list_partial(
-    snapid_t seq,
-    int max_count,
-    vector<hobject_t> *ls, 
-    collection_list_handle_t *last
-    );
-
-  /// @see CollectionIndex
   int collection_list(
     vector<hobject_t> *ls
     );
@@ -145,6 +137,7 @@ public:
     const hobject_t &start,
     int min_count,
     int max_count,
+    snapid_t seq,
     vector<hobject_t> *ls,
     hobject_t *next
     );
@@ -184,13 +177,6 @@ protected:
    * cookie location will cause the next max_count to be listed.
    * @return Error code.  0 on success.
    */
-  virtual int _collection_list_partial(
-    snapid_t seq,
-    int max_count,
-    vector<hobject_t> *ls,
-    collection_list_handle_t *last
-    ) = 0;
-				       
   /// List contents of collection.
   virtual int _collection_list(
     vector<hobject_t> *ls ///< [out] Listed objects.
@@ -201,6 +187,7 @@ protected:
     const hobject_t &start,
     int min_count,
     int max_count,
+    snapid_t seq,
     vector<hobject_t> *ls,
     hobject_t *next
     ) = 0;

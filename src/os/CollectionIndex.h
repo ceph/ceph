@@ -125,28 +125,12 @@ protected:
     int *exist	           ///< [out] True if the object exists, else false
     ) = 0;
 
-  /**
-   * List contents of the collection
-   *
-   * @param [in] seq Snapid to list.
-   * @param [in] max_count Max number to list (0 for no limit).
-   * @param [out] ls Container for listed objects.
-   * @param [in,out] last List handle.  0 for beginning.  Passing the same
-   * cookie location will cause the next max_count to be listed.
-   * @return Error code.  0 on success.
-   */
-  virtual int collection_list_partial(
-    snapid_t seq,
-    int max_count,
-    vector<hobject_t> *ls, 
-    collection_list_handle_t *last
-    ) = 0;
-
   /// List contents of collection by hash
   virtual int collection_list_partial(
     const hobject_t &start, ///< [in] object at which to start
     int min_count,          ///< [in] get at least min_count objects
     int max_count,          ///< [in] return at most max_count objects
+    snapid_t seq,           ///< [in] list only objects with snap >= seq
     vector<hobject_t> *ls,  ///< [out] Listed objects
     hobject_t *next         ///< [out] Next object to list
     ) = 0;

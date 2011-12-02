@@ -113,12 +113,6 @@ int LFNIndex::lookup(const hobject_t &hoid,
   return 0;
 }
 
-int LFNIndex::collection_list_partial(snapid_t seq, int max_count,
-				      vector<hobject_t> *ls, 
-				      collection_list_handle_t *last) {
-  return _collection_list_partial(seq, max_count, ls, last);
-}
-
 int LFNIndex::collection_list(vector<hobject_t> *ls) {
   return _collection_list(ls);
 }
@@ -127,9 +121,10 @@ int LFNIndex::collection_list(vector<hobject_t> *ls) {
 int LFNIndex::collection_list_partial(const hobject_t &start,
 				      int min_count,
 				      int max_count,
+				      snapid_t seq,
 				      vector<hobject_t> *ls,
 				      hobject_t *next) {
-  return _collection_list_partial(start, min_count, max_count, ls, next);
+  return _collection_list_partial(start, min_count, max_count, seq, ls, next);
 }
 
 /* Derived class utility methods */

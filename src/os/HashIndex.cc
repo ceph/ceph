@@ -125,56 +125,21 @@ int HashIndex::_lookup(const hobject_t &hoid,
   return get_mangled_name(*path, hoid, mangled_name, exists_out);
 }
 
-static void split_handle(collection_list_handle_t handle, 
-			 uint32_t *hash, uint32_t *index) {
-  *hash = handle.hash;
-  *index = handle.index;
-}
-
-static collection_list_handle_t form_handle(uint32_t hash, uint32_t index) {
-  collection_list_handle_t handle;
-  handle.hash = hash;
-  handle.index = index;
-  return handle;
-}
-
-int HashIndex::_collection_list_partial(snapid_t seq, int max_count,
-					vector<hobject_t> *ls, 
-					collection_list_handle_t *last) {
-  vector<string> path;
-  uint32_t index, hash;
-  string lower_bound;
-  if (last) {
-    split_handle(*last, &hash, &index);
-    lower_bound = get_hash_str(hash);
-  }
-  int r = list(path, 
-	       max_count ? &max_count : NULL, 
-	       &seq,
-	       last ? &lower_bound : NULL,
-	       last ? &index : NULL, 
-	       ls);
-  if (r < 0)
-    return r;
-  if (last && ls->size())
-    *last = form_handle(ls->rbegin()->hash, index);
-  return 0;
-}
-
 int HashIndex::_collection_list(vector<hobject_t> *ls) {
   vector<string> path;
-  return list(path, NULL, NULL, NULL, NULL, ls);
+  return list_by_hash(path, 0, 0, 0, 0, ls);
 }
 
 int HashIndex::_collection_list_partial(const hobject_t &start,
 					int min_count,
 					int max_count,
+					snapid_t seq,
 					vector<hobject_t> *ls,
 					hobject_t *next) {
   vector<string> path;
   *next = start;
   dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
-  return list_by_hash(path, min_count, max_count, next, ls);
+  return list_by_hash(path, min_count, max_count, seq, next, ls);
 }
 
 int HashIndex::start_split(const vector<string> &path) {
@@ -472,9 +437,9 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 int HashIndex::list_by_hash(const vector<string> &path,
 			    int min_count,
 			    int max_count,
+			    snapid_t seq,
 			    hobject_t *next,
 			    vector<hobject_t> *out) {
-  assert(next);
   assert(out);
   vector<string> next_path = path;
   next_path.push_back("");
@@ -483,7 +448,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
   int r = get_path_contents_by_hash(path,
 				    NULL,
 				    next,
-				    NULL,
+				    &seq,
 				    &hash_prefixes,
 				    &objects);
   if (r < 0)
@@ -494,88 +459,44 @@ int HashIndex::list_by_hash(const vector<string> &path,
        ++i) {
     multimap<string, hobject_t>::iterator j = objects.find(*i);
     if (j == objects.end()) {
-      if (out->size() > (unsigned)min_count) {
-	*next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i));
+      if (min_count > 0 && out->size() > (unsigned)min_count) {
+	if (next)
+	  *next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i));
 	return 0;
       }
       *(next_path.rbegin()) = *(i->rbegin());
-      hobject_t next_recurse = *next;
+      hobject_t next_recurse;
+      if (next)
+	next_recurse = *next;
       r = list_by_hash(next_path,
 		       min_count,
 		       max_count,
+		       seq,
 		       &next_recurse,
 		       out);
 
       if (r < 0)
 	return r;
       if (!next_recurse.max) {
-	*next = next_recurse;
+	if (next)
+	  *next = next_recurse;
 	return 0;
       }
     } else {
       while (j != objects.end() && j->first == *i) {
-	if (out->size() == (unsigned)max_count) {
-	  *next = j->second;
+	if (max_count > 0 && out->size() == (unsigned)max_count) {
+	  if (next)
+	    *next = j->second;
 	  return 0;
 	}
-	if (j->second >= *next) {
+	if (!next || j->second >= *next) {
 	  out->push_back(j->second);
 	}
 	++j;
       }
     }
   }
-  *next = hobject_t::get_max();
-  return 0;
-}
-
-int HashIndex::list(const vector<string> &path,
-		    const int *max_count,
-		    const snapid_t *seq,
-		    const string *lower_bound,
-		    uint32_t *index,
-		    vector<hobject_t> *out) {
-  if (lower_bound)
-    assert(index);
-  vector<string> next_path = path;
-  next_path.push_back("");
-  int max = max_count ? *max_count : 0;
-  set<string> hash_prefixes;
-  multimap<string, hobject_t> objects;
-  int r = get_path_contents_by_hash(path,
-				    lower_bound,
-				    NULL,
-				    seq,
-				    &hash_prefixes,
-				    &objects);
-  uint32_t counter = 0;
-  for (set<string>::iterator i = hash_prefixes.begin();
-       i != hash_prefixes.end() && (!max_count || max > 0);
-       ++i) {
-    multimap<string, hobject_t>::iterator j = objects.find(*i);
-    if (j != objects.end()) {
-      counter = 0;
-      for (; (!max_count || max > 0) && j != objects.end() && j->first == *i; ++j, ++counter) {
-	if (lower_bound && *lower_bound == *i && counter < *index)
-	  continue;
-	out->push_back(j->second);
-	if (max_count)
-	  max--;
-      }
-      if (index)
-	*index = counter;
-      continue;
-    } 
-
-    // subdir
-    *(next_path.rbegin()) = *(i->rbegin());
-    int old_size = out->size();
-    assert(next_path.size() > path.size());
-    r = list(next_path, max_count ? &max : NULL, seq, lower_bound, index, out);
-    if (r < 0)
-      return r;
-    if (max_count)
-      max -= out->size() - old_size;
-  }
+  if (next)
+    *next = hobject_t::get_max();
   return 0;
 }

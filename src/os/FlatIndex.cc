@@ -376,16 +376,10 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   return 0;
 }
 
-int FlatIndex::collection_list_partial(snapid_t seq, int max_count,
-				       vector<hobject_t> *ls, 
-				       collection_list_handle_t *handle) {
-  assert(0); // Should not be called
-  return 0;
-}
-
 int FlatIndex::collection_list_partial(const hobject_t &start,
 				       int min_count,
 				       int max_count,
+				       snapid_t seq,
 				       vector<hobject_t> *ls,
 				       hobject_t *next) {
   assert(0); // Should not be called

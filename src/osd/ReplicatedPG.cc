@@ -295,9 +295,11 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	  // it's a filestore cookie
 	  dout(10) << " handle high/missing " << response.handle << dendl;
 	  osr.flush();  // order wrt preceeding writes
+	  /*
 	  result = osd->store->collection_list_partial(coll, snapid,
 						       sentries, p->op.pgls.count - sentries.size(),
 						       &response.handle);
+						       */
 	  response.handle.in_missing_set = false;
 	}
 

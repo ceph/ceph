@@ -189,18 +189,22 @@ TEST_F(StoreTest, ManyObjectTest) {
 
   objects.clear();
   listed.clear();
-  collection_list_handle_t handle;
+  hobject_t start, next;
   while (1) {
-    r = store->collection_list_partial(cid, CEPH_NOSNAP, objects, 50, &handle);
+    r = store->collection_list_partial(cid, start,
+				       50,
+				       60,
+				       CEPH_NOSNAP,
+				       &objects,
+				       &next);
     ASSERT_EQ(r, 0);
-    for (vector<hobject_t>::iterator i = objects.begin();
-	 i != objects.end();
-	 ++i) {
-      listed.insert(*i);
-    }
-    if (objects.size() < 50)
+    listed.insert(objects.begin(), objects.end());
+    if (objects.size() < 50) {
+      ASSERT_TRUE(next.max);
       break;
+    }
     objects.clear();
+    start = next;
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
@@ -359,34 +363,29 @@ public:
     while (in_flight)
       cond.Wait(lock);
     vector<hobject_t> objects;
-    set<hobject_t> objects_set;
-    collection_list_handle_t handle;
+    set<hobject_t> objects_set, objects_set2;
+    hobject_t next, current;
     while (1) {
       cerr << "scanning..." << std::endl;
-      int r = store->collection_list_partial(cid, CEPH_NOSNAP, objects, 50, &handle);
+      int r = store->collection_list_partial(cid, current, 50, 100, 
+					     CEPH_NOSNAP, &objects, &next);
       ASSERT_EQ(r, 0);
       objects_set.insert(objects.begin(), objects.end());
-      if (objects.size() < 50) break;
       objects.clear();
-    }
-    hobject_t next, current;
-    set<hobject_t> objects_set2;
-    while (1) {
-      cerr << "scanning (by hash)..." << std::endl;
-      int r = store->collection_list_partial(cid, current, 50, 100, &objects, &next);
-      ASSERT_EQ(r, 0);
-      objects_set2.insert(objects.begin(), objects.end());
       if (next.max) break;
-      objects.clear();
       current = next;
     }
     ASSERT_EQ(objects_set.size(), available_objects.size());
-    ASSERT_EQ(objects_set2.size(), available_objects.size());
     for (set<hobject_t>::iterator i = objects_set.begin();
 	 i != objects_set.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
     }
+
+    int r = store->collection_list(cid, objects);
+    ASSERT_EQ(r, 0);
+    objects_set2.insert(objects.begin(), objects.end());
+    ASSERT_EQ(objects_set2.size(), available_objects.size());
     for (set<hobject_t>::iterator i = objects_set2.begin();
 	 i != objects_set2.end();
 	 ++i) {
@@ -503,9 +502,10 @@ TEST_F(StoreTest, HashCollisionTest) {
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
   listed.clear();
-  collection_list_handle_t handle;
+  hobject_t current, next;
   while (1) {
-    r = store->collection_list_partial(cid, CEPH_NOSNAP, objects, 50, &handle);
+    r = store->collection_list_partial(cid, current, 50, 60,
+				       CEPH_NOSNAP, &objects, &next);
     ASSERT_EQ(r, 0);
     for (vector<hobject_t>::iterator i = objects.begin();
 	 i != objects.end();
@@ -514,9 +514,12 @@ TEST_F(StoreTest, HashCollisionTest) {
 	cerr << *i << " repeated" << std::endl;
       listed.insert(*i);
     }
-    if (objects.size() < 50)
+    if (objects.size() < 50) {
+      ASSERT_TRUE(next.max);
       break;
+    }
     objects.clear();
+    current = next;
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());

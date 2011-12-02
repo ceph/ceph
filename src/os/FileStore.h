@@ -352,10 +352,9 @@ public:
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
-  int collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>& o, int count, collection_list_handle_t *handle);
   int collection_list(coll_t c, vector<hobject_t>& o);
   int collection_list_partial(coll_t c, hobject_t start,
-			      int min, int max,
+			      int min, int max, snapid_t snap,
 			      vector<hobject_t> *ls, hobject_t *next);
 
   int _create_collection(coll_t c);
