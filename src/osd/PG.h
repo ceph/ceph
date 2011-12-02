@@ -1158,6 +1158,10 @@ public:
     struct NeedNewMap : boost::statechart::event< NeedNewMap > {
       NeedNewMap() : boost::statechart::event< NeedNewMap >() {}
     };
+    struct Incomplete;
+    struct IsIncomplete : boost::statechart::event< IsIncomplete > {
+      IsIncomplete() : boost::statechart::event< IsIncomplete >() {}
+    };
 
     struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
       Primary(my_context ctx);
@@ -1167,7 +1171,8 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::transition< NeedNewMap, WaitActingChange >
+	boost::statechart::transition< NeedNewMap, WaitActingChange >,
+	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
@@ -1181,6 +1186,12 @@ public:
 	> reactions;
       WaitActingChange(my_context ctx);
       boost::statechart::result react(const MLogRec&);
+      void exit();
+    };
+
+    struct Incomplete : boost::statechart::state< Incomplete, Primary>,
+			NamedState {
+      Incomplete(my_context ctx);
       void exit();
     };
     

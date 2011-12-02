@@ -4485,8 +4485,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
   // am i broken?
   if (pg->info.last_update < best.log_tail) {
     dout(10) << " not contiguous with osd." << newest_update_osd << ", down" << dendl;
-    /*post_event(...something...); */
-#warning fixme need an event here?
+    post_event(IsIncomplete());
     return;
   }
 
@@ -4564,6 +4563,16 @@ PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt) {
 }
 
 void PG::RecoveryState::WaitActingChange::exit() {
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+/*------Incomplete--------*/
+PG::RecoveryState::Incomplete::Incomplete(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Peering/Incomplete";
+  context< RecoveryMachine >().log_enter(state_name);
+}
+void PG::RecoveryState::Incomplete::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
