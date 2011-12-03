@@ -68,7 +68,7 @@ std::string PG::gen_prefix() const
   return out.str();
 }
   
-/******* PGLog ********/
+/******* PG::Log ********/
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 
 {
@@ -110,6 +110,9 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
     tail = s;
 }
 
+
+/********* PG **********/
+
 void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_master_log for osd." << from << ": " << olog << " " << omissing << dendl;
@@ -128,9 +131,11 @@ void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Mi
   peer_missing[from].swap(omissing);
 }
     
-void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
+void PG::proc_replica_log(ObjectStore::Transaction& t,
+			  Info &oinfo, Log &olog, Missing& omissing, int from)
 {
-  dout(10) << "proc_replica_log for osd." << from << ": " << oinfo << " " << olog << " " << omissing << dendl;
+  dout(10) << "proc_replica_log for osd." << from << ": "
+	   << oinfo << " " << olog << " " << omissing << dendl;
 
   /*
     basically what we're doing here is rewinding the remote log,
@@ -145,7 +150,8 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
-    dout(20) << " before missing " << i->first << " need " << i->second.need << " have " << i->second.have << dendl;
+    dout(20) << " before missing " << i->first << " need " << i->second.need
+	     << " have " << i->second.have << dendl;
   }
 
   list<Log::Entry>::const_reverse_iterator pp = olog.log.rbegin();
@@ -217,7 +223,8 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
-    dout(20) << " after missing " << i->first << " need " << i->second.need << " have " << i->second.have << dendl;
+    dout(20) << " after missing " << i->first << " need " << i->second.need
+	     << " have " << i->second.have << dendl;
   }
   peer_missing[from].swap(omissing);
 }
