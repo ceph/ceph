@@ -110,31 +110,6 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
     tail = s;
 }
 
-
-void PG::IndexedLog::trim_write_ahead(eversion_t last_update) 
-{
-  while (!log.empty() &&
-         log.rbegin()->version > last_update) {
-    // remove from index
-    unindex(*log.rbegin());
-    
-    // remove
-    log.pop_back();
-  }
-}
-
-void PG::trim_write_ahead()
-{
-  if (info.last_update < log.head) {
-    dout(10) << "trim_write_ahead (" << info.last_update << "," << log.head << "]" << dendl;
-    log.trim_write_ahead(info.last_update);
-  } else {
-    assert(info.last_update == log.head);
-    dout(10) << "trim_write_ahead last_update=head=" << info.last_update << dendl;
-  }
-
-}
-
 void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_master_log for osd." << from << ": " << olog << " " << omissing << dendl;

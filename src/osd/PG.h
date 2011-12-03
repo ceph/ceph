@@ -632,8 +632,6 @@ public:
     }
 
     void trim(ObjectStore::Transaction &t, eversion_t s);
-    void trim_write_ahead(eversion_t last_update);
-
 
     ostream& print(ostream& out) const;
   };
