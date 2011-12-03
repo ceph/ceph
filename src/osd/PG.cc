@@ -3431,7 +3431,7 @@ void PG::Missing::add_next_event(const Log::Entry& e)
       missing[e.soid].need = e.version;  // leave .have unchanged.
     } else if (e.is_backlog()) {
       // May not have prior version
-      missing[e.soid].need = e.version;
+      assert(0 == "these don't exist anymore");
     } else {
       // not missing, we must have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
@@ -4474,7 +4474,7 @@ void PG::RecoveryState::handle_backfill_complete(RecoveryCtx *rctx)
 
 void PG::RecoveryState::handle_loaded(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_backlog_loaded" << dendl;
+  dout(10) << "handle_loaded" << dendl;
   start_handle(rctx);
   machine.process_event(Load());
   end_handle();

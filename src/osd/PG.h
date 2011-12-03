@@ -361,7 +361,7 @@ public:
 	MODIFY = 1,
 	CLONE = 2,
 	DELETE = 3,
-	BACKLOG = 4,  // event invented by generate_backlog
+	BACKLOG = 4,  // event invented by generate_backlog [deprecated]
 	LOST_REVERT = 5, // lost new version, revert to an older version.
 	LOST_DELETE = 6, // lost new version, revert to no object (deleted).
 	LOST_MARK = 7,   // lost new version, now EIO
