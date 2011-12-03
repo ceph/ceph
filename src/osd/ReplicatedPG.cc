@@ -5477,65 +5477,21 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
   assert(info.last_update >= log.tail);  // otherwise we need some help!
 
-  if (log.backlog) {
+  // just scan the log.
+  set<hobject_t> did;
+  for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
+       p != log.log.rend();
+       p++) {
+    if (did.count(p->soid))
+      continue;
+    did.insert(p->soid);
 
-    // be thorough.
-    vector<hobject_t> ls;
-    osd->store->collection_list(coll, ls);
-
-    set<hobject_t> s;   
-    for (vector<hobject_t>::iterator i = ls.begin();
-         i != ls.end();
-         i++)
-      if (i->snap == CEPH_NOSNAP)
-	s.insert(*i);
-
-    dout(10) << " " << s.size() << " local objects" << dendl;
-
-    set<hobject_t> did;
-    for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
-         p != log.log.rend();
-         p++) {
-      if (did.count(p->soid)) continue;
-      did.insert(p->soid);
-      
-      if (p->is_delete()) {
-        if (s.count(p->soid)) {
-          dout(10) << " deleting " << p->soid
-                   << " when " << p->version << dendl;
-	  remove_object_with_snap_hardlinks(t, p->soid);
-        }
-        s.erase(p->soid);
-      } else {
-        // just leave old objects.. they're missing or whatever
-        s.erase(p->soid);
-      }
-    }
-
-    for (set<hobject_t>::iterator i = s.begin(); 
-         i != s.end();
-         i++) {
-      dout(10) << " deleting stray " << *i << dendl;
-      remove_object_with_snap_hardlinks(t, *i);
-    }
-
-  } else {
-    // just scan the log.
-    set<hobject_t> did;
-    for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
-         p != log.log.rend();
-         p++) {
-      if (did.count(p->soid))
-	continue;
-      did.insert(p->soid);
-
-      if (p->is_delete()) {
-        dout(10) << " deleting " << p->soid
-                 << " when " << p->version << dendl;
-	remove_object_with_snap_hardlinks(t, p->soid);
-      } else {
-        // keep old(+missing) objects, just for kicks.
-      }
+    if (p->is_delete()) {
+      dout(10) << " deleting " << p->soid
+	       << " when " << p->version << dendl;
+      remove_object_with_snap_hardlinks(t, p->soid);
+    } else {
+      // keep old(+missing) objects, just for kicks.
     }
   }
 }
