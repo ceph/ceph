@@ -528,7 +528,6 @@ public:
     }
 
     void copy_after(const Log &other, eversion_t v);
-    bool copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor);
     ostream& print(ostream& out) const;
   };
   WRITE_CLASS_ENCODER(Log)

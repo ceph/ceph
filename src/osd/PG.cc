@@ -88,47 +88,6 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
   }
 }
 
-bool PG::Log::copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor) 
-{
-  assert(split >= other.tail);
-  assert(floor >= other.tail);
-  assert(floor <= split);
-  head = tail = other.head;
-  
-  /* runs on replica.  split is primary's log.head.  floor is how much they want.
-     split tell us if the primary is divergent.. e.g.:
-     -> i am A, B is primary, split is 2'6, floor is 2'2.
-A     B     C
-2'2         2'2
-2'3   2'3   2'3
-2'4   2'4   2'4
-3'5 | 2'5   2'5
-3'6 | 2'6
-3'7 |
-3'8 |
-3'9 |
-      -> i need to backfill.
-  */
-
-  for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
-       i != other.log.rend();
-       i++) {
-    // is primary divergent? 
-    // e.g. my 3'6 vs their 2'6 split
-    if (i->version.version == split.version && i->version.epoch > split.epoch) {
-      clear();
-      return false;   // divergent!
-    }
-    if (i->version == floor) break;
-    assert(i->version > floor);
-
-    // e.g. my 2'23 > '12
-    log.push_front(*i);
-  }
-  tail = floor;
-  return true;
-}
-
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
 {
   if (complete_to != log.end() &&
