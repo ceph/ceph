@@ -1478,12 +1478,6 @@ public:
 
   void calc_acting(int& newest_update_osd, vector<int>& want, set<int>& backfill) const;
   bool choose_acting(int& newest_update_osd, set<int>& backfill);
-  bool choose_log_location(const PriorSet &prior_set,
-			   bool &need_backlog,
-			   bool &wait_on_backlog,
-			   int &pull_from,
-			   eversion_t &newest_update,
-			   eversion_t &oldest_update) const;
   void build_might_have_unfound();
   void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
