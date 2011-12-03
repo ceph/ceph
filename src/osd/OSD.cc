@@ -4127,7 +4127,6 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     child->info.last_update = child->log.head;
     child->info.last_complete = parent->info.last_complete;
     child->info.log_tail =  parent->log.tail;
-    child->info.log_backlog = parent->log.backlog;
     child->info.history.last_epoch_split = osdmap->get_epoch();
 
     child->snap_trimq = parent->snap_trimq;

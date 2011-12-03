@@ -107,7 +107,7 @@ A     B     C
 3'7 |
 3'8 |
 3'9 |
-      -> i return full backlog.
+      -> i need to backfill.
   */
 
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
@@ -419,7 +419,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
 		   olog.log, from, to);
       
     info.log_tail = log.tail = olog.tail;
-    info.log_backlog = log.backlog = olog.backlog;
     changed = true;
   }
     
@@ -1680,7 +1679,6 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_tail = log.tail;
-    info.log_backlog = log.backlog;
     trim_ondisklog(t);
   }
 }
@@ -2084,8 +2082,6 @@ void PG::read_state(ObjectStore *store)
 
     // reset info
     info.log_tail = info.last_update;
-    info.log_backlog = false;
-    log.backlog = false;
 
     // Move the corrupt log to a new place and create a new zero-length log entry.
     ObjectStore::Transaction t;
@@ -3974,7 +3970,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
   pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
 		msg->info, msg->log, logevt.from);
 
-  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
   return discard_event();
@@ -4023,7 +4019,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
 		msg->info, msg->log, logevt.from);
 
-  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
   post_event(Activate());
@@ -4036,7 +4032,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   dout(10) << "got info from osd." << infoevt.from << dendl;
 
   if (pg->is_replica()) {
-    assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+    assert(pg->log.tail <= pg->info.last_complete);
     assert(pg->log.head == pg->info.last_update);
     post_event(Activate());
   } else {

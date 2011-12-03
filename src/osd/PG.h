@@ -174,7 +174,6 @@ public:
     eversion_t last_complete;  // last version pg was complete through.
 
     eversion_t log_tail;     // oldest log entry.
-    bool       log_backlog;    // do we store a complete log?
 
     interval_set<uint64_t> incomplete;  // incomplete hash ranges prior to last_complete
 
@@ -249,8 +248,8 @@ public:
       }
     } history;
     
-    Info() : log_backlog(false) {}
-    Info(pg_t p) : pgid(p), log_backlog(false) { }
+    Info() {}
+    Info(pg_t p) : pgid(p) { }
 
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return history.epoch_created == 0; }
@@ -258,14 +257,13 @@ public:
     bool is_incomplete() const { return !incomplete.empty(); }
 
     void encode(bufferlist &bl) const {
-      __u8 v = 24;
+      __u8 v = 25;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
       ::encode(last_update, bl);
       ::encode(last_complete, bl);
       ::encode(log_tail, bl);
-      ::encode(log_backlog, bl);
       ::encode(incomplete, bl);
       ::encode(stats, bl);
       history.encode(bl);
@@ -285,7 +283,10 @@ public:
       ::decode(last_update, bl);
       ::decode(last_complete, bl);
       ::decode(log_tail, bl);
-      ::decode(log_backlog, bl);
+      if (v < 25) {
+	bool log_backlog;
+	::decode(log_backlog, bl);
+      }
       if (v >= 24)
 	::decode(incomplete, bl);
       ::decode(stats, bl);
@@ -1776,8 +1777,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
     out << " v " << pgi.last_update;
     if (pgi.last_complete != pgi.last_update)
       out << " lc " << pgi.last_complete;
-    out << " (" << pgi.log_tail << "," << pgi.last_update << "]"
-        << (pgi.log_backlog ? "+backlog":"");
+    out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
     if (!pgi.incomplete.empty())
       out << " incomp " << std::hex << pgi.incomplete << std::dec;
   }
