@@ -502,7 +502,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
-#define PG_STATE_SCANNING     (1<<14) // scanning content to generate backlog
+//#define PG_STATE_SCANNING     (1<<14) // scanning content to generate backlog
 
 std::string pg_state_string(int state);
 
