@@ -1789,7 +1789,6 @@ void PG::read_log(ObjectStore *store)
 
   dout(10) << "read_log " << ondisklog.tail << "~" << ondisklog.length() << dendl;
 
-  log.backlog = false;
   log.tail = info.log_tail;
 
   // In case of sobject_t based encoding, may need to list objects in the store
@@ -2117,26 +2116,21 @@ void PG::log_weirdness()
     // shoudl it be?
     if (log.head != log.tail)
       osd->clog.error() << info.pgid
-			<< " log bound mismatch, empty but (" << log.tail 
-			<< "," << log.head << "]" << (log.backlog ? "+backlog":"")
-			<< "\n";
+			<< " log bound mismatch, empty but (" << log.tail << "," << log.head << "]\n";
   } else {
-    if ((log.log.begin()->version <= log.tail && !log.backlog) || // sloppy check
-	(log.log.rbegin()->version != log.head && !(log.head == log.tail && log.backlog)))
+    if ((log.log.begin()->version <= log.tail) || // sloppy check
+	(log.log.rbegin()->version != log.head && !(log.head == log.tail)))
       osd->clog.error() << info.pgid
-			<< " log bound mismatch, info (" << log.tail 
-			<< "," << log.head << "]" << (log.backlog ? "+backlog":"")
+			<< " log bound mismatch, info (" << log.tail << "," << log.head << "]"
 			<< " actual ["
-			<< log.log.begin()->version << ","
-			<< log.log.rbegin()->version << "]"
+			<< log.log.begin()->version << "," << log.log.rbegin()->version << "]"
 			<< "\n";
   }
   
-  if (info.last_complete < log.tail && !log.backlog)
+  if (info.last_complete < log.tail)
     osd->clog.error() << info.pgid
 		      << " last_complete " << info.last_complete
 		      << " < log.tail " << log.tail
-		      << " and !backlog"
 		      << "\n";
 }
 
@@ -3520,8 +3514,8 @@ ostream& operator<<(ostream& out, const PG& pg)
       out << " (log bound mismatch, empty)";
     }
   } else {
-    if ((pg.log.log.begin()->version <= pg.log.tail && !pg.log.backlog) || // sloppy check
-        (pg.log.log.rbegin()->version != pg.log.head && !(pg.log.head == pg.log.tail && pg.log.backlog))) {
+    if ((pg.log.log.begin()->version <= pg.log.tail) || // sloppy check
+        (pg.log.log.rbegin()->version != pg.log.head && !(pg.log.head == pg.log.tail))) {
       out << " (log bound mismatch, actual=["
 	  << pg.log.log.begin()->version << ","
 	  << pg.log.log.rbegin()->version << "]";

@@ -351,12 +351,7 @@ public:
   
   /*
    * Log - incremental log of recent pg changes.
-   *  also, serves as a recovery queue.
-   *
-   * when backlog is true, 
-   *  objects with versions <= bottom are in log.
-   *  we do not have any deletion info before that time, however.
-   *  log is a "summary" in that it contains all objects in the PG.
+   *  serves as a recovery queue for recent changes.
    */
   struct Log {
     /** Entry
@@ -477,21 +472,13 @@ public:
     eversion_t head;    // newest entry
     eversion_t tail;    // version prior to oldest
 
-    /*
-     * backlog - true if log is a complete summary of pg contents.
-     * updated will include all items in pg, but deleted will not
-     * include negative entries for items deleted prior to 'tail'.
-     */
-    bool backlog;
-    
     list<Entry> log;  // the actual log.
 
-    Log() : backlog(false) {}
+    Log() {}
 
     void clear() {
       eversion_t z;
       head = tail = z;
-      backlog = false;
       log.clear();
     }
 
@@ -522,11 +509,10 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(head, bl);
       ::encode(tail, bl);
-      ::encode(backlog, bl);
       ::encode(log, bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -534,7 +520,10 @@ public:
       ::decode(struct_v, bl);
       ::decode(head, bl);
       ::decode(tail, bl);
-      ::decode(backlog, bl);
+      if (struct_v < 2) {
+	bool backlog;
+	::decode(backlog, bl);
+      }
       ::decode(log, bl);
     }
 
@@ -1806,7 +1795,6 @@ inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
 {
   out << "log(" << log.tail << "," << log.head << "]";
-  if (log.backlog) out << "+backlog";
   return out;
 }
 

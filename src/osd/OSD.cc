@@ -4121,7 +4121,6 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     if (!child->log.empty()) {
       child->log.head = child->log.log.rbegin()->version;
       child->log.tail =  parent->log.tail;
-      child->log.backlog = parent->log.backlog;
       child->log.index();
     }
     child->info.last_update = child->log.head;
