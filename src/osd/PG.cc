@@ -77,10 +77,7 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
-    // stop if we reach the tail; do not copy backlog entries and keep
-    // tail == other.tail.
-    if (i->version <= other.tail)
-      break;
+    assert(i->version > other.tail);
     if (i->version <= v) {
       // make tail accurate.
       tail = i->version;
@@ -134,9 +131,6 @@ A     B     C
 
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
 {
-  if (backlog && s < tail)
-    s = tail;
-
   if (complete_to != log.end() &&
       complete_to->version <= s) {
     generic_dout(0) << " bad trim to " << s << " when complete_to is " << complete_to->version
@@ -153,8 +147,6 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   }
 
   // raise tail?
-  if (backlog)
-    backlog = false;
   if (tail < s)
     tail = s;
 }
