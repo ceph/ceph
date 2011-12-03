@@ -284,86 +284,79 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         PGLSResponse response;
 	::decode(response.handle, bp);
 
-	// reset cookie?
-	if (p->op.pgls.start_epoch &&
-	    p->op.pgls.start_epoch < info.history.same_primary_since) {
-	  dout(10) << " pgls sequence started epoch " << p->op.pgls.start_epoch
-		   << " < same_primary_since " << info.history.same_primary_since
-		   << ", resetting cookie" << dendl;
-	  response.handle = collection_list_handle_t();
+	hobject_t next;
+	hobject_t current = response.handle;
+	osr.flush();
+	int r = osd->store->collection_list_partial(coll, current,
+						    p->op.pgls.count,
+						    p->op.pgls.count,
+						    snapid,
+						    &sentries,
+						    &next);
+	if (r != 0) {
+	  result = -EINVAL;
+	  break;
 	}
 
-	if (response.handle.in_missing_set) {
-	  // it's an offset into the missing set
-	  version_t v = response.handle.index;
-	  dout(10) << " handle low/missing " << v << dendl;
-	  map<version_t, hobject_t>::iterator mp = missing.rmissing.lower_bound(v);
-	  result = 0;
-	  while (sentries.size() < p->op.pgls.count) {
-	    if (mp == missing.rmissing.end()) {
-	      dout(10) << " handle finished low/missing, moving to high/ondisk" << dendl;
-	      response.handle.in_missing_set = false;
-	      break;
-	    }
-	    sentries.push_back(mp->second);
-	    response.handle.index = mp->first + 1;
+	assert(snapid == CEPH_NOSNAP || missing.missing.empty());
+	map<hobject_t, Missing::item>::iterator missing_iter =
+	  missing.missing.lower_bound(current);
+	vector<hobject_t>::iterator ls_iter = sentries.begin();
+	while (1) {
+	  if (ls_iter == sentries.end()) {
+	    break;
 	  }
-	}
-	if (sentries.size() < p->op.pgls.count &&
-	    !response.handle.in_missing_set) {
-	  // it's a filestore cookie
-	  dout(10) << " handle high/missing " << response.handle << dendl;
-	  osr.flush();  // order wrt preceeding writes
-	  /*
-	  result = osd->store->collection_list_partial(coll, snapid,
-						       sentries, p->op.pgls.count - sentries.size(),
-						       &response.handle);
-						       */
-	  response.handle.in_missing_set = false;
-	}
 
-	if (result == 0) {
-          vector<hobject_t>::iterator iter;
-          for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
-	    bool keep = true;
-	    // skip snapdir objects
-	    if (iter->snap == CEPH_SNAPDIR)
-	      continue;
-	    bufferlist attr_bl;
-	    osd->store->getattr(coll, *iter, OI_ATTR, attr_bl);
-	    object_info_t oi(attr_bl);
+	  hobject_t candidate;
+	  if (missing_iter == missing.missing.end() ||
+	      *ls_iter < missing_iter->first) {
+	    candidate = *(ls_iter++);
+	  } else {
+	    candidate = (missing_iter++)->first;
+	  }
 
-	    if (snapid != CEPH_NOSNAP) {
-	      // skip items not defined for this snapshot
-	      if (iter->snap == CEPH_NOSNAP) {
-		bufferlist bl;
-		osd->store->getattr(coll, *iter, SS_ATTR, bl);
-		SnapSet snapset(bl);
-		if (snapid <= snapset.seq)
-		  continue;
-	      } else {
-		bool exists = false;
-		for (vector<snapid_t>::iterator i = oi.snaps.begin(); i != oi.snaps.end(); ++i)
-		  if (*i == snapid) {
-		    exists = true;
-		    break;
-		  }
-		dout(10) << *iter << " has " << oi.snaps << " .. exists=" << exists << dendl;
-		if (!exists)
-		  continue;
-	      }
+	  if (response.entries.size() == p->op.pgls.count) {
+	    next = candidate;
+	  }
+
+	  // skip snapdir objects
+	  if (candidate.snap == CEPH_SNAPDIR)
+	    continue;
+
+	  if (candidate.snap < snapid)
+	    continue;
+
+	  if (snapid != CEPH_NOSNAP) {
+	    bufferlist bl;
+	    if (candidate.snap == CEPH_NOSNAP) {
+	      osd->store->getattr(coll, candidate, SS_ATTR, bl);
+	      SnapSet snapset(bl);
+	      if (snapid <= snapset.seq)
+		continue;
+	    } else {
+	      bufferlist attr_bl;
+	      osd->store->getattr(coll, candidate, OI_ATTR, attr_bl);
+	      object_info_t oi(attr_bl);
+	      vector<snapid_t>::iterator i = find(oi.snaps.begin(),
+						  oi.snaps.end(),
+						  snapid);
+	      if (i == oi.snaps.end())
+		continue;
 	    }
-	    if (filter)
-	      keep = pgls_filter(filter, *iter, filter_out);
+	  }
 
-            if (keep)
-	      response.entries.push_back(make_pair(iter->oid, oi.oloc.key));
-          }
-	  ::encode(response, outdata);
-          if (filter)
-	    ::encode(filter_out, outdata);
-        }
-	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;
+	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	    continue;
+
+	  response.entries.push_back(make_pair(candidate.oid,
+					       candidate.get_key()));
+	}
+	response.handle = next;
+	::encode(response, outdata);
+	if (filter)
+	  ::encode(filter_out, outdata);
+	dout(10) << " pgls result=" << result << " outdata.length()="
+		 << outdata.length() << dendl;
       }
       break;
 

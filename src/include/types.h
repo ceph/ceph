@@ -419,37 +419,7 @@ inline ostream& operator<<(ostream& out, const SnapContext& snapc) {
   return out << snapc.seq << "=" << snapc.snaps;
 }
 
-struct collection_list_handle_t {
-  bool in_missing_set;
-  uint32_t hash;
-  uint32_t index;
-
-  collection_list_handle_t() : in_missing_set(true), hash(0), index(0) {}
-
-  void encode(bufferlist& bl) const {
-    __u8 version = 0;
-    ::encode(version, bl);
-    ::encode(in_missing_set, bl);
-    ::encode(hash, bl);
-    ::encode(index, bl);
-  }
-
-  void decode(bufferlist::iterator &bl) {
-    __u8 version = 0;
-    ::decode(version, bl);
-    ::decode(in_missing_set, bl);
-    ::decode(hash, bl);
-    ::decode(index, bl);
-  }
-
-};
-WRITE_CLASS_ENCODER(collection_list_handle_t);
-
-inline ostream& operator<<(ostream& out, const collection_list_handle_t& handle) {
-  return out << "(" << handle.in_missing_set 
-	     << "," << handle.hash 
-	     << "," << handle.index << ")";
-}
+typedef hobject_t collection_list_handle_t;
 
 // dentries
 #define MAX_DENTRY_LEN 255
