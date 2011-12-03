@@ -4244,12 +4244,7 @@ void ReplicatedPG::recover_primary_got(hobject_t oid, eversion_t v)
       dout(10) << "last_complete now " << info.last_complete
 	       << " log.complete_to at end" << dendl;
       assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
-      if (info.last_complete != info.last_update) {
-	// this happens if the log we are recovering from was a
-	// backlog, and the most recent entry wasn't last_update.
-	info.last_complete = info.last_update;
-	dout(10) << "setting last_complete to last_update " << info.last_complete << dendl;
-      }
+      assert(info.last_complete == info.last_update);
     }
   }
 }
