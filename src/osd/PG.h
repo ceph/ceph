@@ -870,7 +870,6 @@ public:
   // primary state
  public:
   vector<int> up, acting;
-  set<int> backfill;      // up - acting
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -1359,6 +1358,9 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
+
+  epoch_t last_peering_reset;
+
   struct BackfillInterval {
     // info about a backfill interval on a peer
     map<hobject_t,eversion_t> objects;
@@ -1386,10 +1388,8 @@ protected:
   };
   
   BackfillInterval backfill_info;
-  int backfill_target;
   BackfillInterval peer_backfill_info;
-
-  epoch_t last_peering_reset;
+  int backfill_target;
 
   friend class OSD;
 
@@ -1479,8 +1479,8 @@ public:
   
   void trim_write_ahead();
 
-  void calc_acting(int& newest_update_osd, vector<int>& want, set<int>& backfill) const;
-  bool choose_acting(int& newest_update_osd, set<int>& backfill);
+  void calc_acting(int& newest_update_osd, vector<int>& want) const;
+  bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
   void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,

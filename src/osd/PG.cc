@@ -805,7 +805,6 @@ void PG::clear_primary_state()
 
   // clear peering state
   stray_set.clear();
-  backfill.clear();
   peer_log_requested.clear();
   peer_missing_requested.clear();
   peer_info.clear();
@@ -842,7 +841,7 @@ void PG::clear_primary_state()
  * incomplete, or another osd has a longer tail that allows us to
  * bring other up nodes up to date.
  */
-void PG::calc_acting(int& newest_update_osd_id, vector<int>& want, set<int>& backfill) const
+void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 {
   map<int, Info> all_info(peer_info.begin(), peer_info.end());
   all_info[osd->whoami] = info;
@@ -960,8 +959,8 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want, set<int>& bac
       continue;
     const Info &cur_info = all_info.find(*i)->second;
     if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
-      dout(10) << " osd." << *i << " (up) REJECTED " << cur_info << dendl;
-      backfill.insert(*i);
+      dout(10) << " osd." << *i << " (up) accepted (backfill) " << cur_info << dendl;
+      want.push_back(*i);
     } else {
       want.push_back(*i);
       dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
@@ -996,10 +995,10 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want, set<int>& bac
  * calculate the desired acting, and request a change with the monitor
  * if it differs from the current acting.
  */
-bool PG::choose_acting(int& newest_update_osd, set<int>& backfill)
+bool PG::choose_acting(int& newest_update_osd)
 {
   vector<int> want;
-  calc_acting(newest_update_osd, want, backfill);
+  calc_acting(newest_update_osd, want);
 
   if (want != acting) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
@@ -3438,9 +3437,6 @@ ostream& operator<<(ostream& out, const PG& pg)
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
 
-  if (pg.backfill.size())
-    out << " backfill=" << pg.backfill;
-
   if (pg.is_active() &&
       pg.last_update_ondisk != pg.info.last_update)
     out << " luod=" << pg.last_update_ondisk;
@@ -3862,10 +3858,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const BackfillComplet
   PG *pg = context< RecoveryMachine >().pg;
 
   int newest_update_osd;
-  if (!pg->choose_acting(newest_update_osd, pg->backfill)) {
+  if (!pg->choose_acting(newest_update_osd)) {
     post_event(NeedNewMap());
-  } else {
-    assert(0 == "we shouldn't get here");
   }
 
   return discard_event();
@@ -4105,7 +4099,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
   PG *pg = context< RecoveryMachine >().pg;
 
   // adjust acting?
-  if (!pg->choose_acting(newest_update_osd, pg->backfill)) {
+  if (!pg->choose_acting(newest_update_osd)) {
     post_event(NeedNewMap());
     return;
   }

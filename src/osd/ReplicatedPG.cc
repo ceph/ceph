@@ -4959,7 +4959,15 @@ int ReplicatedPG::start_recovery_ops(int max)
     // second chance to recovery replicas
     started = recover_replicas(max);
   }
-  if (!backfill.empty() && started < max) {
+  if (backfill_target < 0) {
+    for (unsigned i = 1; i<acting.size(); i++) {
+      if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
+	backfill_target = acting[i];
+	dout(10) << " chose backfill target osd." << backfill_target << dendl;
+      }
+    }
+  }
+  if (backfill_target >= 0 && started < max) {
     started += recover_backfill(max - started);
   }
 
@@ -4971,7 +4979,7 @@ int ReplicatedPG::start_recovery_ops(int max)
 
   assert(recovery_ops_active == 0);
 
-  if (backfill.size()) {
+  if (acting != up) {
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
     handle_backfill_complete(&rctx);
     return 0;
@@ -5265,13 +5273,8 @@ int ReplicatedPG::recover_replicas(int max)
 int ReplicatedPG::recover_backfill(int max)
 {
   dout(10) << "recover_backfill (" << max << ")" << dendl;
-  assert(!backfill.empty());
+  assert(backfill_target >= 0);
   
-  // backfill one peer at a time.
-  if (backfill_target < 0) {
-    backfill_target = *backfill.begin();
-    dout(10) << " chose backfill target osd." << backfill_target << dendl;
-  }
   Info& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
 
@@ -5395,7 +5398,7 @@ int ReplicatedPG::recover_backfill(int max)
   }
 
   hobject_t bound = pbi.begin;
-  bound.back_up_to_bounding_key;
+  bound.back_up_to_bounding_key();
   if (pinfo.last_backfill < bound) {
     pinfo.last_backfill = bound;
 
