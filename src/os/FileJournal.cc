@@ -391,6 +391,8 @@ int FileJournal::open(uint64_t next_seq)
 {
   dout(2) << "open " << fn << " next_seq " << next_seq << dendl;
 
+  last_committed_seq = next_seq - 1;
+
   int err = _open(false);
   if (err < 0) 
     return err;
@@ -1171,7 +1173,6 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
     assert(h->seq >= last_committed_seq);
     return false;
   }
-  last_committed_seq = h->seq;
 
   // ok!
   seq = h->seq;
