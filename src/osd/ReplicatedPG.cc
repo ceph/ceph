@@ -880,6 +880,9 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
   switch (m->op) {
   case MOSDPGBackfill::OP_BACKFILL_FINISH:
     {
+      assert(get_role() < 0);
+      assert(g_conf->osd_kill_backfill_at != 1);
+
       MOSDPGBackfill *reply = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
 						 get_osdmap()->get_epoch(), m->query_epoch,
 						 info.pgid);
@@ -890,6 +893,7 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
   case MOSDPGBackfill::OP_BACKFILL_PROGRESS:
     {
       assert(get_role() < 0);
+      assert(g_conf->osd_kill_backfill_at != 2);
 
       info.last_update = m->last_complete;
       info.last_complete = m->last_complete;
@@ -912,6 +916,7 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
   case MOSDPGBackfill::OP_BACKFILL_FINISH_ACK:
     {
       assert(is_primary());
+      assert(g_conf->osd_kill_backfill_at != 3);
       finish_recovery_op(hobject_t::get_max());
     }
     break;
