@@ -330,12 +330,13 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    __u8 version = 1;
+    __u8 version = 2;
     ::encode(version, bl);
     ::encode(key, bl);
     ::encode(oid, bl);
     ::encode(snap, bl);
     ::encode(hash, bl);
+    ::encode(max, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 version;
@@ -345,6 +346,10 @@ public:
     ::decode(oid, bl);
     ::decode(snap, bl);
     ::decode(hash, bl);
+    if (version >= 2)
+      ::decode(max, bl);
+    else
+      max = false;
   }
 };
 WRITE_CLASS_ENCODER(hobject_t)
