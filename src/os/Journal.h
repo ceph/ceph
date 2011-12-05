@@ -40,7 +40,7 @@ public:
   virtual ~Journal() { }
 
   virtual int create() = 0;
-  virtual int open(uint64_t last_seq) = 0;
+  virtual int open(uint64_t fs_op_seq) = 0;
   virtual void close() = 0;
 
   virtual void flush() = 0;

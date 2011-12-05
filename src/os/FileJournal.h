@@ -191,7 +191,7 @@ private:
   }
 
   int create();
-  int open(uint64_t last_seq);
+  int open(uint64_t fs_op_seq);
   void close();
 
   void flush();

@@ -387,11 +387,12 @@ done:
   return ret;
 }
 
-int FileJournal::open(uint64_t next_seq)
+int FileJournal::open(uint64_t fs_op_seq)
 {
-  dout(2) << "open " << fn << " next_seq " << next_seq << dendl;
+  dout(2) << "open " << fn << " fs_op_seq " << fs_op_seq << dendl;
 
-  last_committed_seq = next_seq - 1;
+  last_committed_seq = fs_op_seq;
+  uint64_t next_seq = fs_op_seq + 1;
 
   int err = _open(false);
   if (err < 0) 
