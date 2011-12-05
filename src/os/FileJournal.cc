@@ -1168,12 +1168,6 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
     return false;
   }
 
-  if (h->seq < last_committed_seq) {
-    dout(0) << "read_entry seq " << seq << " < last_committed_seq " << last_committed_seq << dendl;
-    assert(h->seq >= last_committed_seq);
-    return false;
-  }
-
   // ok!
   seq = h->seq;
   journalq.push_back(pair<uint64_t,off64_t>(h->seq, read_pos));
