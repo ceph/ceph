@@ -38,8 +38,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   }
 
   op_seq = fs_op_seq;
-  committed_seq = op_seq;
-  committing_seq = op_seq;
+  committed_seq = fs_op_seq;
+  committing_seq = fs_op_seq;
   applied_seq = fs_op_seq;
 
   if (!journal)
