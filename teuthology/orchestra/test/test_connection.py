@@ -36,6 +36,9 @@ def test_connect():
         username='jdoe',
         timeout=60,
         )
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.remember_order()
+    transport.expects('set_keepalive').with_args(False)
     got = connection.connect(
         'jdoe@orchestra.test.newdream.net.invalid',
         _SSHClient=sshclient,
@@ -60,6 +63,9 @@ def test_connect_override_hostkeys():
         username='jdoe',
         timeout=60,
         )
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.remember_order()
+    transport.expects('set_keepalive').with_args(False)
     create_key = fudge.Fake('create_key')
     create_key.expects_call().with_args('ssh-rsa', 'testkey').returns('frobnitz')
     got = connection.connect(
