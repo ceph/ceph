@@ -175,7 +175,7 @@ public:
 
     eversion_t log_tail;     // oldest log entry.
 
-    interval_set<uint64_t> incomplete;  // incomplete hash ranges prior to last_complete
+    hobject_t last_backfill;   // objects >= this and < last_complete may be missing
 
     interval_set<snapid_t> purged_snaps;
 
@@ -248,13 +248,18 @@ public:
       }
     } history;
     
-    Info() {}
-    Info(pg_t p) : pgid(p) { }
+    Info()
+      : last_backfill(hobject_t::get_max())
+    { }
+    Info(pg_t p)
+      : pgid(p),
+	last_backfill(hobject_t::get_max())
+    { }
 
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return history.epoch_created == 0; }
 
-    bool is_incomplete() const { return !incomplete.empty(); }
+    bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
 
     void encode(bufferlist &bl) const {
       __u8 v = 25;
@@ -264,7 +269,7 @@ public:
       ::encode(last_update, bl);
       ::encode(last_complete, bl);
       ::encode(log_tail, bl);
-      ::encode(incomplete, bl);
+      ::encode(last_backfill, bl);
       ::encode(stats, bl);
       history.encode(bl);
       ::encode(purged_snaps, bl);
@@ -288,7 +293,7 @@ public:
 	::decode(log_backlog, bl);
       }
       if (v >= 24)
-	::decode(incomplete, bl);
+	::decode(last_backfill, bl);
       ::decode(stats, bl);
       history.decode(bl);
       if (v >= 22)
@@ -1381,7 +1386,8 @@ protected:
   };
   
   BackfillInterval backfill_info;
-  map<int,BackfillInterval> peer_backfill_info;
+  int backfill_target;
+  BackfillInterval peer_backfill_info;
 
   epoch_t last_peering_reset;
 
@@ -1758,8 +1764,8 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
     if (pgi.last_complete != pgi.last_update)
       out << " lc " << pgi.last_complete;
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
-    if (!pgi.incomplete.empty())
-      out << " incomp " << std::hex << pgi.incomplete << std::dec;
+    if (pgi.is_incomplete())
+      out << " lb " << pgi.last_backfill;
   }
   //out << " c " << pgi.epoch_created;
   out << " n=" << pgi.stats.stats.sum.num_objects;

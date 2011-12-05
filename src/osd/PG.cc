@@ -818,6 +818,9 @@ void PG::clear_primary_state()
   stray_purged.clear();
   might_have_unfound.clear();
 
+  backfill_target = -1;
+  peer_backfill_info = BackfillInterval();
+
   last_update_ondisk = eversion_t();
 
   snap_trimq.clear();
@@ -2033,7 +2036,7 @@ void PG::read_state(ObjectStore *store)
     write_info(t);
     store->apply_transaction(t);
 
-    info.incomplete.insert(0, 1ull << 32);
+    info.last_backfill = hobject_t();
   }
 
   // log any weirdness
