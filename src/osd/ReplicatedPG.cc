@@ -5394,8 +5394,10 @@ int ReplicatedPG::recover_backfill(int max)
     }
   }
 
-  if (pinfo.last_backfill < pbi.begin) {
-    pinfo.last_backfill = pbi.begin;
+  hobject_t bound = pbi.begin;
+  bound.back_up_to_bounding_key;
+  if (pinfo.last_backfill < bound) {
+    pinfo.last_backfill = bound;
 
     dout(10) << " peer osd." << backfill_target << " info.last_backfill now " << pinfo.last_backfill << dendl;
 
