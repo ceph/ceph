@@ -43,8 +43,12 @@ struct object_t {
   object_t() {}
   object_t(const char *s) : name(s) {}
   object_t(const string& s) : name(s) {}
+
   void swap(object_t& o) {
     name.swap(o.name);
+  }
+  void clear() {
+    name.clear();
   }
   
   void encode(bufferlist &bl) const {
@@ -311,6 +315,25 @@ public:
     hash = _reverse_nibbles(v);
   }
 
+  const string& get_effective_key() const {
+    if (key.length())
+      return key;
+    return oid.name;
+  }
+
+  /**
+   * back up hobject_t to beginning of hash bucket, if i am partway through one.
+   */
+  void back_up_to_bounding_key() {
+    if (key.length()) {
+      oid.clear();
+    } else {
+      key = oid.name;
+      oid.clear();
+    }
+    snap = 0;
+  }
+
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
     oid(o.oid), snap(o.snap) {
@@ -368,9 +391,10 @@ inline ostream& operator<<(ostream& out, const hobject_t& o)
 {
   if (o.is_max())
     return out << "MAX";
-  out << o.oid << "/" << o.snap << "/" << std::hex << o.hash << std::dec;
+  out << std::hex << o.hash << std::dec;
   if (o.get_key().length())
-    out << "@" << o.get_key();
+    out << "." << o.get_key();
+  out << "/" << o.oid << "/" << o.snap;
   return out;
 }
 
@@ -384,26 +408,26 @@ inline bool operator!=(const hobject_t &l, const hobject_t &r) {
 inline bool operator>(const hobject_t &l, const hobject_t &r) {
   return l.max > r.max ||
     (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.oid > r.oid || 
-					      (l.oid == r.oid && l.snap > r.snap)))));
+			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() > r.get_effective_key() || 
+					      (l.get_effective_key() == r.get_effective_key() && l.snap > r.snap)))));
 }
 inline bool operator<(const hobject_t &l, const hobject_t &r) {
   return l.max < r.max ||
     (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.oid < r.oid ||
-					      (l.oid == r.oid && l.snap < r.snap)))));
+			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() < r.get_effective_key() ||
+					      (l.get_effective_key() == r.get_effective_key() && l.snap < r.snap)))));
 }
 inline bool operator>=(const hobject_t &l, const hobject_t &r) {
   return l.max > r.max ||
     (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.oid > r.oid ||
-					      (l.oid == r.oid && l.snap >= r.snap)))));
+			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() > r.get_effective_key() ||
+					      (l.get_effective_key() == r.get_effective_key() && l.snap >= r.snap)))));
 }
 inline bool operator<=(const hobject_t &l, const hobject_t &r) {
   return l.max < r.max ||
     (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.oid < r.oid ||
-					      (l.oid == r.oid && l.snap <= r.snap)))));
+			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() < r.get_effective_key() ||
+					      (l.get_effective_key() == r.get_effective_key() && l.snap <= r.snap)))));
 }
 
 
