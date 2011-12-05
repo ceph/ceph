@@ -652,13 +652,14 @@ int ceph_tool_messenger_shutdown()
 
 int ceph_tool_common_shutdown(CephToolCtx *ctx)
 {
+  // wait for messenger to finish
+  messenger->wait();
+
   ctx->lock.Lock();
   ctx->mc.shutdown();
   ctx->timer.shutdown();
   ctx->lock.Unlock();
 
-  // wait for messenger to finish
-  messenger->wait();
   messenger->destroy();
   tok_end(tok);
   
