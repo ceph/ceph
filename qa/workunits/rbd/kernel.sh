@@ -3,7 +3,7 @@
 CEPH_SECRET_FILE=${CEPH_SECRET_FILE:-}
 CEPH_ID=${CEPH_ID:-admin}
 SECRET_ARGS=''
-if [ -z $CEPH_SECRET_FILE ]; then
+if [ ! -z $CEPH_SECRET_FILE ]; then
 	SECRET_ARGS="--secret $CEPH_SECRET_FILE"
 fi
 
@@ -21,7 +21,7 @@ function clean_up {
 	rbd unmap /dev/rbd/rbd/testimg1@snap1 || true
 	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
 	rbd rm testimg1 || true
-	rm -f $TMP_FILES
+	sudo rm -f $TMP_FILES
 }
 
 clean_up
@@ -87,7 +87,7 @@ rbd snap rollback --snap=snap1 testimg1
 echo 1 | sudo tee /sys/bus/rbd/devices/$DEV_ID1/refresh
 cat /sys/bus/rbd/devices/$DEV_ID1/snap_snap1/snap_size | grep 76800000
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 76800000
-rm -f /tmp/img1.snap1 /tmp/img1.export
+sudo rm -f /tmp/img1.snap1 /tmp/img1.export
 
 sudo dd if=/dev/rbd/rbd/testimg1@snap1 of=/tmp/img1.snap1
 cmp /tmp/img1 /tmp/img1.snap1
