@@ -83,7 +83,25 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
       tail = i->version;
       break;
     }
-    assert(i->version > v);
+    log.push_front(*i);
+  }
+}
+
+void PG::Log::copy_range(const Log &other, eversion_t from, eversion_t to)
+{
+  list<Entry>::const_reverse_iterator i = other.log.rbegin();
+  assert(i != other.log.rend());
+  while (i->version > to) {
+    ++i;
+    assert(i != other.log.rend());
+  }
+  assert(i->version == to);
+  head = to;
+  for ( ; i != other.log.rend(); ++i) {
+    if (i->version <= from) {
+      tail = i->version;
+      break;
+    }
     log.push_front(*i);
   }
 }

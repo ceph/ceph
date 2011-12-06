@@ -532,7 +532,23 @@ public:
       ::decode(log, bl);
     }
 
-    void copy_after(const Log &other, eversion_t v);
+    /**
+     * copy entries from the tail of another Log
+     *
+     * @param other Log to copy from
+     * @param from copy entries after this version
+     */
+    void copy_after(const Log &other, eversion_t from);
+
+    /**
+     * copy a range of entries from another Log
+     *
+     * @param other Log to copy from
+     * @param from copy entries after this version
+     * @parem to up to and including this version
+     */
+    void copy_range(const Log &other, eversion_t from, eversion_t to);
+
     ostream& print(ostream& out) const;
   };
   WRITE_CLASS_ENCODER(Log)
