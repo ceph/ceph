@@ -15,7 +15,25 @@ RBD is a Linux kernel feature that exposes RADOS storage as a block
 device. Qemu/KVM also has a direct RBD client, that avoids the kernel
 overhead.
 
-.. image:: overview.png
+.. ditaa::
+
+   /---------+-----------+-----------\/----------+------\/---------\/-----------\
+   | ceph.ko | ceph-fuse | libcephfs ||  kernel  | Qemu ||         ||librados   |
+   |c9EE     |c3EA       |c6F6       || /dev/rbd | /KVM ||         ||c6F6       |
+   +---------+-----------+-----------+|c9EE      |c3EA  ||         |+-----------+
+   |       Ceph DFS (protocol)       |+----------+------+| radosgw ||           |
+   |               +-----------------+|                 ||         ||           |
+   |               |     ceph-mds    || RBD (protocol)  ||         ||           |
+   |               |cFA2             ||                 ||cFB5     ||           |
+   +---------------+-----------------++-----------------++---------++           |
+   |                                                                            |
+   |                                          +=------+     +=------+           |
+   |                                          |cls_rbd|     |cls_rgw|           |
+   |                                          +-------+     +-------+           |
+   |                                                                            |
+   |                              ceph-osd                                      |
+   |cFB3                                                                        |
+   \----------------------------------------------------------------------------/
 
 
 

@@ -26,6 +26,7 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
     'breathe',
+    'sphinx_ditaa',
     ]
 todo_include_todos = True
 
