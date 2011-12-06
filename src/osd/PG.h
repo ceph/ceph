@@ -718,6 +718,11 @@ public:
     void got(const hobject_t& oid, eversion_t v);
     void got(const std::map<hobject_t, Missing::item>::iterator &m);
 
+    void clear() {
+      missing.clear();
+      rmissing.clear();
+    }
+
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);

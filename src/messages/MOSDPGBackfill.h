@@ -38,7 +38,6 @@ public:
   epoch_t map_epoch, query_epoch;
   pg_t pgid;
   hobject_t last_backfill;
-  eversion_t last_complete;
 
   virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
@@ -47,7 +46,6 @@ public:
     ::decode(query_epoch, p);
     ::decode(pgid, p);
     ::decode(last_backfill, p);
-    ::decode(last_complete, p);
   }
 
   virtual void encode_payload(CephContext *cct) {
@@ -56,7 +54,6 @@ public:
     ::encode(query_epoch, payload);
     ::encode(pgid, payload);
     ::encode(last_backfill, payload);
-    ::encode(last_complete, payload);
   }
 
   MOSDPGBackfill() : Message(MSG_OSD_PG_BACKFILL) {}
@@ -75,7 +72,6 @@ public:
     out << "pg_backfill(" << get_op_name(op)
 	<< " " << pgid
 	<< " e " << map_epoch << "/" << query_epoch
-	<< " lc " << last_complete
 	<< " lb " << last_backfill
 	<< ")";
   }

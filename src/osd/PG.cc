@@ -180,6 +180,14 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
       lu = pp->version;
       break;
     }
+
+    if (oe.soid > oinfo.last_backfill) {
+      // past backfill line, don't care
+      dout(10) << " had " << oe << " beyond last_backfill : skipping" << dendl;
+      ++pp;
+      continue;
+    }
+
     if (ne.version > oe.version) {
       dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
     } else {
@@ -467,6 +475,15 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
 	       << dendl;
       continue;
     }
+    if (p->first >= oinfo.last_backfill) {
+      // FIXME: this is _probably_ true, although it could conceivably
+      // be in the undefined region!  Hmm!
+      dout(10) << "search_for_missing " << soid << " " << need
+	       << " also missing on osd." << fromosd
+	       << " (past last_backfill " << oinfo.last_backfill << ")"
+	       << dendl;
+      continue;
+    }
     if (oinfo.last_complete < need) {
       if (!omissing) {
 	// We know that the peer lacks some objects at the revision we need.
@@ -615,6 +632,11 @@ bool PG::is_all_uptodate() const
     }
     if (pm->second.num_missing()) {
       dout(10) << __func__ << ": osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
+      uptodate = false;
+    }
+    map<int,Info>::const_iterator pi = peer_info.find(peer);
+    if (pi->second.last_backfill != hobject_t::get_max()) {
+      dout(10) << __func__ << ": osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
       uptodate = false;
     }
   }
@@ -1186,6 +1208,27 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
+      if (log.tail > pi.last_update) {
+	// reset, backfill
+	pi.last_update = info.last_update;
+	pi.last_complete = info.last_complete;
+	pi.last_backfill = hobject_t();
+	pi.history = info.history;
+
+	peer_missing[peer].clear();
+
+	dout(10) << "activate peer osd." << peer << " must restart backfill, sending info " << pi << dendl;
+	if (activator_map) {
+	  if (activator_map->count(peer) == 0)
+	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
+	  (*activator_map)[peer]->pg_info.push_back(pi);
+	} else {
+	  m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
+	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+	}
+	continue;
+      }
+
       if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.is_empty() && activator_map) {
@@ -1197,10 +1240,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	}
-      } 
-      else {
-	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
+      } else {
 	assert(log.tail <= pi.last_update);
+	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	// send new stuff to append to replicas log
 	assert(info.last_update > pi.last_update);
 	m->log.copy_after(log, pi.last_update);
@@ -1213,9 +1255,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
         eversion_t plu = pi.last_update;
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
-             p++) 
-          if (p->version > plu)
-            pm.add_next_event(*p);
+             p++)
+	  if (p->soid < pi.last_backfill)
+	    pm.add_next_event(*p);
       }
       
       if (m) {
@@ -1232,8 +1274,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	pi.last_complete = pi.last_update;
         dout(10) << "activate peer osd." << peer << " " << pi << " uptodate" << dendl;
       } else {
-        dout(10) << "activate peer osd." << peer << " " << pi
-                 << " missing " << pm << dendl;
+        dout(10) << "activate peer osd." << peer << " " << pi << " missing " << pm << dendl;
       }
     }
 
@@ -4221,6 +4262,12 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 
     if (pi.is_empty())
       continue;                                // no pg data, nothing divergent
+
+    if (pi.last_update < pg->log.tail) {
+      dout(10) << " osd." << *i << " is not contiguous, will restart backfill" << dendl;
+      pg->peer_missing[*i];
+      continue;
+    }
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
 	pi.last_update == pg->info.last_update) {  // peer is up to date

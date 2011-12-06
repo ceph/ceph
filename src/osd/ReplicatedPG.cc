@@ -880,7 +880,7 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
   switch (m->op) {
   case MOSDPGBackfill::OP_BACKFILL_FINISH:
     {
-      assert(get_role() < 0);
+      assert(is_replica());
       assert(g_conf->osd_kill_backfill_at != 1);
 
       MOSDPGBackfill *reply = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
@@ -892,11 +892,9 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
 
   case MOSDPGBackfill::OP_BACKFILL_PROGRESS:
     {
-      assert(get_role() < 0);
+      assert(is_replica());
       assert(g_conf->osd_kill_backfill_at != 2);
 
-      info.last_update = m->last_complete;
-      info.last_complete = m->last_complete;
       info.last_backfill = m->last_backfill;
 
       log.clear();
@@ -4105,7 +4103,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 		   pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
-      if (pi->version > peer_info[peer].log_tail)
+      if (peer_missing[peer].is_missing(soid))  // so that we ignore backfill; imprecise!
 	peer_missing[peer].got(soid, pi->version);
       
       pushing[soid].erase(peer);
@@ -5336,7 +5334,6 @@ int ReplicatedPG::recover_backfill(int max)
 
 	  epoch_t e = get_osdmap()->get_epoch();
 	  MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
-	  m->last_complete = info.last_update;
 	  m->last_backfill = hobject_t::get_max();
 	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
 	  start_recovery_op(hobject_t::get_max());
@@ -5407,7 +5404,6 @@ int ReplicatedPG::recover_backfill(int max)
     epoch_t e = get_osdmap()->get_epoch();
     MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
     m->last_backfill = pinfo.last_backfill;
-    m->last_complete = info.last_update;
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
   }
   return ops;
