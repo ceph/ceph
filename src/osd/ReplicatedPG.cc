@@ -2943,11 +2943,18 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 
   repop->v = ctx->at_version;
 
+  // add myself to gather set
+  repop->waitfor_ack.insert(acting[0]);
+  repop->waitfor_disk.insert(acting[0]);
+
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     
+    repop->waitfor_ack.insert(peer);
+    repop->waitfor_disk.insert(peer);
+
     // forward the write/update/whatever
     MOSDSubOp *wr = new MOSDSubOp(repop->ctx->reqid, info.pgid, soid,
 				  false, acks_wanted,
@@ -2956,6 +2963,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 
     if (op && op->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC) {
       // replicate original op for parallel execution on replica
+      assert(0 == "broken implementation, do not use");
       wr->oloc = repop->ctx->obs->oi.oloc;
       wr->ops = repop->ctx->ops;
       wr->mtime = repop->ctx->mtime;
@@ -2996,13 +3004,6 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
   dout(10) << "new_repop mode was " << mode << dendl;
   mode.write_start();
   dout(10) << "new_repop mode now " << mode << " (start_write)" << dendl;
-
-  // initialize gather sets
-  for (unsigned i=0; i<acting.size(); i++) {
-    int osd = acting[i];
-    repop->waitfor_ack.insert(osd);
-    repop->waitfor_disk.insert(osd);
-  }
 
   repop->start = ceph_clock_now(g_ceph_context);
 

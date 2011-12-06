@@ -623,7 +623,7 @@ protected:
    */
   void scan_range(hobject_t begin, int min, int max, BackfillInterval *bi);
 
-  void push_backfill_object(hobject_t oid, eversion_t v, int peer);
+  void push_backfill_object(hobject_t oid, eversion_t v, eversion_t have, int peer);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
