@@ -627,12 +627,12 @@ public:
    * list partial contents of collection relative to a hash offset/position
    *
    * @param c collection
-   * @param start list objects that sort >= this value
+   * @param start list objects that sort > this value
    * @param min return at least this many results, unless we reach the end
    * @param max return no more than this many results
    * @param snapid return no objects with snap < snapid
    * @param ls [out] result
-   * @param next [out] next item sorts >= this value
+   * @param next [out] next item sorts > this value
    * @return zero on success, or negative error
    */
   virtual int collection_list_partial(coll_t c, hobject_t start,

@@ -486,10 +486,10 @@ int HashIndex::list_by_hash(const vector<string> &path,
       while (j != objects.end() && j->first == *i) {
 	if (max_count > 0 && out->size() == (unsigned)max_count) {
 	  if (next)
-	    *next = j->second;
+	    *next = out->back();
 	  return 0;
 	}
-	if (!next || j->second >= *next) {
+	if (!next || j->second > *next) {
 	  out->push_back(j->second);
 	}
 	++j;
