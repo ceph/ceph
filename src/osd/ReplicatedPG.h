@@ -707,6 +707,8 @@ protected:
     }
   };
 
+  void sub_op_remove(MOSDSubOp *op);
+
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_applied(RepModify *rm);
   void sub_op_modify_commit(RepModify *rm);

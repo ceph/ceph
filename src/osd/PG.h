@@ -1366,6 +1366,11 @@ public:
 
 protected:
 
+  /*
+   * peer_info    -- projected (updates _before_ replicas ack)
+   * peer_missing -- committed (updates _after_ replicas ack)
+   */
+  
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
@@ -1385,15 +1390,22 @@ protected:
   struct BackfillInterval {
     // info about a backfill interval on a peer
     map<hobject_t,eversion_t> objects;
-    hobject_t begin, end;
+    hobject_t begin;
+    hobject_t end;
     
+    /// clear content
+    void clear() {
+      objects.clear();
+      begin = end = hobject_t();
+    }
+
     /// true if there are no objects in this interval
     bool empty() {
       return objects.empty();
     }
 
     /// true if interval extends to the end of the range
-    bool at_end() {
+    bool extends_to_end() {
       return end == hobject_t::get_max();
     }
 

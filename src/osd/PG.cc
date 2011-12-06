@@ -863,7 +863,8 @@ void PG::clear_primary_state()
   might_have_unfound.clear();
 
   backfill_target = -1;
-  peer_backfill_info = BackfillInterval();
+  backfill_info.clear();
+  peer_backfill_info.clear();
 
   last_update_ondisk = eversion_t();
 
@@ -892,7 +893,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
   all_info[osd->whoami] = info;
 
   for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
-    dout(10) << "choose_acting osd." << p->first << " " << p->second << dendl;
+    dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
   }
 
   // find osd with newest last_update.  if there are multiples, prefer
@@ -907,36 +908,35 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
       continue;
     }
     // prefer longer tail, if it will bring another peer in log contiguity
-    if (p->second.log_tail < newest_update_osd->second.log_tail) {
-      bool worse = false;
-      for (map<int,Info>::iterator q = all_info.begin(); q != all_info.end(); ++q) {
-	if (q->second.is_incomplete())
-	  continue;  // don't care about log contiguity
-	if (q->second.last_update < newest_update_osd->second.log_tail &&
-	    q->second.last_update >= p->second.log_tail) {
-	  dout(10) << "choose_acting prefer osd." << p->first
-		   << " because it brings osd." << q->first << " into log contiguity" << dendl;
-	  newest_update_osd = p;
-	  continue;
-	}
-	if (q->second.last_update < p->second.log_tail &&
-	    q->second.last_update >= newest_update_osd->second.log_tail) {
-	  worse = true;
-	  break;
-	}
-      }
-      if (worse)
+    bool worse = false;
+    for (map<int,Info>::iterator q = all_info.begin(); q != all_info.end(); ++q) {
+      if (q->second.is_incomplete())
+	continue;  // don't care about log contiguity
+      if (q->second.last_update < newest_update_osd->second.log_tail &&
+	  q->second.last_update >= p->second.log_tail) {
+	dout(10) << "calc_acting prefer osd." << p->first
+		 << " because it brings osd." << q->first << " into log contiguity" << dendl;
+	newest_update_osd = p;
 	continue;
+      }
+      if (q->second.last_update < p->second.log_tail &&
+	  q->second.last_update >= newest_update_osd->second.log_tail) {
+	worse = true;
+	break;
+      }
     }
+    if (worse)
+      continue;
+
     // prefer current primary (usually the caller), all things being equal
     if (p->first == acting[0]) {
-      dout(10) << "choose_acting prefer osd." << p->first
+      dout(10) << "calc_acting prefer osd." << p->first
 	       << " because it is current primary" << dendl;
       newest_update_osd = p;
       continue;
     }
   }
-  dout(10) << "choose_acting newest update on osd." << newest_update_osd->first
+  dout(10) << "calc_acting newest update on osd." << newest_update_osd->first
 	   << " with " << newest_update_osd->second << dendl;
   newest_update_osd_id = newest_update_osd->first;
   
@@ -955,7 +955,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
     if (p->second.is_incomplete())
       continue;
     if (primary->second.is_incomplete()) {
-      dout(10) << "choose_acting prefer osd." << p->first << " because not incomplete" << dendl;
+      dout(10) << "calc_acting prefer osd." << p->first << " because not incomplete" << dendl;
       primary = p;
       continue;
     }
@@ -963,7 +963,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
     if (p->second.last_update < newest_update_osd->second.log_tail)
       continue;
     if (primary->second.last_update < newest_update_osd->second.log_tail) {
-      dout(10) << "choose_acting prefer osd." << p->first
+      dout(10) << "calc_acting prefer osd." << p->first
 	       << " because log contiguous with newest osd." << newest_update_osd->first << dendl;
       primary = p;
       continue;
@@ -974,7 +974,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 	if (!q->second.is_incomplete() &&
 	    q->second.last_update < primary->second.log_tail &&
 	    q->second.last_update >= p->second.log_tail) {
-	  dout(10) << "choose_acting prefer osd." << p->first
+	  dout(10) << "calc_acting prefer osd." << p->first
 		   << " because it brings osd." << q->first << " into log contiguity" << dendl;
 	  primary = p;
 	  continue;
@@ -985,14 +985,15 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 
   if (primary->second.is_incomplete() ||
       primary->second.last_update < newest_update_osd->second.log_tail) {
-    dout(10) << "choose_acting no acceptable primary, reverting to up " << up << dendl;
+    dout(10) << "calc_acting no acceptable primary, reverting to up " << up << dendl;
     want = up;
     return;
   }
 
-  dout(10) << "choose_acting primary is osd." << primary->first
+  dout(10) << "calc_acting primary is osd." << primary->first
 	   << " with " << primary->second << dendl;
   want.push_back(primary->first);
+  unsigned usable = 1;
 
   // select replicas that have log contiguity with primary
   for (vector<int>::const_iterator i = up.begin();
@@ -1008,6 +1009,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
       want.push_back(*i);
     } else {
       want.push_back(*i);
+      usable++;
       dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
     }
   }
@@ -1015,7 +1017,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
   for (map<int,Info>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
-    if (want.size() >= get_osdmap()->get_pg_size(info.pgid))
+    if (usable >= get_osdmap()->get_pg_size(info.pgid))
       break;
 
     // skip up osds we already considered above
@@ -1163,7 +1165,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
   last_update_applied = info.last_update;
 
-  assert(info.last_complete >= log.tail && !info.is_incomplete());
+  assert(info.last_complete >= log.tail);
 
   need_up_thru = false;
 
@@ -1227,14 +1229,13 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       assert(peer_info.count(peer));
       PG::Info& pi = peer_info[peer];
 
-      MOSDPGLog *m = 0;
-
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
       if (log.tail > pi.last_update) {
 	// reset, backfill
 	pi.last_update = info.last_update;
 	pi.last_complete = info.last_complete;
+	pi.log_tail = info.last_update;
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
 
@@ -1246,12 +1247,14 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
 	  (*activator_map)[peer]->pg_info.push_back(pi);
 	} else {
-	  m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
-	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+	  MOSDPGInfo *mp = new MOSDPGInfo(get_osdmap()->get_epoch());
+	  mp->pg_info.push_back(pi);
+	  osd->cluster_messenger->send_message(mp, get_osdmap()->get_cluster_inst(peer));
 	}
 	continue;
       }
 
+      MOSDPGLog *m = 0;
       if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.is_empty() && activator_map) {
@@ -4025,22 +4028,22 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "got info from osd." << infoevt.from << dendl;
+  dout(10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
 
-  if (pg->is_replica()) {
-    assert(pg->log.tail <= pg->info.last_complete);
-    assert(pg->log.head == pg->info.last_update);
-    post_event(Activate());
-  } else {
-    // pg creation for backfill
-    dout(10) << "updating info to " << infoevt.info << dendl;
+  if (infoevt.info.last_update != pg->info.last_update) {
+    dout(10) << " reset for backfill" << dendl;
     pg->info = infoevt.info;
-
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    pg->write_info(*t);
-    int tr = pg->osd->store->queue_transaction(&pg->osr, t);
-    assert(tr == 0);
+    assert(pg->info.log_tail == pg->info.last_update);
+    assert(pg->info.last_backfill == hobject_t());
+    pg->log.clear();
+    pg->log.head = pg->info.last_update;
+    pg->log.tail = pg->info.last_update;
   }
+
+  assert(pg->log.tail <= pg->info.last_complete);
+  assert(pg->log.head == pg->info.last_update);
+
+  post_event(Activate());
   return discard_event();
 }
 

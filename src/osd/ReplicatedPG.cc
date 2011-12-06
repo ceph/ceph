@@ -800,6 +800,9 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
     case CEPH_OSD_OP_PUSH:
       sub_op_push(op);
       return;
+    case CEPH_OSD_OP_DELETE:
+      sub_op_remove(op);
+      return;
     case CEPH_OSD_OP_SCRUB_RESERVE:
       sub_op_scrub_reserve(op);
       return;
@@ -2951,7 +2954,8 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
-    
+    Info &pinfo = peer_info[peer];
+
     repop->waitfor_ack.insert(peer);
     repop->waitfor_disk.insert(peer);
 
@@ -2975,7 +2979,14 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
       wr->set_data(repop->ctx->op->get_data());   // _copy_ bufferlist
     } else {
       // ship resulting transaction, log entries, and pg_stats
-      ::encode(repop->ctx->op_t, wr->get_data());
+      if (soid > pinfo.last_backfill) {
+	dout(10) << "issue_repop shipping empty opt to osd." << peer << ", object beyond last_backfill "
+		 << pinfo.last_backfill << dendl;
+	ObjectStore::Transaction t;
+	::encode(t, wr->get_data());
+      } else {
+	::encode(repop->ctx->op_t, wr->get_data());
+      }
       ::encode(repop->ctx->log, wr->logbl);
       wr->pg_stats = info.stats;
     }
@@ -2984,10 +2995,9 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
     osd->cluster_messenger->send_message(wr, get_osdmap()->get_cluster_inst(peer));
 
     // keep peer_info up to date
-    Info &in = peer_info[peer];
-    in.last_update = ctx->at_version;
-    if (in.last_complete == old_last_update)
-      in.last_update = ctx->at_version;
+    if (pinfo.last_complete == pinfo.last_update)
+      pinfo.last_update = ctx->at_version;
+    pinfo.last_update = ctx->at_version;
   }
 }
 
@@ -4100,8 +4110,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 		   pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
-      if (peer_missing[peer].is_missing(soid))  // so that we ignore backfill; imprecise!
-	peer_missing[peer].got(soid, pi->version);
+      peer_missing[peer].got(soid, pi->version);
       
       pushing[soid].erase(peer);
       pi = NULL;
@@ -4613,6 +4622,17 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
   op->put();
 }
 
+void ReplicatedPG::sub_op_remove(MOSDSubOp *op)
+{
+  dout(7) << "sub_op_remove " << op->poid << dendl;
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  remove_object_with_snap_hardlinks(*t, op->poid);
+  int r = osd->store->queue_transaction(&osr, t);
+  assert(r == 0);
+  
+  op->put();
+}
 
 
 eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
@@ -5273,31 +5293,23 @@ int ReplicatedPG::recover_backfill(int max)
   Info& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
 
-  dout(10) << " peer osd." << backfill_target << " " << pinfo
+  hobject_t pos = pbi.begin;
+
+  dout(10) << " peer osd." << backfill_target
+	   << " pos " << pos
+	   << " info " << pinfo
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
   
-  // does the pg exist yet on the peer?
-  if (pinfo.dne()) {
-    // ok, we know they have no objects.
-    pbi.end = hobject_t::get_max();
-
-    // fill in pinfo
-    pinfo.last_update = info.last_update;
-    pinfo.log_tail = info.last_update;
-    pinfo.last_backfill = hobject_t();
-    pinfo.history = info.history;
-    dout(10) << " peer osd." << backfill_target << " pg dne; setting info to " << pinfo << dendl;
-
-    // create pg on remote
-    MOSDPGInfo *mp = new MOSDPGInfo(get_osdmap()->get_epoch());
-    mp->pg_info.push_back(pinfo);
-    osd->cluster_messenger->send_message(mp, get_osdmap()->get_cluster_inst(backfill_target));
-  }
+  // re-scan our local interval to cope with recent changes
+  dout(10) << " rescanning local backfill_info from " << pos << dendl;
+  backfill_info.clear();
+  osr.flush();
+  scan_range(pos, 10, 20, &backfill_info);
 
   int ops = 0;
   while (ops < max) {
-    if (!backfill_info.at_end() && (backfill_info.end <= pbi.begin ||
+    if (!backfill_info.extends_to_end() && (backfill_info.end <= pbi.begin ||
 				    backfill_info.empty())) {
       osr.flush();
       scan_range(backfill_info.end, 10, 20, &backfill_info);
@@ -5307,7 +5319,7 @@ int ReplicatedPG::recover_backfill(int max)
 	     << " " << backfill_info.objects << dendl;
     dout(20) << " peer backfill " << pbi.begin << "-" << pbi.end << " " << pbi.objects << dendl;
 
-    if (!pbi.at_end() && (pbi.end <= backfill_info.begin ||
+    if (!pbi.extends_to_end() && (pbi.end <= backfill_info.begin ||
 			  pbi.empty())) {
       epoch_t e = get_osdmap()->get_epoch();
       MOSDPGScan *m = new MOSDPGScan(MOSDPGScan::OP_SCAN_GET_DIGEST, e, e, info.pgid,
@@ -5320,9 +5332,9 @@ int ReplicatedPG::recover_backfill(int max)
     
     if (backfill_info.empty()) {
       // this only happens when we reach the end of the collection.
-      assert(backfill_info.at_end());
+      assert(backfill_info.extends_to_end());
       if (pbi.empty()) {
-	assert(pbi.at_end());
+	assert(pbi.extends_to_end());
 	dout(10) << " reached end for both local and peer" << dendl;
 	if (pbi.begin != hobject_t::get_max()) {
 	  pbi.begin = hobject_t::get_max();
@@ -5354,10 +5366,10 @@ int ReplicatedPG::recover_backfill(int max)
     eversion_t mv = backfill_info.objects.begin()->second;
 
     if (pbi.empty()) {
-      assert(pbi.at_end());
+      assert(pbi.extends_to_end());
       dout(20) << " pushing local " << my_first << " " << backfill_info.objects.begin()->second
 	       << " to peer osd." << backfill_target << dendl;
-      push_backfill_object(my_first, mv, backfill_target);
+      push_backfill_object(my_first, mv, eversion_t(), backfill_target);
       backfill_info.pop_front();
       pbi.begin = my_first;
       ++ops;
@@ -5371,21 +5383,25 @@ int ReplicatedPG::recover_backfill(int max)
       dout(20) << " removing peer " << peer_first << " <= local " << my_first << dendl;
       send_remove_op(peer_first, pv, backfill_target);
       pbi.pop_front();
+      if (pbi.begin < backfill_info.begin)
+	pbi.begin = backfill_info.begin;
     } else if (peer_first == my_first) {
       if (pv == mv) {
 	dout(20) << " keeping peer " << peer_first << " " << pv << dendl;
       } else {
 	dout(20) << " replacing peer " << peer_first << " with local " << mv << dendl;
-	push_backfill_object(my_first, mv, backfill_target);
+	push_backfill_object(my_first, mv, pv, backfill_target);
 	++ops;
       }
       pbi.pop_front();
       backfill_info.pop_front();
+      if (pbi.begin < backfill_info.begin)
+	pbi.begin = backfill_info.begin;
     } else {
       // peer_first > my_first
       dout(20) << " pushing local " << my_first << " " << mv
 	       << " to peer osd." << backfill_target << dendl;
-      push_backfill_object(my_first, mv, backfill_target);
+      push_backfill_object(my_first, mv, eversion_t(), backfill_target);
       backfill_info.pop_front();
       ++ops;
     }
@@ -5394,21 +5410,24 @@ int ReplicatedPG::recover_backfill(int max)
   hobject_t bound = pbi.begin;
   bound.back_up_to_bounding_key();
   if (pinfo.last_backfill < bound) {
-    pinfo.last_backfill = bound;
-
     dout(10) << " peer osd." << backfill_target << " info.last_backfill now " << pinfo.last_backfill << dendl;
 
     epoch_t e = get_osdmap()->get_epoch();
     MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
-    m->last_backfill = pinfo.last_backfill;
+    m->last_backfill = bound;
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
   }
   return ops;
 }
 
-void ReplicatedPG::push_backfill_object(hobject_t oid, eversion_t v, int peer)
+void ReplicatedPG::push_backfill_object(hobject_t oid, eversion_t v, eversion_t have, int peer)
 {
   dout(10) << "push_backfill_object " << oid << " v " << v << " to osd." << peer << dendl;
+
+  // object is now below the waterline; mark it missing.
+  peer_info[peer].last_backfill = oid;
+  peer_missing[peer].add(oid, v, have);
+
   start_recovery_op(oid);
   ObjectContext *obc = get_object_context(oid, OLOC_BLANK, false);
   obc->ondisk_read_lock();
@@ -5422,6 +5441,7 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
   assert(is_locked());
   dout(10) << "scan_range from " << begin << dendl;
   bi->begin = begin;
+  bi->objects.clear();  // for good measure
 
   vector<hobject_t> ls;
   ls.reserve(max);
