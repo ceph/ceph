@@ -92,7 +92,7 @@ Makefile
 /gtest/fused-src/
 /unittest_*
 ceph.conf
-.ceph_keyring
+keyring
 massif.out.*
 testrados_list_parallel
 testrados_open_pools_parallel
