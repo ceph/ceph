@@ -296,6 +296,10 @@ bool PG::proc_replica_info(int from, Info &oinfo)
  */
 bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 {
+  if (oe.soid > info.last_backfill) {
+    dout(20) << "merge_old_entry  had " << oe << " : beyond last_backfill" << dendl;
+    return false;
+  }
   if (log.objects.count(oe.soid)) {
     Log::Entry &ne = *log.objects[oe.soid];  // new(er?) entry
     
@@ -308,7 +312,6 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : same" << dendl;
       return true;
     }
-
     if (oe.is_delete()) {
       if (ne.is_delete()) {
 	// old and new are delete
@@ -415,9 +418,11 @@ void PG::merge_log(ObjectStore::Transaction& t,
       Log::Entry &ne = *p;
       dout(20) << "merge_log " << ne << dendl;
       log.index(ne);
-      missing.add_next_event(ne);
-      if (ne.is_delete())
-	t.remove(coll, ne.soid);
+      if (ne.soid <= info.last_backfill) {
+	missing.add_next_event(ne);
+	if (ne.is_delete())
+	  t.remove(coll, ne.soid);
+      }
     }
       
     // move aside divergent items
@@ -1274,7 +1279,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              p++)
-	  if (p->soid < pi.last_backfill)
+	  if (p->soid <= pi.last_backfill)
 	    pm.add_next_event(*p);
       }
       
