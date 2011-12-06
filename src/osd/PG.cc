@@ -2609,11 +2609,12 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
 
 void PG::_request_scrub_map(int replica, eversion_t version)
 {
-    dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
-    MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version, 
-						get_osdmap()->get_epoch());
-    osd->cluster_messenger->send_message(repscrubop,
-					 get_osdmap()->get_cluster_inst(replica));
+  assert(replica != osd->whoami);
+  dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
+  MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version,
+                                              get_osdmap()->get_epoch());
+  osd->cluster_messenger->send_message(repscrubop,
+                                       get_osdmap()->get_cluster_inst(replica));
 }
 
 void PG::sub_op_scrub_reserve(MOSDSubOp *op)
