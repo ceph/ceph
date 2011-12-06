@@ -3966,16 +3966,12 @@ void ReplicatedPG::push_start(const hobject_t& soid, int peer,
 			      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   // take note.
-  push_info_t *pi, static_pi;
-  if (is_replica())
-    pi = &static_pi;            // i won't get an ack; no keep to keep state
-  else
-    pi = &pushing[soid][peer];
+  push_info_t *pi = &pushing[soid][peer];
   pi->size = size;
   pi->version = version;
   pi->data_subset = data_subset;
   pi->clone_subsets = clone_subsets;
-  
+
   pi->data_subset_pushing.span_of(pi->data_subset, 0, g_conf->osd_recovery_max_chunk);
   bool complete = pi->data_subset_pushing == pi->data_subset;
 
