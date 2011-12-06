@@ -22,6 +22,7 @@ class TestPool(object):
     def test_eexist(self):
         self.rados.create_pool('foo')
         assert_raises(ObjectExists, self.rados.create_pool, 'foo')
+        self.rados.delete_pool('foo')
 
     def list_non_default_pools(self):
         pools = self.rados.list_pools()
