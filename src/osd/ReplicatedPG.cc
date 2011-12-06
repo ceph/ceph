@@ -4240,6 +4240,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       // did we get everything we wanted?
       if (pi->data_subset.empty()) {
 	complete = true;
+      } else if (data_subset.empty()) {
+	complete = false;
       } else {
 	complete = pi->data_subset.range_end() == data_subset.range_end();
       }
