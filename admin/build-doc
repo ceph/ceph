@@ -42,9 +42,7 @@ cd build-doc
 if [ ! -e virtualenv ]; then
     virtualenv --no-site-packages virtualenv
 fi
-if [ ! -x virtualenv/bin/sphinx-build ]; then
-    ./virtualenv/bin/pip install sphinx
-fi
+./virtualenv/bin/pip install --quiet -r ../admin/doc-requirements.txt
 
 # ugly kludge until breathe is distutils-friendly
 install -d breathe
@@ -56,8 +54,6 @@ if [ -z "$(git rev-parse --default HEAD)" ]; then
     git pull --ff-only https://github.com/michaeljones/breathe.git master
 fi
 cd ..
-
-./virtualenv/bin/pip install --quiet -e 'git+https://github.com/NewDreamNetwork/sphinx-ditaa.git#egg=sphinx-ditaa'
 
 install -d -m0755 \
     output/html \

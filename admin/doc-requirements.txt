@@ -1,0 +1,2 @@
+Sphinx >=1.1.2
+-e git+https://github.com/NewDreamNetwork/sphinx-ditaa.git#egg=sphinx-ditaa
