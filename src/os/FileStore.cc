@@ -2369,7 +2369,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       break;
 
     default:
-      cerr << "bad op " << op << std::endl;
+      derr << "bad op " << op << dendl;
       assert(0);
     }
 
