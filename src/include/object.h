@@ -279,6 +279,7 @@ public:
   }
   
   hobject_t() : snap(0), hash(0), max(false) {}
+
   hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash) : 
     oid(oid), snap(snap), hash(hash), max(false),
     key(oid.name == key ? string() : key) {}
@@ -286,6 +287,12 @@ public:
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
     oid(soid.oid), snap(soid.snap), hash(hash), max(false),
     key(soid.oid.name == key ? string() : key) {}
+
+  /* Do not use when a particular hash function is needed */
+  explicit hobject_t(const sobject_t &o) :
+    oid(o.oid), snap(o.snap), max(false) {
+    hash = __gnu_cxx::hash<sobject_t>()(o);
+  }
 
   // maximum sorted value.
   static hobject_t get_max() {
@@ -332,12 +339,6 @@ public:
       oid.clear();
     }
     snap = 0;
-  }
-
-  /* Do not use when a particular hash function is needed */
-  explicit hobject_t(const sobject_t &o) :
-    oid(o.oid), snap(o.snap) {
-    hash = __gnu_cxx::hash<sobject_t>()(o);
   }
 
   void swap(hobject_t &o) {
