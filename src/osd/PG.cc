@@ -4194,7 +4194,6 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
   eversion_t request_log_from = pg->info.last_update;
   for (vector<int>::iterator p = pg->acting.begin() + 1; p != pg->acting.end(); ++p) {
     Info& ri = pg->peer_info[*p];
-    assert(!ri.is_incomplete());
     assert(ri.last_update >= best.log_tail);
     if (ri.last_update < request_log_from)
       request_log_from = ri.last_update;
