@@ -491,22 +491,18 @@ int crush_do_rule(const struct crush_map *map,
 	 * that this may or may not correspond to the specific types
 	 * referenced by the crush rule.
 	 */
-	if (force >= 0) {
-		if (force >= map->max_devices ||
-		    map->device_parents[force] == 0) {
-			/*dprintk("CRUSH: forcefed device dne\n");*/
-			force = -1;  /* force fed device dne */
-		}
-		else if (!is_out(map, weight, force, x)) {
-			while (1) {
-				force_context[++force_pos] = force;
-				if (force >= 0)
-					force = map->device_parents[force];
-				else
-					force = map->bucket_parents[-1-force];
-				if (force == 0)
-					break;
-			}
+	if (force >= 0 &&
+	    force < map->max_devices &&
+	    map->device_parents[force] != 0 &&
+	    !is_out(map, weight, force, x)) {
+		while (1) {
+			force_context[++force_pos] = force;
+			if (force >= 0)
+				force = map->device_parents[force];
+			else
+				force = map->bucket_parents[-1-force];
+			if (force == 0)
+				break;
 		}
 	}
 
