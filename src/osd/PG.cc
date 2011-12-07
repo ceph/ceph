@@ -1218,7 +1218,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     // start up replicas
 
     // count replicas that are not backfilling
-    int active = 1;
+    unsigned active = 1;
 
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
