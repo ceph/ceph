@@ -1142,12 +1142,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   state_set(PG_STATE_ACTIVE);
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
-  state_clear(PG_STATE_PEERING);
-  if (is_primary() && 
-      get_osdmap()->get_pg_size(info.pgid) != acting.size())
-    state_set(PG_STATE_DEGRADED);
-  else
-    state_clear(PG_STATE_DEGRADED);
 
   if (is_primary()) {
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -1224,6 +1218,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   // if primary..
   if (is_primary()) {
     // start up replicas
+
+    // count replicas that are not backfilling
+    int active = 1;
+
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_info.count(peer));
@@ -1238,6 +1236,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	pi.log_tail = info.last_update;
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
+	state_set(PG_STATE_BACKFILL);
 
 	peer_missing[peer].clear();
 
@@ -1274,6 +1273,11 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	m->log.copy_after(log, pi.last_update);
       }
 
+      if (pi.last_backfill != hobject_t::get_max())
+	state_set(PG_STATE_BACKFILL);
+      else
+	active++;
+
       Missing& pm = peer_missing[peer];
 
       // update local version of peer's missing list!
@@ -1303,6 +1307,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
         dout(10) << "activate peer osd." << peer << " " << pi << " missing " << pm << dendl;
       }
     }
+
+    // degraded?
+    if (get_osdmap()->get_pg_size(info.pgid) != active)
+      state_set(PG_STATE_DEGRADED);
 
     // all clean?
     if (is_all_uptodate()) 
@@ -3267,16 +3275,8 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   // deactivate.
   state_clear(PG_STATE_ACTIVE);
   state_clear(PG_STATE_DOWN);
-  state_clear(PG_STATE_PEERING);  // we'll need to restart peering
-  state_clear(PG_STATE_DEGRADED);
-  state_clear(PG_STATE_REPLAY);
 
   peer_missing.clear();
-
-  if (is_primary()) {
-    if (osdmap->get_pg_size(info.pgid) != acting.size())
-      state_set(PG_STATE_DEGRADED);
-  }
 
   // reset primary state?
   if (oldrole == 0 || get_role() == 0)
@@ -3779,7 +3779,6 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   dout(10) << "Peering advmap" << dendl;
   if (prior_set.get()->affected_by_map(advmap.osdmap, pg)) {
     dout(1) << "Peering, affected_by_map, going to Reset" << dendl;
-    pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
     return transit< Reset >();
   }
@@ -3793,6 +3792,8 @@ void PG::RecoveryState::Peering::exit()
 {
   dout(10) << "Leaving Peering" << dendl;
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_PEERING);
 }
 
 /*---------Active---------*/
@@ -3933,8 +3934,13 @@ boost::statechart::result PG::RecoveryState::Active::react(const BackfillComplet
 }
 
 void PG::RecoveryState::Active::exit()
- {
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_DEGRADED);
+  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_REPLAY);
 }
 
 /*------ReplicaActive-----*/
@@ -4267,10 +4273,18 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
 {
   state_name = "Started/Primary/Peering/Incomplete";
   context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_PEERING);
+  pg->state_set(PG_STATE_INCOMPLETE);
+  pg->update_stats();
 }
 void PG::RecoveryState::Incomplete::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_INCOMPLETE);
 }
 
 /*------GetMissing--------*/
