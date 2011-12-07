@@ -355,6 +355,27 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
         # race condition: nothing actually says rsyslog had time to
         # flush the file fully. oh well.
 
+        log.info('Checking logs for errors...')
+        for remote in ctx.cluster.remotes.iterkeys():
+            log.debug('Checking %s', remote.name)
+            r = remote.run(
+                args=[
+                    'egrep',
+                    'BUG|INFO|DEADLOCK',
+                    run.Raw('/tmp/cephtest/archive/syslog/*.log'),
+                    run.Raw('|'),
+                    'head', '-n', '1',
+                    ],
+                stdout=StringIO(),
+                )
+            stdout = r.stdout.getvalue()
+            if stdout != '':
+                log.error('Error in syslog on %s: %s', remote.name, stdout)
+                ctx.summary['success'] = False
+                if 'failure_reason' not in ctx.summary:
+                    ctx.summary['failure_reason'] = \
+                        "'{error}' in syslog".format(error=stdout)
+
         log.info('Compressing syslogs...')
         run.wait(
             ctx.cluster.run(
