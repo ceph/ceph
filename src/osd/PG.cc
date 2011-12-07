@@ -999,8 +999,6 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
-    if (want.size() >= get_osdmap()->get_pg_size(info.pgid))
-      break;
     if (*i == primary->first)
       continue;
     const Info &cur_info = all_info.find(*i)->second;
