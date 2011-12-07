@@ -5293,6 +5293,9 @@ int ReplicatedPG::recover_backfill(int max)
   Info& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
 
+  // we track position based on pbi.begin.  the updates below when we
+  // advance through the pg must update pbi.begin to the MIN of the
+  // local and target intervals.
   hobject_t pos = pbi.begin;
 
   dout(10) << " peer osd." << backfill_target
@@ -5302,6 +5305,9 @@ int ReplicatedPG::recover_backfill(int max)
 	   << " " << pbi.objects.size() << " objects" << dendl;
   
   // re-scan our local interval to cope with recent changes
+  // FIXME: we could track the eversion_t when we last scanned, and invalidate
+  // that way.  or explicitly modify/invalidate when we actually change specific
+  // objects.
   dout(10) << " rescanning local backfill_info from " << pos << dendl;
   backfill_info.clear();
   osr.flush();
@@ -5337,8 +5343,9 @@ int ReplicatedPG::recover_backfill(int max)
 	assert(pbi.extends_to_end());
 	dout(10) << " reached end for both local and peer" << dendl;
 	if (pbi.begin != hobject_t::get_max()) {
+	  // we reached the end of both intervals for the _first_
+	  // time.  send completion message to the replica.
 	  pbi.begin = hobject_t::get_max();
-
 	  pinfo.last_backfill = hobject_t::get_max();
 
 	  epoch_t e = get_osdmap()->get_epoch();
