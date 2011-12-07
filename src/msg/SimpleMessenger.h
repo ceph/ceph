@@ -332,11 +332,6 @@ private:
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }
-    void send_keepalive() {
-      pipe_lock.Lock();
-      _send_keepalive();
-      pipe_lock.Unlock();
-    }    
     void _send_keepalive() {
       keepalive = true;
       cond.Signal();
