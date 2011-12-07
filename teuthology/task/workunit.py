@@ -101,6 +101,8 @@ def _run_tests(ctx, role, tests):
     # subdir so we can remove and recreate this a lot without sudo
     scratch_tmp = os.path.join(mnt, 'client.{id}'.format(id=id_), 'tmp')
     srcdir = '/tmp/cephtest/workunit.{role}'.format(role=role)
+    secretfile = '/tmp/cephtest/data/{role}.secret'.format(role=role)
+    teuthology.write_secret_file(remote, role, secretfile)
 
     remote.run(
         logger=log.getChild(role),
@@ -156,6 +158,8 @@ def _run_tests(ctx, role, tests):
                         run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
                         run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
                         run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
+                        run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
+                        run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                         run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
                         '/tmp/cephtest/enable-coredump',
                         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
