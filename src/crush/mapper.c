@@ -489,7 +489,8 @@ int crush_do_rule(const struct crush_map *map,
 	/*
 	 * determine hierarchical context of force, if any.  note
 	 * that this may or may not correspond to the specific types
-	 * referenced by the crush rule.
+	 * referenced by the crush rule.  it will also only affect
+	 * the first descent (TAKE).
 	 */
 	if (force >= 0 &&
 	    force < map->max_devices &&
@@ -511,13 +512,14 @@ int crush_do_rule(const struct crush_map *map,
 		switch (rule->steps[step].op) {
 		case CRUSH_RULE_TAKE:
 			w[0] = rule->steps[step].arg1;
-			if (force_pos >= 0) {
-				if (force_context[force_pos] != w[0]) {
-					rc = -1;  /* forced mapping dne */
-					goto out;
-				}
+
+			/* find position in force_context/hierarchy */
+			while (force_pos >= 0 && force_context[force_pos] != w[0])
 				force_pos--;
-			}
+			/* and move past it */
+			if (force_pos >= 0)
+				force_pos--;
+
 			wsize = 1;
 			break;
 
