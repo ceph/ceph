@@ -90,6 +90,8 @@ void usage(ostream& out)
 STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "\n"
 "GLOBAL OPTIONS:\n"
+"   --object_locator object_locator\n"
+"        set object_locator for operation"
 "   -p pool\n"
 "   --pool=pool\n"
 "        select given pool by name\n"
@@ -563,6 +565,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int ret;
   bool create_pool = false;
   const char *pool_name = NULL;
+  string oloc;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
   const char *snapname = NULL;
@@ -590,6 +593,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("pool");
   if (i != opts.end()) {
     pool_name = i->second.c_str();
+  }
+  i = opts.find("object_locator");
+  if (i != opts.end()) {
+    oloc = i->second;
   }
   i = opts.find("category");
   if (i != opts.end()) {
@@ -712,6 +719,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "error looking up snap '" << snapname << "': " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
     }
+  }
+  if (oloc.size()) {
+    io_ctx.locator_set_key(oloc);
   }
   if (snapid != CEPH_NOSNAP) {
     string name;
@@ -855,7 +865,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       librados::ObjectIterator i = io_ctx.objects_begin();
       librados::ObjectIterator i_end = io_ctx.objects_end();
       for (; i != i_end; ++i) {
-	*outstream << *i << std::endl;
+	if (i->second.size())
+	  *outstream << i->first << "\t" << i->second << std::endl;
+	else
+	  *outstream << i->first << std::endl;
       }
     }
     if (!stdout)
@@ -1274,6 +1287,8 @@ int main(int argc, const char **argv)
       opts["pretty-format"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {
+      opts["object_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
       opts["category"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
