@@ -21,7 +21,6 @@
 
 #include "crush/CrushWrapper.h"
 
-#include "common/strtol.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDBoot.h"
@@ -35,6 +34,8 @@
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#include "common/perf_counters.h"
+#include "common/strtol.h"
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -144,8 +145,24 @@ bool OSDMonitor::update_from_paxos()
   check_subs();
 
   share_map_with_random_osd();
+  update_logger();
 
   return true;
+}
+
+void OSDMonitor::on_active()
+{
+  update_logger();
+}
+
+void OSDMonitor::update_logger()
+{
+  dout(10) << "update_logger" << dendl;
+  
+  mon->cluster_logger->set(l_cluster_num_osd, osdmap.get_num_osds());
+  mon->cluster_logger->set(l_cluster_num_osd_up, osdmap.get_num_up_osds());
+  mon->cluster_logger->set(l_cluster_num_osd_in, osdmap.get_num_in_osds());
+  mon->cluster_logger->set(l_cluster_osd_epoch, osdmap.get_epoch());
 }
 
 void OSDMonitor::remove_redundant_pg_temp()

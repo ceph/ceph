@@ -176,11 +176,6 @@ enum {
   l_mon_last,
 };
 
-enum {
-  l_cluster_first = 555000,
-  l_cluster_last,
-};
-
 void Monitor::init()
 {
   lock.Lock();
@@ -200,7 +195,22 @@ void Monitor::init()
   assert(!cluster_logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "cluster", l_cluster_first, l_cluster_last);
-    // ...
+    pcb.add_u64(l_cluster_num_osd, "num_osd");
+    pcb.add_u64(l_cluster_num_osd_up, "num_osd_up");
+    pcb.add_u64(l_cluster_num_osd_in, "num_osd_in");
+    pcb.add_u64(l_cluster_osd_epoch, "osd_epoch");
+    pcb.add_u64(l_cluster_osd_kb, "osd_kb");
+    pcb.add_u64(l_cluster_osd_kb_used, "osd_kb_used");
+    pcb.add_u64(l_cluster_osd_kb_avail, "osd_kb_avail");
+    pcb.add_u64(l_cluster_num_pool, "num_pool");
+    pcb.add_u64(l_cluster_num_pg, "num_pg");
+    pcb.add_u64(l_cluster_num_pg_active_clean, "num_pg_active_clean");
+    pcb.add_u64(l_cluster_num_pg_active, "num_pg_active");
+    pcb.add_u64(l_cluster_num_pg_peering, "num_pg_peering");
+    pcb.add_u64(l_cluster_num_object, "num_object");
+    pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded");
+    pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound");
+    pcb.add_u64(l_cluster_num_kb, "num_kb");
     cluster_logger = pcb.create_perf_counters();
   }
 

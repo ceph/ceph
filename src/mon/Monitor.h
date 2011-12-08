@@ -44,6 +44,27 @@
 
 #include <memory>
 
+enum {
+  l_cluster_first = 555000,
+  l_cluster_num_osd,
+  l_cluster_num_osd_up,
+  l_cluster_num_osd_in,
+  l_cluster_osd_epoch,
+  l_cluster_osd_kb,
+  l_cluster_osd_kb_used,
+  l_cluster_osd_kb_avail,
+  l_cluster_num_pool,
+  l_cluster_num_pg,
+  l_cluster_num_pg_active_clean,
+  l_cluster_num_pg_active,
+  l_cluster_num_pg_peering,
+  l_cluster_num_object,
+  l_cluster_num_object_degraded,
+  l_cluster_num_object_unfound,
+  l_cluster_num_kb,
+  l_cluster_last,
+};
+
 class MonitorStore;
 
 class PaxosService;
