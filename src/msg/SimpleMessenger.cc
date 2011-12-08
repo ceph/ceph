@@ -1315,7 +1315,7 @@ int SimpleMessenger::Pipe::connect()
   pipe_lock.Lock();
  fail_locked:
   if (state == STATE_CONNECTING)
-    fault();
+    fault(true);
   else
     ldout(msgr->cct,3) << "connect fault, but state != connecting, stopping" << dendl;
 
