@@ -3292,18 +3292,12 @@ void Client::unmount()
     put_inode(cwd);
   cwd = NULL;
 
-  // NOTE: i'm assuming all caches are already flushing (because all files are closed).
-
   // clean up any unclosed files
-  if (!fd_map.empty())
-    ldout(cct, 0) << "Warning: Some files were not closed prior to unmounting; closing them now" << dendl;
   while (!fd_map.empty()) {
-    int fd = fd_map.begin()->first;
-    assert(fd_map.count(fd));
-    Fh *fh = fd_map[fd];
+    Fh *fh = fd_map.begin()->second;
+    fd_map.erase(fd_map.begin());
     ldout(cct, 0) << " destroying lost open file " << fh << " on " << *fh->inode << dendl;
     _release_fh(fh);
-    fd_map.erase(fd);
   }
 
   _ll_drop_pins();
