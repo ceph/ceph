@@ -450,7 +450,7 @@ written." % (self.name, ret, length))
         ret = self.librados.rados_read(self.io, c_char_p(key), ret_buf,
                 c_size_t(length), c_uint64(offset))
         if ret < 0:
-            raise make_ex("Ioctx.read(%s): failed to read %s" % (self.name, key))
+            raise make_ex(ret, "Ioctx.read(%s): failed to read %s" % (self.name, key))
         return ctypes.string_at(ret_buf, ret)
 
     def get_stats(self):
