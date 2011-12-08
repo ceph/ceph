@@ -3312,6 +3312,11 @@ void Client::unmount()
   lru.lru_set_max(0);
   trim_cache();
 
+  while (unsafe_sync_write > 0) {
+    ldout(cct, 0) << unsafe_sync_write << " unsafe_sync_writes, waiting"  << dendl;
+    mount_cond.Wait(client_lock);
+  }
+
   if (cct->_conf->client_oc) {
     // flush/release all buffered data
     hash_map<vinodeno_t, Inode*>::iterator next;
@@ -3337,7 +3342,6 @@ void Client::unmount()
   flush_caps();
   wait_sync_caps(last_flush_seq);
 
-  //if (0) {// hack
   while (lru.lru_get_size() > 0 || 
          !inode_map.empty()) {
     ldout(cct, 2) << "cache still has " << lru.lru_get_size() 
@@ -3349,16 +3353,6 @@ void Client::unmount()
   }
   assert(lru.lru_get_size() == 0);
   assert(inode_map.empty());
-  //}
-
-  // unsafe writes
-  if (!cct->_conf->client_oc) {
-    while (unsafe_sync_write > 0) {
-      ldout(cct, 0) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
-              << dendl;
-      mount_cond.Wait(client_lock);
-    }
-  }
 
   // stop tracing
   if (!cct->_conf->client_trace.empty()) {
