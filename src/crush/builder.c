@@ -317,7 +317,8 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 
 	/* reverse sort by weight (simple insertion sort) */
 	reverse = malloc(sizeof(int) * size);
-	reverse[0] = 0;
+	if (size)
+		reverse[0] = 0;
 	for (i=1; i<size; i++) {
 		for (j=0; j<i; j++) {
 			if (weights[i] < weights[reverse[j]]) {
