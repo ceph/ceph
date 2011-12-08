@@ -28,7 +28,7 @@
 
 #include "messages/MGenericMessage.h"
 
-
+#include "common/perf_counters.h"
 #include "common/Timer.h"
 
 #include <sstream>
@@ -100,6 +100,7 @@ bool MDSMonitor::update_from_paxos()
   print_map(mdsmap, 0);
 
   check_subs();
+  update_logger();
 
   return true;
 }
@@ -124,6 +125,15 @@ void MDSMonitor::encode_pending(bufferlist &bl)
   pending_mdsmap.encode(bl);
 }
 
+void MDSMonitor::update_logger()
+{
+  dout(10) << "update_logger" << dendl;
+
+  mon->cluster_logger->set(l_cluster_num_mds_up, mdsmap.get_num_up_mds());
+  mon->cluster_logger->set(l_cluster_num_mds_in, mdsmap.get_num_in_mds());
+  mon->cluster_logger->set(l_cluster_num_mds_failed, mdsmap.get_num_failed_mds());
+  mon->cluster_logger->set(l_cluster_mds_epoch, mdsmap.get_epoch());
+}
 
 bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
 {
@@ -475,6 +485,7 @@ void MDSMonitor::_updated(MMDSBeacon *m)
 void MDSMonitor::on_active()
 {
   tick();
+  update_logger();
 }
 
 enum health_status_t MDSMonitor::get_health(ostream &oss) const

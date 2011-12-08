@@ -46,6 +46,8 @@
 
 enum {
   l_cluster_first = 555000,
+  l_cluster_num_mon,
+  l_cluster_num_mon_quorum,
   l_cluster_num_osd,
   l_cluster_num_osd_up,
   l_cluster_num_osd_in,
@@ -62,6 +64,10 @@ enum {
   l_cluster_num_object_degraded,
   l_cluster_num_object_unfound,
   l_cluster_num_kb,
+  l_cluster_num_mds_up,
+  l_cluster_num_mds_in,
+  l_cluster_num_mds_failed,
+  l_cluster_mds_epoch,
   l_cluster_last,
 };
 
@@ -190,6 +196,7 @@ public:
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
   void finish_election();
 
+  void update_logger();
 
   // -- paxos --
   vector<Paxos*> paxos;

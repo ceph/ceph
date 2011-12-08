@@ -70,7 +70,9 @@ class MDSMonitor : public PaxosService {
   bool update_from_paxos();
   void create_pending(); 
   void encode_pending(bufferlist &bl);
-  
+
+  void update_logger();
+
   void _updated(MMDSBeacon *m);
  
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.

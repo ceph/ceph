@@ -195,6 +195,8 @@ void Monitor::init()
   assert(!cluster_logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "cluster", l_cluster_first, l_cluster_last);
+    pcb.add_u64(l_cluster_num_mon, "num_mon");
+    pcb.add_u64(l_cluster_num_mon_quorum, "num_mon_quorum");
     pcb.add_u64(l_cluster_num_osd, "num_osd");
     pcb.add_u64(l_cluster_num_osd_up, "num_osd_up");
     pcb.add_u64(l_cluster_num_osd_in, "num_osd_in");
@@ -211,6 +213,10 @@ void Monitor::init()
     pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded");
     pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound");
     pcb.add_u64(l_cluster_num_kb, "num_kb");
+    pcb.add_u64(l_cluster_num_mds_up, "num_mds_up");
+    pcb.add_u64(l_cluster_num_mds_in, "num_mds_in");
+    pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed");
+    pcb.add_u64(l_cluster_mds_epoch, "mds_epoch");
     cluster_logger = pcb.create_perf_counters();
   }
 
@@ -271,6 +277,12 @@ void Monitor::unregister_cluster_logger()
   } else {
     dout(10) << "unregister_cluster_logger - not registered" << dendl;
   }
+}
+
+void Monitor::update_logger()
+{
+  cluster_logger->set(l_cluster_num_mon, monmap->size());
+  cluster_logger->set(l_cluster_num_mon_quorum, quorum.size());
 }
 
 void Monitor::shutdown()
@@ -739,6 +751,7 @@ void Monitor::finish_election()
 {
   finish_contexts(g_ceph_context, waitfor_quorum);
   resend_routed_requests();
+  update_logger();
   register_cluster_logger();
 } 
 
