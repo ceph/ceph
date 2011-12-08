@@ -710,7 +710,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	   << ceph_mds_state_name(mdsmap.get_state(who)) << ")";
       } else if ((mdsmap.get_root() == who ||
 		  mdsmap.get_tableserver() == who) &&
-		 mdsmap.get_num_mds() > 1) {
+		 mdsmap.get_num_in_mds() > 1) {
 	r = -EBUSY;
 	ss << "can't tell the root (" << mdsmap.get_root() << ") or tableserver (" << mdsmap.get_tableserver()
 	   << " to stop unless it is the last mds in the cluster";
@@ -903,7 +903,7 @@ void MDSMonitor::tick()
   if (!mon->is_leader()) return;
 
   // expand mds cluster (add new nodes to @in)?
-  while (pending_mdsmap.get_num_mds() < pending_mdsmap.get_max_mds() &&
+  while (pending_mdsmap.get_num_in_mds() < pending_mdsmap.get_max_mds() &&
 	 !pending_mdsmap.is_degraded()) {
     int mds = 0;
     string name;

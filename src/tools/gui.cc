@@ -528,8 +528,8 @@ void GuiMonitor::update_mds_cluster_view()
     view_mds_nodes();
 
   ostringstream oss;
-  oss << ctx->mdsmap.get_num_mds() << " In, "
-      << ctx->mdsmap.get_num_failed() << " Failed, "
+  oss << ctx->mdsmap.get_num_in_mds() << " In, "
+      << ctx->mdsmap.get_num_failed_mds() << " Failed, "
       << ctx->mdsmap.get_num_mds(MDSMap::STATE_STOPPED) << " Stopped, "
       << ctx->mdsmap.get_max_mds() << " Max";
   guiMonitorMDSClusterStatsLabel->set_label(oss.str());
@@ -1516,9 +1516,9 @@ void GuiMonitor::StatsWindowInfo::gen_mds_cluster_columns()
     ctx->mdsmap.get_max_mds()));
   insert_stats("Amount of Up MDSes", str(boost::format("%d") % up_mds.size()));
   insert_stats("Amount of In MDSes", str(boost::format("%u") %
-    ctx->mdsmap.get_num_mds()));
+    ctx->mdsmap.get_num_in_mds()));
   insert_stats("Amount of Failed MDSes", str(boost::format("%d") %
-    ctx->mdsmap.get_num_failed()));
+    ctx->mdsmap.get_num_failed_mds()));
   insert_stats("Amount of Stopped MDSes", str(boost::format("%d") %
     stopped_mds.size()));
 }

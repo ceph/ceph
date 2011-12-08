@@ -255,8 +255,14 @@ public:
   }
 
   // counts
-  unsigned get_num_mds() {
+  unsigned get_num_in_mds() {
     return in.size();
+  }
+  unsigned get_num_up_mds() {
+    return up.size();
+  }
+  int get_num_failed_mds() {
+    return failed.size();
   }
   unsigned get_num_mds(int state) {
     unsigned n = 0;
@@ -266,7 +272,6 @@ public:
       if (p->second.state == state) ++n;
     return n;
   }
-  int get_num_failed() { return failed.size(); }
 
   // data pools
   void add_data_pg_pool(int64_t poolid) {
