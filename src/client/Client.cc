@@ -3302,10 +3302,6 @@ void Client::unmount()
 
   _ll_drop_pins();
 
-  // empty lru cache
-  lru.lru_set_max(0);
-  trim_cache();
-
   while (unsafe_sync_write > 0) {
     ldout(cct, 0) << unsafe_sync_write << " unsafe_sync_writes, waiting"  << dendl;
     mount_cond.Wait(client_lock);
@@ -3335,6 +3331,10 @@ void Client::unmount()
 
   flush_caps();
   wait_sync_caps(last_flush_seq);
+
+  // empty lru cache
+  lru.lru_set_max(0);
+  trim_cache();
 
   while (lru.lru_get_size() > 0 || 
          !inode_map.empty()) {
