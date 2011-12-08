@@ -3296,13 +3296,12 @@ void Client::unmount()
 
   // clean up any unclosed files
   if (!fd_map.empty())
-    std::cerr << "Warning: Some files were not closed prior to unmounting;\n"
-	      << "Ceph is closing them now.\n";
+    ldout(cct, 0) << "Warning: Some files were not closed prior to unmounting; closing them now" << dendl;
   while (!fd_map.empty()) {
     int fd = fd_map.begin()->first;
     assert(fd_map.count(fd));
     Fh *fh = fd_map[fd];
-    lderr(cct) << " destroying lost open file " << fh << " on " << *fh->inode << dendl;
+    ldout(cct, 0) << " destroying lost open file " << fh << " on " << *fh->inode << dendl;
     _release_fh(fh);
     fd_map.erase(fd);
   }
