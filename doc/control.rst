@@ -152,7 +152,9 @@ resending pending requests. ::
 
 	$ ceph osd reweight N W
 
-Sets the weight of osdN to W. ::
+Set the weight of osdN to W. Two OSDs with the same weight will receive
+roughly the same number of I/O requests and store approximately the
+same amount of data. ::
 
 	$ ceph osd reweight-by-utilization [threshold]
 
