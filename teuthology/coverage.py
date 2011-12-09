@@ -180,19 +180,6 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
             os.path.join(args.lcov_output, 'total.lcov')
             )
 
-        if args.html_output:
-            log.info('generating html for %s', test)
-            subprocess.check_call(
-                args=[
-                    'genhtml',
-                    '-o', os.path.join(args.html_output, test),
-                    '-t', desc,
-                    '--',
-                    os.path.join(args.lcov_output,
-                                 '{name}.lcov'.format(name=test)),
-                    ],
-                )
-
     suite = os.path.basename(args.test_dir)
     coverage = read_coverage(output)
     test_coverage['total for {suite}'.format(suite=suite)] = coverage
