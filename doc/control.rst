@@ -197,6 +197,17 @@ Changes a pool setting. Valid fields are:
 
 ::
 
+	$ ceph osd pool get POOL FIELD
+
+Get the value of a pool setting. Valid fields are:
+
+	* ``pg_num``: See above.
+	* ``pgp_num``: See above.
+	* ``lpg_num``: The number of local PGs.
+	* ``lpgp_num``: The number used for placing the local PGs.
+
+::
+
 	$ ceph osd scrub N
 
 Sends a scrub command to osdN. To send the command to all osds, use ``*``.
