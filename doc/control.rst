@@ -145,7 +145,9 @@ List classes that are loaded in the ceph cluster. ::
 	$ ceph osd pause
 	$ ceph osd unpause
 
-TODO ::
+Set or clear the pause flags in the OSD map. If set, no IO requests
+will be sent to any OSD. Clearing the flags via unpause results in
+resending pending requests. ::
 
 	$ ceph osd reweight N W
 
