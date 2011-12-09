@@ -158,14 +158,16 @@ protected:
     string *mangled_name,
     int *exists
     );
-  int _collection_list_partial(
-    snapid_t seq,
-    int max_count,
-    vector<hobject_t> *ls, 
-    collection_list_handle_t *last
-    );
   int _collection_list(
     vector<hobject_t> *ls
+    );
+  int _collection_list_partial(
+    const hobject_t &start,
+    int min_count,
+    int max_count,
+    snapid_t seq,
+    vector<hobject_t> *ls,
+    hobject_t *next
     );
 private:
   /// Tag root directory at beginning of split
@@ -246,26 +248,29 @@ private:
     uint32_t hash ///< [in] Hash to convert to a string.
     ); ///< @return String representation of hash
 
-  /** 
-   * Recursively lists all objects in path.
-   *
-   * Lists all objects in path or a subdirectory of path which
-   * sort greater than *lower_bound and have snapid_t > *seq in order of 
-   * hash up to a max count of *max_count
-   *
-   * In case of multiple objects with the same hash, *index indicates the
-   * last listed.  (If non-null, the index of the last object listed will 
-   * be assigned to *index).
-   *
-   * max_count, seq, lower_bound optional, lower_bound iff index
-   */
-  int list(
-    const vector<string> &path, ///< [in] Path to list.
-    const int *max_count,	///< [in] Max number to list (NULL if not needed)
-    const snapid_t *seq,	///< [in] Snap to list (NULL if not needed)
-    const string *lower_bound,	///< [in] Last hash listed (NULL if not needed)
-    uint32_t *index,		///< [in,out] last index (NULL iff !lower_bound)
-    vector<hobject_t> *out	///< [out] Listed objects
+  /// Get hash from hash prefix string e.g. "FFFFAB" -> 0xFFFFAB00
+  uint32_t hash_prefix_to_hash(
+    string prefix ///< [in] string to convert
+    ); ///< @return Hash
+
+  /// Get path contents by hash
+  int get_path_contents_by_hash(
+    const vector<string> &path,          /// [in] Path to list
+    const string *lower_bound,           /// [in] list > *lower_bound
+    const hobject_t *next_object,        /// [in] list > *next_object
+    const snapid_t *seq,                 /// [in] list >= *seq
+    set<string> *hash_prefixes,          /// [out] prefixes in dir
+    multimap<string, hobject_t> *objects /// [out] objects
+    );
+
+  /// List objects in collection in hobject_t order
+  int list_by_hash(
+    const vector<string> &path, /// [in] Path to list
+    int min_count,              /// [in] List at least min_count
+    int max_count,              /// [in] List at most max_count
+    snapid_t seq,               /// [in] list only objects where snap >= seq
+    hobject_t *next,            /// [in,out] List objects >= *next
+    vector<hobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
 };
 

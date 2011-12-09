@@ -198,7 +198,7 @@ int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
       return -ENOENT;
     }
 
-    obj.name = **state;
+    obj.name = (*state)->first;
     (*state)++;
   } while (obj.name[0] == '.');
 
@@ -237,11 +237,11 @@ int RGWRados::log_list_next(RGWAccessHandle handle, string *name)
       return -ENOENT;
     }
     if (state->prefix.length() &&
-	(*state->obit).find(state->prefix) != 0) {
+	state->obit->first.find(state->prefix) != 0) {
       state->obit++;
       continue;
     }
-    *name = *state->obit;
+    *name = state->obit->first;
     state->obit++;
     break;
   }
@@ -2019,7 +2019,7 @@ int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<stri
 
   librados::ObjectIterator iter = io_ctx.objects_begin();
   while (iter != io_ctx.objects_end()) {
-    const std::string& oid = *iter;
+    const std::string& oid = iter->first;
     if (oid.compare(start) >= 0)
       break;
 
@@ -2032,7 +2032,7 @@ int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<stri
 
   for (i = 0; i < num && iter != io_ctx.objects_end(); ++i, ++iter) {
     RGWObjEnt e;
-    const string &oid = *iter;
+    const string &oid = iter->first;
 
     // fill it in with initial values; we may correct later
     e.name = oid;

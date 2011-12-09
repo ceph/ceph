@@ -20,9 +20,9 @@ TEST(LibRadosList, ListObjects) {
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   const char *entry;
-  ASSERT_EQ(0, rados_objects_list_next(ctx, &entry));
+  ASSERT_EQ(0, rados_objects_list_next(ctx, &entry, NULL));
   ASSERT_EQ(std::string(entry), "foo");
-  ASSERT_EQ(-ENOENT, rados_objects_list_next(ctx, &entry));
+  ASSERT_EQ(-ENOENT, rados_objects_list_next(ctx, &entry, NULL));
   rados_objects_list_close(ctx);
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
@@ -41,7 +41,7 @@ TEST(LibRadosList, ListObjectsPP) {
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
   ASSERT_EQ(false, (iter == ioctx.objects_end()));
-  ASSERT_EQ(*iter, "foo");
+  ASSERT_EQ((*iter).first, "foo");
   ++iter;
   ASSERT_EQ(true, (iter == ioctx.objects_end()));
   ioctx.close();

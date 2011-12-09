@@ -259,10 +259,12 @@ namespace __gnu_cxx {
   };
 }
 
+typedef uint64_t filestore_hobject_key_t;
 struct hobject_t {
   object_t oid;
   snapid_t snap;
   uint32_t hash;
+  bool max;
 
 private:
   string key;
@@ -271,15 +273,43 @@ public:
   const string &get_key() const {
     return key;
   }
-
-  hobject_t() : snap(0), hash(0) {}
-  hobject_t(object_t oid, const string &key, snapid_t snap, uint32_t hash) : 
-    oid(oid), snap(snap), hash(hash), 
+  
+  hobject_t() : snap(0), hash(0), max(false) {}
+  hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash) : 
+    oid(oid), snap(snap), hash(hash), max(false),
     key(oid.name == key ? string() : key) {}
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
-    oid(soid.oid), snap(soid.snap), hash(hash),
+    oid(soid.oid), snap(soid.snap), hash(hash), max(false),
     key(soid.oid.name == key ? string() : key) {}
+
+  // maximum sorted value.
+  static hobject_t get_max() {
+    hobject_t h;
+    h.max = true;
+    return h;
+  }
+  bool is_max() const {
+    return max;
+  }
+
+  static uint32_t _reverse_nibbles(uint32_t retval) {
+    // reverse nibbles
+    retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
+    retval = ((retval & 0x00ff00ff) << 8) | ((retval & 0xff00ff00) >> 8);
+    retval = ((retval & 0x0000ffff) << 16) | ((retval & 0xffff0000) >> 16);
+    return retval;
+  }
+
+  filestore_hobject_key_t get_filestore_key() const {
+    if (max)
+      return 0x100000000ull;
+    else
+      return _reverse_nibbles(hash);
+  }
+  void set_filestore_key(uint32_t v) {
+    hash = _reverse_nibbles(v);
+  }
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
@@ -299,17 +329,14 @@ public:
     hash = temp.hash;
   }
 
-  operator sobject_t() const {
-    return sobject_t(oid, snap);
-  }
-
   void encode(bufferlist& bl) const {
-    __u8 version = 1;
+    __u8 version = 2;
     ::encode(version, bl);
     ::encode(key, bl);
     ::encode(oid, bl);
     ::encode(snap, bl);
     ::encode(hash, bl);
+    ::encode(max, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 version;
@@ -319,18 +346,66 @@ public:
     ::decode(oid, bl);
     ::decode(snap, bl);
     ::decode(hash, bl);
+    if (version >= 2)
+      ::decode(max, bl);
+    else
+      max = false;
   }
 };
 WRITE_CLASS_ENCODER(hobject_t)
+
 namespace __gnu_cxx {
   template<> struct hash<hobject_t> {
-    size_t operator()(const sobject_t &r) const {
+    size_t operator()(const hobject_t &r) const {
       static hash<object_t> H;
       static rjhash<uint64_t> I;
       return H(r.oid) ^ I(r.snap);
     }
   };
 }
+
+inline ostream& operator<<(ostream& out, const hobject_t& o)
+{
+  if (o.is_max())
+    return out << "MAX";
+  out << o.oid << "/" << o.snap << "/" << std::hex << o.hash << std::dec;
+  if (o.get_key().length())
+    out << "@" << o.get_key();
+  return out;
+}
+
+// sort hobject_t's by <get_filestore_key,name,snapid>
+inline bool operator==(const hobject_t &l, const hobject_t &r) {
+  return l.oid == r.oid && l.snap == r.snap && l.hash == r.hash && l.max == r.max;
+}
+inline bool operator!=(const hobject_t &l, const hobject_t &r) {
+  return l.oid != r.oid || l.snap != r.snap || l.hash != r.hash || l.max != r.max;
+}
+inline bool operator>(const hobject_t &l, const hobject_t &r) {
+  return l.max > r.max ||
+    (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid > r.oid || 
+					      (l.oid == r.oid && l.snap > r.snap)))));
+}
+inline bool operator<(const hobject_t &l, const hobject_t &r) {
+  return l.max < r.max ||
+    (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid < r.oid ||
+					      (l.oid == r.oid && l.snap < r.snap)))));
+}
+inline bool operator>=(const hobject_t &l, const hobject_t &r) {
+  return l.max > r.max ||
+    (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid > r.oid ||
+					      (l.oid == r.oid && l.snap >= r.snap)))));
+}
+inline bool operator<=(const hobject_t &l, const hobject_t &r) {
+  return l.max < r.max ||
+    (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid < r.oid ||
+					      (l.oid == r.oid && l.snap <= r.snap)))));
+}
+
 
 // ---------------------------
 

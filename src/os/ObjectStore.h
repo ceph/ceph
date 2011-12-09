@@ -620,8 +620,25 @@ public:
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
   virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
   virtual bool collection_empty(coll_t c) = 0;
-  virtual int collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>& o, int count, collection_list_handle_t *handle) = 0;
   virtual int collection_list(coll_t c, vector<hobject_t>& o) = 0;
+
+
+  /**
+   * list partial contents of collection relative to a hash offset/position
+   *
+   * @param c collection
+   * @param start list objects that sort >= this value
+   * @param min return at least this many results, unless we reach the end
+   * @param max return no more than this many results
+   * @param snapid return no objects with snap < snapid
+   * @param ls [out] result
+   * @param next [out] next item sorts >= this value
+   * @return zero on success, or negative error
+   */
+  virtual int collection_list_partial(coll_t c, hobject_t start,
+				      int min, int max, snapid_t snap, 
+				      vector<hobject_t> *ls, hobject_t *next) = 0;
+
 
   /*
   virtual int _create_collection(coll_t c) = 0;

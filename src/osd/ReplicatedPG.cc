@@ -50,6 +50,7 @@ static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMapRef osdma
 
 
 #include <sstream>
+#include <utility>
 
 #include <errno.h>
 
@@ -116,6 +117,11 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, Message *m)
     pull(soid, v);
   }
   waiting_for_missing_object[soid].push_back(m);
+}
+
+void ReplicatedPG::wait_for_all_missing(Message *m)
+{
+  waiting_for_all_missing.push_back(m);
 }
 
 bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
@@ -226,6 +232,20 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 
 // ==========================================================
+bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
+{
+  if (missing.missing.empty())
+    return false;
+  for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); ++p) {
+    if (p->op.op == CEPH_OSD_OP_PGLS) {
+      if (op->get_snapid() != CEPH_NOSNAP) {
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
 void ReplicatedPG::do_pg_op(MOSDOp *op)
 {
   dout(10) << "do_pg_op " << *op << dendl;
@@ -264,84 +284,79 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         PGLSResponse response;
 	::decode(response.handle, bp);
 
-	// reset cookie?
-	if (p->op.pgls.start_epoch &&
-	    p->op.pgls.start_epoch < info.history.same_primary_since) {
-	  dout(10) << " pgls sequence started epoch " << p->op.pgls.start_epoch
-		   << " < same_primary_since " << info.history.same_primary_since
-		   << ", resetting cookie" << dendl;
-	  response.handle = collection_list_handle_t();
+	hobject_t next;
+	hobject_t current = response.handle;
+	osr.flush();
+	int r = osd->store->collection_list_partial(coll, current,
+						    p->op.pgls.count,
+						    p->op.pgls.count,
+						    snapid,
+						    &sentries,
+						    &next);
+	if (r != 0) {
+	  result = -EINVAL;
+	  break;
 	}
 
-	if (response.handle.in_missing_set) {
-	  // it's an offset into the missing set
-	  version_t v = response.handle.index;
-	  dout(10) << " handle low/missing " << v << dendl;
-	  map<version_t, hobject_t>::iterator mp = missing.rmissing.lower_bound(v);
-	  result = 0;
-	  while (sentries.size() < p->op.pgls.count) {
-	    if (mp == missing.rmissing.end()) {
-	      dout(10) << " handle finished low/missing, moving to high/ondisk" << dendl;
-	      response.handle.in_missing_set = false;
-	      break;
-	    }
-	    sentries.push_back(mp->second);
-	    response.handle.index = mp->first + 1;
+	assert(snapid == CEPH_NOSNAP || missing.missing.empty());
+	map<hobject_t, Missing::item>::iterator missing_iter =
+	  missing.missing.lower_bound(current);
+	vector<hobject_t>::iterator ls_iter = sentries.begin();
+	while (1) {
+	  if (ls_iter == sentries.end()) {
+	    break;
 	  }
-	}
-	if (sentries.size() < p->op.pgls.count &&
-	    !response.handle.in_missing_set) {
-	  // it's a readdir cookie
-	  dout(10) << " handle high/missing " << response.handle << dendl;
-	  osr.flush();  // order wrt preceeding writes
-	  result = osd->store->collection_list_partial(coll, snapid,
-						       sentries, p->op.pgls.count - sentries.size(),
-						       &response.handle);
-	  response.handle.in_missing_set = false;
-	}
 
-	if (result == 0) {
-          vector<hobject_t>::iterator iter;
-          for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
-	    bool keep = true;
-	    // skip snapdir objects
-	    if (iter->snap == CEPH_SNAPDIR)
-	      continue;
+	  hobject_t candidate;
+	  if (missing_iter == missing.missing.end() ||
+	      *ls_iter < missing_iter->first) {
+	    candidate = *(ls_iter++);
+	  } else {
+	    candidate = (missing_iter++)->first;
+	  }
 
-	    if (snapid != CEPH_NOSNAP) {
-	      // skip items not defined for this snapshot
-	      if (iter->snap == CEPH_NOSNAP) {
-		bufferlist bl;
-		osd->store->getattr(coll, *iter, SS_ATTR, bl);
-		SnapSet snapset(bl);
-		if (snapid <= snapset.seq)
-		  continue;
-	      } else {
-		bufferlist bl;
-		osd->store->getattr(coll, *iter, OI_ATTR, bl);
-		object_info_t oi(bl);
-		bool exists = false;
-		for (vector<snapid_t>::iterator i = oi.snaps.begin(); i != oi.snaps.end(); ++i)
-		  if (*i == snapid) {
-		    exists = true;
-		    break;
-		  }
-		dout(10) << *iter << " has " << oi.snaps << " .. exists=" << exists << dendl;
-		if (!exists)
-		  continue;
-	      }
+	  if (response.entries.size() == p->op.pgls.count) {
+	    next = candidate;
+	  }
+
+	  // skip snapdir objects
+	  if (candidate.snap == CEPH_SNAPDIR)
+	    continue;
+
+	  if (candidate.snap < snapid)
+	    continue;
+
+	  if (snapid != CEPH_NOSNAP) {
+	    bufferlist bl;
+	    if (candidate.snap == CEPH_NOSNAP) {
+	      osd->store->getattr(coll, candidate, SS_ATTR, bl);
+	      SnapSet snapset(bl);
+	      if (snapid <= snapset.seq)
+		continue;
+	    } else {
+	      bufferlist attr_bl;
+	      osd->store->getattr(coll, candidate, OI_ATTR, attr_bl);
+	      object_info_t oi(attr_bl);
+	      vector<snapid_t>::iterator i = find(oi.snaps.begin(),
+						  oi.snaps.end(),
+						  snapid);
+	      if (i == oi.snaps.end())
+		continue;
 	    }
-	    if (filter)
-	      keep = pgls_filter(filter, *iter, filter_out);
+	  }
 
-            if (keep)
-	      response.entries.push_back(iter->oid);
-          }
-	  ::encode(response, outdata);
-          if (filter)
-	    ::encode(filter_out, outdata);
-        }
-	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;
+	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	    continue;
+
+	  response.entries.push_back(make_pair(candidate.oid,
+					       candidate.get_key()));
+	}
+	response.handle = next;
+	::encode(response, outdata);
+	if (filter)
+	  ::encode(filter_out, outdata);
+	dout(10) << " pgls result=" << result << " outdata.length()="
+		 << outdata.length() << dendl;
       }
       break;
 
@@ -397,8 +412,13 @@ void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
  */
 void ReplicatedPG::do_op(MOSDOp *op) 
 {
-  if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
+  if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP)) {
+    if (pg_op_must_wait(op)) {
+      wait_for_all_missing(op);
+      return;
+    }
     return do_pg_op(op);
+  }
 
   dout(10) << "do_op " << *op << (op->may_write() ? " may_write" : "") << dendl;
 
@@ -4444,6 +4464,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(20) << " kicking waiters on " << soid << dendl;
       osd->requeue_ops(this, waiting_for_missing_object[soid]);
       waiting_for_missing_object.erase(soid);
+      if (missing.missing.size() == 0) {
+	osd->requeue_ops(this, waiting_for_all_missing);
+	waiting_for_all_missing.clear();
+      }
     } else {
       dout(20) << " no waiters on " << soid << dendl;
       /*for (hash_map<hobject_t,list<class Message*> >::iterator p = waiting_for_missing_object.begin();
@@ -4651,8 +4675,12 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
 void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
 {
-  dout(10) << "_finish_mark_all_unfound_lost " << dendl;
   lock();
+  dout(10) << "_finish_mark_all_unfound_lost " << dendl;
+
+  osd->requeue_ops(this, waiting_for_all_missing);
+  waiting_for_all_missing.clear();
+
   while (!obcs.empty()) {
     ObjectContext *obc = obcs.front();
     put_object_context(obc);
@@ -4730,6 +4758,8 @@ void ReplicatedPG::on_change()
   // take object waiters
   requeue_object_waiters(waiting_for_missing_object);
   requeue_object_waiters(waiting_for_degraded_object);
+  osd->requeue_ops(this, waiting_for_all_missing);
+  waiting_for_all_missing.clear();
 
   // clear pushing/pulling maps
   pushing.clear();

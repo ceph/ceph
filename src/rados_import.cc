@@ -230,7 +230,7 @@ int do_rados_import(ThreadPool *tp, IoCtx &io_ctx, IoCtxDistributor* io_ctx_dist
     librados::ObjectIterator oi = io_ctx.objects_begin();
     librados::ObjectIterator oi_end = io_ctx.objects_end();
     for (; oi != oi_end; ++oi) {
-      import_val_wq.queue(new std::string(*oi));
+      import_val_wq.queue(new std::string((*oi).first));
     }
     import_val_wq.drain();
   }

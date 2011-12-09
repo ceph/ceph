@@ -18,6 +18,9 @@
 
 #include "HashIndex.h"
 
+#include "common/debug.h"
+#define DOUT_SUBSYS filestore
+
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";
 
@@ -122,45 +125,21 @@ int HashIndex::_lookup(const hobject_t &hoid,
   return get_mangled_name(*path, hoid, mangled_name, exists_out);
 }
 
-static void split_handle(collection_list_handle_t handle, 
-			 uint32_t *hash, uint32_t *index) {
-  *hash = handle.hash;
-  *index = handle.index;
-}
-
-static collection_list_handle_t form_handle(uint32_t hash, uint32_t index) {
-  collection_list_handle_t handle;
-  handle.hash = hash;
-  handle.index = index;
-  return handle;
-}
-
-int HashIndex::_collection_list_partial(snapid_t seq, int max_count,
-					vector<hobject_t> *ls, 
-					collection_list_handle_t *last) {
-  vector<string> path;
-  uint32_t index, hash;
-  string lower_bound;
-  if (last) {
-    split_handle(*last, &hash, &index);
-    lower_bound = get_hash_str(hash);
-  }
-  int r = list(path, 
-	       max_count ? &max_count : NULL, 
-	       &seq,
-	       last ? &lower_bound : NULL,
-	       last ? &index : NULL, 
-	       ls);
-  if (r < 0)
-    return r;
-  if (last && ls->size())
-    *last = form_handle(ls->rbegin()->hash, index);
-  return 0;
-}
-
 int HashIndex::_collection_list(vector<hobject_t> *ls) {
   vector<string> path;
-  return list(path, NULL, NULL, NULL, NULL, ls);
+  return list_by_hash(path, 0, 0, 0, 0, ls);
+}
+
+int HashIndex::_collection_list_partial(const hobject_t &start,
+					int min_count,
+					int max_count,
+					snapid_t seq,
+					vector<hobject_t> *ls,
+					hobject_t *next) {
+  vector<string> path;
+  *next = start;
+  dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
+  return list_by_hash(path, min_count, max_count, seq, next, ls);
 }
 
 int HashIndex::start_split(const vector<string> &path) {
@@ -371,12 +350,12 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 void HashIndex::get_path_components(const hobject_t &hoid,
 				    vector<string> *path) {
   char buf[MAX_HASH_LEVEL + 1];
-  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, hoid.hash);
+  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)hoid.get_filestore_key());
 
-  // Path components are the hex characters of hoid.hash in, least
+  // Path components are the hex characters of hoid.hash, least
   // significant first
   for (int i = 0; i < MAX_HASH_LEVEL; ++i) {
-    path->push_back(string(&buf[MAX_HASH_LEVEL - 1 - i], 1));
+    path->push_back(string(&buf[i], 1));
   }
 }
 
@@ -394,28 +373,34 @@ string HashIndex::get_path_str(const hobject_t &hoid) {
   return get_hash_str(hoid.hash);
 }
 
-int HashIndex::list(const vector<string> &path,
-		    const int *max_count,
-		    const snapid_t *seq,
-		    const string *lower_bound,
-		    uint32_t *index,
-		    vector<hobject_t> *out) {
-  if (lower_bound)
-    assert(index);
-  vector<string> next_path = path;
-  next_path.push_back("");
-  set<string> hash_prefixes;
-  multimap<string, hobject_t> objects;
+uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
+  while (prefix.size() < sizeof(uint32_t) * 2) {
+    prefix.push_back('0');
+  }
+  uint32_t hash;
+  sscanf(prefix.c_str(), "%x", &hash);
+  // nibble reverse
+  hash = ((hash & 0x0f0f0f0f) << 4) | ((hash & 0xf0f0f0f0) >> 4);
+  hash = ((hash & 0x00ff00ff) << 8) | ((hash & 0xff00ff00) >> 8);
+  hash = ((hash & 0x0000ffff) << 16) | ((hash & 0xffff0000) >> 16);
+  return hash;
+}
+
+int HashIndex::get_path_contents_by_hash(const vector<string> &path,
+					 const string *lower_bound,
+					 const hobject_t *next_object,
+					 const snapid_t *seq,
+					 set<string> *hash_prefixes,
+					 multimap<string, hobject_t> *objects) {
+  set<string> subdirs;
   map<string, hobject_t> rev_objects;
   int r;
-  int max = max_count ? *max_count : 0;
   string cur_prefix;
   for (vector<string>::const_iterator i = path.begin();
        i != path.end();
        ++i) {
     cur_prefix.append(*i);
   }
-
   r = list_objects(path, 0, 0, &rev_objects);
   if (r < 0)
     return r;
@@ -425,12 +410,13 @@ int HashIndex::list(const vector<string> &path,
     string hash_prefix = get_path_str(i->second);
     if (lower_bound && hash_prefix < *lower_bound)
       continue;
+    if (next_object && i->second < *next_object)
+      continue;
     if (seq && i->second.snap < *seq)
       continue;
-    hash_prefixes.insert(hash_prefix);
-    objects.insert(pair<string, hobject_t>(hash_prefix, i->second));
+    hash_prefixes->insert(hash_prefix);
+    objects->insert(pair<string, hobject_t>(hash_prefix, i->second));
   }
-  set<string> subdirs;
   r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -440,37 +426,77 @@ int HashIndex::list(const vector<string> &path,
     string candidate = cur_prefix + *i;
     if (lower_bound && candidate < lower_bound->substr(0, candidate.size()))
       continue;
-    hash_prefixes.insert(cur_prefix + *i);
+    if (next_object &&
+	candidate < get_path_str(*next_object).substr(0, candidate.size()))
+      continue;
+    hash_prefixes->insert(cur_prefix + *i);
   }
+  return 0;
+}
 
-  uint32_t counter = 0;
+int HashIndex::list_by_hash(const vector<string> &path,
+			    int min_count,
+			    int max_count,
+			    snapid_t seq,
+			    hobject_t *next,
+			    vector<hobject_t> *out) {
+  assert(out);
+  vector<string> next_path = path;
+  next_path.push_back("");
+  set<string> hash_prefixes;
+  multimap<string, hobject_t> objects;
+  int r = get_path_contents_by_hash(path,
+				    NULL,
+				    next,
+				    &seq,
+				    &hash_prefixes,
+				    &objects);
+  if (r < 0)
+    return r;
+  dout(20) << " prefixes " << hash_prefixes << dendl;
   for (set<string>::iterator i = hash_prefixes.begin();
-       i != hash_prefixes.end() && (!max_count || max > 0);
+       i != hash_prefixes.end();
        ++i) {
     multimap<string, hobject_t>::iterator j = objects.find(*i);
-    if (j != objects.end()) {
-      counter = 0;
-      for (; (!max_count || max > 0) && j != objects.end() && j->first == *i; ++j, ++counter) {
-	if (lower_bound && *lower_bound == *i && counter < *index)
-	  continue;
-	out->push_back(j->second);
-	if (max_count)
-	  max--;
+    if (j == objects.end()) {
+      if (min_count > 0 && out->size() > (unsigned)min_count) {
+	if (next)
+	  *next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i));
+	return 0;
       }
-      if (index)
-	*index = counter;
-      continue;
-    } 
+      *(next_path.rbegin()) = *(i->rbegin());
+      hobject_t next_recurse;
+      if (next)
+	next_recurse = *next;
+      r = list_by_hash(next_path,
+		       min_count,
+		       max_count,
+		       seq,
+		       &next_recurse,
+		       out);
 
-    // subdir
-    *(next_path.rbegin()) = *(i->rbegin());
-    int old_size = out->size();
-    assert(next_path.size() > path.size());
-    r = list(next_path, max_count ? &max : NULL, seq, lower_bound, index, out);
-    if (r < 0)
-      return r;
-    if (max_count)
-      max -= out->size() - old_size;
+      if (r < 0)
+	return r;
+      if (!next_recurse.max) {
+	if (next)
+	  *next = next_recurse;
+	return 0;
+      }
+    } else {
+      while (j != objects.end() && j->first == *i) {
+	if (max_count > 0 && out->size() == (unsigned)max_count) {
+	  if (next)
+	    *next = j->second;
+	  return 0;
+	}
+	if (!next || j->second >= *next) {
+	  out->push_back(j->second);
+	}
+	++j;
+      }
+    }
   }
+  if (next)
+    *next = hobject_t::get_max();
   return 0;
 }
