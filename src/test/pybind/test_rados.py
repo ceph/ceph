@@ -133,3 +133,22 @@ class TestIoctx(object):
         eq(snap.name, 'foo')
         self.ioctx.remove_snap('foo')
         eq(list(self.ioctx.list_snaps()), [])
+
+    def test_locator(self):
+        self.ioctx.set_locator_key("bar")
+        self.ioctx.write('foo', 'contents1')
+        objects = [i for i in self.ioctx.list_objects()]
+        eq(len(objects), 1)
+        eq(self.ioctx.get_locator_key(), "bar")
+        self.ioctx.set_locator_key("")
+        objects[0].seek(0)
+        objects[0].write("contents2")
+        eq(self.ioctx.get_locator_key(), "")
+        self.ioctx.set_locator_key("bar")
+        contents = self.ioctx.read("foo")
+        eq(contents, "contents2")
+        eq(self.ioctx.get_locator_key(), "bar")
+        objects[0].remove()
+        objects = [i for i in self.ioctx.list_objects()]
+        eq(objects, [])
+        self.ioctx.set_locator_key("")

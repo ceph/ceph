@@ -266,10 +266,12 @@ class ObjectIterator(object):
 
     def next(self):
         key = c_char_p()
-        ret = self.ioctx.librados.rados_objects_list_next(self.ctx, byref(key))
+        locator = c_char_p()
+        ret = self.ioctx.librados.rados_objects_list_next(self.ctx, byref(key),
+                                                          byref(locator))
         if ret < 0:
             raise StopIteration()
-        return Object(self.ioctx, key.value)
+        return Object(self.ioctx, key.value, locator.value)
 
     def __del__(self):
         self.ioctx.librados.rados_objects_list_close(self.ctx)
@@ -368,6 +370,7 @@ class Ioctx(object):
         self.librados = librados
         self.io = io
         self.state = "open"
+        self.locator_key = ""
 
     def __enter__(self):
         return self
@@ -400,6 +403,10 @@ class Ioctx(object):
         if ret < 0:
             raise make_ex(ret, "error changing locator key of '%s' to '%s'" %\
                 (self.name, loc_key))
+        self.locator_key = loc_key
+
+    def get_locator_key(self):
+        return self.locator_key
 
     def close(self):
         if self.state == "open":
@@ -585,13 +592,26 @@ written." % (self.name, ret, length))
         self.require_ioctx_open()
         return self.librados.rados_get_last_version(self.io)
 
+def set_object_locator(func):
+    def retfunc(self, *args, **kwargs):
+        if self.locator_key is not None:
+            old_locator = self.ioctx.get_locator_key()
+            self.ioctx.set_locator_key(self.locator_key)
+            retval = func(self, *args, **kwargs)
+            self.ioctx.set_locator_key(old_locator)
+            return retval
+        else:
+            return func(self, *args, **kwargs)
+    return retfunc
+
 class Object(object):
     """Rados object wrapper, makes the object look like a file"""
-    def __init__(self, ioctx, key):
+    def __init__(self, ioctx, key, locator_key=None):
         self.key = key
         self.ioctx = ioctx
         self.offset = 0
         self.state = "exists"
+        self.locator_key = locator_key
 
     def __str__(self):
         return "rados.Object(ioctx=%s,key=%s)" % (str(self.ioctx), self.key)
@@ -600,23 +620,27 @@ class Object(object):
         if self.state != "exists":
             raise ObjectStateError("The object is %s" % self.state)
 
+    @set_object_locator
     def read(self, length = 1024*1024):
         self.require_object_exists()
         ret = self.ioctx.read(self.key, self.offset, length)
         self.offset += len(ret)
         return ret
 
+    @set_object_locator
     def write(self, string_to_write):
         self.require_object_exists()
         ret = self.ioctx.write(self.key, string_to_write, self.offset)
         self.offset += ret
         return ret
 
+    @set_object_locator
     def remove(self):
         self.require_object_exists()
         self.ioctx.remove_object(self.key)
         self.state = "removed"
 
+    @set_object_locator
     def stat(self):
         self.require_object_exists()
         return self.ioctx.stat(self.key)
@@ -625,18 +649,22 @@ class Object(object):
         self.require_object_exists()
         self.offset = position
 
+    @set_object_locator
     def get_xattr(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.get_xattr(self.key, xattr_name)
 
+    @set_object_locator
     def get_xattrs(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.get_xattrs(self.key, xattr_name)
 
+    @set_object_locator
     def set_xattr(self, xattr_name, xattr_value):
         self.require_object_exists()
         return self.ioctx.set_xattr(self.key, xattr_name, xattr_value)
 
+    @set_object_locator
     def rm_xattr(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.rm_xattr(self.key, xattr_name)
