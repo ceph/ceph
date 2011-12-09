@@ -64,6 +64,7 @@ file. This is functionally equivalent to ::
 
 	$ ceph osd getmap -o /tmp/osdmap
 	$ osdmaptool /tmp/osdmap --export-crush file
+
 ::
 
 	$ ceph osd dump [--format format>]
@@ -188,8 +189,11 @@ Creates/deletes a storage pool. ::
 Changes a pool setting. Valid fields are:
 
 	* ``size``: Sets the number of copies of data in the pool.
-	* ``pg_num``: TODO
-	* ``pgp_num``: TODO
+	* ``crash_replay_interval``: The number of seconds to allow
+	  clients to replay acknowledged but uncommited requests.
+	* ``pg_num``: The placement group number.
+	* ``pgp_num``: Effective number when calculating pg placement.
+	* ``crush_ruleset``: rule number for mapping placement.
 
 ::
 
