@@ -364,6 +364,8 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     'BUG|INFO|DEADLOCK',
                     run.Raw('/tmp/cephtest/archive/syslog/*.log'),
                     run.Raw('|'),
+                    'grep', '-v', 'task .* blocked for more than .* seconds',
+                    run.Raw('|'),
                     'head', '-n', '1',
                     ],
                 stdout=StringIO(),
