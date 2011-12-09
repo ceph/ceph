@@ -64,8 +64,47 @@ file. This is functionally equivalent to ::
 
 	$ ceph osd getmap -o /tmp/osdmap
 	$ osdmaptool /tmp/osdmap --export-crush file
-
 ::
+
+	$ ceph osd dump [--format format>]
+
+Dump the osd map. Valid formats for -f are "plain" and "json". If no
+--format option is given, the osd map is dumped as plain text. ::
+
+	$ ceph osd tree [--format format]
+
+Dump the osd map as a tree with one line per osd containing weight
+and state. ::
+
+	$ ceph osd crush add <id> <name> <weight> [<loc1> [<loc2> ...]]
+
+Add a new item with the given id/name/weight at the specified
+location. ::
+
+	$ ceph osd crush remove <id>
+
+Remove an existing item from the crush map. ::
+
+	$ ceph osd crush reweight <name> <weight>
+
+Set the weight of the item given by ``<name>`` to ``<weight>``. ::
+
+	$ ceph osd cluster_snap <name>
+
+Create a cluster snapshot. ::
+
+	$ ceph osd lost [--yes-i-really-mean-it]
+
+Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
+
+	$ ceph osd create [<id>]
+
+Create a new OSD. If no ID is given, a new ID is automatically selected
+if possible. ::
+
+	$ ceph osd rm [<id>...]
+
+Remove the given OSD(s). ::
 
 	$ ceph osd getmaxosd
 
@@ -179,5 +218,4 @@ Enables debug messages. ::
 
 Displays the status of all metadata servers.
 
-dump, getmap, stop, set_max_mds, setmap: TODO
-
+set_max_mds: TODO
