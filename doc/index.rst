@@ -105,6 +105,7 @@ Table of Contents
    ops/index
    rec/index
    config
+   control
    api/index
    Internals <dev/index>
    man/index
