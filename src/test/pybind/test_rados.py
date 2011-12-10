@@ -1,5 +1,6 @@
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados, ObjectExists, ObjectNotFound, ANONYMOUS_AUID, ADMIN_AUID
+import threading
 
 class TestPool(object):
 
@@ -152,3 +153,77 @@ class TestIoctx(object):
         objects = [i for i in self.ioctx.list_objects()]
         eq(objects, [])
         self.ioctx.set_locator_key("")
+
+    def test_aio_write(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_write("foo", "bar", 0, cb, cb)
+        comp.wait_for_complete()
+        comp.wait_for_safe()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        contents = self.ioctx.read("foo")
+        eq(contents, "bar")
+        [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_append(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_write("foo", "bar", 0, cb, cb)
+        comp2 = self.ioctx.aio_append("foo", "baz", cb, cb)
+        comp.wait_for_complete()
+        contents = self.ioctx.read("foo")
+        eq(contents, "barbaz")
+        with lock:
+            while count[0] < 4:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_write_full(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        self.ioctx.aio_write("foo", "barbaz", 0, cb, cb)
+        comp = self.ioctx.aio_write_full("foo", "bar", cb, cb)
+        comp.wait_for_complete()
+        comp.wait_for_safe()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        contents = self.ioctx.read("foo")
+        eq(contents, "bar")
+        [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_read(self):
+        retval = [None]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                retval[0] = buf
+                lock.notify()
+        self.ioctx.write("foo", "bar")
+        self.ioctx.aio_read("foo", 3, 0, cb)
+        with lock:
+            while retval[0] is None:
+                lock.wait()
+        eq(retval[0], "bar")
+        [i.remove() for i in self.ioctx.list_objects()]
+
