@@ -10,7 +10,7 @@ cd ..
 mkdir tmp
 cd tmp
 # must be root!
-sudo prove -r ../pjd*/tests
+sudo prove -r -v ../pjd*/tests
 cd ..
 rm -r tmp pjd*
 
