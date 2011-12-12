@@ -191,7 +191,8 @@ private:
   OSDMap() : epoch(0), 
 	     pool_max(-1),
 	     flags(0),
-	     num_osd(0), max_osd(0) { 
+	     num_osd(0), max_osd(0),
+	     cluster_snapshot_epoch(0) { 
     memset(&fsid, 0, sizeof(fsid));
   }
 
