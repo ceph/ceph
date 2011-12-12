@@ -477,7 +477,6 @@ int crush_do_rule(const struct crush_map *map,
 	int i, j;
 	int numrep;
 	int firstn;
-	int rc = -1;
 
 	BUG_ON((__u32)ruleno >= map->max_rules);
 
@@ -601,10 +600,7 @@ int crush_do_rule(const struct crush_map *map,
 			BUG_ON(1);
 		}
 	}
-	rc = result_len;
-
-out:
-	return rc;
+	return result_len;
 }
 
 
