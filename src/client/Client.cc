@@ -4790,7 +4790,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
 
-  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_mds());
+  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
   return r;
 }
@@ -4804,7 +4804,7 @@ int Client::lookup_ino(inodeno_t ino)
   filepath path(ino);
   req->set_filepath(path);
 
-  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_mds());
+  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_ino exit(" << ino << ") = " << r << dendl;
   return r;
 }
