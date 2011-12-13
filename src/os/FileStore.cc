@@ -2159,8 +2159,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
 
   Transaction::iterator i = t.begin();
 
+  int op_num = 0;
   while (i.have_op()) {
     int op = i.get_op();
+    op_num++;
     int r = 0;
     switch (op) {
     case Transaction::OP_NOP:
@@ -2410,7 +2412,11 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
     }
     else if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r) << " not handled" << dendl;
+      dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
+	      << " (op num " << op_num << ", counting from 1)" << dendl;
+      dout(0) << " transaction dump:\n";
+      t.dump(*_dout);
+      *_dout << dendl;
       assert(0 == "unexpected error");
     }
   }
