@@ -207,65 +207,67 @@ public:
       return !ops;
     }
 
-    bool have_op() {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      return !p.end();
-    }
     int get_num_ops() {
       return ops;
     }
-    int get_op() {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      __u32 op;
-      ::decode(op, p);
-      return op;
-    }
-    void get_bl(bufferlist& bl) {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      ::decode(bl, p);
-    }
-    hobject_t get_oid() {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      hobject_t hoid;
-      if (sobject_encoding) {
-	sobject_t soid;
-	::decode(soid, p);
-	hoid.snap = soid.snap;
-	hoid.oid = soid.oid;
-      } else {
-	::decode(hoid, p);
+
+    // ---- iterator ----
+    class iterator {
+      bufferlist::iterator p;
+      bool sobject_encoding;
+
+      iterator(Transaction *t)
+	: p(t->tbl.begin()),
+	  sobject_encoding(t->sobject_encoding) {}
+
+      friend class Transaction;
+
+    public:
+      bool have_op() {
+	return !p.end();
       }
-      return hoid;
-    }
-    coll_t get_cid() {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      coll_t c;
-      ::decode(c, p);
-      return c;
-    }
-    uint64_t get_length() {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      uint64_t len;
-      ::decode(len, p);
-      return len;
-    }
-    string get_attrname() {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      string s;
-      ::decode(s, p);
-      return s;
-    }
-    void get_attrset(map<string,bufferptr>& aset) {
-      if (p.get_off() == 0)
-	p = tbl.begin();
-      ::decode(aset, p);
+      int get_op() {
+	__u32 op;
+	::decode(op, p);
+	return op;
+      }
+      void get_bl(bufferlist& bl) {
+	::decode(bl, p);
+      }
+      hobject_t get_oid() {
+	hobject_t hoid;
+	if (sobject_encoding) {
+	  sobject_t soid;
+	  ::decode(soid, p);
+	  hoid.snap = soid.snap;
+	  hoid.oid = soid.oid;
+	} else {
+	  ::decode(hoid, p);
+	}
+	return hoid;
+      }
+      coll_t get_cid() {
+	coll_t c;
+	::decode(c, p);
+	return c;
+      }
+      uint64_t get_length() {
+	uint64_t len;
+	::decode(len, p);
+	return len;
+      }
+      string get_attrname() {
+	string s;
+	::decode(s, p);
+	return s;
+      }
+      void get_attrset(map<string,bufferptr>& aset) {
+	::decode(aset, p);
+      }
+    };
+
+    iterator begin() {
+      return iterator(this);
     }
 
     // -----------------------------

@@ -2157,76 +2157,78 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
 
   bool idempotent = true;
 
-  while (t.have_op()) {
-    int op = t.get_op();
+  Transaction::iterator i = t.begin();
+
+  while (i.have_op()) {
+    int op = i.get_op();
     int r = 0;
     switch (op) {
     case Transaction::OP_NOP:
       break;
     case Transaction::OP_TOUCH:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
 	r = _touch(cid, oid);
       }
       break;
       
     case Transaction::OP_WRITE:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	uint64_t off = t.get_length();
-	uint64_t len = t.get_length();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	uint64_t off = i.get_length();
+	uint64_t len = i.get_length();
 	bufferlist bl;
-	t.get_bl(bl);
+	i.get_bl(bl);
 	r = _write(cid, oid, off, len, bl);
       }
       break;
       
     case Transaction::OP_ZERO:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	uint64_t off = t.get_length();
-	uint64_t len = t.get_length();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	uint64_t off = i.get_length();
+	uint64_t len = i.get_length();
 	r = _zero(cid, oid, off, len);
       }
       break;
       
     case Transaction::OP_TRIMCACHE:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	uint64_t off = t.get_length();
-	uint64_t len = t.get_length();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	uint64_t off = i.get_length();
+	uint64_t len = i.get_length();
 	trim_from_cache(cid, oid, off, len);
       }
       break;
       
     case Transaction::OP_TRUNCATE:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	uint64_t off = t.get_length();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	uint64_t off = i.get_length();
 	r = _truncate(cid, oid, off);
       }
       break;
       
     case Transaction::OP_REMOVE:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
 	r = _remove(cid, oid);
       }
       break;
       
     case Transaction::OP_SETATTR:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	string name = t.get_attrname();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	string name = i.get_attrname();
 	bufferlist bl;
-	t.get_bl(bl);
+	i.get_bl(bl);
 	r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
 	if (r == -ENOSPC)
 	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
@@ -2236,29 +2238,29 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       
     case Transaction::OP_SETATTRS:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
 	map<string, bufferptr> aset;
-	t.get_attrset(aset);
+	i.get_attrset(aset);
 	r = _setattrs(cid, oid, aset);
   	if (r == -ENOSPC)
 	  dout(0) << " ENOSPC on setxattrs on " << cid << "/" << oid << dendl;
-    }
+      }
       break;
 
     case Transaction::OP_RMATTR:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	string name = t.get_attrname();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	string name = i.get_attrname();
 	r = _rmattr(cid, oid, name.c_str());
       }
       break;
 
     case Transaction::OP_RMATTRS:
       {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
 	r = _rmattrs(cid, oid);
       }
       break;
@@ -2267,9 +2269,9 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       {
 	idempotent = false;   // this operation is non-idempotent
 
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	hobject_t noid = t.get_oid();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	hobject_t noid = i.get_oid();
 	r = _clone(cid, oid, noid);
       }
       break;
@@ -2278,11 +2280,11 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       {
 	idempotent = false;   // this operation is non-idempotent
 
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	hobject_t noid = t.get_oid();
- 	uint64_t off = t.get_length();
-	uint64_t len = t.get_length();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	hobject_t noid = i.get_oid();
+ 	uint64_t off = i.get_length();
+	uint64_t len = i.get_length();
 	r = _clone_range(cid, oid, noid, off, len, off);
       }
       break;
@@ -2291,12 +2293,12 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       {
 	idempotent = false;   // this operation is non-idempotent
 
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
-	hobject_t noid = t.get_oid();
- 	uint64_t srcoff = t.get_length();
-	uint64_t len = t.get_length();
- 	uint64_t dstoff = t.get_length();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	hobject_t noid = i.get_oid();
+ 	uint64_t srcoff = i.get_length();
+	uint64_t len = i.get_length();
+ 	uint64_t dstoff = i.get_length();
 	r = _clone_range(cid, oid, noid, srcoff, len, dstoff);
       }
       break;
@@ -2305,7 +2307,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       {
 	// this operation is non-idempotent, but we tolerate replay below.
 
-	coll_t cid = t.get_cid();
+	coll_t cid = i.get_cid();
 	r = _create_collection(cid);
       }
       break;
@@ -2314,42 +2316,42 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       {
 	// this operation is non-idempotent, but we tolerate replay below.
 
-	coll_t cid = t.get_cid();
+	coll_t cid = i.get_cid();
 	r = _destroy_collection(cid);
       }
       break;
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ocid = t.get_cid();
-	coll_t ncid = t.get_cid();
-	hobject_t oid = t.get_oid();
+	coll_t ocid = i.get_cid();
+	coll_t ncid = i.get_cid();
+	hobject_t oid = i.get_oid();
 	r = _collection_add(ocid, ncid, oid);
       }
       break;
 
     case Transaction::OP_COLL_REMOVE:
        {
-	coll_t cid = t.get_cid();
-	hobject_t oid = t.get_oid();
+	coll_t cid = i.get_cid();
+	hobject_t oid = i.get_oid();
 	r = _collection_remove(cid, oid);
        }
       break;
 
     case Transaction::OP_COLL_SETATTR:
       {
-	coll_t cid = t.get_cid();
-	string name = t.get_attrname();
+	coll_t cid = i.get_cid();
+	string name = i.get_attrname();
 	bufferlist bl;
-	t.get_bl(bl);
+	i.get_bl(bl);
 	r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
       {
-	coll_t cid = t.get_cid();
-	string name = t.get_attrname();
+	coll_t cid = i.get_cid();
+	string name = i.get_attrname();
 	r = _collection_rmattr(cid, name.c_str());
       }
       break;
@@ -2362,8 +2364,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       {
 	idempotent = false;   // this operation is non-idempotent
 	
-	coll_t cid(t.get_cid());
-	coll_t ncid(t.get_cid());
+	coll_t cid(i.get_cid());
+	coll_t ncid(i.get_cid());
 	r = _collection_rename(cid, ncid);
       }
       break;
