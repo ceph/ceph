@@ -691,6 +691,10 @@ struct object_stat_sum_t {
   {}
 
   void calc_copies_degraded(int nrep, int acting_nrep) {
+  void clear() {
+    memset(this, 0, sizeof(*this));
+  }
+
     num_object_copies = nrep * num_objects;
     num_objects_degraded = (nrep - acting_nrep) * num_objects;
   }
@@ -806,6 +810,11 @@ struct object_stat_collection_t {
     ::decode(v, bl);
     ::decode(sum, bl);
     ::decode(cat_sum, bl);
+  }
+
+  void clear() {
+    sum.clear();
+    cat_sum.clear();
   }
 
   void add(const object_stat_sum_t& o, const string& cat) {
