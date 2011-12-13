@@ -523,6 +523,8 @@ public:
 	::decode(tbl, bl);
       }
     }
+
+    void dump(ostream& out);
   };
 
   struct C_DeleteTransaction : public Context {
