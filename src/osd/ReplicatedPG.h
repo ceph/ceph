@@ -801,7 +801,7 @@ private:
     boost::statechart::result react(const SnapTrim&);
   };
 
-  void _delete_head(OpContext *ctx);
+  int _delete_head(OpContext *ctx);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
   bool same_for_read_since(epoch_t e);

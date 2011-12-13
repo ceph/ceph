@@ -1737,11 +1737,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     
     case CEPH_OSD_OP_DELETE:
-      if (!obs.exists) {
-	result = -ENOENT;
-      } else {
-	_delete_head(ctx);
-      }
+      result = _delete_head(ctx);
       break;
 
     case CEPH_OSD_OP_CLONERANGE:
@@ -2077,7 +2073,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   return result;
 }
 
-inline void ReplicatedPG::_delete_head(OpContext *ctx)
+inline int ReplicatedPG::_delete_head(OpContext *ctx)
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -2085,22 +2081,27 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
   const hobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
 
-  if (obs.exists)
-    t.remove(coll, soid);
+  if (!obs.exists)
+    return -ENOENT;
+  
+  t.remove(coll, soid);
+
   if (oi.size > 0) {
     interval_set<uint64_t> ch;
     ch.insert(0, oi.size);
     ctx->modified_ranges.union_of(ch);
   }
-  if (obs.exists) {
-    ctx->delta_stats.num_objects--;
-    ctx->delta_stats.num_bytes -= oi.size;
-    ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
-    oi.size = 0;
-    snapset.head_exists = false;
-    obs.exists = false;
-  }      
+
+  ctx->delta_stats.num_objects--;
+  ctx->delta_stats.num_bytes -= oi.size;
+  ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+
+  oi.size = 0;
+  snapset.head_exists = false;
+  obs.exists = false;
+
   ctx->delta_stats.num_wr++;
+  return 0;
 }
 
 int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
