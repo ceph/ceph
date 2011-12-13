@@ -563,9 +563,11 @@ protected:
   int recover_object_replicas(const hobject_t& soid, eversion_t v);
   void calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 			 Missing& missing,
+			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
 			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, Missing& missing,
+			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void push_to_replica(ObjectContext *obc, const hobject_t& oid, int dest);

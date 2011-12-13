@@ -3637,6 +3637,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 
 void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 				     Missing& missing,
+				     const hobject_t &last_backfill,
 				     interval_set<uint64_t>& data_subset,
 				     map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
@@ -3655,7 +3656,7 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
     hobject_t c = head;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
-    if (!missing.is_missing(c)) {
+    if (!missing.is_missing(c) && c < last_backfill) {
       dout(10) << "calc_head_subsets " << head << " has prev " << c
 	       << " overlap " << prev << dendl;
       clone_subsets[c] = prev;
@@ -3678,6 +3679,7 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 
 void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
 				      Missing& missing,
+				      const hobject_t &last_backfill,
 				      interval_set<uint64_t>& data_subset,
 				      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
@@ -3700,7 +3702,7 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
     hobject_t c = soid;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
-    if (!missing.is_missing(c)) {
+    if (!missing.is_missing(c) && c < last_backfill) {
       dout(10) << "calc_clone_subsets " << soid << " has prev " << c
 	       << " overlap " << prev << dendl;
       clone_subsets[c] = prev;
@@ -3815,7 +3817,7 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
     // check snapset
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
     dout(10) << " snapset " << ssc->snapset << dendl;
-    calc_clone_subsets(ssc->snapset, soid, missing,
+    calc_clone_subsets(ssc->snapset, soid, missing, info.last_backfill,
 		       data_subset, clone_subsets);
     put_snapset_context(ssc);
     // FIXME: this may overestimate if we are pulling multiple clones in parallel...
@@ -3939,6 +3941,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const hobject_t& soid, in
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
     dout(15) << "push_to_replica snapset is " << ssc->snapset << dendl;
     calc_clone_subsets(ssc->snapset, soid, peer_missing[peer],
+		       peer_info[peer].last_backfill,
 		       data_subset, clone_subsets);
     put_snapset_context(ssc);
   } else if (soid.snap == CEPH_NOSNAP) {
@@ -3946,7 +3949,9 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const hobject_t& soid, in
     // base this on partially on replica's clones?
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
     dout(15) << "push_to_replica snapset is " << ssc->snapset << dendl;
-    calc_head_subsets(ssc->snapset, soid, peer_missing[peer], data_subset, clone_subsets);
+    calc_head_subsets(ssc->snapset, soid, peer_missing[peer],
+		      peer_info[peer].last_backfill,
+		      data_subset, clone_subsets);
     put_snapset_context(ssc);
   }
 
@@ -4331,7 +4336,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       clone_subsets.clear();   // forget what pusher said; recalculate cloning.
 
       interval_set<uint64_t> data_needed;
-      calc_clone_subsets(ssc->snapset, soid, missing, data_needed, clone_subsets);
+      calc_clone_subsets(ssc->snapset, soid, missing, info.last_backfill,
+			 data_needed, clone_subsets);
       pi->data_subset = data_needed;
       put_snapset_context(ssc);
 
