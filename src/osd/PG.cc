@@ -4042,10 +4042,10 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
     pg->log.clear();
     pg->log.head = pg->info.last_update;
     pg->log.tail = pg->info.last_update;
+  } else {
+    assert(pg->log.tail <= pg->info.last_complete);
+    assert(pg->log.head == pg->info.last_update);
   }
-
-  assert(pg->log.tail <= pg->info.last_complete);
-  assert(pg->log.head == pg->info.last_update);
 
   post_event(Activate());
   return discard_event();
