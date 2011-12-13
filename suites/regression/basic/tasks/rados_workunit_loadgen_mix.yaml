@@ -1,0 +1,6 @@
+tasks:
+- ceph:
+- cfuse:
+- workunit:
+    all:
+      - rados/load-gen-mix.sh
