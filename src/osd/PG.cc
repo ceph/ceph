@@ -4175,18 +4175,18 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
     return;
   }
 
+  // am i the best?
+  if (newest_update_osd == pg->osd->whoami) {
+    post_event(GotLog());
+    return;
+  }
+
   const Info& best = pg->peer_info[newest_update_osd];
 
   // am i broken?
   if (pg->info.last_update < best.log_tail) {
     dout(10) << " not contiguous with osd." << newest_update_osd << ", down" << dendl;
     post_event(IsIncomplete());
-    return;
-  }
-
-  // am i the best?
-  if (newest_update_osd == pg->osd->whoami) {
-    post_event(GotLog());
     return;
   }
 
