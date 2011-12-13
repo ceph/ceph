@@ -365,6 +365,7 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('/tmp/cephtest/archive/syslog/*.log'),
                     run.Raw('|'),
                     'grep', '-v', 'task .* blocked for more than .* seconds',
+                    'grep', '-v', 'lockdep is turned off',
                     run.Raw('|'),
                     'head', '-n', '1',
                     ],
