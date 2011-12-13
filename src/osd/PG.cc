@@ -1154,10 +1154,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   if (role == 0) {    // primary state
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
+    assert(info.last_complete >= log.tail);
   }
   last_update_applied = info.last_update;
 
-  assert(info.last_complete >= log.tail);
 
   need_up_thru = false;
 
