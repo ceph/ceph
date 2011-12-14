@@ -12,7 +12,6 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 def connect_to_db(ctx):
-    teuthology.read_config(ctx)
     db = MySQLdb.connect(
         host=ctx.teuthology_config['coverage_db_host'],
         user=ctx.teuthology_config['coverage_db_user'],
@@ -109,6 +108,8 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
         level=loglevel,
         )
 
+    teuthology.read_config(args)
+
     tests = [
         f for f in sorted(os.listdir(args.test_dir))
         if not f.startswith('.')
@@ -130,6 +131,8 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
 
     assert len(test_summaries) > 0
 
+    suite = os.path.basename(args.test_dir)
+
     # only run cov-init once.
     # this only works if all tests were run against the same version.
     if not args.skip_init:
@@ -139,6 +142,10 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
                 os.path.join(args.cov_tools_dir, 'cov-init.sh'),
                 os.path.join(args.test_dir, tests[0]),
                 args.lcov_output,
+                os.path.join(
+                    args.teuthology_config['ceph_build_output_dir'],
+                    '{suite}.tgz'.format(suite=suite),
+                    ),
                 ])
         shutil.copy(
             os.path.join(args.lcov_output, 'base.lcov'),
@@ -180,7 +187,6 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
             os.path.join(args.lcov_output, 'total.lcov')
             )
 
-    suite = os.path.basename(args.test_dir)
     coverage = read_coverage(output)
     test_coverage['total for {suite}'.format(suite=suite)] = coverage
     log.debug('total coverage is %s', str(coverage))
