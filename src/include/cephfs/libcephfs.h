@@ -18,6 +18,8 @@
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/statvfs.h>
+#include <sys/socket.h>
 
 // FreeBSD compatibility
 #ifdef __FreeBSD__
