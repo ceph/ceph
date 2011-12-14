@@ -1068,10 +1068,10 @@ void Objecter::send_op(Op *op)
   if (op->priority)
     m->set_priority(op->priority);
 
-  messenger->send_message(m, op->session->con);
-
   logger->inc(l_osdc_op_send);
   logger->inc(l_osdc_op_send_bytes, m->get_data().length());
+
+  messenger->send_message(m, op->session->con);
 }
 
 int Objecter::calc_op_budget(Op *op)
