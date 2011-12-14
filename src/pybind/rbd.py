@@ -101,6 +101,8 @@ class RBD(object):
 
     def version(self):
         """
+        Get the version number of the ``librbd`` C library.
+
         :returns: a tuple of ``(major, minor, extra)`` components of the
                   librbd version
         """
