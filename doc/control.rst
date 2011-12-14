@@ -55,7 +55,8 @@ Query osd subsystem status. ::
 
 	$ ceph osd getmap -o file
 
-Write a copy of the most recent osd map to a file. See osdmaptool. ::
+Write a copy of the most recent osd map to a file. See
+:doc:`osdmaptool </man/8/osdmaptool>`. ::
 
 	$ ceph osd getcrushmap -o file
 
