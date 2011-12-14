@@ -207,7 +207,7 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    CGI_PRINTF(s, "X-Storage-Token: AUTH_rgwtk%s\n", buf);
+    CGI_PRINTF(s, "X-Auth-Token: AUTH_rgwtk%s\n", buf);
   }
 
   ret = STATUS_NO_CONTENT;
