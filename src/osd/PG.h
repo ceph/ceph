@@ -873,6 +873,7 @@ public:
    * (if they have one) */
   xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
+  int waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
   set<hobject_t> recovering_oids;
 #endif
@@ -1605,6 +1606,7 @@ public:
     info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
     recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
+    waiting_on_backfill(0),
     role(0),
     state(0),
     recovery_state(this),

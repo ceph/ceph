@@ -5033,7 +5033,7 @@ int ReplicatedPG::start_recovery_ops(int max)
       }
     }
   }
-  if (backfill_target >= 0 && started < max) {
+  if (backfill_target >= 0 && started < max && !waiting_on_backfill) {
     started += recover_backfill(max - started);
   }
 
