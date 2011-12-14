@@ -89,11 +89,6 @@ using namespace std;
 
 
 
-// static logger
-Mutex client_logger_lock("client_logger_lock");
-PerfCounters  *client_counters = 0;
-
-
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
   Client *client = (Client*)p;
@@ -115,7 +110,7 @@ dir_result_t::dir_result_t(Inode *in)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : Dispatcher(m->cct), cct(m->cct), timer(m->cct, client_lock), 
+  : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
     client_lock("Client::client_lock")
 {
@@ -188,6 +183,7 @@ Client::~Client()
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
+  delete logger;
 }
 
 
@@ -291,25 +287,15 @@ int Client::init()
   monclient->sub_want("mdsmap", 0, 0);
   monclient->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
 
-  // do logger crap only once per process.
-  static bool did_init = false;
-  if (!did_init) {
-    did_init = true;
-  
-    // logger?
-    client_logger_lock.Lock();
-    PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
-    if (client_counters == 0) {
-      plb.add_fl_avg(l_c_reply, "reply");
-      plb.add_fl_avg(l_c_lat, "lat");
-      plb.add_fl_avg(l_c_wrlat, "wrlat");
-      plb.add_fl_avg(l_c_owrlat, "owrlat");
-      plb.add_fl_avg(l_c_ordlat, "ordlat");
-      
-      client_counters = plb.create_perf_counters();
-    }
-    client_logger_lock.Unlock();
-  }
+  // logger
+  PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
+  plb.add_fl_avg(l_c_reply, "reply");
+  plb.add_fl_avg(l_c_lat, "lat");
+  plb.add_fl_avg(l_c_wrlat, "wrlat");
+  plb.add_fl_avg(l_c_owrlat, "owrlat");
+  plb.add_fl_avg(l_c_ordlat, "ordlat");
+  logger = plb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(logger);
 
   return r;
 }
@@ -326,6 +312,10 @@ void Client::shutdown()
   client_lock.Unlock();
   monclient->shutdown();
   messenger->shutdown();
+
+  cct->get_perfcounters_collection()->remove(logger);
+  delete logger;
+  logger = NULL;
 }
 
 
@@ -1110,8 +1100,8 @@ int Client::make_request(MetaRequest *request,
   utime_t lat = ceph_clock_now(cct);
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
-  client_counters->finc(l_c_lat,(double)lat);
-  client_counters->finc(l_c_reply,(double)lat);
+  logger->finc(l_c_lat,(double)lat);
+  logger->finc(l_c_reply,(double)lat);
 
   request->put();
 
@@ -5348,7 +5338,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   // time
   utime_t lat = ceph_clock_now(cct);
   lat -= start;
-  client_counters->finc(l_c_wrlat,(double)lat);
+  logger->finc(l_c_wrlat,(double)lat);
     
   // assume success for now.  FIXME.
   uint64_t totalwritten = size;
