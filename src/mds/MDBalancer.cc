@@ -274,7 +274,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
 
   {
-    unsigned cluster_size = mds->get_mds_map()->get_num_mds();
+    unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
     if (mds_load.size() == cluster_size) {
       // let's go!
       //export_empties();  // no!
@@ -433,7 +433,7 @@ void MDBalancer::prep_rebalance(int beat)
 	 ++i)
       my_targets[*i] = 0.0;
   } else {
-    int cluster_size = mds->get_mds_map()->get_num_mds();
+    int cluster_size = mds->get_mds_map()->get_num_in_mds();
     int whoami = mds->get_nodeid();
     rebalance_time = ceph_clock_now(g_ceph_context);
 
@@ -1050,7 +1050,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	  dir_pop >= g_conf->mds_bal_replicate_threshold) {
 	// replicate
 	float rdp = dir->pop_me.get(META_POP_IRD).get(now, mds->mdcache->decayrate);
-	rd_adj = rdp / mds->get_mds_map()->get_num_mds() - rdp;
+	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
 	rd_adj /= 2.0;  // temper somewhat
 
 	dout(0) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;

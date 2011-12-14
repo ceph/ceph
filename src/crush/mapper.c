@@ -477,7 +477,6 @@ int crush_do_rule(const struct crush_map *map,
 	int i, j;
 	int numrep;
 	int firstn;
-	int rc = -1;
 
 	BUG_ON((__u32)ruleno >= map->max_rules);
 
@@ -489,24 +488,21 @@ int crush_do_rule(const struct crush_map *map,
 	/*
 	 * determine hierarchical context of force, if any.  note
 	 * that this may or may not correspond to the specific types
-	 * referenced by the crush rule.
+	 * referenced by the crush rule.  it will also only affect
+	 * the first descent (TAKE).
 	 */
-	if (force >= 0) {
-		if (force >= map->max_devices ||
-		    map->device_parents[force] == 0) {
-			/*dprintk("CRUSH: forcefed device dne\n");*/
-			force = -1;  /* force fed device dne */
-		}
-		else if (!is_out(map, weight, force, x)) {
-			while (1) {
-				force_context[++force_pos] = force;
-				if (force >= 0)
-					force = map->device_parents[force];
-				else
-					force = map->bucket_parents[-1-force];
-				if (force == 0)
-					break;
-			}
+	if (force >= 0 &&
+	    force < map->max_devices &&
+	    map->device_parents[force] != 0 &&
+	    !is_out(map, weight, force, x)) {
+		while (1) {
+			force_context[++force_pos] = force;
+			if (force >= 0)
+				force = map->device_parents[force];
+			else
+				force = map->bucket_parents[-1-force];
+			if (force == 0)
+				break;
 		}
 	}
 
@@ -515,13 +511,14 @@ int crush_do_rule(const struct crush_map *map,
 		switch (rule->steps[step].op) {
 		case CRUSH_RULE_TAKE:
 			w[0] = rule->steps[step].arg1;
-			if (force_pos >= 0) {
-				if (force_context[force_pos] != w[0]) {
-					rc = -1;  /* forced mapping dne */
-					goto out;
-				}
+
+			/* find position in force_context/hierarchy */
+			while (force_pos >= 0 && force_context[force_pos] != w[0])
 				force_pos--;
-			}
+			/* and move past it */
+			if (force_pos >= 0)
+				force_pos--;
+
 			wsize = 1;
 			break;
 
@@ -603,10 +600,7 @@ int crush_do_rule(const struct crush_map *map,
 			BUG_ON(1);
 		}
 	}
-	rc = result_len;
-
-out:
-	return rc;
+	return result_len;
 }
 
 

@@ -980,6 +980,7 @@ noinst_LIBRARIES += libmds.a
 libos_la_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
+	os/ObjectStore.cc \
 	os/JournalingObjectStore.cc \
 	os/LFNIndex.cc \
 	os/HashIndex.cc \

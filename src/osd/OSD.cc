@@ -3655,18 +3655,18 @@ MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to)
   m->oldest_map = superblock.oldest_map;
   m->newest_map = superblock.newest_map;
   
-  for (epoch_t e = to;
-       e > since;
-       e--) {
+  for (epoch_t e = to; e > since; e--) {
     bufferlist bl;
-    if (get_inc_map_bl(e,bl)) {
+    if (e > m->oldest_map && get_inc_map_bl(e, bl)) {
       m->incremental_maps[e].claim(bl);
-    } else if (get_map_bl(e,bl)) {
+    } else if (get_map_bl(e, bl)) {
       m->maps[e].claim(bl);
       break;
-    }
-    else {
-      assert(0);  // we should have all maps.
+    } else {
+      derr << "since " << since << " to " << to
+	   << " oldest " << m->oldest_map << " newest " << m->newest_map
+	   << dendl;
+      assert(0 == "missing an osdmap on disk");  // we should have all maps.
     }
   }
   return m;

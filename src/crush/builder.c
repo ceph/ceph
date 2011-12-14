@@ -29,8 +29,10 @@ void crush_finalize(struct crush_map *map)
 	__u32 i;
 
 	/* calc max_devices */
+	map->max_devices = 0;
 	for (b=0; b<map->max_buckets; b++) {
-		if (map->buckets[b] == 0) continue;
+		if (map->buckets[b] == 0)
+			continue;
 		for (i=0; i<map->buckets[b]->size; i++)
 			if (map->buckets[b]->items[i] >= map->max_devices)
 				map->max_devices = map->buckets[b]->items[i] + 1;
@@ -317,7 +319,8 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 
 	/* reverse sort by weight (simple insertion sort) */
 	reverse = malloc(sizeof(int) * size);
-	reverse[0] = 0;
+	if (size)
+		reverse[0] = 0;
 	for (i=1; i<size; i++) {
 		for (j=0; j<i; j++) {
 			if (weights[i] < weights[reverse[j]]) {

@@ -56,8 +56,11 @@ private:
   bool update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);
+  void on_active();
 
   void share_map_with_random_osd();
+
+  void update_logger();
 
   void handle_query(PaxosServiceMessage *m);
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.

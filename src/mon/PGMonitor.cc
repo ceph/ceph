@@ -33,6 +33,7 @@
 #include "common/Timer.h"
 #include "common/Formatter.h"
 #include "common/ceph_argparse.h"
+#include "common/perf_counters.h"
 
 #include "osd/osd_types.h"
 #include "osd/PG.h"  // yuck
@@ -95,6 +96,41 @@ void PGMonitor::on_active()
   if (mon->is_leader()) {
     check_osd_map(mon->osdmon()->osdmap.epoch);
   }
+
+  update_logger();
+}
+
+void PGMonitor::update_logger()
+{
+  dout(10) << "update_logger" << dendl;
+
+  mon->cluster_logger->set(l_cluster_osd_kb, pg_map.osd_sum.kb);
+  mon->cluster_logger->set(l_cluster_osd_kb_used, pg_map.osd_sum.kb_used);
+  mon->cluster_logger->set(l_cluster_osd_kb_avail, pg_map.osd_sum.kb_avail);
+
+  mon->cluster_logger->set(l_cluster_num_pool, pg_map.pg_pool_sum.size());
+  mon->cluster_logger->set(l_cluster_num_pg, pg_map.pg_stat.size());
+
+  unsigned active = 0, active_clean = 0, peering = 0;
+  for (hash_map<int,int>::iterator p = pg_map.num_pg_by_state.begin();
+       p != pg_map.num_pg_by_state.end();
+       ++p) {
+    if (p->second & PG_STATE_ACTIVE) {
+      active++;
+      if (p->second & PG_STATE_CLEAN)
+	active_clean++;
+    }
+    if (p->second & PG_STATE_PEERING)
+      peering++;
+  }
+  mon->cluster_logger->set(l_cluster_num_pg_active_clean, active_clean);
+  mon->cluster_logger->set(l_cluster_num_pg_active, active);
+  mon->cluster_logger->set(l_cluster_num_pg_peering, peering);
+
+  mon->cluster_logger->set(l_cluster_num_object, pg_map.pg_sum.stats.sum.num_objects);
+  mon->cluster_logger->set(l_cluster_num_object_degraded, pg_map.pg_sum.stats.sum.num_objects_degraded);
+  mon->cluster_logger->set(l_cluster_num_object_unfound, pg_map.pg_sum.stats.sum.num_objects_unfound);
+  mon->cluster_logger->set(l_cluster_num_kb, pg_map.pg_sum.stats.sum.num_kb);
 }
 
 void PGMonitor::tick() 
@@ -184,6 +220,8 @@ bool PGMonitor::update_from_paxos()
     paxos->trim_to(paxosv - max);
 
   send_pg_creates();
+
+  update_logger();
 
   return true;
 }

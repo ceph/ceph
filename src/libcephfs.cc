@@ -63,6 +63,8 @@ public:
 
   int mount(const std::string &mount_root)
   {
+    int ret;
+    
     if (mounted)
       return -EDOM;
 
@@ -70,42 +72,43 @@ public:
 
     //monmap
     monclient = new MonClient(cct);
-    if (monclient->build_initial_monmap() < 0) {
-      shutdown();
-      return -1000;
-    }
+    ret = -1000;
+    if (monclient->build_initial_monmap() < 0)
+      goto fail;
 
     //network connection
     messenger = new SimpleMessenger(cct);
     if (!messenger->register_entity(entity_name_t::CLIENT())) {
       messenger->destroy();
       messenger = NULL;
-      shutdown();
-      return -1001;
+      ret = -1001;
+      goto fail;
     }
 
     //at last the client
+    ret = -1002;
     client = new Client(messenger, monclient);
-    if (!client) {
-      shutdown();
-      return -1002;
-    }
+    if (!client)
+      goto fail;
 
-    if (messenger->start_with_nonce(msgr_nonce) != 0) {
-      shutdown();
-      return -1003;
-    }
+    ret = -1003;
+    if (messenger->start_with_nonce(msgr_nonce) != 0)
+      goto fail;
 
-    client->init();
+    ret = client->init();
+    if (ret)
+      goto fail;
 
-    int ret = client->mount(mount_root);
-    if (ret) {
-      shutdown();
-      return ret;
-    }
+    ret = client->mount(mount_root);
+    if (ret)
+      goto fail;
 
     mounted = true;
     return 0;
+
+  fail:
+    shutdown();
+    return ret;
   }
 
   void shutdown()
