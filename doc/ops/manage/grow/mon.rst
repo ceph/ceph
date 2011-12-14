@@ -40,7 +40,7 @@ For example, if your cluster includes ``mon.a``, ``mon.b``, and ``mon.c``, then 
   $ ceph mon remove c
 
 Removing a monitor from an unhealthy or down cluster
-------------------------------------------------
+----------------------------------------------------
 
 The mon cluster may not be up because you have lost too many nodes to
 form a quorum.
