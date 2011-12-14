@@ -873,7 +873,7 @@ public:
    * (if they have one) */
   xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
-  int waiting_on_backfill;
+  bool waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
   set<hobject_t> recovering_oids;
 #endif

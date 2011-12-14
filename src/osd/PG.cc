@@ -1540,6 +1540,7 @@ void PG::clear_recovery_state()
     finish_recovery_op(soid, true);
   }
 
+  waiting_on_backfill = false;
   _clear_recovery_state();  // pg impl specific hook
 }
 
