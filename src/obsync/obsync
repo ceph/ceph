@@ -88,6 +88,10 @@ ACL_XATTR = "rados.acl"
 META_XATTR_PREFIX = "rados.meta."
 CONTENT_TYPE_XATTR = "rados.content_type"
 
+def vvprint(s):
+	if (opts.more_verbose):
+		print s
+
 ###### Exception classes #######
 class ObsyncException(Exception):
     def __init__(self, ty, e):
