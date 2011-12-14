@@ -690,13 +690,12 @@ struct object_stat_sum_t {
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   {}
 
-  void calc_copies_degraded(int nrep, int acting_nrep) {
   void clear() {
     memset(this, 0, sizeof(*this));
   }
 
+  void calc_copies(int nrep) {
     num_object_copies = nrep * num_objects;
-    num_objects_degraded = (nrep - acting_nrep) * num_objects;
   }
 
   void dump(Formatter *f) const {
@@ -781,10 +780,10 @@ struct object_stat_collection_t {
   object_stat_sum_t sum;
   map<string,object_stat_sum_t> cat_sum;
 
-  void calc_copies_degraded(int nrep, int acting_nrep) {
-    sum.calc_copies_degraded(nrep, acting_nrep);
+  void calc_copies(int nrep) {
+    sum.calc_copies(nrep);
     for (map<string,object_stat_sum_t>::iterator p = cat_sum.begin(); p != cat_sum.end(); ++p)
-      p->second.calc_copies_degraded(nrep, acting_nrep);
+      p->second.calc_copies(nrep);
   }
 
   void dump(Formatter *f) const {

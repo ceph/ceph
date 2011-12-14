@@ -38,6 +38,7 @@ public:
   epoch_t map_epoch, query_epoch;
   pg_t pgid;
   hobject_t last_backfill;
+  object_stat_collection_t stats;
 
   virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
@@ -46,6 +47,7 @@ public:
     ::decode(query_epoch, p);
     ::decode(pgid, p);
     ::decode(last_backfill, p);
+    ::decode(stats, p);
   }
 
   virtual void encode_payload(CephContext *cct) {
@@ -54,6 +56,7 @@ public:
     ::encode(query_epoch, payload);
     ::encode(pgid, payload);
     ::encode(last_backfill, payload);
+    ::encode(stats, payload);
   }
 
   MOSDPGBackfill() : Message(MSG_OSD_PG_BACKFILL) {}

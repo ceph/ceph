@@ -524,6 +524,8 @@ protected:
 			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
+  void add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *stat);
+
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,

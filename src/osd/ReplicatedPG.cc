@@ -899,6 +899,7 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
       assert(g_conf->osd_kill_backfill_at != 2);
 
       info.last_backfill = m->last_backfill;
+      info.stats.stats = m->stats;
 
       log.clear();
       log.head = info.last_update;
@@ -2697,6 +2698,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   ctx->obc->ssc->snapset = ctx->new_snapset;
   info.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
 
+  if (backfill_target >= 0) {
+    Info& pinfo = peer_info[backfill_target];
+    if (soid < pinfo.last_backfill)
+      pinfo.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+  }
+
   return result;
 }
 
@@ -2988,7 +2995,11 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 	::encode(repop->ctx->op_t, wr->get_data());
       }
       ::encode(repop->ctx->log, wr->logbl);
-      wr->pg_stats = info.stats;
+
+      if (backfill_target >= 0 && backfill_target == peer)
+	wr->pg_stats = pinfo.stats;  // reflects backfill progress
+      else
+	wr->pg_stats = info.stats;
     }
     
     wr->pg_trim_to = pg_trim_to;
@@ -3389,6 +3400,40 @@ void ReplicatedPG::put_object_contexts(map<hobject_t,ObjectContext*>& obcv)
   for (map<hobject_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
     put_object_context(p->second);
   obcv.clear();
+}
+
+void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *pgstat)
+{
+  object_info_t& oi = obc->obs.oi;
+
+  dout(10) << "add_object_context_to_pg_stat " << oi.soid << dendl;
+  object_stat_sum_t stat;
+
+  if (oi.soid.snap != CEPH_SNAPDIR)
+    stat.num_objects++;
+
+  stat.num_bytes += oi.size;
+  stat.num_kb += SHIFT_ROUND_UP(oi.size, 10);
+
+  if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP) {
+    stat.num_object_clones++;
+
+    // subtract off clone overlap
+    if (obc->ssc->snapset.clone_overlap.count(oi.soid.snap)) {
+      interval_set<uint64_t>& o = obc->ssc->snapset.clone_overlap[oi.soid.snap];
+      for (interval_set<uint64_t>::const_iterator r = o.begin();
+	   r != o.end();
+	   ++r) {
+	stat.num_bytes -= r.get_len();
+	stat.num_kb -= SHIFT_ROUND_UP(r.get_start()+r.get_len(), 10) - (r.get_start() >> 10);
+      }	  
+    }
+  }
+
+  // add it in
+  pgstat->stats.sum.add(stat);
+  if (oi.category.length())
+    pgstat->stats.cat_sum[oi.category].add(stat);
 }
 
 ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
@@ -5357,6 +5402,21 @@ int ReplicatedPG::recover_backfill(int max)
 	  epoch_t e = get_osdmap()->get_epoch();
 	  MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
 	  m->last_backfill = hobject_t::get_max();
+
+	  m->stats = info.stats.stats;  // should match pinfo.stats.stats, but use definitive value
+
+	  if (info.stats.stats.sum.num_bytes != pinfo.stats.stats.sum.num_bytes)
+	    osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
+			      << "num_bytes " << pinfo.stats.stats.sum.num_bytes
+			      << " != expected " << pinfo.stats.stats.sum.num_bytes << "\n";
+	  if (info.stats.stats.sum.num_objects != pinfo.stats.stats.sum.num_objects)
+	    osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
+			      << "num_objects " << pinfo.stats.stats.sum.num_objects
+			      << " != expected " << pinfo.stats.stats.sum.num_objects << "\n";
+	  //assert(info.stats.stats.sum.num_objects == pinfo.stats.stats.sum.num_objects);
+	  //assert(info.stats.stats.sum.num_kb == pinfo.stats.stats.sum.num_kb);
+	  //assert(info.stats.stats.sum.num_bytes == pinfo.stats.stats.sum.num_bytes);
+
 	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
 	  start_recovery_op(hobject_t::get_max());
 	  ops++;
@@ -5378,14 +5438,18 @@ int ReplicatedPG::recover_backfill(int max)
     const hobject_t& my_first = backfill_info.objects.begin()->first;
     eversion_t mv = backfill_info.objects.begin()->second;
 
+    ObjectContext *obc = get_object_context(my_first, OLOC_BLANK, false);
+
     if (pbi.empty()) {
       assert(pbi.extends_to_end());
       dout(20) << " pushing local " << my_first << " " << backfill_info.objects.begin()->second
 	       << " to peer osd." << backfill_target << dendl;
       push_backfill_object(my_first, mv, eversion_t(), backfill_target);
+      add_object_context_to_pg_stat(obc, &pinfo.stats);
       backfill_info.pop_front();
       pbi.begin = my_first;
       ++ops;
+      put_object_context(obc);
       continue;
     }
 
@@ -5406,6 +5470,7 @@ int ReplicatedPG::recover_backfill(int max)
 	push_backfill_object(my_first, mv, pv, backfill_target);
 	++ops;
       }
+      add_object_context_to_pg_stat(obc, &pinfo.stats);
       pbi.pop_front();
       backfill_info.pop_front();
       if (pbi.begin < backfill_info.begin)
@@ -5415,21 +5480,26 @@ int ReplicatedPG::recover_backfill(int max)
       dout(20) << " pushing local " << my_first << " " << mv
 	       << " to peer osd." << backfill_target << dendl;
       push_backfill_object(my_first, mv, eversion_t(), backfill_target);
+      add_object_context_to_pg_stat(obc, &pinfo.stats);
       backfill_info.pop_front();
       ++ops;
     }
+    put_object_context(obc);
   }
 
   hobject_t bound = pbi.begin;
-  bound.back_up_to_bounding_key();
+  //bound.back_up_to_bounding_key();
   if (pinfo.last_backfill < bound) {
     dout(10) << " peer osd." << backfill_target << " info.last_backfill now " << pinfo.last_backfill << dendl;
 
     epoch_t e = get_osdmap()->get_epoch();
     MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
     m->last_backfill = bound;
+    m->stats = pinfo.stats.stats;
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
   }
+  dout(10) << " peer num_objects now " << pinfo.stats.stats.sum.num_objects << " / " << info.stats.stats.sum.num_objects << dendl;
+
   return ops;
 }
 

@@ -1227,18 +1227,21 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      if (log.tail > pi.last_update) {
+      if (log.tail > pi.last_update || info.last_backfill == hobject_t()) {
 	// reset, backfill
+	// we need to do this even when last_backfill == hobject_t() to ensure that
+	// stats get zeroed out properly, etc.
 	pi.last_update = info.last_update;
 	pi.last_complete = info.last_complete;
 	pi.log_tail = info.last_update;
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
+	pi.stats.stats.clear();
 	state_set(PG_STATE_BACKFILL);
 
 	peer_missing[peer].clear();
 
-	dout(10) << "activate peer osd." << peer << " must restart backfill, sending info " << pi << dendl;
+	dout(10) << "activate peer osd." << peer << " must (re)start backfill, sending info " << pi << dendl;
 	if (activator_map) {
 	  if (activator_map->count(peer) == 0)
 	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
@@ -1591,17 +1594,27 @@ void PG::update_stats()
     pg_stats_stable.log_start = log.tail;
     pg_stats_stable.ondisk_log_start = log.tail;
 
-    pg_stats_stable.stats.calc_copies_degraded(get_osdmap()->get_pg_size(info.pgid), acting.size());
-
+    // calc copies, degraded
+    int target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
+    pg_stats_stable.stats.calc_copies(target);
+    pg_stats_stable.stats.sum.num_objects_degraded = 0;
     if (!is_clean() && is_active()) {
+      // NOTE: we only generate copies, degraded, unfound values for
+      // the summation, not individual stat categories.
+      uint64_t num_objects = pg_stats_stable.stats.sum.num_objects;
+
       pg_stats_stable.stats.sum.num_objects_missing_on_primary = missing.num_missing();
-      int degraded = missing.num_missing();
+      uint64_t degraded = missing.num_missing();
       for (unsigned i=1; i<acting.size(); i++) {
 	assert(peer_missing.count(acting[i]));
-	degraded += peer_missing[acting[i]].num_missing();
-      }
-      pg_stats_stable.stats.sum.num_objects_degraded += degraded;
 
+	// in missing set
+	degraded += peer_missing[acting[i]].num_missing();
+
+	// not yet backfilled
+	degraded += num_objects - peer_info[acting[i]].stats.stats.sum.num_objects;
+      }
+      pg_stats_stable.stats.sum.num_objects_degraded = degraded;
       pg_stats_stable.stats.sum.num_objects_unfound = get_num_unfound();
     }
 
@@ -2109,6 +2122,7 @@ void PG::read_state(ObjectStore *store)
     store->apply_transaction(t);
 
     info.last_backfill = hobject_t();
+    info.stats.stats.clear();
   }
 
   // log any weirdness
