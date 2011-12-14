@@ -238,4 +238,4 @@ Enables debug messages. ::
 
 Displays the status of all metadata servers.
 
-set_max_mds: TODO
+.. todo:: ``ceph mds`` subcommands missing docs: set_max_mds, dump, getmap, stop, setmap
