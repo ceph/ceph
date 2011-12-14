@@ -163,6 +163,7 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
 int SimpleMessenger::Accepter::rebind(int avoid_port)
 {
   ldout(msgr->cct,1) << "accepter.rebind avoid " << avoid_port << dendl;
+  assert(msgr->did_bind);
   
   stop();
 
@@ -268,6 +269,7 @@ void SimpleMessenger::Accepter::stop()
   }
   join();
   done = false;
+  msgr->did_bind = false;
 }
 
 
@@ -2683,7 +2685,6 @@ void SimpleMessenger::wait()
   ldout(cct,10) << "wait: done." << dendl;
   ldout(cct,1) << "shutdown complete." << dendl;
   started = false;
-  did_bind = false;
   my_type = -1;
 }
 
