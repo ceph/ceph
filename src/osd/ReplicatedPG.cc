@@ -3418,6 +3418,12 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
   if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP) {
     stat.num_object_clones++;
 
+    if (!obc->ssc)
+      obc->ssc = get_snapset_context(oi.soid.oid,
+				     oi.soid.get_key(),
+				     oi.soid.hash,
+				     false);
+
     // subtract off clone overlap
     if (obc->ssc->snapset.clone_overlap.count(oi.soid.snap)) {
       interval_set<uint64_t>& o = obc->ssc->snapset.clone_overlap[oi.soid.snap];
