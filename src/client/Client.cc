@@ -273,7 +273,7 @@ void Client::dump_cache()
  
 }
 
-void Client::init() 
+int Client::init() 
 {
   Mutex::Locker lock(client_lock);
   timer.init();
@@ -283,29 +283,35 @@ void Client::init()
   // ok!
   messenger->add_dispatcher_head(this);
 
-  monclient->init();
+  int r = monclient->init();
+  if (r < 0)
+    return r;
+
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);
   monclient->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
 
   // do logger crap only once per process.
   static bool did_init = false;
-  if (did_init) return;
-  did_init = true;
+  if (!did_init) {
+    did_init = true;
   
-  // logger?
-  client_logger_lock.Lock();
-  PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
-  if (client_counters == 0) {
-    plb.add_fl_avg(l_c_reply, "reply");
-    plb.add_fl_avg(l_c_lat, "lat");
-    plb.add_fl_avg(l_c_wrlat, "wrlat");
-    plb.add_fl_avg(l_c_owrlat, "owrlat");
-    plb.add_fl_avg(l_c_ordlat, "ordlat");
-    
-    client_counters = plb.create_perf_counters();
+    // logger?
+    client_logger_lock.Lock();
+    PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
+    if (client_counters == 0) {
+      plb.add_fl_avg(l_c_reply, "reply");
+      plb.add_fl_avg(l_c_lat, "lat");
+      plb.add_fl_avg(l_c_wrlat, "wrlat");
+      plb.add_fl_avg(l_c_owrlat, "owrlat");
+      plb.add_fl_avg(l_c_ordlat, "ordlat");
+      
+      client_counters = plb.create_perf_counters();
+    }
+    client_logger_lock.Unlock();
   }
-  client_logger_lock.Unlock();
+
+  return r;
 }
 
 void Client::shutdown() 

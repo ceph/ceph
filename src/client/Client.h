@@ -367,7 +367,7 @@ protected:
 
   inodeno_t get_root_ino();
 
-  void init();
+  int init();
   void shutdown();
 
   // messaging
