@@ -5528,7 +5528,8 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = osd->store->collection_list_partial(coll, begin, min, max, &ls, &bi->end);
+  int r = osd->store->collection_list_partial(coll, begin, min, max,
+					      CEPH_NOSNAP, &ls, &bi->end);
   assert(r >= 0);
   dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
   dout(20) << ls << dendl;
