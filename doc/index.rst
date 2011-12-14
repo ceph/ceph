@@ -10,7 +10,7 @@ Ceph Distributed File System provides POSIX filesystem semantics with
 distributed metadata management.
 
 RADOS is a reliable object store, used by Ceph, but also directly
-accessible.
+accessible by client applications.
 
 ``radosgw`` is an S3-compatible RESTful HTTP service for object
 storage, using RADOS storage.
