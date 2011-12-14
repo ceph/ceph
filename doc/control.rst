@@ -67,12 +67,12 @@ file. This is functionally equivalent to ::
 
 ::
 
-	$ ceph osd dump [--format format>]
+	$ ceph osd dump [--format <format>]
 
 Dump the osd map. Valid formats for -f are "plain" and "json". If no
 --format option is given, the osd map is dumped as plain text. ::
 
-	$ ceph osd tree [--format format]
+	$ ceph osd tree [--format <format>]
 
 Dump the osd map as a tree with one line per osd containing weight
 and state. ::
