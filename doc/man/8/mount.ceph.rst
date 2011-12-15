@@ -81,10 +81,14 @@ Options
   string, set the name of the hidden snapdir. Default: .snap
 
 :command:`name`
-  string, used with cephx, Default: guest
+  RADOS user to authenticate as when using cephx. Default: guest
 
 :command:`secret`
-  string, used with cephx
+  secret key for use with cephx. This option is insecure because it exposes
+  the secret on the command line. To avoid this, use the secretfile option.
+
+:command:`secretfile`
+  path to file containing the secret key to use with cephx
 
 :command:`ip`
   my ip
