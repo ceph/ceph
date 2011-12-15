@@ -221,7 +221,11 @@ def task(ctx, config):
 
     s3tests_conf = {}
     for client in clients:
-        print 'client={client} config[client]={conf}'.format(client=client, conf=config[client])
+        if config[client] is None:
+            config[client] = {}
+        config[client].setdefault('s3', {})
+        config[client].setdefault('readwrite', {})
+
         s3tests_conf[client] = ({
                 'DEFAULT':
                     {
@@ -231,7 +235,6 @@ def task(ctx, config):
                 'readwrite' : config[client]['readwrite'],
                 's3'  : config[client]['s3'],
                 })
-        print 's3tests_conf[client]={s}'.format(s=s3tests_conf[client])
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=clients),
