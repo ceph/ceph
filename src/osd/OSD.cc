@@ -3187,6 +3187,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   osd_lock.Unlock();
 
   op_tp.pause();
+  disk_tp.pause();
 
   // requeue under osd_lock to preserve ordering of _dispatch() wrt incoming messages
   osd_lock.Lock();  
@@ -3210,7 +3211,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   op_wq.unlock();
 
   recovery_tp.pause();
-  disk_tp.pause_new();   // _process() may be waiting for a replica message
 
   ObjectStore::Transaction t;
 
