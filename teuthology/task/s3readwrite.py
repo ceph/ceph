@@ -1,5 +1,4 @@
 from cStringIO import StringIO
-from configobj import ConfigObj
 import base64
 import contextlib
 import logging
@@ -227,7 +226,7 @@ def task(ctx, config):
                 'DEFAULT':
                     {
                     'port'      : 7280,
-                    'is_secure' : 'no',
+                    'is_secure' : False,
                     },
                 'readwrite' : config[client]['readwrite'],
                 's3'  : config[client]['s3'],
