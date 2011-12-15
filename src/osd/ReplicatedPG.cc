@@ -550,18 +550,18 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	  wait_for_missing_object(wait_oid, op);
 	} else if (r) {
 	  osd->reply_op_error(op, r);
-	} else if (is_degraded_object(sobc->obs.oi.soid)) { 
-	  wait_for_degraded_object(sobc->obs.oi.soid, op);
-	  dout(10) << " writes for " << obc->obs.oi.soid << " now blocked by "
-		   << sobc->obs.oi.soid << dendl; 
-	  obc->blocked_by = sobc;
-	  sobc->blocking.insert(obc);
 	} else if (sobc->obs.oi.oloc.key != obc->obs.oi.oloc.key &&
 		   sobc->obs.oi.oloc.key != obc->obs.oi.soid.oid.name &&
 		   sobc->obs.oi.soid.oid.name != obc->obs.oi.oloc.key) {
 	  dout(1) << " src_oid " << osd_op.soid << " oloc " << sobc->obs.oi.oloc << " != "
 		  << op->get_oid() << " oloc " << obc->obs.oi.oloc << dendl;
 	  osd->reply_op_error(op, -EINVAL);
+	} else if (is_degraded_object(sobc->obs.oi.soid)) {
+	  wait_for_degraded_object(sobc->obs.oi.soid, op);
+	  dout(10) << " writes for " << obc->obs.oi.soid << " now blocked by "
+		   << sobc->obs.oi.soid << dendl;
+	  obc->blocked_by = sobc;
+	  sobc->blocking.insert(obc);
 	} else {
 	  src_obc[toid] = sobc;
 	  continue;
