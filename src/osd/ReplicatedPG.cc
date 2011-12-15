@@ -3772,7 +3772,7 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
     hobject_t c = soid;
     c.snap = snapset.clones[j];
     next.intersection_of(snapset.clone_overlap[snapset.clones[j-1]]);
-    if (!missing.is_missing(c)) {
+    if (!missing.is_missing(c) && c < last_backfill) {
       dout(10) << "calc_clone_subsets " << soid << " has next " << c
 	       << " overlap " << next << dendl;
       clone_subsets[c] = next;
