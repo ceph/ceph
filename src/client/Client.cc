@@ -313,9 +313,11 @@ void Client::shutdown()
   monclient->shutdown();
   messenger->shutdown();
 
-  cct->get_perfcounters_collection()->remove(logger);
-  delete logger;
-  logger = NULL;
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = NULL;
+  }
 }
 
 
