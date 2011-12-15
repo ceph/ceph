@@ -81,10 +81,10 @@ Options
   string, set the name of the hidden snapdir. Default: .snap
 
 :command:`name`
-  string, used with authx, Default: guest
+  string, used with cephx, Default: guest
 
 :command:`secret`
-  string, used with authx
+  string, used with cephx
 
 :command:`ip`
   my ip
