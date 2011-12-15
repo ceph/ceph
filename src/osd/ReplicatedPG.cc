@@ -528,6 +528,18 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return;
   }
 
+  // if we have src_oids, we need to be careful of the target being
+  // before and a src being after the last_backfill line, or else the
+  // operation won't apply properly on the backfill_target.  (the
+  // opposite is not a problem; if the target is after the line, we
+  // don't apply on the backfill_target and it doesn't matter.)
+  Info *backfill_target_info = NULL;
+  bool before_backfill = false;
+  if (backfill_target >= 0) {
+    backfill_target_info = &peer_info[backfill_target];
+    before_backfill = obc->obs.oi.soid < backfill_target_info->last_backfill;
+  }
+
   // src_oids
   map<hobject_t,ObjectContext*> src_obc;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
@@ -556,7 +568,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	  dout(1) << " src_oid " << osd_op.soid << " oloc " << sobc->obs.oi.oloc << " != "
 		  << op->get_oid() << " oloc " << obc->obs.oi.oloc << dendl;
 	  osd->reply_op_error(op, -EINVAL);
-	} else if (is_degraded_object(sobc->obs.oi.soid)) {
+	} else if (is_degraded_object(sobc->obs.oi.soid) ||
+		   (before_backfill && sobc->obs.oi.soid > backfill_target_info->last_backfill)) {
 	  wait_for_degraded_object(sobc->obs.oi.soid, op);
 	  dout(10) << " writes for " << obc->obs.oi.soid << " now blocked by "
 		   << sobc->obs.oi.soid << dendl;
