@@ -5414,7 +5414,7 @@ int ReplicatedPG::recover_backfill(int max)
 	  if (info.stats.stats.sum.num_bytes != pinfo.stats.stats.sum.num_bytes)
 	    osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
 			      << "num_bytes " << pinfo.stats.stats.sum.num_bytes
-			      << " != expected " << pinfo.stats.stats.sum.num_bytes << "\n";
+			      << " != expected " << info.stats.stats.sum.num_bytes << "\n";
 	  if (info.stats.stats.sum.num_objects != pinfo.stats.stats.sum.num_objects)
 	    osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
 			      << "num_objects " << pinfo.stats.stats.sum.num_objects
