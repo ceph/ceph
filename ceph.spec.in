@@ -11,83 +11,108 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
-Name:          ceph
-Version:       @VERSION@
-Release:       4%{?dist}
-Summary:       User space components of the Ceph file system
-License:       LGPLv2
-Group:         System Environment/Base
-URL:           http://ceph.newdream.net/
+#################################################################################
+# common
+#################################################################################
+Name:		ceph
+Version:	@VERSION@
+Release:	6%{?dist}
+Summary:	User space components of the Ceph file system
+License:	LGPLv2
+Group:		System Environment/Base
+URL:		http://ceph.newdream.net/
+Source0:	http://ceph.newdream.net/download/%{name}-%{version}.tar.bz2
+Requires:	librbd1 = %{version}-%{release}
+Requires:	librados2 = %{version}-%{release}
+Requires:	librgw1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Requires(post):	binutils
+BuildRoot:      %{_tmppath}/%{name}-%{version}-build
+BuildRequires:	gcc-c++
+BuildRequires:	libtool
+BuildRequires:	boost-devel
+BuildRequires:	libedit-devel
+BuildRequires:	perl
+BuildRequires:	gdbm
+BuildRequires:	pkgconfig
+BuildRequires:	python
 
-Source:        http://ceph.newdream.net/download/%{name}-%{version}.tar.gz
-BuildRequires: gcc-c++,
-BuildRequires: fuse-devel, libtool, boost-devel, libuuid-devel,
-%if %{defined suse_version}
-BuildRequires: mozilla-nss-devel, libatomic-ops-devel, keyutils-devel, libtool,
+#################################################################################
+# specific
+#################################################################################
+%if 0%{defined suse_version}
+BuildRequires:	%insserv_prereq
+Recommends:	logrotate
+BuildRequires:	mozilla-nss-devel
+BuildRequires:	keyutils-devel
+BuildRequires:	libatomic-ops-devel
 %else
-BuildRequires: nss-devel, libatomic_ops-devel, keyutils-libs-devel,
-BuildRequires: libtool-ltdl-devel, 
+BuildRequires:	nss-devel
+BuildRequires:	keyutils-libs-devel
+BuildRequires:	libatomic_ops-devel
+Requires(post):	chkconfig
+Requires(preun):chkconfig
+Requires(preun):initscripts
 %endif
-BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm, libcurl-devel,
-BuildRequires: pkgconfig, python,
-%if %{with tcmalloc}
+BuildRequires: libcurl-devel
+%if 0%{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
 # http://rpm.org/wiki/PackagerDocs/ArchDependencies
 BuildRequires: google-perftools-devel%{?_isa}
 %endif
-BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-%if %{defined suse_version}
-Requires(post): aaa_base
-Requires(preun): aaa_base
-BuildRequires: %insserv_prereq
-%else
-Requires(post): chkconfig
-Requires(preun): chkconfig
-%endif
-Requires(post): binutils, libedit
-Requires(preun): initscripts
 
 %description
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability.
 
-%package       fuse
-Summary:       Ceph fuse-based client
-Group:         System Environment/Base
-Requires:      %{name} = %{version}-%{release}
-BuildRequires: fuse-devel
-%description   fuse
+#################################################################################
+# packages
+#################################################################################
+%package fuse
+Summary:	Ceph fuse-based client
+Group:		System Environment/Base
+Requires:	%{name} = %{version}-%{release}
+BuildRequires:	fuse-devel
+%description fuse
 FUSE based client for Ceph distributed network file system
 
-%package     devel
-Summary:     Ceph headers
-Group:       Development/Libraries
-License:     LGPLv2
-Requires:    %{name} = %{version}-%{release}
+%package devel
+Summary:	Ceph headers
+Group:		Development/Libraries
+License:	LGPLv2
+Requires:	%{name} = %{version}-%{release}
+Requires:	librados2 = %{version}
+Requires:	librgw1 = %{version}
+Requires:	librbd1 = %{version}
+Requires:	libcephfs1 = %{version}
 %description devel
-This package contains the headers needed to develop programs that use Ceph.
+This package contains libraries and headers needed to develop programs
+that use Ceph.
 
 %package radosgw
-Summary:        Rados REST gateway
-Group:          Development/Libraries
-Requires:       mod_fcgid
-%if %{defined suse_version}
-BuildRequires:  libexpat-devel, FastCGI-devel,
+Summary:	Rados REST gateway
+Group:		Development/Libraries
+Requires:	librados2 = %{version}-%{release}
+%if 0%{defined suse_version}
+BuildRequires:	libexpat-devel
+BuildRequires:	FastCGI-devel
+Requires:	apache2-mod_fcgid
 %else
-BuildRequires:  expat-devel, fcgi-devel,
+BuildRequires:	expat-devel
+BuildRequires:	fcgi-devel
+Requires:	mod_fcgid
 %endif
-
 %description radosgw
 radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
 implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 
 %package obsync
-Summary:        synchronize data between cloud object storage providers or a local directory
-Group:          Productivity/Networking/Other
-License:        LGPLv2
-Requires:       python, python-boto
+Summary:	synchronize data between cloud object storage providers or a local directory
+Group:		Productivity/Networking/Other
+License:	LGPLv2
+Requires:	python, python-boto
 %description obsync
 obsync is a tool to synchronize objects between cloud object
 storage providers, such as Amazon S3 (or compatible services), a
@@ -95,17 +120,73 @@ Ceph RADOS cluster, or a local directory.
 
 %if %{with_gtk2}
 %package gcephtool
-Summary:        Ceph graphical monitoring tool
-Group:          System Environment/Base
-License:        LGPLv2
-Requires:       gtk2 gtkmm24
-BuildRequires:  gtk2-devel gtkmm24-devel
-
+Summary:	Ceph graphical monitoring tool
+Group:		System Environment/Base
+License:	LGPLv2
+Requires:	gtk2 gtkmm24
+BuildRequires:	gtk2-devel gtkmm24-devel
 %description gcephtool
 gcephtool is a graphical monitor for the clusters running the Ceph distributed
 file system.
 %endif
 
+%package -n librados2
+Summary:	RADOS distributed object store client library
+Group:		System Environment/Libraries
+License:	LGPLv2
+%description -n librados2
+RADOS is a reliable, autonomic distributed object storage cluster
+developed as part of the Ceph distributed storage system. This is a
+shared library allowing applications to access the distributed object
+store using a simple file-like interface.
+
+%package -n librbd1
+Summary:	RADOS block device client library
+Group:		System Environment/Libraries
+License:	LGPLv2
+Requires:	librados2 = %{version}-%{release}
+%description -n librbd1
+RBD is a block device striped across multiple distributed objects in
+RADOS, a reliable, autonomic distributed object storage cluster
+developed as part of the Ceph distributed storage system. This is a
+shared library allowing applications to manage these block devices.
+
+%package -n librgw1
+Summary:	RGW distributed object store client library
+Group:		System Environment/Libraries
+License:	LGPLv2
+%description -n librgw1
+radosgw is a REST gateway for RADOS distributed object store. librgw
+contains support for reading and writing objects in the format expected
+by radosgw.
+
+%package -n libcephfs1
+Summary:	Ceph distributed file system client library
+Group:		System Environment/Libraries
+License:	LGPLv2
+%description -n libcephfs1
+Ceph is a distributed network file system designed to provide excellent
+performance, reliability, and scalability. This is a shared library
+allowing applications to access a Ceph distributed file system via a
+POSIX-like interface.
+
+%package -n python-ceph
+Summary:	Python libraries for the Ceph distributed filesystem
+Group:		System Environment/Libraries
+License:	LGPLv2
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+%if 0%{defined suse_version}
+%py_requires
+%endif
+%description -n python-ceph
+This package contains Python libraries for interacting with Cephs RADOS
+object storage.
+
+#################################################################################
+# common
+#################################################################################
 %prep
 %setup -q
 
@@ -121,25 +202,37 @@ MY_CONF_OPT="$MY_CONF_OPT --with-gtk2"
 MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
 %endif
 
-# be explicit about --with/without-tcmalloc because the autoconf
-# default differs from what's needed for rpm
-%{configure} --prefix=/usr --sbindir=/sbin \
---localstatedir=/var --sysconfdir=/etc \
---docdir=%{_docdir}/ceph \
---without-hadoop $MY_CONF_OPT \
-%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc}
+# be explicit about --with/without-tcmalloc because the
+# autoconf default differs from what's needed for rpm
+%{configure}	--prefix=/usr \
+		--sbindir=/sbin \
+		--localstatedir=/var \
+		--sysconfdir=/etc \
+		--docdir=%{_docdir}/ceph \
+		--without-hadoop \
+		$MY_CONF_OPT \
+		%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc}
+
+# fix bug in specific version of libedit-devel
+%if 0%{defined suse_version}
+sed -i -e "s/-lcurses/-lncurses/g" Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
+%endif
 
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
 make -j$(getconf _NPROCESSORS_ONLN) CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %install
-rm -rf $RPM_BUILD_ROOT
-make install DESTDIR=$RPM_BUILD_ROOT
+make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/radosgw
+install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
+mkdir -p $RPM_BUILD_ROOT/usr/sbin
+ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
@@ -147,6 +240,10 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
+# remove *.pyc where *.pyo exists
+rm $RPM_BUILD_ROOT/%{python_sitelib}/rados.pyc
+rm $RPM_BUILD_ROOT/%{python_sitelib}/rbd.pyc
+rm $RPM_BUILD_ROOT/%{python_sitelib}/rgw.pyc
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -170,9 +267,13 @@ if [ "$1" -ge "1" ] ; then
     /sbin/service ceph condrestart >/dev/null 2>&1 || :
 fi
 %if %{defined suse_version}
+%restart_on_update ceph
 %insserv_cleanup
 %endif
 
+#################################################################################
+# files
+#################################################################################
 %files
 %defattr(-,root,root,-)
 %docdir %{_docdir}
@@ -201,21 +302,14 @@ fi
 %{_bindir}/ceph-coverage
 %{_bindir}/obsync
 %{_initrddir}/ceph
-%{_libdir}/libcephfs.so.*
-%{_libdir}/librados.so.*
-%{_libdir}/librbd.so.*
 %dir %{_libdir}/rados-classes
-%{_libdir}/rados-classes/libcls_rbd.so.*
-%{_libdir}/rados-classes/libcls_rbd.so
-%{_libdir}/rados-classes/libcls_rgw.so.*
-%{_libdir}/rados-classes/libcls_rgw.so
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
-%{_sysconfdir}/bash_completion.d/ceph
-%{_sysconfdir}/bash_completion.d/rados
-%{_sysconfdir}/bash_completion.d/radosgw-admin
-%{_sysconfdir}/bash_completion.d/rbd
+%config %{_sysconfdir}/bash_completion.d/ceph
+%config %{_sysconfdir}/bash_completion.d/rados
+%config %{_sysconfdir}/bash_completion.d/radosgw-admin
+%config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
@@ -236,26 +330,28 @@ fi
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
 %{_mandir}/man8/librados-config.8.gz
-%{python_sitelib}/rados.py
-%{python_sitelib}/rados.pyc
-%{python_sitelib}/rados.pyo
-%{python_sitelib}/rbd.py
-%{python_sitelib}/rbd.pyc
-%{python_sitelib}/rbd.pyo
-%{python_sitelib}/rgw.py
-%{python_sitelib}/rgw.pyc
-%{python_sitelib}/rgw.pyo
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
 %dir %{_localstatedir}/log/ceph/
-%dir %{_localstatedir}/run/ceph/
+%ghost %dir %{_localstatedir}/run/ceph/
 %dir %{_sysconfdir}/ceph/
+/usr/sbin/rcceph
+# not sure why I need to list those for CentOS although they're removed in install
+%if 0%{defined centos_version}
+%{python_sitelib}/rados.pyc
+%{python_sitelib}/rbd.pyc
+%{python_sitelib}/rgw.pyc
+%endif
+%{_libdir}/rados-classes/libcls_rbd.so.*
+%{_libdir}/rados-classes/libcls_rgw.so.*
 
+#################################################################################
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 
+#################################################################################
 %files devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
@@ -275,36 +371,42 @@ fi
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
-
+%{_libdir}/rados-classes/libcls_rbd.so
+%{_libdir}/rados-classes/libcls_rgw.so
 %{_libdir}/libcephfs.so
-%{_libdir}/librados.so
 %{_libdir}/librbd.so
 %{_libdir}/librgw.so
+%{_libdir}/librados.so
 
+#################################################################################
 %files radosgw
 %defattr(-,root,root,-)
-%{_initrddir}/radosgw
+%{_initrddir}/ceph-radosgw
 %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%{_libdir}/librgw.so.*
+/usr/sbin/rcceph-radosgw
 
 %post radosgw
+/sbin/ldconfig
 %if %{defined suse_version}
-%fillup_and_insserv -f -y radosgw
+%fillup_and_insserv -f -y ceph-radosgw
 %endif
 
 %preun radosgw
 %if %{defined suse_version}
-%stop_on_removal radosgw
+%stop_on_removal ceph-radosgw
 %endif
 
 %postun radosgw
+/sbin/ldconfig
 %if %{defined suse_version}
+%restart_on_update ceph-radosgw
 %insserv_cleanup
 %endif
 
+#################################################################################
 %if %{with_gtk2}
 %files gcephtool
 %defattr(-,root,root,-)
@@ -312,33 +414,58 @@ fi
 %{_datadir}/ceph_tool/gui_resources/*
 %endif
 
+#################################################################################
+%files -n librados2
+%defattr(-,root,root,-)
+%{_libdir}/librados.so.*
+
+%post -n librados2
+/sbin/ldconfig
+
+%postun -n librados2
+/sbin/ldconfig
+
+#################################################################################
+%files -n librgw1
+%defattr(-,root,root,-)
+%{_libdir}/librgw.so.*
+
+%post -n librgw1
+/sbin/ldconfig
+
+%postun -n librgw1
+/sbin/ldconfig
+
+#################################################################################
+%files -n librbd1
+%defattr(-,root,root,-)
+%{_libdir}/librbd.so.*
+
+%post -n librbd1
+/sbin/ldconfig
+
+%postun -n librbd1
+/sbin/ldconfig
+
+#################################################################################
+%files -n libcephfs1
+%defattr(-,root,root,-)
+%{_libdir}/libcephfs.so.*
+
+%post -n libcephfs1
+/sbin/ldconfig
+
+%postun -n libcephfs1
+/sbin/ldconfig
+
+#################################################################################
+%files -n python-ceph
+%defattr(-,root,root,-)
+%{python_sitelib}/rados.py
+%{python_sitelib}/rados.pyo
+%{python_sitelib}/rbd.py
+%{python_sitelib}/rbd.pyo
+%{python_sitelib}/rgw.py
+%{python_sitelib}/rgw.pyo
+
 %changelog
-* Thu Dec 9 2010 Colin McCabe <colinm@hq.newdream.net> 0.19.1-6
-- Remove radosacl, since it's a debug binary
-- Fix GUI dependencies
-- Miscellaneous cleanups
-
-* Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5
-- Remove java deps (no need to build hadoop by default)
-- Include all required librados helpers
-- Include fetch_config sample
-- Include rbdtool
-- Remove misc debugging, test binaries
-
-* Thu Apr 30 2010 Josef Bacik <josef@toxicpanda.com> 0.19.1-4
-- Add java-devel and java tricks to get hadoop to build
-
-* Mon Apr 26 2010 Josef Bacik <josef@toxicpanda.com> 0.19.1-3
-- Move the rados and cauthtool man pages into the base package
-
-* Sun Apr 25 2010 Jonathan Dieter <jdieter@lesbg.com> 0.19.1-2
-- Add missing libhadoopcephfs.so* to file list
-- Add COPYING to all subpackages
-- Fix ownership of /usr/lib[64]/ceph
-- Enhance description of fuse client
-
-* Tue Apr 20 2010 Josef Bacik <josef@toxicpanda.com> 0.19.1-1
-- Update to 0.19.1
-
-* Mon Feb  8 2010 Josef Bacik <josef@toxicpanda.com> 0.18-1
-- Initial spec file creation, based on the template provided in the ceph src
