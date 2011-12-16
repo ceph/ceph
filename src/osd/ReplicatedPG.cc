@@ -2709,6 +2709,8 @@ void ReplicatedPG::op_applied(RepGather *repop)
   put_object_contexts(repop->src_obc);
   repop->obc = 0;
 
+  assert(info.last_update >= repop->v);
+  assert(last_update_applied < repop->v);
   last_update_applied = repop->v;
   if (last_update_applied == info.last_update && finalizing_scrub) {
     dout(10) << "requeueing scrub for cleanup" << dendl;
@@ -3453,6 +3455,8 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   rm->applied = true;
   bool done = rm->applied && rm->committed;
 
+  assert(info.last_update >= rm->op->version);
+  assert(last_update_applied < rm->op->version);
   last_update_applied = rm->op->version;
   if (last_update_applied == info.last_update && finalizing_scrub) {
     assert(active_rep_scrub);
