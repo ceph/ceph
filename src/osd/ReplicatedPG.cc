@@ -3077,8 +3077,6 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
   ::encode(obc->obs.oi, bl);
   t->setattr(coll, obc->obs.oi.soid, OI_ATTR, bl);
 
-  ctx->at_version.version++;
-
   append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
 
   // obc ref swallowed by repop!
