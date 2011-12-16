@@ -61,34 +61,4 @@ In the end, you'll want to close your IO context and connection to RADOS with :c
 API calls
 =========
 
-.. todo:: this document mentions individual entries, and not all of
-          librados.h, because processing the whole file in takes 2
-          minutes
-
-.. .. doxygenfile:: rados/librados.h
-
-
-Cluster operations
-------------------
-
-.. doxygentypedef:: rados_t
-
-.. doxygenfunction:: rados_create
-
-.. doxygenfunction:: rados_shutdown
-
-
-IO Context
-----------
-
-.. doxygentypedef:: rados_ioctx_t
-
-.. doxygenfunction:: rados_ioctx_create
-
-.. doxygenfunction:: rados_ioctx_destroy
-
-
-Operations on objects
----------------------
-
-.. doxygenfunction:: rados_write_full
+ .. doxygenfile:: rados/librados.h

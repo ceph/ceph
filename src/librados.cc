@@ -1333,13 +1333,6 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   return 0;
 }
 
-/**
- * Attempt to change a io's associated auid "owner." Requires that you
- * have write permission on both the current and new auid.
- * io: reference to the io to change.
- * auid: the auid you wish the io to have.
- * Returns: 0 on success, or -ERROR# on failure.
- */
 int librados::RadosClient::pool_change_auid(rados_ioctx_t io, unsigned long long auid)
 {
   int reply;
