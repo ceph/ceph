@@ -313,7 +313,7 @@ public:
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
-    oid(o.oid), snap(o.snap) {
+    oid(o.oid), snap(o.snap), max(false) {
     hash = __gnu_cxx::hash<sobject_t>()(o);
   }
 
