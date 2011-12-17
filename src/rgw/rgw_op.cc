@@ -187,11 +187,11 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
   return ret;
 }
 
-static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs, uint64_t *obj_size)
 {
   void *handle;
   int ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, NULL, NULL, &attrs, NULL,
-                                      NULL, NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
+                                      NULL, NULL, NULL, NULL, NULL, obj_size, &handle, &s->err);
   rgwstore->finish_get_obj(&handle);
   return ret;
 }
@@ -877,8 +877,10 @@ void RGWPutObjMetadata::execute()
 
   rgwstore->set_atomic(s->obj_ctx, obj);
 
+  uint64_t obj_size;
+
   /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(s, obj, orig_attrs);
+  ret = get_obj_attrs(s, obj, orig_attrs, &obj_size);
   if (ret < 0)
     goto done;
 
@@ -887,10 +889,12 @@ void RGWPutObjMetadata::execute()
     const string& name = iter->first;
     if (name.compare(0, meta_prefix_len, meta_prefix) == 0) {
       rmattrs[name] = iter->second;
+    } else if (attrs.find(name) == attrs.end()) {
+      attrs[name] = iter->second;
     }
   }
 
-  ret = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, obj, obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs);
 
 done:
   send_response();
@@ -1326,7 +1330,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
 
   rgw_obj obj(s->bucket, meta_oid, s->object_str, mp_ns);
 
-  int ret = get_obj_attrs(s, obj, attrs);
+  int ret = get_obj_attrs(s, obj, attrs, NULL);
   if (ret < 0)
     return ret;
 
