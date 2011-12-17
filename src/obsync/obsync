@@ -58,7 +58,7 @@ obsync -v --src-type=s3 --src-host=myhost --src-bucket=mybucket \
 # copy contents of mydir to a swift container
 DST_AKEY=... DST_SKEY=... \
 obsync -v --src-type=file --src-path=mydir --dst-type=swift \
---dst-host=myauthurl --dst-bucket=mycontainer
+--dst-authurl=myauthurl --dst-bucket=mycontainer
 
 # synchronize two S3 buckets
 SRC_AKEY=... SRC_SKEY=... \
@@ -89,8 +89,8 @@ META_XATTR_PREFIX = "rados.meta."
 CONTENT_TYPE_XATTR = "rados.content_type"
 
 def vvprint(s):
-	if (opts.more_verbose):
-		print s
+    if (opts.more_verbose):
+        print s
 
 ###### Exception classes #######
 class ObsyncException(Exception):
@@ -987,6 +987,8 @@ try:
         action="store", help="local file path for source")
     parser.add_option("--src-host", dest="src_host", type="string",
         action="store", help="host to connect to for source data")
+    parser.add_option("--src-authurl", dest="src_authurl", type="string",
+        action="store", help="authurl to connect to for source data")
     parser.add_option("--src-bucket", dest="src_bucket", type="string",
         action="store", help="source bucket")
     parser.add_option("--src-prefix", dest="src_prefix", type="string",
@@ -998,6 +1000,8 @@ try:
         action="store", help="local file path for destination")
     parser.add_option("--dst-host", dest="dst_host", type="string",
         action="store", help="host to connect to for destination data")
+    parser.add_option("--dst-authurl", dest="dst_authurl", type="string",
+        action="store", help="authurl to connect to for destination data")
     parser.add_option("--dst-bucket", dest="dst_bucket", type="string",
         action="store", help="destination bucket")
     parser.add_option("--dst-prefix", dest="dst_prefix", type="string",
@@ -1045,31 +1049,51 @@ try:
     if (not opts.src_type):
         raise ObsyncArgumentParsingException("src-type is required!")
     if (opts.src_type == 'file'):
-        if (opts.src_host or opts.src_bucket or opts.src_prefix):
-            raise ObsyncArgumentParsingException("host, bucket, and prefix " + \
-                "not required for local file stores.")
+        if (opts.src_host or opts.src_bucket or opts.src_prefix or opts.src_authurl):
+            raise ObsyncArgumentParsingException("host, bucket, prefix, and " + \
+                "authurl not required for local file stores.")
         if (not opts.src_path):
             raise ObsyncArgumentParsingException("src-path is required!")
     else:
-        if (not opts.src_host):
-            raise ObsyncArgumentParsingException("src-host is required!")
+        if (opts.src_type == 's3'):
+            if (opts.src_authurl):
+                raise ObsyncArgumentParsingException("src-authurl is not used for s3 stores!")
+            if (not opts.src_host):
+                raise ObsyncArgumentParsingException("src-host is required for s3 stores!")
+        if (opts.src_type == 'swift'):
+            if (not opts.src_authurl):
+                raise ObsyncArgumentParsingException("src-authurl is required for swift stores!")
+            if (opts.src_host):
+                raise ObsyncArgumentParsingException("src-host is not used for swift stores!")
         if (not opts.src_bucket):
             raise ObsyncArgumentParsingException("src-bucket is required!")
 
     if (not opts.dst_type):
         raise ObsyncArgumentParsingException("dst-type is required!")
     if (opts.dst_type == 'file'):
-        if (opts.dst_host or opts.dst_bucket or opts.dst_prefix):
-            raise ObsyncArgumentParsingException("host, bucket, and prefix " + \
-                "not required for local file stores.")
+        if (opts.dst_host or opts.dst_bucket or opts.dst_prefix or opts.dst_authurl):
+            raise ObsyncArgumentParsingException("host, bucket, prefix, and " + \
+                "authurl not required for local file stores.")
         if (not opts.dst_path):
             raise ObsyncArgumentParsingException("dst-path is required!")
     else:
-        if (not opts.dst_host):
-            raise ObsyncArgumentParsingException("dst-host is required!")
+        if (opts.dst_type == 's3'):
+            if (opts.dst_authurl):
+                raise ObsyncArgumentParsingException("dst-authurl is not used for s3 stores!")
+            if (not opts.dst_host):
+                raise ObsyncArgumentParsingException("dst-host is required for s3 stores!")
+        if (opts.dst_type == 'swift'):
+            if (not opts.dst_authurl):
+                raise ObsyncArgumentParsingException("dst-authurl is required for swift stores!")
+            if (opts.dst_host):
+                raise ObsyncArgumentParsingException("dst-host is not used for swift stores!")
         if (not opts.dst_bucket):
             raise ObsyncArgumentParsingException("dst-bucket is required!")
 
+    if opts.src_authurl:
+        opts.src_host = opts.src_authurl
+    if opts.dst_authurl:
+        opts.dst_host = opts.dst_authurl
     opts.preserve_acls = not opts.no_preserve_acls
     if (opts.create and opts.dry_run):
         raise ObsyncArgumentParsingException("You can't run with both \
