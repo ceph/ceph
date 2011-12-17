@@ -880,6 +880,55 @@ void PG::clear_primary_state()
   osd->snap_trim_wq.dequeue(this);
 }
 
+map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &infos) const
+{
+  map<int, Info>::const_iterator best = infos.end();
+  // find osd with newest last_update.  if there are multiples, prefer
+  //  - a longer tail, if it brings another peer into log contiguity
+  //  - the current primary
+  for (map<int, Info>::const_iterator p = infos.begin();
+       p != infos.end();
+       ++p) {
+    if (best == infos.end()) {
+      best = p;
+      continue;
+    }
+    // Prefer newer last_update
+    if (p->second.last_update < best->second.last_update)
+      continue;
+    if (p->second.last_update > best->second.last_update) {
+      best = p;
+      continue;
+    }
+    // Prefer longer tail if it brings another peer into contiguity
+    for (map<int, Info>::const_iterator q = infos.begin();
+	 q != infos.end();
+	 ++q) {
+      if (q->second.is_incomplete())
+	continue;  // don't care about log contiguity
+      if (q->second.last_update < best->second.log_tail &&
+	  q->second.last_update >= p->second.log_tail) {
+	dout(10) << "calc_acting prefer osd." << p->first
+		 << " because it brings osd." << q->first << " into log contiguity" << dendl;
+	best = p;
+	continue;
+      }
+      if (q->second.last_update < p->second.log_tail &&
+	  q->second.last_update >= best->second.log_tail) {
+	continue;
+      }
+    }
+    // prefer current primary (usually the caller), all things being equal
+    if (p->first == acting[0]) {
+      dout(10) << "calc_acting prefer osd." << p->first
+	       << " because it is current primary" << dendl;
+      best = p;
+      continue;
+    }
+  }
+  return best;
+}
+
 /**
  * calculate the desired acting set.
  *
@@ -896,99 +945,44 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
     dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
   }
 
-  // find osd with newest last_update.  if there are multiples, prefer
-  //  - a longer tail, if it brings another peer into log contiguity
-  //  - the current primary
-  map<int,Info>::iterator newest_update_osd = all_info.find(osd->whoami);
-  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
-    if (p->second.last_update < newest_update_osd->second.last_update)
-      continue;
-    if (p->second.last_update > newest_update_osd->second.last_update) {
-      newest_update_osd = p;
-      continue;
-    }
-    // prefer longer tail, if it will bring another peer in log contiguity
-    bool worse = false;
-    for (map<int,Info>::iterator q = all_info.begin(); q != all_info.end(); ++q) {
-      if (q->second.is_incomplete())
-	continue;  // don't care about log contiguity
-      if (q->second.last_update < newest_update_osd->second.log_tail &&
-	  q->second.last_update >= p->second.log_tail) {
-	dout(10) << "calc_acting prefer osd." << p->first
-		 << " because it brings osd." << q->first << " into log contiguity" << dendl;
-	newest_update_osd = p;
-	continue;
-      }
-      if (q->second.last_update < p->second.log_tail &&
-	  q->second.last_update >= newest_update_osd->second.log_tail) {
-	worse = true;
-	break;
-      }
-    }
-    if (worse)
-      continue;
+  map<int, Info>::const_iterator newest_update_osd = find_best_info(all_info);
 
-    // prefer current primary (usually the caller), all things being equal
-    if (p->first == acting[0]) {
-      dout(10) << "calc_acting prefer osd." << p->first
-	       << " because it is current primary" << dendl;
-      newest_update_osd = p;
-      continue;
-    }
-  }
   dout(10) << "calc_acting newest update on osd." << newest_update_osd->first
 	   << " with " << newest_update_osd->second << dendl;
   newest_update_osd_id = newest_update_osd->first;
   
   // select primary
-  map<int,Info>::iterator primary;
-  if (up.size()) {
+  map<int,Info>::const_iterator primary;
+  if (up.size() &&
+      !all_info[up[0]].is_incomplete() &&
+      all_info[up[0]].last_update >= newest_update_osd->second.log_tail) {
+    dout(10) << "up[0](osd." << up[0] << ") selected as primary" << dendl;
     primary = all_info.find(up[0]);         // prefer up[0], all thing being equal
+  } else if (!newest_update_osd->second.is_incomplete()) {
+    dout(10) << "up[0] needs backfill, osd." << newest_update_osd_id
+	     << " selected as primary instead" << dendl;
+    primary = newest_update_osd;
   } else {
-    assert(acting.size());
-    primary = all_info.find(acting[0]);     // or the status quo
-  }
-  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
-    if (p == primary)
-      continue;
-    // require complete
-    if (p->second.is_incomplete())
-      continue;
-    if (primary->second.is_incomplete()) {
-      dout(10) << "calc_acting prefer osd." << p->first << " because not incomplete" << dendl;
-      primary = p;
-      continue;
+    map<int, Info> complete_infos;
+    for (map<int, Info>::iterator i = all_info.begin();
+	 i != all_info.end();
+	 ++i) {
+      if (!i->second.is_incomplete())
+	complete_infos.insert(*i);
     }
-    // require log continuity with newest_update_osd
-    if (p->second.last_update < newest_update_osd->second.log_tail)
-      continue;
-    if (primary->second.last_update < newest_update_osd->second.log_tail) {
-      dout(10) << "calc_acting prefer osd." << p->first
-	       << " because log contiguous with newest osd." << newest_update_osd->first << dendl;
-      primary = p;
-      continue;
-    }
-    // prefer longer tail, if it will bring another peer in log contiguity
-    if (p->second.log_tail < primary->second.log_tail) {
-      for (map<int,Info>::iterator q = all_info.begin(); q != all_info.end(); ++q) {
-	if (!q->second.is_incomplete() &&
-	    q->second.last_update < primary->second.log_tail &&
-	    q->second.last_update >= p->second.log_tail) {
-	  dout(10) << "calc_acting prefer osd." << p->first
-		   << " because it brings osd." << q->first << " into log contiguity" << dendl;
-	  primary = p;
-	  continue;
-	}
-      }
+    primary = find_best_info(complete_infos);
+    if (primary == complete_infos.end() ||
+	primary->second.last_update < newest_update_osd->second.log_tail) {
+      dout(10) << "calc_acting no acceptable primary, reverting to up " << up << dendl;
+      want = up;
+      return;
+    } else {
+      dout(10) << "up[0] and newest_update_osd need backfill, osd."
+	       << newest_update_osd_id
+	       << " selected as primary instead" << dendl;
     }
   }
 
-  if (primary->second.is_incomplete() ||
-      primary->second.last_update < newest_update_osd->second.log_tail) {
-    dout(10) << "calc_acting no acceptable primary, reverting to up " << up << dendl;
-    want = up;
-    return;
-  }
 
   dout(10) << "calc_acting primary is osd." << primary->first
 	   << " with " << primary->second << dendl;
