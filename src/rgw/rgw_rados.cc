@@ -417,7 +417,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 
   bufferlist outbl;
   int ret = root_pool_ctx.operate(bucket.name, &op);
-  if (ret < 0 && ret != -EEXIST)
+  if (ret < 0)
     return ret;
 
   if (system_bucket) {
