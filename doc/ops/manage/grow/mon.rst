@@ -6,22 +6,31 @@ Adding a monitor
 ----------------
 
 #. Initialize the new monitor's data directory with the ``ceph-mon
-   --mkfs`` command.  You need to provide the new monitor with three
+   --mkfs`` command.  You need to provide the new monitor with four
    pieces of information:
 
-   - the cluster fsid
-   - one or more existing monitors to join
-   - the monitor authentication key ``mon.``
+   - the cluster fsid.  This can come from a monmap (``--monmap
+     </path/to/monmap>``) for explicitly via ``--fsid <fsid>``.
+   - one or more existing monitors to join.  This can come via ``-m
+     <host1,host2,...>``, a monmap (``--monmap </some/path>``), or
+     ``[mon.foo]`` sections with ``mon addr`` fields in ``ceph.conf``.
+   - the monitor authentication key ``mon.``.  This should be passed
+     in explicitly via a keyring (``--keyring </some/path>``).
 
-   The simplest way to do this is probably::
+   Any combination of the above arguments that provide the four needed
+   pieces of information will work.  The simplest way to do this is
+   usually::
 
      $ ceph mon getmap -o /tmp/monmap           # provides fsid and existing monitor addrs
      $ ceph auth export mon. -o /tmp/monkey     # mon. auth key
      $ ceph-mon -i newname --mkfs --monmap /tmp/monmap --keyring /tmp/monkey
 
-#. Start the new monitor and it will automatically join the cluster::
+#. Start the new monitor and it will automatically join the cluster.
+   The daemon needs to know which address to bind to, either via
+   ``--public-addr <ip:port>`` or by setting ``mon addr`` in the
+   appropriate section of ``ceph.conf``.  For example::
 
-    $ ceph-mon -i newname
+    $ ceph-mon -i newname --public-addr <ip:port>
 
 #. If you would like other nodes to be able to use this monitor during
    their initial startup, you'll need to adjust ``ceph.conf`` to add a
