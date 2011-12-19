@@ -723,120 +723,9 @@ def cluster(ctx, config):
 
 
 @contextlib.contextmanager
-def mon(ctx, config):
-    log.info('Starting mon daemons...')
-    mons = ctx.cluster.only(teuthology.is_type('mon'))
-    coverage_dir = '/tmp/cephtest/archive/coverage'
-
-    daemon_signal = 'kill'
-    if config.get('coverage'):
-        log.info('Recording coverage for this run.')
-        daemon_signal = 'term'
-
-    for remote, roles_for_host in mons.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-            proc_signal = daemon_signal
-            run_cmd = ['/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/daemon-helper'
-                       ]
-
-            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/ceph-mon',
-                    '-f',
-                    '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf']
-
-            extra_args = None
-
-            if config.get('valgrind') and (config.get('valgrind').get('mon.{id}'.format(id=id_), None) is not None):
-                valgrind_args = config.get('valgrind').get('mon.{id}'.format(id=id_))
-                log.debug('running mon.{id} under valgrind'.format(id=id_))
-                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                proc_signal = 'term'
-                if 'memcheck' in valgrind_args or \
-                        'helgrind' in valgrind_args:
-                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/mon.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
-                else:
-                    extra_args = extra_args = ['valgrind', '--log-file={vdir}/mon.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
-
-            run_cmd.append(proc_signal)
-            if extra_args is not None:
-                run_cmd.extend(extra_args)
-            run_cmd.extend(run_cmd_tail)
-            ctx.daemons.add_daemon(remote, 'mon', id_,
-                args=run_cmd,
-                logger=log.getChild('mon.{id}'.format(id=id_)),
-                stdin=run.PIPE,
-                wait=False,
-                )
-
-    try:
-        yield
-    finally:
-        log.info('Shutting down mon daemons...')
-        [i.stop() for i in ctx.daemons.iter_daemons_of_role('mon')]
-
-
-@contextlib.contextmanager
-def osd(ctx, config):
-    log.info('Starting osd daemons...')
-    osds = ctx.cluster.only(teuthology.is_type('osd'))
-    coverage_dir = '/tmp/cephtest/archive/coverage'
-
-    daemon_signal = 'kill'
-    if config.get('coverage'):
-        log.info('Recording coverage for this run.')
-        daemon_signal = 'term'
-
-    for remote, roles_for_host in osds.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-            run_cmd = ['/tmp/cephtest/enable-coredump',
-                       '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                       coverage_dir,
-                       '/tmp/cephtest/daemon-helper'
-                       ]
-            proc_signal = daemon_signal
-            run_cmd_tail = [ '/tmp/cephtest/binary/usr/local/bin/ceph-osd',
-                             '-f',
-                             '-i', id_,
-                             '-c', '/tmp/cephtest/ceph.conf',
-                             ]
-            
-            extra_args = None
-
-            if config.get('valgrind') and config.get('valgrind').get('osd.{id}'.format(id=id_), None) is not None:
-                valgrind_args = config.get('valgrind').get('osd.{id}'.format(id=id_))
-                log.debug('running osd.{id} under valgrind'.format(id=id_))
-                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                proc_signal = 'term'
-                if 'memcheck' in valgrind_args or \
-                        'helgrind' in valgrind_args:
-                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/osd.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
-                else:
-                    extra_args = extra_args = ['valgrind', '--log-file={vdir}/osd.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
-
-            run_cmd.append(proc_signal)
-            if extra_args is not None:
-                run_cmd.extend(extra_args)
-            run_cmd.extend(run_cmd_tail)
-            ctx.daemons.add_daemon(remote, 'osd', id_,
-                args=run_cmd,
-                logger=log.getChild('osd.{id}'.format(id=id_)),
-                stdin=run.PIPE,
-                wait=False,
-                )
-    try:
-        yield
-    finally:
-        log.info('Shutting down osd daemons...')
-        [i.stop() for i in ctx.daemons.iter_daemons_of_role('osd')]
-
-@contextlib.contextmanager
-def mds(ctx, config):
-    log.info('Starting mds daemons...')
-    firstmon = teuthology.get_first_mon(ctx, config)
-    mdss = ctx.cluster.only(teuthology.is_type('mds'))
+def run_daemon(ctx, config, type):
+    log.info('Starting %s daemons...' % type)
+    daemons = ctx.cluster.only(teuthology.is_type(type))
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
     daemon_signal = 'kill'
@@ -845,48 +734,51 @@ def mds(ctx, config):
         daemon_signal = 'term'
 
     num_active = 0
-    for remote, roles_for_host in mdss.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
+    for remote, roles_for_host in daemons.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, type):
             if not id_.endswith('-s'):
                 num_active += 1
-            run_cmd = ['/tmp/cephtest/enable-coredump',
-                       '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                       coverage_dir,
-                       '/tmp/cephtest/daemon-helper'
-                       ]
+
             proc_signal = daemon_signal
-            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/ceph-mds',
-                            '-f',
-                            '-i', id_,
-                            '-c', '/tmp/cephtest/ceph.conf',
-                            ]
+            run_cmd = ['/tmp/cephtest/enable-coredump',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/daemon-helper'
+                       ]
+            run_cmd_tail = [
+                '/tmp/cephtest/binary/usr/local/bin/ceph-%s' % type,
+                '-f',
+                '-i', id_,
+                '-c', '/tmp/cephtest/ceph.conf']
 
             extra_args = None
 
-            if config.get('valgrind') and (config.get('valgrind').get('mds.{id}'.format(id=id_), None) is not None):
-                valgrind_args = config.get('valgrind').get('mds.{id}'.format(id=id_))
-                log.debug('running mds.{id} under valgrind'.format(id=id_))
+            if config.get('valgrind') and (config.get('valgrind').get('{type}.{id}'.format(type=type,id=id_), None) is not None):
+                valgrind_args = config.get('valgrind').get('{type}.{id}'.format(type=type,id=id_))
+                log.debug('running {type}.{id} under valgrind'.format(type=type,id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 proc_signal = 'term'
                 if 'memcheck' in valgrind_args or \
                         'helgrind' in valgrind_args:
-                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/mds.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
+                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_), valgrind_args]
                 else:
-                    extra_args = extra_args = ['valgrind', '--log-file={vdir}/mds.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
+                    extra_args = ['valgrind', '--log-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_), valgrind_args]
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
                 run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
-            ctx.daemons.add_daemon(remote, 'mds', id_,
+            ctx.daemons.add_daemon(remote, type, id_,
                 args=run_cmd,
-                logger=log.getChild('mds.{id}'.format(id=id_)),
+                logger=log.getChild('{type}.{id}'.format(type=type,id=id_)),
                 stdin=run.PIPE,
                 wait=False,
                 )
 
-    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-    mon0_remote.run(args=[
+    if type is 'mds':
+        firstmon = teuthology.get_first_mon(ctx, config)
+        (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+        mon0_remote.run(args=[
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
@@ -897,8 +789,9 @@ def mds(ctx, config):
     try:
         yield
     finally:
-        log.info('Shutting down mds daemons...')
-        [i.stop() for i in ctx.daemons.iter_daemons_of_role('mds')]
+        log.info('Shutting down %s daemons...' % type)
+        [i.stop() for i in ctx.daemons.iter_daemons_of_role(type)]
+
 
 def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
@@ -1064,9 +957,9 @@ def task(ctx, config):
                 btrfs=config.get('btrfs', False),
                 log_whitelist=config.get('log-whitelist', []),
                 )),
-        lambda: mon(ctx=ctx, config=config),
-        lambda: osd(ctx=ctx, config=config),
-        lambda: mds(ctx=ctx, config=config),
+        lambda: run_daemon(ctx=ctx, config=config, type='mon'),
+        lambda: run_daemon(ctx=ctx, config=config, type='osd'),
+        lambda: run_daemon(ctx=ctx, config=config, type='mds'),
         ):
         healthy(ctx=ctx, config=None)
         yield
