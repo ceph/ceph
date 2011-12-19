@@ -216,7 +216,11 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
     fprintf(stderr, "Parse error at line %d:\n%s\n",
 	      (int)XML_GetCurrentLineNumber(p),
 	      XML_ErrorString(XML_GetErrorCode(p)));
-    return false;
+    success = false;
   }
+
+  if (done || !success)
+    XML_ParserFree(p);
+
   return success;
 }
