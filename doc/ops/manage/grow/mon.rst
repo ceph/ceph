@@ -13,7 +13,7 @@ Adding a monitor
      </path/to/monmap>``) for explicitly via ``--fsid <fsid>``.
    - one or more existing monitors to join.  This can come via ``-m
      <host1,host2,...>``, a monmap (``--monmap </some/path>``), or
-     ``[mon.foo]`` sections with ``mon addr`` fields in ``ceph.conf``.
+     ``[mon.foo]`` sections with ``mon addr`` fields in *ceph.conf*.
    - the monitor authentication key ``mon.``.  This should be passed
      in explicitly via a keyring (``--keyring </some/path>``).
 
@@ -28,12 +28,12 @@ Adding a monitor
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, either via
    ``--public-addr <ip:port>`` or by setting ``mon addr`` in the
-   appropriate section of ``ceph.conf``.  For example::
+   appropriate section of *ceph.conf*.  For example::
 
     $ ceph-mon -i newname --public-addr <ip:port>
 
 #. If you would like other nodes to be able to use this monitor during
-   their initial startup, you'll need to adjust ``ceph.conf`` to add a
+   their initial startup, you'll need to adjust *ceph.conf* to add a
    section and ``mon addr`` for the new monitor, or add it to the
    existing ``mon host`` list.
 
@@ -82,5 +82,5 @@ form a quorum.
 
      $ service ceph start mon           # on each node with a surviving monitor
 
-6) Remove the old monitors from ``ceph.conf`` so that nobody tries to
+6) Remove the old monitors from *ceph.conf* so that nobody tries to
    connect to the old instances.
