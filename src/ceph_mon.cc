@@ -336,6 +336,7 @@ int main(int argc, const char **argv)
 	   << " not present in monmap" << dendl;
       exit(1);
     }
+    ipaddr = g_conf->public_addr;
   }
 
   // bind
