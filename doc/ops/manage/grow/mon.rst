@@ -6,7 +6,7 @@ Adding a monitor
 ----------------
 
 #. Initialize the new monitor's data directory with the ``ceph-mon
-   --mkfs`` command.  You need to provide the new monitor with four
+   --mkfs`` command.  You need to provide the new monitor with three
    pieces of information:
 
    - the cluster fsid.  This can come from a monmap (``--monmap
