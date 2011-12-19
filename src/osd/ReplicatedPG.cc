@@ -3464,10 +3464,13 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   assert(info.last_update >= rm->op->version);
   assert(last_update_applied < rm->op->version);
   last_update_applied = rm->op->version;
-  if (last_update_applied == info.last_update && finalizing_scrub) {
+  if (finalizing_scrub) {
     assert(active_rep_scrub);
-    osd->rep_scrub_wq.queue(active_rep_scrub);
-    active_rep_scrub = 0;
+    assert(info.last_update <= active_rep_scrub->scrub_to);
+    if (last_update_applied == active_rep_scrub->scrub_to) {
+      osd->rep_scrub_wq.queue(active_rep_scrub);
+      active_rep_scrub = 0;
+    }
   }
 
   unlock();
