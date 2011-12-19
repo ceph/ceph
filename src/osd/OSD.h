@@ -1056,9 +1056,12 @@ private:
 			const char *val, size_t vallen);
   static int read_meta(const std::string &base, const std::string &file,
 		       char *val, size_t vallen);
-  static int write_meta(const std::string &base, uuid_d& fsid, int whoami);
+  static int write_meta(const std::string &base,
+			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 public:
-  static int peek_meta(const std::string &dev, string& magic, uuid_d& fsid, int& whoami);
+  static int peek_meta(const std::string &dev, string& magic,
+		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
+  static int peek_journal_fsid(std::string jpath, uuid_d& fsid);
   
 
   // startup/shutdown

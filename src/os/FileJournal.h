@@ -31,20 +31,63 @@ public:
    * journal header
    */
   struct header_t {
-    __u32 version;
-    __u32 flags;
-    uint64_t fsid;
+    uint64_t flags;
+    uuid_d fsid;
     __u32 block_size;
     __u32 alignment;
     int64_t max_size;   // max size of journal ring buffer
     int64_t start;      // offset of first entry
 
-    header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), start(0) {}
-
     void clear() {
       start = block_size;
     }
-  } header __attribute__((__packed__, aligned(4)));
+
+    uint64_t get_fsid64() {
+      return *(uint64_t*)&fsid.uuid[0];
+    }
+
+    void encode(bufferlist& bl) const {
+      __u32 v = 2;
+      ::encode(v, bl);
+      bufferlist em;
+      {
+	::encode(flags, em);
+	::encode(fsid, em);
+	::encode(block_size, em);
+	::encode(alignment, em);
+	::encode(max_size, em);
+	::encode(start, em);
+      }
+      ::encode(em, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      __u32 v;
+      ::decode(v, bl);
+      if (v < 2) {  // normally 0, but concievably 1
+	// decode old header_t struct (pre v0.40).
+	bl.advance(4); // skip __u32 flags (it was unused by any old code)
+	flags = 0;
+	uint64_t tfsid;
+	::decode(tfsid, bl);
+	*(uint64_t*)&fsid.uuid[0] = tfsid;
+	*(uint64_t*)&fsid.uuid[8] = tfsid;
+	::decode(block_size, bl);
+	::decode(alignment, bl);
+	::decode(max_size, bl);
+	::decode(start, bl);
+	return;
+      }
+      bufferlist em;
+      ::decode(em, bl);
+      bufferlist::iterator t = em.begin();
+      ::decode(flags, t);
+      ::decode(fsid, t);
+      ::decode(block_size, t);
+      ::decode(alignment, t);
+      ::decode(max_size, t);
+      ::decode(start, t);
+    }
+  } header;
 
   struct entry_header_t {
     uint64_t seq;  // fs op seq #
@@ -171,7 +214,7 @@ private:
   }
 
  public:
-  FileJournal(uint64_t fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
+  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
     Journal(fsid, fin, sync_cond), fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
@@ -193,6 +236,7 @@ private:
   int create();
   int open(uint64_t fs_op_seq);
   void close();
+  int peek_fsid(uuid_d& fsid);
 
   void flush();
 
@@ -216,5 +260,7 @@ private:
   // reads
   bool read_entry(bufferlist& bl, uint64_t& seq);
 };
+
+WRITE_CLASS_ENCODER(FileJournal::header_t)
 
 #endif

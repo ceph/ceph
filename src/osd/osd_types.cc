@@ -522,10 +522,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  __u8 v = 3;
+  __u8 v = 4;
   ::encode(v, bl);
 
-  ::encode(fsid, bl);
+  ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
   ::encode(oldest_map, bl);
@@ -534,6 +534,7 @@ void OSDSuperblock::encode(bufferlist &bl) const
   compat_features.encode(bl);
   ::encode(clean_thru, bl);
   ::encode(mounted, bl);
+  ::encode(osd_fsid, bl);
 }
 
 void OSDSuperblock::decode(bufferlist::iterator &bl)
@@ -545,7 +546,7 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
     string magic;
     ::decode(magic, bl);
   }
-  ::decode(fsid, bl);
+  ::decode(cluster_fsid, bl);
   ::decode(whoami, bl);
   ::decode(current_epoch, bl);
   ::decode(oldest_map, bl);
@@ -558,6 +559,8 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
   }
   ::decode(clean_thru, bl);
   ::decode(mounted, bl);
+  if (v >= 4)
+    ::decode(osd_fsid, bl);
 }
 
 

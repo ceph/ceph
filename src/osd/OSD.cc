@@ -35,6 +35,7 @@
 
 #include "common/ceph_argparse.h"
 #include "os/FileStore.h"
+#include "os/FileJournal.h"
 
 #include "ReplicatedPG.h"
 
@@ -263,7 +264,8 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
   int ret;
   ObjectStore *store = NULL;
   OSDSuperblock sb;
-  sb.fsid = fsid;
+
+  sb.cluster_fsid = fsid;
   sb.whoami = whoami;
 
   try {
@@ -277,13 +279,15 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
       goto free_store;
     }
+    sb.osd_fsid = store->get_fsid();
+
     ret = store->mount();
     if (ret) {
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
       goto free_store;
     }
     store->sync_and_flush();
-    ret = write_meta(dev, fsid, whoami);
+    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
     if (ret) {
       derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
       goto umount_store;
@@ -443,14 +447,7 @@ int OSD::read_meta(const  std::string &base, const std::string &file,
   return len;
 }
 
-#define FSID_FORMAT "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-" \
-	"%02x%02x%02x%02x%02x%02x"
-#define PR_FSID(f) (f)->fsid[0], (f)->fsid[1], (f)->fsid[2], (f)->fsid[3], \
-		(f)->fsid[4], (f)->fsid[5], (f)->fsid[6], (f)->fsid[7],    \
-		(f)->fsid[8], (f)->fsid[9], (f)->fsid[10], (f)->fsid[11],  \
-		(f)->fsid[12], (f)->fsid[13], (f)->fsid[14], (f)->fsid[15]
-
-int OSD::write_meta(const std::string &base, uuid_d& fsid, int whoami)
+int OSD::write_meta(const std::string &base, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
 {
   char val[80];
   
@@ -460,15 +457,15 @@ int OSD::write_meta(const std::string &base, uuid_d& fsid, int whoami)
   snprintf(val, sizeof(val), "%d\n", whoami);
   write_meta(base, "whoami", val, strlen(val));
 
-  fsid.print(val);
+  cluster_fsid.print(val);
   strcat(val, "\n");
   write_meta(base, "ceph_fsid", val, strlen(val));
-  
+
   return 0;
 }
 
 int OSD::peek_meta(const std::string &dev, std::string& magic,
-		   uuid_d& fsid, int& whoami)
+		   uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami)
 {
   char val[80] = { 0 };
 
@@ -485,11 +482,27 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
 
   if (read_meta(dev, "ceph_fsid", val, sizeof(val)) < 0)
     return -errno;
-  
-  memset(&fsid, 0, sizeof(fsid));
-  fsid.parse(val);
+  if (strlen(val) > 36)
+    val[36] = 0;
+  cluster_fsid.parse(val);
+
+  if (read_meta(dev, "fsid", val, sizeof(val)) < 0)
+    osd_fsid = uuid_d();
+  else {
+    if (strlen(val) > 36)
+      val[36] = 0;
+    osd_fsid.parse(val);
+  }
+
   return 0;
 }
+
+int OSD::peek_journal_fsid(string path, uuid_d& fsid)
+{
+  FileJournal j(fsid, 0, 0, path.c_str());
+  return j.peek_fsid(fsid);
+}
+
 
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, osdmap)
@@ -1530,9 +1543,9 @@ void OSD::reset_heartbeat_peers()
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
-  if (superblock.fsid != m->fsid) {
+  if (superblock.cluster_fsid != m->fsid) {
     dout(20) << "handle_osd_ping from " << m->get_source_inst()
-	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
+	     << " bad fsid " << m->fsid << " != " << superblock.cluster_fsid << dendl;
     m->put();
     return;
   }

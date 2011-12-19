@@ -28,6 +28,8 @@
 
 #include "Fake.h"
 
+#include "include/uuid.h"
+
 #include <map>
 #include <deque>
 using namespace std;
@@ -45,7 +47,7 @@ class FileStore : public JournalingObjectStore,
   string basedir, journalpath;
   std::string current_fn;
   std::string current_op_seq_fn;
-  uint64_t fsid;
+  uuid_d fsid;
   
   bool btrfs;                   ///< fs is btrfs
   bool btrfs_stable_commits;    ///< we are using btrfs snapshots for a stable journal refernce
@@ -80,6 +82,7 @@ class FileStore : public JournalingObjectStore,
   // helper fns
   int get_cdir(coll_t cid, char *s, int len);
   
+  int read_fsid(int fd);
   int lock_fsid();
 
   // sync thread
@@ -319,6 +322,8 @@ public:
   void _flush_op_queue();
   void flush();
   void sync_and_flush();
+
+  uuid_d get_fsid() { return fsid; }
 
   int snapshot(const string& name);
 
