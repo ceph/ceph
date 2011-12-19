@@ -1425,6 +1425,8 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   if (lastmod)
     *lastmod = astate->mtime;
 
+  delete new_ctx;
+
   return 0;
 
 done_err:
