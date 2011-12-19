@@ -23,6 +23,7 @@ from sys import stderr
 from lxml import etree
 import base64
 import boto
+import cloudfiles
 import errno
 import hashlib
 import mimetypes
@@ -45,24 +46,30 @@ global xuser
 
 ###### Usage #######
 USAGE = """
-obsync synchronizes S3 and local objects. The source and destination
+obsync synchronizes S3, swift and local objects. The source and destination
 can both be local or both remote.
 
 Examples:
-# copy contents of mybucket to disk
-obsync -v s3://myhost/mybucket file://mydir
+# copy contents of s3 bucket to disk
+SRC_AKEY=... SRC_SKEY=... \
+obsync -v --src-type=s3 --src-host=myhost --src-bucket=mybucket \
+--dst-type=file --dst-path=mydir
 
-# copy contents of mydir to an S3 bucket
-obsync -v file://mydir s3://myhost/mybucket
+# copy contents of mydir to a swift container
+DST_AKEY=... DST_SKEY=... \
+obsync -v --src-type=file --src-path=mydir --dst-type=swift \
+--dst-authurl=myauthurl --dst-bucket=mycontainer
 
 # synchronize two S3 buckets
 SRC_AKEY=... SRC_SKEY=... \
 DST_AKEY=... DST_SKEY=... \
-obsync -v s3://myhost/mybucket1 s3://myhost2/mybucket2
-   --xuser bob=robert --xuser joe=joseph -O bob
+obsync -v --src-type=s3 --src-host=oldhost --src-bucket=mybucket \
+--dst-type=s3 --dst-host=newhost --dst-bucket=mybucket \
+--xuser bob=robert --xuser joe=joseph
 
 Note: You must specify an AWS access key and secret access key when accessing
-S3. obsync honors these environment variables:
+S3. When accessing swift use your username as the access key and your api
+key as the secret key. obsync honors these environment variables:
 SRC_AKEY          Access key for the source URL
 SRC_SKEY          Secret access key for the source URL
 DST_AKEY          Access key for the destination URL
@@ -75,8 +82,15 @@ DST_CONSISTENCY   Set to 'eventual' if the destination is eventually consistent
 
 If these environment variables are not given, we will fall back on libboto
 defaults.
+"""
+###### Constants #######
+ACL_XATTR = "rados.acl"
+META_XATTR_PREFIX = "rados.meta."
+CONTENT_TYPE_XATTR = "rados.content_type"
 
-obsync (options) [source] [destination]"""
+def vvprint(s):
+    if (opts.more_verbose):
+        print s
 
 ###### Exception classes #######
 class ObsyncException(Exception):
@@ -143,7 +157,7 @@ def test_xattr_support(path):
                 "read it back.")
     except IOError, e:
         print >>stderr, "**** ERRROR: You do not appear to have xattr support " + \
-            "at %s ****" % path
+            "at %s ****" % pa
         raise ObsyncPermanentException(exc)
     finally:
         os.unlink(test_file)
@@ -220,15 +234,15 @@ def getenv(a, b):
 # if not, just reject the local file name. S3 object names must be valid
 # utf-8.
 #
-# ----------		-----------
-# In S3				Locally
-# ----------		-----------
-# foo/				foo$slash
+# ----------        -----------
+# In S3             Locally
+# ----------        -----------
+# foo/              foo$slash
 #
-# $money			$$money
+# $money            $$money
 #
-# obj-with-acl		obj-with-acl
-#					.obj-with-acl$acl
+# obj-with-acl      obj-with-acl
+#                  .obj-with-acl$acl
 def s3_name_to_local_name(s3_name):
     s3_name = re.sub(r'\$', "$$", s3_name)
     if (s3_name[-1:] == "/"):
@@ -520,25 +534,18 @@ class Object(object):
 ###### Store #######
 class Store(object):
     @staticmethod
-    def make_store(url, is_dst, create, akey, skey):
-        s3_url = strip_prefix("s3://", url)
-        if (s3_url):
+    def make_store(type, is_dst, create, akey, skey, **kwargs):
+        if (type == 's3'):
             if (is_dst):
                 is_secure = os.environ.has_key("DST_SECURE")
             else:
                 is_secure = os.environ.has_key("SRC_SECURE")
-            return S3Store(s3_url, create, akey, skey, is_secure)
-        file_url = strip_prefix("file://", url)
-        if (file_url):
-            return FileStore(file_url, create)
-        if (url[0:1] == "/"):
-            return FileStore(url, create)
-        if (url[0:2] == "./"):
-            return FileStore(url, create)
-        raise ObsyncPermanentException("Failed to find a prefix of s3://, file://, /, or ./ \
-Cannot handle this URL.")
-    def __init__(self, url):
-        self.url = url
+            return S3Store(kwargs['host'], kwargs['bucket'], kwargs['prefix'], create, akey, skey, is_secure)
+        elif (type == 'swift'):
+            return SwiftStore(kwargs['host'], kwargs['bucket'], kwargs['prefix'], create, akey, skey, False)
+        elif (type == 'file'):
+            return FileStore(kwargs['path'], create)
+        raise ObsyncPermanentException('Unknown store type: "%s"' %type)
 
 ###### LocalCopy ######
 class LocalCopy(object):
@@ -624,30 +631,15 @@ class S3StoreIterator(object):
         return ret
 
 class S3Store(Store):
-    def __init__(self, url, create, akey, skey, is_secure):
-        # Parse the s3 url
-        host_end = string.find(url, "/")
-        if (host_end == -1):
-            raise ObsyncPermanentException("S3Store URLs are of the form \
-s3://host/bucket/key_prefix. Failed to find the host.")
-        self.host = url[0:host_end]
-        bucket_end = url.find("/", host_end+1)
-        if (bucket_end == -1):
-            self.bucket_name = url[host_end+1:]
-            self.key_prefix = ""
-        else:
-            self.bucket_name = url[host_end+1:bucket_end]
-            self.key_prefix = url[bucket_end+1:]
-        if (self.bucket_name == ""):
-            raise ObsyncPermanentException("S3Store URLs are of the form \
-s3://host/bucket/key_prefix. Failed to find the bucket.")
-        if (opts.more_verbose):
-            print "self.host = '" + self.host + "', ",
-            print "self.bucket_name = '" + self.bucket_name + "' ",
-            print "self.key_prefix = '" + self.key_prefix + "'"
+    def __init__(self, host, bucket_name, object_prefix, create, akey, skey, is_secure):
+        self.host = host
+        self.bucket_name = bucket_name
+        self.key_prefix = object_prefix
+
         self.conn = S3Connection(calling_format=OrdinaryCallingFormat(),
                 host=self.host, is_secure=is_secure,
                 aws_access_key_id=akey, aws_secret_access_key=skey)
+
         self.bucket = self.conn.lookup(self.bucket_name)
         if (self.bucket == None):
             if (create):
@@ -656,13 +648,15 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
                 self.bucket = self.conn.create_bucket(bucket_name = self.bucket_name)
             else:
                 raise ObsyncPermanentException("%s: no such bucket as %s" % \
-                    (url, self.bucket_name))
-        Store.__init__(self, "s3://" + url)
+                    (host, self.bucket_name))
+
     def __str__(self):
         return "s3://" + self.host + "/" + self.bucket_name + "/" + self.key_prefix
+
     def get_acl(self, obj):
         acl_xml = self.bucket.get_xml_acl(obj.name)
         return LocalAcl.from_xml(obj.name, acl_xml)
+
     def make_local_copy(self, obj):
         k = Key(self.bucket)
         k.key = obj.name
@@ -673,14 +667,17 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             os.unlink(temp_file)
             raise ObsyncTemporaryException(e)
         return LocalCopy(obj.name, temp_file, True)
+
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(self.bucket, blrs.__iter__())
+
     def locate_object(self, obj):
         k = self.bucket.get_key(obj.name)
         if (k == None):
             return None
         return Object(obj.name, etag_to_md5(k.etag), k.size, s3_key_to_meta(k))
+
     def upload(self, local_copy, src_acl, obj):
         if (opts.more_verbose):
             print "S3Store.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
@@ -742,6 +739,108 @@ def do_with_s3_retries(fn):
                 print "retrying operation after " + str(stime) + \
                     " second delay"
             time.sleep(stime)
+
+###### Swift store #######
+def swift_object_to_meta(obj):
+    meta = {}
+    if (obj.__dict__.has_key("content_type")):
+        meta[CONTENT_TYPE_XATTR] = obj.content_type
+    for k,v in obj.metadata.items():
+        meta[META_XATTR_PREFIX + k] = v
+    return meta
+
+def meta_to_swift_object(obj, meta):
+    for k,v in meta.items():
+        if (k == CONTENT_TYPE_XATTR):
+            obj.metadata["Content-Type"] = v
+        elif (k[:len(META_XATTR_PREFIX)] == META_XATTR_PREFIX):
+            k_name = k[len(META_XATTR_PREFIX):]
+            obj.metadata[k_name] = v
+        else:
+            raise ObsyncPermanentException("can't understand meta entry: %s" % k)
+        obj.sync_metadata()
+
+class SwiftStoreIterator(object):
+    """SwiftStore iterator"""
+    def __init__(self, container, object_list):
+        self.container = container
+        self.generator = (o for o in object_list)
+    def __iter__(self):
+        return self
+    def next(self):
+        # This will raise StopIteration when there are no more objects to
+        # iterate on
+        obj = self.generator.next()
+        ret = Object(obj.name, etag_to_md5(obj._etag), obj.size, swift_object_to_meta(obj))
+        return ret
+
+class SwiftStore(Store):
+    def __init__(self, authurl, container_name, object_prefix, create, akey, skey, is_secure):
+        self.host = authurl
+        self.container_name = container_name
+        self.object_prefix = object_prefix
+
+        self.conn = cloudfiles.get_connection(username=akey, api_key=skey,
+            authurl=self.host)
+        try:
+            self.container = self.conn.get_container(self.container_name)
+        except cloudfiles.errors.NoSuchContainer:
+            self.container = None
+
+        if (self.container == None):
+            if (create):
+                if (opts.dry_run):
+                    raise ObsyncPermanentException("logic error: this should be unreachable.")
+                self.container = self.conn.create_container(self.container_name)
+            else:
+                raise ObsyncPermanentException("%s: no such container as %s" % \
+                    (self.host, self.container_name))
+
+    def __str__(self):
+        return "swift://" + self.host + "/" + self.container_name + "/" + self.object_prefix
+
+    def get_acl(self, obj):
+        raise NotImplementedError # We always use --no-preserve-acls right now
+    def make_local_copy(self, obj):
+        o = self.container.get_object(obj.name)
+        temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False).name
+        try:
+            o.save_to_filename(temp_file)
+        except Exception, e:
+            os.unlink(temp_file)
+            raise ObsyncTemporaryException(e)
+        return LocalCopy(obj.name, temp_file, True)
+
+    def all_objects(self):
+        object_list = self.container.get_objects(prefix = self.object_prefix)
+        return SwiftStoreIterator(self.container, object_list)
+
+    def locate_object(self, obj):
+        try:
+            o = self.container.get_object(obj.name)
+        except cloudfiles.errors.NoSuchObject:
+            return None
+        return Object(obj.name, etag_to_md5(o._etag), o.size, swift_object_to_meta(o))
+
+    def upload(self, local_copy, src_acl, obj):
+        if (opts.more_verbose):
+            print "SwiftStore.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
+                "obj='" + obj.name + "'"
+        if (opts.dry_run):
+            return
+        o = self.container.create_object(obj.name)
+        o.load_from_filename(local_copy.path)
+        meta_to_swift_object(o, obj.meta)
+        if (src_acl.acl_policy != None):
+            #FIXME: no acls for swift yet
+            pass
+
+    def remove(self, obj):
+        if (opts.dry_run):
+            return
+        self.container.delete_object(obj.name)
+        if (opts.more_verbose):
+            print "SwiftStore: removed %s" % obj.name
 
 ###### FileStore #######
 class FileStoreIterator(object):
@@ -877,9 +976,36 @@ we are already translating \"%s\" to \"%s\"; we cannot translate it \
 to \"%s\"" % (src_user, xuser[src_user], dst_user))
     xuser[src_user] = dst_user
 
+############Begin#############
 try:
     currently_handling = "unknown"
     parser = OptionParser(USAGE)
+    parser.add_option("--src-type", dest="src_type", type="string",
+        action="store", help="type of data  store for source. Can be " + \
+        "'file', 's3', or 'swift'")
+    parser.add_option("--src-path", dest="src_path", type="string",
+        action="store", help="local file path for source")
+    parser.add_option("--src-host", dest="src_host", type="string",
+        action="store", help="host to connect to for source data")
+    parser.add_option("--src-authurl", dest="src_authurl", type="string",
+        action="store", help="authurl to connect to for source data")
+    parser.add_option("--src-bucket", dest="src_bucket", type="string",
+        action="store", help="source bucket")
+    parser.add_option("--src-prefix", dest="src_prefix", type="string",
+        action="store", help="object prefix for the source")
+    parser.add_option("--dst-type", dest="dst_type", type="string",
+        action="store", help="type of data  store for destination. Can be " + \
+        "'file', 's3', or 'swift'")
+    parser.add_option("--dst-path", dest="dst_path", type="string",
+        action="store", help="local file path for destination")
+    parser.add_option("--dst-host", dest="dst_host", type="string",
+        action="store", help="host to connect to for destination data")
+    parser.add_option("--dst-authurl", dest="dst_authurl", type="string",
+        action="store", help="authurl to connect to for destination data")
+    parser.add_option("--dst-bucket", dest="dst_bucket", type="string",
+        action="store", help="destination bucket")
+    parser.add_option("--dst-prefix", dest="dst_prefix", type="string",
+        action="store", help="object prefix for the destination")
     parser.add_option("-n", "--dry-run", action="store_true", \
         dest="dry_run", default=False)
     parser.add_option("-c", "--create-dest", action="store_true", \
@@ -920,16 +1046,59 @@ try:
             boto.config.add_section('Boto')
         boto.config.set('Boto', 'num_retries', str(opts.boto_retries))
 
+    if (not opts.src_type):
+        raise ObsyncArgumentParsingException("src-type is required!")
+    if (opts.src_type == 'file'):
+        if (opts.src_host or opts.src_bucket or opts.src_prefix or opts.src_authurl):
+            raise ObsyncArgumentParsingException("host, bucket, prefix, and " + \
+                "authurl not required for local file stores.")
+        if (not opts.src_path):
+            raise ObsyncArgumentParsingException("src-path is required!")
+    else:
+        if (opts.src_type == 's3'):
+            if (opts.src_authurl):
+                raise ObsyncArgumentParsingException("src-authurl is not used for s3 stores!")
+            if (not opts.src_host):
+                raise ObsyncArgumentParsingException("src-host is required for s3 stores!")
+        if (opts.src_type == 'swift'):
+            if (not opts.src_authurl):
+                raise ObsyncArgumentParsingException("src-authurl is required for swift stores!")
+            if (opts.src_host):
+                raise ObsyncArgumentParsingException("src-host is not used for swift stores!")
+        if (not opts.src_bucket):
+            raise ObsyncArgumentParsingException("src-bucket is required!")
+
+    if (not opts.dst_type):
+        raise ObsyncArgumentParsingException("dst-type is required!")
+    if (opts.dst_type == 'file'):
+        if (opts.dst_host or opts.dst_bucket or opts.dst_prefix or opts.dst_authurl):
+            raise ObsyncArgumentParsingException("host, bucket, prefix, and " + \
+                "authurl not required for local file stores.")
+        if (not opts.dst_path):
+            raise ObsyncArgumentParsingException("dst-path is required!")
+    else:
+        if (opts.dst_type == 's3'):
+            if (opts.dst_authurl):
+                raise ObsyncArgumentParsingException("dst-authurl is not used for s3 stores!")
+            if (not opts.dst_host):
+                raise ObsyncArgumentParsingException("dst-host is required for s3 stores!")
+        if (opts.dst_type == 'swift'):
+            if (not opts.dst_authurl):
+                raise ObsyncArgumentParsingException("dst-authurl is required for swift stores!")
+            if (opts.dst_host):
+                raise ObsyncArgumentParsingException("dst-host is not used for swift stores!")
+        if (not opts.dst_bucket):
+            raise ObsyncArgumentParsingException("dst-bucket is required!")
+
+    if opts.src_authurl:
+        opts.src_host = opts.src_authurl
+    if opts.dst_authurl:
+        opts.dst_host = opts.dst_authurl
     opts.preserve_acls = not opts.no_preserve_acls
     if (opts.create and opts.dry_run):
         raise ObsyncArgumentParsingException("You can't run with both \
 --create-dest and --dry-run! By definition, a dry run never changes anything.")
 
-    if (len(args) < 2):
-        raise ObsyncArgumentParsingException("Expected two positional \
-arguments: source and destination")
-    elif (len(args) > 2):
-        raise ObsyncArgumentParsingException("Too many positional arguments.")
     if (opts.more_verbose):
         print >>stderr, "User translations:"
         for k,v in xuser.items():
@@ -942,31 +1111,35 @@ arguments: source and destination")
     if (opts.delete_before and opts.delete_after):
         raise ObsyncArgumentParsingException("It doesn't make sense to \
 specify both --delete-before and --delete-after.")
-    src_name = args[0]
-    dst_name = args[1]
 
     currently_handling = "source"
     if (opts.more_verbose):
-        print "SOURCE: " + src_name
+        print "SOURCE: %s, %s, %s (%s)" % (opts.src_host, opts.src_bucket,
+                opts.src_prefix, opts.src_type)
     try:
-        src = Store.make_store(src_name, False, False,
-                getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
+        src = Store.make_store(opts.src_type, False, False,
+                getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"),
+                host=opts.src_host, bucket=opts.src_bucket,
+                prefix=opts.src_prefix, path=opts.src_path)
     except ObsyncException, e:
         if (e.comment == "NonexistentStore"):
-            e.comment = "Fatal error: Source " + dst_name + " does " +\
+            e.comment = "Fatal error: Source " + opts.src_host + " does " +\
                 "not appear to exist."
         raise
 
     currently_handling = "destination"
     if (opts.more_verbose):
-        print "DESTINATION: " + dst_name
+        print "DESTINATION: %s, %s, %s (%s)" % (opts.dst_host, opts.dst_bucket,
+                opts.dst_prefix, opts.dst_type)
     try:
-        dst = Store.make_store(dst_name, True, opts.create,
-                getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
+        dst = Store.make_store(opts.dst_type, True, opts.create,
+                getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"),
+                host=opts.dst_host, bucket=opts.dst_bucket,
+                prefix=opts.dst_prefix, path=opts.dst_path)
     except ObsyncException, e:
         if (e.comment == "NonexistentStore"):
-            e.comment = "Fatal error: Destination " + dst_name + " does " +\
-                "not exist. Run with -c or --create-dest to create it automatically."
+            e.comment = "Fatal error: Destination does not exist. Run " + \
+                "with -c or --create-dest to create it automatically."
         raise
 
     if (opts.delete_before):
