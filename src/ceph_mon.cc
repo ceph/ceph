@@ -331,12 +331,24 @@ int main(int argc, const char **argv)
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
     pick_addresses(g_ceph_context);
-    if (g_conf->public_addr.is_blank_ip()) {
-      derr << "no public_addr or public_network specified, and " << g_conf->name
-	   << " not present in monmap" << dendl;
-      exit(1);
+    if (!g_conf->public_addr.is_blank_ip()) {
+      ipaddr = g_conf->public_addr;
+    } else {
+      MonMap tmpmap;
+      int err = MonClient::build_initial_monmap(g_ceph_context, tmpmap);
+      if (err < 0) {
+	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
+	usage();
+	exit(1);
+      }
+      if (tmpmap.contains(g_conf->name.get_id())) {
+	ipaddr = tmpmap.get_addr(g_conf->name.get_id());
+      } else {
+	derr << "no public_addr or public_network specified, and " << g_conf->name
+	     << " not present in monmap or ceph.conf" << dendl;
+	exit(1);
+      }
     }
-    ipaddr = g_conf->public_addr;
   }
 
   // bind
