@@ -3857,7 +3857,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 {
   RadosXattrsIter *it = new RadosXattrsIter();
   if (!it)
-    return ENOMEM;
+    return -ENOMEM;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t obj(oid);
   int ret = ctx->client->getxattrs(*ctx, obj, it->attrset);
@@ -3890,7 +3890,7 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
   size_t bl_len = bl.length();
   it->val = (char*)malloc(bl_len);
   if (!it->val)
-    return ENOMEM;
+    return -ENOMEM;
   memcpy(it->val, bl.c_str(), bl_len);
   *val = it->val;
   *len = bl_len;
