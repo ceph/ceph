@@ -11,7 +11,7 @@ overview of RADOS, see :doc:`/architecture`.
 Example: connecting and writing an object
 =========================================
 
-To use `Librados`, you instantiate a :c:type:`rados_t` variable and
+To use `Librados`, you instantiate a :c:type:`rados_t` variable (a cluster handle) and
 call :c:func:`rados_create()` with a pointer to it::
 
 	int err;
@@ -19,7 +19,27 @@ call :c:func:`rados_create()` with a pointer to it::
 
 	err = rados_create(&cluster, NULL);
 	if (err < 0) {
-		fprintf(stderr, "%s: cannot open a rados connection: %s\n", argv[0], strerror(-err));
+		fprintf(stderr, "%s: cannot create a cluster handle: %s\n", argv[0], strerror(-err));
+		exit(1);
+	}
+
+Then you configure your :c:type:`rados_t` to connect to your cluster,
+either by setting individual values (:c:func:`rados_conf_set()`),
+using a configuration file (:c:func:`rados_conf_read_file()`), using
+command line options (:c:func:`rados_conf_parse_argv`), or an
+environment variable (:c:func:`rados_conf_parse_env()`)::
+
+	err = rados_conf_read_file(cluster, "/path/to/myceph.conf");
+	if (err < 0) {
+		fprintf(stderr, "%s: cannot read config file: %s\n", argv[0], strerror(-err));
+		exit(1);
+	}
+
+Once the cluster handle is configured, you can connect to the cluster with :c:func:`rados_connect()`::
+
+	err = rados_connect(cluster);
+	if (err < 0) {
+		fprintf(stderr, "%s: cannot connect to cluster: %s\n", argv[0], strerror(-err));
 		exit(1);
 	}
 
