@@ -1488,9 +1488,6 @@ void PG::start_recovery_op(const hobject_t& soid)
   assert(recovering_oids.count(soid) == 0);
   recovering_oids.insert(soid);
 #endif
-  if (soid.is_max()) {
-    waiting_on_backfill = true;
-  }
   osd->start_recovery_op(this, soid);
 }
 
@@ -1507,9 +1504,6 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   assert(recovering_oids.count(soid));
   recovering_oids.erase(soid);
 #endif
-  if (soid.is_max()) {
-    waiting_on_backfill = false;
-  }
   osd->finish_recovery_op(this, soid, dequeue);
 }
 

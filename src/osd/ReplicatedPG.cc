@@ -868,6 +868,8 @@ void ReplicatedPG::do_scan(MOSDPGScan *m)
       bufferlist::iterator p = m->get_data().begin();
       ::decode(bi.objects, p);
 
+      assert(waiting_on_backfill);
+      waiting_on_backfill = false;
       finish_recovery_op(bi.begin);
     }
     break;
@@ -5388,6 +5390,7 @@ int ReplicatedPG::recover_backfill(int max)
       MOSDPGScan *m = new MOSDPGScan(MOSDPGScan::OP_SCAN_GET_DIGEST, e, e, info.pgid,
 				     pbi.end, hobject_t());
       osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
+      waiting_on_backfill = true;
       start_recovery_op(pbi.end);
       ops++;
       break;
@@ -5424,6 +5427,7 @@ int ReplicatedPG::recover_backfill(int max)
 	  //assert(info.stats.stats.sum.num_bytes == pinfo.stats.stats.sum.num_bytes);
 
 	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
+	  waiting_on_backfill = true;
 	  start_recovery_op(hobject_t::get_max());
 	  ops++;
 	}
