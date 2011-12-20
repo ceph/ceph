@@ -851,7 +851,7 @@ int main(int argc, char **argv)
     info.subusers.erase(uiter);
     if (purge_keys) {
       map<string, RGWAccessKey> *keys_map;
-      access_key = subuser;
+      access_key = info.user_id;
       access_key.append(":");
       access_key.append(subuser);
       keys_map = &info.swift_keys;
