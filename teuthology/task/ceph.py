@@ -736,6 +736,8 @@ def run_daemon(ctx, config, type):
     num_active = 0
     for remote, roles_for_host in daemons.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, type):
+            name = '%s.%s' % (type, id_)
+
             if not id_.endswith('-s'):
                 num_active += 1
 
@@ -753,27 +755,30 @@ def run_daemon(ctx, config, type):
 
             extra_args = None
 
-            if config.get('valgrind') and (config.get('valgrind').get('{type}.{id}'.format(type=type,id=id_), None) is not None):
-                valgrind_args = config.get('valgrind').get('{type}.{id}'.format(type=type,id=id_))
-                log.debug('running {type}.{id} under valgrind'.format(type=type,id=id_))
-                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+            if config.get('valgrind') and (config.get('valgrind').get(name, None) is not None):
+                valgrind_args = config.get('valgrind').get(name)
+                if not isinstance(valgrind_args, list):
+                    valgrind_args = [valgrind_args]
+                log.debug('running %s under valgrind with args %s' % (name, valgrind_args))
+                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', 'valgrind'))
                 proc_signal = 'term'
-                if 'memcheck' in valgrind_args or \
-                        'helgrind' in valgrind_args:
-                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_), valgrind_args]
+                if '--tool=memcheck' in valgrind_args or \
+                        '--tool=helgrind' in valgrind_args:
+                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_)]
                 else:
-                    extra_args = ['valgrind', '--log-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_), valgrind_args]
+                    extra_args = ['valgrind', '--log-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_)]
+                extra_args.extend(valgrind_args)
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
                 run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
             ctx.daemons.add_daemon(remote, type, id_,
-                args=run_cmd,
-                logger=log.getChild('{type}.{id}'.format(type=type,id=id_)),
-                stdin=run.PIPE,
-                wait=False,
-                )
+                                   args=run_cmd,
+                                   logger=log.getChild(name),
+                                   stdin=run.PIPE,
+                                   wait=False,
+                                   )
 
     if type is 'mds':
         firstmon = teuthology.get_first_mon(ctx, config)
@@ -855,12 +860,14 @@ def task(ctx, config):
     for available devices.  If no such file is found, /dev/sdb will be used.
 
     To run some daemons under valgrind, include their names
-    and the tool to use in a valgrind section::
+    and the tool/args to use in a valgrind section::
+
         tasks:
         - ceph:
           valgrind:
             mds.1: --tool=memcheck
-            osd.1: --tool=memcheck
+            osd.1: [--tool=memcheck, --leak-check=no]
+
     Those nodes which are using memcheck or helgrind will get
     checked for bad results.
 
