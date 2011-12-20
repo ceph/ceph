@@ -49,6 +49,8 @@
                                json
      --purge-data              when specified, user removal will also purge all the
                                user data
+     --purge-keys              when specified, subuser removal will also purge all the
+                               subuser keys
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value

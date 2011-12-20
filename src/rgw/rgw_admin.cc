@@ -77,6 +77,8 @@ void _usage()
   cerr << "                             json\n";
   cerr << "   --purge-data              when specified, user removal will also purge all the\n";
   cerr << "                             user data\n";
+  cerr << "   --purge-keys              when specified, subuser removal will also purge all the\n";
+  cerr << "                             subuser keys\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
@@ -502,6 +504,7 @@ int main(int argc, char **argv)
   int show_log_entries = true;
   int show_log_sum = true;
   int skip_zero_entries = false;  // log show
+  int purge_keys = false;
 
   std::string val;
   std::ostringstream errs;
@@ -578,6 +581,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else {
       ++i;
@@ -844,6 +849,18 @@ int main(int argc, char **argv)
     uiter = info.subusers.find(subuser);
     assert (uiter != info.subusers.end());
     info.subusers.erase(uiter);
+    if (purge_keys) {
+      map<string, RGWAccessKey> *keys_map;
+      access_key = subuser;
+      access_key.append(":");
+      access_key.append(subuser);
+      keys_map = &info.swift_keys;
+      kiter = keys_map->find(access_key);
+      if (kiter != keys_map->end()) {
+        rgw_remove_key_index(kiter->second);
+        keys_map->erase(kiter);
+      }
+    }
     if ((err = rgw_store_user_info(info)) < 0) {
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
