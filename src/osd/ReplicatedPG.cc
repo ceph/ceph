@@ -2752,8 +2752,8 @@ void ReplicatedPG::apply_repop(RepGather *repop)
 
   repop->applying = true;
 
-  repop->tls.push_back(&repop->ctx->op_t);
   repop->tls.push_back(&repop->ctx->local_t);
+  repop->tls.push_back(&repop->ctx->op_t);
 
   repop->obc->ondisk_write_lock();
   if (repop->ctx->clone_obc)
