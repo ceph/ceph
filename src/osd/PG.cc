@@ -2185,6 +2185,9 @@ void PG::update_snap_collections(vector<Log::Entry> &log_entries,
   for (vector<Log::Entry>::iterator i = log_entries.begin();
        i != log_entries.end();
        ++i) {
+    // If past backfill line, snap_collections will be updated during push
+    if (i->soid > info.last_backfill)
+      continue;
     if (i->is_clone()) {
       vector<snapid_t> snaps;
       bufferlist::iterator p = i->snaps.begin();
