@@ -1706,7 +1706,7 @@ int librados::RadosClient::operate(IoCtxImpl& io, const object_t& oid,
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   if (!o->size())
     return 0;
@@ -1738,10 +1738,6 @@ int librados::RadosClient::operate(IoCtxImpl& io, const object_t& oid,
 int librados::RadosClient::operate_read(IoCtxImpl& io, const object_t& oid,
 					::ObjectOperation *o, bufferlist *pbl)
 {
-  /* can't write to a snapshot */
-  if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
-
   if (!o->size())
     return 0;
 
@@ -1775,7 +1771,7 @@ int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
   utime_t ut = ceph_clock_now(cct);
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Context *onack = new C_aio_Ack(c);
   Context *oncommit = new C_aio_Safe(c);
