@@ -587,7 +587,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	  wait_for_degraded_object(sobc->obs.oi.soid, op);
 	  dout(10) << " writes for " << obc->obs.oi.soid << " now blocked by "
 		   << sobc->obs.oi.soid << dendl;
+	  obc->get();
 	  obc->blocked_by = sobc;
+	  sobc->get();
 	  sobc->blocking.insert(obc);
 	} else {
 	  src_obc[toid] = sobc;
@@ -4238,13 +4240,17 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
   dout(10) << "finish_degraded_object " << oid << dendl;
   map<hobject_t, ObjectContext *>::iterator i = object_contexts.find(oid);
   if (i != object_contexts.end()) {
+    i->second->get();
     populate_obc_watchers(i->second);
     for (set<ObjectContext*>::iterator j = i->second->blocking.begin();
 	 j != i->second->blocking.end();
 	 i->second->blocking.erase(j++)) {
       dout(10) << " no longer blocking writes for " << (*j)->obs.oi.soid << dendl;
       (*j)->blocked_by = NULL;
+      put_object_context(*j);
+      put_object_context(i->second);
     }
+    put_object_context(i->second);
   }
 }
 
