@@ -271,6 +271,10 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
+    // set if writes for this object are blocked on another objects recovery
+    ObjectContext *blocked_by;      // object blocking our writes
+    set<ObjectContext*> blocking;   // objects whose writes we block
+
     // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
     map<entity_name_t, Context *> unconnected_watchers;
@@ -583,6 +587,8 @@ protected:
 		   interval_set<uint64_t>& data_subset, 
 		   map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void send_push_op_blank(const hobject_t& soid, int peer);
+
+  void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_op_pulls(const OSDMapRef map);
