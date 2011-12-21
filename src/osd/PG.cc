@@ -880,6 +880,14 @@ void PG::clear_primary_state()
   osd->snap_trim_wq.dequeue(this);
 }
 
+/**
+ * find_best_info
+ *
+ * Returns an iterator to the best info in infos sorted by:
+ *  1) Prefer newer last_update
+ *  2) Prefer longer tail if it brings another info into contiguity
+ *  3) Prefer current primary
+ */
 map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &infos) const
 {
   map<int, Info>::const_iterator best = infos.end();

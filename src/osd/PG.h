@@ -1388,6 +1388,15 @@ protected:
 
   epoch_t last_peering_reset;
 
+  /**
+   * BackfillInterval
+   *
+   * Represents the objects in a range [begin, end)
+   *
+   * Possible states:
+   * 1) begin == end == hobject_t() indicates the the interval is unpopulated
+   * 2) Else, objects contains all objects in [begin, end)
+   */
   struct BackfillInterval {
     // info about a backfill interval on a peer
     map<hobject_t,eversion_t> objects;
