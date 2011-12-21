@@ -771,6 +771,7 @@ class SwiftStoreIterator(object):
         # This will raise StopIteration when there are no more objects to
         # iterate on
         obj = self.generator.next()
+        obj = self.container.get_object(obj.name)
         ret = Object(obj.name, etag_to_md5(obj._etag), obj.size, swift_object_to_meta(obj))
         return ret
 
