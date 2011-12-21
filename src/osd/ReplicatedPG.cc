@@ -443,6 +443,20 @@ void ReplicatedPG::do_op(MOSDOp *op)
     wait_for_degraded_object(head, op);
     return;
   }
+
+  // missing snapdir?
+  hobject_t snapdir(op->get_oid(), op->get_object_locator().key,
+		 CEPH_SNAPDIR, op->get_pg().ps());
+  if (is_missing_object(snapdir)) {
+    wait_for_missing_object(snapdir, op);
+    return;
+  }
+
+  // degraded object?
+  if (op->may_write() && is_degraded_object(snapdir)) {
+    wait_for_degraded_object(snapdir, op);
+    return;
+  }
  
   entity_inst_t client = op->get_source_inst();
 
