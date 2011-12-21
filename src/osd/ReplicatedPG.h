@@ -283,7 +283,8 @@ public:
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
       : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
 	lock("ReplicatedPG::ObjectContext::lock"),
-	unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
+	unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
+	blocked_by(0) {}
     
     void get() { ++ref; }
 
