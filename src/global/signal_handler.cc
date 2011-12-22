@@ -81,7 +81,10 @@ static void handle_shutdown_signal(int signum)
 	    sys_siglist[signum], (unsigned long long)pthread_self());
   dout_emergency(buf);
   pidfile_remove();
-  reraise_fatal(signum);
+  if (signum == SIGTERM)
+    exit(0);
+  else
+    reraise_fatal(signum);
 }
 
 static void handle_fatal_signal(int signum)

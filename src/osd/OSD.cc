@@ -584,22 +584,6 @@ OSD::~OSD()
   delete store;
 }
 
-bool got_sigterm = false;
-
-void handle_signal(int signal)
-{
-  switch (signal) {
-  case SIGTERM:
-  case SIGINT:
-#ifdef ENABLE_COVERAGE
-    exit(0);
-#else
-    got_sigterm = true;
-#endif
-    break;
-  }
-}
-
 void cls_initialize(ClassHandler *ch);
 
 
@@ -724,9 +708,6 @@ int OSD::init()
   // tick
   timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
-#ifdef ENABLE_COVERAGE
-  signal(SIGTERM, handle_signal);
-#endif
 #if 0
   int ret = monc->start_auth_rotating(ename, KEY_ROTATE_TIME);
   if (ret < 0) {
@@ -1698,14 +1679,6 @@ void OSD::heartbeat()
 
   dout(30) << "heartbeat" << dendl;
 
-  if (got_sigterm) {
-    derr << "got SIGTERM, shutting down" << dendl;
-    Message *m = new MGenericMessage(CEPH_MSG_SHUTDOWN);
-    m->set_priority(CEPH_MSG_PRIO_HIGHEST);
-    cluster_messenger->send_message(m, cluster_messenger->get_myinst());
-    return;
-  }
-
   // get CPU load avg
   double loadavgs[1];
   if (getloadavg(loadavgs, 1) == 1)
@@ -1777,13 +1750,6 @@ void OSD::tick()
   dout(5) << "tick" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
-
-  if (got_sigterm) {
-    derr << "got SIGTERM, shutting down" << dendl;
-    cluster_messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
-			    cluster_messenger->get_myinst());
-    return;
-  }
 
   // periodically kick recovery work queue
   recovery_tp.kick();

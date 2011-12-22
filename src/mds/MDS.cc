@@ -82,13 +82,6 @@
 
 
 
-#ifdef ENABLE_COVERAGE
-void handle_signal(int signal)
-{
-  exit(0);
-}
-#endif
-
 // cons/des
 MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
   Dispatcher(m->cct),
@@ -511,10 +504,6 @@ int MDS::init(int wanted_state)
   create_logger();
 
   mds_lock.Unlock();
-
-#ifdef ENABLE_COVERAGE
-  signal(SIGTERM, handle_signal);
-#endif
 
   return 0;
 }

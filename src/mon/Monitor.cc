@@ -87,13 +87,6 @@ CompatSet get_ceph_mon_feature_compat_set()
 		   ceph_mon_feature_incompat);
 }
 
-#ifdef ENABLE_COVERAGE
-void handle_signal(int signal)
-{
-  exit(0);
-}
-#endif
-
 Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
@@ -250,11 +243,6 @@ void Monitor::init()
   bootstrap();
   
   lock.Unlock();
-
-#ifdef ENABLE_COVERAGE
-  signal(SIGTERM, handle_signal);
-#endif
-
 }
 
 void Monitor::register_cluster_logger()
