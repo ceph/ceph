@@ -453,7 +453,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
     info.last_update = log.head = olog.head;
     if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
       oinfo.stats.reported = info.stats.reported;
-    info.stats = oinfo.stats;
+    if (info.last_backfill.is_max())
+      info.stats = oinfo.stats;
 
     // process divergent items
     if (!divergent.empty()) {
@@ -3375,7 +3376,9 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
 {
   assert(!is_primary());
   assert(is_stray() || is_active());
-  info.stats = oinfo.stats;
+
+  if (info.last_backfill.is_max())
+    info.stats = oinfo.stats;
 
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   info.history.merge(oinfo.history);
