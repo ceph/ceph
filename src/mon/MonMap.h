@@ -40,6 +40,7 @@ class MonMap {
   void calc_ranks() {
     rank_name.resize(mon_addr.size());
     rank_addr.resize(mon_addr.size());
+    addr_name.clear();
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
 	 p++) {
