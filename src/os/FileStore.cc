@@ -1736,6 +1736,8 @@ int FileStore::mount()
 
   g_ceph_context->get_perfcounters_collection()->add(logger);
 
+  g_ceph_context->_conf->add_observer(this);
+
   // all okay.
   return 0;
 
@@ -1756,6 +1758,8 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
+  g_ceph_context->_conf->remove_observer(this);
+
   start_sync();
 
   lock.Lock();
