@@ -50,18 +50,15 @@ public:
   }
 
   void encode_payload(CephContext *cct) {
-    __u8 v = 0;
-    ::encode(v, payload);
+    header.version = 2
     ::encode(pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
   }
   void decode_payload(CephContext *cct) {
-    __u8 v = -1;
+    assert(header.version == 2);
     bufferlist::iterator p = payload.begin();
-    ::decode(v, p);
-    assert(v == 0);
     ::decode(pgid, p);
     ::decode(scrub_from, p);
     ::decode(scrub_to, p);
