@@ -554,6 +554,8 @@ protected:
     interval_set<uint64_t> data_subset, data_subset_pulling;
   };
   map<hobject_t, pull_info_t> pulling;
+  set<hobject_t> backfills_in_flight;
+  map<hobject_t, pg_stat_t> pending_stat_updates;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;

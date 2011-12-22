@@ -4210,7 +4210,10 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 		   pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
-      peer_missing[peer].got(soid, pi->version);
+      if (backfills_in_flight.count(soid) && peer == backfill_target)
+	backfills_in_flight.erase(soid);
+      else
+	peer_missing[peer].got(soid, pi->version);
       
       pushing[soid].erase(peer);
       pi = NULL;
@@ -5039,6 +5042,8 @@ void ReplicatedPG::_clear_recovery_state()
 #ifdef DEBUG_RECOVERY_OIDS
   recovering_oids.clear();
 #endif
+  backfills_in_flight.clear();
+  pending_stat_updates.clear();
   pulling.clear();
   pushing.clear();
   pull_from_peer.clear();
@@ -5424,7 +5429,7 @@ int ReplicatedPG::recover_replicas(int max)
  * backfilled.  No deleted objects in this interval remain on backfill_target.
  *
  * peer_info[backfill_target].last_backfill = MIN(peer_backfill_info.begin,
- * backfill_info.begin)
+ * backfill_info.begin, backfills_in_flight)
  */
 int ReplicatedPG::recover_backfill(int max)
 {
@@ -5433,7 +5438,7 @@ int ReplicatedPG::recover_backfill(int max)
 
   Info& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
-  hobject_t pos = pinfo.last_backfill;
+  hobject_t pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
   dout(10) << " peer osd." << backfill_target
 	   << " pos " << pos
@@ -5526,7 +5531,9 @@ int ReplicatedPG::recover_backfill(int max)
        i != add_to_stat.end();
        ++i) {
     ObjectContext *obc = get_object_context(*i, OLOC_BLANK, false);
-    add_object_context_to_pg_stat(obc, &pinfo.stats);
+    pg_stat_t stat;
+    add_object_context_to_pg_stat(obc, &stat);
+    pending_stat_updates[*i] = stat;
     put_object_context(obc);
   }
   for (map<hobject_t, eversion_t>::iterator i = to_remove.begin();
@@ -5534,12 +5541,24 @@ int ReplicatedPG::recover_backfill(int max)
        ++i) {
     send_remove_op(i->first, i->second, backfill_target);
   }
+  for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
+       i != to_push.end();
+       ++i) {
+    push_backfill_object(i->first, i->second.first, i->second.second, backfill_target);
+  }
 
-  if (pos > pinfo.last_backfill) {
-    pinfo.last_backfill = pos;
+  hobject_t bound = backfills_in_flight.size() ?
+    *(backfills_in_flight.begin()) : pos;
+  if (bound > pinfo.last_backfill) {
+    pinfo.last_backfill = bound;
+    for (map<hobject_t, pg_stat_t>::iterator i = pending_stat_updates.begin();
+	 i != pending_stat_updates.end() && i->first < bound;
+	 pending_stat_updates.erase(i++)) {
+      pinfo.stats.add(i->second);
+    }
     epoch_t e = get_osdmap()->get_epoch();
     MOSDPGBackfill *m = NULL;
-    if (pos.is_max()) {
+    if (bound.is_max()) {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
       if (info.stats.stats.sum.num_bytes != pinfo.stats.stats.sum.num_bytes)
 	osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
@@ -5553,16 +5572,11 @@ int ReplicatedPG::recover_backfill(int max)
     } else {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
     }
-    m->last_backfill = pos;
+    m->last_backfill = bound;
     m->stats = pinfo.stats.stats;
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
   }
 
-  for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
-       i != to_push.end();
-       ++i) {
-    push_backfill_object(i->first, i->second.first, i->second.second, backfill_target);
-  }
   dout(10) << " peer num_objects now " << pinfo.stats.stats.sum.num_objects
 	   << " / " << info.stats.stats.sum.num_objects << dendl;
   return ops;
@@ -5572,9 +5586,7 @@ void ReplicatedPG::push_backfill_object(hobject_t oid, eversion_t v, eversion_t 
 {
   dout(10) << "push_backfill_object " << oid << " v " << v << " to osd." << peer << dendl;
 
-  // object is now below the waterline; mark it missing.
-  peer_info[peer].last_backfill = oid;
-  peer_missing[peer].add(oid, v, have);
+  backfills_in_flight.insert(oid);
 
   start_recovery_op(oid);
   ObjectContext *obc = get_object_context(oid, OLOC_BLANK, false);
