@@ -862,10 +862,6 @@ void PG::clear_primary_state()
   stray_purged.clear();
   might_have_unfound.clear();
 
-  backfill_target = -1;
-  backfill_info.clear();
-  peer_backfill_info.clear();
-
   last_update_ondisk = eversion_t();
 
   snap_trimq.clear();
@@ -1536,6 +1532,9 @@ void PG::clear_recovery_state()
     finish_recovery_op(soid, true);
   }
 
+  backfill_target = -1;
+  backfill_info.clear();
+  peer_backfill_info.clear();
   waiting_on_backfill = false;
   _clear_recovery_state();  // pg impl specific hook
 }
