@@ -1419,6 +1419,14 @@ protected:
       return end == hobject_t::get_max();
     }
 
+    /// Adjusts begin to the first object
+    void trim() {
+      if (objects.size())
+	begin = objects.begin()->first;
+      else
+	begin = end;
+    }
+
     /// drop first entry, and adjust @begin accordingly
     void pop_front() {
       assert(!objects.empty());

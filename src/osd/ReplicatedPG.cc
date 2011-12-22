@@ -5405,18 +5405,35 @@ int ReplicatedPG::recover_replicas(int max)
   return started;
 }
 
+/**
+ * recover_backfill
+ *
+ * Invariants:
+ *
+ * backfilled: fully pushed to replica or present in replica's missing set (both
+ * our copy and theirs).
+ *
+ * All objects on backfill_target in [MIN,peer_backfill_info.begin) are either
+ * not present or backfilled (all removed objects have been removed).
+ * There may be PG objects in this interval yet to be backfilled.
+ *
+ * All objects in PG in [MIN,backfill_info.begin) have been backfilled to
+ * backfill_target.  There may be objects on backfill_target yet to be deleted.
+ *
+ * All objects < MIN(peer_backfill_info.begin, backfill_info.begin) in PG are
+ * backfilled.  No deleted objects in this interval remain on backfill_target.
+ *
+ * peer_info[backfill_target].last_backfill = MIN(peer_backfill_info.begin,
+ * backfill_info.begin)
+ */
 int ReplicatedPG::recover_backfill(int max)
 {
   dout(10) << "recover_backfill (" << max << ")" << dendl;
   assert(backfill_target >= 0);
-  
+
   Info& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
-
-  // we track position based on pbi.begin.  the updates below when we
-  // advance through the pg must update pbi.begin to the MIN of the
-  // local and target intervals.
-  hobject_t pos = pbi.begin;
+  hobject_t pos = pinfo.last_backfill;
 
   dout(10) << " peer osd." << backfill_target
 	   << " pos " << pos
@@ -5434,19 +5451,28 @@ int ReplicatedPG::recover_backfill(int max)
   scan_range(pos, 10, 20, &backfill_info);
 
   int ops = 0;
+  map<hobject_t, pair<eversion_t, eversion_t> > to_push;
+  map<hobject_t, eversion_t> to_remove;
+  set<hobject_t> add_to_stat;
+
+  pbi.trim();
+  backfill_info.trim();
+
   while (ops < max) {
-    if (!backfill_info.extends_to_end() && (backfill_info.end <= pbi.begin ||
-				    backfill_info.empty())) {
+    if (backfill_info.begin <= pbi.begin &&
+	!backfill_info.extends_to_end() && backfill_info.empty()) {
       osr.flush();
       scan_range(backfill_info.end, 10, 20, &backfill_info);
+      backfill_info.trim();
     }
+    pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
     dout(20) << "   my backfill " << backfill_info.begin << "-" << backfill_info.end
 	     << " " << backfill_info.objects << dendl;
     dout(20) << " peer backfill " << pbi.begin << "-" << pbi.end << " " << pbi.objects << dendl;
 
-    if (!pbi.extends_to_end() && (pbi.end <= backfill_info.begin ||
-			  pbi.empty())) {
+    if (pbi.begin <= backfill_info.begin &&
+	!pbi.extends_to_end() && pbi.empty()) {
       epoch_t e = get_osdmap()->get_epoch();
       MOSDPGScan *m = new MOSDPGScan(MOSDPGScan::OP_SCAN_GET_DIGEST, e, e, info.pgid,
 				     pbi.end, hobject_t());
@@ -5456,121 +5482,89 @@ int ReplicatedPG::recover_backfill(int max)
       ops++;
       break;
     }
-    
-    if (backfill_info.empty()) {
-      // this only happens when we reach the end of the collection.
-      assert(backfill_info.extends_to_end());
-      if (pbi.empty()) {
-	assert(pbi.extends_to_end());
-	dout(10) << " reached end for both local and peer" << dendl;
-	if (pbi.begin != hobject_t::get_max()) {
-	  // we reached the end of both intervals for the _first_
-	  // time.  send completion message to the replica.
-	  pbi.begin = hobject_t::get_max();
-	  pinfo.last_backfill = hobject_t::get_max();
 
-	  epoch_t e = get_osdmap()->get_epoch();
-	  MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
-	  m->last_backfill = hobject_t::get_max();
-
-	  m->stats = info.stats.stats;  // should match pinfo.stats.stats, but use definitive value
-
-	  if (info.stats.stats.sum.num_bytes != pinfo.stats.stats.sum.num_bytes)
-	    osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
-			      << "num_bytes " << pinfo.stats.stats.sum.num_bytes
-			      << " != expected " << info.stats.stats.sum.num_bytes << "\n";
-	  if (info.stats.stats.sum.num_objects != pinfo.stats.stats.sum.num_objects)
-	    osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
-			      << "num_objects " << pinfo.stats.stats.sum.num_objects
-			      << " != expected " << info.stats.stats.sum.num_objects << "\n";
-	  //assert(info.stats.stats.sum.num_objects == pinfo.stats.stats.sum.num_objects);
-	  //assert(info.stats.stats.sum.num_kb == pinfo.stats.stats.sum.num_kb);
-	  //assert(info.stats.stats.sum.num_bytes == pinfo.stats.stats.sum.num_bytes);
-
-	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
-	  waiting_on_backfill = true;
-	  start_recovery_op(hobject_t::get_max());
-	  ops++;
-	}
-	return ops;
-      }
-
-      // remove peer objects < backfill_info.end
-      const hobject_t& pf = pbi.objects.begin()->first;
-      eversion_t pv = pbi.objects.begin()->second;
-      assert(pf < backfill_info.end);
-      
-      dout(20) << " removing peer " << pf << " <= local end " << backfill_info.end << dendl;
-      send_remove_op(pf, pv, backfill_target);
-      pbi.pop_front();
-      continue;
+    if (backfill_info.empty() && pbi.empty()) {
+      dout(10) << " reached end for both local and peer" << dendl;
+      break;
     }
 
-    const hobject_t& my_first = backfill_info.objects.begin()->first;
-    eversion_t mv = backfill_info.objects.begin()->second;
-
-    ObjectContext *obc = get_object_context(my_first, OLOC_BLANK, false);
-
-    if (pbi.empty()) {
-      assert(pbi.extends_to_end());
-      dout(20) << " pushing local " << my_first << " " << backfill_info.objects.begin()->second
-	       << " to peer osd." << backfill_target << dendl;
-      push_backfill_object(my_first, mv, eversion_t(), backfill_target);
-      add_object_context_to_pg_stat(obc, &pinfo.stats);
-      backfill_info.pop_front();
-      pbi.begin = my_first;
-      ++ops;
-      put_object_context(obc);
-      continue;
-    }
-
-    const hobject_t& peer_first = pbi.objects.begin()->first;
-    eversion_t pv = pbi.objects.begin()->second;
-
-    if (peer_first < my_first) {
-      dout(20) << " removing peer " << peer_first << " <= local " << my_first << dendl;
-      send_remove_op(peer_first, pv, backfill_target);
+    if (pbi.begin < backfill_info.begin) {
+      dout(20) << " removing peer " << pbi.begin << dendl;
+      to_remove[pbi.begin] = pbi.objects.begin()->second;
       pbi.pop_front();
-      if (pbi.begin < backfill_info.begin)
-	pbi.begin = backfill_info.begin;
-    } else if (peer_first == my_first) {
-      if (pv == mv) {
-	dout(20) << " keeping peer " << peer_first << " " << pv << dendl;
+      ops++;
+    } else if (pbi.begin == backfill_info.begin) {
+      if (pbi.objects.begin()->second !=
+	  backfill_info.objects.begin()->second) {
+	dout(20) << " replacing peer " << pbi.begin << " with local "
+		 << backfill_info.objects.begin()->second << dendl;
+	to_push[pbi.begin] = make_pair(backfill_info.objects.begin()->second,
+				       pbi.objects.begin()->second);
+	ops++;
       } else {
-	dout(20) << " replacing peer " << peer_first << " with local " << mv << dendl;
-	push_backfill_object(my_first, mv, pv, backfill_target);
-	++ops;
+	dout(20) << " keeping peer " << pbi.begin << " "
+		 << pbi.objects.begin()->second << dendl;
       }
-      add_object_context_to_pg_stat(obc, &pinfo.stats);
+      add_to_stat.insert(pbi.begin);
+      backfill_info.pop_front();
       pbi.pop_front();
-      backfill_info.pop_front();
-      if (pbi.begin < backfill_info.begin)
-	pbi.begin = backfill_info.begin;
     } else {
-      // peer_first > my_first
-      dout(20) << " pushing local " << my_first << " " << mv
+      dout(20) << " pushing local " << backfill_info.begin << " "
+	       << backfill_info.objects.begin()->second
 	       << " to peer osd." << backfill_target << dendl;
-      push_backfill_object(my_first, mv, eversion_t(), backfill_target);
-      add_object_context_to_pg_stat(obc, &pinfo.stats);
+      to_push[backfill_info.begin] =
+	make_pair(backfill_info.objects.begin()->second,
+		  eversion_t());
+      add_to_stat.insert(backfill_info.begin);
       backfill_info.pop_front();
-      ++ops;
+      ops++;
     }
+  }
+  pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+
+  for (set<hobject_t>::iterator i = add_to_stat.begin();
+       i != add_to_stat.end();
+       ++i) {
+    ObjectContext *obc = get_object_context(*i, OLOC_BLANK, false);
+    add_object_context_to_pg_stat(obc, &pinfo.stats);
     put_object_context(obc);
   }
+  for (map<hobject_t, eversion_t>::iterator i = to_remove.begin();
+       i != to_remove.end();
+       ++i) {
+    send_remove_op(i->first, i->second, backfill_target);
+  }
 
-  hobject_t bound = pbi.begin;
-  //bound.back_up_to_bounding_key();
-  if (pinfo.last_backfill < bound) {
-    dout(10) << " peer osd." << backfill_target << " info.last_backfill now " << pinfo.last_backfill << dendl;
-
+  if (pos > pinfo.last_backfill) {
+    pinfo.last_backfill = pos;
     epoch_t e = get_osdmap()->get_epoch();
-    MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
-    m->last_backfill = bound;
+    MOSDPGBackfill *m = NULL;
+    if (pos.is_max()) {
+      m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
+      if (info.stats.stats.sum.num_bytes != pinfo.stats.stats.sum.num_bytes)
+	osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
+			  << "num_bytes " << pinfo.stats.stats.sum.num_bytes
+			  << " != expected " << info.stats.stats.sum.num_bytes << "\n";
+      if (info.stats.stats.sum.num_objects != pinfo.stats.stats.sum.num_objects)
+	osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
+			  << "num_objects " << pinfo.stats.stats.sum.num_objects
+			  << " != expected " << info.stats.stats.sum.num_objects << "\n";
+      start_recovery_op(hobject_t::get_max());
+    } else {
+      m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
+    }
+    m->last_backfill = pos;
     m->stats = pinfo.stats.stats;
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(backfill_target));
   }
-  dout(10) << " peer num_objects now " << pinfo.stats.stats.sum.num_objects << " / " << info.stats.stats.sum.num_objects << dendl;
 
+  for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
+       i != to_push.end();
+       ++i) {
+    push_backfill_object(i->first, i->second.first, i->second.second, backfill_target);
+  }
+  dout(10) << " peer num_objects now " << pinfo.stats.stats.sum.num_objects
+	   << " / " << info.stats.stats.sum.num_objects << dendl;
   return ops;
 }
 
