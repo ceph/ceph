@@ -50,7 +50,7 @@ public:
   }
 
   void encode_payload(CephContext *cct) {
-    header.version = 2
+    header.version = 2;
     ::encode(pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
