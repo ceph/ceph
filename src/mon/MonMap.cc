@@ -45,10 +45,10 @@ void MonMap::print(ostream& out) const
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
   unsigned i = 0;
-  for (map<string,entity_addr_t>::const_iterator p = mon_addr.begin();
-       p != mon_addr.end();
+  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
+       p != addr_name.end();
        p++)
-    out << i++ << ": " << p->second << " mon." << p->first << "\n";
+    out << i++ << ": " << p->first << " mon." << p->second << "\n";
 }
 
 void MonMap::dump(Formatter *f) const
@@ -59,13 +59,13 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("created") << created;
   f->open_array_section("mons");
   int i = 0;
-  for (map<string,entity_addr_t>::const_iterator p = mon_addr.begin();
-       p != mon_addr.end();
+  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
+       p != addr_name.end();
        ++p, ++i) {
     f->open_object_section("mon");
     f->dump_int("rank", i);
-    f->dump_string("name", p->first);
-    f->dump_stream("addr") << p->second;
+    f->dump_string("name", p->second);
+    f->dump_stream("addr") << p->first;
     f->close_section();
   }
   f->close_section();
