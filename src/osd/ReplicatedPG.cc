@@ -5438,6 +5438,13 @@ int ReplicatedPG::recover_backfill(int max)
 
   Info& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
+
+  // Initialize from prior backfill state
+  if (pbi.begin < pinfo.last_backfill) {
+    pbi.reset(pinfo.last_backfill);
+    backfill_info.reset(pinfo.last_backfill);
+  }
+
   hobject_t pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
   dout(10) << " peer osd." << backfill_target

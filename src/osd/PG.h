@@ -1409,6 +1409,11 @@ protected:
       begin = end = hobject_t();
     }
 
+    void reset(hobject_t start) {
+      clear();
+      begin = end = start;
+    }
+
     /// true if there are no objects in this interval
     bool empty() {
       return objects.empty();

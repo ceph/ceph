@@ -477,7 +477,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
 
       if (r < 0)
 	return r;
-      if (!next_recurse.max) {
+      if (!next_recurse.is_max()) {
 	if (next)
 	  *next = next_recurse;
 	return 0;
@@ -486,10 +486,10 @@ int HashIndex::list_by_hash(const vector<string> &path,
       while (j != objects.end() && j->first == *i) {
 	if (max_count > 0 && out->size() == (unsigned)max_count) {
 	  if (next)
-	    *next = out->back();
+	    *next = j->second;
 	  return 0;
 	}
-	if (!next || j->second > *next) {
+	if (!next || j->second >= *next) {
 	  out->push_back(j->second);
 	}
 	++j;
