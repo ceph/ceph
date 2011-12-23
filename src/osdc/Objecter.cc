@@ -965,10 +965,13 @@ int Objecter::recalc_op_target(Op *op)
       } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
 	// look for a local replica
 	int i;
-	for (i = acting.size()-1; i >= 0; --i) {
+	/* loop through the OSD replicas and see if any are local to read from.
+	 * We don't need to check the primary since we default to it. (Be
+         * careful to preserve that default, which is why we iterate in reverse
+         * order.) */
+	for (i = acting.size()-1; i > 0; --i) {
 	  if (osdmap->get_addr(acting[i]).is_same_host(messenger->get_myaddr())) {
-	    op->used_replica = i; /* only set used_replica if
-	                             local copy is not primary */
+	    op->used_replica = true;
 	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
 	    break;
 	  }
