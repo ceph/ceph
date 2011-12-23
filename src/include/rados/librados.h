@@ -437,11 +437,11 @@ int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t
  *
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
- * @param crush_rule which rule to use for placement in the new pool
+ * @param crush_rule_num which rule to use for placement in the new pool1
  * @return 0 on success, negative error code on failure
  */
 int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
-				      __u8 crush_rule);
+				      __u8 crush_rule_num);
 
 /**
  * Create a pool with a specific CRUSH rule and auid
@@ -451,12 +451,12 @@ int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
  *
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
- * @param crush_rule which rule to use for placement in the new pool
+ * @param crush_rule_num which rule to use for placement in the new pool2
  * @param auid the id of the owner of the new pool
  * @return 0 on success, negative error code on failure
  */
 int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid,
-			       __u8 crush_rule);
+			       __u8 crush_rule_num);
 
 /**
  * Delete a pool and all data inside it

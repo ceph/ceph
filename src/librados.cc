@@ -3685,19 +3685,19 @@ extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
 }
 
 extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *name,
-						 __u8 crush_rule)
+						 __u8 crush_rule_num)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  return radosp->pool_create(sname, 0, crush_rule);
+  return radosp->pool_create(sname, 0, crush_rule_num);
 }
 
 extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
-					  uint64_t auid, __u8 crush_rule)
+					  uint64_t auid, __u8 crush_rule_num)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  return radosp->pool_create(sname, auid, crush_rule);
+  return radosp->pool_create(sname, auid, crush_rule_num);
 }
 
 extern "C" int rados_pool_delete(rados_t cluster, const char *pool_name)
