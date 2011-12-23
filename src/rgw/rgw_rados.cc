@@ -474,7 +474,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
       RGWBucketInfo info;
       info.bucket = bucket;
       info.owner = owner;
-      ret = store_bucket_info(info);
+      ret = store_bucket_info(info, exclusive);
       if (ret < 0) {
         dout(0) << "failed to store bucket info, removing bucket" << dendl;
         delete_bucket(bucket);
@@ -486,19 +486,23 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   return ret;
 }
 
-int RGWRados::store_bucket_info(RGWBucketInfo& info)
+int RGWRados::store_bucket_info(RGWBucketInfo& info, bool exclusive)
 {
   bufferlist bl;
   ::encode(info, bl);
 
-  int ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length());
+  int ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length(), exclusive);
   if (ret < 0)
     return ret;
 
   char bucket_char[16];
   snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
   string bucket_id_string(bucket_char);
-  ret = rgw_put_obj(info.owner, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length());
+  ret = rgw_put_obj(info.owner, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length(), false);
+  if (ret < 0) {
+    dout(0) << "ERROR: failed to store " << pi_buckets_rados << ":" << bucket_id_string << " ret=" << ret << dendl;
+    return ret;
+  }
 
   dout(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
@@ -692,17 +696,17 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::put_obj_data(void *ctx, rgw_obj& obj,
-			   const char *data, off_t ofs, size_t len)
+			   const char *data, off_t ofs, size_t len, bool exclusive)
 {
   void *handle;
-  int r = aio_put_obj_data(ctx, obj, data, ofs, len, &handle);
+  int r = aio_put_obj_data(ctx, obj, data, ofs, len, exclusive, &handle);
   if (r < 0)
     return r;
   return aio_wait(handle);
 }
 
 int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
-			       const char *data, off_t ofs, size_t len,
+			       const char *data, off_t ofs, size_t len, bool exclusive,
                                void **handle)
 {
   rgw_bucket bucket;
@@ -722,16 +726,17 @@ int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   *handle = c;
   
+  ObjectWriteOperation op;
+
+  if (exclusive)
+    op.create(true);
 
   if (ofs == -1) {
-    // write_full wants to write the complete bufferlist, not part of it
-    assert(bl.length() == len);
-
-    r = io_ctx.aio_write_full(oid, c, bl);
+    op.write_full(bl);
+  } else {
+    op.write(ofs, bl);
   }
-  else {
-    r = io_ctx.aio_write(oid, c, bl, len, ofs);
-  }
+  r = io_ctx.aio_operate(oid, c, &op);
   if (r < 0)
     return r;
 
@@ -810,7 +815,7 @@ int RGWRados::copy_obj(void *ctx,
 
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(ctx, tmp_obj, data, ((ofs == 0) ? -1 : ofs), ret);
+    r = put_obj_data(ctx, tmp_obj, data, ((ofs == 0) ? -1 : ofs), ret, false);
     free(data);
     if (r < 0)
       goto done_err;
@@ -908,7 +913,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info);
+    r = put_bucket_info(bucket.name, info, false);
     if (r < 0) {
       dout(0) << "put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -1816,7 +1821,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   return 0;
 }
 
-int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info)
+int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive)
 {
   bufferlist bl;
 
@@ -1824,7 +1829,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info)
 
   string unused;
 
-  int ret = rgw_put_obj(unused, pi_buckets_rados, bucket_name, bl.c_str(), bl.length());
+  int ret = rgw_put_obj(unused, pi_buckets_rados, bucket_name, bl.c_str(), bl.length(), exclusive);
 
   return ret;
 }

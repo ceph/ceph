@@ -134,7 +134,7 @@ class RGWRados  : public RGWAccess
   int delete_obj_impl(void *ctx, rgw_obj& src_obj, bool sync);
 
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
-  int store_bucket_info(RGWBucketInfo& info);
+  int store_bucket_info(RGWBucketInfo& info, bool exclusive);
 
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
@@ -184,9 +184,9 @@ public:
               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
               map<std::string, bufferlist>* rmattrs);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-              off_t ofs, size_t len);
+              off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                               off_t ofs, size_t len, void **handle);
+                               off_t ofs, size_t len, bool exclusive, void **handle);
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
@@ -307,7 +307,7 @@ public:
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats);
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
-  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info);
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,

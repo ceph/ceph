@@ -14,18 +14,18 @@
 
 static map<string, string> ext_mime_map;
 
-int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size)
+int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive)
 {
   map<string,bufferlist> attrs;
 
   rgw_obj obj(bucket, oid);
 
-  int ret = rgwstore->put_obj(NULL, obj, data, size, NULL, attrs);
+  int ret = rgwstore->put_obj(NULL, obj, data, size, exclusive, NULL, attrs);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_bucket(uid, bucket, attrs, true); //all callers are using system buckets
     if (ret >= 0)
-      ret = rgwstore->put_obj(NULL, obj, data, size, NULL, attrs);
+      ret = rgwstore->put_obj(NULL, obj, data, size, exclusive, NULL, attrs);
   }
 
   return ret;

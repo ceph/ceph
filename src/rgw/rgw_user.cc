@@ -40,7 +40,7 @@ bool rgw_user_is_authenticated(RGWUserInfo& info)
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_store_user_info(RGWUserInfo& info)
+int rgw_store_user_info(RGWUserInfo& info, bool exclusive)
 {
   bufferlist bl;
   info.encode(bl);
@@ -80,12 +80,12 @@ int rgw_store_user_info(RGWUserInfo& info)
   ::encode(ui, uid_bl);
   ::encode(info, uid_bl);
 
-  ret = rgw_put_obj(info.user_id, ui_uid_bucket, info.user_id, uid_bl.c_str(), uid_bl.length());
+  ret = rgw_put_obj(info.user_id, ui_uid_bucket, info.user_id, uid_bl.c_str(), uid_bl.length(), exclusive);
   if (ret < 0)
     return ret;
 
   if (info.user_email.size()) {
-    ret = rgw_put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length());
+    ret = rgw_put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), exclusive);
     if (ret < 0)
       return ret;
   }
@@ -94,7 +94,7 @@ int rgw_store_user_info(RGWUserInfo& info)
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      ret = rgw_put_obj(k.id, ui_key_bucket, k.id, uid_bl.c_str(), uid_bl.length());
+      ret = rgw_put_obj(k.id, ui_key_bucket, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
       if (ret < 0)
         return ret;
     }
@@ -103,7 +103,7 @@ int rgw_store_user_info(RGWUserInfo& info)
   map<string, RGWAccessKey>::iterator siter;
   for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
     RGWAccessKey& k = siter->second;
-    ret = rgw_put_obj(info.user_id, ui_swift_bucket, k.id, uid_bl.c_str(), uid_bl.length());
+    ret = rgw_put_obj(info.user_id, ui_swift_bucket, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
     if (ret < 0)
       return ret;
   }

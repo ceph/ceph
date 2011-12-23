@@ -254,7 +254,7 @@ done_err:
 }
 
 int RGWFS::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                  off_t ofs, size_t size)
+                  off_t ofs, size_t size, bool exclusive)
 {
   rgw_bucket& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -331,7 +331,7 @@ int RGWFS::copy_obj(void *ctx, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = put_obj(ctx, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj(ctx, dest_obj, data, ret, false, mtime, attrs);
 
   return ret;
 }
@@ -694,7 +694,7 @@ int RGWFS::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info)
   return -ENOTSUP;
 }
 
-int RGWFS::put_bucket_info(string& bucket_name, RGWBucketInfo& info)
+int RGWFS::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive)
 {
   return -ENOTSUP;
 }

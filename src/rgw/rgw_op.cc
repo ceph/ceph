@@ -738,7 +738,7 @@ void RGWPutObj::execute()
         void *handle;
         ret = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
 				     data,
-				     ((ofs == 0) ? -1 : ofs), len, &handle);
+				     ((ofs == 0) ? -1 : ofs), len, false, &handle);
         if (ret < 0)
           goto done_err;
 
