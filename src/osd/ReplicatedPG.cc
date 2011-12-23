@@ -4981,6 +4981,14 @@ void ReplicatedPG::on_activate()
        ++i) {
     populate_obc_watchers(i->second);
   }
+
+  for (unsigned i = 1; i<acting.size(); i++) {
+    if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
+      assert(backfill_target == -1);
+      backfill_target = acting[i];
+      dout(10) << " chose backfill target osd." << backfill_target << dendl;
+    }
+  }
 }
 
 void ReplicatedPG::on_change()
@@ -5098,14 +5106,6 @@ int ReplicatedPG::start_recovery_ops(int max)
   if (!started && num_unfound != get_num_unfound()) {
     // second chance to recovery replicas
     started = recover_replicas(max);
-  }
-  if (backfill_target < 0) {
-    for (unsigned i = 1; i<acting.size(); i++) {
-      if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
-	backfill_target = acting[i];
-	dout(10) << " chose backfill target osd." << backfill_target << dendl;
-      }
-    }
   }
   if (backfill_target >= 0 && started < max && !waiting_on_backfill) {
     started += recover_backfill(max - started);
