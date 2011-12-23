@@ -81,4 +81,4 @@ In the end, you'll want to close your IO context and connection to RADOS with :c
 API calls
 =========
 
- .. doxygenfile:: rados/librados.h
+ .. doxygenfile:: librados.h

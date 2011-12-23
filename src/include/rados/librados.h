@@ -37,6 +37,7 @@ extern "C" {
  * @bug there's no way to use these in the C api
  * @{
  */
+/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
 	LIBRADOS_CMPXATTR_OP_NOP = 0,
 	LIBRADOS_CMPXATTR_OP_EQ  = 1,
@@ -46,6 +47,7 @@ enum {
 	LIBRADOS_CMPXATTR_OP_LT  = 5,
 	LIBRADOS_CMPXATTR_OP_LTE = 6
 };
+/** @endcond */
 /** @} */
 
 struct CephContext;
