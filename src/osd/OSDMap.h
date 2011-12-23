@@ -490,7 +490,7 @@ private:
   }
 
 public:
-  int pg_to_osds(pg_t pg, vector<int>& raw) {
+  int pg_to_osds(pg_t pg, vector<int>& raw) const {
     const pg_pool_t *pool = get_pg_pool(pg.pool());
     if (!pool)
       return 0;
@@ -616,7 +616,7 @@ public:
       return PG_ROLE_MIDDLE;
   }
   
-  int get_pg_role(pg_t pg, int osd) {
+  int get_pg_role(pg_t pg, int osd) const {
     vector<int> group;
     int nrep = pg_to_osds(pg, group);
     return calc_pg_role(osd, group, nrep);
