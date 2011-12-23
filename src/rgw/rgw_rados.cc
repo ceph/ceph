@@ -417,7 +417,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 
   bufferlist outbl;
   int ret = root_pool_ctx.operate(bucket.name, &op);
-  if (ret < 0 && ret != -EEXIST)
+  if (ret < 0)
     return ret;
 
   if (system_bucket) {
@@ -1424,6 +1424,8 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     *obj_size = astate->size;
   if (lastmod)
     *lastmod = astate->mtime;
+
+  delete new_ctx;
 
   return 0;
 

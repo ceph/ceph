@@ -24,7 +24,7 @@ class PerfCounters;
 
 class Journal {
 protected:
-  uint64_t fsid;
+  uuid_d fsid;
   Finisher *finisher;
 public:
   PerfCounters *logger;
@@ -33,7 +33,7 @@ protected:
   bool wait_on_full;
 
 public:
-  Journal(uint64_t f, Finisher *fin, Cond *c=0) :
+  Journal(uuid_d f, Finisher *fin, Cond *c=0) :
     fsid(f), finisher(fin), logger(NULL),
     do_sync_cond(c),
     wait_on_full(false) { }

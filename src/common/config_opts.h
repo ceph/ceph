@@ -356,6 +356,7 @@ OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to se
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
 OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
+OPTION(rgw_init_timeout, OPT_INT, 30) // time in seconds
 OPTION(rbd_writeback_window, OPT_INT, 0 /*8 << 20*/) // rbd writeback window size, bytes
 OPTION(rgw_mime_types_file, OPT_STR, "/etc/mime.types")
 

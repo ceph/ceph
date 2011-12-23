@@ -67,7 +67,7 @@ class Filer;
 class Objecter;
 class ObjectCacher;
 
-extern class PerfCounters *client_counters;
+class PerfCounters;
 
 enum {
   l_c_first = 20000,
@@ -184,6 +184,8 @@ struct dir_result_t {
 class Client : public Dispatcher {
  public:
   CephContext *cct;
+
+  PerfCounters *logger;
 
   // cluster descriptors
   MDSMap *mdsmap; 

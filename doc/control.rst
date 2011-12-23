@@ -55,7 +55,8 @@ Query osd subsystem status. ::
 
 	$ ceph osd getmap -o file
 
-Write a copy of the most recent osd map to a file. See osdmaptool. ::
+Write a copy of the most recent osd map to a file. See
+:doc:`osdmaptool </man/8/osdmaptool>`. ::
 
 	$ ceph osd getcrushmap -o file
 
@@ -67,12 +68,12 @@ file. This is functionally equivalent to ::
 
 ::
 
-	$ ceph osd dump [--format format>]
+	$ ceph osd dump [--format <format>]
 
 Dump the osd map. Valid formats for -f are "plain" and "json". If no
 --format option is given, the osd map is dumped as plain text. ::
 
-	$ ceph osd tree [--format format]
+	$ ceph osd tree [--format <format>]
 
 Dump the osd map as a tree with one line per osd containing weight
 and state. ::
@@ -237,4 +238,85 @@ Enables debug messages. ::
 
 Displays the status of all metadata servers.
 
-set_max_mds: TODO
+.. todo:: ``ceph mds`` subcommands missing docs: set_max_mds, dump, getmap, stop, setmap
+
+
+Mon subsystem
+-------------
+
+Show monitor stats::
+
+	$ ceph mon stat
+	2011-12-14 10:40:59.044395 mon <- [mon,stat]
+	2011-12-14 10:40:59.057111 mon.1 -> 'e3: 5 mons at {a=10.1.2.3:6789/0,b=10.1.2.4:6789/0,c=10.1.2.5:6789/0,d=10.1.2.6:6789/0,e=10.1.2.7:6789/0}, election epoch 16, quorum 0,1,2,3' (0)
+
+The ``quorum`` list at the end lists monitor nodes that are part of the current quorum.
+
+This is also available more directly::
+
+	$ ./ceph quorum_status
+	2011-12-14 10:44:20.417705 mon <- [quorum_status]
+	2011-12-14 10:44:20.431890 mon.0 -> '{ "election_epoch": 10,
+	  "quorum": [
+	        0,
+	        1,
+	        2],
+	  "monmap": { "epoch": 1,
+	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
+	      "modified": "2011-12-12 13:28:27.505520",
+	      "created": "2011-12-12 13:28:27.505520",
+	      "mons": [
+	            { "rank": 0,
+	              "name": "a",
+	              "addr": "127.0.0.1:6789\/0"},
+	            { "rank": 1,
+	              "name": "b",
+	              "addr": "127.0.0.1:6790\/0"},
+	            { "rank": 2,
+	              "name": "c",
+	              "addr": "127.0.0.1:6791\/0"}]}}' (0)
+
+The above will block until a quorum is reached.
+
+For a status of just the monitor you connect to (use ``-m HOST:PORT``
+to select)::
+
+	$ ./ceph mon_status
+	2011-12-14 10:45:30.644414 mon <- [mon_status]
+	2011-12-14 10:45:30.644632 mon.0 -> '{ "name": "a",
+	  "rank": 0,
+	  "state": "leader",
+	  "election_epoch": 10,
+	  "quorum": [
+	        0,
+	        1,
+	        2],
+	  "outside_quorum": [],
+	  "monmap": { "epoch": 1,
+	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
+	      "modified": "2011-12-12 13:28:27.505520",
+	      "created": "2011-12-12 13:28:27.505520",
+	      "mons": [
+	            { "rank": 0,
+	              "name": "a",
+	              "addr": "127.0.0.1:6789\/0"},
+	            { "rank": 1,
+	              "name": "b",
+	              "addr": "127.0.0.1:6790\/0"},
+	            { "rank": 2,
+	              "name": "c",
+	              "addr": "127.0.0.1:6791\/0"}]}}' (0)
+
+A dump of the monitor state::
+
+	$ ceph mon dump
+	2011-12-14 10:43:08.015333 mon <- [mon,dump]
+	2011-12-14 10:43:08.015567 mon.0 -> 'dumped monmap epoch 1' (0)
+	epoch 1
+	fsid 444b489c-4f16-4b75-83f0-cb8097468898
+	last_changed 2011-12-12 13:28:27.505520
+	created 2011-12-12 13:28:27.505520
+	0: 127.0.0.1:6789/0 mon.a
+	1: 127.0.0.1:6790/0 mon.b
+	2: 127.0.0.1:6791/0 mon.c
+

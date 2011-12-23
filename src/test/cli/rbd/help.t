@@ -37,4 +37,4 @@
   
   For the map command:
     --user <username>            rados user to authenticate as
-    --secret <path>              file containing secret key for use with authx
+    --secret <path>              file containing secret key for use with cephx

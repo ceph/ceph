@@ -27,11 +27,9 @@ To start in interactive mode, no arguments are necessary. Control-d or
 Watch mode
 ----------
 
-To watch cluster state changes in real time, starting in -w (watch)
-mode will print updates to stdout as they occur. For example, to keep
-an eye on cluster state, run::
+Watch mode shows cluster state changes as they occur. For example::
 
-       ceph -C ceph.conf -w
+       ceph -w
 
 Command line mode
 -----------------

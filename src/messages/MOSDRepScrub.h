@@ -25,13 +25,16 @@
 struct MOSDRepScrub : public Message {
   pg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
+  eversion_t scrub_to;   // last_update_applied when message sent
   epoch_t map_epoch;
 
   MOSDRepScrub() {}
-  MOSDRepScrub(pg_t pgid, eversion_t scrub_from, epoch_t map_epoch) :
+  MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
+	       epoch_t map_epoch) :
     Message(MSG_OSD_REP_SCRUB),
     pgid(pgid),
     scrub_from(scrub_from),
+    scrub_to(scrub_to),
     map_epoch(map_epoch) {}
   
 private:
@@ -41,20 +44,24 @@ public:
   const char *get_type_name() { return "replica scrub"; }
   void print(ostream& out) {
     out << "replica scrub(pg: ";
-    out << pgid << ",from:" << scrub_from << "epoch:" 
-        << map_epoch;
+    out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
+	<< "epoch:" << map_epoch;
     out << ")";
   }
 
   void encode_payload(CephContext *cct) {
+    header.version = 2;
     ::encode(pgid, payload);
     ::encode(scrub_from, payload);
+    ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
   }
   void decode_payload(CephContext *cct) {
+    assert(header.version == 2);
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);
     ::decode(scrub_from, p);
+    ::decode(scrub_to, p);
     ::decode(map_epoch, p);
   }
 };

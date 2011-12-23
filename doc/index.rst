@@ -2,11 +2,15 @@
  Welcome to Ceph
 =================
 
-Ceph is a distributed network storage and file system with distributed
-metadata management and POSIX semantics.
+Ceph is a unified, distributed storage system that operates on a large
+number of hosts connected by a TCP/IP network. Ceph has been designed
+to accommodate multiple petabytes of storage with ease.
+
+Ceph Distributed File System provides POSIX filesystem semantics with
+distributed metadata management.
 
 RADOS is a reliable object store, used by Ceph, but also directly
-accessible.
+accessible by client applications.
 
 ``radosgw`` is an S3-compatible RESTful HTTP service for object
 storage, using RADOS storage.

@@ -99,7 +99,7 @@ void usage()
        << "\n"
        << "For the map command:\n"
        << "  --user <username>            rados user to authenticate as\n"
-       << "  --secret <path>              file containing secret key for use with authx\n";
+       << "  --secret <path>              file containing secret key for use with cephx\n";
 }
 
 void usage_exit()

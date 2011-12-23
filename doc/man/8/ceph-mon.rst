@@ -40,6 +40,30 @@ Options
    ``/etc/ceph/ceph.conf`` to determine monitor addresses during
    startup.
 
+.. option:: --mkfs
+
+   Initialize the ``mon data`` directory with seed information to form
+   and initial ceph file system or to join an existing monitor
+   cluster.  Three pieces of information must be provided:
+
+   - The cluster fsid.  This can come from a monmap (``--monmap <path>``) or
+     explicitly via ``--fsid <uuid>``.
+   - A list of monitors and their addresses.  This list of monitors
+     can come from a monmap (``--monmap <path>``), the ``mon host``
+     configuration value (in *ceph.conf* or via ``-m
+     host1,host2,...`), or ``mon addr`` lines in *ceph.conf*.  If this
+     monitor is to be part of the initial monitor quorum for a new
+     Ceph cluster, then it must be included in the initial list,
+     matching either the name or address of a monitor in the list.
+     When matching by address, either the ``public addr`` or ``public
+     subnet`` options may be used.
+   - The monitor secret key ``mon.``.  This must be included in the
+     keyring provided via ``--keyring <path>``.
+
+.. option:: --keyring
+
+   Specify a keyring for use with ``--mkfs``.
+
 
 Availability
 ============

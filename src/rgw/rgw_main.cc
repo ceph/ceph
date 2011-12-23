@@ -235,6 +235,15 @@ done:
   dout(0) << "====== req done fcgx=" << hex << fcgx << dec << " http_status=" << http_ret << " ======" << dendl;
 }
 
+class C_InitTimeout : public Context {
+public:
+  C_InitTimeout() {}
+  void finish(int r) {
+    derr << "Initialization timeout, failed to initialize" << dendl;
+    exit(1);
+  }
+};
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -278,7 +287,13 @@ int main(int argc, const char **argv)
       dout(0) << "weird, i couldn't chdir to '" << g_conf->chdir << "'" << dendl;
     }
   }
-  
+  Mutex mutex("main");
+  SafeTimer init_timer(g_ceph_context, mutex);
+  init_timer.init();
+  mutex.Lock();
+  init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+  mutex.Unlock();
+
   common_init_finish(g_ceph_context);
 
   rgw_tools_init(g_ceph_context);
@@ -300,6 +315,10 @@ int main(int argc, const char **argv)
   int r = rgw_perf_start(g_ceph_context);
   if (r < 0)
     return 1;
+
+  mutex.Lock();
+  init_timer.cancel_all_events();
+  mutex.Unlock();
 
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
   process.run();

@@ -361,7 +361,7 @@ class interval_set {
 
   void swap(interval_set<T>& other) {
     m.swap(other.m);
-    int t = _size;
+    int64_t t = _size;
     _size = other._size;
     other._size = t;
   }    

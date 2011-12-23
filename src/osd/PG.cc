@@ -2360,6 +2360,7 @@ void PG::_request_scrub_map(int replica, eversion_t version)
   assert(replica != osd->whoami);
   dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
   MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version,
+					      last_update_applied,
                                               get_osdmap()->get_epoch());
   osd->cluster_messenger->send_message(repscrubop,
                                        get_osdmap()->get_cluster_inst(replica));
@@ -2612,9 +2613,10 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   if (msg->scrub_from > eversion_t()) {
     if (finalizing_scrub) {
       assert(last_update_applied == info.last_update);
+      assert(last_update_applied == msg->scrub_to);
     } else {
       finalizing_scrub = 1;
-      if (last_update_applied != info.last_update) {
+      if (last_update_applied != msg->scrub_to) {
 	active_rep_scrub = msg;
 	return;
       }
@@ -2770,6 +2772,10 @@ void PG::scrub_clear_state()
   osd->requeue_ops(this, waiting_for_active);
 
   finalizing_scrub = false;
+  if (active_rep_scrub) {
+    active_rep_scrub->put();
+    active_rep_scrub = NULL;
+  }
   scrub_received_maps.clear();
 }
 
