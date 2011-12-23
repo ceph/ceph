@@ -135,6 +135,13 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
     if (peer_missing.count(peer) &&
 	peer_missing[peer].missing.count(soid))
       return true;
+
+    // Object is degraded if after last_backfill AND
+    // we have started backfilling it
+    if (peer_info[peer].last_backfill <= soid &&
+	pending_backfill_updates.size() &&
+	pending_backfill_updates.rbegin()->first >= soid)
+      return true;
   }
   return false;
 }
@@ -5051,7 +5058,7 @@ void ReplicatedPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   backfills_in_flight.clear();
-  pending_stat_updates.clear();
+  pending_backfill_updates.clear();
   pulling.clear();
   pushing.clear();
   pull_from_peer.clear();
@@ -5540,7 +5547,7 @@ int ReplicatedPG::recover_backfill(int max)
     ObjectContext *obc = get_object_context(*i, OLOC_BLANK, false);
     pg_stat_t stat;
     add_object_context_to_pg_stat(obc, &stat);
-    pending_stat_updates[*i] = stat;
+    pending_backfill_updates[*i] = stat;
     put_object_context(obc);
   }
   for (map<hobject_t, eversion_t>::iterator i = to_remove.begin();
@@ -5558,9 +5565,9 @@ int ReplicatedPG::recover_backfill(int max)
     *(backfills_in_flight.begin()) : pos;
   if (bound > pinfo.last_backfill) {
     pinfo.last_backfill = bound;
-    for (map<hobject_t, pg_stat_t>::iterator i = pending_stat_updates.begin();
-	 i != pending_stat_updates.end() && i->first < bound;
-	 pending_stat_updates.erase(i++)) {
+    for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
+	 i != pending_backfill_updates.end() && i->first < bound;
+	 pending_backfill_updates.erase(i++)) {
       pinfo.stats.add(i->second);
     }
     epoch_t e = get_osdmap()->get_epoch();
