@@ -993,6 +993,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 	   << " with " << primary->second << dendl;
   want.push_back(primary->first);
   unsigned usable = 1;
+  unsigned backfill = 0;
 
   // select replicas that have log contiguity with primary
   for (vector<int>::const_iterator i = up.begin();
@@ -1002,8 +1003,13 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
       continue;
     const Info &cur_info = all_info.find(*i)->second;
     if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
-      dout(10) << " osd." << *i << " (up) accepted (backfill) " << cur_info << dendl;
-      want.push_back(*i);
+      if (backfill < 1) {
+	dout(10) << " osd." << *i << " (up) accepted (backfill) " << cur_info << dendl;
+	want.push_back(*i);
+	backfill++;
+      } else {
+	dout(10) << " osd." << *i << " (up) rejected" << cur_info << dendl;
+      }
     } else {
       want.push_back(*i);
       usable++;
