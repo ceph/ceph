@@ -545,6 +545,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   map_cache_lock("OSD::map_cache_lock"),
+  outstanding_pg_stats(false),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -1802,6 +1803,13 @@ void OSD::tick()
 
   timer.add_event_after(1.0, new C_Tick(this));
 
+  if (outstanding_pg_stats
+      &&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
+    dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
+            << "seconds, reconnecting elsewhere" << dendl;
+    monc->reopen_session();
+  }
+
   // only do waiters if dispatch() isn't currently running.  (if it is,
   // it'll do the waiters, and doing them here may screw up ordering
   // of op_queue vs handle_osd_map.)
@@ -2152,7 +2160,11 @@ void OSD::send_pg_stats(const utime_t &now)
       }
       pg->pg_stats_lock.Unlock();
     }
-    
+
+    if (!outstanding_pg_stats) {
+      outstanding_pg_stats = true;
+      last_pg_stats_ack = ceph_clock_now(g_ceph_context);
+    }
     monc->send_mon_message(m);
   }
 
@@ -2167,6 +2179,8 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     ack->put();
     return;
   }
+
+  last_pg_stats_ack = ceph_clock_now(g_ceph_context);
 
   pg_stat_queue_lock.Lock();
 
@@ -2196,6 +2210,10 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
       dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
   }
   
+  if (!pg_stat_queue.size()) {
+    outstanding_pg_stats = false;
+  }
+
   pg_stat_queue_lock.Unlock();
 
   ack->put();

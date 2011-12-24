@@ -479,6 +479,15 @@ protected:
   utime_t last_mon_report;
   utime_t last_pg_stats_sent;
 
+  /* if our monitor dies, we want to notice it and reconnect.
+   *  So we keep track of when it last acked our stat updates,
+   *  and if too much time passes (and we've been sending
+   *  more updates) then we can call it dead and reconnect
+   *  elsewhere.
+   */
+  utime_t last_pg_stats_ack;
+  bool outstanding_pg_stats; // some stat updates haven't been acked yet
+
   void do_mon_report();
 
   // -- boot --
