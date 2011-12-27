@@ -297,9 +297,14 @@ for name in $what; do
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
                 echo "$name: running..."
-            else
+            elif [ -e "$pid_file" ]; then
+                # daemon is dead, but pid file still exists
                 echo "$name: dead."
                 EXIT_STATUS=1
+            else
+                # daemon is dead, and pid file is gone
+                echo "$name: not running."
+                EXIT_STATUS=3
             fi
 	    ;;
 
