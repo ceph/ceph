@@ -68,12 +68,12 @@ typedef void *rados_t;
  *
  * An io context encapsulates a few settings for all I/O operations
  * done on it:
- * - pool - set when the io context is created (see rados_ioctx_open())
+ * - pool - set when the io context is created (see rados_ioctx_create())
  * - snapshot context for writes (see
- *   rados_ioctx_selfmanaged_snap_set_write_context())
- * - snapshot id to read from (see rados_ioctx_set_snap_read())
- * - object locater for all single-object operations (see
- *   rados_ioctx_set_object_locater_key())
+ *   rados_ioctx_selfmanaged_snap_set_write_ctx())
+ * - snapshot id to read from (see rados_ioctx_snap_set_read())
+ * - object locator for all single-object operations (see
+ *   rados_ioctx_locator_set_key())
  *
  * @warning changing any of these settings is not thread-safe -
  * librados users must synchronize any of these changes on their own,
@@ -85,9 +85,9 @@ typedef void *rados_ioctx_t;
  * @typedef rados_list_ctx_t
  *
  * An iterator for listing the objects in a pool.
- * Used with rados_ioctx_objects_list_open(),
- * rados_ioctx_objects_list_next(), and
- * rados_ioctx_objects_list_close().
+ * Used with rados_objects_list_open(),
+ * rados_objects_list_next(), and
+ * rados_objects_list_close().
  */
 typedef void *rados_list_ctx_t;
 
@@ -166,7 +166,7 @@ void rados_version(int *major, int *minor, int *extra);
  * configuration is necessary.
  *
  * @param cluster where to store the handle
- * @param id the user to connect as (i.e. admin, *not* client.admin)
+ * @param id the user to connect as (i.e. admin, not client.admin)
  * @return 0 on success, negative error code on failure
  */
 int rados_create(rados_t *cluster, const char * const id);
@@ -495,12 +495,14 @@ int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
 /** @} pools */
 
+
+
 /**
  * Set the key for mapping objects to pgs within an io context.
  *
  * The key is used instead of the object name to determine which
  * placement groups an object is put in. This affects all subsequent
- * operations of the io context - until a different locater key is
+ * operations of the io context - until a different locator key is
  * set, all objects in this io context will be placed in the same pg.
  *
  * This is useful if you need to do clone_range operations, which must
@@ -577,7 +579,7 @@ void rados_objects_list_close(rados_list_ctx_t ctx);
  *    responsibility for keeping track of the snapshot context to the
  *    clients. For every write, the client must send the snapshot
  *    context. In librados, this is accomplished with
- *    rados_selfmanaged_snap_set_write_context(). These are more
+ *    rados_selfmanaged_snap_set_write_ctx(). These are more
  *    difficult to manage, but are restricted to specific objects
  *    instead of applying to an entire pool.
  *
@@ -787,8 +789,8 @@ int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t 
  * copy-on-write clone.
  *
  * The src and dest objects must be in the same pg. To ensure this,
- * the io context should have a locater key set (see
- * rados_ioctx_locator_set_key).
+ * the io context should have a locator key set (see
+ * rados_ioctx_locator_set_key()).
  *
  * @param io the context in which the data is cloned
  * @param dst the name of the destination object
@@ -817,7 +819,7 @@ int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
  * Read data from an object
  *
  * The io context determines the snapshot to read from, if any was set
- * by rados_ioctx_set_snap_read.
+ * by rados_ioctx_snap_set_read().
  * 
  * @param io the context in which to perform the read
  * @param oid the name of the object to read from
@@ -1244,7 +1246,7 @@ int rados_aio_write_full(rados_ioctx_t io, const char *oid,
  * Asychronously read data from an object
  *
  * The io context determines the snapshot to read from, if any was set
- * by rados_ioctx_set_snap_read.
+ * by rados_ioctx_snap_set_read().
  *
  * @note only the 'complete' callback of the completion will be called.
  *
