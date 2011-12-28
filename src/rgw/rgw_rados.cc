@@ -409,18 +409,20 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 			    bool system_bucket,
 			    bool exclusive, uint64_t auid)
 {
-  librados::ObjectWriteOperation op;
-  op.create(exclusive);
-
-  for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
-    op.setxattr(iter->first.c_str(), iter->second);
-
-  bufferlist outbl;
-  int ret = root_pool_ctx.operate(bucket.name, &op);
-  if (ret < 0)
-    return ret;
+  int ret = 0;
 
   if (system_bucket) {
+    librados::ObjectWriteOperation op;
+    op.create(exclusive);
+
+    for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
+      op.setxattr(iter->first.c_str(), iter->second);
+
+    bufferlist outbl;
+    ret = root_pool_ctx.operate(bucket.name, &op);
+    if (ret < 0)
+      return ret;
+
     ret = rados->pool_create(bucket.pool.c_str(), auid);
     if (ret == -EEXIST)
       ret = 0;
@@ -430,6 +432,11 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
       bucket.pool = bucket.name;
     }
   } else {
+    if (ret < 0) {
+      dout(0) << "failed to store bucket info" << dendl;
+      return ret;
+    }
+
     ret = select_bucket_placement(bucket.name, bucket);
     if (ret < 0)
       return ret;
@@ -466,39 +473,36 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     if (r < 0 && r != -EEXIST)
       return r;
 
+    RGWBucketInfo info;
+    info.bucket = bucket;
+    info.owner = owner;
+    ret = store_bucket_info(info, &attrs, exclusive);
+    if (ret == -EEXIST)
+      return ret;
+
     if (r != -EEXIST) {
       r = cls_rgw_init_index(bucket, dir_oid);
       if (r < 0)
         return r;
-
-      RGWBucketInfo info;
-      info.bucket = bucket;
-      info.owner = owner;
-      ret = store_bucket_info(info, exclusive);
-      if (ret < 0) {
-        dout(0) << "failed to store bucket info, removing bucket" << dendl;
-        delete_bucket(bucket);
-        return ret;
-      }
     }
   }
 
   return ret;
 }
 
-int RGWRados::store_bucket_info(RGWBucketInfo& info, bool exclusive)
+int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, bool exclusive)
 {
   bufferlist bl;
   ::encode(info, bl);
 
-  int ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length(), exclusive);
+  int ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
   if (ret < 0)
     return ret;
 
   char bucket_char[16];
   snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
   string bucket_id_string(bucket_char);
-  ret = rgw_put_obj(info.owner, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length(), false);
+  ret = rgw_put_obj(info.owner, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length(), false, pattrs);
   if (ret < 0) {
     dout(0) << "ERROR: failed to store " << pi_buckets_rados << ":" << bucket_id_string << " ret=" << ret << dendl;
     return ret;

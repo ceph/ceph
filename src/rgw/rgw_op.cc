@@ -520,7 +520,6 @@ void RGWCreateBucket::execute()
   bool pol_ret;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
-
   s->bucket_owner = s->user.user_id;
 
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
