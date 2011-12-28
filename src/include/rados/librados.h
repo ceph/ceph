@@ -493,6 +493,14 @@ int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  */
 int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
+/**
+ * Get the pool id of the io context
+ *
+ * @param io the io context to query
+ * @return the id of the pool the io context uses
+ */
+int64_t rados_ioctx_get_id(rados_ioctx_t io);
+
 /** @} pools */
 
 
@@ -513,13 +521,6 @@ int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
  * any previously set key
  */
 void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
-
-/**
- * Get the pool id of the io context
- * @param io the io context to query
- * @return the id of the pool the io context uses
- */
-int64_t rados_ioctx_get_id(rados_ioctx_t io);
 
 /**
  * @defgroup list_obj Listing Objects
