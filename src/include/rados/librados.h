@@ -140,9 +140,9 @@ struct rados_cluster_stat_t {
  * unrelated to the Ceph version number.
  *
  * TODO: define version semantics, i.e.:
- *   incrementing major is for backwards-incompatible changes
- *   incrementing minor is for backwards-compatible changes
- *   incrementing extra is for bug fixes
+ * - incrementing major is for backwards-incompatible changes
+ * - incrementing minor is for backwards-compatible changes
+ * - incrementing extra is for bug fixes
  *
  * @param major where to store the major version number
  * @param minor where to store the minor version number
