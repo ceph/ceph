@@ -167,7 +167,7 @@ void rados_version(int *major, int *minor, int *extra);
  *
  * @param cluster where to store the handle
  * @param id the user to connect as (i.e. admin, not client.admin)
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_create(rados_t *cluster, const char * const id);
 
@@ -180,7 +180,7 @@ int rados_create(rados_t *cluster, const char * const id);
  *
  * @param cluster where to store the handle
  * @param cct_ the existing configuration to use
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_create_with_context(rados_t *cluster, struct CephContext *cct_);
 
@@ -197,7 +197,7 @@ int rados_create_with_context(rados_t *cluster, struct CephContext *cct_);
  * @post If this succeeds, any function in librados may be used
  *
  * @param cluster The cluster to connect to.
- * @return 0 on sucess, negative error code on failure
+ * @returns 0 on sucess, negative error code on failure
  */
 int rados_connect(rados_t cluster);
 
@@ -251,7 +251,7 @@ void rados_shutdown(rados_t cluster);
  *
  * @param cluster cluster handle to configure
  * @param path path to a Ceph configuration file
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_conf_read_file(rados_t cluster, const char *path);
 
@@ -270,7 +270,7 @@ int rados_conf_read_file(rados_t cluster, const char *path);
  * @param cluster cluster handle to configure
  * @param argc number of arguments in argv
  * @param argv arguments to parse
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 
@@ -287,7 +287,7 @@ int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
  *
  * @param cluster cluster handle to configure
  * @param var name of the environment variable to read
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_conf_parse_env(rados_t cluster, const char *var);
 
@@ -299,7 +299,7 @@ int rados_conf_parse_env(rados_t cluster, const char *var);
  * @param cluster cluster handle to configure
  * @param option option to set
  * @param value value of the option
- * @return 0 on success, negative error code on failure. -ENOENT is
+ * @returns 0 on success, negative error code on failure. -ENOENT is
  * returned when the option is not a Ceph configuration option.
  */
 int rados_conf_set(rados_t cluster, const char *option, const char *value);
@@ -311,7 +311,7 @@ int rados_conf_set(rados_t cluster, const char *option, const char *value);
  * @param option which option to read
  * @param buf where to write the configuration value
  * @param len the size of buf in bytes
- * @return 0 on success, negative error code on failure.
+ * @returns 0 on success, negative error code on failure.
  * -ENAMETOOLONG is returned if the buffer is too short to contain the
  * requested value.
  */
@@ -328,7 +328,7 @@ int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
  *
  * @param cluster cluster to query
  * @param result where to store the results
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 
@@ -358,7 +358,7 @@ int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
  * @param cluster cluster handle
  * @param buf output buffer
  * @param len output buffer length
- * @return length of the buffer we would need to list all pools
+ * @returns length of the buffer we would need to list all pools
  */
 int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
@@ -371,7 +371,7 @@ int rados_pool_list(rados_t cluster, char *buf, size_t len);
  * @param cluster which cluster the pool is in
  * @param pool_name name of the pool
  * @param ioctx where to store the io context
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx);
 
@@ -398,7 +398,7 @@ void rados_ioctx_destroy(rados_ioctx_t io);
  *
  * @param io determines which pool to query
  * @param stats where to store the results
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats);
 
@@ -407,8 +407,8 @@ int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats);
  *
  * @param cluster which cluster the pool is in
  * @param pool_name which pool to look up
- * @return id of the pool
- * @return -ENOENT if the pool is not found
+ * @returns id of the pool
+ * @returns -ENOENT if the pool is not found
  */
 int64_t rados_pool_lookup(rados_t cluster, const char *pool_name);
 
@@ -417,7 +417,7 @@ int64_t rados_pool_lookup(rados_t cluster, const char *pool_name);
  *
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_pool_create(rados_t cluster, const char *pool_name);
 
@@ -430,7 +430,7 @@ int rados_pool_create(rados_t cluster, const char *pool_name);
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
  * @param auid the id of the owner of the new pool
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid);
 
@@ -440,7 +440,7 @@ int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
  * @param crush_rule_num which rule to use for placement in the new pool1
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
 				      __u8 crush_rule_num);
@@ -455,7 +455,7 @@ int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
  * @param pool_name the name of the new pool
  * @param crush_rule_num which rule to use for placement in the new pool2
  * @param auid the id of the owner of the new pool
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid,
 			       __u8 crush_rule_num);
@@ -468,7 +468,7 @@ int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t 
  *
  * @param cluster the cluster the pool is in
  * @param pool_name which pool to delete
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_pool_delete(rados_t cluster, const char *pool_name);
 
@@ -480,7 +480,7 @@ int rados_pool_delete(rados_t cluster, const char *pool_name);
  *
  * @param io reference to the pool to change.
  * @param auid the auid you wish the io to have.
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
 
@@ -489,7 +489,7 @@ int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  *
  * @param io pool to query
  * @param auid where to store the auid
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
@@ -497,7 +497,7 @@ int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
  * Get the pool id of the io context
  *
  * @param io the io context to query
- * @return the id of the pool the io context uses
+ * @returns the id of the pool the io context uses
  */
 int64_t rados_ioctx_get_id(rados_ioctx_t io);
 
@@ -536,7 +536,7 @@ void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
  *
  * @param io the pool to list from
  * @param ctx the handle to store list context in
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 
@@ -546,8 +546,8 @@ int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
  * @param ctx iterator marking where you are in the listing
  * @param entry where to store the name of the entry (caller must free)
  * @param key where to store the object locator (set to NULL to ignore) (caller must free)
- * @return 0 on success, negative error code on failure
- * @return -ENOENT when there are no more objects to list
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when there are no more objects to list
  */
 int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key);
 
@@ -597,7 +597,7 @@ void rados_objects_list_close(rados_list_ctx_t ctx);
  *
  * @param io the pool to snapshot
  * @param snapname the name of the snapshot
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname);
 
@@ -606,7 +606,7 @@ int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname);
  *
  * @param io the pool to delete the snapshot from
  * @param snapname which snapshot to delete
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_snap_remove(rados_ioctx_t io, const char *snapname);
 
@@ -619,7 +619,7 @@ int rados_ioctx_snap_remove(rados_ioctx_t io, const char *snapname);
  * @param io the pool in which the object is stored
  * @param oid the name of the object to rollback
  * @param snapname which snapshot to rollback to
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
@@ -645,7 +645,7 @@ void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap);
  *
  * @param io the pool in which the snapshot will exist
  * @param snapid where to store the newly allocated snapshot ID
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io, rados_snap_t *snapid);
 
@@ -657,7 +657,7 @@ int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io, rados_snap_t *snapid);
  *
  * @param io the pool in which the snapshot will exist
  * @param snapid where to store the newly allocated snapshot ID
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io, rados_snap_t snapid);
 
@@ -670,7 +670,7 @@ int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io, rados_snap_t snapid);
  * @param io the pool in which the object is stored
  * @param oid the name of the object to rollback
  * @param snapid which snapshot to rollback to
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid, rados_snap_t snapid);
 
@@ -683,7 +683,7 @@ int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid, rad
  * @param seq the newest snapshot sequence number for the pool
  * @param snaps array of snapshots in sorted by descending id
  * @param num_snaps how many snaphosts are in the snaps array
- * @return 0 on success, negative error code on failure.
+ * @returns 0 on success, negative error code on failure.
  * -EINVAL is returned if snaps are not in descending order.
  */
 int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
@@ -698,7 +698,7 @@ int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, rados_snap_t se
  * @param io the pool to read from
  * @param snaps where to store the results
  * @param maxlen the number of rados_snap_t that fit in the snaps array
- * @return number of snapshots on success, negative error code on failure.
+ * @returns number of snapshots on success, negative error code on failure.
  * -ERANGE is returned if the snaps array is too short.
  */
 int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps, int maxlen);
@@ -709,7 +709,7 @@ int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps, int maxlen);
  * @param io the pool to read from
  * @param name the snapshot to find
  * @param id where to store the result
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_snap_lookup(rados_ioctx_t io, const char *name, rados_snap_t *id);
 
@@ -720,8 +720,8 @@ int rados_ioctx_snap_lookup(rados_ioctx_t io, const char *name, rados_snap_t *id
  * @param id the snapshot to find
  * @param name where to store the result
  * @param maxlen the size of the name array
- * @return 0 on success, negative error code on failure
- * @return -ERANGE if the name array is too small
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the name array is too small
  */
 int rados_ioctx_snap_get_name(rados_ioctx_t io, rados_snap_t id, char *name, int maxlen);
 
@@ -731,7 +731,7 @@ int rados_ioctx_snap_get_name(rados_ioctx_t io, rados_snap_t id, char *name, int
  * @param io the pool the snapshot was taken in
  * @param id the snapshot to lookup
  * @param t where to store the result
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 
@@ -757,7 +757,7 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
  * written via this io context
  *
  * @param io the io context to check
- * @return last read or written object version
+ * @returns last read or written object version
  */
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
@@ -769,7 +769,7 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
  * @param buf data to write
  * @param len length of the data, in bytes
  * @param off byte offset in the object to begin writing at
- * @return number of bytes written on success, negative error code on
+ * @returns number of bytes written on success, negative error code on
  * failure
  */
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
@@ -784,7 +784,7 @@ int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, 
  * @param oid name of the object
  * @param buf data to write
  * @param len length of the data, in bytes
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
 
@@ -804,7 +804,7 @@ int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t 
  * @param src the name of the source object
  * @param src_off the offset within the source object (in bytes)
  * @param len how much data to copy
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
                       const char *src, uint64_t src_off, size_t len);
@@ -816,7 +816,7 @@ int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
  * @param oid the name of the object
  * @param buf the data to append
  * @param len length of buf (in bytes)
- * @return number of bytes written on success, negative error code on
+ * @returns number of bytes written on success, negative error code on
  * failure
  */
 int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
@@ -832,7 +832,7 @@ int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
  * @param buf where to store the results
  * @param len the number of bytes to read
  * @param off the offset to start reading from in the object
- * @return number of bytes read on success, negative error code on
+ * @returns number of bytes read on success, negative error code on
  * failure
  */
 int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off);
@@ -844,7 +844,7 @@ int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_
  *
  * @param io the pool to delete the object from
  * @param oid the name of the object to delete
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_remove(rados_ioctx_t io, const char *oid);
 
@@ -857,7 +857,7 @@ int rados_remove(rados_ioctx_t io, const char *oid);
  * @param io the context in which to truncate
  * @param oid the name of the object
  * @param size the new size of the object in bytes
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
 
@@ -879,7 +879,7 @@ int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
  * @param name which extended attribute to read
  * @param buf where to store the result
  * @param len size of buf in bytes
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
 
@@ -891,7 +891,7 @@ int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf,
  * @param name which extended attribute to set
  * @param buf what to store in the xattr
  * @param len the number of bytes in buf
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, size_t len);
 
@@ -901,7 +901,7 @@ int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char
  * @param io the context in which to delete the xattr
  * @param o the name of the object
  * @param name which xattr to delete
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name);
 
@@ -913,7 +913,7 @@ int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name);
  * @param io the context in which to list xattrs
  * @param oid name of the object
  * @param iter where to store the iterator
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_getxattrs(rados_ioctx_t io, const char *oid, rados_xattrs_iter_t *iter);
 
@@ -930,7 +930,7 @@ int rados_getxattrs(rados_ioctx_t io, const char *oid, rados_xattrs_iter_t *iter
  * @param name where to store the name of the next xattr
  * @param val where to store the value of the next xattr
  * @param len the number of bytes in val
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_getxattrs_next(rados_xattrs_iter_t iter, const char **name,
 			 const char **val, size_t *len);
@@ -955,7 +955,7 @@ void rados_getxattrs_end(rados_xattrs_iter_t iter);
  * @param o object name
  * @param psize where to store object size
  * @param pmtime where to store modification time
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime);
 
@@ -1003,7 +1003,7 @@ int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
  * @param o object name
  * @param cmdbuf command buffer
  * @param cmdbuflen command buffer length in bytes
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
 
@@ -1027,7 +1027,7 @@ int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_
  * @param o object name
  * @param buf buffer
  * @param buflen buffer length in bytes
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t buflen);
 
@@ -1041,7 +1041,7 @@ int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t bufl
  * @param o object name
  * @param buf buffer
  * @param buflen buffer length in bytes
- * @return 0 on success, negative error code on failure.
+ * @returns 0 on success, negative error code on failure.
  * -ERANGE is returned if buf isn't big enough
  */
 int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
@@ -1063,7 +1063,7 @@ int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
  * @param in_len length of in_buf in bytes
  * @param buf where to store output
  * @param out_len length of buf in bytes
- * @return For methods that return data, the length of the output, or
+ * @returns For methods that return data, the length of the output, or
  * -ERANGE if out_buf does not have enough space to store it. For
  * methods that don't return data, the return value is
  * method-specific.
@@ -1117,7 +1117,7 @@ typedef void (*rados_callback_t)(rados_completion_t cb, void *arg);
  * @param cb_safe the function to be called when the operation is on
  * stable storage on all replicas
  * @param pc where to store the completion
- * @return 0
+ * @returns 0
  */
 int rados_aio_create_completion(void *cb_arg, rados_callback_t cb_complete, rados_callback_t cb_safe,
 				rados_completion_t *pc);
@@ -1130,7 +1130,7 @@ int rados_aio_create_completion(void *cb_arg, rados_callback_t cb_complete, rado
  * @bug this should be void
  *
  * @param c operation to wait for
- * @return 0
+ * @returns 0
  */
 int rados_aio_wait_for_complete(rados_completion_t c);
 
@@ -1142,7 +1142,7 @@ int rados_aio_wait_for_complete(rados_completion_t c);
  * @bug this should be void
  *
  * @param c operation to wait for
- * @return 0
+ * @returns 0
  */
 int rados_aio_wait_for_safe(rados_completion_t c);
 
@@ -1153,7 +1153,7 @@ int rados_aio_wait_for_safe(rados_completion_t c);
  * finished
  *
  * @param c async operation to inspect
- * @return whether c is complete
+ * @returns whether c is complete
  */
 int rados_aio_is_complete(rados_completion_t c);
 
@@ -1164,7 +1164,7 @@ int rados_aio_is_complete(rados_completion_t c);
  * finished
  *
  * @param c async operation to inspect
- * @return whether c is safe
+ * @returns whether c is safe
  */
 int rados_aio_is_safe(rados_completion_t c);
 
@@ -1180,7 +1180,7 @@ int rados_aio_is_safe(rados_completion_t c);
  * message is received before the complete message
  *
  * @param c async operation to inspect
- * @return return value of the operation (see sychronous version of
+ * @returns return value of the operation (see sychronous version of
  * operation for expected values)
  */
 int rados_aio_get_return_value(rados_completion_t c);
@@ -1206,7 +1206,7 @@ void rados_aio_release(rados_completion_t c);
  * @param buf data to write
  * @param len length of the data, in bytes
  * @param off byte offset in the object to begin writing at
- * @return 0 on success, -EROFS if the io context specifies a snap_seq
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
  * other than CEPH_NOSNAP
  */
 int rados_aio_write(rados_ioctx_t io, const char *oid,
@@ -1223,7 +1223,7 @@ int rados_aio_write(rados_ioctx_t io, const char *oid,
  * @param completion what to do when the append is safe and complete
  * @param buf the data to append
  * @param len length of buf (in bytes)
- * @return 0 on success, -EROFS if the io context specifies a snap_seq
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
  * other than CEPH_NOSNAP
  */
 int rados_aio_append(rados_ioctx_t io, const char *oid,
@@ -1242,7 +1242,7 @@ int rados_aio_append(rados_ioctx_t io, const char *oid,
  * @param completion what to do when the write_full is safe and complete
  * @param buf data to write
  * @param len length of the data, in bytes
- * @return 0 on success, -EROFS if the io context specifies a snap_seq
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
  * other than CEPH_NOSNAP
  */
 int rados_aio_write_full(rados_ioctx_t io, const char *oid,
@@ -1263,7 +1263,7 @@ int rados_aio_write_full(rados_ioctx_t io, const char *oid,
  * @param buf where to store the results
  * @param len the number of bytes to read
  * @param off the offset to start reading from in the object
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_aio_read(rados_ioctx_t io, const char *oid,
 		   rados_completion_t completion,
@@ -1279,7 +1279,7 @@ int rados_aio_read(rados_ioctx_t io, const char *oid,
  * @bug always returns 0, should be void or accept a timeout
  *
  * @param io the context to flush
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_aio_flush(rados_ioctx_t io);
 
@@ -1336,7 +1336,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @param handle where to store the internal id assigned to this watch
  * @param watchcb what to do when a notify is received on this object
  * @param arg application defined data to pass when watchcb is called
- * @return 0 on success, negative error code on failure. -ERANGE is
+ * @returns 0 on success, negative error code on failure. -ERANGE is
  * returned, and the watch is not registered, if the version of the
  * object is greater than ver.
  */
@@ -1352,7 +1352,7 @@ int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,
  * @param io the pool the object is in
  * @param o the name of the watched object
  * @param handle which watch to unregister
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
 
@@ -1370,7 +1370,7 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
  * @param ver obsolete - just pass zero
  * @param buf data to send to watchers
  * @param buf_len length of buf in bytes
- * @return 0 on success, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
 
