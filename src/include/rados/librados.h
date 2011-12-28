@@ -503,7 +503,11 @@ int64_t rados_ioctx_get_id(rados_ioctx_t io);
 
 /** @} pools */
 
-
+/**
+ * @defgroup obj_loc Object Locators
+ *
+ * @{
+ */
 
 /**
  * Set the key for mapping objects to pgs within an io context.
@@ -521,6 +525,7 @@ int64_t rados_ioctx_get_id(rados_ioctx_t io);
  * any previously set key
  */
 void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
+/** @} obj_loc */
 
 /**
  * @defgroup list_obj Listing Objects
