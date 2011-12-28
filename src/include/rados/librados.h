@@ -968,28 +968,28 @@ int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
  * command code, whose value is one of CEPH_OSD_TMAP_*.
  *
  *  - update tmap 'header'
- *    1 byte  = CEPH_OSD_TMAP_HDR
- *    4 bytes = data length (little endian)
- *    N bytes = data
+ *    - 1 byte  = CEPH_OSD_TMAP_HDR
+ *    - 4 bytes = data length (little endian)
+ *    - N bytes = data
  *
  *  - insert/update one key/value pair
- *    1 byte  = CEPH_OSD_TMAP_SET
- *    4 bytes = key name length (little endian)
- *    N bytes = key name
- *    4 bytes = data length (little endian)
- *    M bytes = data
+ *    - 1 byte  = CEPH_OSD_TMAP_SET
+ *    - 4 bytes = key name length (little endian)
+ *    - N bytes = key name
+ *    - 4 bytes = data length (little endian)
+ *    - M bytes = data
  *
  *  - insert one key/value pair; return -EEXIST if it already exists.
- *    1 byte  = CEPH_OSD_TMAP_CREATE
- *    4 bytes = key name length (little endian)
- *    N bytes = key name
- *    4 bytes = data length (little endian)
- *    M bytes = data
+ *    - 1 byte  = CEPH_OSD_TMAP_CREATE
+ *    - 4 bytes = key name length (little endian)
+ *    - N bytes = key name
+ *    - 4 bytes = data length (little endian)
+ *    - M bytes = data
  *
  *  - remove one key/value pair
- *    1 byte  = CEPH_OSD_TMAP_RM
- *    4 bytes = key name length (little endian)
- *    N bytes = key name
+ *    - 1 byte  = CEPH_OSD_TMAP_RM
+ *    - 4 bytes = key name length (little endian)
+ *    - N bytes = key name
  *
  * Restrictions:
  *  - The HDR update must preceed any key/value updates.
@@ -1002,8 +1002,8 @@ int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
  * @param io ioctx
  * @param o object name
  * @param cmdbuf command buffer
- * @param cmdbuflen command buffer length
- * @return 0 for success or negative error code
+ * @param cmdbuflen command buffer length in bytes
+ * @return 0 on success, negative error code on failure
  */
 int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
 
@@ -1013,20 +1013,21 @@ int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_
  * Put a full tmap object into the store, replacing what was there.
  *
  * The format of buf is:
- *    4 bytes - length of header (little endian)
- *    N bytes - header data
- *    4 bytes - number of keys (little endian)
+ * - 4 bytes - length of header (little endian)
+ * - N bytes - header data
+ * - 4 bytes - number of keys (little endian)
+ *
  * and for each key,
- *    4 bytes - key name length (little endian)
- *    N bytes - key name
- *    4 bytes - value length (little endian)
- *    M bytes - value data
+ * - 4 bytes - key name length (little endian)
+ * - N bytes - key name
+ * - 4 bytes - value length (little endian)
+ * - M bytes - value data
  *
  * @param io ioctx
  * @param o object name
  * @param buf buffer
- * @param buflen buffer length
- * @return 0 for success or negative error code
+ * @param buflen buffer length in bytes
+ * @return 0 on success, negative error code on failure
  */
 int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t buflen);
 
@@ -1034,14 +1035,14 @@ int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t bufl
  * Fetch complete tmap (trivial map) object
  *
  * Read a full tmap object.  See rados_tmap_put() for the format the
- * data is returned in.  If the supplied buffer isn't big enough,
- * returns -ERANGE.
+ * data is returned in.
  *
  * @param io ioctx
  * @param o object name
  * @param buf buffer
- * @param buflen buffer length
- * @return 0 for success or negative error code
+ * @param buflen buffer length in bytes
+ * @return 0 on success, negative error code on failure.
+ * -ERANGE is returned if buf isn't big enough
  */
 int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
 
