@@ -33,7 +33,7 @@ extern "C" {
 #define LIBRADOS_SUPPORTS_WATCH 1
 
 /**
- * @defgroup xattr_comp xattr comparison operations
+ * @defgroup librados_h_xattr_comp xattr comparison operations
  * @bug there's no way to use these in the C api
  * @{
  */
@@ -151,7 +151,7 @@ struct rados_cluster_stat_t {
 void rados_version(int *major, int *minor, int *extra);
 
 /**
- * @defgroup init Setup and Teardown
+ * @defgroup librados_h_init Setup and Teardown
  * These are the first and last functions to that should be called
  * when using librados.
  *
@@ -220,7 +220,7 @@ void rados_shutdown(rados_t cluster);
 /** @} init */
 
 /**
- * @defgroup config Configuration
+ * @defgroup librados_h_config Configuration
  * These functions read and update Ceph configuration for a cluster
  * handle. Any configuration changes must be done before connecting to
  * the cluster.
@@ -334,7 +334,7 @@ int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 
 
 /**
- * @defgroup pools Pools
+ * @defgroup librados_h_pools Pools
  *
  * RADOS pools are separate namespaces for objects. Pools may have
  * different crush rules associated with them, so they could have
@@ -504,7 +504,7 @@ int64_t rados_ioctx_get_id(rados_ioctx_t io);
 /** @} pools */
 
 /**
- * @defgroup obj_loc Object Locators
+ * @defgroup librados_h_obj_loc Object Locators
  *
  * @{
  */
@@ -528,7 +528,7 @@ void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
 /** @} obj_loc */
 
 /**
- * @defgroup list_obj Listing Objects
+ * @defgroup librados_h_list_obj Listing Objects
  * @{
  */
 /**
@@ -564,7 +564,7 @@ void rados_objects_list_close(rados_list_ctx_t ctx);
 /** @} Listing Objects */
 
 /**
- * @defgroup snaps Snapshots
+ * @defgroup librados_h_snaps Snapshots
  *
  * RADOS snapshots are based upon sequence numbers that form a
  * snapshot context. They are pool-specific. The snapshot context
@@ -738,7 +738,7 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 /** @} Snapshots */
 
 /**
- * @defgroup synch_io Synchronous I/O
+ * @defgroup librados_h_synch_io Synchronous I/O
  * Writes are replicated to a number of OSDs based on the
  * configuration of the pool they are in. These write functions block
  * until data is in memory on all replicas of the object they're
@@ -862,7 +862,7 @@ int rados_remove(rados_ioctx_t io, const char *oid);
 int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
 
 /**
- * @defgroup xattrs Xattrs
+ * @defgroup librados_h_xattrs Xattrs
  * Extended attributes are stored as extended attributes on the files
  * representing an object on the OSDs. Thus, they have the same
  * limitations as the underlying filesystem. On ext4, this means that
@@ -1074,7 +1074,7 @@ int rados_exec(rados_ioctx_t io, const char *oid, const char *cls, const char *m
 /** @} Synchronous I/O */
 
 /**
- * @defgroup asynch_io Asynchronous I/O
+ * @defgroup librados_h_asynch_io Asynchronous I/O
  * Read and write to objects without blocking.
  *
  * @{
@@ -1285,7 +1285,7 @@ int rados_aio_flush(rados_ioctx_t io);
 /** @} Asynchronous I/O */
 
 /**
- * @defgroup watch_notify Watch/Notify
+ * @defgroup librados_h_watch_notify Watch/Notify
  *
  * Watch/notify is a protocol to help communicate among clients. It
  * can be used to sychronize client state. All that's needed is a
