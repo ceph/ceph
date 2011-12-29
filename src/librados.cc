@@ -952,7 +952,12 @@ int librados::RadosClient::connect()
   ldout(cct, 1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   ldout(cct, 1) << "calling monclient init" << dendl;
-  monclient.init();
+  err = monclient.init();
+  if (err) {
+    ldout(cct, 0) << conf->name << " initialization error " << cpp_strerror(-err) << dendl;
+    shutdown();
+    goto out;
+  }
 
   err = monclient.authenticate(conf->client_mount_timeout);
   if (err) {
