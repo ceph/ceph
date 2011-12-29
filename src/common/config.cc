@@ -424,6 +424,28 @@ void md_config_t::apply_changes(std::ostringstream *oss)
   changed.clear();
 }
 
+void md_config_t::call_all_observers()
+{
+  Mutex::Locker l(lock);
+
+  // Expand all metavariables
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = config_optionsp + i;
+    if (opt->type == OPT_STR) {
+      std::string *str = (std::string *)opt->conf_ptr(this);
+      expand_meta(*str);
+    }
+  }
+
+  std::map<md_config_obs_t*,std::set<std::string> > obs;
+  for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r)
+    obs[r->second].insert(r->first);
+  for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
+       p != obs.end();
+       ++p)
+    p->first->handle_conf_change(this, p->second);
+}
+
 int md_config_t::injectargs(const std::string& s, std::ostringstream *oss)
 {
   int ret;
