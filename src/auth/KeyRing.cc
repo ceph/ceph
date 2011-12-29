@@ -23,6 +23,7 @@
 #include "common/ConfUtils.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/errno.h"
 #include "include/str_list.h"
 
 #define DOUT_SUBSYS auth
@@ -32,7 +33,7 @@
 using std::auto_ptr;
 using namespace std;
 
-KeyRing *KeyRing::from_ceph_context(CephContext *cct)
+int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
 {
   const md_config_t *conf = cct->_conf;
   bool found_key = false;
@@ -42,7 +43,8 @@ KeyRing *KeyRing::from_ceph_context(CephContext *cct)
 
   if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
     ldout(cct, 2) << "KeyRing::from_ceph_context: CephX auth is not supported." << dendl;
-    return keyring.release();
+    *pkeyring = keyring.release();
+    return 0;
   }
 
   int ret = 0;
@@ -51,9 +53,8 @@ KeyRing *KeyRing::from_ceph_context(CephContext *cct)
     ret = keyring->load(cct, filename);
     if (ret) {
       lderr(cct) << "KeyRing::from_ceph_context: failed to load " << filename
-		 << ": error " << ret << dendl;
-    }
-    else {
+		 << ": " << cpp_strerror(ret) << dendl;
+    } else {
       found_key = true;
     }
   }
@@ -72,7 +73,7 @@ KeyRing *KeyRing::from_ceph_context(CephContext *cct)
       int res = fread(buf, 1, sizeof(buf) - 1, fp);
       if (res < 0) {
 	res = ferror(fp);
-	lderr(cct) << "KeyRing::from_ceph_conf: failed to read '" << conf->keyfile
+	lderr(cct) << "KeyRing::from_ceph_context: failed to read '" << conf->keyfile
 		   << "'" << dendl;
       }
       else {
@@ -83,12 +84,21 @@ KeyRing *KeyRing::from_ceph_context(CephContext *cct)
 	found_key = true;
       }
       fclose(fp);
+    } else {
+      ret = errno;
+      lderr(cct) << "KeyRing::conf_ceph_context: failed to open " << conf->keyfile
+		 << ": " << cpp_strerror(ret) << dendl;
     }
   }
 
-  if (!found_key)
-    return NULL;
-  return keyring.release();
+  if (!found_key) {
+    if (conf->keyring.length())
+      lderr(cct) << "failed to open keyring from " << conf->keyring << dendl;
+    return -ENOENT;
+  }
+
+  *pkeyring = keyring.release();
+  return 0;
 }
 
 KeyRing *KeyRing::create_empty()
