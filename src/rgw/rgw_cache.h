@@ -176,7 +176,7 @@ public:
                    map<std::string, bufferlist>* rmattrs);
 
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-              off_t ofs, size_t len);
+              off_t ofs, size_t len, bool exclusive);
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
@@ -310,7 +310,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
 
 template <class T>
 int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-              off_t ofs, size_t len)
+              off_t ofs, size_t len, bool exclusive)
 {
   rgw_bucket bucket;
   string oid;
@@ -327,7 +327,7 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
     info.status = 0;
     info.flags = CACHE_FLAG_DATA;
   }
-  int ret = T::put_obj_data(ctx, obj, data, ofs, len);
+  int ret = T::put_obj_data(ctx, obj, data, ofs, len, exclusive);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
