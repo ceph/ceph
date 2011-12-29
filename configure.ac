@@ -277,6 +277,12 @@ AM_CONDITIONAL(WITH_LIBATOMIC, [test "$HAVE_ATOMIC_OPS" = "1"])
 #            [],
 #            [with_newsyn=no])
 
+AC_ARG_WITH([ocf],
+            [AS_HELP_STRING([--with-ocf], [build OCF-compliant cluster resource agent])],
+            ,
+            [with_ocf=no])
+AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
+
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
@@ -375,6 +381,8 @@ AM_PATH_PYTHON([2.4],
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
+	src/ocf/Makefile
+	src/ocf/ceph
 	man/Makefile
 	ceph.spec])
 AC_OUTPUT
