@@ -554,8 +554,24 @@ protected:
     interval_set<uint64_t> data_subset, data_subset_pulling;
   };
   map<hobject_t, pull_info_t> pulling;
+
+  /*
+   * Backfill
+   *
+   * peer_info[backfill_target].last_backfill == info.last_backfill on the peer.
+   *
+   * objects prior to peer_info[backfill_target].last_backfill
+   *   - are on the peer
+   *   - are included in the peer stats
+   *
+   * objects between last_backfill and backfill_pos
+   *   - are on the peer or are in backfills_in_flight
+   *   - are not included in pg stats (yet)
+   *   - have their stats in pending_backfill_updates on the primary
+   */
   set<hobject_t> backfills_in_flight;
   map<hobject_t, pg_stat_t> pending_backfill_updates;
+  hobject_t backfill_pos;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;

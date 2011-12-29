@@ -137,10 +137,11 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
       return true;
 
     // Object is degraded if after last_backfill AND
-    // we have started backfilling it
-    if (peer_info[peer].last_backfill <= soid &&
-	pending_backfill_updates.size() &&
-	pending_backfill_updates.rbegin()->first >= soid)
+    // we have are backfilling it
+    if (peer == backfill_target &&
+	peer_info[peer].last_backfill <= soid &&
+	backfill_pos >= soid &&
+	backfills_in_flight.count(soid))
       return true;
   }
   return false;
@@ -2761,6 +2762,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     Info& pinfo = peer_info[backfill_target];
     if (soid < pinfo.last_backfill)
       pinfo.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+    else if (soid < backfill_pos)
+      pending_backfill_updates[soid].stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
   }
 
   return result;
@@ -3047,9 +3050,9 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
       wr->set_data(repop->ctx->op->get_data());   // _copy_ bufferlist
     } else {
       // ship resulting transaction, log entries, and pg_stats
-      if (soid > pinfo.last_backfill) {
-	dout(10) << "issue_repop shipping empty opt to osd." << peer << ", object beyond last_backfill "
-		 << pinfo.last_backfill << dendl;
+      if (peer == backfill_target && soid >= backfill_pos) {
+	dout(10) << "issue_repop shipping empty opt to osd." << peer << ", object beyond backfill_pos "
+		 << backfill_pos << ", last_backfill is " << pinfo.last_backfill << dendl;
 	ObjectStore::Transaction t;
 	::encode(t, wr->get_data());
       } else {
@@ -5070,6 +5073,7 @@ void ReplicatedPG::_clear_recovery_state()
 #ifdef DEBUG_RECOVERY_OIDS
   recovering_oids.clear();
 #endif
+  backfill_pos = hobject_t();
   backfills_in_flight.clear();
   pending_backfill_updates.clear();
   pulling.clear();
@@ -5465,10 +5469,10 @@ int ReplicatedPG::recover_backfill(int max)
     backfill_info.reset(pinfo.last_backfill);
   }
 
-  hobject_t pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+  backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
   dout(10) << " peer osd." << backfill_target
-	   << " pos " << pos
+	   << " pos " << backfill_pos
 	   << " info " << pinfo
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
@@ -5477,10 +5481,10 @@ int ReplicatedPG::recover_backfill(int max)
   // FIXME: we could track the eversion_t when we last scanned, and invalidate
   // that way.  or explicitly modify/invalidate when we actually change specific
   // objects.
-  dout(10) << " rescanning local backfill_info from " << pos << dendl;
+  dout(10) << " rescanning local backfill_info from " << backfill_pos << dendl;
   backfill_info.clear();
   osr.flush();
-  scan_range(pos, 10, 20, &backfill_info);
+  scan_range(backfill_pos, 10, 20, &backfill_info);
 
   int ops = 0;
   map<hobject_t, pair<eversion_t, eversion_t> > to_push;
@@ -5497,7 +5501,7 @@ int ReplicatedPG::recover_backfill(int max)
       scan_range(backfill_info.end, 10, 20, &backfill_info);
       backfill_info.trim();
     }
-    pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+    backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
     dout(20) << "   my backfill " << backfill_info.begin << "-" << backfill_info.end
 	     << " " << backfill_info.objects << dendl;
@@ -5552,7 +5556,7 @@ int ReplicatedPG::recover_backfill(int max)
       ops++;
     }
   }
-  pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+  backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
   for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
@@ -5575,7 +5579,7 @@ int ReplicatedPG::recover_backfill(int max)
   }
 
   hobject_t bound = backfills_in_flight.size() ?
-    *(backfills_in_flight.begin()) : pos;
+    *(backfills_in_flight.begin()) : backfill_pos;
   if (bound > pinfo.last_backfill) {
     pinfo.last_backfill = bound;
     for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
