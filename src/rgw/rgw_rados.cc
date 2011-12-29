@@ -1509,6 +1509,8 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   string etag;
   string content_type;
   bufferlist acl_bl;
+  bool update_index = (category == RGW_OBJ_CATEGORY_MAIN ||
+                       category == RGW_OBJ_CATEGORY_MULTIMETA);
 
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -1584,9 +1586,13 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   string tag;
   uint64_t epoch = 0;
-  int ret = prepare_update_index(state, bucket, dst_obj, tag);
-  if (ret < 0)
-    goto done;
+  int ret;
+
+  if (update_index) {
+    ret = prepare_update_index(state, bucket, dst_obj, tag);
+    if (ret < 0)
+      goto done;
+  }
 
   ret = io_ctx.operate(dst_oid, &op);
 
@@ -1595,7 +1601,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 done:
   atomic_write_finish(state, ret);
 
-  if (ret >= 0) {
+  if (update_index && ret >= 0) {
     ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
                                 ut, etag, content_type, &acl_bl, category);
   }
