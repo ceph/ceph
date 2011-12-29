@@ -2,6 +2,36 @@
  Documenting Ceph
 ==================
 
+Code Documentation
+==================
+
+C and C++ can be documented with Doxygen_, using the subset of Doxygen
+markup supported by Asphyxiate_.
+
+.. _Doxygen: http://www.stack.nl/~dimitri/doxygen/
+.. _Asphyxiate: https://github.com/NewDreamNetwork/asphyxiate
+
+The general format for function documentation is::
+
+  /**
+   * Short description
+   *
+   * Detailed description when necessary
+   *
+   * preconditons, postconditions, warnings, bugs or other notes
+   *
+   * parameter reference
+   * return value (if non-void)
+   */
+
+This should be in the header where the function is declared, and
+functions should be grouped into logical categories. The `librados C
+API`_ provides a complete example. It is pulled into Sphinx by
+`librados.rst`_, which is rendered at :doc:`/api/librados`.
+
+.. _`librados C API`: https://github.com/NewDreamNetwork/ceph/blob/master/src/include/rados/librados.h
+.. _`librados.rst`: https://raw.github.com/NewDreamNetwork/ceph/master/doc/api/librados.rst
+
 Drawing diagrams
 ================
 
