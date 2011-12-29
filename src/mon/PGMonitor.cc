@@ -427,7 +427,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   int from = stats->get_orig_source().num();
 
   if (stats->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_statfs on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
+    dout(0) << "prepare_pg_stats on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
     stats->put();
     return false;
   }
