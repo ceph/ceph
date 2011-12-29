@@ -1,3 +1,9 @@
+# The test cases in this file have been annotated for inventory.
+# To extract the inventory (in csv format) use the command:
+#
+#   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
+#
+
 from cStringIO import StringIO
 import logging
 import json
@@ -68,12 +74,16 @@ def task(ctx, config):
     secret_key2='Q8Tk6Q/27hfbFSYdSkPtUqhqx1GgzvpXa4WARozh'
     swift_secret1='gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
     swift_secret2='ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
-    
+
     bucket_name='myfoo'
 
-    # create
+    # legend (test cases can be easily grep-ed out)
+    # TESTCASE 'testname','object','method','operation','assertion'
+    # TESTCASE 'info-nosuch','user','info','non-existent user','fails'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert err
+
+    # TESTCASE 'create-ok','user','create','w/all valid info','succeeds'
     (err, out) = rgwadmin(ctx, client, [
             'user', 'create',
             '--uid', user,
@@ -83,6 +93,8 @@ def task(ctx, config):
             '--secret', secret_key
             ])
     assert not err
+
+    # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert not err
     assert out['user_id'] == user
@@ -93,33 +105,39 @@ def task(ctx, config):
     assert out['keys'][0]['secret_key'] == secret_key
     assert not out['suspended']
 
-    # suspend
+    # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'suspend', '--uid', user])
     assert not err
+
+    # TESTCASE 'suspend-suspended','user','suspend','suspended user','succeeds w/advisory'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert not err
     assert out['suspended']
 
-    # enable
+    # TESTCASE 're-enable','user','enable','suspended user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'enable', '--uid', user])
     assert not err
+
+    # TESTCASE 'info-re-enabled','user','info','re-enabled user','no longer suspended'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert not err
     assert not out['suspended']
 
-    # add key
+    # TESTCASE 'add-keys','key','create','w/valid info','succeeds'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'create', '--uid', user,
             '--access-key', access_key2, '--secret', secret_key2,
             ])
     assert not err
+
+    # TESTCASE 'info-new-key','user','info','after key addition','returns all keys'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert not err
     assert len(out['keys']) == 2
     assert out['keys'][0]['access_key'] == access_key2 or out['keys'][1]['access_key'] == access_key2
     assert out['keys'][0]['secret_key'] == secret_key2 or out['keys'][1]['secret_key'] == secret_key2
 
-    # remove key
+    # TESTCASE 'rm-key','key','rm','newly added key','succeeds, key is removed'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'rm', '--uid', user,
             '--access-key', access_key2,
@@ -128,34 +146,38 @@ def task(ctx, config):
     assert len(out['keys']) == 1
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
-    
-    # add swift key
+
+    # TESTCASE 'add-swift-key','key','create','swift key','succeeds'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'create', '--subuser', subuser1,
             '--secret', swift_secret1,
             '--key-type', 'swift',
             ])
     assert not err
+
+    # TESTCASE 'info-swift-key','user','info','after key addition','returns all keys'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert not err
     assert len(out['swift_keys']) == 1
     assert out['swift_keys'][0]['user'] == subuser1
     assert out['swift_keys'][0]['secret_key'] == swift_secret1
 
-    # add another swift key
+    # TESTCASE 'add-swift-subuser','key','create','swift sub-user key','succeeds'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'create', '--subuser', subuser2,
             '--secret', swift_secret2,
             '--key-type', 'swift',
             ])
     assert not err
+
+    # TESTCASE 'info-swift-subuser','user','info','after key addition','returns all sub-users/keys'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert not err
     assert len(out['swift_keys']) == 2
     assert out['swift_keys'][0]['user'] == subuser2 or out['swift_keys'][1]['user'] == subuser2
     assert out['swift_keys'][0]['secret_key'] == swift_secret2 or out['swift_keys'][1]['secret_key'] == swift_secret2
 
-    # remove first swift key
+    # TESTCASE 'rm-swift-key1','key','rm','subuser','succeeds, one key is removed'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'rm', '--subuser', subuser1,
             '--key-type', 'swift',
@@ -163,7 +185,7 @@ def task(ctx, config):
     assert not err
     assert len(out['swift_keys']) == 1
 
-     # remove second swift key
+    # TESTCASE 'rm-swift-key2','key','rm','subuser','succeeds, second key is removed'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'rm', '--subuser', subuser2,
             '--key-type', 'swift',
@@ -171,7 +193,7 @@ def task(ctx, config):
     assert not err
     assert len(out['swift_keys']) == 0
 
-   # no buckets yet
+    # TESTCASE 'bucket-stats','bucket','stats','no session/buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user])
     assert not err
     assert len(out) == 0
@@ -188,34 +210,38 @@ def task(ctx, config):
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
-    # create bucket
+    # TESTCASE 'bucket-stats2','bucket','stats','no buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user])
     assert not err
     assert len(out) == 0
 
+    # creat a first bucket
     bucket = connection.create_bucket(bucket_name)
 
+    # TESTCASE 'bucket-list','bucket','list','one bucket','succeeds, expected list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user])
     assert not err
     assert len(out) == 1
     assert out[0] == bucket_name
 
-    # it should be empty
+    # TESTCASE 'bucket-stats3','bucket','stats','new empty bucket','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, [
             'bucket', 'stats', '--bucket', bucket_name])
     assert not err
     assert out['owner'] == user
     bucket_id = out['id']
-    
-    # no buckets yet
+
+    # TESTCASE 'bucket-stats4','bucket','stats','new empty bucket','succeeds, expected bucket ID'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user])
     assert not err
     assert len(out) == 1
-    assert out[0]['id'] == bucket_id
+    assert out[0]['id'] == bucket_id    # does it return the same ID twice in a row?
 
     # use some space
     key = boto.s3.key.Key(bucket)
     key.set_contents_from_string('one')
+
+    # TESTCASE 'bucket-stats5','bucket','stats','after creating key','succeeds, lists one non-empty object'
     (err, out) = rgwadmin(ctx, client, [
             'bucket', 'stats', '--bucket-id', '%d' % bucket_id])
     assert not err
@@ -225,6 +251,8 @@ def task(ctx, config):
 
     # reclaim it
     key.delete()
+
+    # TESTCASE 'bucket-stats6','bucket','stats','after deleting key','succeeds, lists one no objects'
     (err, out) = rgwadmin(ctx, client, [
             'bucket', 'stats', '--bucket-id', '%d' % bucket_id])
     assert not err
@@ -232,11 +260,13 @@ def task(ctx, config):
     assert out['usage']['rgw.main']['num_objects'] == 0
 
     # list log objects
+    # TESTCASE 'log-list','log','list','after activity','succeeds, lists one no objects'
     (err, out) = rgwadmin(ctx, client, ['log', 'list'])
     assert not err
     assert len(out) > 0
 
     for obj in out:
+        # TESTCASE 'log-show','log','show','after activity','returns expected info'
         (err, log) = rgwadmin(ctx, client, ['log', 'show', '--object', obj])
         assert not err
         assert len(log) > 0
@@ -247,29 +277,35 @@ def task(ctx, config):
             assert entry['bucket'] == bucket_name
             assert entry['user'] == user
 
+        # TESTCASE 'log-rm','log','rm','delete log objects','succeeds'
         (err, out) = rgwadmin(ctx, client, ['log', 'rm', '--object', obj])
         assert not err
 
     # TODO: show log by bucket+date
 
-    # user suspension
+    # TESTCASE 'user-suspend2','user','suspend','existing user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'suspend', '--uid', user])
     assert not err
 
+    # TESTCASE 'user-suspend3','user','suspend','suspended user','cannot write objects'
     try:
         key = boto.s3.key.Key(bucket)
         key.set_contents_from_string('two')
     except boto.exception.S3ResponseError as e:
         assert e.status == 403
 
+    # TESTCASE 'user-renable2','user','enable','suspended user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'enable', '--uid', user])
     assert not err
 
+    # TESTCASE 'user-renable3','user','enable','reenabled user','can write objects'
     key = boto.s3.key.Key(bucket)
     key.set_contents_from_string('three')
 
-    # remove user
+    # TESTCASE 'rm-user','user','rm','existing user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
     assert not err
+
+    # TESTCASE 'rm-user2','user','rm','deleted user','fails'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert err
