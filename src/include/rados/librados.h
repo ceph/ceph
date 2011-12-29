@@ -299,8 +299,8 @@ int rados_conf_parse_env(rados_t cluster, const char *var);
  * @param cluster cluster handle to configure
  * @param option option to set
  * @param value value of the option
- * @returns 0 on success, negative error code on failure. -ENOENT is
- * returned when the option is not a Ceph configuration option.
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when the option is not a Ceph configuration option
  */
 int rados_conf_set(rados_t cluster, const char *option, const char *value);
 
@@ -311,9 +311,9 @@ int rados_conf_set(rados_t cluster, const char *option, const char *value);
  * @param option which option to read
  * @param buf where to write the configuration value
  * @param len the size of buf in bytes
- * @returns 0 on success, negative error code on failure.
- * -ENAMETOOLONG is returned if the buffer is too short to contain the
- * requested value.
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENAMETOOLONG if the buffer is too short to contain the
+ * requested value
  */
 int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
 
@@ -683,8 +683,8 @@ int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid, rad
  * @param seq the newest snapshot sequence number for the pool
  * @param snaps array of snapshots in sorted by descending id
  * @param num_snaps how many snaphosts are in the snaps array
- * @returns 0 on success, negative error code on failure.
- * -EINVAL is returned if snaps are not in descending order.
+ * @returns 0 on success, negative error code on failure
+ * @returns -EINVAL if snaps are not in descending order
  */
 int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
@@ -698,8 +698,8 @@ int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, rados_snap_t se
  * @param io the pool to read from
  * @param snaps where to store the results
  * @param maxlen the number of rados_snap_t that fit in the snaps array
- * @returns number of snapshots on success, negative error code on failure.
- * -ERANGE is returned if the snaps array is too short.
+ * @returns number of snapshots on success, negative error code on failure
+ * @returns -ERANGE is returned if the snaps array is too short
  */
 int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps, int maxlen);
 
@@ -1041,8 +1041,8 @@ int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t bufl
  * @param o object name
  * @param buf buffer
  * @param buflen buffer length in bytes
- * @returns 0 on success, negative error code on failure.
- * -ERANGE is returned if buf isn't big enough
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if buf isn't big enough
  */
 int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
 
@@ -1063,8 +1063,8 @@ int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
  * @param in_len length of in_buf in bytes
  * @param buf where to store output
  * @param out_len length of buf in bytes
- * @returns For methods that return data, the length of the output, or
- * -ERANGE if out_buf does not have enough space to store it. For
+ * @returns the length of the output, or
+ * -ERANGE if out_buf does not have enough space to store it (For methods that return data). For
  * methods that don't return data, the return value is
  * method-specific.
  */
@@ -1180,8 +1180,7 @@ int rados_aio_is_safe(rados_completion_t c);
  * message is received before the complete message
  *
  * @param c async operation to inspect
- * @returns return value of the operation (see sychronous version of
- * operation for expected values)
+ * @returns return value of the operation
  */
 int rados_aio_get_return_value(rados_completion_t c);
 
@@ -1198,7 +1197,8 @@ void rados_aio_release(rados_completion_t c);
 /**
  * Write data to an object asynchronously
  *
- * Queues the write and returns.
+ * Queues the write and returns. The return value of the completion
+ * will be 0 on success, negative error code on failure.
  *
  * @param io the context in which the write will occur
  * @param oid name of the object
@@ -1217,6 +1217,9 @@ int rados_aio_write(rados_ioctx_t io, const char *oid,
  * Asychronously append data to an object
  *
  * Queues the append and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
  *
  * @param io the context to operate in
  * @param oid the name of the object
@@ -1237,6 +1240,9 @@ int rados_aio_append(rados_ioctx_t io, const char *oid,
  * it is atomically truncated and then written.
  * Queues the write_full and returns.
  *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
  * @param io the io context in which the write will occur
  * @param oid name of the object
  * @param completion what to do when the write_full is safe and complete
@@ -1254,6 +1260,9 @@ int rados_aio_write_full(rados_ioctx_t io, const char *oid,
  *
  * The io context determines the snapshot to read from, if any was set
  * by rados_ioctx_snap_set_read().
+ *
+ * The return value of the completion will be number of bytes read on
+ * success, negative error code on failure.
  *
  * @note only the 'complete' callback of the completion will be called.
  *
@@ -1336,9 +1345,8 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @param handle where to store the internal id assigned to this watch
  * @param watchcb what to do when a notify is received on this object
  * @param arg application defined data to pass when watchcb is called
- * @returns 0 on success, negative error code on failure. -ERANGE is
- * returned, and the watch is not registered, if the version of the
- * object is greater than ver.
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the version of the object is greater than ver
  */
 int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,
                 rados_watchcb_t watchcb, void *arg);
