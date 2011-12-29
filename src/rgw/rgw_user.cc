@@ -439,6 +439,18 @@ int rgw_delete_user(RGWUserInfo& info) {
     }
   }
 
+  map<string, RGWAccessKey>::iterator siter = info.swift_keys.begin();
+  for (; siter != info.swift_keys.end(); ++siter) {
+    RGWAccessKey& k = siter->second;
+    dout(0) << "removing swift subuser index: " << k.id << dendl;
+    /* check if swift mapping exists */
+    ret = rgw_remove_swift_name_index(k.id);
+    if (ret < 0 && ret != -ENOENT) {
+      dout(0) << "ERROR: could not remove " << k.id << " (swift name object), should be fixed (err=" << ret << ")" << dendl;
+      return ret;
+    }
+  }
+
   rgw_obj email_obj(ui_email_bucket, info.user_email);
   dout(0) << "removing email index: " << info.user_email << dendl;
   ret = rgwstore->delete_obj(NULL, email_obj);
