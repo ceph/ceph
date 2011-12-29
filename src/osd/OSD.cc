@@ -692,7 +692,13 @@ int OSD::init()
 
   osd_lock.Unlock();
 
-  monc->authenticate();
+  r = monc->authenticate();
+  if (r < 0) {
+    monc->shutdown();
+    store->umount();
+    return r;
+  }
+
   monc->wait_auth_rotating(30.0);
 
   osd_lock.Lock();
