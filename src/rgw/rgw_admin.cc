@@ -865,6 +865,8 @@ int main(int argc, char **argv)
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
+    remove_old_indexes(old_info, info);
+
     show_user_info(info, formatter);
     break;
 
