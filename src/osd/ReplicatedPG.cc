@@ -4230,7 +4230,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 		   pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
-      if (backfills_in_flight.count(soid) && peer == backfill_target)
+      if (peer == backfill_target && backfills_in_flight.count(soid))
 	backfills_in_flight.erase(soid);
       else
 	peer_missing[peer].got(soid, pi->version);
