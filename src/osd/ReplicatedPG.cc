@@ -566,10 +566,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
   map<hobject_t,ObjectContext*> src_obc;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     OSDOp& osd_op = *p;
-    object_locator_t src_oloc;
-    get_src_oloc(op->get_oid(), op->get_object_locator(), src_oloc);
-    hobject_t toid(osd_op.soid, src_oloc.key, op->get_pg().ps());
+    if (!ceph_osd_op_type_multi(osd_op.op.op))
+      continue;
     if (osd_op.soid.oid.name.length()) {
+      object_locator_t src_oloc;
+      get_src_oloc(op->get_oid(), op->get_object_locator(), src_oloc);
+      hobject_t toid(osd_op.soid, src_oloc.key, op->get_pg().ps());
       if (!src_obc.count(toid)) {
 	ObjectContext *sobc;
 	snapid_t ssnapid;
@@ -609,7 +611,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
       }
       // Error cleanup below
     } else {
-      continue;
+      dout(10) << "no src oid specified for multi op " << osd_op << dendl;
+      osd->reply_op_error(op, -EINVAL);
+      op->put();
     }
     put_object_contexts(src_obc);
     put_object_context(obc);
