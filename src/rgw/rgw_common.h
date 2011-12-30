@@ -600,6 +600,8 @@ struct RGWBucketEnt {
   time_t mtime;
   uint64_t count;
 
+  RGWBucketEnt() : size(0), size_rounded(0), mtime(0), count(0) {}
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 4;
     ::encode(struct_v, bl);
