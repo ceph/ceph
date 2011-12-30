@@ -60,15 +60,12 @@ def task(ctx, config):
             )
 
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
-    remotes = []
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-        remotes.append(remote)
-
         proc = remote.run(
             args=['CEPH_CLIENT_ID={id_}'.format(id_=id_)] + args,
             logger=log.getChild('rados.{id}'.format(id=id_)),
