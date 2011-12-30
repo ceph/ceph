@@ -4,7 +4,6 @@ import os
 import logging
 import configobj
 import getpass
-import paramiko
 import socket
 import time
 import urllib2
@@ -319,12 +318,11 @@ def reconnect(ctx, timeout):
     contains this data, you can construct a context
     that is a subset of your full cluster.
     """
-    import errno
     log.info('Re-opening connections...')
     starttime = time.time()
     need_reconnect = ctx.cluster.remotes.keys()
-    while True:
-        for remote in list(need_reconnect):
+    while need_reconnect:
+        for remote in need_reconnect:
             try:
                 log.info('trying to connect to %s', remote.name)
                 from .orchestra import connection
@@ -333,28 +331,12 @@ def reconnect(ctx, timeout):
                     host_key=ctx.config['targets'][remote.name],
                     keep_alive=True,
                     )
-            except socket.timeout:
-                pass
-            except socket.error as e:
-                if hasattr(e, '__getitem__'):
-                    if e[0] not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
-                                errno.EHOSTUNREACH, errno.EHOSTDOWN]:
-                        log.exception('unknown socket error: %s', repr(e))
-                        raise
-                    else:
-                        if time.time() - starttime > timeout:
-                            raise
-                else:
-                    log.exception('weird socket error without error code')
-                    raise
-            except paramiko.SSHException:
+            except Exception:
                 if time.time() - starttime > timeout:
                     raise
             else:
                 need_reconnect.remove(remote)
 
-        if not need_reconnect:
-            break
         log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
         time.sleep(1)
 
