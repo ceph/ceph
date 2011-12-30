@@ -283,7 +283,7 @@ OPTION(osd_scrub_max_interval, OPT_FLOAT, 60*60*24)   // once a day
 OPTION(osd_auto_weight, OPT_BOOL, false)
 OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0)  // seconds
 OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0) // seconds
-OPTION(osd_class_dir, OPT_STR, "/usr/lib/rados-classes")
+OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes")
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
