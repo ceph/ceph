@@ -15,13 +15,13 @@ void TestOp::begin()
   _begin();
 }
 
-void TestOp::finish()
+void TestOp::finish(TestOp::CallbackInfo *info)
 {
-  _finish();
+  _finish(info);
   //if (stat && finished()) stat->end(this);
 }
 
 void callback(librados::completion_t cb, void *arg) {
   TestOp *op = static_cast<TestOp*>(arg);
-  op->finish();
+  op->finish(NULL);
 }

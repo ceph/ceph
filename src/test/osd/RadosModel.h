@@ -50,8 +50,29 @@ public:
 
   virtual ~TestOp();
 
+  /**
+   * This struct holds data to be passed by a callback
+   * to a TestOp::finish method.
+   */
+  struct CallbackInfo {
+    uint64_t id;
+    CallbackInfo(uint64_t id) : id(id) {}
+    virtual ~CallbackInfo() {};
+  };
+
   virtual void _begin() = 0;
-  virtual void _finish() = 0;
+
+  /**
+   * Called when the operation completes.
+   * This should be overridden by asynchronous operations.
+   *
+   * @param info information stored by a callback, or NULL -
+   *             useful for multi-operation TestOps
+   */
+  virtual void _finish(CallbackInfo *info)
+  {
+    return;
+  }
   virtual string getType() = 0;
   virtual bool finished()
   {
@@ -59,7 +80,7 @@ public:
   }
 
   void begin();
-  void finish();
+  void finish(CallbackInfo *info);
 };
 
 class TestOpGenerator {
@@ -322,7 +343,7 @@ public:
     }
   }
 
-  void _finish()
+  void _finish(CallbackInfo *info)
   {
     context->state_lock.Lock();
     assert(!done);
@@ -415,17 +436,6 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->state_lock.Unlock();
-    finish();
-  }
-
-  void _finish()
-  {
-    return;
-  }
-
-  bool finished()
-  {
-    return true;
   }
 
   string getType()
@@ -476,7 +486,7 @@ public:
     }
   }
 
-  void _finish()
+  void _finish(CallbackInfo *info)
   {
     context->state_lock.Lock();
     assert(!done);
@@ -537,13 +547,6 @@ public:
     context->state_lock.Lock();
     context->add_snap(snap);
     context->state_lock.Unlock();
-
-    finish();
-  }
-
-  void _finish()
-  {
-    return;
   }
 
   string getType()
@@ -570,12 +573,6 @@ public:
     context->state_lock.Unlock();
 
     assert(!context->io_ctx.selfmanaged_snap_remove(snap));
-    finish();
-  }
-
-  void _finish()
-  {
-    return;
   }
 
   string getType()
@@ -621,14 +618,7 @@ public:
       cerr << "r is " << r << std::endl;
       assert(0);
     }
-    finish();
   }
-
-  void _finish()
-  {
-    return;
-  }
-    
 
   string getType()
   {
