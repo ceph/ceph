@@ -50,7 +50,7 @@ cmp /tmp/img2 /tmp/img1.snap1
 
 # remove snapshots
 rbd snap rm --snap=snap1 testimg1
-rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: error 2: No such file or directory'
+rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
 
 rm -f $TMP_FILES
 
