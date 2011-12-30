@@ -28,6 +28,7 @@ using namespace __gnu_cxx;
 #include "hash.h"
 #include "encoding.h"
 #include "ceph_hash.h"
+#include "cmp.h"
 
 /* Maximum supported object name length for Ceph, in bytes.
  *
@@ -399,37 +400,9 @@ inline ostream& operator<<(ostream& out, const hobject_t& o)
   return out;
 }
 
-// sort hobject_t's by <get_filestore_key,name,snapid>
-inline bool operator==(const hobject_t &l, const hobject_t &r) {
-  return l.oid == r.oid && l.snap == r.snap && l.hash == r.hash && l.max == r.max;
-}
-inline bool operator!=(const hobject_t &l, const hobject_t &r) {
-  return l.oid != r.oid || l.snap != r.snap || l.hash != r.hash || l.max != r.max;
-}
-inline bool operator>(const hobject_t &l, const hobject_t &r) {
-  return l.max > r.max ||
-    (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() > r.get_effective_key() || 
-					      (l.get_effective_key() == r.get_effective_key() && l.snap > r.snap)))));
-}
-inline bool operator<(const hobject_t &l, const hobject_t &r) {
-  return l.max < r.max ||
-    (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() < r.get_effective_key() ||
-					      (l.get_effective_key() == r.get_effective_key() && l.snap < r.snap)))));
-}
-inline bool operator>=(const hobject_t &l, const hobject_t &r) {
-  return l.max > r.max ||
-    (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() > r.get_effective_key() ||
-					      (l.get_effective_key() == r.get_effective_key() && l.snap >= r.snap)))));
-}
-inline bool operator<=(const hobject_t &l, const hobject_t &r) {
-  return l.max < r.max ||
-    (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
-			(l.get_filestore_key() == r.get_filestore_key() && (l.get_effective_key() < r.get_effective_key() ||
-					      (l.get_effective_key() == r.get_effective_key() && l.snap <= r.snap)))));
-}
+WRITE_EQ_OPERATORS_5(hobject_t, oid, get_key(), snap, hash, max)
+// sort hobject_t's by <max, get_filestore_key(hash), key, oid, snapid>
+WRITE_CMP_OPERATORS_5(hobject_t, max, get_filestore_key(), get_effective_key(), oid, snap)
 
 
 // ---------------------------
