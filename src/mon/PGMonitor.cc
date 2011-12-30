@@ -141,14 +141,16 @@ void PGMonitor::tick()
   update_from_paxos();
   handle_osd_timeouts();
 
-  ratio_lock.Lock();
-  if (need_ratio_update) {
-    need_ratio_update = false;
-    pending_inc.full_ratio = new_full_ratio;
-    pending_inc.nearfull_ratio = new_nearfull_ratio;
-    propose_pending();
+  if (mon->is_leader()) {
+    ratio_lock.Lock();
+    if (need_ratio_update) {
+      need_ratio_update = false;
+      pending_inc.full_ratio = new_full_ratio;
+      pending_inc.nearfull_ratio = new_nearfull_ratio;
+      propose_pending();
+    }
+    ratio_lock.Unlock();
   }
-  ratio_lock.Unlock();
 
   dout(10) << pg_map << dendl;
 }
