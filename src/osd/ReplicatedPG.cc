@@ -4789,9 +4789,13 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
   for (unsigned i=1; i<acting.size(); ++i) {
-    assert(peer_missing[acting[i]].is_missing(oid));
-    eversion_t h = peer_missing[acting[i]].missing[oid].have;
-    dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << acting[i] << dendl;
+    int peer = acting[i];
+    if (!peer_missing[peer].is_missing(oid)) {
+      assert(peer == backfill_target);
+      continue;
+    }
+    eversion_t h = peer_missing[peer].missing[oid].have;
+    dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << peer << dendl;
     if (h > v)
       v = h;
   }
