@@ -12,7 +12,7 @@ def task(ctx, config):
 
     The config should be as follows::
 
-        testrados:
+        rados:
           clients: [client list]
           ops: <number of ops>
           objects: <number of objects to use>
@@ -23,7 +23,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - testrados:
+        - rados:
             clients: [client.0]
             ops: 1000
             objects: 25
@@ -31,10 +31,10 @@ def task(ctx, config):
             snaps: true
         - interactive:
     """
-    log.info('Beginning testrados...')
+    log.info('Beginning rados...')
     assert isinstance(config, dict), \
         "please list clients to run on"
-    testrados = {}
+    tests = {}
 
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
     remotes = []
@@ -71,14 +71,14 @@ def task(ctx, config):
 
         proc = remote.run(
             args=args,
-            logger=log.getChild('testrados.{id}'.format(id=id_)),
+            logger=log.getChild('rados.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False
             )
-        testrados[id_] = proc
+        tests[id_] = proc
 
     try:
         yield
     finally:
-        log.info('joining testrados')
-        run.wait(testrados.itervalues())
+        log.info('joining rados')
+        run.wait(tests.itervalues())
