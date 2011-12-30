@@ -1,5 +1,6 @@
 %define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
 
+%bcond_with ocf
 # it seems there is no usable tcmalloc rpm for x86_64; parts of
 # google-perftools don't compile on x86_64, and apparently the
 # decision was to not build the package at all, even if tcmalloc
@@ -130,6 +131,19 @@ gcephtool is a graphical monitor for the clusters running the Ceph distributed
 file system.
 %endif
 
+%if %{with ocf}
+%package resource-agents
+Summary:	OCF-compliant resource agents for Ceph daemons
+Group:		System Environment/Base
+License:	LGPLv2
+Requires:	%{name} = %{version}
+Requires:	resource-agents
+%description resource-agents
+Resource agents for monitoring and managing Ceph daemons
+under Open Cluster Framework (OCF) compliant resource
+managers such as Pacemaker.
+%endif
+
 %package -n librados2
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
@@ -211,6 +225,7 @@ MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
 		--docdir=%{_docdir}/ceph \
 		--without-hadoop \
 		$MY_CONF_OPT \
+		%{?_with_ocf} \
 		%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc}
 
 # fix bug in specific version of libedit-devel
@@ -412,6 +427,13 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/gceph
 %{_datadir}/ceph_tool/gui_resources/*
+%endif
+
+#################################################################################
+%if %{with ocf}
+%files resource-agents
+%defattr(0755,root,root,-)
+/usr/lib/ocf/resource.d/%{name}/*
 %endif
 
 #################################################################################

@@ -5222,6 +5222,7 @@ struct C_MDC_TruncateFinish : public Context {
   C_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
     mdc(c), in(i), ls(l) {}
   void finish(int r) {
+    assert(r != -EINVAL);
     mdc->truncate_inode_finish(in, ls);
   }
 };

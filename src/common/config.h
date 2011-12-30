@@ -109,6 +109,7 @@ public:
 
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostringstream *oss);
+  void call_all_observers();
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostringstream *oss);

@@ -11,7 +11,7 @@ std::string cpp_strerror(int err)
   if (err < 0)
     err = -err;
   std::ostringstream oss;
-  oss << "error " << err << ": " << strerror_r(err, buf, sizeof(buf));
+  oss << "(" << err << ") " << strerror_r(err, buf, sizeof(buf));
 
   return oss.str();
 }

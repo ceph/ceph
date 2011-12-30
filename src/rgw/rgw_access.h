@@ -74,15 +74,15 @@ public:
                       map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                       map<std::string, bufferlist>* rmattrs) = 0;
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                      off_t ofs, size_t len) = 0;
+                      off_t ofs, size_t len, bool exclusive) = 0;
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                      off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
+                      off_t ofs, size_t len, bool exclusive, void **handle) { return -ENOTSUP; }
 
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
-  int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len,
+  int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_data(ctx, obj, data, -1, len);
-    if (ret >= 0) {
+    int ret = put_obj_data(ctx, obj, data, -1, len, exclusive);
+    if (ret >= 0 && (attrs.size() || mtime)) {
       ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false, NULL);
     }
     return ret;
@@ -265,7 +265,7 @@ public:
   /* The bucket here can either be the bucket name identifier, or the ID
    * in period format: ".123" */
   virtual int get_bucket_info(void *ctx, string& bucket, RGWBucketInfo& info) = 0;
-  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info) = 0;
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive) = 0;
 
 
   virtual int remove_temp_objects(string date, string time) {

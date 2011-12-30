@@ -23,7 +23,7 @@ public:
 	      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
 	      map<std::string, bufferlist> *rmattrs);
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-              off_t ofs, size_t size);
+              off_t ofs, size_t size, bool exclusive);
   int copy_obj(void *ctx, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
@@ -63,7 +63,7 @@ public:
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
 
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
-  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info);
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive);
 };
 
 #endif

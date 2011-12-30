@@ -57,7 +57,8 @@ public:
   virtual ~RatioMonitor() {}
   virtual const char **get_tracked_conf_keys() const {
     static const char *KEYS[] = { "mon_osd_full_ratio",
-				  "mon_osd_nearfull_ratio", NULL };
+				  "mon_osd_nearfull_ratio",
+				  NULL };
     return KEYS;
   }
   virtual void handle_conf_change(const md_config_t *conf,
@@ -68,7 +69,10 @@ public:
 };
 
 PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
-  : PaxosService(mn, p)
+  : PaxosService(mn, p),
+    ratio_lock("PGMonitor::ratio_lock"),
+    need_full_ratio_update(false),
+    need_nearfull_ratio_update(false)
 {
   ratio_monitor = new RatioMonitor(this);
   g_conf->add_observer(ratio_monitor);
@@ -133,12 +137,52 @@ void PGMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_num_kb, pg_map.pg_sum.stats.sum.num_kb);
 }
 
+void PGMonitor::update_full_ratios(float full_ratio, float nearfull_ratio)
+{
+  Mutex::Locker l(ratio_lock);
+  dout(10) << "update_full_ratios full " << full_ratio << " nearfull " << nearfull_ratio << dendl;
+  if (full_ratio != 0) {
+    new_full_ratio = full_ratio;
+    need_full_ratio_update = true;
+  }
+  if (nearfull_ratio != 0) {
+    new_nearfull_ratio = nearfull_ratio;
+    need_nearfull_ratio_update = true;
+  }
+}
+
 void PGMonitor::tick() 
 {
   if (!paxos->is_active()) return;
 
   update_from_paxos();
   handle_osd_timeouts();
+
+  if (mon->is_leader()) {
+    ratio_lock.Lock();
+    bool propose = false;
+    if (need_full_ratio_update) {
+      dout(10) << "tick need full ratio update " << new_full_ratio << dendl;
+      need_full_ratio_update = false;
+      if (pg_map.full_ratio != new_full_ratio) {
+	pending_inc.full_ratio = new_full_ratio;
+	propose = true;
+      }
+    }
+    if (need_nearfull_ratio_update) {
+      dout(10) << "tick need nearfull ratio update " << new_nearfull_ratio << dendl;
+      need_nearfull_ratio_update = false;
+      if (pg_map.nearfull_ratio != new_nearfull_ratio) {
+	pending_inc.nearfull_ratio = new_nearfull_ratio;
+	propose = true;
+      }
+    }
+    ratio_lock.Unlock();
+    if (propose) {
+      propose_pending();
+    }
+  }
+
   dout(10) << pg_map << dendl;
 }
 
@@ -427,7 +471,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   int from = stats->get_orig_source().num();
 
   if (stats->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_statfs on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
+    dout(0) << "prepare_pg_stats on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
     stats->put();
     return false;
   }

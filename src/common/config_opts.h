@@ -337,7 +337,7 @@ OPTION(bdev_debug_check_io_overlap, OPT_BOOL, true)  // [DEBUG] check for any pe
 OPTION(bdev_fake_mb, OPT_INT, 0)
 OPTION(bdev_fake_max_mb, OPT_INT, 0)
 OPTION(debug_rgw, OPT_INT, 20)                 // log level for the Rados gateway
-OPTION(rgw_cache_enabled, OPT_BOOL, false)   // rgw cache enabled
+OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 OPTION(rgw_dns_name, OPT_STR, "")

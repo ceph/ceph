@@ -356,10 +356,10 @@ int MonClient::init()
 
   messenger->add_dispatcher_head(this);
 
-  keyring = KeyRing::from_ceph_context(cct);
-  if (!keyring) {
-    lderr(cct) << "MonClient::init(): Failed to create keyring" << dendl;
-    return -EDOM;
+  int r = KeyRing::from_ceph_context(cct, &keyring);
+  if (r < 0) {
+    lderr(cct) << "failed to open keyring: " << cpp_strerror(r) << dendl;
+    return r;
   }
   rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
 
@@ -563,6 +563,7 @@ void MonClient::_reopen_session()
 
   MAuth *m = new MAuth;
   m->protocol = 0;
+  m->monmap_epoch = monmap.get_epoch();
   __u8 struct_v = 1;
   ::encode(struct_v, m->auth_payload);
   ::encode(auth_supported->get_supported_set(), m->auth_payload);

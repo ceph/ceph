@@ -377,6 +377,11 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     uint64_t auid;
     if (start) {
       // new session
+
+      // always send the latest monmap.
+      if (m->monmap_epoch < mon->monmap->get_epoch())
+	mon->send_latest_monmap(m->get_connection());
+
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
       ret = 0;
       s->caps.set_allow_all(caps_info.allow_all);

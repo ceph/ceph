@@ -693,7 +693,13 @@ int OSD::init()
 
   osd_lock.Unlock();
 
-  monc->authenticate();
+  r = monc->authenticate();
+  if (r < 0) {
+    monc->shutdown();
+    store->umount();
+    return r;
+  }
+
   monc->wait_auth_rotating(30.0);
 
   osd_lock.Lock();
@@ -1414,7 +1420,7 @@ void OSD::_add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, uti
     dout(10) << "update_heartbeat_peers: new _from osd." << p
 	     << " " << con->get_peer_addr() << dendl;
     heartbeat_from_stamp[p] = ceph_clock_now(g_ceph_context);  
-    MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch,
+    MOSDPing *m = new MOSDPing(monc->get_fsid(), 0, heartbeat_epoch,
 			       MOSDPing::START_HEARTBEAT);
     hbin_messenger->send_message(m, con);
   }
@@ -1481,14 +1487,14 @@ void OSD::update_heartbeat_peers()
       dout(10) << "update_heartbeat_peers: telling old peer osd." << p->first
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
-      hbin_messenger->send_message(new MOSDPing(osdmap->get_fsid(), heartbeat_epoch,
+      hbin_messenger->send_message(new MOSDPing(monc->get_fsid(), heartbeat_epoch,
 						heartbeat_epoch,
 						MOSDPing::YOU_DIED), con);
       hbin_messenger->mark_disposable(con);
       hbin_messenger->mark_down_on_empty(con);
     } else {
       // tell them to stop sending heartbeats
-      hbin_messenger->send_message(new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch,
+      hbin_messenger->send_message(new MOSDPing(monc->get_fsid(), 0, heartbeat_epoch,
 						MOSDPing::STOP_HEARTBEAT), con);
     }
     if (!osdmap->is_up(p->first)) {
@@ -1704,7 +1710,7 @@ void OSD::heartbeat()
        i++) {
     int peer = i->first;
     dout(30) << "heartbeat allocating ping for osd." << peer << dendl;
-    Message *m = new MOSDPing(osdmap->get_fsid(),
+    Message *m = new MOSDPing(monc->get_fsid(),
 			      map_locked ? osdmap->get_epoch():0, 
 			      i->second, MOSDPing::HEARTBEAT);
     m->set_priority(CEPH_MSG_PRIO_HIGH);
@@ -2125,7 +2131,7 @@ void OSD::send_pg_stats(const utime_t &now)
     utime_t had_for(now);
     had_for -= had_map_since;
 
-    MPGStats *m = new MPGStats(osdmap->get_fsid(), osdmap->get_epoch(), had_for);
+    MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
     m->set_tid(++pg_stat_tid);
     m->osd_stat = cur_stat;
 

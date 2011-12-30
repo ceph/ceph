@@ -520,7 +520,6 @@ void RGWCreateBucket::execute()
   bool pol_ret;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
-
   s->bucket_owner = s->user.user_id;
 
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
@@ -738,7 +737,7 @@ void RGWPutObj::execute()
         void *handle;
         ret = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
 				     data,
-				     ((ofs == 0) ? -1 : ofs), len, &handle);
+				     ((ofs == 0) ? -1 : ofs), len, false, &handle);
         if (ret < 0)
           goto done_err;
 

@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS =
-DIST_SUBDIRS = gtest
+SUBDIRS = ocf
+DIST_SUBDIRS = gtest ocf
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds

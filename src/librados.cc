@@ -952,7 +952,12 @@ int librados::RadosClient::connect()
   ldout(cct, 1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   ldout(cct, 1) << "calling monclient init" << dendl;
-  monclient.init();
+  err = monclient.init();
+  if (err) {
+    ldout(cct, 0) << conf->name << " initialization error " << cpp_strerror(-err) << dendl;
+    shutdown();
+    goto out;
+  }
 
   err = monclient.authenticate(conf->client_mount_timeout);
   if (err) {
@@ -1706,7 +1711,7 @@ int librados::RadosClient::operate(IoCtxImpl& io, const object_t& oid,
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   if (!o->size())
     return 0;
@@ -1738,10 +1743,6 @@ int librados::RadosClient::operate(IoCtxImpl& io, const object_t& oid,
 int librados::RadosClient::operate_read(IoCtxImpl& io, const object_t& oid,
 					::ObjectOperation *o, bufferlist *pbl)
 {
-  /* can't write to a snapshot */
-  if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
-
   if (!o->size())
     return 0;
 
@@ -1775,7 +1776,7 @@ int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
   utime_t ut = ceph_clock_now(cct);
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Context *onack = new C_aio_Ack(c);
   Context *oncommit = new C_aio_Safe(c);
@@ -3857,7 +3858,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 {
   RadosXattrsIter *it = new RadosXattrsIter();
   if (!it)
-    return ENOMEM;
+    return -ENOMEM;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t obj(oid);
   int ret = ctx->client->getxattrs(*ctx, obj, it->attrset);
@@ -3890,7 +3891,7 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
   size_t bl_len = bl.length();
   it->val = (char*)malloc(bl_len);
   if (!it->val)
-    return ENOMEM;
+    return -ENOMEM;
   memcpy(it->val, bl.c_str(), bl_len);
   *val = it->val;
   *len = bl_len;
