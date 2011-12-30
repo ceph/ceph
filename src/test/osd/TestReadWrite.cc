@@ -77,7 +77,9 @@ int main(int argc, char **argv)
   int objects = 500;
   int read_percent = 50;
   int max_in_flight = 16;
-  int size = 4000000; // 4 MB
+  uint64_t size = 4000000; // 4 MB
+  uint64_t min_stride_size, max_stride_size;
+
   if (argc > 1) {
     ops = atoi(argv[1]);
   }
@@ -98,16 +100,40 @@ int main(int argc, char **argv)
     size = atoi(argv[5]);
   }
 
+  if (argc > 6) {
+    min_stride_size = atoi(argv[6]);
+  } else {
+    min_stride_size = size / 10;
+  }
+
+  if (argc > 7) {
+    max_stride_size = atoi(argv[7]);
+  } else {
+    max_stride_size = size / 5;
+  }
+
+  if (min_stride_size > max_stride_size) {
+    cerr << "Error: min_stride_size cannot be more than max_stride_size"
+	 << std::endl;
+    return 1;
+  }
+
+  if (min_stride_size > size || max_stride_size > size) {
+    cerr << "Error: min_stride_size and max_stride_size must be "
+	 << "smaller than object size" << std::endl;
+    return 1;
+  }
+
   if (max_in_flight > objects) {
     cerr << "Error: max_in_flight must be less than the number of objects"
 	 << std::endl;
-    return 0;
+    return 1;
   }
 
   char *id = getenv("CEPH_CLIENT_ID");
   if (id) cerr << "Client id is: " << id << std::endl;
   string pool_name = "data";
-  VarLenGenerator cont_gen(size);
+  VarLenGenerator cont_gen(size, min_stride_size, max_stride_size);
   RadosTestContext context(pool_name, max_in_flight, cont_gen, id);
 
   ReadWriteGenerator gen = ReadWriteGenerator(ops, objects, read_percent);
