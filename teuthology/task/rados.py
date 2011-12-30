@@ -36,6 +36,29 @@ def task(ctx, config):
         "please list clients to run on"
     tests = {}
 
+    args = [
+        'CEPH_CONF=/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
+        '/tmp/cephtest/enable-coredump',
+        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+        '/tmp/cephtest/archive/coverage',
+        ]
+    if config.get('snaps', False):
+        args.extend(
+            '/tmp/cephtest/binary/usr/local/bin/testreadwrite',
+            str(config.get('ops', '10000')),
+            str(config.get('objects', '500')),
+            str(50),
+            str(config.get('maxinflight', '16'))
+            )
+    else:
+        args.extend(
+            '/tmp/cephtest/binary/usr/local/bin/testsnaps',
+            str(config.get('ops', '10000')),
+            str(config.get('objects', '500')),
+            str(config.get('maxinflight', '16'))
+            )
+
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
     remotes = []
     for role in config.get('clients', ['client.0']):
@@ -46,31 +69,8 @@ def task(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         remotes.append(remote)
 
-        args = []
-        if not config.get('snaps', False):
-            args = [
-                'CEPH_CLIENT_ID={id_}'.format(id_=id_),
-                'CEPH_CONF=/tmp/cephtest/ceph.conf',
-                'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
-                '/tmp/cephtest/binary/usr/local/bin/testreadwrite',
-                str(config.get('ops', '10000')),
-                str(config.get('objects', '500')),
-                str(50),
-                str(config.get('maxinflight', '16'))
-                ]
-        else:
-            args = [
-                'CEPH_CLIENT_ID={id_}'.format(id_=id_),
-                'CEPH_CONF=/tmp/cephtest/ceph.conf',
-                'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
-                '/tmp/cephtest/binary/usr/local/bin/testsnaps',
-                str(config.get('ops', '10000')),
-                str(config.get('objects', '500')),
-                str(config.get('maxinflight', '16'))
-                ]
-
         proc = remote.run(
-            args=args,
+            args=['CEPH_CLIENT_ID={id_}'.format(id_=id_)] + args,
             logger=log.getChild('rados.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False
