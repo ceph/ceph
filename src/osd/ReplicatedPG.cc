@@ -5139,7 +5139,9 @@ int ReplicatedPG::start_recovery_ops(int max)
     // second chance to recovery replicas
     started = recover_replicas(max);
   }
-  if (backfill_target >= 0 && started < max && !waiting_on_backfill) {
+  if (backfill_target >= 0 && started < max &&
+      missing.num_missing() == 0 &&
+      !waiting_on_backfill) {
     started += recover_backfill(max - started);
   }
 
