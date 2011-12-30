@@ -68,7 +68,8 @@ public:
 };
 
 PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
-  : PaxosService(mn, p)
+  : PaxosService(mn, p),
+    ratio_lock("PGMonitor::ratio_lock"), need_ratio_update(false), first_ratio_update(true)
 {
   ratio_monitor = new RatioMonitor(this);
   g_conf->add_observer(ratio_monitor);
@@ -139,6 +140,16 @@ void PGMonitor::tick()
 
   update_from_paxos();
   handle_osd_timeouts();
+
+  ratio_lock.Lock();
+  if (need_ratio_update) {
+    need_ratio_update = false;
+    pending_inc.full_ratio = new_full_ratio;
+    pending_inc.nearfull_ratio = new_nearfull_ratio;
+    propose_pending();
+  }
+  ratio_lock.Unlock();
+
   dout(10) << pg_map << dendl;
 }
 

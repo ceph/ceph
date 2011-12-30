@@ -43,6 +43,10 @@ class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
 
+  Mutex ratio_lock;
+  bool need_ratio_update, first_ratio_update;
+  float new_full_ratio, new_nearfull_ratio;
+
 private:
   PGMap::Incremental pending_inc;
 
@@ -63,11 +67,19 @@ private:
   void _updated_stats(MPGStats *req, MPGStatsAck *ack);
 
   void update_full_ratios(float full_ratio, int nearfull_ratio) {
+    Mutex::Locker l(ratio_lock);
+
+    // ignore callback during startup
+    if (first_ratio_update) {
+      first_ratio_update = false;
+      return;
+    }
+
     if (full_ratio != 0)
-      pending_inc.full_ratio = full_ratio;
+      new_full_ratio = full_ratio;
     if (nearfull_ratio != 0)
-      pending_inc.nearfull_ratio = nearfull_ratio;
-    propose_pending();
+      new_nearfull_ratio = nearfull_ratio;
+    need_ratio_update = true;
   }
 
   struct C_Stats : public Context {
