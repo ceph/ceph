@@ -8,28 +8,28 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Run testrados
+    Run RadosModel-based integration tests.
 
-    The config should be as follows:
+    The config should be as follows::
 
-    testrados:
-        clients: [client list]
-        ops: <number of ops>
-        objects: <number of objects to use>
-        maxinflight: <max number of operations in flight>
-        snaps: <create/remove/rollback snaps>
+        testrados:
+          clients: [client list]
+          ops: <number of ops>
+          objects: <number of objects to use>
+          maxinflight: <max number of operations in flight>
+          snaps: <create/remove/rollback snaps>
 
-    example:
+    For example::
 
-    tasks:
-    - ceph:
-    - testrados:
-        clients: [client.0]
-        ops: 1000
-        objects: 25
-        maxinflight: 16
-        snaps: true
-    - interactive:
+        tasks:
+        - ceph:
+        - testrados:
+            clients: [client.0]
+            ops: 1000
+            objects: 25
+            maxinflight: 16
+            snaps: true
+        - interactive:
     """
     log.info('Beginning testrados...')
     assert isinstance(config, dict), \
