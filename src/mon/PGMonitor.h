@@ -44,7 +44,7 @@ public:
   PGMap pg_map;
 
   Mutex ratio_lock;
-  bool need_ratio_update, first_ratio_update;
+  bool need_ratio_update;
   float new_full_ratio, new_nearfull_ratio;
 
 private:
@@ -68,13 +68,6 @@ private:
 
   void update_full_ratios(float full_ratio, int nearfull_ratio) {
     Mutex::Locker l(ratio_lock);
-
-    // ignore callback during startup
-    if (first_ratio_update) {
-      first_ratio_update = false;
-      return;
-    }
-
     if (full_ratio != 0)
       new_full_ratio = full_ratio;
     if (nearfull_ratio != 0)

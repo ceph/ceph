@@ -69,7 +69,7 @@ public:
 
 PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
   : PaxosService(mn, p),
-    ratio_lock("PGMonitor::ratio_lock"), need_ratio_update(false), first_ratio_update(true)
+    ratio_lock("PGMonitor::ratio_lock"), need_ratio_update(false),
 {
   ratio_monitor = new RatioMonitor(this);
   g_conf->add_observer(ratio_monitor);
