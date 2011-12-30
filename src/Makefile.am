@@ -1148,6 +1148,7 @@ noinst_HEADERS = \
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
+	include/cmp.h\
 	include/color.h\
 	include/compat.h\
 	include/crc32c.h\
