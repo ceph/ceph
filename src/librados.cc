@@ -1228,6 +1228,7 @@ int librados::RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
   IoCtxImpl* io = (IoCtxImpl *) io_;
   string sName(snapName);
 
+  lock.Lock();
   snapid_t snap;
   const map<int64_t, pg_pool_t>& pools = objecter->osdmap->get_pools();
   const pg_pool_t& pg_pool = pools.find(io->poolid)->second;
@@ -1240,7 +1241,11 @@ int librados::RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
       break;
     }
   }
-  if (p == pg_pool.snaps.end()) return -ENOENT;
+  if (p == pg_pool.snaps.end()) {
+    lock.Unlock();
+    return -ENOENT;
+  }
+  lock.Unlock();
 
   return selfmanaged_snap_rollback_object(io_, oid, io->snapc, snap);
 }
