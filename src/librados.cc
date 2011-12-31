@@ -1782,6 +1782,8 @@ int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
   Context *oncommit = new C_aio_Safe(c);
 
   io.queue_aio_write(c);
+
+  Mutex::Locker l(lock);
   objecter->mutate(oid, io.oloc, *o, io.snapc, ut, 0, onack, oncommit, &c->objver);
 
   return 0;
