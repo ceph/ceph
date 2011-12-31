@@ -16,8 +16,11 @@ def task(ctx, config):
           clients: [client list]
           ops: <number of ops>
           objects: <number of objects to use>
-          maxinflight: <max number of operations in flight>
-          snaps: <create/remove/rollback snaps>
+          max_in_flight: <max number of operations in flight>
+          object_size: <size of objects in bytes>
+          min_stride_size: <minimum write stride size in bytes>
+          max_stride_size: <maximum write stride size in bytes>
+          op_weights: <dictionary mapping operation type to integer weight>
 
     For example::
 
@@ -27,39 +30,48 @@ def task(ctx, config):
             clients: [client.0]
             ops: 1000
             objects: 25
-            maxinflight: 16
-            snaps: true
+            max_in_flight: 16
+            object_size: 4000000
+            min_stride_size: 1024
+            max_stride_size: 4096
+            op_weights:
+              read: 20
+              write: 10
+              delete: 2
+              snap_create: 3
+              rollback: 2
+              snap_delete: 0
         - interactive:
     """
     log.info('Beginning rados...')
     assert isinstance(config, dict), \
         "please list clients to run on"
-    tests = {}
 
+    object_size = int(config.get('object_size', 4000000))
+    op_weights = config.get('op_weights', {})
     args = [
         'CEPH_CONF=/tmp/cephtest/ceph.conf',
         'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
         '/tmp/cephtest/enable-coredump',
         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
         '/tmp/cephtest/archive/coverage',
+        '/tmp/cephtest/binary/usr/local/bin/testrados',
+        str(op_weights.get('read', 100)),
+        str(op_weights.get('write', 100)),
+        str(op_weights.get('delete', 10)),
+        str(op_weights.get('snap_create', 0)),
+        str(op_weights.get('snap_remove', 0)),
+        str(op_weights.get('rollback', 0)),
+        str(config.get('ops', 10000)),
+        str(config.get('objects', 500)),
+        str(config.get('max_in_flight', 16)),
+        str(object_size),
+        str(config.get('min_stride_size', object_size / 10)),
+        str(config.get('max_stride_size', object_size / 5))
         ]
-    if config.get('snaps', False):
-        args.extend(
-            '/tmp/cephtest/binary/usr/local/bin/testreadwrite',
-            str(config.get('ops', '10000')),
-            str(config.get('objects', '500')),
-            str(50),
-            str(config.get('maxinflight', '16'))
-            )
-    else:
-        args.extend(
-            '/tmp/cephtest/binary/usr/local/bin/testsnaps',
-            str(config.get('ops', '10000')),
-            str(config.get('objects', '500')),
-            str(config.get('maxinflight', '16'))
-            )
 
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
+    tests = {}
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
         PREFIX = 'client.'
