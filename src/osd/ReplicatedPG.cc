@@ -5519,6 +5519,7 @@ int ReplicatedPG::recover_backfill(int max)
 
     if (pbi.begin <= backfill_info.begin &&
 	!pbi.extends_to_end() && pbi.empty()) {
+      dout(10) << " scanning peer osd." << backfill_target << " from " << pbi.end << dendl;
       epoch_t e = get_osdmap()->get_epoch();
       MOSDPGScan *m = new MOSDPGScan(MOSDPGScan::OP_SCAN_GET_DIGEST, e, e, info.pgid,
 				     pbi.end, hobject_t());
