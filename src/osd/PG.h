@@ -1006,8 +1006,8 @@ public:
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
-    struct BackfillComplete : boost::statechart::event< BackfillComplete > {
-      BackfillComplete() : boost::statechart::event< BackfillComplete >() {}
+    struct RecoveryComplete : boost::statechart::event< RecoveryComplete > {
+      RecoveryComplete() : boost::statechart::event< RecoveryComplete >() {}
     };
     struct ActMap : boost::statechart::event< ActMap > {
       ActMap() : boost::statechart::event< ActMap >() {}
@@ -1229,14 +1229,14 @@ public:
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< BackfillComplete >
+	boost::statechart::custom_reaction< RecoveryComplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
       boost::statechart::result react(const MLogRec& logevt);
-      boost::statechart::result react(const BackfillComplete&);
+      boost::statechart::result react(const RecoveryComplete&);
     };
 
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
@@ -1360,7 +1360,7 @@ public:
 			    vector<int>& newup, vector<int>& newacting, 
 			    RecoveryCtx *ctx);
     void handle_activate_map(RecoveryCtx *ctx);
-    void handle_backfill_complete(RecoveryCtx *ctx);
+    void handle_recovery_complete(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
     void handle_loaded(RecoveryCtx *ctx);
   } recovery_state;
@@ -1754,8 +1754,8 @@ public:
   void handle_activate_map(RecoveryCtx *rctx) {
     recovery_state.handle_activate_map(rctx);
   }
-  void handle_backfill_complete(RecoveryCtx *rctx) {
-    recovery_state.handle_backfill_complete(rctx);
+  void handle_recovery_complete(RecoveryCtx *rctx) {
+    recovery_state.handle_recovery_complete(rctx);
   }
   void handle_create(RecoveryCtx *rctx) {
     recovery_state.handle_create(rctx);

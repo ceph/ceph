@@ -5153,26 +5153,8 @@ int ReplicatedPG::start_recovery_ops(int max)
 
   assert(recovery_ops_active == 0);
 
-  if (acting != up) {
-    PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
-    handle_backfill_complete(&rctx);
-    return 0;
-  }
-
-  if (is_all_uptodate()) {
-    dout(10) << __func__ << ": all OSDs in the PG are up-to-date!" << dendl;
-    log.reset_recovery_pointers();
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    finish_recovery(*t, fin->contexts);
-    int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
-  }
-  else {
-    dout(10) << __func__ << ": some OSDs are not up-to-date yet. "
-             << "Recovery isn't finished yet." << dendl;
-  }
-
+  PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
+  handle_recovery_complete(&rctx);
   return 0;
 }
 

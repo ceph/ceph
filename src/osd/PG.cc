@@ -1444,6 +1444,8 @@ struct C_PG_FinishRecovery : public Context {
 void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
+  state_clear(PG_STATE_DEGRADED);
+  state_clear(PG_STATE_BACKFILL);
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
@@ -3953,13 +3955,30 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const BackfillComplete& evt)
+boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplete& evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
 
   int newest_update_osd;
-  if (!pg->choose_acting(newest_update_osd)) {
+
+  // adjust acting set?  (e.g. because backfill completed...)
+  if (pg->acting != pg->up &&
+      !pg->choose_acting(newest_update_osd)) {
     post_event(NeedNewMap());
+    return discard_event();
+  }
+
+  if (pg->is_all_uptodate()) {
+    dout(10) << "recovery complete" << dendl;
+    pg->log.reset_recovery_pointers();
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
+    pg->finish_recovery(*t, fin->contexts);
+    int tr = pg->osd->store->queue_transaction(&pg->osr, t,
+					       new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(tr == 0);
+  } else {
+    dout(10) << "recovery not yet complete: some osds not up to date" << dendl;
   }
 
   return discard_event();
@@ -4519,11 +4538,11 @@ void PG::RecoveryState::handle_activate_map(RecoveryCtx *rctx)
   end_handle();
 }
 
-void PG::RecoveryState::handle_backfill_complete(RecoveryCtx *rctx)
+void PG::RecoveryState::handle_recovery_complete(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_backfill_complete" << dendl;
+  dout(10) << "handle_recovery_complete" << dendl;
   start_handle(rctx);
-  machine.process_event(BackfillComplete());
+  machine.process_event(RecoveryComplete());
   end_handle();
 }
 
