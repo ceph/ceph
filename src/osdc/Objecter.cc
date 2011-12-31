@@ -804,6 +804,8 @@ void Objecter::resend_mon_ops()
 
 tid_t Objecter::op_submit(Op *op, OSDSession *s)
 {
+  assert(client_lock.is_locked());
+
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
