@@ -894,6 +894,9 @@ map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &info
   for (map<int, Info>::const_iterator p = infos.begin();
        p != infos.end();
        ++p) {
+    // Disquality anyone who is incomplete (not fully backfilled)
+    if (p->second.is_incomplete())
+      continue;
     if (best == infos.end()) {
       best = p;
       continue;
