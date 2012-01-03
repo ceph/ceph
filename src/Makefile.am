@@ -196,13 +196,9 @@ test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
-testsnaps_SOURCES = test/osd/TestSnaps.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
-testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += testsnaps
-
-testreadwrite_SOURCES = test/osd/TestReadWrite.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
-testreadwrite_LDADD = librados.la $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += testreadwrite
+testrados_SOURCES = test/osd/TestRados.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
+testrados_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += testrados
 
 multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)

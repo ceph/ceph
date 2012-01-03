@@ -36,6 +36,15 @@ typename T::iterator rand_choose(T &cont) {
   return retval;
 }
 
+enum TestOpType {
+  TEST_OP_READ,
+  TEST_OP_WRITE,
+  TEST_OP_DELETE,
+  TEST_OP_SNAP_CREATE,
+  TEST_OP_SNAP_REMOVE,
+  TEST_OP_ROLLBACK
+};
+
 class TestOp {
 public:
   RadosTestContext *context;
@@ -48,7 +57,7 @@ public:
     done(0)
   {}
 
-  virtual ~TestOp();
+  virtual ~TestOp() {};
 
   /**
    * This struct holds data to be passed by a callback
@@ -85,7 +94,7 @@ public:
 
 class TestOpGenerator {
 public:
-  virtual ~TestOpGenerator();
+  virtual ~TestOpGenerator() {};
   virtual TestOp *next(RadosTestContext &context) = 0;
 };
 
