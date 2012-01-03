@@ -150,18 +150,20 @@ def main():
             with parallel() as p:
                 for target, hostkey in ctx.config['targets'].iteritems():
                     p.spawn(
-                        nuke_and_unlock,
+                        nuke,
                         targets={target: hostkey},
                         owner=ctx.owner,
                         log=log,
                         teuth_config=ctx.teuthology_config,
+                        # only unlock if we locked them in the first place
+                        should_unlock=ctx.lock,
                         )
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
 
-def nuke_and_unlock(targets, owner, log, teuth_config,
-                    synch_clocks=True, reboot_all=True):
+def nuke(targets, owner, log, teuth_config, should_unlock,
+         synch_clocks=True, reboot_all=True):
     from teuthology.nuke import nuke
     from teuthology.lock import unlock
     ctx = argparse.Namespace(
@@ -177,8 +179,9 @@ def nuke_and_unlock(targets, owner, log, teuth_config,
         log.exception('Could not nuke all targets in %s', targets)
         # not re-raising the so that parallel calls aren't killed
     else:
-        for target in targets.keys():
-            unlock(ctx, target, owner)
+        if should_unlock:
+            for target in targets.keys():
+                unlock(ctx, target, owner)
 
 def schedule():
     parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
