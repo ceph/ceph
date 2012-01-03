@@ -29,7 +29,6 @@ def task(ctx, config):
         "please list clients to run on"
     testwatch = {}
 
-    (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
     remotes = []
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
