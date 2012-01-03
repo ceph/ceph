@@ -916,7 +916,7 @@ void ReplicatedPG::do_scan(MOSDPGScan *m)
     {
       BackfillInterval bi;
       osr.flush();
-      scan_range(m->begin, 100, 200, &bi);
+      scan_range(m->begin, g_conf->osd_backfill_scan_min, g_conf->osd_backfill_scan_max, &bi);
       MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
 					 get_osdmap()->get_epoch(), m->query_epoch,
 					 info.pgid, bi.begin, bi.end);
@@ -5485,7 +5485,10 @@ int ReplicatedPG::recover_backfill(int max)
 	   << " info " << pinfo
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
-  
+
+  int local_min = osd->store->get_ideal_list_min();
+  int local_max = osd->store->get_ideal_list_max();
+
   // re-scan our local interval to cope with recent changes
   // FIXME: we could track the eversion_t when we last scanned, and invalidate
   // that way.  or explicitly modify/invalidate when we actually change specific
@@ -5493,7 +5496,7 @@ int ReplicatedPG::recover_backfill(int max)
   dout(10) << " rescanning local backfill_info from " << backfill_pos << dendl;
   backfill_info.clear();
   osr.flush();
-  scan_range(backfill_pos, 10, 20, &backfill_info);
+  scan_range(backfill_pos, local_min, local_max, &backfill_info);
 
   int ops = 0;
   map<hobject_t, pair<eversion_t, eversion_t> > to_push;
@@ -5507,7 +5510,7 @@ int ReplicatedPG::recover_backfill(int max)
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
       osr.flush();
-      scan_range(backfill_info.end, 10, 20, &backfill_info);
+      scan_range(backfill_info.end, local_min, local_max, &backfill_info);
       backfill_info.trim();
     }
     backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
