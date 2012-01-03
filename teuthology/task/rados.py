@@ -40,7 +40,7 @@ def task(ctx, config):
               delete: 2
               snap_create: 3
               rollback: 2
-              snap_delete: 0
+              snap_remove: 0
         - interactive:
     """
     log.info('Beginning rados...')
