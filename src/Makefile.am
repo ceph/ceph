@@ -769,8 +769,7 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
 docdir ?= ${datadir}/doc/ceph
 
-doc_DATA = $(srcdir)/sample.ceph.conf
-doc_SCRIPTS = sample.fetch_config
+doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 sample.fetch_config: fetch_config
 	cp -f $(srcdir)/fetch_config ./sample.fetch_config
