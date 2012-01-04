@@ -688,6 +688,14 @@ void OSDMap::dump(Formatter *f) const
       f->dump_stream("public_addr") << get_addr(i);
       f->dump_stream("cluster_addr") << get_cluster_addr(i);
       f->dump_stream("heartbeat_addr") << get_hb_addr(i);
+
+      set<string> st;
+      get_state(i, st);
+      f->open_array_section("state");
+      for (set<string>::iterator p = st.begin(); p != st.end(); ++p)
+	f->dump_string("state", *p);
+      f->close_section();
+
       f->close_section();
     }
   f->close_section();
@@ -779,6 +787,9 @@ void OSDMap::print(ostream& out) const
       const osd_info_t& info(get_info(i));
       out << " " << info;
       out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_addr(i);
+      set<string> st;
+      get_state(i, st);
+      out << " " << st;
       out << "\n";
     }
   }
