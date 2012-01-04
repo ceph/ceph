@@ -128,7 +128,7 @@ struct librados::IoCtxImpl {
   void complete_aio_write(struct AioCompletionImpl *c);
   void flush_aio_writes();
 
-  int get_id() {
+  int64_t get_id() {
     return poolid;
   }
 };
@@ -3114,7 +3114,7 @@ void librados::IoCtx::locator_set_key(const string& key)
   io_ctx_impl->oloc.key = key;
 }
 
-int librados::IoCtx::get_id()
+int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();
 }
@@ -3734,7 +3734,7 @@ extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
     ctx->oloc.key = "";
 }
 
-extern "C" int rados_ioctx_get_id(rados_ioctx_t io)
+extern "C" int64_t rados_ioctx_get_id(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->get_id();

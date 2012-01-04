@@ -324,7 +324,7 @@ namespace librados
 
     void locator_set_key(const std::string& key);
 
-    int get_id();
+    int64_t get_id();
 
     CephContext *cct();
 
