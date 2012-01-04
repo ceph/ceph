@@ -5236,12 +5236,12 @@ void OSD::handle_op(MOSDOp *op)
     }
 
     // okay, we aren't valid now; check send epoch
-    OSDMapRef send_map = get_map(op->get_map_epoch());
-    if (!send_map) {
+    if (op->get_map_epoch() >= superblock.oldest_map) {
       dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
       op->put();
       return;
     }
+    OSDMapRef send_map = get_map(op->get_map_epoch());
 
     // remap pgid
     pgid = op->get_pg();
