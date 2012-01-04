@@ -500,33 +500,12 @@ void SimpleMessenger::set_ip(entity_addr_t &addr)
   }
 }
 
-
-
-/**************************************
- * Pipe
- */
-
-#undef dout_prefix
-#define dout_prefix _pipe_prefix(_dout)
-ostream& SimpleMessenger::Pipe::_pipe_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << msgr->ms_addr << " >> " << peer_addr << " pipe(" << this
-		<< " sd=" << sd
-		<< " pgs=" << peer_global_seq
-		<< " cs=" << connect_seq
-		<< " l=" << policy.lossy
-		<< ").";
-}
-
-static int get_proto_version(int my_type, int peer_type, bool connect)
+int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 {
   // set reply protocol version
   if (peer_type == my_type) {
     // internal
-    switch (my_type) {
-    case CEPH_ENTITY_TYPE_OSD: return CEPH_OSD_PROTOCOL;
-    case CEPH_ENTITY_TYPE_MDS: return CEPH_MDS_PROTOCOL;
-    case CEPH_ENTITY_TYPE_MON: return CEPH_MON_PROTOCOL;
-    }
+    return cluster_protocol;
   } else {
     // public
     if (connect) {
@@ -544,6 +523,22 @@ static int get_proto_version(int my_type, int peer_type, bool connect)
     }
   }
   return 0;
+}
+
+
+/**************************************
+ * Pipe
+ */
+
+#undef dout_prefix
+#define dout_prefix _pipe_prefix(_dout)
+ostream& SimpleMessenger::Pipe::_pipe_prefix(std::ostream *_dout) {
+  return *_dout << "-- " << msgr->ms_addr << " >> " << peer_addr << " pipe(" << this
+		<< " sd=" << sd
+		<< " pgs=" << peer_global_seq
+		<< " cs=" << connect_seq
+		<< " l=" << policy.lossy
+		<< ").";
 }
 
 void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
@@ -736,7 +731,7 @@ int SimpleMessenger::Pipe::accept()
 	     << dendl;
 
     memset(&reply, 0, sizeof(reply));
-    reply.protocol_version = get_proto_version(msgr->my_type, peer_type, false);
+    reply.protocol_version = msgr->get_proto_version(peer_type, false);
 
     // mismatch?
     ldout(msgr->cct,10) << "accept my proto " << reply.protocol_version
@@ -1137,7 +1132,7 @@ int SimpleMessenger::Pipe::connect()
     connect.host_type = msgr->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
-    connect.protocol_version = get_proto_version(msgr->my_type, peer_type, true);
+    connect.protocol_version = msgr->get_proto_version(peer_type, true);
     connect.authorizer_protocol = authorizer ? authorizer->protocol : 0;
     connect.authorizer_len = authorizer ? authorizer->bl.length() : 0;
     if (authorizer) 

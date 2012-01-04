@@ -211,6 +211,8 @@ int main(int argc, const char **argv)
   global_print_banner();
 
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
+  messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
+
   messenger->bind(g_conf->public_addr, getpid());
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;

@@ -275,6 +275,10 @@ int main(int argc, const char **argv)
   SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context);
   SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context);
 
+  cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+
   client_messenger->bind(g_conf->public_addr, getpid());
   cluster_messenger->bind(g_conf->cluster_addr, getpid());
 
