@@ -46,6 +46,9 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+#define CEPH_OSD_PROTOCOL     8 /* cluster internal */
+
+
 enum {
   l_osd_first = 10000,
   l_osd_opq,

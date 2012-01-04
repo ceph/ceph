@@ -44,6 +44,10 @@
 
 #include <memory>
 
+
+#define CEPH_MON_PROTOCOL     9 /* cluster internal */
+
+
 enum {
   l_cluster_first = 555000,
   l_cluster_num_mon,
