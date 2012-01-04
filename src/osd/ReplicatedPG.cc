@@ -262,9 +262,15 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
     bufferlist::iterator bp = p->data.begin();
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS_FILTER:
-      ::decode(cname, bp);
-      ::decode(mname, bp);
-
+      try {
+	::decode(cname, bp);
+	::decode(mname, bp);
+      }
+      catch (const buffer::error& e) {
+	dout(0) << "unable to decode PGLS_FILTER description in " << *op << dendl;
+	result = -EINVAL;
+	break;
+      }
       result = get_pgls_filter(bp, &filter);
       if (result < 0)
         break;
@@ -282,7 +288,14 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	// read into a buffer
         vector<hobject_t> sentries;
         PGLSResponse response;
-	::decode(response.handle, bp);
+	try {
+	  ::decode(response.handle, bp);
+	}
+	catch (const buffer::error& e) {
+	  dout(0) << "unable to decode PGLS handle in " << *op << dendl;
+	  result = -EINVAL;
+	  break;
+	}
 
 	hobject_t next;
 	hobject_t current = response.handle;
