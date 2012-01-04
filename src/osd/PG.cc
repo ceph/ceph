@@ -1235,7 +1235,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      if (log.tail > pi.last_update || info.last_backfill == hobject_t()) {
+      if (log.tail > pi.last_update || pi.last_backfill == hobject_t()) {
 	// reset, backfill
 	// we need to do this even when last_backfill == hobject_t() to ensure that
 	// stats get zeroed out properly, etc.
