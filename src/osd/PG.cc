@@ -1318,7 +1318,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     }
 
     // degraded?
-    if (get_osdmap()->get_pg_size(info.pgid) != active)
+    if (get_osdmap()->get_pg_size(info.pgid) > active)
       state_set(PG_STATE_DEGRADED);
 
     // all clean?
