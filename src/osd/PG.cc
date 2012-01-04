@@ -1038,6 +1038,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
     } else {
       want.push_back(i->first);
       dout(10) << " osd." << i->first << " (stray) accepted " << i->second << dendl;
+      usable++;
     }
   }
 }
