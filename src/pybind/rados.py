@@ -210,11 +210,11 @@ Rados object in state %s." % (self.state))
                             self.cluster, c_char_p(pool_name))
             else:
                 ret = self.librados.rados_pool_create_with_all(
-                            self.cluster, c_char_p(pool_name), c_ubyte(auid),
+                            self.cluster, c_char_p(pool_name), c_uint64(auid),
                             c_ubyte(crush_rule))
         elif (crush_rule == None):
             ret = self.librados.rados_pool_create_with_auid(
-                        self.cluster, c_char_p(pool_name), c_ubyte(auid))
+                        self.cluster, c_char_p(pool_name), c_uint64(auid))
         else:
             ret = self.librados.rados_pool_create_with_crush_rule(
                         self.cluster, c_char_p(pool_name), c_ubyte(crush_rule))
@@ -531,7 +531,7 @@ class Ioctx(object):
     def change_auid(self, auid):
         self.require_ioctx_open()
         ret = self.librados.rados_ioctx_pool_set_auid(self.io,\
-                ctypes.c_int64(auid))
+                ctypes.c_uint64(auid))
         if ret < 0:
             raise make_ex(ret, "error changing auid of '%s' to %lld" %\
                 (self.name, auid))
