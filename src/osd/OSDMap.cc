@@ -362,9 +362,9 @@ int OSDMap::apply_incremental(Incremental &inc)
        i++) {
     set_weight(i->first, i->second);
 
-    // if we are marking in, clear the AUTOOUT bit.
+    // if we are marking in, clear the AUTOOUT and NEW bits.
     if (i->second)
-      osd_state[i->first] &= ~CEPH_OSD_AUTOOUT;
+      osd_state[i->first] &= ~(CEPH_OSD_AUTOOUT | CEPH_OSD_NEW);
   }
 
   // up/down

@@ -619,7 +619,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     return false;
   }
 
-  int oldstate = osdmap.exists(from) ? osdmap.get_state(from) : 0;
+  int oldstate = osdmap.exists(from) ? osdmap.get_state(from) : CEPH_OSD_NEW;
   if (pending_inc.new_state.count(from))
     oldstate ^= pending_inc.new_state[from];
 
@@ -1813,7 +1813,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
   done:
       dout(10) << " creating osd." << i << dendl;
-      pending_inc.new_state[i] |= CEPH_OSD_EXISTS;
+      pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
       ss << i;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
