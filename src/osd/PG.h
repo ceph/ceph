@@ -1449,6 +1449,13 @@ protected:
 
   friend class OSD;
 
+public:
+  int get_backfill_target() const {
+    return backfill_target;
+  }
+
+protected:
+
 
   // pg waiters
   list<class Message*>            waiting_for_active;
@@ -1635,6 +1642,7 @@ public:
     recovery_state(this),
     need_up_thru(false),
     last_peering_reset(0),
+    backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL),

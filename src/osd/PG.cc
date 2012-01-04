@@ -3568,6 +3568,9 @@ ostream& operator<<(ostream& out, const PG& pg)
     }
   }
 
+  if (pg.get_backfill_target() >= 0)
+    out << " bft=" << pg.get_backfill_target();
+
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
 
