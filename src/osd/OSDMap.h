@@ -258,7 +258,7 @@ private:
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
-  int get_state(int o) {
+  int get_state(int o) const {
     assert(o < max_osd);
     return osd_state[o];
   }

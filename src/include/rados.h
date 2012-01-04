@@ -114,8 +114,9 @@ struct ceph_eversion {
  */
 
 /* status bits */
-#define CEPH_OSD_EXISTS 1
-#define CEPH_OSD_UP     2
+#define CEPH_OSD_EXISTS  (1<<0)
+#define CEPH_OSD_UP      (1<<1)
+#define CEPH_OSD_AUTOOUT (1<<2)  /* osd was automatically marked out */
 
 /* osd weights.  fixed point value: 0x10000 == 1.0 ("in"), 0 == "out" */
 #define CEPH_OSD_IN  0x10000

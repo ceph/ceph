@@ -1088,6 +1088,12 @@ void OSDMonitor::tick()
 	dout(10) << "tick marking osd." << o << " OUT after " << down
 		 << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
 	pending_inc.new_weight[o] = CEPH_OSD_OUT;
+
+	// set the AUTOOUT bit.
+	if (pending_inc.new_state.count(o) == 0)
+	  pending_inc.new_state[o] = 0;
+	pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
 	do_propose = true;
 	
 	mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
