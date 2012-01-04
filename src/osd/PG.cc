@@ -4363,6 +4363,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
       pg->peer_missing[*i];
       continue;
     }
+    if (pi.last_backfill == hobject_t()) {
+      dout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
+      pg->peer_missing[*i];
+      continue;
+    }
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
 	pi.last_update == pg->info.last_update) {  // peer is up to date
