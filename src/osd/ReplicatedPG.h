@@ -571,6 +571,8 @@ protected:
    */
   set<hobject_t> backfills_in_flight;
   map<hobject_t, pg_stat_t> pending_backfill_updates;
+
+  /// leading edge of backfill
   hobject_t backfill_pos;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer

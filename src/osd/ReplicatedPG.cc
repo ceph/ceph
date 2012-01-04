@@ -922,6 +922,10 @@ void ReplicatedPG::do_scan(MOSDPGScan *m)
       bufferlist::iterator p = m->get_data().begin();
       ::decode(bi.objects, p);
 
+      backfill_pos = backfill_info.begin > peer_backfill_info.begin ?
+	peer_backfill_info.begin : backfill_info.begin;
+      dout(10) << " backfill_pos now " << backfill_pos << dendl;
+
       assert(waiting_on_backfill);
       waiting_on_backfill = false;
       finish_recovery_op(bi.begin);
@@ -5017,7 +5021,9 @@ void ReplicatedPG::on_activate()
     if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
       assert(backfill_target == -1);
       backfill_target = acting[i];
-      dout(10) << " chose backfill target osd." << backfill_target << dendl;
+      backfill_pos = peer_info[acting[i]].last_backfill;
+      dout(10) << " chose backfill target osd." << backfill_target
+	       << " from " << backfill_pos << dendl;
     }
   }
 }
@@ -5460,8 +5466,6 @@ int ReplicatedPG::recover_backfill(int max)
     pbi.reset(pinfo.last_backfill);
     backfill_info.reset(pinfo.last_backfill);
   }
-
-  backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
 
   dout(10) << " peer osd." << backfill_target
 	   << " pos " << backfill_pos
