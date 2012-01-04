@@ -35,6 +35,7 @@ using namespace librados;
 #include <sstream>
 #include <errno.h>
 #include <dirent.h>
+#include <stdexcept>
 
 #include "common/errno.h"
 
@@ -862,13 +863,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       outstream = new ofstream(nargs[1]);
 
     {
-      librados::ObjectIterator i = io_ctx.objects_begin();
-      librados::ObjectIterator i_end = io_ctx.objects_end();
-      for (; i != i_end; ++i) {
-	if (i->second.size())
-	  *outstream << i->first << "\t" << i->second << std::endl;
-	else
-	  *outstream << i->first << std::endl;
+      try {
+	librados::ObjectIterator i = io_ctx.objects_begin();
+	librados::ObjectIterator i_end = io_ctx.objects_end();
+	for (; i != i_end; ++i) {
+	  if (i->second.size())
+	    *outstream << i->first << "\t" << i->second << std::endl;
+	  else
+	    *outstream << i->first << std::endl;
+	}
+      }
+      catch (const std::runtime_error& e) {
+	cerr << e.what() << std::endl;
+	return 1;
       }
     }
     if (!stdout)

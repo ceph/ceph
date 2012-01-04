@@ -2625,7 +2625,7 @@ void librados::ObjectIterator::get_next()
   }
   else if (ret) {
     ostringstream oss;
-    oss << "rados_objects_list_next returned " << ret;
+    oss << "rados returned " << cpp_strerror(ret);
     throw std::runtime_error(oss.str());
   }
 
