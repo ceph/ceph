@@ -23,7 +23,6 @@ from sys import stderr
 from lxml import etree
 import base64
 import boto
-import cloudfiles
 import errno
 import hashlib
 import mimetypes
@@ -37,6 +36,11 @@ import tempfile
 import time
 import traceback
 import xattr
+
+try:
+    import cloudfiles
+except ImportError:
+    cloudfiles = None
 
 # Command-line options
 global opts
@@ -82,6 +86,9 @@ DST_CONSISTENCY   Set to 'eventual' if the destination is eventually consistent
 
 If these environment variables are not given, we will fall back on libboto
 defaults.
+
+Note: if python-cloudfiles is not installed, swift stores will not be able
+to be synced.
 """
 ###### Constants #######
 ACL_XATTR = "rados.acl"
@@ -1062,6 +1069,8 @@ try:
             if (not opts.src_host):
                 raise ObsyncArgumentParsingException("src-host is required for s3 stores!")
         if (opts.src_type == 'swift'):
+            if not cloudfiles:
+                raise ObsyncArgumentParsingException("cloudfiles library not found. Swift syncing unavailable")
             if (not opts.src_authurl):
                 raise ObsyncArgumentParsingException("src-authurl is required for swift stores!")
             if (opts.src_host):
@@ -1084,6 +1093,8 @@ try:
             if (not opts.dst_host):
                 raise ObsyncArgumentParsingException("dst-host is required for s3 stores!")
         if (opts.dst_type == 'swift'):
+            if not cloudfiles:
+                raise ObsyncArgumentParsingException("cloudfiles library not found. Swift syncing unavailable")
             if (not opts.dst_authurl):
                 raise ObsyncArgumentParsingException("dst-authurl is required for swift stores!")
             if (opts.dst_host):
