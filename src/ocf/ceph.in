@@ -16,15 +16,15 @@ ceph_meta_data() {
     case $__SCRIPT_NAME in
 	"osd")
 	    longdesc="Wraps the ceph init script to provide an OCF resource agent that manages and monitors the Ceph OSD service."
-	    longdesc="Manages a Ceph OSD instance."
+	    shortdesc="Manages a Ceph OSD instance."
 	    ;;
 	"mds")
 	    longdesc="Wraps the ceph init script to provide an OCF resource agent that manages and monitors the Ceph MDS service."
-	    longdesc="Manages a Ceph MDS instance."
+	    shortdesc="Manages a Ceph MDS instance."
 	    ;;
 	"mon")
 	    longdesc="Wraps the ceph init script to provide an OCF resource agent that manages and monitors the Ceph MON service."
-	    longdesc="Manages a Ceph MON instance."
+	    shortdesc="Manages a Ceph MON instance."
 	    ;;
     esac
     
