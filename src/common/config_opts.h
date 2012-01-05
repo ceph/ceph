@@ -87,7 +87,7 @@ OPTION(mon_data, OPT_STR, "")
 OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
-OPTION(mon_osd_auto_mark_in, OPT_BOOL, true)          // mark booting osds 'in'
+OPTION(mon_osd_auto_mark_in, OPT_BOOL, false)         // mark any booting osds 'in'
 OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL, true) // mark booting auto-marked-out osds 'in'
 OPTION(mon_osd_auto_mark_new_in, OPT_BOOL, true)      // mark booting new osds 'in'
 OPTION(mon_osd_down_out_interval, OPT_INT, 300) // seconds
