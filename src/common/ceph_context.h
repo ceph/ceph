@@ -22,7 +22,7 @@
 template <typename T, typename U>
 class DoutStreambuf;
 
-class AdminSocketConfigObs;
+class AdminSocket;
 class CephContextServiceThread;
 class DoutLocker;
 class PerfCountersCollection;
@@ -85,7 +85,7 @@ private:
   CephContextServiceThread *_service_thread;
 
   /* The collection of profiling loggers associated with this context */
-  AdminSocketConfigObs *_admin_socket_config_obs;
+  AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;

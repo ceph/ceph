@@ -13,33 +13,50 @@
  */
 
 #include "common/config_obs.h"
+#include "common/Thread.h"
 
 #include <string>
+#include "include/buffer.h"
 
 class AdminSocket;
 class CephContext;
 
 #define CEPH_ADMIN_SOCK_VERSION 1U
 
-class AdminSocketConfigObs : public md_config_obs_t
+class AdminSocket : public Thread, public md_config_obs_t
 {
 public:
-  AdminSocketConfigObs(CephContext *cct);
-  ~AdminSocketConfigObs();
+  AdminSocket(CephContext *cct);
+  virtual ~AdminSocket();
+
+  // md_config_obs_t
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const md_config_t *conf,
-			  const std::set <std::string> &changed);
+				  const std::set <std::string> &changed);
+
 private:
-  AdminSocketConfigObs(const AdminSocketConfigObs& rhs);
-  AdminSocketConfigObs& operator=(const AdminSocketConfigObs &rhs);
+  AdminSocket(const AdminSocket& rhs);
+  AdminSocket& operator=(const AdminSocket &rhs);
+
   bool init(const std::string &path);
   void shutdown();
 
-  CephContext *m_cct;
-  AdminSocket* m_thread;
-  std::string m_path;
-  int m_shutdown_fd;
+  std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
+  std::string bind_and_listen(const std::string &sock_path, int *fd);
 
-  friend class AdminSocket;
+  void *entry();
+  bool do_accept();
+
+  bool handle_version_request(int connection_fd);
+  bool handle_json_request(int connection_fd, bool schema);
+
+  CephContext *m_cct;
+  std::string m_path;
+  int m_sock_fd;
+  int m_shutdown_rd_fd;
+  int m_shutdown_wr_fd;
+
   friend class AdminSocketTest;
 };
+
+

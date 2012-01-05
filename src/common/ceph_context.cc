@@ -91,15 +91,15 @@ CephContext::CephContext(uint32_t module_type_)
     _dout(_doss),
     _module_type(module_type_),
     _service_thread(NULL),
-    _admin_socket_config_obs(NULL),
+    _admin_socket(NULL),
     _perf_counters_collection(NULL),
     _heartbeat_map(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
   _perf_counters_collection = new PerfCountersCollection(this);
   _conf->add_observer(_doss);
-  _admin_socket_config_obs = new AdminSocketConfigObs(this);
-  _conf->add_observer(_admin_socket_config_obs);
+  _admin_socket = new AdminSocket(this);
+  _conf->add_observer(_admin_socket);
   _heartbeat_map = new HeartbeatMap(this);
 }
 
@@ -109,7 +109,7 @@ CephContext::~CephContext()
 
   delete _heartbeat_map;
 
-  _conf->remove_observer(_admin_socket_config_obs);
+  _conf->remove_observer(_admin_socket);
   _conf->remove_observer(_doss);
 
   delete _perf_counters_collection;
