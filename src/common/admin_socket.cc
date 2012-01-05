@@ -336,22 +336,19 @@ private:
  * management system. It will create the AdminSocket thread when the
  * appropriate configuration is set.
  */
-AdminSocketConfigObs::
-AdminSocketConfigObs(CephContext *cct)
+AdminSocketConfigObs::AdminSocketConfigObs(CephContext *cct)
   : m_cct(cct),
     m_thread(NULL),
     m_shutdown_fd(-1)
 {
 }
 
-AdminSocketConfigObs::
-~AdminSocketConfigObs()
+AdminSocketConfigObs::~AdminSocketConfigObs()
 {
   shutdown();
 }
 
-const char** AdminSocketConfigObs::
-get_tracked_conf_keys() const
+const char** AdminSocketConfigObs::get_tracked_conf_keys() const
 {
   static const char *KEYS[] = { "admin_socket",
 	  "internal_safe_to_start_threads",
@@ -360,9 +357,8 @@ get_tracked_conf_keys() const
   return KEYS;
 }
 
-void AdminSocketConfigObs::
-handle_conf_change(const md_config_t *conf,
-		   const std::set <std::string> &changed)
+void AdminSocketConfigObs::handle_conf_change(const md_config_t *conf,
+					      const std::set <std::string> &changed)
 {
   if (!conf->internal_safe_to_start_threads) {
     // We can't do anything until it's safe to start threads.
@@ -378,8 +374,7 @@ handle_conf_change(const md_config_t *conf,
   }
 }
 
-bool AdminSocketConfigObs::
-init(const std::string &path)
+bool AdminSocketConfigObs::init(const std::string &path)
 {
   /* Set up things for the new thread */
   std::string err;
@@ -415,8 +410,7 @@ init(const std::string &path)
   return true;
 }
 
-void AdminSocketConfigObs::
-shutdown()
+void AdminSocketConfigObs::shutdown()
 {
   if (!m_thread)
     return;
