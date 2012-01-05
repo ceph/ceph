@@ -850,6 +850,25 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   return 0;
 }
 
+bool has_snaps(IoCtx& io_ctx, const std::string& md_oid)
+{
+  CephContext *cct(io_ctx.cct());
+  ldout(cct, 20) << "has_snaps " << &io_ctx << " " << md_oid << dendl;
+
+  bufferlist bl, bl2;
+  int r = io_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
+  if (r < 0) {
+    lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
+    return true;
+  }
+  uint32_t num_snaps;
+  uint64_t snap_seq;
+  bufferlist::iterator iter = bl2.begin();
+  ::decode(snap_seq, iter);
+  ::decode(num_snaps, iter);
+  return num_snaps > 0;
+}
+
 int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 {
   CephContext *cct(io_ctx.cct());
@@ -864,6 +883,10 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
     ldout(cct, 2) << "error reading header: " << cpp_strerror(-r) << dendl;
   }
   if (r >= 0) {
+    if (has_snaps(io_ctx, md_oid)) {
+      lderr(cct) << "image has snapshots - not removing" << dendl;
+      return -EBUSY;
+    }
     trim_image(io_ctx, header, 0, prog_ctx);
     ldout(cct, 2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
