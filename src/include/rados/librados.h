@@ -143,7 +143,7 @@ int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
 int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
 void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
-int rados_ioctx_get_id(rados_ioctx_t io);
+int64_t rados_ioctx_get_id(rados_ioctx_t io);
 
 /* objects */
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);

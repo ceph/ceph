@@ -21,6 +21,8 @@ struct ObjectMetaInfo {
   uint64_t size;
   time_t mtime;
 
+  ObjectMetaInfo() : size(0), mtime(0) {}
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -75,6 +77,8 @@ struct RGWCacheNotifyInfo {
   ObjectCacheInfo obj_info;
   off_t ofs;
   string ns;
+
+  RGWCacheNotifyInfo() : op(0), ofs(0) {}
 
   void encode(bufferlist& obl) const {
     __u8 struct_v = 1;

@@ -128,7 +128,7 @@ struct librados::IoCtxImpl {
   void complete_aio_write(struct AioCompletionImpl *c);
   void flush_aio_writes();
 
-  int get_id() {
+  int64_t get_id() {
     return poolid;
   }
 };
@@ -1228,6 +1228,7 @@ int librados::RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
   IoCtxImpl* io = (IoCtxImpl *) io_;
   string sName(snapName);
 
+  lock.Lock();
   snapid_t snap;
   const map<int64_t, pg_pool_t>& pools = objecter->osdmap->get_pools();
   const pg_pool_t& pg_pool = pools.find(io->poolid)->second;
@@ -1240,7 +1241,11 @@ int librados::RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
       break;
     }
   }
-  if (p == pg_pool.snaps.end()) return -ENOENT;
+  if (p == pg_pool.snaps.end()) {
+    lock.Unlock();
+    return -ENOENT;
+  }
+  lock.Unlock();
 
   return selfmanaged_snap_rollback_object(io_, oid, io->snapc, snap);
 }
@@ -1782,6 +1787,8 @@ int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
   Context *oncommit = new C_aio_Safe(c);
 
   io.queue_aio_write(c);
+
+  Mutex::Locker l(lock);
   objecter->mutate(oid, io.oloc, *o, io.snapc, ut, 0, onack, oncommit, &c->objver);
 
   return 0;
@@ -2618,7 +2625,7 @@ void librados::ObjectIterator::get_next()
   }
   else if (ret) {
     ostringstream oss;
-    oss << "rados_objects_list_next returned " << ret;
+    oss << "rados returned " << cpp_strerror(ret);
     throw std::runtime_error(oss.str());
   }
 
@@ -3107,7 +3114,7 @@ void librados::IoCtx::locator_set_key(const string& key)
   io_ctx_impl->oloc.key = key;
 }
 
-int librados::IoCtx::get_id()
+int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();
 }
@@ -3727,7 +3734,7 @@ extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
     ctx->oloc.key = "";
 }
 
-extern "C" int rados_ioctx_get_id(rados_ioctx_t io)
+extern "C" int64_t rados_ioctx_get_id(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->get_id();

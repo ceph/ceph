@@ -340,6 +340,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 
   formatter->close_section();
   formatter->flush(cout);
+  cout << std::endl;
 }
 
 static int create_bucket(string bucket_str, string& user_id, string& display_name, uint64_t auid)
@@ -950,6 +951,7 @@ int main(int argc, char **argv)
     }
     formatter->close_section();
     formatter->flush(cout);
+    cout << std::endl;
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
@@ -1045,6 +1047,7 @@ int main(int argc, char **argv)
     }
     formatter->close_section();
     formatter->flush(cout);
+    cout << std::endl;
   }
 
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
@@ -1153,6 +1156,7 @@ next:
       }
       formatter->close_section();
       formatter->flush(cout);
+      cout << std::endl;
     }
     if (opt_cmd == OPT_LOG_RM) {
       int r = store->log_remove(oid);
@@ -1189,6 +1193,7 @@ next:
      formatter->dump_string("owner", bucket_info.owner.c_str());
      formatter->close_section();
      formatter->flush(cout);
+     cout << std::endl;
    }
 
    if (opt_cmd == OPT_BUCKET_STATS) {
@@ -1214,6 +1219,7 @@ next:
        }
      }
      formatter->flush(cout);
+     cout << std::endl;
    }
 
    if (opt_cmd == OPT_POOL_CREATE) {

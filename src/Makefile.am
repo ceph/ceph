@@ -196,13 +196,9 @@ test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
-testsnaps_SOURCES = test/osd/TestSnaps.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
-testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += testsnaps
-
-testreadwrite_SOURCES = test/osd/TestReadWrite.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
-testreadwrite_LDADD = librados.la $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += testreadwrite
+testrados_SOURCES = test/osd/TestRados.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
+testrados_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += testrados
 
 multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
@@ -733,8 +729,11 @@ ${WARN_TYPE_LIMITS} ${WARN_IGNORED_QUALIFIERS} -Winit-self -Wpointer-arith \
 -fno-strict-aliasing
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
-AM_CXXFLAGS = $(AM_COMMON_FLAGS) -Wnon-virtual-dtor -Wno-invalid-offsetof \
--Wstrict-null-sentinel
+AM_CXXFLAGS = $(AM_COMMON_FLAGS) \
+	-DCEPH_LIBDIR=\"${libdir}\" \
+	-Wnon-virtual-dtor \
+	-Wno-invalid-offsetof \
+	-Wstrict-null-sentinel
 AM_LDFLAGS = -Wl,--as-needed
 
 if USE_BOOST_SPIRIT_OLD_HDR
@@ -766,8 +765,7 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
 docdir ?= ${datadir}/doc/ceph
 
-doc_DATA = $(srcdir)/sample.ceph.conf
-doc_SCRIPTS = sample.fetch_config
+doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 sample.fetch_config: fetch_config
 	cp -f $(srcdir)/fetch_config ./sample.fetch_config

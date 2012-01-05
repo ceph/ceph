@@ -36,6 +36,15 @@ typename T::iterator rand_choose(T &cont) {
   return retval;
 }
 
+enum TestOpType {
+  TEST_OP_READ,
+  TEST_OP_WRITE,
+  TEST_OP_DELETE,
+  TEST_OP_SNAP_CREATE,
+  TEST_OP_SNAP_REMOVE,
+  TEST_OP_ROLLBACK
+};
+
 class TestOp {
 public:
   RadosTestContext *context;
@@ -48,10 +57,31 @@ public:
     done(0)
   {}
 
-  virtual ~TestOp();
+  virtual ~TestOp() {};
+
+  /**
+   * This struct holds data to be passed by a callback
+   * to a TestOp::finish method.
+   */
+  struct CallbackInfo {
+    uint64_t id;
+    CallbackInfo(uint64_t id) : id(id) {}
+    virtual ~CallbackInfo() {};
+  };
 
   virtual void _begin() = 0;
-  virtual void _finish() = 0;
+
+  /**
+   * Called when the operation completes.
+   * This should be overridden by asynchronous operations.
+   *
+   * @param info information stored by a callback, or NULL -
+   *             useful for multi-operation TestOps
+   */
+  virtual void _finish(CallbackInfo *info)
+  {
+    return;
+  }
   virtual string getType() = 0;
   virtual bool finished()
   {
@@ -59,12 +89,12 @@ public:
   }
 
   void begin();
-  void finish();
+  void finish(CallbackInfo *info);
 };
 
 class TestOpGenerator {
 public:
-  virtual ~TestOpGenerator();
+  virtual ~TestOpGenerator() {};
   virtual TestOp *next(RadosTestContext &context) = 0;
 };
 
@@ -242,20 +272,22 @@ public:
   }
 };
 
-void callback(librados::completion_t cb, void *arg);
+void read_callback(librados::completion_t comp, void *arg);
+void write_callback(librados::completion_t comp, void *arg);
 
 class WriteOp : public TestOp {
 public:
   string oid;
   ContDesc cont;
   set<librados::AioCompletion *> waiting;
-  int waiting_on;
+  uint64_t waiting_on;
+  uint64_t last_acked_tid;
 
   WriteOp(RadosTestContext *context, 
 	  const string &oid,
 	  TestOpStat *stat = 0) : 
     TestOp(context, stat),
-    oid(oid), waiting_on(0)
+    oid(oid), waiting_on(0), last_acked_tid(0)
   {}
 		
   void _begin()
@@ -286,14 +318,6 @@ public:
     }
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
-    for (interval_set<uint64_t>::iterator i = ranges.begin();
-	 i != ranges.end();
-	 ++i) {
-      ++waiting_on;
-      librados::AioCompletion *completion = 
-	context->rados.aio_create_completion((void *) this, &callback, 0);
-      waiting.insert(completion);
-    }
     context->state_lock.Unlock();
 
     int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
@@ -302,11 +326,13 @@ public:
       assert(0);
     }
 
+    waiting_on = ranges.num_intervals();
+    cout << "waiting_on = " << waiting_on << std::endl;
     ContentsGenerator::iterator gen_pos = context->cont_gen.get_iterator(cont);
-    set<librados::AioCompletion*>::iterator l = waiting.begin();
+    uint64_t tid = 1;
     for (interval_set<uint64_t>::iterator i = ranges.begin(); 
 	 i != ranges.end();
-	 ++i, ++l) {
+	 ++i, ++tid) {
       bufferlist to_write;
       gen_pos.seek(i.get_start());
       for (uint64_t k = 0; k != i.get_len(); ++k, ++gen_pos) {
@@ -315,16 +341,34 @@ public:
       assert(to_write.length() == i.get_len());
       assert(to_write.length() > 0);
       std::cout << "Writing " << context->prefix+oid << " from " << i.get_start()
-		<< " to " << i.get_len() + i.get_start() << " ranges are " 
-		<< ranges << std::endl;
-      context->io_ctx.aio_write(context->prefix+oid, *l,
+		<< " to " << i.get_len() + i.get_start() << " tid " << tid
+		<< " ranges are " << ranges << std::endl;
+      pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+	new pair<TestOp*, TestOp::CallbackInfo*>(this,
+						 new TestOp::CallbackInfo(tid));
+      librados::AioCompletion *completion =
+	context->rados.aio_create_completion((void*) cb_arg, &write_callback, NULL);
+      waiting.insert(completion);
+      context->io_ctx.aio_write(context->prefix+oid, completion,
 				to_write, i.get_len(), i.get_start());
     }
   }
 
-  void _finish()
+  void _finish(CallbackInfo *info)
   {
+    assert(info);
     context->state_lock.Lock();
+    uint64_t tid = info->id;
+
+    cout << "finishing write tid " << tid << " to " << context->prefix + oid << std::endl;
+
+    if (tid <= last_acked_tid) {
+      cerr << "Error: finished tid " << tid
+	   << " when last_acked_tid was " << last_acked_tid << std::endl;
+      assert(0);
+    }
+    last_acked_tid = tid;
+
     assert(!done);
     waiting_on--;
     if (waiting_on == 0) {
@@ -350,7 +394,7 @@ public:
 
   bool finished()
   {
-    return waiting.empty();
+    return done;
   }
 
   string getType()
@@ -415,17 +459,6 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->state_lock.Unlock();
-    finish();
-  }
-
-  void _finish()
-  {
-    return;
-  }
-
-  bool finished()
-  {
-    return true;
   }
 
   string getType()
@@ -458,7 +491,7 @@ public:
       snap = -1;
     }
     done = 0;
-    completion = context->rados.aio_create_completion((void *) this, &callback, 0);
+    completion = context->rados.aio_create_completion((void *) this, &read_callback, 0);
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
@@ -476,7 +509,7 @@ public:
     }
   }
 
-  void _finish()
+  void _finish(CallbackInfo *info)
   {
     context->state_lock.Lock();
     assert(!done);
@@ -537,13 +570,6 @@ public:
     context->state_lock.Lock();
     context->add_snap(snap);
     context->state_lock.Unlock();
-
-    finish();
-  }
-
-  void _finish()
-  {
-    return;
   }
 
   string getType()
@@ -570,12 +596,6 @@ public:
     context->state_lock.Unlock();
 
     assert(!context->io_ctx.selfmanaged_snap_remove(snap));
-    finish();
-  }
-
-  void _finish()
-  {
-    return;
   }
 
   string getType()
@@ -621,14 +641,7 @@ public:
       cerr << "r is " << r << std::endl;
       assert(0);
     }
-    finish();
   }
-
-  void _finish()
-  {
-    return;
-  }
-    
 
   string getType()
   {

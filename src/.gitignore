@@ -41,8 +41,7 @@
 /test_libceph_build
 /test_librados_build
 /test_librgw_build
-/testsnaps
-/testreadwrite
+/testrados
 /test_str_list
 /test_stress_watch
 /multi_stress_watch

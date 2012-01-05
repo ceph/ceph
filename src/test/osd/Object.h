@@ -213,8 +213,8 @@ public:
   uint64_t length;
   uint64_t min_stride_size;
   uint64_t max_stride_size;
-  VarLenGenerator(int length) : 
-    length(length), min_stride_size(length/10), max_stride_size(length/5) {}
+  VarLenGenerator(uint64_t length, uint64_t min_stride_size, uint64_t max_stride_size) :
+    length(length), min_stride_size(min_stride_size), max_stride_size(max_stride_size) {}
 };
 
 class ObjectDesc {

@@ -547,6 +547,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   map_cache_lock("OSD::map_cache_lock"),
+  outstanding_pg_stats(false),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -1803,6 +1804,13 @@ void OSD::tick()
 
   timer.add_event_after(1.0, new C_Tick(this));
 
+  if (outstanding_pg_stats
+      &&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
+    dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
+            << "seconds, reconnecting elsewhere" << dendl;
+    monc->reopen_session();
+  }
+
   // only do waiters if dispatch() isn't currently running.  (if it is,
   // it'll do the waiters, and doing them here may screw up ordering
   // of op_queue vs handle_osd_map.)
@@ -2153,7 +2161,11 @@ void OSD::send_pg_stats(const utime_t &now)
       }
       pg->pg_stats_lock.Unlock();
     }
-    
+
+    if (!outstanding_pg_stats) {
+      outstanding_pg_stats = true;
+      last_pg_stats_ack = ceph_clock_now(g_ceph_context);
+    }
     monc->send_mon_message(m);
   }
 
@@ -2168,6 +2180,8 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     ack->put();
     return;
   }
+
+  last_pg_stats_ack = ceph_clock_now(g_ceph_context);
 
   pg_stat_queue_lock.Lock();
 
@@ -2197,6 +2211,10 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
       dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
   }
   
+  if (!pg_stat_queue.size()) {
+    outstanding_pg_stats = false;
+  }
+
   pg_stat_queue_lock.Unlock();
 
   ack->put();
@@ -5100,18 +5118,28 @@ void OSD::reply_op_error(MOSDOp *op, int err, eversion_t v)
 
 void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
 {
-  if (op->get_map_epoch() < pg->info.history.same_primary_since) {
-    dout(7) << *pg << " changed after " << op->get_map_epoch() << ", dropping" << dendl;
-    op->put();
+  if (pg) {
+    if (op->get_map_epoch() < pg->info.history.same_primary_since) {
+      dout(7) << *pg << " changed after " << op->get_map_epoch() << ", dropping" << dendl;
+      op->put();
+      return;
+    } else {
+      dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
+      clog.warn() << op->get_source_inst() << " misdirected "
+          << op->get_reqid() << " " << pg->info.pgid << " to osd." << whoami
+          << " not " << pg->acting
+          << " in e" << op->get_map_epoch() << "/" << osdmap->get_epoch()
+          << "\n";
+    }
   } else {
-    dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
+    dout(7) << "got misdirected op from " << op->get_source_inst()
+            << " for pgid " << op->get_pg() << dendl;
     clog.warn() << op->get_source_inst() << " misdirected "
-		<< op->get_reqid() << " " << pg->info.pgid << " to osd." << whoami
-		<< " not " << pg->acting
-		<< " in e" << op->get_map_epoch() << "/" << osdmap->get_epoch()
-		<< "\n";
-    reply_op_error(op, -ENXIO);
+                << op->get_reqid() << " " << pg->info.pgid
+                << "to osd." << whoami
+                << " in e" << op->get_map_epoch() << "\n";
   }
+  reply_op_error(op, -ENXIO);
 }
 
 void OSD::handle_op(MOSDOp *op)
@@ -5186,9 +5214,35 @@ void OSD::handle_op(MOSDOp *op)
   // get and lock *pg.
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
   if (!pg) {
-    dout(7) << "hit non-existent pg " << pgid 
-	    << ", waiting" << dendl;
-    waiting_for_pg[pgid].push_back(op);
+    dout(7) << "hit non-existent pg " << pgid << dendl;
+
+    if (osdmap->get_pg_role(pgid, whoami) >= 0) {
+      dout(7) << "we are valid target for op, waiting" << dendl;
+      waiting_for_pg[pgid].push_back(op);
+      return;
+    }
+
+    // okay, we aren't valid now; check send epoch
+    if (op->get_map_epoch() >= superblock.oldest_map) {
+      dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
+      op->put();
+      return;
+    }
+    OSDMapRef send_map = get_map(op->get_map_epoch());
+
+    // remap pgid
+    pgid = op->get_pg();
+    if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
+	send_map->have_pg_pool(pgid.pool()))
+      pgid = send_map->raw_pg_to_pg(pgid);
+    
+    if (send_map->get_pg_role(op->get_pg(), whoami) >= 0) {
+      dout(7) << "dropping request; client will resend when they get new map" << dendl;
+      op->put();
+    } else {
+      dout(7) << "we are invalid target" << dendl;
+      handle_misdirected_op(NULL, op);
+    }
     return;
   }
 
@@ -5316,7 +5370,12 @@ bool OSD::op_is_discardable(MOSDOp *op)
 }
 
 /*
- * discard operation, or return true.  no side-effects.
+ * Determine if we can queue the op right now; if not this deals with it.
+ * If it's not queueable, we deal with it in one of a few ways:
+ * dropping the request, putting it into a wait list for later, or
+ * telling the sender that the request was misdirected.
+ *
+ * @return true if the op is queueable; false otherwise.
  */
 bool OSD::op_is_queueable(PG *pg, MOSDOp *op)
 {
