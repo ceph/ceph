@@ -61,12 +61,16 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
   // bind to a socket
   ldout(msgr->cct,10) << "accepter.bind" << dendl;
   
-  int family = conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
+  int family;
   switch (bind_addr.get_family()) {
   case AF_INET:
   case AF_INET6:
     family = bind_addr.get_family();
     break;
+
+  default:
+    // bind_addr is empty
+    family = conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
   }
 
   /* socket creation */
