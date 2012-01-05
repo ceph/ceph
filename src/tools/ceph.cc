@@ -59,7 +59,7 @@ static void usage()
 static void parse_cmd_args(vector<const char*> &args,
 		std::string *in_file, std::string *out_file,
 			   ceph_tool_mode_t *mode, bool *concise,
-			   string *admin_socket, uint32_t *admin_socket_cmd)
+			   string *admin_socket, string *admin_socket_cmd)
 {
   std::vector<const char*>::iterator i;
   std::string val;
@@ -70,21 +70,11 @@ static void parse_cmd_args(vector<const char*> &args,
       *in_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--out-file", (char*)NULL)) {
       *out_file = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--dump-perf-counters", (char*)NULL)) {
-      *admin_socket = val;
-      *admin_socket_cmd = 1;
-    } else if (ceph_argparse_witharg(args, i, &val, "--dump-perf-counters-schema", (char*)NULL)) {
-      *admin_socket = val;
-      *admin_socket_cmd = 2;
     } else if (ceph_argparse_witharg(args, i, &val, "--admin-daemon", (char*)NULL)) {
       *admin_socket = val;
       if (i == args.end())
 	usage();
-      const char *start = *i;
-      char *end = (char *)start;
-      *admin_socket_cmd = strtol(start, &end, 10);
-      if (*end != '\0')
-	usage();
+      *admin_socket_cmd = *i;
     } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
       *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
     } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
@@ -131,7 +121,7 @@ static int get_indata(const char *in_file, bufferlist &indata)
   return 0;
 }
 
-int do_admin_socket(string path, uint32_t cmd)
+int do_admin_socket(string path, string cmd)
 {
   struct sockaddr_un address;
   int fd;
@@ -155,8 +145,7 @@ int do_admin_socket(string path, uint32_t cmd)
   
   char *buf;
   uint32_t len;
-  cmd = htonl(cmd);
-  r = safe_write(fd, &cmd, sizeof(cmd));
+  r = safe_write(fd, cmd.c_str(), cmd.length() + 1);
   if (r < 0) {
     cerr << "write to " << path << " failed with " << cpp_strerror(errno) << std::endl;
     goto out;
@@ -204,7 +193,7 @@ int main(int argc, const char **argv)
   // parse user input
   bool concise = false;
   string admin_socket;
-  uint32_t admin_socket_cmd = 0;
+  string admin_socket_cmd;
   parse_cmd_args(args, &in_file, &out_file, &mode, &concise, &admin_socket, &admin_socket_cmd);
 
   // daemon admin socket?
