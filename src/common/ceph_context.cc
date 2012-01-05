@@ -85,6 +85,31 @@ private:
   CephContext *_cct;
 };
 
+
+// perfcounter hooks
+
+class PerfCountersHook : public AdminSocketHook {
+  PerfCountersCollection *m_coll;
+
+public:
+  PerfCountersHook(PerfCountersCollection *c) : m_coll(c) {}
+
+  bool call(std::string command, bufferlist& out) {
+    std::vector<char> v;
+    if (command == "perfcounters_dump" ||
+	command == "1")
+      m_coll->write_json_to_buf(v, false);
+    else if (command == "perfcounters_schema" ||
+	     command == "2")
+      m_coll->write_json_to_buf(v, true);
+    else 
+      assert(0 == "registered under wrong command?");    
+    out.append(&v[0], v.size());
+    return true;
+  }
+};
+
+
 CephContext::CephContext(uint32_t module_type_)
   : _conf(new md_config_t()),
     _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
@@ -101,11 +126,23 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket = new AdminSocket(this);
   _conf->add_observer(_admin_socket);
   _heartbeat_map = new HeartbeatMap(this);
+
+  _perf_counters_hook = new PerfCountersHook(_perf_counters_collection);
+  _admin_socket->register_command("perfcounters_dump", _perf_counters_hook, "dump perfcounters value");
+  _admin_socket->register_command("1", _perf_counters_hook, "");
+  _admin_socket->register_command("perfcounters_schema", _perf_counters_hook, "dump perfcounters schema");
+  _admin_socket->register_command("2", _perf_counters_hook, "");
 }
 
 CephContext::~CephContext()
 {
   join_service_thread();
+
+  _admin_socket->unregister_command("perfcounters_dump");
+  _admin_socket->unregister_command("1");
+  _admin_socket->unregister_command("perfcounters_schema");
+  _admin_socket->unregister_command("2");
+  delete _perf_counters_hook;
 
   delete _heartbeat_map;
 
@@ -193,3 +230,5 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
 {
   return _perf_counters_collection;
 }
+
+

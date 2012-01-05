@@ -14,14 +14,22 @@
 
 #include "common/config_obs.h"
 #include "common/Thread.h"
+#include "common/Mutex.h"
 
 #include <string>
+#include <map>
 #include "include/buffer.h"
 
 class AdminSocket;
 class CephContext;
 
-#define CEPH_ADMIN_SOCK_VERSION 1U
+#define CEPH_ADMIN_SOCK_VERSION "2"
+
+class AdminSocketHook {
+public:
+  virtual bool call(std::string command, bufferlist& out) = 0;
+  virtual ~AdminSocketHook() {};
+};
 
 class AdminSocket : public Thread, public md_config_obs_t
 {
@@ -34,6 +42,25 @@ public:
   virtual void handle_conf_change(const md_config_t *conf,
 				  const std::set <std::string> &changed);
 
+  /**
+   * register an admin socket command
+   *
+   * @param command command string
+   * @param hook implementaiton
+   * @param help help text.  if empty, command will not be included in 'help' output.
+   *
+   * @return 0 for success, -EEXIST if command already registered.
+   */
+  int register_command(std::string command, AdminSocketHook *hook, std::string help);
+
+  /**
+   * unregister an admin socket command
+   *
+   * @param command command string
+   * @return 0 on succest, -ENOENT if command dne.
+   */
+  int unregister_command(std::string command);
+  
 private:
   AdminSocket(const AdminSocket& rhs);
   AdminSocket& operator=(const AdminSocket &rhs);
@@ -47,16 +74,20 @@ private:
   void *entry();
   bool do_accept();
 
-  bool handle_version_request(int connection_fd);
-  bool handle_json_request(int connection_fd, bool schema);
-
   CephContext *m_cct;
   std::string m_path;
   int m_sock_fd;
   int m_shutdown_rd_fd;
   int m_shutdown_wr_fd;
 
+  Mutex m_lock;    // protects m_hooks, m_help
+  AdminSocketHook *m_version_hook, *m_help_hook;
+
+  std::map<std::string,AdminSocketHook*> m_hooks;
+  std::map<std::string,std::string> m_help;
+
   friend class AdminSocketTest;
+  friend class HelpHook;
 };
 
 

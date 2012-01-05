@@ -28,6 +28,7 @@ class DoutLocker;
 class PerfCountersCollection;
 class md_config_obs_t;
 class md_config_t;
+class PerfCountersHook;
 
 namespace ceph {
   class HeartbeatMap;
@@ -94,6 +95,8 @@ private:
   PerfCountersCollection *_perf_counters_collection;
 
   md_config_obs_t *_perf_counters_conf_obs;
+
+  PerfCountersHook *_perf_counters_hook;
 
   ceph::HeartbeatMap *_heartbeat_map;
 };
