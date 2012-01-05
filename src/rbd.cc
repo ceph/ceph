@@ -78,6 +78,7 @@ void usage()
        << "  snap create <--snap=name> [image-name]    create a snapshot\n"
        << "  snap rollback <--snap=name> [image-name]  rollback image head to snapshot\n"
        << "  snap rm <--snap=name> [image-name]        deletes a snapshot\n"
+       << "  snap purge [image-name]                   deletes all snapshots\n"
        << "  watch [image-name]                        watch events on image\n"
        << "  map [image-name]                          map the image to a block device\n"
        << "                                            using the kernel\n"
@@ -255,6 +256,25 @@ static int do_rollback_snap(librbd::Image& image, const char *snapname)
     pc.fail();
     return r;
   }
+  pc.finish();
+  return 0;
+}
+
+static int do_purge_snaps(librbd::Image& image)
+{
+  MyProgressContext pc("Removing all snapshots");
+  std::vector<librbd::snap_info_t> snaps;
+  int r = image.snap_list(snaps);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+
+  for (size_t i = 0; i < snaps.size(); ++i) {
+    image.snap_remove(snaps[i].name.c_str());
+    pc.update_progress(i + 1, snaps.size());
+  }
+
   pc.finish();
   return 0;
 }
@@ -815,6 +835,7 @@ enum {
   OPT_SNAP_ROLLBACK,
   OPT_SNAP_REMOVE,
   OPT_SNAP_LIST,
+  OPT_SNAP_PURGE,
   OPT_WATCH,
   OPT_MAP,
   OPT_UNMAP,
@@ -866,6 +887,8 @@ static int get_cmd(const char *cmd, bool snapcmd)
     if (strcmp(cmd, "ls") == 0||
         strcmp(cmd, "list") == 0)
       return OPT_SNAP_LIST;
+    if (strcmp(cmd, "purge") == 0)
+      return OPT_SNAP_PURGE;
   }
 
   return OPT_NO_CMD;
@@ -979,6 +1002,7 @@ int main(int argc, const char **argv)
       case OPT_SNAP_ROLLBACK:
       case OPT_SNAP_REMOVE:
       case OPT_SNAP_LIST:
+      case OPT_SNAP_PURGE:
       case OPT_WATCH:
       case OPT_MAP:
 	set_conf_param(v, &imgname, NULL);
@@ -1083,8 +1107,8 @@ int main(int argc, const char **argv)
   if (imgname && talk_to_cluster &&
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH ||
-       opt_cmd == OPT_COPY)) {
+       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_SNAP_PURGE ||
+       opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
@@ -1161,7 +1185,13 @@ int main(int argc, const char **argv)
   case OPT_RM:
     r = do_delete(rbd, io_ctx, imgname);
     if (r < 0) {
-      cerr << "delete error: " << cpp_strerror(-r) << std::endl;
+      if (r == -EBUSY) {
+	cerr << "delete error: image has snapshots - these must be deleted"
+	     << " with 'rbd snap purge' before the image can be removed."
+	     << std::endl;
+      } else {
+	cerr << "delete error: " << cpp_strerror(-r) << std::endl;
+      }
       exit(1);
     }
     break;
@@ -1218,6 +1248,18 @@ int main(int argc, const char **argv)
     r = do_remove_snap(image, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
+  case OPT_SNAP_PURGE:
+    if (!imgname) {
+      usage();
+      exit(1);
+    }
+    r = do_purge_snaps(image);
+    if (r < 0) {
+      cerr << "removing snaps failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;

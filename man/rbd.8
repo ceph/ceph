@@ -103,7 +103,8 @@ Will create a new rbd image. You must also specify the size via \-\-size.
 Resizes rbd image. The size parameter also needs to be specified.
 .TP
 .B \fBrm\fP [\fIimage\-name\fP]
-Deletes rbd image (including all data blocks)
+Deletes an rbd image (including all data blocks). If the image has
+snapshots, this fails and nothing is deleted.
 .TP
 .B \fBexport\fP [\fIimage\-name\fP] [\fIdest\-path\fP]
 Exports image to dest path.
@@ -129,6 +130,9 @@ array and update the data head content to the snapshotted version.
 .TP
 .B \fBsnap\fP rm [\fIimage\-name\fP]
 Removes the specified snapshot.
+.TP
+.B \fBsnap\fP purge [\fIimage\-name\fP]
+Removes all snapshots from an image.
 .TP
 .B \fBmap\fP [\fIimage\-name\fP]
 Maps the specified image to a block device via the rbd kernel module.

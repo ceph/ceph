@@ -20,6 +20,7 @@ function clean_up {
 	rbd unmap /dev/rbd/rbd/testimg1 || true
 	rbd unmap /dev/rbd/rbd/testimg1@snap1 || true
 	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
+	rbd snap purge testimg1 || true
 	rbd rm testimg1 || true
 	sudo rm -f $TMP_FILES
 }

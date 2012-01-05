@@ -17,6 +17,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -59,6 +60,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -101,6 +103,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -143,6 +146,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -185,6 +189,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -227,6 +232,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -269,6 +275,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -311,6 +318,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
@@ -353,6 +361,7 @@
     snap create <--snap=name> [image-name]    create a snapshot
     snap rollback <--snap=name> [image-name]  rollback image head to snapshot
     snap rm <--snap=name> [image-name]        deletes a snapshot
+    snap purge [image-name]                   deletes all snapshots
     watch [image-name]                        watch events on image
     map [image-name]                          map the image to a block device
                                               using the kernel
