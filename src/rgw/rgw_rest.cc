@@ -820,7 +820,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   return ret;
 }
 
-int RGWHandler_REST::read_permissions()
+int RGWHandler_REST::read_permissions(RGWOp *op_obj)
 {
   bool only_bucket;
 
@@ -847,7 +847,7 @@ int RGWHandler_REST::read_permissions()
     return -EINVAL;
   }
 
-  return do_read_permissions(only_bucket);
+  return do_read_permissions(op_obj, only_bucket);
 }
 
 RGWOp *RGWHandler_REST::get_op()

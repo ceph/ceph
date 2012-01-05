@@ -33,6 +33,7 @@ public:
   virtual void init(struct req_state *s) {
     this->s = s;
   }
+  virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
   virtual void execute() = 0;
 };
@@ -59,10 +60,13 @@ protected:
   int ret;
   bool get_data;
   bool partial_content;
+  rgw_obj obj;
 
   int init_common();
 public:
   RGWGetObj() {}
+
+  virtual bool prefetch_data() { return true; }
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -604,7 +608,7 @@ class RGWHandler {
 protected:
   struct req_state *s;
 
-  int do_read_permissions(bool only_bucket);
+  int do_read_permissions(RGWOp *op, bool only_bucket);
 public:
   RGWHandler() {}
   virtual ~RGWHandler() {}
@@ -612,7 +616,7 @@ public:
 
   virtual RGWOp *get_op() = 0;
   virtual void put_op(RGWOp *op) = 0;
-  virtual int read_permissions() = 0;
+  virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
 };
 

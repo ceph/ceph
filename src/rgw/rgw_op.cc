@@ -214,7 +214,6 @@ static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessC
     obj.set_ns(mp_ns);
   }
   obj.init(bucket, oid, object);
-
   int ret = get_policy_from_attr(s->obj_ctx, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
@@ -243,7 +242,7 @@ static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessC
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int read_acls(struct req_state *s, bool only_bucket)
+static int read_acls(struct req_state *s, bool only_bucket, bool prefetch_data)
 {
   int ret = 0;
   string obj_str;
@@ -253,13 +252,6 @@ static int read_acls(struct req_state *s, bool only_bucket)
        return -ENOMEM;
   }
 
-  /* we're passed only_bucket = true when we specifically need the bucket's
-     acls, that happens on write operations */
-  if (!only_bucket) {
-    obj_str = s->object_str;
-    rgw_obj obj(s->bucket, obj_str);
-    rgwstore->set_atomic(s->obj_ctx, obj);
-  }
 
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
@@ -272,6 +264,17 @@ static int read_acls(struct req_state *s, bool only_bucket)
     s->bucket_owner = bucket_info.owner;
   }
 
+  /* we're passed only_bucket = true when we specifically need the bucket's
+     acls, that happens on write operations */
+  if (!only_bucket) {
+    obj_str = s->object_str;
+    rgw_obj obj(s->bucket, obj_str);
+    rgwstore->set_atomic(s->obj_ctx, obj);
+    if (prefetch_data) {
+      rgwstore->set_prefetch_data(s->obj_ctx, obj);
+    }
+  }
+
   ret = read_acls(s, bucket_info, s->acl, s->bucket, obj_str);
 
   return ret;
@@ -279,6 +282,10 @@ static int read_acls(struct req_state *s, bool only_bucket)
 
 int RGWGetObj::verify_permission()
 {
+  obj.init(s->bucket, s->object_str);
+  rgwstore->set_atomic(s->obj_ctx, obj);
+  rgwstore->set_prefetch_data(s->obj_ctx, obj);
+
   if (!::verify_permission(s, RGW_PERM_READ))
     return -EACCES;
 
@@ -288,7 +295,6 @@ int RGWGetObj::verify_permission()
 void RGWGetObj::execute()
 {
   void *handle = NULL;
-  rgw_obj obj;
   utime_t start_time = s->time;
 
   perfcounter->inc(l_rgw_get);
@@ -301,8 +307,6 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done;
 
-  obj.init(s->bucket, s->object_str);
-  rgwstore->set_atomic(s->obj_ctx, obj);
   ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, &ofs, &end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
@@ -1065,7 +1069,7 @@ int RGWGetACLs::verify_permission()
 
 void RGWGetACLs::execute()
 {
-  ret = read_acls(s, false);
+  ret = read_acls(s, false, false);
 
   if (ret < 0) {
     send_response();
@@ -1636,9 +1640,9 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
   return 0;
 }
 
-int RGWHandler::do_read_permissions(bool only_bucket)
+int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
 {
-  int ret = read_acls(s, only_bucket);
+  int ret = read_acls(s, only_bucket, op->prefetch_data());
 
   if (ret < 0) {
     dout(10) << "read_permissions on " << s->bucket << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;

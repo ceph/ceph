@@ -91,7 +91,7 @@ int RGWFS::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
   }
 }
 
-int RGWFS::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs)
+int RGWFS::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk)
 {
   return -ENOTSUP;
 }

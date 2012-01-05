@@ -184,7 +184,7 @@ public:
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
-  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
+  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
   int delete_obj(void *ctx, rgw_obj& obj, bool sync);
 };
@@ -348,13 +348,13 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs)
+int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.')
-    return T::obj_stat(ctx, obj, psize, pmtime, attrs);
+    return T::obj_stat(ctx, obj, psize, pmtime, attrs, first_chunk);
 
   string name = normal_name(bucket, oid);
 
@@ -371,7 +371,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
     mtime = info.meta.mtime;
     goto done;
   }
-  r = T::obj_stat(ctx, obj, &size, &mtime, &info.xattrs);
+  r = T::obj_stat(ctx, obj, &size, &mtime, &info.xattrs, first_chunk);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;

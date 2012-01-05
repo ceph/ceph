@@ -229,7 +229,7 @@ public:
  /**
   * stat an object
   */
-  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs) = 0;
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk) = 0;
 
   virtual bool supports_tmap() { return false; }
 
@@ -255,6 +255,7 @@ public:
   virtual void *create_context(void *user_ctx) { return NULL; }
   virtual void destroy_context(void *ctx) {}
   virtual void set_atomic(void *ctx, rgw_obj& obj) {}
+  virtual void set_prefetch_data(void *ctx, rgw_obj& obj) {}
 
   // to notify upper layer that we need to do some operation on an object, and it's up to
   // the upper layer to schedule this operation.. e.g., log intent in intent log
