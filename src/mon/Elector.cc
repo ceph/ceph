@@ -62,6 +62,10 @@ void Elector::bump_epoch(epoch_t e)
 
 void Elector::start()
 {
+  if (!participating) {
+    dout(0) << "not starting new election -- not participating" << dendl;
+    return;
+  }
   dout(5) << "start -- can i be leader?" << dendl;
   
   // start by trying to elect me
@@ -285,6 +289,10 @@ void Elector::dispatch(Message *m)
     
   case MSG_MON_ELECTION:
     {
+      if (!participating) {
+        m->put();
+        return;
+      }
       MMonElection *em = (MMonElection*)m;
 
       // assume an old message encoding would have matched
@@ -341,6 +349,10 @@ void Elector::dispatch(Message *m)
   }
 }
 
-
-
-
+void Elector::start_participating()
+{
+  if (!participating) {
+    participating = true;
+    call_election();
+  }
+}

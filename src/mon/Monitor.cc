@@ -964,6 +964,24 @@ void Monitor::handle_command(MMonCommand *m)
       else
 	ceph_heap_profiler_handle_command(m->cmd, clog);
     }
+    if (m->cmd[0] == "quorum") {
+      if (m->cmd[1] == "exit") {
+        reset();
+        start_election();
+        elector.stop_participating();
+        rs = "stopped responding to quorum, initiated new election";
+        r = 0;
+      } else if (m->cmd[1] == "enter") {
+        elector.start_participating();
+        reset();
+        start_election();
+        rs = "started responding to quorum, initiated new election";
+        r = 0;
+      }
+    } else {
+      rs = "unknown quorum subcommand; use exit or enter";
+      r = -EINVAL;
+    }
   } else 
     rs = "no command";
 
