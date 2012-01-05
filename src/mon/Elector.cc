@@ -56,7 +56,6 @@ void Elector::bump_epoch(epoch_t e)
   // clear up some state
   electing_me = false;
   acked_me.clear();
-  leader_acked = -1;
 }
 
 
@@ -74,6 +73,7 @@ void Elector::start()
   start_stamp = ceph_clock_now(g_ceph_context);
   electing_me = true;
   acked_me.insert(mon->rank);
+  leader_acked = -1;
 
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
