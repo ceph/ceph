@@ -1237,6 +1237,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
       if (log.tail > pi.last_update || pi.last_backfill == hobject_t()) {
+	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
+			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
+			 << " to " << info.last_update;
+
 	// reset, backfill
 	// we need to do this even when last_backfill == hobject_t() to ensure that
 	// stats get zeroed out properly, etc.
@@ -1251,6 +1255,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	peer_missing[peer].clear();
 
 	dout(10) << "activate peer osd." << peer << " must (re)start backfill, sending info " << pi << dendl;
+
 	if (activator_map) {
 	  if (activator_map->count(peer) == 0)
 	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
