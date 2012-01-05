@@ -40,6 +40,7 @@ struct MonSession : public RefCountedObject {
   Connection *con;
   entity_inst_t inst;
   utime_t until;
+  utime_t time_established;
   bool closed;
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
@@ -57,7 +58,9 @@ struct MonSession : public RefCountedObject {
   MonSession(entity_inst_t i, Connection *c) :
     con(c->get()), inst(i), closed(false), item(this),
     global_id(0), notified_global_id(0), auth_handler(NULL),
-    proxy_con(NULL), proxy_tid(0) {}
+    proxy_con(NULL), proxy_tid(0) {
+    time_established = ceph_clock_now(g_ceph_context);
+  }
   ~MonSession() {
     if (con)
       con->put();
