@@ -1128,16 +1128,25 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   ldout(cct, 7) << "handle_osd_op_reply " << tid
-	  << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
-	  << " v " << m->get_version() << " in " << m->get_pg()
-	  << dendl;
+		<< (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
+		<< " v " << m->get_version() << " in " << m->get_pg()
+		<< " attempt " << m->get_retry_attempt()
+		<< dendl;
   Op *op = ops[tid];
 
-  if (op->session->con != m->get_connection()) {
-    ldout(cct, 7) << " ignoring reply from " << m->get_source_inst()
-	    << ", i last sent to " << op->session->con->get_peer_addr() << dendl;
-    m->put();
-    return;
+  if (m->get_retry_attempt() >= 0) {
+    if (m->get_retry_attempt() != (op->attempts - 1)) {
+      ldout(cct, 7) << " ignoring reply from attempt " << m->get_retry_attempt()
+		    << " from " << m->get_source_inst()
+		    << "; last attempt " << (op->attempts - 1) << " sent to "
+		    << op->session->con->get_peer_addr() << dendl;
+      m->put();
+      return;
+    }
+  } else {
+    // we don't know the request attempt because the server is old, so
+    // just accept this one.  we may do ACK callbacks we shouldn't
+    // have, but that is better than doing callbacks out of order.
   }
 
   Context *onack = 0;
