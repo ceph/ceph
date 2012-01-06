@@ -977,10 +977,10 @@ void Monitor::handle_command(MMonCommand *m)
         start_election();
         rs = "started responding to quorum, initiated new election";
         r = 0;
+      } else {
+	rs = "unknown quorum subcommand; use exit or enter";
+	r = -EINVAL;
       }
-    } else {
-      rs = "unknown quorum subcommand; use exit or enter";
-      r = -EINVAL;
     }
   } else 
     rs = "no command";
