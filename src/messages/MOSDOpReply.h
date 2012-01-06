@@ -37,6 +37,7 @@ class MOSDOpReply : public Message {
   int32_t result;
   eversion_t reassert_version;
   epoch_t osdmap_epoch;
+  int32_t retry_attempt;
 
 public:
   object_t get_oid() { return oid; }
@@ -56,6 +57,15 @@ public:
   void set_version(eversion_t v) { reassert_version = v; }
 
   void add_flags(int f) { flags |= f; }
+
+  /**
+   * get retry attempt
+   *
+   * If we don't know the attempt (because the server is old), return -1.
+   */
+  int get_retry_attempt() const {
+    return retry_attempt;
+  }
   
   // osdmap
   epoch_t get_map_epoch() { return osdmap_epoch; }
@@ -77,6 +87,7 @@ public:
     pgid = req->pgid;
     osdmap_epoch = e;
     reassert_version = req->reassert_version;
+    retry_attempt = req->get_retry_attempt();
   }
   MOSDOpReply() {}
 private:
@@ -99,7 +110,7 @@ public:
       }
       ::encode_nohead(oid.name, payload);
     } else {
-      header.version = 2;
+      header.version = 3;
       ::encode(oid, payload);
       ::encode(pgid, payload);
       ::encode(flags, payload);
@@ -111,6 +122,8 @@ public:
       ::encode(num_ops, payload);
       for (unsigned i = 0; i < num_ops; i++)
 	::encode(ops[i].op, payload);
+
+      ::encode(retry_attempt, payload);
     }
   }
   virtual void decode_payload(CephContext *cct) {
@@ -128,6 +141,7 @@ public:
       flags = head.flags;
       reassert_version = head.reassert_version;
       osdmap_epoch = head.osdmap_epoch;
+      retry_attempt = -1;
     } else {
       ::decode(oid, p);
       ::decode(pgid, p);
@@ -141,6 +155,11 @@ public:
       ops.resize(num_ops);
       for (unsigned i = 0; i < num_ops; i++)
 	::decode(ops[i].op, p);
+
+      if (header.version >= 3)
+	::decode(retry_attempt, p);
+      else
+	retry_attempt = -1;
     }
   }
 

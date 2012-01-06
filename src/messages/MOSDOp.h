@@ -36,6 +36,7 @@ private:
   __u32 flags;
   utime_t mtime;
   eversion_t reassert_version;
+  int32_t retry_attempt;   // 0 is first attempt.  -1 if we don't know.
 
   object_t oid;
   object_locator_t oloc;
@@ -102,7 +103,7 @@ public:
 	 int _flags) :
     Message(CEPH_MSG_OSD_OP),
     client_inc(inc),
-    osdmap_epoch(_osdmap_epoch), flags(_flags),
+    osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
     oid(_oid), oloc(_oloc), pgid(_pgid),
     rmw_flags(flags) {
     set_tid(tid);
@@ -162,11 +163,23 @@ public:
   void set_want_ondisk(bool b) { flags |= CEPH_OSD_FLAG_ONDISK; }
 
   bool is_retry_attempt() const { return flags & CEPH_OSD_FLAG_RETRY; }
-  void set_retry_attempt(bool a) { 
+  void set_retry_attempt(unsigned a) { 
     if (a)
       flags |= CEPH_OSD_FLAG_RETRY;
     else
       flags &= ~CEPH_OSD_FLAG_RETRY;
+    retry_attempt = a;
+  }
+
+  /**
+   * get retry attempt
+   *
+   * 0 is the first attempt.
+   *
+   * @return retry attempt, or -1 if we don't know
+   */
+  int get_retry_attempt() const {
+    return retry_attempt;
   }
 
   // marshalling
@@ -235,7 +248,7 @@ struct ceph_osd_request_head {
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
     } else {
-      header.version = 3;
+      header.version = 4;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
@@ -257,6 +270,8 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
+
+      ::encode(retry_attempt, payload);
     }
   }
 
@@ -304,6 +319,8 @@ struct ceph_osd_request_head {
       pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
 				oid.name.c_str(),
 				oid.name.length()));
+
+      retry_attempt = -1;
     } else {
       // new decode 
       ::decode(client_inc, p);
@@ -337,6 +354,11 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::decode(peer_stat, p);
+
+      if (header.version >= 4)
+	::decode(retry_attempt, p);
+      else
+	retry_attempt = -1;
     }
 
     bufferlist::iterator datap = data.begin();
