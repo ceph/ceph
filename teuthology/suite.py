@@ -56,12 +56,6 @@ combination, and will override anything in the suite.
         help='address to email test failures to',
         )
     parser.add_argument(
-        '--email-on-success',
-        action='store_true',
-        default=False,
-        help='email even if all tests pass',
-        )
-    parser.add_argument(
         '--timeout',
         help='how many seconds to wait for jobs to finish before emailing results',
         )
@@ -195,12 +189,6 @@ def results():
         help='address to email test failures to',
         )
     parser.add_argument(
-        '--email-on-success',
-        action='store_true',
-        default=False,
-        help='email even if all tests pass',
-        )
-    parser.add_argument(
         '--timeout',
         help='how many seconds to wait for all tests to finish (default no wait)',
         type=int,
@@ -299,7 +287,7 @@ def results():
                         reason=summary['failure_reason'],
                         ))
 
-    if not args.email or not (failures or unfinished or args.email_on_success):
+    if not args.email:
         return
 
     if failures or unfinished:

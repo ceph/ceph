@@ -90,8 +90,6 @@ describe. One job is run at a time.
                 '--name',
                 job_config['name'],
                 ]
-            if job_config.get('email_on_success', False):
-                args.append('--email-on-success')
             subprocess.Popen(args=args)
         else:
             log.debug('Creating archive dir...')

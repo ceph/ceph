@@ -209,12 +209,6 @@ def schedule():
         help='where to send the results of a suite (only applies to the last job in a suite)',
         )
     parser.add_argument(
-        '--email-on-success',
-        action='store_true',
-        default=False,
-        help='email even if all tests pass',
-        )
-    parser.add_argument(
         '--timeout',
         help='how many seconds to wait for jobs to finish before emailing results (only applies to the last job in a suite',
         type=int,
@@ -245,7 +239,6 @@ def schedule():
     if not ctx.last_in_suite:
         assert not ctx.email, '--email is only applicable to the last job in a suite'
         assert not ctx.timeout, '--timeout is only applicable to the last job in a suite'
-        assert not ctx.email_on_success, '--email-on-success is only applicable to the last job in a suite'
 
     from teuthology.misc import read_config, get_user
     if ctx.owner is None:
@@ -271,7 +264,6 @@ def schedule():
             name=ctx.name,
             last_in_suite=ctx.last_in_suite,
             email=ctx.email,
-            email_on_success=ctx.email_on_success,
             description=ctx.description,
             owner=ctx.owner,
             verbose=ctx.verbose,
