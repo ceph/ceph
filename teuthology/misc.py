@@ -66,14 +66,19 @@ def feed_many_stdins_and_close(fp, processes):
 
 def get_mons(roles, ips):
     mons = {}
+    mon_ports = {}
     mon_id = 0
     for idx, roles in enumerate(roles):
         for role in roles:
             if not role.startswith('mon.'):
                 continue
+            if ips[idx] not in mon_ports:
+                mon_ports[ips[idx]] = 6789
+            else:
+                mon_ports[ips[idx]] += 1
             addr = '{ip}:{port}'.format(
                 ip=ips[idx],
-                port=6789+mon_id,
+                port=mon_ports[ips[idx]],
                 )
             mon_id += 1
             mons[role] = addr
