@@ -63,7 +63,7 @@ public:
   ~RGWPutObj_REST() {}
 
   virtual int get_params();
-  int get_data();
+  int get_data(bufferlist& bl);
 };
 
 class RGWPutObjMetadata_REST : public RGWPutObjMetadata

@@ -197,8 +197,8 @@ public:
               map<std::string, bufferlist>* rmattrs);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
-  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                               off_t ofs, size_t len, bool exclusive, void **handle);
+  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
+                               off_t ofs, bool exclusive, void **handle);
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 

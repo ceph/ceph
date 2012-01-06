@@ -75,8 +75,8 @@ public:
                       map<std::string, bufferlist>* rmattrs) = 0;
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, bool exclusive) = 0;
-  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                      off_t ofs, size_t len, bool exclusive, void **handle) { return -ENOTSUP; }
+  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
+                      off_t ofs, bool exclusive, void **handle) { return -ENOTSUP; }
 
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
   int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,

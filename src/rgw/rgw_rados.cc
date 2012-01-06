@@ -703,14 +703,16 @@ int RGWRados::put_obj_data(void *ctx, rgw_obj& obj,
 			   const char *data, off_t ofs, size_t len, bool exclusive)
 {
   void *handle;
-  int r = aio_put_obj_data(ctx, obj, data, ofs, len, exclusive, &handle);
+  bufferlist bl;
+  bl.append(data, len);
+  int r = aio_put_obj_data(ctx, obj, bl, ofs, exclusive, &handle);
   if (r < 0)
     return r;
   return aio_wait(handle);
 }
 
-int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
-			       const char *data, off_t ofs, size_t len, bool exclusive,
+int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
+			       off_t ofs, bool exclusive,
                                void **handle)
 {
   rgw_bucket bucket;
@@ -723,9 +725,6 @@ int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
     return r;
 
   io_ctx.locator_set_key(key);
-
-  bufferlist bl;
-  bl.append(data, len);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   *handle = c;

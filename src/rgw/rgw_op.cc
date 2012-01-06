@@ -600,45 +600,8 @@ void RGWDeleteBucket::execute()
 }
 
 struct put_obj_aio_info {
-  void *data;
   void *handle;
 };
-
-static struct put_obj_aio_info pop_pending(std::list<struct put_obj_aio_info>& pending)
-{
-  struct put_obj_aio_info info;
-  info = pending.front();
-  pending.pop_front();
-  return info;
-}
-
-static int wait_pending_front(std::list<struct put_obj_aio_info>& pending)
-{
-  struct put_obj_aio_info info = pop_pending(pending);
-  int ret = rgwstore->aio_wait(info.handle);
-  free(info.data);
-  return ret;
-}
-
-static bool pending_has_completed(std::list<struct put_obj_aio_info>& pending)
-{
-  if (pending.size() == 0)
-    return false;
-
-  struct put_obj_aio_info& info = pending.front();
-  return rgwstore->aio_completed(info.handle);
-}
-
-static int drain_pending(std::list<struct put_obj_aio_info>& pending)
-{
-  int ret = 0;
-  while (!pending.empty()) {
-    int r = wait_pending_front(pending);
-    if (r < 0)
-      ret = r;
-  }
-  return ret;
-}
 
 int RGWPutObj::verify_permission()
 {
@@ -648,18 +611,210 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
+class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
+{
+  list<struct put_obj_aio_info> pending;
+  size_t max_chunks;
+
+  struct put_obj_aio_info pop_pending();
+  int wait_pending_front();
+  bool pending_has_completed();
+  int drain_pending();
+
+protected:
+  rgw_obj obj;
+
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  int throttle_data(void *handle);
+
+  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS) {}
+  virtual ~RGWPutObjProcessor_Aio() {
+    drain_pending();
+  }
+};
+
+int RGWPutObjProcessor_Aio::handle_data(bufferlist& bl, off_t ofs, void **phandle)
+{
+  // For the first call pass -1 as the offset to
+  // do a write_full.
+  int r = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
+                                     bl,
+                                     ((ofs == 0) ? -1 : ofs),
+                                     false, phandle);
+
+  return r;
+}
+
+struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
+{
+  struct put_obj_aio_info info;
+  info = pending.front();
+  pending.pop_front();
+  return info;
+}
+
+int RGWPutObjProcessor_Aio::wait_pending_front()
+{
+  struct put_obj_aio_info info = pop_pending();
+  int ret = rgwstore->aio_wait(info.handle);
+  return ret;
+}
+
+bool RGWPutObjProcessor_Aio::pending_has_completed()
+{
+  if (pending.size() == 0)
+    return false;
+
+  struct put_obj_aio_info& info = pending.front();
+  return rgwstore->aio_completed(info.handle);
+}
+
+int RGWPutObjProcessor_Aio::drain_pending()
+{
+  int ret = 0;
+  while (!pending.empty()) {
+    int r = wait_pending_front();
+    if (r < 0)
+      ret = r;
+  }
+  return ret;
+}
+
+int RGWPutObjProcessor_Aio::throttle_data(void *handle)
+{
+  struct put_obj_aio_info info;
+  info.handle = handle;
+  pending.push_back(info);
+  size_t orig_size = pending.size();
+  while (pending_has_completed()) {
+    int r = wait_pending_front();
+    if (r < 0)
+      return r;
+  }
+
+  /* resize window in case messages are draining too fast */
+  if (orig_size - pending.size() >= max_chunks)
+  max_chunks++;
+
+  if (pending.size() > max_chunks) {
+    int r = wait_pending_front();
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
+class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
+{
+  string oid;
+  bool remove_temp_obj;
+protected:
+  int prepare(struct req_state *s);
+  int complete(string& etag, map<string, bufferlist>& attrs);
+
+public:
+  ~RGWPutObjProcessor_Atomic();
+  RGWPutObjProcessor_Atomic() : remove_temp_obj(false) {}
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
+    int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
+    if (r >= 0) {
+      remove_temp_obj = true;
+    }
+    return r;
+  }
+};
+
+int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
+{
+  RGWPutObjProcessor::prepare(s);
+
+  oid = s->object_str;
+  obj.set_ns(tmp_ns);
+
+  char buf[33];
+  gen_rand_alphanumeric(buf, sizeof(buf) - 1);
+  oid.append("_");
+  oid.append(buf);
+  obj.init(s->bucket, oid, s->object_str);
+
+  return 0;
+}
+
+int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& attrs)
+{
+  rgw_obj dst_obj(s->bucket, s->object_str);
+  rgwstore->set_atomic(s->obj_ctx, dst_obj);
+  int r = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN);
+
+  return r;
+}
+RGWPutObjProcessor_Atomic::~RGWPutObjProcessor_Atomic()
+{
+  if (remove_temp_obj)
+    rgwstore->delete_obj(NULL, obj, NULL);
+}
+
+class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
+{
+  string oid;
+  string part_num;
+  string multipart_meta_obj;
+protected:
+  int prepare(struct req_state *s);
+  int complete(string& etag, map<string, bufferlist>& attrs);
+
+public:
+  RGWPutObjProcessor_Multipart() {}
+};
+
+int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
+{
+  oid = s->object_str;
+  string upload_id;
+  url_decode(s->args.get("uploadId"), upload_id);
+  RGWMPObj mp(oid, upload_id);
+  multipart_meta_obj = mp.get_meta();
+
+  url_decode(s->args.get("partNumber"), part_num);
+  if (part_num.empty()) {
+    return -EINVAL;
+  }
+  oid = mp.get_part(part_num);
+
+  obj.set_ns(mp_ns);
+  obj.init(s->bucket, oid, s->object_str);
+  return 0;
+}
+
+int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>& attrs)
+{
+  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
+  if (r < 0)
+    return r;
+
+  bufferlist bl;
+  RGWUploadPartInfo info;
+  string p = "part.";
+  p.append(part_num);
+  info.num = atoi(part_num.c_str());
+  info.etag = etag;
+  info.size = s->obj_size;
+  info.modified = ceph_clock_now(g_ceph_context);
+  ::encode(info, bl);
+
+  rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
+
+  r = rgwstore->tmap_set(meta_obj, p, bl);
+
+  return r;
+}
+
+
 void RGWPutObj::execute()
 {
-  bool multipart;
-  string multipart_meta_obj;
-  string part_num;
-  list<struct put_obj_aio_info> pending;
-  size_t max_chunks = RGW_MAX_PENDING_CHUNKS;
-  bool created_obj = false;
   rgw_obj obj;
 
   perfcounter->inc(l_rgw_put);
-
   ret = -EINVAL;
   if (!s->object) {
     goto done;
@@ -698,84 +853,51 @@ void RGWPutObj::execute()
       strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5));
     }
 
-    MD5 hash;
-    string oid;
-    multipart = s->args.exists("uploadId");
+    bool multipart = s->args.exists("uploadId");
+
     if (!multipart) {
-      oid = s->object_str;
-      obj.set_ns(tmp_ns);
-
-      char buf[33];
-      gen_rand_alphanumeric(buf, sizeof(buf) - 1);
-      oid.append("_");
-      oid.append(buf);
+      processor = new RGWPutObjProcessor_Atomic();
     } else {
-      oid = s->object_str;
-      string upload_id;
-      url_decode(s->args.get("uploadId"), upload_id);
-      RGWMPObj mp(oid, upload_id);
-      multipart_meta_obj = mp.get_meta();
-
-      url_decode(s->args.get("partNumber"), part_num);
-      if (part_num.empty()) {
-        ret = -EINVAL;
-        goto done;
-      }
-      oid = mp.get_part(part_num);
-
-      obj.set_ns(mp_ns);
+      processor = new RGWPutObjProcessor_Multipart();
     }
-    obj.init(s->bucket, oid, s->object_str);
+
+    MD5 hash;
+
+    ret = processor->prepare(s);
+    if (ret < 0)
+      goto done;
+
     int len;
     do {
-      len = get_data();
+      bufferlist data;
+      len = get_data(data);
       if (len < 0) {
         ret = len;
         goto done;
       }
-      if (len > 0) {
-        struct put_obj_aio_info info;
-        size_t orig_size;
-	// For the first call to put_obj_data, pass -1 as the offset to
-	// do a write_full.
-        void *handle;
-        ret = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
-				     data,
-				     ((ofs == 0) ? -1 : ofs), len, false, &handle);
-        if (ret < 0)
-          goto done_err;
+      if (!len)
+        break;
 
-        created_obj = true;
+      void *handle;
+      ret = processor->handle_data(data, ofs, &handle);
+      if (ret < 0)
+        goto done;
 
-        hash.Update((unsigned char *)data, len);
-        info.handle = handle;
-        info.data = data;
-        pending.push_back(info);
-        orig_size = pending.size();
-        while (pending_has_completed(pending)) {
-          ret = wait_pending_front(pending);
-          if (ret < 0)
-            goto done_err;
+      hash.Update((unsigned char *)data.c_str(), len);
 
-        }
+      ret = processor->throttle_data(handle);
+      if (ret < 0)
+        goto done;
 
-        /* resize window in case messages are draining too fast */
-        if (orig_size - pending.size() >= max_chunks)
-          max_chunks++;
+      ofs += len;
+    } while (len > 0);
 
-        if (pending.size() > max_chunks) {
-          ret = wait_pending_front(pending);
-          if (ret < 0)
-            goto done_err;
-        }
-        ofs += len;
-      }
-    } while ( len > 0);
-    drain_pending(pending);
+    // was this really needed?
+    // drain_pending(pending);
 
     if (!chunked_upload && (uint64_t)ofs != s->content_length) {
       ret = -ERR_REQUEST_TIMEOUT;
-      goto done_err;
+      goto done;
     }
     s->obj_size = ofs;
     perfcounter->inc(l_rgw_put_b, s->obj_size);
@@ -786,7 +908,7 @@ void RGWPutObj::execute()
 
     if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
        ret = -ERR_BAD_DIGEST;
-       goto done_err;
+       goto done;
     }
     bufferlist aclbl;
     policy.encode(aclbl);
@@ -795,7 +917,7 @@ void RGWPutObj::execute()
 
     if (supplied_etag && etag.compare(supplied_etag) != 0) {
       ret = -ERR_UNPROCESSABLE_ENTITY;
-      goto done_err;
+      goto done;
     }
     map<string, bufferlist> attrs;
     bufferlist bl;
@@ -811,51 +933,14 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    if (!multipart) {
-      rgw_obj dst_obj(s->bucket, s->object_str);
-      rgwstore->set_atomic(s->obj_ctx, dst_obj);
-      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN);
-      if (ret < 0)
-        goto done_err;
-      if (created_obj) {
-        ret = rgwstore->delete_obj(NULL, obj, false);
-        if (ret < 0)
-          goto done;
-      }
-    } else {
-      ret = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
-      if (ret < 0)
-        goto done_err;
-
-      bl.clear();
-      RGWUploadPartInfo info;
-      string p = "part.";
-      p.append(part_num);
-      info.num = atoi(part_num.c_str());
-      info.etag = etag;
-      info.size = s->obj_size;
-      info.modified = ceph_clock_now(g_ceph_context);
-      ::encode(info, bl);
-
-      rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
-
-      ret = rgwstore->tmap_set(meta_obj, p, bl);
-    }
+    ret = processor->complete(etag, attrs);
   }
 done:
-  drain_pending(pending);
+  delete processor;
   perfcounter->finc(l_rgw_put_lat,
                    (ceph_clock_now(g_ceph_context) - s->time));
   send_response();
   return;
-
-done_err:
-  if (created_obj)
-    rgwstore->delete_obj(s->obj_ctx, obj);
-  drain_pending(pending);
-  perfcounter->finc(l_rgw_put_lat,
-                   (ceph_clock_now(g_ceph_context) - s->time));
-  send_response();
 }
 
 int RGWPutObjMetadata::verify_permission()

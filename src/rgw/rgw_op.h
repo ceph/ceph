@@ -237,15 +237,33 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWPutObjProcessor
+{
+protected:
+  struct req_state *s;
+public:
+  virtual ~RGWPutObjProcessor() {}
+  virtual int prepare(struct req_state *_s) {
+    s = _s;
+    return 0;
+  };
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
+  virtual int throttle_data(void *handle) = 0;
+  virtual int complete(string& etag, map<string, bufferlist>& attrs) = 0;
+};
+
 class RGWPutObj : public RGWOp {
+
+  friend class RGWPutObjProcessor;
+
 protected:
   int ret;
   off_t ofs;
-  char *data;
   const char *supplied_md5_b64;
   const char *supplied_etag;
   string etag;
   bool chunked_upload;
+  RGWPutObjProcessor *processor;
 
 public:
   RGWPutObj() {}
@@ -254,17 +272,17 @@ public:
     RGWOp::init(s);
     ret = 0;
     ofs = 0;
-    data = NULL;
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
     etag = "";
     chunked_upload = false;
+    processor = NULL;
   }
   int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
-  virtual int get_data() = 0;
+  virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
 };
 
