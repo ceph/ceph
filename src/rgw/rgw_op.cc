@@ -758,7 +758,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
 {
   string oid;
   string part_num;
-  string multipart_meta_obj;
+  RGWMPObj mp;
 protected:
   int prepare(struct req_state *s);
   int complete(string& etag, map<string, bufferlist>& attrs);
@@ -769,11 +769,12 @@ public:
 
 int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
 {
+  RGWPutObjProcessor::prepare(s);
+
   oid = s->object_str;
   string upload_id;
   url_decode(s->args.get("uploadId"), upload_id);
-  RGWMPObj mp(oid, upload_id);
-  multipart_meta_obj = mp.get_meta();
+  mp.init(oid, upload_id);
 
   url_decode(s->args.get("partNumber"), part_num);
   if (part_num.empty()) {
@@ -801,6 +802,8 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
   info.size = s->obj_size;
   info.modified = ceph_clock_now(g_ceph_context);
   ::encode(info, bl);
+
+  string multipart_meta_obj = mp.get_meta();
 
   rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
 
