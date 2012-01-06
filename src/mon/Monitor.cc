@@ -122,6 +122,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
   mon_caps->text = "allow *";
+
+  exited_quorum = ceph_clock_now(g_ceph_context);
 }
 
 Paxos *Monitor::add_paxos(int type)
@@ -352,6 +354,9 @@ void Monitor::reset()
 {
   dout(10) << "reset" << dendl;
   leader_since = utime_t();
+  if (!quorum.empty()) {
+    exited_quorum = ceph_clock_now(g_ceph_context);
+  }
   quorum.clear();
   outside_quorum.clear();
 
@@ -737,6 +742,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
 
 void Monitor::finish_election()
 {
+  exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
   resend_routed_requests();
   update_logger();
@@ -957,6 +963,24 @@ void Monitor::handle_command(MMonCommand *m)
 	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
       else
 	ceph_heap_profiler_handle_command(m->cmd, clog);
+    }
+    if (m->cmd[0] == "quorum") {
+      if (m->cmd[1] == "exit") {
+        reset();
+        start_election();
+        elector.stop_participating();
+        rs = "stopped responding to quorum, initiated new election";
+        r = 0;
+      } else if (m->cmd[1] == "enter") {
+        elector.start_participating();
+        reset();
+        start_election();
+        rs = "started responding to quorum, initiated new election";
+        r = 0;
+      }
+    } else {
+      rs = "unknown quorum subcommand; use exit or enter";
+      r = -EINVAL;
     }
   } else 
     rs = "no command";
@@ -1605,6 +1629,21 @@ void Monitor::tick()
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->inst.addr);
       remove_session(s);
+    } else if (!exited_quorum.is_zero()) {
+      if (s->time_established < exited_quorum) {
+        if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
+          // boot the client Session because we've taken too long getting back in
+          dout(10) << " trimming session " << s->inst
+              << " because we've been out of quorum too long" << dendl;
+          messenger->mark_down(s->inst.addr);
+          remove_session(s);
+        }
+      } else if (s->time_established + g_conf->mon_lease < now) {
+        dout(10) << " trimming session " << s->inst
+                 << " because we're still not in quorum" << dendl;
+        messenger->mark_down(s->inst.addr);
+        remove_session(s);
+      }
     }
   }
 

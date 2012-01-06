@@ -40,6 +40,8 @@ class Elector {
 
   epoch_t epoch;   // latest epoch we've seen.  odd == election, even == stable, 
 
+  bool participating;
+
   // electing me
   bool     electing_me;
   utime_t  start_stamp;
@@ -73,6 +75,7 @@ class Elector {
   Elector(Monitor *m) : mon(m),
 			       expire_event(0),
 			       epoch(0),
+			       participating(true),
 			       electing_me(false),
 			       leader_acked(-1) { }
 
@@ -87,6 +90,8 @@ class Elector {
     start();
   }
 
+  void stop_participating() { participating = false; }
+  void start_participating();
 };
 
 

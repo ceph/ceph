@@ -56,12 +56,15 @@ void Elector::bump_epoch(epoch_t e)
   // clear up some state
   electing_me = false;
   acked_me.clear();
-  leader_acked = -1;
 }
 
 
 void Elector::start()
 {
+  if (!participating) {
+    dout(0) << "not starting new election -- not participating" << dendl;
+    return;
+  }
   dout(5) << "start -- can i be leader?" << dendl;
   
   // start by trying to elect me
@@ -70,6 +73,7 @@ void Elector::start()
   start_stamp = ceph_clock_now(g_ceph_context);
   electing_me = true;
   acked_me.insert(mon->rank);
+  leader_acked = -1;
 
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
@@ -285,6 +289,10 @@ void Elector::dispatch(Message *m)
     
   case MSG_MON_ELECTION:
     {
+      if (!participating) {
+        m->put();
+        return;
+      }
       MMonElection *em = (MMonElection*)m;
 
       // assume an old message encoding would have matched
@@ -341,6 +349,10 @@ void Elector::dispatch(Message *m)
   }
 }
 
-
-
-
+void Elector::start_participating()
+{
+  if (!participating) {
+    participating = true;
+    call_election();
+  }
+}
