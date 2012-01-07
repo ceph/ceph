@@ -632,6 +632,13 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
 
   op.create(exclusive);
 
+  if (data) {
+    /* if we want to overwrite the data, we also want to overwrite the
+       xattrs, so just remove the object */
+    op.remove();
+    op.write_full(*data);
+  }
+
   string etag;
   string content_type;
   bufferlist acl_bl;
@@ -661,9 +668,6 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
       acl_bl = bl;
     }
   }
-
-  if (data)
-    op.write_full(*data);
 
   if (!op.size())
     return 0;
