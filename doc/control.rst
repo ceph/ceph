@@ -7,12 +7,11 @@
 Monitor commands
 ----------------
 
-Monitor commands are issued using the ceph utility (in versions before
-Dec08 it was called cmonctl)::
+Monitor commands are issued using the ceph utility::
 
 	$ ceph [-m monhost] command
 
-where the command is usually of the form::
+where the command is usually (though not always) of the form::
 
 	$ ceph subsystem command
 
@@ -32,6 +31,16 @@ Shows an overview of the current status of the cluster.  ::
 	$ ceph -w
 
 Shows a running summary of the status of the cluster, and major events.
+
+	$ ceph quorum_status
+
+Show the monitor quorum, including which monitors are participating and which one
+is the leader.
+
+	$ ceph [-m monhost] mon_status
+
+Query the status of a single monitor, including whether or not it is in the quorum.
+
 
 AUTH subsystem
 --------------

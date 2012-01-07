@@ -53,6 +53,9 @@ class LogicError(Error):
 class ReadOnlyImage(Error):
     pass
 
+class ImageBusy(Error):
+    pass
+
 def make_ex(ret, msg):
     """
     Translate a librbd return code into an exception.
@@ -71,6 +74,7 @@ def make_ex(ret, msg):
         errno.EEXIST : ImageExists,
         errno.EINVAL : InvalidArgument,
         errno.EROFS  : ReadOnlyImage,
+        errno.EBUSY  : ImageBusy,
         }
     ret = abs(ret)
     if ret in errors:
@@ -157,13 +161,15 @@ class RBD(object):
         """
         Delete an RBD image. This may take a long time, since it does
         not return until every object that comprises the image has
-        been deleted.
+        been deleted. Note that all snapshots must be deleted before
+        the image can be removed. If there are snapshots left,
+        :class:`ImageBusy` is raised.
 
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
         :type name: str
-        :raises: :class:`ImageNotFound`
+        :raises: :class:`ImageNotFound`, :class:`ImageBusy`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')

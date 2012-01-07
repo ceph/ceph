@@ -4,7 +4,8 @@ import struct
 from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
-from rbd import RBD, Image, ImageNotFound, InvalidArgument, ImageExists
+from rbd import RBD, Image, ImageNotFound, InvalidArgument, ImageExists, \
+    ImageBusy
 
 
 rados = None
@@ -154,6 +155,7 @@ class TestImage(object):
         snap_data = at_snapshot.read(0, 256)
         at_snapshot.close()
         eq(snap_data, '\0' * 256)
+        self.image.remove_snap('snap1')
 
     def test_list_snaps(self):
         eq([], list(self.image.list_snaps()))
@@ -161,6 +163,8 @@ class TestImage(object):
         eq(['snap1'], map(lambda snap: snap['name'], self.image.list_snaps()))
         self.image.create_snap('snap2')
         eq(['snap1', 'snap2'], map(lambda snap: snap['name'], self.image.list_snaps()))
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
 
     def test_remove_snap(self):
         eq([], list(self.image.list_snaps()))
@@ -168,6 +172,11 @@ class TestImage(object):
         eq(['snap1'], map(lambda snap: snap['name'], self.image.list_snaps()))
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
+
+    def test_remove_with_snap(self):
+        self.image.create_snap('snap1')
+        assert_raises(ImageBusy, remove_image)
+        self.image.remove_snap('snap1')
 
     def test_rollback_to_snap(self):
         self.image.write('\0' * 256, 0)
@@ -181,6 +190,7 @@ class TestImage(object):
         self.image.rollback_to_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
+        self.image.remove_snap('snap1')
 
     def test_rollback_to_snap_sparse(self):
         self.image.create_snap('snap1')
@@ -193,6 +203,7 @@ class TestImage(object):
         self.image.rollback_to_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
+        self.image.remove_snap('snap1')
 
     def test_rollback_with_resize(self):
         read = self.image.read(0, 256)
@@ -216,6 +227,8 @@ class TestImage(object):
         check_stat(self.image.stat(), new_size, IMG_ORDER)
         read = self.image.read(new_size - 256, 256)
         eq(read, data)
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
 
     def test_set_snap(self):
         self.image.write('\0' * 256, 0)
@@ -229,6 +242,7 @@ class TestImage(object):
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
+        self.image.remove_snap('snap1')
 
     def test_set_no_snap(self):
         self.image.write('\0' * 256, 0)
@@ -245,6 +259,7 @@ class TestImage(object):
         self.image.set_snap(None)
         read = self.image.read(0, 256)
         eq(read, data)
+        self.image.remove_snap('snap1')
 
     def test_set_snap_sparse(self):
         self.image.create_snap('snap1')
@@ -257,3 +272,4 @@ class TestImage(object):
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
+        self.image.remove_snap('snap1')

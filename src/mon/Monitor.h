@@ -164,6 +164,7 @@ private:
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
+  utime_t exited_quorum; // time detected as not in quorum; 0 if in
 
   set<string> outside_quorum;
   entity_inst_t slurp_source;

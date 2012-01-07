@@ -2,6 +2,7 @@
 
 TMP_FILES="/tmp/img1 /tmp/img1.new /tmp/img2 /tmp/img2.new /tmp/img3 /tmp/img3.new /tmp/img1.snap1"
 
+rbd snap purge testimg1 || true
 rbd rm testimg1 || true
 rbd rm testimg2 || true
 rbd rm testimg3 || true

@@ -81,7 +81,8 @@ Commands
   Resizes rbd image. The size parameter also needs to be specified.
 
 :command:`rm` [*image-name*]
-  Deletes rbd image (including all data blocks)
+  Deletes an rbd image (including all data blocks). If the image has
+  snapshots, this fails and nothing is deleted.
 
 :command:`export` [*image-name*] [*dest-path*]
   Exports image to dest path.
@@ -107,6 +108,9 @@ Commands
 
 :command:`snap` rm [*image-name*]
   Removes the specified snapshot.
+
+:command:`snap` purge [*image-name*]
+  Removes all snapshots from an image.
 
 :command:`map` [*image-name*]
   Maps the specified image to a block device via the rbd kernel module.
