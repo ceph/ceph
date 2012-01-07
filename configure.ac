@@ -88,10 +88,20 @@ AS_IF([test "x$with_cryptopp" != "xno"],
     [PKG_CHECK_MODULES([CRYPTOPP],
 	    [libcrypto++],
 	    [have_cryptopp=yes],
-	    [AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp],
-		    [have_cryptopp=yes],
-		    [true],
-		    [-lpthread])])])
+	    [
+		   AC_LANG_PUSH([C++])
+		   SAVED_CXXFLAGS="${CXXFLAGS}"
+		   SAVED_LIBS="${LIBS}"
+		   LIBS="${LIBS} ${PTHREAD_LIBS}"
+		   CXXFLAGS="${CXXFLAGS} ${PTHREAD_CFLAGS}"
+		   AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp],
+			  [have_cryptopp=yes],
+			  [true], [])
+		   CRYPTOPP_LIBS="${ac_cv_search__ZTIN8CryptoPP14CBC_EncryptionE}"
+		   LIBS="${SAVED_LIBS}"
+		   CXXFLAGS="${SAVED_CXXFLAGS}"
+		   AC_LANG_POP([C++])
+	   ])])
 # bail out if given explicit --with-cryptopp
 if test "x$have_cryptopp" = "xno" -a "x$with_cryptopp" != "xcheck" -a "x$with_cryptopp" != "xno"; then
     AC_MSG_FAILURE([--with-cryptopp was given, but library was not found])
