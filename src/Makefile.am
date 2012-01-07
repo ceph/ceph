@@ -1423,11 +1423,17 @@ noinst_HEADERS = \
 	tools/gui.h\
 	tools/gui_resources.h\
 	test/osd/RadosModel.h\
+	test/osd/Object.h\
+	test/osd/TestOpStat.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \
+	test/system/st_rados_delete_objs.h \
+	test/system/st_rados_delete_pool.h \
+	test/system/st_rados_notify.h \
+	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
 	test/rados-api/test.h \
