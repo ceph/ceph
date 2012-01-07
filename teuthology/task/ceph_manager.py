@@ -45,9 +45,6 @@ class Thrasher(gevent.Greenlet):
         self.log("Reviving osd %s"%(str(osd),))
         self.live_osds.append(osd)
         self.dead_osds.remove(osd)
-        if osd in self.out_osds:
-            self.in_osds.append(osd)
-            self.out_osds.remove(osd)
         self.ceph_manager.revive_osd(osd)
 
     def out_osd(self, osd=None):
