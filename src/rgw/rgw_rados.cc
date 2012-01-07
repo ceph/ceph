@@ -614,7 +614,8 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int aui
  */
 int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-                  map<string, bufferlist>* rmattrs)
+                  map<string, bufferlist>* rmattrs,
+                  const bufferlist *data)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -660,6 +661,9 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
       acl_bl = bl;
     }
   }
+
+  if (data)
+    op.write_full(*data);
 
   if (!op.size())
     return 0;

@@ -194,7 +194,7 @@ public:
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-              map<std::string, bufferlist>* rmattrs);
+              map<std::string, bufferlist>* rmattrs, const bufferlist *data);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,

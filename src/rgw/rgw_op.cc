@@ -611,6 +611,50 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
+class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
+{
+  bufferlist data;
+  rgw_obj obj;
+  off_t ofs;
+
+protected:
+  int prepare(struct req_state *s);
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  int throttle_data(void *handle) { return 0; }
+  int complete(string& etag, map<string, bufferlist>& attrs);
+
+public:
+  RGWPutObjProcessor_Plain() : ofs(0) {}
+};
+
+int RGWPutObjProcessor_Plain::prepare(struct req_state *s)
+{
+  RGWPutObjProcessor::prepare(s);
+
+  obj.init(s->bucket, s->object_str);
+
+  return 0;
+};
+
+int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle)
+{
+  if (ofs != _ofs)
+    return -EINVAL;
+
+  data.append(bl);
+  ofs += bl.length();
+
+  return 0;
+}
+
+int RGWPutObjProcessor_Plain::complete(string& etag, map<string, bufferlist>& attrs)
+{
+  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, data.length(), NULL, attrs,
+                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &data);
+  return r;
+}
+
+
 class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 {
   list<struct put_obj_aio_info> pending;
@@ -706,7 +750,6 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
-  string oid;
   bool remove_temp_obj;
 protected:
   int prepare(struct req_state *s);
@@ -728,7 +771,7 @@ int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
 {
   RGWPutObjProcessor::prepare(s);
 
-  oid = s->object_str;
+  string oid = s->object_str;
   obj.set_ns(tmp_ns);
 
   char buf[33];
@@ -756,7 +799,6 @@ RGWPutObjProcessor_Atomic::~RGWPutObjProcessor_Atomic()
 
 class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
 {
-  string oid;
   string part_num;
   RGWMPObj mp;
 protected:
@@ -771,7 +813,7 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
 {
   RGWPutObjProcessor::prepare(s);
 
-  oid = s->object_str;
+  string oid = s->object_str;
   string upload_id;
   url_decode(s->args.get("uploadId"), upload_id);
   mp.init(oid, upload_id);
@@ -789,7 +831,7 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
 
 int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
+  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -859,7 +901,10 @@ void RGWPutObj::execute()
     bool multipart = s->args.exists("uploadId");
 
     if (!multipart) {
-      processor = new RGWPutObjProcessor_Atomic();
+      if (s->content_length <= RGW_MAX_CHUNK_SIZE)
+        processor = new RGWPutObjProcessor_Plain();
+      else
+        processor = new RGWPutObjProcessor_Atomic();
     } else {
       processor = new RGWPutObjProcessor_Multipart();
     }
@@ -985,7 +1030,7 @@ void RGWPutObjMetadata::execute()
     }
   }
 
-  ret = rgwstore->put_obj_meta(s->obj_ctx, obj, obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, obj, obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs, NULL);
 
 done:
   send_response();
@@ -1406,7 +1451,7 @@ void RGWInitMultipart::execute()
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL);
+    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1555,7 +1600,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL);
   if (ret < 0)
     goto done;
   

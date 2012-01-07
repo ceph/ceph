@@ -72,7 +72,8 @@ public:
     with the given stats */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                       map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-                      map<std::string, bufferlist>* rmattrs) = 0;
+                      map<std::string, bufferlist>* rmattrs,
+                      const bufferlist *data) = 0;
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, bool exclusive) = 0;
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
@@ -81,10 +82,9 @@ public:
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
   int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_data(ctx, obj, data, -1, len, exclusive);
-    if (ret >= 0 && (attrs.size() || mtime)) {
-      ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false, NULL);
-    }
+    bufferlist bl;
+    bl.append(data, len);
+    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl);
     return ret;
   }
 
