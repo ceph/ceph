@@ -584,15 +584,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
     if (osd_op.soid.oid.name.length()) {
       object_locator_t src_oloc;
       get_src_oloc(op->get_oid(), op->get_object_locator(), src_oloc);
-      hobject_t toid(osd_op.soid, src_oloc.key, op->get_pg().ps());
-      if (!src_obc.count(toid)) {
+      hobject_t src_oid(osd_op.soid, src_oloc.key, op->get_pg().ps());
+      if (!src_obc.count(src_oid)) {
 	ObjectContext *sobc;
 	snapid_t ssnapid;
 
-	int r = find_object_context(hobject_t(toid.oid, src_oloc.key,
-					      toid.snap, op->get_pg().ps()),
-				    src_oloc,
-				    &sobc, false, &ssnapid);
+	int r = find_object_context(src_oid, src_oloc, &sobc, false, &ssnapid);
 	if (r == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
 	  hobject_t wait_oid(osd_op.soid.oid, src_oloc.key, ssnapid, op->get_pg().ps());
@@ -615,7 +612,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	  sobc->get();
 	  sobc->blocking.insert(obc);
 	} else {
-	  src_obc[toid] = sobc;
+	  dout(10) << " src_oid " << src_oid << " obc " << src_obc << dendl;
+	  src_obc[src_oid] = sobc;
 	  continue;
 	}
 	// Error cleanup below
@@ -1401,9 +1399,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     ObjectContext *src_obc = 0;
     if (ceph_osd_op_type_multi(op.op)) {
-      src_obc = ctx->src_obc[hobject_t(osd_op.soid, 
-				       ((MOSDOp *)ctx->op)->get_object_locator().key,
-				       soid.hash)];
+      object_locator_t src_oloc;
+      get_src_oloc(soid.oid, ((MOSDOp *)ctx->op)->get_object_locator(), src_oloc);
+      hobject_t src_oid(osd_op.soid, src_oloc.key, soid.hash);
+      src_obc = ctx->src_obc[src_oid];
+      dout(10) << " src_oid " << src_oid << " obc " << src_obc << dendl;
       assert(src_obc);
     }
 
