@@ -1543,7 +1543,7 @@ public:
   void trim_write_ahead();
 
   map<int, Info>::const_iterator find_best_info(const map<int, Info> &infos) const;
-  void calc_acting(int& newest_update_osd, vector<int>& want) const;
+  bool calc_acting(int& newest_update_osd, vector<int>& want) const;
   bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
   void replay_queued_ops();

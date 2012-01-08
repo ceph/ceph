@@ -944,7 +944,7 @@ map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &info
  * incomplete, or another osd has a longer tail that allows us to
  * bring other up nodes up to date.
  */
-void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
+bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 {
   map<int, Info> all_info(peer_info.begin(), peer_info.end());
   all_info[osd->whoami] = info;
@@ -954,6 +954,18 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
   }
 
   map<int, Info>::const_iterator newest_update_osd = find_best_info(all_info);
+
+  if (newest_update_osd == all_info.end()) {
+    if (up != acting) {
+      dout(10) << "calc_acting no suitable info found (incomplete backfills?), reverting to up" << dendl;
+      want = up;
+      return true;
+    } else {
+      dout(10) << "calc_acting no suitable info found (incomplete backfills?)" << dendl;
+      return false;
+    }
+  }
+
 
   dout(10) << "calc_acting newest update on osd." << newest_update_osd->first
 	   << " with " << newest_update_osd->second << dendl;
@@ -983,7 +995,7 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 	primary->second.last_update < newest_update_osd->second.log_tail) {
       dout(10) << "calc_acting no acceptable primary, reverting to up " << up << dendl;
       want = up;
-      return;
+      return true;
     } else {
       dout(10) << "up[0] and newest_update_osd need backfill, osd."
 	       << newest_update_osd_id
@@ -1041,6 +1053,8 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
       usable++;
     }
   }
+
+  return true;
 }
 
 /**
@@ -1052,7 +1066,12 @@ void PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 bool PG::choose_acting(int& newest_update_osd)
 {
   vector<int> want;
-  calc_acting(newest_update_osd, want);
+
+  if (!calc_acting(newest_update_osd, want)) {
+    dout(10) << "choose_acting failed, marking pg down" << dendl;
+    state_set(PG_STATE_DOWN);
+    return false;
+  }
 
   if (want != acting) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
