@@ -531,7 +531,7 @@ check_PROGRAMS += unittest_perf_counters
 
 unittest_admin_socket_SOURCES = test/admin_socket.cc
 unittest_admin_socket_LDFLAGS = ${AM_LDFLAGS}
-unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD} libcommon.la
 unittest_admin_socket_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_admin_socket
 

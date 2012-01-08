@@ -26,34 +26,30 @@
 class AdminSocketTest
 {
 public:
-  AdminSocketTest(AdminSocketConfigObs *asokc)
+  AdminSocketTest(AdminSocket *asokc)
     : m_asokc(asokc)
   {
   }
   bool init(const std::string &uri) {
-    if (m_asokc->m_thread != NULL) {
-      return false;
-    }
     return m_asokc->init(uri);
   }
   bool shutdown() {
     m_asokc->shutdown();
-    return (m_asokc->m_thread == NULL);
+    return true;
   }
-private:
-  AdminSocketConfigObs *m_asokc;
+  AdminSocket *m_asokc;
 };
 
 TEST(AdminSocket, Teardown) {
-  std::auto_ptr<AdminSocketConfigObs>
-      asokc(new AdminSocketConfigObs(g_ceph_context));
+  std::auto_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
 }
 
 TEST(AdminSocket, TeardownSetup) {
-  std::auto_ptr<AdminSocketConfigObs>
-      asokc(new AdminSocketConfigObs(g_ceph_context));
+  std::auto_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
@@ -61,14 +57,35 @@ TEST(AdminSocket, TeardownSetup) {
 }
 
 TEST(AdminSocket, SendNoOp) {
-  std::auto_ptr<AdminSocketConfigObs>
-      asokc(new AdminSocketConfigObs(g_ceph_context));
+  std::auto_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  uint32_t version;
-  ASSERT_EQ("", client.get_version(&version));
+  string version;
+  ASSERT_EQ("", client.do_request("version", &version));
   ASSERT_EQ(CEPH_ADMIN_SOCK_VERSION, version);
+  ASSERT_EQ(true, asoct.shutdown());
+}
+
+class MyTest : public AdminSocketHook {
+  bool call(std::string command, bufferlist& result) {
+    result.append("yes");
+    return true;
+  }
+};
+
+TEST(AdminSocket, RegisterCommand) {
+  std::auto_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", new MyTest(), ""));
+  string result;
+  ASSERT_EQ("", client.do_request("test", &result));
+  ASSERT_EQ("yes", result);
   ASSERT_EQ(true, asoct.shutdown());
 }
