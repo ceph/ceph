@@ -102,6 +102,9 @@ def main():
         handler.setFormatter(formatter)
         logging.getLogger().addHandler(handler)
 
+        with file(os.path.join(ctx.archive, 'pid'), 'w') as f:
+            f.write('%d' % os.getpid())
+
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
 
     ctx.summary = dict(success=True)
