@@ -904,6 +904,10 @@ def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
     firstmon = teuthology.get_first_mon(ctx, config)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+    teuthology.wait_until_osds_up(
+        cluster=ctx.cluster,
+        remote=mon0_remote
+        )
     teuthology.wait_until_healthy(
         remote=mon0_remote,
         )

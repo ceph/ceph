@@ -9,6 +9,7 @@ import time
 import urllib2
 import urlparse
 import yaml
+import json
 
 from .orchestra import run
 
@@ -283,6 +284,31 @@ def wait_until_healthy(remote):
         out = r.stdout.getvalue()
         log.debug('Ceph health: %s', out.rstrip('\n'))
         if out.split(None, 1)[0] == 'HEALTH_OK':
+            break
+        time.sleep(1)
+
+def wait_until_osds_up(cluster, remote):
+    """Wait until all Ceph OSDs are booted."""
+    num_osds = num_instances_of_type(cluster, 'osd')
+    while True:
+        r = remote.run(
+            args=[
+                '/tmp/cephtest/enable-coredump',
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                '/tmp/cephtest/archive/coverage',
+                '/tmp/cephtest/binary/usr/local/bin/ceph',
+                '-c', '/tmp/cephtest/ceph.conf',
+                '--concise',
+                'osd', 'dump', '--format=json'
+                ],
+            stdout=StringIO(),
+            logger=log.getChild('health'),
+            )
+        out = r.stdout.getvalue()
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        up = len(j['osds'])
+        log.debug('%d of %d OSDs are up' % (up, num_osds))
+        if up == num_osds:
             break
         time.sleep(1)
 
