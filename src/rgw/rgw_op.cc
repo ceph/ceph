@@ -855,136 +855,149 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
 }
 
 
+RGWPutObjProcessor *RGWPutObj::select_processor()
+{
+  RGWPutObjProcessor *processor;
+
+  bool multipart = s->args.exists("uploadId");
+
+  if (!multipart) {
+    if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload)
+      processor = new RGWPutObjProcessor_Plain();
+    else
+      processor = new RGWPutObjProcessor_Atomic();
+  } else {
+    processor = new RGWPutObjProcessor_Multipart();
+  }
+
+  return processor;
+}
+
+void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
+{
+  delete processor;
+}
+
 void RGWPutObj::execute()
 {
   rgw_obj obj;
+  RGWAccessControlPolicy policy;
+  RGWPutObjProcessor *processor = NULL;
+  char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
+  char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  MD5 hash;
+  bufferlist bl, aclbl;
+  map<string, bufferlist> attrs;
+  int len;
+
 
   perfcounter->inc(l_rgw_put);
   ret = -EINVAL;
   if (!s->object) {
     goto done;
-  } else {
-    ret = get_params();
-    if (ret < 0)
-      goto done;
-
-    RGWAccessControlPolicy policy;
-
-    ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-    if (!ret) {
-       ret = -EINVAL;
-       goto done;
-    }
-    char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
-    char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-
-    if (supplied_md5_b64) {
-      dout(15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
-      ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
-			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
-      dout(15) << "ceph_armor ret=" << ret << dendl;
-      if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-        ret = -ERR_INVALID_DIGEST;
-        goto done;
-      }
-
-      buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
-      dout(15) << "supplied_md5=" << supplied_md5 << dendl;
-    }
-
-    if (supplied_etag) {
-      strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5));
-    }
-
-    bool multipart = s->args.exists("uploadId");
-
-    if (!multipart) {
-      if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload)
-        processor = new RGWPutObjProcessor_Plain();
-      else
-        processor = new RGWPutObjProcessor_Atomic();
-    } else {
-      processor = new RGWPutObjProcessor_Multipart();
-    }
-
-    MD5 hash;
-
-    ret = processor->prepare(s);
-    if (ret < 0)
-      goto done;
-
-    int len;
-    do {
-      bufferlist data;
-      len = get_data(data);
-      if (len < 0) {
-        ret = len;
-        goto done;
-      }
-      if (!len)
-        break;
-
-      void *handle;
-      ret = processor->handle_data(data, ofs, &handle);
-      if (ret < 0)
-        goto done;
-
-      hash.Update((unsigned char *)data.c_str(), len);
-
-      ret = processor->throttle_data(handle);
-      if (ret < 0)
-        goto done;
-
-      ofs += len;
-    } while (len > 0);
-
-    // was this really needed?
-    // drain_pending(pending);
-
-    if (!chunked_upload && (uint64_t)ofs != s->content_length) {
-      ret = -ERR_REQUEST_TIMEOUT;
-      goto done;
-    }
-    s->obj_size = ofs;
-    perfcounter->inc(l_rgw_put_b, s->obj_size);
-
-    hash.Final(m);
-
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-       ret = -ERR_BAD_DIGEST;
-       goto done;
-    }
-    bufferlist aclbl;
-    policy.encode(aclbl);
-
-    etag = calc_md5;
-
-    if (supplied_etag && etag.compare(supplied_etag) != 0) {
-      ret = -ERR_UNPROCESSABLE_ENTITY;
-      goto done;
-    }
-    map<string, bufferlist> attrs;
-    bufferlist bl;
-    bl.append(etag.c_str(), etag.size() + 1);
-    attrs[RGW_ATTR_ETAG] = bl;
-    attrs[RGW_ATTR_ACL] = aclbl;
-
-    if (s->content_type) {
-      bl.clear();
-      bl.append(s->content_type, strlen(s->content_type) + 1);
-      attrs[RGW_ATTR_CONTENT_TYPE] = bl;
-    }
-
-    get_request_metadata(s, attrs);
-
-    ret = processor->complete(etag, attrs);
   }
+
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
+  ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!ret) {
+     ret = -EINVAL;
+     goto done;
+  }
+
+  if (supplied_md5_b64) {
+    dout(15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
+    ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
+                       supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+    dout(15) << "ceph_armor ret=" << ret << dendl;
+    if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+      ret = -ERR_INVALID_DIGEST;
+      goto done;
+    }
+
+    buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+    dout(15) << "supplied_md5=" << supplied_md5 << dendl;
+  }
+
+  if (supplied_etag) {
+    strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5));
+  }
+
+  processor = select_processor();
+
+  ret = processor->prepare(s);
+  if (ret < 0)
+    goto done;
+
+  do {
+    bufferlist data;
+    len = get_data(data);
+    if (len < 0) {
+      ret = len;
+      goto done;
+    }
+    if (!len)
+      break;
+
+    void *handle;
+    ret = processor->handle_data(data, ofs, &handle);
+    if (ret < 0)
+      goto done;
+
+    hash.Update((unsigned char *)data.c_str(), len);
+
+    ret = processor->throttle_data(handle);
+    if (ret < 0)
+      goto done;
+
+    ofs += len;
+  } while (len > 0);
+
+  // was this really needed? processor->complete() will synch
+  // drain_pending(pending);
+
+  if (!chunked_upload && (uint64_t)ofs != s->content_length) {
+    ret = -ERR_REQUEST_TIMEOUT;
+    goto done;
+  }
+  s->obj_size = ofs;
+  perfcounter->inc(l_rgw_put_b, s->obj_size);
+
+  hash.Final(m);
+
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+
+  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+     ret = -ERR_BAD_DIGEST;
+     goto done;
+  }
+  policy.encode(aclbl);
+
+  etag = calc_md5;
+
+  if (supplied_etag && etag.compare(supplied_etag) != 0) {
+    ret = -ERR_UNPROCESSABLE_ENTITY;
+    goto done;
+  }
+  bl.append(etag.c_str(), etag.size() + 1);
+  attrs[RGW_ATTR_ETAG] = bl;
+  attrs[RGW_ATTR_ACL] = aclbl;
+
+  if (s->content_type) {
+    bl.clear();
+    bl.append(s->content_type, strlen(s->content_type) + 1);
+    attrs[RGW_ATTR_CONTENT_TYPE] = bl;
+  }
+
+  get_request_metadata(s, attrs);
+
+  ret = processor->complete(etag, attrs);
 done:
-  delete processor;
+  dispose_processor(processor);
   perfcounter->finc(l_rgw_put_lat,
                    (ceph_clock_now(g_ceph_context) - s->time));
   send_response();
