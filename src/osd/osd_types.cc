@@ -881,3 +881,23 @@ void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
     }
   }
 }
+
+void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in)
+{
+  bufferlist::iterator datap = in.begin();
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ops[i].op.payload_len) {
+      datap.copy(ops[i].op.payload_len, ops[i].outdata);
+    }
+  }
+}
+
+void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
+{
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ops[i].outdata.length()) {
+      ops[i].op.payload_len = ops[i].outdata.length();
+      out.append(ops[i].outdata);
+    }
+  }
+}

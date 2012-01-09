@@ -1302,7 +1302,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 
 struct OSDOp {
   ceph_osd_op op;
-  bufferlist indata;
+  bufferlist indata, outdata;
   sobject_t soid;
 
   OSDOp() {
@@ -1314,5 +1314,7 @@ ostream& operator<<(ostream& out, const OSDOp& op);
 
 void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
 void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out);
+void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in);
+void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out);
 
 #endif
