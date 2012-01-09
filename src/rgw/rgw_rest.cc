@@ -100,7 +100,7 @@ void set_req_state_err(struct req_state *s, int err_no)
     s->err.s3_code = r->s3_code;
     return;
   }
-  dout(0) << "set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
+  dout(0) << "WARNING: set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
 
   s->err.http_ret = 500;
   s->err.s3_code = "UnknownError";

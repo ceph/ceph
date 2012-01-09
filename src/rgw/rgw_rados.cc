@@ -433,7 +433,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     }
   } else {
     if (ret < 0) {
-      dout(0) << "failed to store bucket info" << dendl;
+      dout(0) << "ERROR: failed to store bucket info" << dendl;
       return ret;
     }
 
@@ -460,7 +460,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
       return r;
 
     uint64_t ver = id_io_ctx.get_last_version();
-    dout(0) << "got obj version=" << ver << dendl;
+    dout(20) << "got obj version=" << ver << dendl;
     char buf[32];
     snprintf(buf, sizeof(buf), "%llu", (unsigned long long)ver);
     bucket.marker = buf;
@@ -508,7 +508,7 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
     return ret;
   }
 
-  dout(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  dout(20) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
 }
 
@@ -592,7 +592,7 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int aui
       c->wait();
       r = c->get_return_value();
       if (r < 0) {
-        dout(0) << "async pool_create returned " << r << dendl;
+        dout(0) << "WARNING: async pool_create returned " << r << dendl;
       }
       c->release();
     }
@@ -914,7 +914,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
     RGWBucketInfo info;
     int r = get_bucket_info(NULL, bucket.name, info);
     if (r < 0) {
-      dout(0) << "get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
+      dout(0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
       continue;
     }
@@ -926,7 +926,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 
     r = put_bucket_info(bucket.name, info, false);
     if (r < 0) {
-      dout(0) << "put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
+      dout(0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
       continue;
     }
@@ -1138,12 +1138,12 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
 
   if (state->obj_tag.length() == 0 ||
       state->shadow_obj.size() == 0) {
-    dout(0) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
+    dout(10) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
     // FIXME: need to test object does not exist
   } else if (state->size <= RGW_MAX_CHUNK_SIZE) {
-    dout(0) << "not cloning object, object size (" << state->size << ")" << " <= chunk size" << dendl;
+    dout(10) << "not cloning object, object size (" << state->size << ")" << " <= chunk size" << dendl;
   }else {
-    dout(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
+    dout(10) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
     rgw_obj dest_obj(obj.bucket, state->shadow_obj);
     dest_obj.set_ns(shadow_ns);
     if (obj.key.size())
@@ -1152,14 +1152,14 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       dest_obj.set_key(obj.object);
 
     pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
-    dout(0) << "cloning: dest_obj=" << dest_obj << " size=" << state->size << " tag=" << state->obj_tag.c_str() << dendl;
+    dout(10) << "cloning: dest_obj=" << dest_obj << " size=" << state->size << " tag=" << state->obj_tag.c_str() << dendl;
     r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, false, true, &cond);
     if (r == -EEXIST)
       r = 0;
     if (r == -ECANCELED) {
       /* we lost in a race here, original object was replaced, we assume it was cloned
          as required */
-      dout(0) << "clone_obj_cond was cancelled, lost in a race" << dendl;
+      dout(5) << "clone_obj_cond was cancelled, lost in a race" << dendl;
       state->clear();
       return r;
     } else {
@@ -1258,7 +1258,7 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
 
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
-    dout(0) << "RGWRados::set_attr: raced with another process, going to the shadow obj instead" << dendl;
+    dout(0) << "NOTICE: RGWRados::set_attr: raced with another process, going to the shadow obj instead" << dendl;
     string loc = obj.loc();
     rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
     r = set_attr(NULL, shadow, name, bl);
@@ -1364,7 +1364,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     struct tm mtm;
     struct tm *gmtm = gmtime_r(&astate->mtime, &mtm);
     if (!gmtm) {
-       dout(0) << "could not get translate mtime for object" << dendl;
+       dout(0) << "NOTICE: could not get translate mtime for object" << dendl;
        r = -EINVAL;
        goto done_err;
     }
@@ -1676,7 +1676,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
 
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
-    dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
+    dout(0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
     string loc = obj.loc();
     rgw_obj shadow(bucket, astate->shadow_obj, loc, shadow_ns);
     r = get_obj(NULL, handle, shadow, data, ofs, end);
@@ -1733,7 +1733,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   r = io_ctx.operate(oid, &op, &bl);
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
-    dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
+    dout(0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
     string loc = obj.loc();
     rgw_obj shadow(obj.bucket, astate->shadow_obj, loc, shadow_ns);
     r = read(NULL, shadow, ofs, size, bl);
@@ -1775,7 +1775,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   map<string, bufferlist>::iterator aiter;
   for (aiter = attrset.begin(); aiter != attrset.end(); ++aiter) {
-    dout(0) << "iter->first=" << aiter->first << dendl;
+    dout(20) << "RGWRados::obj_stat: attr=" << aiter->first << dendl;
   }
 
   uint64_t size = 0;
@@ -1846,7 +1846,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
     return -EIO;
   }
 
-  dout(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  dout(20) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
 
   return 0;
 }
@@ -2074,7 +2074,7 @@ int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<stri
     // fill it in with initial values; we may correct later
     e.name = oid;
     m[e.name] = e;
-    dout(0) << " got " << e.name << dendl;
+    dout(20) << "RGWRados::pool_list: got " << e.name << dendl;
   }
 
   if (m.size()) {
@@ -2189,7 +2189,7 @@ int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epo
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
 			      bool *is_truncated, string *last_entry)
 {
-  dout(0) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
+  dout(10) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
 
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -2255,7 +2255,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
       }
     }
     m[e.name] = e;
-    dout(0) << " got " << e.name << dendl;
+    dout(10) << "RGWRados::cls_bucket_list: got " << e.name << dendl;
   }
 
   if (dir.m.size()) {

@@ -105,7 +105,7 @@ bool rgw_verify_os_token(req_state *s)
     return ret;
 
   if (!info.user) {
-    dout(0) << "swift auth didn't authorize a user" << dendl;
+    dout(5) << "swift auth didn't authorize a user" << dendl;
     return false;
   }
 
@@ -117,7 +117,7 @@ bool rgw_verify_os_token(req_state *s)
   dout(10) << "swift user=" << s->os_user << dendl;
 
   if (rgw_get_user_info_by_swift(swift_user, s->user) < 0) {
-    dout(0) << "couldn't map swift user" << dendl;
+    dout(0) << "NOTICE: couldn't map swift user" << dendl;
     return false;
   }
 

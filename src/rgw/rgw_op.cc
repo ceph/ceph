@@ -173,7 +173,7 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
       try {
         policy->decode(iter);
       } catch (buffer::error& err) {
-        dout(0) << "error: could not decode policy, caught buffer::error" << dendl;
+        dout(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
         return -EIO;
       }
       if (g_conf->debug_rgw >= 15) {
@@ -204,7 +204,7 @@ static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessC
   rgw_obj obj;
 
   if (bucket_info.flags & BUCKET_SUSPENDED) {
-    dout(0) << "bucket " << bucket_info.bucket.name << " is suspended" << dendl;
+    dout(0) << "NOTICE: bucket " << bucket_info.bucket.name << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
   }
 
@@ -257,7 +257,7 @@ static int read_acls(struct req_state *s, bool only_bucket, bool prefetch_data)
   if (s->bucket_name_str.size()) {
     ret = rgwstore->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info);
     if (ret < 0) {
-      dout(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
+      dout(0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
       return ret;
     }
     s->bucket = bucket_info.bucket;
@@ -547,7 +547,7 @@ void RGWCreateBucket::execute()
                                 true, s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
-  dout(0) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
+  dout(20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
 
   if (ret && ret != -EEXIST)   
     goto done;
@@ -1587,12 +1587,12 @@ void RGWCompleteMultipart::execute()
        ++iter, ++obj_iter) {
     char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     if (iter->first != (int)obj_iter->first) {
-      dout(0) << "parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
+      dout(0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
       ret = -ERR_INVALID_PART;
       goto done;
     }
     if (iter->second.compare(obj_iter->second.etag) != 0) {
-      dout(0) << "etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
+      dout(0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
       ret = -ERR_INVALID_PART;
       goto done;
     }

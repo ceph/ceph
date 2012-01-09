@@ -84,12 +84,12 @@ int rgw_log_op(struct req_state *s)
     return 0;
 
   if (!s->bucket_name) {
-    dout(0) << "nothing to log for operation" << dendl;
+    dout(5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
     if (!g_conf->rgw_log_nonexistent_bucket) {
-      dout(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
+      dout(5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = 0;
@@ -99,7 +99,7 @@ int rgw_log_op(struct req_state *s)
   entry.bucket = s->bucket_name;
 
   if (check_utf8(s->bucket_name, entry.bucket.size()) != 0) {
-    dout(0) << "not logging op on bucket with non-utf8 name" << dendl;
+    dout(5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
@@ -165,7 +165,7 @@ int rgw_log_op(struct req_state *s)
   }
 done:
   if (ret < 0)
-    dout(0) << "failed to log entry" << dendl;
+    dout(0) << "ERROR: failed to log entry" << dendl;
 
   return ret;
 }

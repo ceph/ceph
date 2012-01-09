@@ -275,7 +275,7 @@ int RGWPutObj_REST_SWIFT::get_params()
   supplied_etag = s->env->get("HTTP_ETAG");
 
   if (!s->content_type) {
-    dout(0) << "content type wasn't provided, trying to guess" << dendl;
+    dout(5) << "content type wasn't provided, trying to guess" << dendl;
     const char *suffix = strrchr(s->object, '.');
     if (suffix) {
       suffix++;
