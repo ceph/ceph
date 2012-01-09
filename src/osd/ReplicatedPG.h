@@ -328,7 +328,6 @@ public:
     Message *op;
     osd_reqid_t reqid;
     vector<OSDOp>& ops;
-    bufferlist outdata;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -734,8 +733,7 @@ public:
 		       vector<hobject_t> &obs_to_trim);
   RepGather *trim_object(const hobject_t &coid, const snapid_t &sn);
   bool snap_trimmer();
-  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
-		 bufferlist& odata);
+  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
   void do_osd_op_effects(OpContext *ctx);
 private:
   struct NotTrimming;
