@@ -4288,7 +4288,6 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
   map<hobject_t, ObjectContext *>::iterator i = object_contexts.find(oid);
   if (i != object_contexts.end()) {
     i->second->get();
-    populate_obc_watchers(i->second);
     for (set<ObjectContext*>::iterator j = i->second->blocking.begin();
 	 j != i->second->blocking.end();
 	 i->second->blocking.erase(j++)) {
@@ -4383,6 +4382,8 @@ void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectCon
 {
   lock();
   dout(10) << "_applied_pushed_object " << *obc << dendl;
+  if (is_primary())
+    populate_obc_watchers(obc);
   put_object_context(obc);
   unlock();
   delete t;
