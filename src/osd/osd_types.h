@@ -1312,4 +1312,7 @@ struct OSDOp {
 
 ostream& operator<<(ostream& out, const OSDOp& op);
 
+void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
+void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out);
+
 #endif

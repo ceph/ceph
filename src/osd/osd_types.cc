@@ -855,3 +855,29 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   return out;
 }
 
+
+void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
+{
+  bufferlist::iterator datap = in.begin();
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ceph_osd_op_type_multi(ops[i].op.op)) {
+      ::decode(ops[i].soid, datap);
+    }
+    if (ops[i].op.payload_len) {
+      datap.copy(ops[i].op.payload_len, ops[i].indata);
+    }
+  }
+}
+
+void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
+{
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ceph_osd_op_type_multi(ops[i].op.op)) {
+      ::encode(ops[i].soid, out);
+    }
+    if (ops[i].indata.length()) {
+      ops[i].op.payload_len = ops[i].indata.length();
+      out.append(ops[i].indata);
+    }
+  }
+}
