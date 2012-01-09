@@ -1086,7 +1086,7 @@ int Objecter::calc_op_budget(Op *op)
        i != op->ops.end();
        ++i) {
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
-      op_budget += i->data.length();
+      op_budget += i->indata.length();
     } else if (i->op.op & CEPH_OSD_OP_MODE_RD) {
       if (ceph_osd_op_type_data(i->op.op)) {
         if ((int64_t)i->op.extent.length > 0)

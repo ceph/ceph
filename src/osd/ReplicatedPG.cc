@@ -259,7 +259,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   snapid_t snapid = op->get_snapid();
 
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
-    bufferlist::iterator bp = p->data.begin();
+    bufferlist::iterator bp = p->indata.begin();
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS_FILTER:
       try {
@@ -1235,7 +1235,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
-    bufferlist::iterator bp = osd_op.data.begin();
+    bufferlist::iterator bp = osd_op.indata.begin();
 
     // user-visible modifcation?
     switch (op.op) {
@@ -1685,8 +1685,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (obs.exists && (flags & CEPH_OSD_OP_FLAG_EXCL)) {
           result = -EEXIST; /* this is an exclusive create */
 	} else {
-	  if (osd_op.data.length()) {
-	    bufferlist::iterator p = osd_op.data.begin();
+	  if (osd_op.indata.length()) {
+	    bufferlist::iterator p = osd_op.indata.begin();
 	    string category;
 	    ::decode(category, p);
 	    if (category.size()) {
@@ -1863,7 +1863,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	newop.op.op = CEPH_OSD_OP_WRITE;
 	newop.op.extent.offset = oi.size;
 	newop.op.extent.length = op.extent.length;
-        newop.data = osd_op.data;
+        newop.indata = osd_op.indata;
 	do_osd_ops(ctx, nops, odata);
       }
       break;
@@ -1905,8 +1905,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	OSDOp& newop = nops[0];
 	newop.op.op = CEPH_OSD_OP_WRITEFULL;
 	newop.op.extent.offset = 0;
-	newop.op.extent.length = osd_op.data.length();
-	newop.data = osd_op.data;
+	newop.op.extent.length = osd_op.indata.length();
+	newop.indata = osd_op.indata;
 	bufferlist r;
 	do_osd_ops(ctx, nops, r);
       }
@@ -1934,7 +1934,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	bufferlist obl;
 
 	dout(30) << "the update command is: \n";
-	osd_op.data.hexdump(*_dout);
+	osd_op.indata.hexdump(*_dout);
 	*_dout << dendl;
 
 	// header
@@ -2067,7 +2067,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  newop.op.op = CEPH_OSD_OP_WRITEFULL;
 	  newop.op.extent.offset = 0;
 	  newop.op.extent.length = obl.length();
-	  newop.data = obl;
+	  newop.indata = obl;
 	  do_osd_ops(ctx, nops, odata);
 	}
       }
@@ -3956,7 +3956,7 @@ int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int pe
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
   //subop->ops[0].op.extent.offset = 0;
   //subop->ops[0].op.extent.length = size;
-  subop->ops[0].data = bl;
+  subop->ops[0].indata = bl;
   subop->data_subset = data_subset;
   subop->clone_subsets = clone_subsets;
   subop->attrset.swap(attrset);

@@ -1302,7 +1302,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 
 struct OSDOp {
   ceph_osd_op op;
-  bufferlist data;
+  bufferlist indata;
   sobject_t soid;
 
   OSDOp() {

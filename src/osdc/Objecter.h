@@ -74,7 +74,7 @@ struct ObjectOperation {
     ops[s].op.op = op;
     ops[s].op.extent.offset = off;
     ops[s].op.extent.length = len;
-    ops[s].data.claim_append(bl);
+    ops[s].indata.claim_append(bl);
   }
   void add_clone_range(int op, uint64_t off, uint64_t len, const object_t& srcoid, uint64_t srcoff, snapid_t srcsnapid) {
     int s = ops.size();
@@ -92,8 +92,8 @@ struct ObjectOperation {
     ops[s].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[s].op.xattr.value_len = data.length();
     if (name)
-      ops[s].data.append(name);
-    ops[s].data.append(data);
+      ops[s].indata.append(name);
+    ops[s].indata.append(data);
   }
   void add_xattr_cmp(int op, const char *name, uint8_t cmp_op, uint8_t cmp_mode, const bufferlist& data) {
     int s = ops.size();
@@ -104,8 +104,8 @@ struct ObjectOperation {
     ops[s].op.xattr.cmp_op = cmp_op;
     ops[s].op.xattr.cmp_mode = cmp_mode;
     if (name)
-      ops[s].data.append(name);
-    ops[s].data.append(data);
+      ops[s].indata.append(name);
+    ops[s].indata.append(data);
   }
   void add_call(int op, const char *cname, const char *method, bufferlist &indata) {
     int s = ops.size();
@@ -114,9 +114,9 @@ struct ObjectOperation {
     ops[s].op.cls.class_len = strlen(cname);
     ops[s].op.cls.method_len = strlen(method);
     ops[s].op.cls.indata_len = indata.length();
-    ops[s].data.append(cname, ops[s].op.cls.class_len);
-    ops[s].data.append(method, ops[s].op.cls.method_len);
-    ops[s].data.append(indata);
+    ops[s].indata.append(cname, ops[s].op.cls.class_len);
+    ops[s].indata.append(method, ops[s].op.cls.method_len);
+    ops[s].indata.append(indata);
   }
   void add_watch(int op, uint64_t cookie, uint64_t ver, uint8_t flag, bufferlist& inbl) {
     int s = ops.size();
@@ -125,7 +125,7 @@ struct ObjectOperation {
     ops[s].op.watch.cookie = cookie;
     ops[s].op.watch.ver = ver;
     ops[s].op.watch.flag = flag;
-    ops[s].data.append(inbl);
+    ops[s].indata.append(inbl);
   }
   void add_pgls(int op, uint64_t count, collection_list_handle_t cookie, epoch_t start_epoch) {
     int s = ops.size();
@@ -133,7 +133,7 @@ struct ObjectOperation {
     ops[s].op.op = op;
     ops[s].op.pgls.count = count;
     ops[s].op.pgls.start_epoch = start_epoch;
-    ::encode(cookie, ops[s].data);
+    ::encode(cookie, ops[s].indata);
   }
   void add_pgls_filter(int op, uint64_t count, bufferlist& filter, collection_list_handle_t cookie, epoch_t start_epoch) {
     int s = ops.size();
@@ -143,10 +143,10 @@ struct ObjectOperation {
     ops[s].op.pgls.start_epoch = start_epoch;
     string cname = "pg";
     string mname = "filter";
-    ::encode(cname, ops[s].data);
-    ::encode(mname, ops[s].data);
-    ::encode(cookie, ops[s].data);
-    ops[s].data.append(filter);
+    ::encode(cname, ops[s].indata);
+    ::encode(mname, ops[s].indata);
+    ::encode(cookie, ops[s].indata);
+    ops[s].indata.append(filter);
   }
 
   // ------
@@ -167,7 +167,7 @@ struct ObjectOperation {
   void create(bool excl, const string& category) {
     OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
     o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
-    ::encode(category, o.data);
+    ::encode(category, o.indata);
   }
 
   // object data
@@ -874,7 +874,7 @@ private:
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[i].op.xattr.value_len = 0;
     if (name)
-      ops[i].data.append(name);
+      ops[i].indata.append(name);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
@@ -925,7 +925,7 @@ private:
     ops[i].op.extent.length = len;
     ops[i].op.extent.truncate_size = 0;
     ops[i].op.extent.truncate_seq = 0;
-    ops[i].data = bl;
+    ops[i].indata = bl;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -943,7 +943,7 @@ private:
     ops[i].op.extent.length = len;
     ops[i].op.extent.truncate_size = 0;
     ops[i].op.extent.truncate_seq = 0;
-    ops[i].data = bl;
+    ops[i].indata = bl;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -962,7 +962,7 @@ private:
     ops[i].op.extent.length = len;
     ops[i].op.extent.truncate_size = trunc_size;
     ops[i].op.extent.truncate_seq = trunc_seq;
-    ops[i].data = bl;
+    ops[i].indata = bl;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -977,7 +977,7 @@ private:
     ops[i].op.op = CEPH_OSD_OP_WRITEFULL;
     ops[i].op.extent.offset = 0;
     ops[i].op.extent.length = bl.length();
-    ops[i].data = bl;
+    ops[i].indata = bl;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -1075,8 +1075,8 @@ private:
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[i].op.xattr.value_len = bl.length();
     if (name)
-      ops[i].data.append(name);
-    ops[i].data.append(bl);
+      ops[i].indata.append(name);
+    ops[i].indata.append(bl);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -1093,7 +1093,7 @@ private:
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[i].op.xattr.value_len = 0;
     if (name)
-      ops[i].data.append(name);
+      ops[i].indata.append(name);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;

@@ -805,9 +805,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
-    if (op.op.xattr.name_len && op.data.length()) {
+    if (op.op.xattr.name_len && op.indata.length()) {
       out << " ";
-      op.data.write(0, op.op.xattr.name_len, out);
+      op.indata.write(0, op.op.xattr.name_len, out);
     }
     if (op.op.xattr.value_len)
       out << " (" << op.op.xattr.value_len << ")";
@@ -815,11 +815,11 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
-    if (op.op.cls.class_len && op.data.length()) {
+    if (op.op.cls.class_len && op.indata.length()) {
       out << " ";
-      op.data.write(0, op.op.cls.class_len, out);
+      op.indata.write(0, op.op.cls.class_len, out);
       out << ".";
-      op.data.write(op.op.cls.class_len, op.op.cls.method_len, out);
+      op.indata.write(op.op.cls.class_len, op.op.cls.method_len, out);
     }
   } else if (ceph_osd_op_type_pg(op.op.op)) {
     switch (op.op.op) {
@@ -841,9 +841,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_SRC_CMPXATTR:
       out << " " << op.soid;
-      if (op.op.xattr.name_len && op.data.length()) {
+      if (op.op.xattr.name_len && op.indata.length()) {
 	out << " ";
-	op.data.write(0, op.op.xattr.name_len, out);
+	op.indata.write(0, op.op.xattr.name_len, out);
       }
       if (op.op.xattr.value_len)
 	out << " (" << op.op.xattr.value_len << ")";
@@ -854,3 +854,4 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   }
   return out;
 }
+

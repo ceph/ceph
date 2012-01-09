@@ -189,9 +189,9 @@ public:
       if (ceph_osd_op_type_multi(ops[i].op.op)) {
 	::encode(ops[i].soid, data);
       }
-      if (ops[i].data.length()) {
-	ops[i].op.payload_len = ops[i].data.length();
-	data.append(ops[i].data);
+      if (ops[i].indata.length()) {
+	ops[i].op.payload_len = ops[i].indata.length();
+	data.append(ops[i].indata);
       }
     }
 
@@ -367,7 +367,7 @@ struct ceph_osd_request_head {
 	::decode(ops[i].soid, datap);
       }
       if (ops[i].op.payload_len) {
-	datap.copy(ops[i].op.payload_len, ops[i].data);
+	datap.copy(ops[i].op.payload_len, ops[i].indata);
       }
     }
   }
