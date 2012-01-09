@@ -901,7 +901,7 @@ void RGWPutObj::execute()
     bool multipart = s->args.exists("uploadId");
 
     if (!multipart) {
-      if (s->content_length <= RGW_MAX_CHUNK_SIZE)
+      if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload)
         processor = new RGWPutObjProcessor_Plain();
       else
         processor = new RGWPutObjProcessor_Atomic();
