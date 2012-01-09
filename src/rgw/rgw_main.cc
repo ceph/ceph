@@ -205,7 +205,7 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
     abort_early(s, -ERR_USER_SUSPENDED);
     goto done;
   }
-  ret = handler->read_permissions();
+  ret = handler->read_permissions(op);
   if (ret < 0) {
     abort_early(s, ret);
     goto done;

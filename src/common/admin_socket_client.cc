@@ -107,10 +107,9 @@ static std::string asok_connect(const std::string &path, int *fd)
   return "";
 }
 
-static std::string asok_request(int socket_fd, uint32_t request_id)
+static std::string asok_request(int socket_fd, std::string request)
 {
-  uint32_t request_id_raw = htonl(request_id);
-  ssize_t res = safe_write(socket_fd, &request_id_raw, sizeof(request_id_raw));
+  ssize_t res = safe_write(socket_fd, request.c_str(), request.length() + 1);
   if (res < 0) {
     int err = res;
     ostringstream oss;
@@ -127,49 +126,7 @@ AdminSocketClient(const std::string &path)
 {
 }
 
-std::string AdminSocketClient::
-get_version(uint32_t *version)
-{
-  uint32_t version_raw;
-  int socket_fd, res;
-  std::string err = asok_connect(m_path, &socket_fd);
-  if (!err.empty()) {
-    goto done;
-  }
-  err = asok_request(socket_fd, 0x0);
-  if (!err.empty()) {
-    goto done;
-  }
-  res = safe_read_exact(socket_fd, &version_raw,
-				sizeof(version_raw));
-  if (res < 0) {
-    int e = res;
-    ostringstream oss;
-    oss << "safe_read(" << socket_fd << ") failed to read version_raw: "
-	<< cpp_strerror(e);
-    err = oss.str();
-    goto done;
-  }
-  *version = ntohl(version_raw);
-done:
-  close(socket_fd);
-  return err;
-}
-
-std::string AdminSocketClient::
-get_schema(std::string *message)
-{
-  return get_json(message, 0x2);
-}
-
-std::string AdminSocketClient::
-get_message(std::string *message)
-{
-  return get_json(message, 0x1);
-}
-
-std::string AdminSocketClient::
-get_json(std::string *message, uint32_t request_code)
+std::string AdminSocketClient::do_request(std::string request, std::string *result)
 {
   int socket_fd, res;
   std::vector<uint8_t> vec(65536, 0);
@@ -180,7 +137,7 @@ get_json(std::string *message, uint32_t request_code)
   if (!err.empty()) {
     goto done;
   }
-  err = asok_request(socket_fd, request_code);
+  err = asok_request(socket_fd, request);
   if (!err.empty()) {
     goto done;
   }
@@ -204,7 +161,7 @@ get_json(std::string *message, uint32_t request_code)
     goto done;
   }
   //printf("MESSAGE FROM SERVER: %s\n", buffer);
-  message->assign((const char*)buffer);
+  result->assign((const char*)buffer);
 done:
   close(socket_fd);
   return err;

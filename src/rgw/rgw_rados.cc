@@ -614,7 +614,8 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int aui
  */
 int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-                  map<string, bufferlist>* rmattrs)
+                  map<string, bufferlist>* rmattrs,
+                  const bufferlist *data)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -630,6 +631,13 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   ObjectWriteOperation op;
 
   op.create(exclusive);
+
+  if (data) {
+    /* if we want to overwrite the data, we also want to overwrite the
+       xattrs, so just remove the object */
+    op.remove();
+    op.write_full(*data);
+  }
 
   string etag;
   string content_type;
@@ -703,14 +711,16 @@ int RGWRados::put_obj_data(void *ctx, rgw_obj& obj,
 			   const char *data, off_t ofs, size_t len, bool exclusive)
 {
   void *handle;
-  int r = aio_put_obj_data(ctx, obj, data, ofs, len, exclusive, &handle);
+  bufferlist bl;
+  bl.append(data, len);
+  int r = aio_put_obj_data(ctx, obj, bl, ofs, exclusive, &handle);
   if (r < 0)
     return r;
   return aio_wait(handle);
 }
 
-int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
-			       const char *data, off_t ofs, size_t len, bool exclusive,
+int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
+			       off_t ofs, bool exclusive,
                                void **handle)
 {
   rgw_bucket bucket;
@@ -723,9 +733,6 @@ int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
     return r;
 
   io_ctx.locator_set_key(key);
-
-  bufferlist bl;
-  bl.append(data, len);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   *handle = c;
@@ -834,7 +841,7 @@ int RGWRados::copy_obj(void *ctx,
 
   ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, NULL, attrs, category);
   if (mtime)
-    obj_stat(ctx, tmp_obj, NULL, mtime, NULL);
+    obj_stat(ctx, tmp_obj, NULL, mtime, NULL, NULL);
 
   r = rgwstore->delete_obj(ctx, tmp_obj, false);
   if (r < 0)
@@ -1008,16 +1015,12 @@ int RGWRados::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state)
 {
   RGWObjState *s = rctx->get_state(obj);
-  dout(20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << dendl;
+  dout(20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs)
     return 0;
 
-  ObjectReadOperation op;
-  op.getxattrs();
-  op.stat();
-  bufferlist outbl;
-  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->attrset);
+  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->attrset, (s->prefetch_data ? &s->data : NULL));
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -1126,6 +1129,8 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
 
   RGWObjState *state = *pstate;
 
+  bool need_guard = (state->obj_tag.length() != 0);
+
   if (!state->is_atomic) {
     dout(20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
     return 0;
@@ -1135,7 +1140,9 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       state->shadow_obj.size() == 0) {
     dout(0) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
     // FIXME: need to test object does not exist
-  } else {
+  } else if (state->size <= RGW_MAX_CHUNK_SIZE) {
+    dout(0) << "not cloning object, object size (" << state->size << ")" << " <= chunk size" << dendl;
+  }else {
     dout(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
     rgw_obj dest_obj(obj.bucket, state->shadow_obj);
     dest_obj.set_ns(shadow_ns);
@@ -1165,7 +1172,9 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       dout(0) << "ERROR: failed to clone object r=" << r << dendl;
       return r;
     }
+  }
 
+  if (need_guard) {
     /* first verify that the object wasn't replaced under */
     op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
     // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
@@ -1654,6 +1663,10 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   int r = append_atomic_test(rctx, obj, state->io_ctx, oid, op, &astate);
   if (r < 0)
     return r;
+  if (!ofs && astate && astate->data.length() >= len) {
+    bl = astate->data;
+    goto done;
+  }
 
   dout(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   op.read(ofs, len);
@@ -1670,6 +1683,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     return r;
   }
 
+done:
   if (bl.length() > 0) {
     r = bl.length();
     *data = (char *)malloc(r);
@@ -1727,7 +1741,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   return r;
 }
 
-int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs)
+int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1742,6 +1756,9 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   ObjectReadOperation op;
   op.getxattrs();
   op.stat();
+  if (first_chunk) {
+    op.read(0, RGW_MAX_CHUNK_SIZE);
+  }
   bufferlist outbl;
   r = io_ctx.operate(oid, &op, &outbl);
   if (r < 0)
@@ -1771,6 +1788,9 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   } catch (buffer::error& err) {
     dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
     return -EIO;
+  }
+  if (first_chunk) {
+    oiter.copy_all(*first_chunk);
   }
   if (psize)
     *psize = size;
@@ -2416,7 +2436,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   cout << "processing intent log " << oid << std::endl;
   uint64_t size;
   rgw_obj obj(bucket, oid);
-  int r = obj_stat(NULL, obj, &size, NULL, NULL);
+  int r = obj_stat(NULL, obj, &size, NULL, NULL, NULL);
   if (r < 0) {
     cerr << "error while doing stat on " << bucket << ":" << oid
 	 << " " << cpp_strerror(-r) << std::endl;

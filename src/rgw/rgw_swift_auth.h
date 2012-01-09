@@ -24,7 +24,7 @@ public:
   void put_op(RGWOp *op);
 
   int authorize();
-  int read_permissions() { return 0; }
+  int read_permissions(RGWOp *op) { return 0; }
 };
 
 #endif

@@ -641,7 +641,7 @@ private:
   }
 
 
-  IntervalTree::TreeNode* deleteNode(IntervalTree::TreeNode* node, std::list<IntervalNode>& dispList) 
+  TreeNode* deleteNode(TreeNode* node, std::list<IntervalNode>& dispList) 
   {
     assert(node);
 
@@ -1002,7 +1002,7 @@ private:
   }
 
 
-  IntervalTree::TreeNode* createTreeNode(value_type in)
+  TreeNode* createTreeNode(value_type in)
   {
     TreeNode* node = new TreeNode();
     node->left = NULL;
@@ -1017,7 +1017,7 @@ private:
   }
 
 
-  void printTreeNode(IntervalTree::TreeNode* node, void* data)
+  void printTreeNode(TreeNode* node, void* data)
   {
     if(node == NULL) {
       return;
@@ -1273,7 +1273,7 @@ private:
     return root;
   }
 
-  IntervalTree::TreeNode* next(IntervalTree::TreeNode* node)
+  TreeNode* next(TreeNode* node)
   {
     assert(node != NULL);
 
@@ -1310,7 +1310,7 @@ private:
   }
 
 
-  IntervalTree::TreeNode* prev(TreeNode* node)
+  TreeNode* prev(TreeNode* node)
   {
     assert(node != NULL);
 
@@ -1350,7 +1350,7 @@ private:
   }
 
 
-  std::pair<IntervalTree::TreeNode*, IntervalTree::TreeNode*> getSpan(const TreeNode* node) const
+  std::pair<TreeNode*, TreeNode*> getSpan(const TreeNode* node) const
   {
     assert(node != NULL);
 

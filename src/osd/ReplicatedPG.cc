@@ -1427,7 +1427,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	int r = osd->store->read(coll, soid, op.extent.offset, op.extent.length, bl);
 	if (odata.length() == 0)
 	  ctx->data_off = op.extent.offset;
-	odata.claim(bl);
+	odata.claim_append(bl);
 	if (r >= 0) 
 	  op.extent.length = r;
 	else {

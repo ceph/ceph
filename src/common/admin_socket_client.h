@@ -25,10 +25,7 @@ class AdminSocketClient
 {
 public:
   AdminSocketClient(const std::string &path);
-  std::string get_version(uint32_t *version);
-  std::string get_schema(std::string *message);
-  std::string get_message(std::string *message);
-  std::string get_json(std::string *message, uint32_t request_code);
+  std::string do_request(std::string request, std::string *result);
 private:
   std::string m_path;
 };

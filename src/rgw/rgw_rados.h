@@ -19,9 +19,12 @@ struct RGWObjState {
   time_t mtime;
   bufferlist obj_tag;
   string shadow_obj;
+  bool has_data;
+  bufferlist data;
+  bool prefetch_data;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), has_attrs(0), exists(false) {}
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), prefetch_data(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -40,6 +43,7 @@ struct RGWObjState {
     obj_tag.clear();
     shadow_obj.clear();
     attrset.clear();
+    data.clear();
   }
 };
 
@@ -61,6 +65,14 @@ struct RGWRadosCtx {
     } else {
       rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
       objs_state[new_obj].is_atomic = true;
+    }
+  }
+  void set_prefetch_data(rgw_obj& obj) {
+    if (obj.object.size()) {
+      objs_state[obj].prefetch_data = true;
+    } else {
+      rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
+      objs_state[new_obj].prefetch_data = true;
     }
   }
   void set_intent_cb(int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
@@ -182,11 +194,11 @@ public:
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-              map<std::string, bufferlist>* rmattrs);
+              map<std::string, bufferlist>* rmattrs, const bufferlist *data);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
-  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
-                               off_t ofs, size_t len, bool exclusive, void **handle);
+  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
+                               off_t ofs, bool exclusive, void **handle);
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
@@ -271,7 +283,7 @@ public:
 
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
   virtual bool supports_tmap() { return true; }
   virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
@@ -298,6 +310,10 @@ public:
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
     rctx->set_atomic(obj);
+  }
+  void set_prefetch_data(void *ctx, rgw_obj& obj) {
+    RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+    rctx->set_prefetch_data(obj);
   }
   void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;

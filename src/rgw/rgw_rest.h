@@ -63,7 +63,7 @@ public:
   ~RGWPutObj_REST() {}
 
   virtual int get_params();
-  int get_data();
+  int get_data(bufferlist& bl);
 };
 
 class RGWPutObjMetadata_REST : public RGWPutObjMetadata
@@ -151,7 +151,7 @@ protected:
   virtual RGWOp *get_copy_op() = 0;
 
 public:
-  int read_permissions();
+  int read_permissions(RGWOp *op);
   RGWOp *get_op();
   void put_op(RGWOp *op);
 

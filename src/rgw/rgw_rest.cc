@@ -257,7 +257,7 @@ int RGWPutObj_REST::get_params()
   return 0;
 }
 
-int RGWPutObj_REST::get_data()
+int RGWPutObj_REST::get_data(bufferlist& bl)
 {
   size_t cl;
   if (s->length) {
@@ -270,11 +270,10 @@ int RGWPutObj_REST::get_data()
 
   int len = 0;
   if (cl) {
-    data = (char *)malloc(cl);
-    if (!data)
-       return -ENOMEM;
+    bufferptr bp(cl);
 
-    CGI_GetStr(s, data, cl, len);
+    CGI_GetStr(s, bp.c_str(), cl, len);
+    bl.append(bp);
   }
 
   if (!ofs)
@@ -820,7 +819,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   return ret;
 }
 
-int RGWHandler_REST::read_permissions()
+int RGWHandler_REST::read_permissions(RGWOp *op_obj)
 {
   bool only_bucket;
 
@@ -847,7 +846,7 @@ int RGWHandler_REST::read_permissions()
     return -EINVAL;
   }
 
-  return do_read_permissions(only_bucket);
+  return do_read_permissions(op_obj, only_bucket);
 }
 
 RGWOp *RGWHandler_REST::get_op()

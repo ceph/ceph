@@ -33,6 +33,7 @@ public:
   virtual void init(struct req_state *s) {
     this->s = s;
   }
+  virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
   virtual void execute() = 0;
 };
@@ -59,10 +60,13 @@ protected:
   int ret;
   bool get_data;
   bool partial_content;
+  rgw_obj obj;
 
   int init_common();
 public:
   RGWGetObj() {}
+
+  virtual bool prefetch_data() { return true; }
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -233,15 +237,33 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWPutObjProcessor
+{
+protected:
+  struct req_state *s;
+public:
+  virtual ~RGWPutObjProcessor() {}
+  virtual int prepare(struct req_state *_s) {
+    s = _s;
+    return 0;
+  };
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
+  virtual int throttle_data(void *handle) = 0;
+  virtual int complete(string& etag, map<string, bufferlist>& attrs) = 0;
+};
+
 class RGWPutObj : public RGWOp {
+
+  friend class RGWPutObjProcessor;
+
 protected:
   int ret;
   off_t ofs;
-  char *data;
   const char *supplied_md5_b64;
   const char *supplied_etag;
   string etag;
   bool chunked_upload;
+  RGWPutObjProcessor *processor;
 
 public:
   RGWPutObj() {}
@@ -250,17 +272,17 @@ public:
     RGWOp::init(s);
     ret = 0;
     ofs = 0;
-    data = NULL;
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
     etag = "";
     chunked_upload = false;
+    processor = NULL;
   }
   int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
-  virtual int get_data() = 0;
+  virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
 };
 
@@ -604,7 +626,7 @@ class RGWHandler {
 protected:
   struct req_state *s;
 
-  int do_read_permissions(bool only_bucket);
+  int do_read_permissions(RGWOp *op, bool only_bucket);
 public:
   RGWHandler() {}
   virtual ~RGWHandler() {}
@@ -612,7 +634,7 @@ public:
 
   virtual RGWOp *get_op() = 0;
   virtual void put_op(RGWOp *op) = 0;
-  virtual int read_permissions() = 0;
+  virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
 };
 

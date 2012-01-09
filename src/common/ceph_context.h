@@ -22,12 +22,13 @@
 template <typename T, typename U>
 class DoutStreambuf;
 
-class AdminSocketConfigObs;
+class AdminSocket;
 class CephContextServiceThread;
 class DoutLocker;
 class PerfCountersCollection;
 class md_config_obs_t;
 class md_config_t;
+class PerfCountersHook;
 
 namespace ceph {
   class HeartbeatMap;
@@ -85,7 +86,7 @@ private:
   CephContextServiceThread *_service_thread;
 
   /* The collection of profiling loggers associated with this context */
-  AdminSocketConfigObs *_admin_socket_config_obs;
+  AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;
@@ -94,6 +95,8 @@ private:
   PerfCountersCollection *_perf_counters_collection;
 
   md_config_obs_t *_perf_counters_conf_obs;
+
+  PerfCountersHook *_perf_counters_hook;
 
   ceph::HeartbeatMap *_heartbeat_map;
 };

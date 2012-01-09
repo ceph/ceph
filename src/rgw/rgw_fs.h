@@ -21,7 +21,7 @@ public:
   int create_bucket(std::string& owner, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool system_bucket, bool exclusive, uint64_t auid=0);
   int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
 	      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-	      map<std::string, bufferlist> *rmattrs);
+	      map<std::string, bufferlist> *rmattrs, const bufferlist *data);
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t size, bool exclusive);
   int copy_obj(void *ctx, rgw_obj& dest_obj,
@@ -60,7 +60,7 @@ public:
 
   void finish_get_obj(void **handle);
   int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
-  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
+  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *prefetch_data);
 
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
   virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive);

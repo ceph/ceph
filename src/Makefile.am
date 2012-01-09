@@ -531,7 +531,7 @@ check_PROGRAMS += unittest_perf_counters
 
 unittest_admin_socket_SOURCES = test/admin_socket.cc
 unittest_admin_socket_LDFLAGS = ${AM_LDFLAGS}
-unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD} libcommon.la
 unittest_admin_socket_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_admin_socket
 
@@ -609,10 +609,10 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
-unittest_interval_tree_SOURCES = test/TestIntervalTree.cc
-unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
-unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_interval_tree
+#unittest_interval_tree_SOURCES = test/TestIntervalTree.cc
+#unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+#unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+#check_PROGRAMS += unittest_interval_tree
 
 unittest_ipaddr_SOURCES = test/test_ipaddr.cc
 unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
