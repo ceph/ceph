@@ -108,20 +108,28 @@ typedef void *rados_xattrs_iter_t;
 /**
  * @struct rados_pool_stat_t
  * Usage information for a pool.
- *
- * num_bytes
- *
  */
 struct rados_pool_stat_t {
-  uint64_t num_bytes;    // in bytes
-  uint64_t num_kb;       // in KB
+  /// space used in bytes
+  uint64_t num_bytes;
+  /// space used in KB
+  uint64_t num_kb;
+  /// number of objects in the pool
   uint64_t num_objects;
+  /// number of clones of objects
   uint64_t num_object_clones;
-  uint64_t num_object_copies;  // num_objects * num_replicas
+  /// num_objects * num_replicas
+  uint64_t num_object_copies;
   uint64_t num_objects_missing_on_primary;
+  /// number of objects found on no OSDs
   uint64_t num_objects_unfound;
+  /// number of objects replicated fewer times than they should be
+  /// (but found on at least one OSD)
   uint64_t num_objects_degraded;
-  uint64_t num_rd, num_rd_kb,num_wr, num_wr_kb;
+  uint64_t num_rd;
+  uint64_t num_rd_kb;
+  uint64_t num_wr;
+  uint64_t num_wr_kb;
 };
 
 /**
