@@ -637,4 +637,62 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
 }
 
 
+/*
+ * guards
+ */
+
+#define ENCODE_START(compat, incompat, bl)		     \
+  __u8 struct_v = compat, struct_incompat = incompat;   \
+  ::encode(struct_v, bl);				     \
+  ::encode(struct_incompat, bl);			     \
+  __le32 struct_len = 0;				     \
+  unsigned struct_len_pos = bl.length();		     \
+  ::encode(struct_len, bl);				     \
+  do {
+
+#define ENCODE_FINISH()				\
+  } while (false);				\
+  struct_len = bl.length() - struct_len_pos;	\
+  bl.copy_in(struct_len_pos, 4, (char *)&struct_len);
+
+#define DECODE_ERR_VERSION(func, compat)			\
+  "" #func " unknown encoding version > " #compat
+
+#define DECODE_ERR_PAST(func) \
+  "" #func " decode past end of struct encoding"
+
+#define DECODE_START(compat, bl)					\
+  __u8 struct_v = compat, struct_incompat = incompat;		\
+  ::decode(struct_v, bl);						\
+  ::decode(struct_incompat, bl);					\
+  if (compat < struct_incompat)						\
+    throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, compat)); \
+  __u32 struct_len;							\
+  ::decode(struct_len, bl);						\
+  unsigned struct_end = bl.get_off() + struct_len;			\
+  do {
+
+#define DECODE_START_LEGACY(compat, bl, lencompat)	\
+  __u8 struct_v, struct_incompat;					\
+  ::decode(struct_v, bl);						\
+  unsigned struct_end = 0;						\
+  if (struct_v >= lencompat) {						\
+    ::decode(struct_incompat, bl);					\
+    if (compat < struct_incompat)					\
+      throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, compat)); \
+    __u32 struct_len;							\
+    ::decode(struct_len, bl);						\
+    struct_end = bl.get_off() + struct_len;				\
+  }									\
+  do {
+
+#define DECODE_FINISH()							\
+  } while (false);							\
+  if (struct_end) {							\
+    if (bl.get_off() > struct_end)					\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    if (bl.get_off() < struct_end)					\
+      bl.advance(struct_end - bl.get_off());				\
+  }
+
 #endif
