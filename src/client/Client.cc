@@ -789,7 +789,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
     request->readdir_end = end;
     request->readdir_num = numdn;
 
-    map<string,Dentry*>::iterator pd = dir->dentry_map.lower_bound(request->readdir_start);
+    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
 
     frag_t fg = request->readdir_frag;
     Inode *diri = in;
