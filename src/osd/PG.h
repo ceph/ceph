@@ -885,10 +885,10 @@ public:
 
   struct PriorSet {
     set<int> probe; /// current+prior OSDs we need to probe.
-    set<int> down;  /// down osds that would normally be in @probe and might be interesting.
+    set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
     map<int,epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
-    bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
+    bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
     PriorSet(const OSDMap &osdmap,
 	     const map<epoch_t, Interval> &past_intervals,
 	     const vector<int> &up,

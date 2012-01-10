@@ -27,10 +27,10 @@
 
 /**
  * crush_find_rule - find a crush_rule id for a given ruleset, type, and size.
- * @map: the crush_map
- * @ruleset: the storage ruleset id (user defined)
- * @type: storage ruleset type (user defined)
- * @size: output set size
+ * @param map the crush_map
+ * @param ruleset the storage ruleset id (user defined)
+ * @param type storage ruleset type (user defined)
+ * @param size output set size
  */
 int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size)
 {
@@ -276,16 +276,16 @@ static int is_out(const struct crush_map *map, const __u32 *weight, int item, in
 
 /**
  * crush_choose - choose numrep distinct items of given type
- * @map: the crush_map
- * @bucket: the bucket we are choose an item from
- * @x: crush input value
- * @numrep: the number of items to choose
- * @type: the type of item to choose
- * @out: pointer to output vector
- * @outpos: our position in that vector
- * @firstn: true if choosing "first n" items, false if choosing "indep"
- * @recurse_to_leaf: true if we want one device under each item of given type
- * @out2: second output vector for leaf items (if @recurse_to_leaf)
+ * @param map the crush_map
+ * @param bucket the bucket we are choose an item from
+ * @param x crush input value
+ * @param numrep the number of items to choose
+ * @param type the type of item to choose
+ * @param out pointer to output vector
+ * @param outpos our position in that vector
+ * @param firstn true if choosing "first n" items, false if choosing "indep"
+ * @param recurseto_leaf: true if we want one device under each item of given type
+ * @param out2 second output vector for leaf items (if @a recurse_to_leaf)
  */
 static int crush_choose(const struct crush_map *map,
 			struct crush_bucket *bucket,
@@ -449,12 +449,12 @@ reject:
 
 /**
  * crush_do_rule - calculate a mapping with the given input and rule
- * @map: the crush_map
- * @ruleno: the rule id
- * @x: hash input
- * @result: pointer to result vector
- * @result_max: maximum result size
- * @force: force initial replica choice; -1 for none
+ * @param map the crush_map
+ * @param ruleno the rule id
+ * @param x hash input
+ * @param result pointer to result vector
+ * @param resultmax: maximum result size
+ * @param force force initial replica choice; -1 for none
  */
 int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,

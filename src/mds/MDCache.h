@@ -665,10 +665,10 @@ public:
    * @param mdr The MDRequest associated with the path. Can be null.
    * @param req The Message associated with the path. Can be null.
    * @param fin The Context associated with the path. Can be null.
-   * @param filepath The path to traverse to.
-   * @pdnvec Data return parameter -- on success, contains a vector of dentries.
-   * On failure, is either empty or contains the full trace of traversable
-   * dentries.
+   * @param path The path to traverse to.
+   * @param pdnvec Data return parameter -- on success, contains a
+   * vector of dentries. On failure, is either empty or contains the
+   * full trace of traversable dentries.
    * @param pin Data return parameter -- if successful, points to the inode
    * associated with filepath. If unsuccessful, is null.
    * @param onfail Specifies different lookup failure behaviors. If set to

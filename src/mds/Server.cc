@@ -2041,10 +2041,10 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
 /**
  * try_open_auth_dirfrag -- open dirfrag, or forward to dirfrag auth
  *
- * @diri base indoe
- * @fg the exact frag we want
- * @mdr request
- * Returns: the pointer, or NULL if it had to be delayed (but mdr is taken care of)
+ * @param diri base inode
+ * @param fg the exact frag we want
+ * @param mdr request
+ * @returns the pointer, or NULL if it had to be delayed (but mdr is taken care of)
  */
 CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 {
