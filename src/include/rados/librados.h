@@ -34,7 +34,7 @@ extern "C" {
 
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
- * @bug there's no way to use these in the C api
+ * @note BUG: there's no way to use these in the C api
  * @{
  */
 /** @cond TODO_enums_not_yet_in_asphyxiate */
@@ -184,7 +184,7 @@ int rados_create(rados_t *cluster, const char * const id);
  *
  * Copies all configuration, as retrieved by the C++ API.
  *
- * @bug Since CephContext isn't accessible from the C API, this function is useless
+ * @note BUG: Since CephContext isn't accessible from the C API, this function is useless
  *
  * @param cluster where to store the handle
  * @param cct_ the existing configuration to use
@@ -195,7 +195,7 @@ int rados_create_with_context(rados_t *cluster, struct CephContext *cct_);
 /**
  * Connect to the cluster.
  *
- * @bug Before calling this, calling a function that communicates with the
+ * @note BUG: Before calling this, calling a function that communicates with the
  * cluster will crash.
  *
  * @pre The cluster handle is configured with at least a monitor
@@ -291,7 +291,7 @@ int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
  *
  * @pre rados_connect() has not been called on the cluster handle
  *
- * @bug this is not threadsafe - it uses a static buffer
+ * @note BUG: this is not threadsafe - it uses a static buffer
  *
  * @param cluster cluster handle to configure
  * @param var name of the environment variable to read
@@ -1120,7 +1120,7 @@ typedef void (*rados_callback_t)(rados_completion_t cb, void *arg);
  * TODO: more complete documentation of this elsewhere (in the RADOS docs?)
  *
  * @note Read operations only get a complete callback.
- * @bug this should check for ENOMEM instead of throwing an exception
+ * @note BUG: this should check for ENOMEM instead of throwing an exception
  *
  * @param cb_arg application-defined data passed to the callback functions
  * @param cb_complete the function to be called when the operation is
@@ -1138,7 +1138,7 @@ int rados_aio_create_completion(void *cb_arg, rados_callback_t cb_complete, rado
  *
  * This means it is in memory on all replicas.
  *
- * @bug this should be void
+ * @note BUG: this should be void
  *
  * @param c operation to wait for
  * @returns 0
@@ -1150,7 +1150,7 @@ int rados_aio_wait_for_complete(rados_completion_t c);
  *
  * This means it is on stable storage on all replicas.
  *
- * @bug this should be void
+ * @note BUG: this should be void
  *
  * @param c operation to wait for
  * @returns 0
@@ -1187,7 +1187,7 @@ int rados_aio_is_safe(rados_completion_t c);
  *
  * @pre The operation is safe or complete
  *
- * @bug complete callback may never be called when the safe
+ * @note BUG: complete callback may never be called when the safe
  * message is received before the complete message
  *
  * @param c async operation to inspect
@@ -1296,7 +1296,7 @@ int rados_aio_read(rados_ioctx_t io, const char *oid,
  * write completions, since this waits for the associated callbacks to
  * complete as well.
  *
- * @bug always returns 0, should be void or accept a timeout
+ * @note BUG: always returns 0, should be void or accept a timeout
  *
  * @param io the context to flush
  * @returns 0 on success, negative error code on failure
@@ -1332,7 +1332,7 @@ int rados_aio_flush(rados_ioctx_t io);
  * - ver version of the watched object
  * - arg application-specific data
  *
- * @bug opcode is an internal detail that shouldn't be exposed
+ * @note BUG: opcode is an internal detail that shouldn't be exposed
  */
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
 
@@ -1347,8 +1347,8 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * after 30 seconds. Watches are automatically reestablished when a new
  * connection is made, or a placement group switches OSDs.
  *
- * @bug watch timeout should be configurable
- * @bug librados should provide a way for watchers to notice connection resets
+ * @note BUG: watch timeout should be configurable
+ * @note BUG: librados should provide a way for watchers to notice connection resets
  *
  * @param io the pool the object is in
  * @param o the object to watch
@@ -1381,8 +1381,8 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
  * This blocks until all watchers of the object have received and
  * reacted to the notify, or a timeout is reached.
  *
- * @bug the timeout is not changeable via the C API
- * @bug the bufferlist is inaccessible in a rados_watchcb_t
+ * @note BUG: the timeout is not changeable via the C API
+ * @note BUG: the bufferlist is inaccessible in a rados_watchcb_t
  *
  * @param io the pool the object is in
  * @param o the name of the object
