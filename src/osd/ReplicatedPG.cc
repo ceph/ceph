@@ -401,9 +401,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
 void ReplicatedPG::calc_trim_to()
 {
-  if (!is_degraded() && !is_scrubbing() &&
-      (is_clean() ||
-       log.head.version - log.tail.version > (unsigned)info.stats.stats.sum.num_objects)) {
+  if (!is_degraded() && !is_scrubbing() && is_clean()) {
     if (min_last_complete_ondisk != eversion_t() &&
 	min_last_complete_ondisk != pg_trim_to &&
 	log.approx_size() > g_conf->osd_min_pg_log_entries) {
