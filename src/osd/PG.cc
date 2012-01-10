@@ -4232,8 +4232,61 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       get_infos();
     } else {
       // are we done getting everything?
-      if (peer_info_requested.empty() && !prior_set->pg_down)
+      if (peer_info_requested.empty() && !prior_set->pg_down) {
+	/*
+	 * make sure we have at least one !incomplete() osd from the
+	 * last rw interval.  the incomplete (backfilling) replicas
+	 * get a copy of the log, but they don't get all the object
+	 * updates, so they are insufficient to recover changes during
+	 * that interval.
+	 */
+	if (pg->info.history.last_epoch_started) {
+	  for (map<epoch_t,PG::Interval>::reverse_iterator p = pg->past_intervals.rbegin();
+	       p != pg->past_intervals.rend();
+	       ++p) {
+	    if (p->first < pg->info.history.last_epoch_started)
+	      break;
+	    if (!p->second.maybe_went_rw)
+	      continue;
+	    Interval& interval = p->second;
+	    dout(10) << " last maybe_went_rw interval was " << interval << dendl;
+	    OSDMapRef osdmap = pg->get_osdmap();
+
+	    /*
+	     * this mirrors the PriorSet calculation: we wait if we
+	     * don't have an up (AND !incomplete) node AND there are
+	     * nodes down that might be usable.
+	     */
+	    bool any_up_complete_now = false;
+	    bool any_down_now = false;
+	    for (unsigned i=0; i<interval.acting.size(); i++) {
+	      int o = interval.acting[i];
+	      if (!osdmap->exists(o) || osdmap->get_info(o).lost_at > interval.first)
+		continue;  // dne or lost
+	      if (osdmap->is_up(o)) {
+		PG::Info *pinfo;
+		if (o == pg->osd->whoami) {
+		  pinfo = &pg->info;
+		} else {
+		  assert(pg->peer_info.count(o));
+		  pinfo = &pg->peer_info[o];
+		}
+		if (!pinfo->is_incomplete())
+		  any_up_complete_now = true;
+	      } else {
+		any_down_now = true;
+	      }
+	    }
+	    if (!any_up_complete_now && any_down_now) {
+	      dout(10) << " no osds up+complete from interval " << interval << dendl;
+	      pg->state_set(PG_STATE_DOWN);
+	      return discard_event();
+	    }
+	    break;
+	  }
+	}
 	post_event(GotInfo());
+      }
     }
   }
   return discard_event();
