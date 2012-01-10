@@ -103,18 +103,54 @@ WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
 
+#ifdef ENCODE_DUMP
+# include <stdio.h>
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <fcntl.h>
 
+# define ENCODE_STR(x) #x
+# define ENCODE_STRINGIFY(x) ENCODE_STR(x)
 
-#define WRITE_CLASS_ENCODER(cl) \
-  inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) { c.encode(bl); } \
+# define ENCODE_DUMP_PRE()			\
+  unsigned pre_off = bl.length()
+# define ENCODE_DUMP_POST(cl)						\
+  do {									\
+    static int i = 0;							\
+    i++;								\
+    int bits = 0;							\
+    for (unsigned t = i; t; bits++)					\
+      t &= t - 1;							\
+    if (bits > 2)							\
+      break;								\
+    char fn[200];							\
+    snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x", #cl, getpid(), i++); \
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
+    if (fd >= 0) {							\
+      bufferlist sub;							\
+      sub.substr_of(bl, pre_off, bl.length() - pre_off);		\
+      sub.write_fd(fd);							\
+      ::close(fd);							\
+    }									\
+  } while (0)
+#else
+# define ENCODE_DUMP_PRE()
+# define ENCODE_DUMP_POST(cl)
+#endif
+
+#define WRITE_CLASS_ENCODER(cl)						\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) { \
+    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
-#define WRITE_CLASS_MEMBER_ENCODER(cl) \
-  inline void encode(const cl &c, bufferlist &bl) const { c.encode(bl); }	\
+#define WRITE_CLASS_MEMBER_ENCODER(cl)					\
+  inline void encode(const cl &c, bufferlist &bl) const {		\
+    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 #define WRITE_CLASS_ENCODER_FEATURES(cl)				\
-  inline void encode(const cl &c, bufferlist &bl, uint64_t features) { c.encode(bl, features); } \
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features) {	\
+    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
