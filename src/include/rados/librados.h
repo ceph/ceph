@@ -415,6 +415,9 @@ int64_t rados_pool_lookup(rados_t cluster, const char *pool_name);
 /**
  * Create a pool with default settings
  *
+ * The default owner is the admin user (auid 0).
+ * The default crush rule is rule 0.
+ *
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
  * @returns 0 on success, negative error code on failure
