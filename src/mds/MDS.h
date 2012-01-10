@@ -279,19 +279,6 @@ class MDS : public Dispatcher {
       mds->beacon_send();
     }
   } *beacon_sender;
-  class C_MDS_BeaconKiller : public Context {
-    MDS *mds;
-    utime_t lab;
-  public:
-    C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
-    void finish(int r) {
-      if (mds->beacon_killer) {
-	mds->beacon_killer = 0;
-	mds->beacon_kill(lab);
-      } 
-      // else mds is pbly already shutting down
-    }
-  } *beacon_killer;
 
   // tick and other timer fun
   class C_MDS_Tick : public Context {
@@ -390,9 +377,7 @@ class MDS : public Dispatcher {
   
   void beacon_start();
   void beacon_send();
-  void beacon_kill(utime_t lab);
   void handle_mds_beacon(MMDSBeacon *m);
-  void reset_beacon_killer();
 
   // messages
   bool _dispatch(Message *m);

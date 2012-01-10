@@ -132,7 +132,6 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   // beacon
   beacon_last_seq = 0;
   beacon_sender = 0;
-  beacon_killer = 0;
   was_laggy = false;
 
   // tick
@@ -656,43 +655,12 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
     while (!beacon_seq_stamp.empty() &&
 	   beacon_seq_stamp.begin()->first <= seq)
       beacon_seq_stamp.erase(beacon_seq_stamp.begin());
-    
-    reset_beacon_killer();
   } else {
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	     << " seq " << m->get_seq() << " dne" << dendl;
   }
 
   m->put();
-}
-
-void MDS::reset_beacon_killer()
-{
-  utime_t when = beacon_last_acked_stamp;
-  when += g_conf->mds_beacon_grace;
-  
-  dout(25) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
-	   << ", will die at " << when << dendl;
-  
-  if (beacon_killer) timer.cancel_event(beacon_killer);
-
-  beacon_killer = new C_MDS_BeaconKiller(this, beacon_last_acked_stamp);
-  timer.add_event_at(when, beacon_killer);
-}
-
-void MDS::beacon_kill(utime_t lab)
-{
-  if (lab == beacon_last_acked_stamp) {
-    dout(0) << "beacon_kill last_acked_stamp " << lab 
-	    << ", we are laggy!"
-	    << dendl;
-    //suicide();
-  } else {
-    dout(20) << "beacon_kill last_acked_stamp " << beacon_last_acked_stamp 
-	     << " != my " << lab 
-	     << ", doing nothing."
-	     << dendl;
-  }
 }
 
 /* This function DOES put the passed message before returning*/
@@ -1551,10 +1519,6 @@ void MDS::suicide()
 	  << ", now " << ceph_mds_state_name(state) << dendl;
 
   // stop timers
-  if (beacon_killer) {
-    timer.cancel_event(beacon_killer);
-    beacon_killer = 0;
-  }
   if (beacon_sender) {
     timer.cancel_event(beacon_sender);
     beacon_sender = 0;
