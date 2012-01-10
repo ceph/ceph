@@ -28,6 +28,9 @@ def task(ctx, config):
     op_delay: (5) the length of time to sleep between changing an
        OSD's status
 
+    max_dead: (1) maximum number of osds to leave down/dead before waiting
+       for clean.  This should probably be num_replicas - 1.
+
     clean_interval: (60) the approximate length of time to loop before
        waiting until the cluster goes clean. (In reality this is used
        to probabilistically choose when to wait, and the method used

@@ -106,6 +106,7 @@ class Thrasher(gevent.Greenlet):
 
     def do_thrash(self):
         cleanint = self.config.get("clean_interval", 60)
+        maxdead = self.config.get("max_dead", 1);
         delay = self.config.get("op_delay", 5)
         self.log("starting do_thrash")
         while not self.stopping:
@@ -113,6 +114,8 @@ class Thrasher(gevent.Greenlet):
                                                 "dead_osds: ", self.dead_osds, "live_osds: ",
                                                 self.live_osds]]))
             if random.uniform(0,1) < (float(delay) / cleanint):
+                while len(self.dead_osds) > maxdead:
+                    self.revive_osd()
                 self.ceph_manager.wait_till_clean(
                     timeout=self.config.get('timeout')
                     )
