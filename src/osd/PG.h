@@ -495,6 +495,10 @@ public:
       return head.version == 0 && head.epoch == 0;
     }
 
+    size_t approx_size() const {
+      return head.version - tail.version;
+    }
+
     list<Entry>::iterator find_entry(eversion_t v) {
       int fromhead = head.version - v.version;
       int fromtail = v.version - tail.version;

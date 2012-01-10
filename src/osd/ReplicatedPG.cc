@@ -405,10 +405,24 @@ void ReplicatedPG::calc_trim_to()
       (is_clean() ||
        log.head.version - log.tail.version > (unsigned)info.stats.stats.sum.num_objects)) {
     if (min_last_complete_ondisk != eversion_t() &&
-	min_last_complete_ondisk != pg_trim_to) {
-      dout(10) << "calc_trim_to " << pg_trim_to << " -> " << min_last_complete_ondisk << dendl;
-      pg_trim_to = min_last_complete_ondisk;
+	min_last_complete_ondisk != pg_trim_to &&
+	log.approx_size() > g_conf->osd_min_pg_log_entries) {
+      size_t num_to_trim = log.approx_size() - g_conf->osd_min_pg_log_entries;
+      list<Log::Entry>::const_iterator it = log.log.begin();
+      eversion_t new_trim_to;
+      for (size_t i = 0; i < num_to_trim; ++i) {
+	new_trim_to = it->version;
+	++it;
+	if (new_trim_to > min_last_complete_ondisk) {
+	  new_trim_to = min_last_complete_ondisk;
+	  dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+	  break;
+	}
+      }
+      dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
+      pg_trim_to = new_trim_to;
       assert(pg_trim_to <= log.head);
+      assert(pg_trim_to <= min_last_complete_ondisk);
     }
   } else {
     // don't trim
