@@ -368,6 +368,8 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'lockdep is turned off',
                     run.Raw('|'),
+                    'grep', '-v', 'trying to register non-static key',
+                    run.Raw('|'),
                     'head', '-n', '1',
                     ],
                 stdout=StringIO(),
