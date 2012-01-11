@@ -602,7 +602,7 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
   if (md5) {
     for (const char *p = md5; *p; p++) {
       if (!is_base64_for_content_md5(*p)) {
-        dout(0) << "bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
+        dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
     }
@@ -626,18 +626,18 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
     } else {
       req_date = s->env->get("HTTP_X_AMZ_DATE");
       if (!req_date) {
-        dout(0) << "missing date for auth header" << dendl;
+        dout(0) << "NOTICE: missing date for auth header" << dendl;
         return false;
       }
     }
 
     struct tm t;
     if (!parse_rfc2616(req_date, &t)) {
-      dout(0) << "failed to parse date for auth header" << dendl;
+      dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
       return false;
     }
     if (t.tm_year < 70) {
-      dout(0) << "bad date (predates epoch): " << req_date << dendl;
+      dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
       return false;
     }
     s->header_time = utime_t(timegm(&t), 0);
@@ -719,7 +719,7 @@ int RGWHandler_REST_S3::authorize()
   if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
     dout(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-    dout(0) << "request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
+    dout(0) << "NOTICE: request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
@@ -735,7 +735,7 @@ int RGWHandler_REST_S3::authorize()
   if (!k.subuser.empty()) {
     map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
     if (uiter == s->user.subusers.end()) {
-      dout(0) << "ERROR: could not find subuser: " << k.subuser << dendl;
+      dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
       return -EPERM;
     }
     RGWSubUser& subuser = uiter->second;

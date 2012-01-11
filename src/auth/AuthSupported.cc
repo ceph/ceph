@@ -42,9 +42,9 @@ bool AuthSupported::is_supported_auth(int auth_type)
   return auth_supported.count(auth_type);
 }
 
-int AuthSupported::pick(const set<__u32>& supp)
+int AuthSupported::pick(const std::set<__u32>& supported)
 {
-  for (set<__u32>::const_reverse_iterator p = supp.rbegin(); p != supp.rend(); ++p)
+  for (set<__u32>::const_reverse_iterator p = supported.rbegin(); p != supported.rend(); ++p)
     if (is_supported_auth(*p))
       return *p;
   return CEPH_AUTH_UNKNOWN;

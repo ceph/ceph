@@ -22,6 +22,8 @@
 
 /**
  * Implements collection prehashing.
+ *
+ * @verbatim
  *     (root) - 0 - 0
  *                - 1
  *                - E
@@ -31,6 +33,8 @@
  *            .
  *            .
  *            - F - 0
+ * @endverbatim
+ *
  * A file is located at the longest existing directory from the root 
  * given by the hex characters in the hash beginning with the least
  * significant.

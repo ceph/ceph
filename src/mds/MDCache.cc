@@ -3393,8 +3393,8 @@ void MDCache::rejoin_send_rejoins()
 /** 
  * rejoin_walk - build rejoin declarations for a subtree
  * 
- * @dir subtree root
- * @rejoin rejoin message
+ * @param dir subtree root
+ * @param rejoin rejoin message
  *
  * from a rejoining node:
  *  weak dirfrag
@@ -3739,8 +3739,8 @@ public:
 /**
  * parallel_fetch -- make a pass at fetching a bunch of paths in parallel
  *
- * @pathmap - map of inodeno to full pathnames.  we remove items from this map 
- *            as we discover we have them.
+ * @param pathmap map of inodeno to full pathnames.  we remove items
+ *            from this map as we discover we have them.
  *
  *	      returns true if there is work to do, false otherwise.
  */
@@ -6919,9 +6919,9 @@ CInode *MDCache::cache_traverse(const filepath& fp)
 /**
  * open_remote_dir -- open up a remote dirfrag
  *
- * @diri - base inode
- * @approxfg - approximate fragment.
- * @fin - completion callback
+ * @param diri base inode
+ * @param approxfg approximate fragment.
+ * @param fin completion callback
  */
 void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin) 
 {
@@ -6947,8 +6947,8 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin)
 /** 
  * get_dentry_inode - get or open inode
  *
- * @dn the dentry
- * @mdr current request
+ * @param dn the dentry
+ * @param mdr current request
  *
  * will return inode for primary, or link up/open up remote link's inode as necessary.
  * If it's not available right now, puts mdr on wait list and returns null.
@@ -9343,9 +9343,9 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 /** 
  * adjust_dir_fragments -- adjust fragmentation for a directory
  *
- * @diri - directory inode
- * @basefrag - base fragment
- * @bits - bit adjustment.  positive for split, negative for merge.
+ * @param diri directory inode
+ * @param basefrag base fragment
+ * @param bits bit adjustment.  positive for split, negative for merge.
  */
 void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 				   list<CDir*>& resultfrags, 

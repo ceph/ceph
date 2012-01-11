@@ -238,8 +238,8 @@ public:
   }
 
   /**
-   * get_branch -- get branch point at OR above frag @x
-   *  - may be @x itself, if @x is a split
+   * get_branch -- get branch point at OR above frag @a x
+   *  - may be @a x itself, if @a x is a split
    *  - may be root (frag_t())
    */
   frag_t get_branch(frag_t x) const {
@@ -251,9 +251,9 @@ public:
   }
 
   /**
-   * get_branch_above -- get a branch point above frag @x
+   * get_branch_above -- get a branch point above frag @a x
    *  - may be root (frag_t())
-   *  - may NOT be @x, even if @x is a split.
+   *  - may NOT be @a x, even if @a x is a split.
    */
   frag_t get_branch_above(frag_t x) const {
     while (1) {
@@ -265,8 +265,8 @@ public:
 
 
   /**
-   * get_branch_or_leaf -- get branch or leaf point parent for frag @x
-   *  - may be @x itself, if @x is a split or leaf
+   * get_branch_or_leaf -- get branch or leaf point parent for frag @a x
+   *  - may be @a x itself, if @a x is a split or leaf
    *  - may be root (frag_t())
    */
   frag_t get_branch_or_leaf(frag_t x) const {
@@ -300,7 +300,7 @@ public:
   }
 
   /**
-   * contains(fg) -- does fragtree contain the specific frag @x
+   * contains(fg) -- does fragtree contain the specific frag @a x
    */
   bool contains(frag_t x) const {
     std::list<frag_t> q;

@@ -19,14 +19,12 @@ html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],
     }
 
-# ugly kludge until breathe is distutils-friendly
-import sys; sys.path.append('../build-doc/breathe')
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
-    'breathe',
     'sphinx_ditaa',
+    'asphyxiate',
     ]
 todo_include_todos = True
 
@@ -67,7 +65,4 @@ def _get_manpages():
 
 man_pages = list(_get_manpages())
 
-breathe_default_project = 'ceph'
-breathe_projects = dict(
-    ceph='doxygen/xml',
-    )
+asphyxiate_doxygen_xml = 'doxygen'

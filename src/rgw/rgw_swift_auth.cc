@@ -65,7 +65,7 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
 
   int len = strlen(token);
   if (len & 1) {
-    dout(0) << "failed to verify token: invalid token length len=" << len << dendl;
+    dout(0) << "NOTICE: failed to verify token: invalid token length len=" << len << dendl;
     return -EINVAL;
   }
 
@@ -88,11 +88,11 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
     ::decode(nonce, iter);
     ::decode(expiration, iter);
   } catch (buffer::error& err) {
-    dout(0) << "failed to decode token: caught exception" << dendl;
+    dout(0) << "NOTICE: failed to decode token: caught exception" << dendl;
     return -EINVAL;
   }
   if (expiration < ceph_clock_now(g_ceph_context)) {
-    dout(0) << "old timed out token was used now=" << ceph_clock_now(g_ceph_context) << " token.expiration=" << expiration << dendl;
+    dout(0) << "NOTICE: old timed out token was used now=" << ceph_clock_now(g_ceph_context) << " token.expiration=" << expiration << dendl;
     return -EPERM;
   }
 
@@ -112,14 +112,14 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
     return ret;
 
   if (tok.length() != bl.length()) {
-    dout(0) << "tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << dendl;
+    dout(0) << "NOTICE: tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << dendl;
     return -EPERM;
   }
 
   if (memcmp(tok.c_str(), bl.c_str(), tok.length()) != 0) {
     char buf[tok.length() * 2 + 1];
     buf_to_hex((const unsigned char *)tok.c_str(), tok.length(), buf);
-    dout(0) << "WARNING: tokens mismatch tok=" << buf << dendl;
+    dout(0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
     return -EPERM;
   }
 
@@ -129,8 +129,6 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
 void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
-
-  dout(20) << "RGW_SWIFT_Auth_Get::execute()" << dendl;
 
   const char *key = s->env->get("HTTP_X_AUTH_KEY");
   const char *user = s->env->get("HTTP_X_AUTH_USER");
@@ -162,7 +160,7 @@ void RGW_SWIFT_Auth_Get::execute()
     }
     const char *host = s->env->get("HTTP_HOST");
     if (!host) {
-      dout(0) << "server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
+      dout(0) << "NOTICE: server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
       ret = -EINVAL;
       goto done;
     }
@@ -192,7 +190,7 @@ void RGW_SWIFT_Auth_Get::execute()
   swift_key = &siter->second;
 
   if (swift_key->key.compare(key) != 0) {
-    dout(0) << "RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
+    dout(0) << "NOTICE: RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
     ret = -EPERM;
     goto done;
   }

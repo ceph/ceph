@@ -200,7 +200,7 @@ done:
     buf = (char *)realloc(buf, max_len);
   }
   if (!buf) {
-    dout(0) << "RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << dendl;
+    dout(0) << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << dendl;
     goto done_free;
   }
   pos = len;

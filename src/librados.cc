@@ -1333,13 +1333,6 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   return 0;
 }
 
-/**
- * Attempt to change a io's associated auid "owner." Requires that you
- * have write permission on both the current and new auid.
- * io: reference to the io to change.
- * auid: the auid you wish the io to have.
- * Returns: 0 on success, or -ERROR# on failure.
- */
 int librados::RadosClient::pool_change_auid(rados_ioctx_t io, unsigned long long auid)
 {
   int reply;
@@ -3692,19 +3685,19 @@ extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
 }
 
 extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *name,
-						 __u8 crush_rule)
+						 __u8 crush_rule_num)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  return radosp->pool_create(sname, 0, crush_rule);
+  return radosp->pool_create(sname, 0, crush_rule_num);
 }
 
 extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
-					  uint64_t auid, __u8 crush_rule)
+					  uint64_t auid, __u8 crush_rule_num)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  return radosp->pool_create(sname, auid, crush_rule);
+  return radosp->pool_create(sname, auid, crush_rule_num);
 }
 
 extern "C" int rados_pool_delete(rados_t cluster, const char *pool_name)

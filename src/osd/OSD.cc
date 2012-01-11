@@ -200,13 +200,10 @@ static int do_convertfs(ObjectStore *store)
   r = store->version_stamp_is_valid(&version);
   if (r < 0)
     return r;
-  if (r == 1) {
-    derr << "FileStore is up to date." << dendl;
+  if (r == 1)
     return store->umount();
-  } else {
-    derr << "FileStore is old at version " << version << ".  Updating..." 
-	 << dendl;
-  }
+
+  derr << "FileStore is old at version " << version << ".  Updating..."  << dendl;
 
   derr << "Getting collections" << dendl;
   vector<coll_t> collections;

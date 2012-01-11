@@ -44,17 +44,6 @@ if [ ! -e virtualenv ]; then
 fi
 ./virtualenv/bin/pip install --quiet -r ../admin/doc-requirements.txt
 
-# ugly kludge until breathe is distutils-friendly
-install -d breathe
-cd breathe
-if [ ! -e .git ]; then
-    git init
-fi
-if [ -z "$(git rev-parse --default HEAD)" ]; then
-    git pull --ff-only https://github.com/michaeljones/breathe.git master
-fi
-cd ..
-
 install -d -m0755 \
     output/html \
     output/man

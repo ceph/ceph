@@ -95,6 +95,7 @@ char *resolve_addrs(const char *orig_str)
     //printf("name '%s' port '%s'\n", tok, port_str);
 
     memset(&hint, 0, sizeof(hint));
+    hint.ai_family = AF_UNSPEC;
     hint.ai_socktype = SOCK_STREAM;
     hint.ai_protocol = IPPROTO_TCP;
 
