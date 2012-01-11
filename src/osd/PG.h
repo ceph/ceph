@@ -549,6 +549,14 @@ public:
      */
     void copy_range(const Log &other, eversion_t from, eversion_t to);
 
+    /**
+     * copy up to N entries
+     *
+     * @param o source log
+     * @param max max number of entreis to copy
+     */
+    void copy_up_to(const Log &other, int max);
+
     ostream& print(ostream& out) const;
   };
   WRITE_CLASS_ENCODER(Log)

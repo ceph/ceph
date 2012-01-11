@@ -106,6 +106,23 @@ void PG::Log::copy_range(const Log &other, eversion_t from, eversion_t to)
   }
 }
 
+void PG::Log::copy_up_to(const Log &other, int max)
+{
+  int n = 0;
+  for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
+       i != other.log.rend();
+       ++i) {
+    log.push_front(*i);
+    if (++n >= max)
+      break;
+  }
+  head = other.head;
+  if (log.empty())
+    tail = head;
+  else
+    tail = log.begin()->version;
+}
+
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
 {
   if (complete_to != log.end() &&
@@ -1280,14 +1297,16 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
 	pi.stats.stats.clear();
-	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
 
-	pm.clear();
+	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
 
 	// send entire log, so that op dup detection works well.
 	// FIXME: limit this to N entries
-	m->log = log;
+	m->log.copy_up_to(log, 500);
+	m->info.log_tail = m->log.tail;
+	pi.log_tail = m->log.tail;  // sigh...
 
+	pm.clear();
       } else {
 	// catch up
 	assert(log.tail <= pi.last_update);
