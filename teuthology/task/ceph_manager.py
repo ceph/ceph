@@ -25,6 +25,9 @@ class Thrasher(gevent.Greenlet):
             self.log = tmp
         if self.config is None:
             self.config = dict()
+        # prevent monitor from auto-marking things out while thrasher runs
+        manager.raw_cluster_cmd('mon', 'tell', '*', 'injectargs',
+                                '--mon-osd-down-out-interval', '0')
         gevent.Greenlet.__init__(self, self.do_thrash)
         self.start()
 
@@ -34,9 +37,6 @@ class Thrasher(gevent.Greenlet):
         self.log("Killing osd %s, live_osds are %s"%(str(osd),str(self.live_osds)))
         self.live_osds.remove(osd)
         self.dead_osds.append(osd)
-        if osd in self.in_osds:
-            self.in_osds.remove(osd)
-            self.out_osds.append(osd)
         self.ceph_manager.kill_osd(osd)
 
     def revive_osd(self, osd=None):
