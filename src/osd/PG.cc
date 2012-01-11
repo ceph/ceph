@@ -1255,39 +1255,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      if (log.tail > pi.last_update || pi.last_backfill == hobject_t()) {
-	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
-			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
-			 << " to " << info.last_update;
-
-	// reset, backfill
-	// we need to do this even when last_backfill == hobject_t() to ensure that
-	// stats get zeroed out properly, etc.
-	pi.last_update = info.last_update;
-	pi.last_complete = info.last_complete;
-	pi.log_tail = info.last_update;
-	pi.last_backfill = hobject_t();
-	pi.history = info.history;
-	pi.stats.stats.clear();
-	state_set(PG_STATE_BACKFILL);
-
-	peer_missing[peer].clear();
-
-	dout(10) << "activate peer osd." << peer << " must (re)start backfill, sending info " << pi << dendl;
-
-	if (activator_map) {
-	  if (activator_map->count(peer) == 0)
-	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
-	  (*activator_map)[peer]->pg_info.push_back(pi);
-	} else {
-	  MOSDPGInfo *mp = new MOSDPGInfo(get_osdmap()->get_epoch());
-	  mp->pg_info.push_back(pi);
-	  osd->cluster_messenger->send_message(mp, get_osdmap()->get_cluster_inst(peer));
-	}
-	continue;
-      }
-
       MOSDPGLog *m = 0;
+      Missing& pm = peer_missing[peer];
+
       if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.is_empty() && activator_map) {
@@ -1299,7 +1269,27 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	}
+      } else if (log.tail > pi.last_update || pi.last_backfill == hobject_t()) {
+	// backfill
+	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
+			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
+			 << " to " << info.last_update;
+
+	pi.last_update = info.last_update;
+	pi.last_complete = info.last_complete;
+	pi.last_backfill = hobject_t();
+	pi.history = info.history;
+	pi.stats.stats.clear();
+	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
+
+	pm.clear();
+
+	// send entire log, so that op dup detection works well.
+	// FIXME: limit this to N entries
+	m->log = log;
+
       } else {
+	// catch up
 	assert(log.tail <= pi.last_update);
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	// send new stuff to append to replicas log
@@ -1312,10 +1302,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       else
 	active++;
 
-      Missing& pm = peer_missing[peer];
 
       // update local version of peer's missing list!
-      if (m) {
+      if (m && pi.last_backfill != hobject_t()) {
         eversion_t plu = pi.last_update;
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
@@ -4102,9 +4091,16 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   MOSDPGLog *msg = logevt.msg;
-  dout(10) << "got log from osd." << logevt.from << dendl;
-  pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
-		msg->info, msg->log, logevt.from);
+  dout(10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
+
+  if (msg->info.last_backfill == hobject_t()) {
+    // restart backfill
+    pg->info = msg->info;
+    pg->log.claim_log(msg->log);
+  } else {
+    pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
+		  msg->info, msg->log, logevt.from);
+  }
 
   assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
@@ -4118,18 +4114,9 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
 
-  if (infoevt.info.last_update != pg->info.last_update) {
-    dout(10) << " reset for backfill" << dendl;
-    pg->info = infoevt.info;
-    assert(pg->info.log_tail == pg->info.last_update);
-    assert(pg->info.last_backfill == hobject_t());
-    pg->log.clear();
-    pg->log.head = pg->info.last_update;
-    pg->log.tail = pg->info.last_update;
-  } else {
-    assert(pg->log.tail <= pg->info.last_complete);
-    assert(pg->log.head == pg->info.last_update);
-  }
+  assert(infoevt.info.last_update == pg->info.last_update);
+  assert(pg->log.tail <= pg->info.last_complete);
+  assert(pg->log.head == pg->info.last_update);
 
   post_event(Activate());
   return discard_event();

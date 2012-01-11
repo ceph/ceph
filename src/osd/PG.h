@@ -568,6 +568,13 @@ public:
     /****/
     IndexedLog() {}
 
+    void claim_log(const Log& o) {
+      log = o.log;
+      head = o.head;
+      tail = o.tail;
+      index();
+    }
+
     void zero() {
       unindex();
       Log::clear();
