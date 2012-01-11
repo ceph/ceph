@@ -591,6 +591,8 @@ def cluster(ctx, config):
                     args=[
                         'sudo',
                         'mount',
+                        '-o',
+                        'user_subvol_rm_allowed',
                         dev,
                         os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
                         ]
