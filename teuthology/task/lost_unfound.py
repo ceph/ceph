@@ -30,7 +30,7 @@ def task(ctx, config):
     if config is None:
         config = {}
     assert isinstance(config, dict), \
-        'thrashosds task only accepts a dict for configuration'
+        'lost_unfound task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
