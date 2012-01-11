@@ -189,6 +189,8 @@ public:
                             bool system_bucket, bool exclusive = true,
                             uint64_t auid = 0);
   virtual int add_bucket_placement(std::string& new_pool);
+  virtual int remove_bucket_placement(std::string& new_pool);
+  virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */

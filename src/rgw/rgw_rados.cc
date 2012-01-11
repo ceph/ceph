@@ -567,6 +567,33 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
   return ret;
 }
 
+int RGWRados::remove_bucket_placement(std::string& old_pool)
+{
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  int ret = tmap_del(obj, old_pool);
+  return ret;
+}
+
+int RGWRados::list_placement_set(set<string>& names)
+{
+  bufferlist header;
+  map<string, bufferlist> m;
+  string pool_name;
+
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  int ret = tmap_get(obj, header, m);
+  if (ret < 0)
+    return ret;
+
+  names.clear();
+  map<string, bufferlist>::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    names.insert(miter->first);
+  }
+
+  return names.size();
+}
+
 int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int auid)
 {
   vector<string>::iterator iter;
