@@ -2210,9 +2210,9 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	ctx->delta_stats.num_objects++;
       }
       ctx->delta_stats.num_bytes -= obs.oi.size;
-      ctx->delta_stats.num_bytes -= SHIFT_ROUND_UP(obs.oi.size, 10);
+      ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(obs.oi.size, 10);
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
-      ctx->delta_stats.num_bytes += SHIFT_ROUND_UP(rollback_to->obs.oi.size, 10);
+      ctx->delta_stats.num_kb += SHIFT_ROUND_UP(rollback_to->obs.oi.size, 10);
       obs.oi.size = rollback_to->obs.oi.size;
       snapset.head_exists = true;
     }
