@@ -1300,9 +1300,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
 
-	// send entire log, so that op dup detection works well.
-	// FIXME: limit this to N entries
-	m->log.copy_up_to(log, 500);
+	// send some recent log, so that op dup detection works well.
+	m->log.copy_up_to(log, g_conf->osd_min_pg_log_entries);
 	m->info.log_tail = m->log.tail;
 	pi.log_tail = m->log.tail;  // sigh...
 
