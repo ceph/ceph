@@ -28,6 +28,8 @@ def task(ctx, config):
     op_delay: (5) the length of time to sleep between changing an
        OSD's status
 
+    min_dead: (0) minimum number of osds to leave down/dead.
+
     max_dead: (1) maximum number of osds to leave down/dead before waiting
        for clean.  This should probably be num_replicas - 1.
 

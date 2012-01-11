@@ -82,7 +82,7 @@ class Thrasher(gevent.Greenlet):
         minin = self.config.get("min_in", 2)
         minout = self.config.get("min_out", 0)
         minlive = self.config.get("min_live", 2)
-        mindead = self.config.get("min_dead", 2)
+        mindead = self.config.get("min_dead", 1)
 
         actions = []
         if len(self.in_osds) > minin:
