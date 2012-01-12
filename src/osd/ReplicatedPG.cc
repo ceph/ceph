@@ -1649,12 +1649,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (oi.size > 0)
 	  ch.insert(0, oi.size);
 	ctx->modified_ranges.union_of(ch);
-	if (op.extent.length != oi.size) {
+	if (op.extent.length + op.extent.offset != oi.size) {
 	  ctx->delta_stats.num_bytes -= oi.size;
 	  ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
-	  ctx->delta_stats.num_bytes += op.extent.length;
-	  ctx->delta_stats.num_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	  oi.size = op.extent.length;
+	  oi.size = op.extent.length + op.extent.offset;
+	  ctx->delta_stats.num_bytes += oi.size;
+	  ctx->delta_stats.num_kb += SHIFT_ROUND_UP(oi.size, 10);
 	}
 	ctx->delta_stats.num_wr++;
 	ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
