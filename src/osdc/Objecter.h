@@ -51,6 +51,10 @@ struct ObjectOperation {
   int flags;
   int priority;
 
+  vector<bufferlist*> out_bl;
+  vector<Context*> out_handler;
+  vector<int*> out_rval;
+
   ObjectOperation() : flags(0), priority(0) {}
 
   size_t size() {
@@ -66,6 +70,12 @@ struct ObjectOperation {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
+    out_bl.resize(s+1);
+    out_bl[s] = NULL;
+    out_handler.resize(s+1);
+    out_handler[s] = NULL;
+    out_rval.resize(s+1);
+    out_rval[s] = NULL;
     return ops[s];
   }
   void add_data(int op, uint64_t off, uint64_t len, bufferlist& bl) {
@@ -170,10 +180,31 @@ struct ObjectOperation {
     ::encode(category, o.indata);
   }
 
+  struct C_ObjectOperation_stat : public Context {
+    bufferlist bl;
+    uint64_t *psize;
+    void finish(int r) {
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	::decode(*psize, p);
+      }
+    }
+  };
+  void stat(uint64_t *psize, int *prval) {
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat;
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
+
   // object data
-  void read(uint64_t off, uint64_t len) {
+  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_READ, off, len, bl);
+    unsigned p = ops.size() - 1;
+    out_bl[p] = pbl;
+    out_rval[p] = prval;
   }
   void write(uint64_t off, bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITE, off, bl.length(), bl);
@@ -210,13 +241,34 @@ struct ObjectOperation {
   }
 
   // object attrs
-  void getxattr(const char *name) {
+  void getxattr(const char *name, bufferlist *pbl, int *prval) {
     bufferlist bl;
     add_xattr(CEPH_OSD_OP_GETXATTR, name, bl);
+    unsigned p = ops.size() - 1;
+    out_bl[p] = pbl;
+    out_rval[p] = prval;
   }
-  void getxattrs() {
+  struct C_ObjectOperation_getxattrs : public Context {
+    bufferlist bl;
+    std::map<std::string,bufferlist> *pattrs;
+    void finish(int r) {
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	::decode(*pattrs, p);
+      }	
+    }
+  };
+  void getxattrs(std::map<std::string,bufferlist> *pattrs, int *prval) {
     bufferlist bl;
     add_xattr(CEPH_OSD_OP_GETXATTRS, 0, bl);
+    if (pattrs) {
+      unsigned p = ops.size() - 1;
+      C_ObjectOperation_getxattrs *h = new C_ObjectOperation_getxattrs;
+      h->pattrs = pattrs;
+      out_handler[p] = h;
+      out_bl[p] = &h->bl;
+      out_rval[p] = prval;
+    }
   }
   void setxattr(const char *name, const bufferlist& bl) {
     add_xattr(CEPH_OSD_OP_SETXATTR, name, bl);
@@ -374,6 +426,9 @@ public:
     utime_t mtime;
 
     bufferlist *outbl;
+    vector<bufferlist*> out_bl;
+    vector<Context*> out_handler;
+    vector<int*> out_rval;
 
     int flags, priority;
     Context *onack, *oncommit;
@@ -394,7 +449,9 @@ public:
       session(NULL), session_item(this), incarnation(0),
       oid(o), oloc(ol),
       used_replica(false), con(NULL),
-      snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
+      snapid(CEPH_NOSNAP),
+      outbl(NULL),
+      flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL) {
       ops.swap(op);
@@ -748,7 +805,7 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t read(const object_t& oid, const object_locator_t& oloc, 
+  tid_t read(const object_t& oid, const object_locator_t& oloc,
 	     ObjectOperation& op,
 	     snapid_t snapid, bufferlist *pbl, int flags,
 	     Context *onack, eversion_t *objver = NULL) {
@@ -756,6 +813,9 @@ private:
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
+    o->out_rval.swap(op.out_rval);
     return op_submit(o);
   }
   tid_t linger(const object_t& oid, const object_locator_t& oloc, 

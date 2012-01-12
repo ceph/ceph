@@ -1178,6 +1178,28 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->outbl = 0;
   }
 
+  // per-op result demuxing
+  vector<OSDOp> out_ops;
+  m->claim_ops(out_ops);
+  unsigned i = 0;
+  for (vector<bufferlist*>::iterator p = op->out_bl.begin();
+       p != op->out_bl.end();
+       ++p, ++i)
+    if (*p)
+      **p = out_ops[i].outdata;
+  i = 0;
+  for (vector<int*>::iterator p = op->out_rval.begin();
+       p != op->out_rval.end();
+       ++p, ++i)
+    if (*p)
+      **p = out_ops[i].rval;
+  i = 0;
+  for (vector<Context*>::iterator p = op->out_handler.begin();
+       p != op->out_handler.end();
+       ++p, ++i)
+    if (*p)
+      (*p)->complete(out_ops[i].rval);
+
   // ack|commit -> ack
   if (op->onack) {
     ldout(cct, 15) << "handle_osd_op_reply ack" << dendl;
