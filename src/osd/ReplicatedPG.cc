@@ -1618,13 +1618,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  oi.truncate_seq = op.extent.truncate_seq;
 	  oi.truncate_size = op.extent.truncate_size;
 	}
-        if (op.extent.length) {
-	  bufferlist nbl;
-	  bp.copy(op.extent.length, nbl);
-	  t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
-        } else {
-          t.touch(coll, soid);
-        }
+	bufferlist nbl;
+	bp.copy(op.extent.length, nbl);
+	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
 	write_update_size_and_usage(ctx->delta_stats, oi, ssc->snapset, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
 	if (!obs.exists) {
