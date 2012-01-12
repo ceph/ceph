@@ -68,9 +68,11 @@ def task(ctx, config):
         rados(mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
         rados(mon, ['-p', 'data', 'rm', 'existed_%d' % f])
 
+    # delay recovery, and make the pg log very long (to prevent backfill)
     manager.raw_cluster_cmd(
             'tell', 'osd.1',
-            'injectargs', '--osd-recovery-delay-start 1000'
+            'injectargs',
+            '--osd-recovery-delay-start 1000 --osd-min-pg-log-entries 100000000'
             )
 
     manager.kill_osd(0)
