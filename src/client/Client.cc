@@ -4140,9 +4140,9 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp)
 
 int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid) 
 {
-  *dirpp = new dir_result_t(in);
   if (!in->is_dir())
     return -ENOTDIR;
+  *dirpp = new dir_result_t(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
   if (in->dir)
     (*dirpp)->release_count = in->dir->release_count;
