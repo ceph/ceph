@@ -502,6 +502,10 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
   bool stats_updated = false;
   bool found_missing = false;
 
+  // take note that we've probed this peer, for
+  // all_unfound_are_queried_or_lost()'s benefit.
+  peer_missing[fromosd];
+
   // found items?
   for (map<hobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
