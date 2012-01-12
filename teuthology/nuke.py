@@ -12,13 +12,14 @@ def parse_args():
         help='be more verbose'
         )
     parser.add_argument(
-        'config',
-        metavar='CONFFILE',
+        '-t', '--targets',
         nargs='+',
         type=config_file,
         action=MergeConfig,
         default={},
-        help='config file to read',
+        required=True,
+        dest='config',
+        help='yaml config containing machines to nuke',
         )
     parser.add_argument(
         '--archive',
