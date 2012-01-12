@@ -176,6 +176,23 @@ def install_and_reboot(ctx, config):
         log.debug('Waiting for install on %s to complete...', name)
         proc.exitstatus.get()
 
+def wait_for_reboot(ctx, need_install, timeout):
+    """
+    Loop reconnecting and checking kernel versions until
+    they're all correct or the timeout is exceeded.
+    """
+    import time
+    starttime = time.time()
+    while need_install:
+        teuthology.reconnect(ctx, timeout)
+        for client in need_install.keys():
+            log.info('Checking client {client} for new kernel version...'.format(client=client))
+            if need_to_install(ctx, client, need_install[client]):
+                assert time.time() - starttime < timeout, \
+                    'failed to install new kernel version within timeout'
+            else:
+                del need_install[client]
+        time.sleep(1)
 
 def task(ctx, config):
     """
@@ -243,11 +260,6 @@ def task(ctx, config):
         if need_to_install(ctx, role, sha1):
             need_install[role] = sha1
 
-    if len(need_install) > 0:
+    if need_install:
         install_and_reboot(ctx, need_install)
-        teuthology.reconnect(ctx, timeout)
-
-    for client, sha1 in need_install.iteritems():
-        log.info('Checking client {client} for new kernel version...'.format(client=client))
-        assert not need_to_install(ctx, client, sha1), \
-            "Client did not boot to the new kernel!"
+        wait_for_reboot(ctx, need_install, timeout)
