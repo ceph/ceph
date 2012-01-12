@@ -33,6 +33,10 @@ Files: src/include/ceph_hash.cc
 Copyright: None
 License: Public domain
 
+Files: m4/acx_pthread.m4
+Copyright: Steven G. Johnson <stevenj@alum.mit.edu>
+License: GPLWithACException
+
 Files: src/common/sctp_crc32.c: 
 Copyright:
     Copyright (c) 2001-2007, by Cisco Systems, Inc. All rights reserved.
