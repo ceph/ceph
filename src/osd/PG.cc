@@ -109,18 +109,17 @@ void PG::Log::copy_range(const Log &other, eversion_t from, eversion_t to)
 void PG::Log::copy_up_to(const Log &other, int max)
 {
   int n = 0;
+  head = other.head;
+  tail = other.tail;
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        ++i) {
-    log.push_front(*i);
-    if (++n >= max)
+    if (n++ >= max) {
+      tail = i->version;
       break;
+    }
+    log.push_front(*i);
   }
-  head = other.head;
-  if (log.empty())
-    tail = head;
-  else
-    tail = log.begin()->version;
 }
 
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
