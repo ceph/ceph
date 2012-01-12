@@ -1293,7 +1293,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 			 << " to " << info.last_update;
 
 	pi.last_update = info.last_update;
-	pi.last_complete = info.last_complete;
+	pi.last_complete = info.last_update;
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
 	pi.stats.stats.clear();
