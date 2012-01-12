@@ -1715,6 +1715,8 @@ done:
     r = bl.length();
     *data = (char *)malloc(r);
     memcpy(*data, bl.c_str(), bl.length());
+  } else {
+    *data = NULL;
   }
 
   if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
