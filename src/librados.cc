@@ -183,28 +183,28 @@ void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
   o->src_cmpxattr(oid, CEPH_NOSNAP, name, bl, op, CEPH_OSD_CMPXATTR_MODE_U64);
 }
 
-void librados::ObjectReadOperation::stat()
+void librados::ObjectReadOperation::stat(uint64_t *psize, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->add_op(CEPH_OSD_OP_STAT);
+  o->stat(psize, prval);
 }
 
-void librados::ObjectReadOperation::read(size_t off, uint64_t len)
+void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->read(off, len);
+  o->read(off, len, pbl, prval);
 }
 
-void librados::ObjectReadOperation::getxattr(const char *name)
+void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->getxattr(name);
+  o->getxattr(name, pbl, prval);
 }
 
-void librados::ObjectReadOperation::getxattrs()
+void librados::ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->getxattrs();
+  o->getxattrs(pattrs, prval);
 }
 
 void librados::ObjectWriteOperation::create(bool exclusive)
@@ -2486,7 +2486,7 @@ int librados::RadosClient::_notify_ack(IoCtxImpl& io, const object_t& oid,
   ::ObjectOperation rd;
   prepare_assert_ops(&io, &rd);
   rd.notify_ack(notify_id, ver);
-  objecter->read(oid, io.oloc, rd, io.snap_seq, NULL, 0, 0, 0);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, (bufferlist*)NULL, 0, 0, 0);
 
   return 0;
 }

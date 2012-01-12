@@ -186,10 +186,10 @@ namespace librados
     ObjectReadOperation() {}
     ~ObjectReadOperation() {}
 
-    void stat();
-    void getxattr(const char *name);
-    void getxattrs();
-    void read(size_t off, uint64_t len);
+    void stat(uint64_t *psize = NULL, int *prval = NULL);
+    void getxattr(const char *name, bufferlist *pbl = NULL, int *prval = NULL);
+    void getxattrs(std::map<std::string, bufferlist> *pattrs = NULL, int *prval = NULL);
+    void read(size_t off, uint64_t len, bufferlist *pbl = NULL, int *prval = NULL);
   };
 
 
