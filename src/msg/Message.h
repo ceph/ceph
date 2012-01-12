@@ -272,7 +272,16 @@ protected:
   bufferlist       middle;   // "middle" unaligned blob
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
   
+  /* recv_stamp is set when the Messenger starts reading the
+   * Message off the wire */
   utime_t recv_stamp;
+  /* dispatch_stamp is set when the Messenger starts calling dispatch() on
+   * its endpoints */
+  utime_t dispatch_stamp;
+  /* throttle_wait is the amount of time spent waiting on throttlers between
+   * message receipt and message dispatch*/
+  utime_t throttle_wait;
+
   Connection *connection;
 
   // release our size in bytes back to this throttler when our payload
@@ -380,7 +389,11 @@ public:
   off_t get_data_len() { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
-  utime_t get_recv_stamp() { return recv_stamp; }
+  const utime_t& get_recv_stamp() { return recv_stamp; }
+  void set_dispatch_stamp(utime_t t) { dispatch_stamp = t; }
+  const utime_t& get_dispatch_stamp() { return dispatch_stamp; }
+  void set_throttle_wait(utime_t t) { throttle_wait = t; }
+  const utime_t& get_throttle_wait() { return throttle_wait; }
 
   void calc_header_crc() {
     header.crc = ceph_crc32c_le(0, (unsigned char*)&header,
