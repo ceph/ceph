@@ -186,7 +186,7 @@ void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
 void librados::ObjectReadOperation::stat(uint64_t *psize, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->stat(psize, prval);
+  o->stat(psize, NULL, prval);
 }
 
 void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)

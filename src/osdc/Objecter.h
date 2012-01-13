@@ -183,16 +183,30 @@ struct ObjectOperation {
   struct C_ObjectOperation_stat : public Context {
     bufferlist bl;
     uint64_t *psize;
+    utime_t *pmtime;
+    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm) : psize(ps), pmtime(pm) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
-	::decode(*psize, p);
+	try {
+	  uint64_t size;
+	  utime_t mtime;
+	  ::decode(size, p);
+	  ::decode(mtime, p);
+	  if (psize)
+	    *psize = size;
+	  if (pmtime)
+	    *pmtime = mtime;
+	}
+	catch (buffer::error& e) {
+	  r = -EIO;
+	}
       }
     }
   };
-  void stat(uint64_t *psize, int *prval) {
+  void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat;
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
@@ -251,10 +265,17 @@ struct ObjectOperation {
   struct C_ObjectOperation_getxattrs : public Context {
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
+    C_ObjectOperation_getxattrs(std::map<std::string,bufferlist> *pa) : pattrs(pa) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
-	::decode(*pattrs, p);
+	try {
+	  if (pattrs)
+	    ::decode(*pattrs, p);
+	}
+	catch (buffer::error& e) {
+	  r = -EIO;
+	}
       }	
     }
   };
@@ -263,8 +284,7 @@ struct ObjectOperation {
     add_xattr(CEPH_OSD_OP_GETXATTRS, 0, bl);
     if (pattrs) {
       unsigned p = ops.size() - 1;
-      C_ObjectOperation_getxattrs *h = new C_ObjectOperation_getxattrs;
-      h->pattrs = pattrs;
+      C_ObjectOperation_getxattrs *h = new C_ObjectOperation_getxattrs(pattrs);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
