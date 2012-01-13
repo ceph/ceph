@@ -750,9 +750,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replicati
   ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int fh = 0;
   fh = ceph_open(cmount, c_path, O_RDONLY, 0);
+  env->ReleaseStringUTFChars(j_path, c_path);
+  if (fh < 0) {
+	  return fh;
+  }
   int replication = ceph_get_file_replication(cmount, fh);
   ceph_close(cmount, fh);
-  env->ReleaseStringUTFChars(j_path, c_path);
   return replication;
 }
 
