@@ -327,7 +327,7 @@ public:
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
   virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive);
 
-  int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
+  int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
                          string& name, string& locator);
   int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
