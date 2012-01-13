@@ -1585,17 +1585,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = -ENOENT;
 	  dout(10) << "stat oi object does not exist" << dendl;
 	}
-	if (1) {  // REMOVE ME LATER!
-          struct stat st;
-          memset(&st, 0, sizeof(st));
-          int checking_result = osd->store->stat(coll, soid, &st);
-          if ((checking_result != result) ||
-              ((uint64_t)st.st_size != oi.size)) {
-            osd->clog.error() << info.pgid << " " << soid << " oi.size " << oi.size
-                              << " but stat got " << checking_result << " size " << st.st_size << "\n";
-            assert(0 == "oi disagrees with stat, or error code on stat");
-          }
-        }
 
 	ctx->delta_stats.num_rd++;
       }
@@ -1781,14 +1770,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  t.truncate(coll, soid, op.extent.truncate_size);
 	  oi.truncate_seq = op.extent.truncate_seq;
 	  oi.truncate_size = op.extent.truncate_size;
+	  if (op.extent.truncate_size != oi.size) {
+	    ctx->delta_stats.num_bytes -= oi.size;
+	    ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+	    ctx->delta_stats.num_bytes += op.extent.truncate_size;
+	    ctx->delta_stats.num_kb +=
+	      SHIFT_ROUND_UP(op.extent.truncate_size, 10);
+	    oi.size = op.extent.truncate_size;
+	  }
 	}
-        if (op.extent.length) {
-	  bufferlist nbl;
-	  bp.copy(op.extent.length, nbl);
-	  t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
-        } else {
-          t.touch(coll, soid);
-        }
+	bufferlist nbl;
+	bp.copy(op.extent.length, nbl);
+	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
 	write_update_size_and_usage(ctx->delta_stats, oi, ssc->snapset, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
 	if (!obs.exists) {
@@ -1813,12 +1806,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (oi.size > 0)
 	  ch.insert(0, oi.size);
 	ctx->modified_ranges.union_of(ch);
-	if (op.extent.length != oi.size) {
+	if (op.extent.length + op.extent.offset != oi.size) {
 	  ctx->delta_stats.num_bytes -= oi.size;
 	  ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
-	  ctx->delta_stats.num_bytes += op.extent.length;
-	  ctx->delta_stats.num_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	  oi.size = op.extent.length;
+	  oi.size = op.extent.length + op.extent.offset;
+	  ctx->delta_stats.num_bytes += oi.size;
+	  ctx->delta_stats.num_kb += SHIFT_ROUND_UP(oi.size, 10);
 	}
 	ctx->delta_stats.num_wr++;
 	ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);

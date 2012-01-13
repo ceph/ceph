@@ -62,8 +62,9 @@ void PG::lock_with_map_lock_held()
 std::string PG::gen_prefix() const
 {
   stringstream out;
+  OSDMapRef mapref = osdmap_ref;
   out << "osd." << osd->whoami 
-      << " " << (osdmap_ref ? osdmap_ref->get_epoch():0)
+      << " " << (mapref ? mapref->get_epoch():0)
       << " " << *this << " ";
   return out.str();
 }

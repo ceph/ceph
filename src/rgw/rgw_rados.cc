@@ -469,7 +469,9 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     string dir_oid =  dir_oid_prefix;
     dir_oid.append(bucket.marker);
 
-    r = io_ctx.create(dir_oid, true);
+    librados::ObjectWriteOperation op;
+    op.create(true);
+    r = cls_rgw_init_index(io_ctx, op, dir_oid);
     if (r < 0 && r != -EEXIST)
       return r;
 
@@ -479,12 +481,6 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     ret = store_bucket_info(info, &attrs, exclusive);
     if (ret == -EEXIST)
       return ret;
-
-    if (r != -EEXIST) {
-      r = cls_rgw_init_index(bucket, dir_oid);
-      if (r < 0)
-        return r;
-    }
   }
 
   return ret;
@@ -565,6 +561,33 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
   bufferlist empty_bl;
   ret = tmap_set(obj, new_pool, empty_bl);
   return ret;
+}
+
+int RGWRados::remove_bucket_placement(std::string& old_pool)
+{
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  int ret = tmap_del(obj, old_pool);
+  return ret;
+}
+
+int RGWRados::list_placement_set(set<string>& names)
+{
+  bufferlist header;
+  map<string, bufferlist> m;
+  string pool_name;
+
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  int ret = tmap_get(obj, header, m);
+  if (ret < 0)
+    return ret;
+
+  names.clear();
+  map<string, bufferlist>::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    names.insert(miter->first);
+  }
+
+  return names.size();
 }
 
 int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int auid)
@@ -1688,6 +1711,8 @@ done:
     r = bl.length();
     *data = (char *)malloc(r);
     memcpy(*data, bl.c_str(), bl.length());
+  } else {
+    *data = NULL;
   }
 
   if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
@@ -2086,23 +2111,11 @@ int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<stri
   return m.size();
 }
 
-int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
+int RGWRados::cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid)
 {
-  if (bucket_is_system(bucket))
-    return 0;
-
-  if (bucket.marker.empty()) {
-    dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
-
-  librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
-  if (r < 0)
-    return r;
-
-  bufferlist in, out;
-  r = io_ctx.exec(oid, "rgw", "bucket_init_index", in, out);
+  bufferlist in;
+  op.exec("rgw", "bucket_init_index", in);
+  int r = io_ctx.operate(oid, &op);
   return r;
 }
 

@@ -16,9 +16,10 @@
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
-    pool add                   add an existing pool to those which can store buckets
-    pool info                  show pool information
-    pool create                generate pool information (requires bucket)
+    bucket info                show bucket information
+    pool add                   add an existing pool for data placement
+    pool rm                    remove an existing pool from data placement set
+    pools list                 list placement active set
     policy                     read bucket/object policy
     log list                   list log objects
     log show                   dump a log from specific object or (bucket + date

@@ -189,6 +189,8 @@ public:
                             bool system_bucket, bool exclusive = true,
                             uint64_t auid = 0);
   virtual int add_bucket_placement(std::string& new_pool);
+  virtual int remove_bucket_placement(std::string& new_pool);
+  virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
@@ -325,7 +327,7 @@ public:
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
   virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive);
 
-  int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
+  int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
                          string& name, string& locator);
   int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,

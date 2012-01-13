@@ -540,11 +540,8 @@ class Ioctx(object):
         self.require_ioctx_open()
         if not isinstance(loc_key, str):
             raise TypeError('loc_key must be a string')
-        ret = self.librados.rados_ioctx_locator_set_key(self.io,\
+        self.librados.rados_ioctx_locator_set_key(self.io,\
                 c_char_p(loc_key))
-        if ret < 0:
-            raise make_ex(ret, "error changing locator key of '%s' to '%s'" %\
-                (self.name, loc_key))
         self.locator_key = loc_key
 
     def get_locator_key(self):
