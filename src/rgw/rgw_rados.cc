@@ -1669,9 +1669,9 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   }
 
   dout(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
-  op.read(ofs, len);
+  op.read(ofs, len, &bl, NULL);
 
-  r = state->io_ctx.operate(oid, &op, &bl);
+  r = state->io_ctx.operate(oid, &op, NULL);
   dout(20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r == -ECANCELED) {
@@ -1728,9 +1728,9 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   if (r < 0)
     return r;
 
-  op.read(ofs, size);
+  op.read(ofs, size, &bl, NULL);
 
-  r = io_ctx.operate(oid, &op, &bl);
+  r = io_ctx.operate(oid, &op, NULL);
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
@@ -1753,45 +1753,21 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   io_ctx.locator_set_key(key);
 
+  map<string, bufferlist> attrset;
+  uint64_t size = 0;
+  time_t mtime = 0;
+
   ObjectReadOperation op;
-  op.getxattrs();
-  op.stat();
+  op.getxattrs(&attrset, NULL);
+  op.stat(&size, NULL);
   if (first_chunk) {
-    op.read(0, RGW_MAX_CHUNK_SIZE);
+    op.read(0, RGW_MAX_CHUNK_SIZE, first_chunk, NULL);
   }
   bufferlist outbl;
   r = io_ctx.operate(oid, &op, &outbl);
   if (r < 0)
     return r;
 
-  map<string, bufferlist> attrset;
-  bufferlist::iterator oiter = outbl.begin();
-  try {
-    ::decode(attrset, oiter);
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
-    return -EIO;
-  }
-
-  map<string, bufferlist>::iterator aiter;
-  for (aiter = attrset.begin(); aiter != attrset.end(); ++aiter) {
-    dout(0) << "iter->first=" << aiter->first << dendl;
-  }
-
-  uint64_t size = 0;
-  time_t mtime = 0;
-  try {
-    ::decode(size, oiter);
-    utime_t ut;
-    ::decode(ut, oiter);
-    mtime = ut.sec();
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
-    return -EIO;
-  }
-  if (first_chunk) {
-    oiter.copy_all(*first_chunk);
-  }
   if (psize)
     *psize = size;
   if (pmtime)
