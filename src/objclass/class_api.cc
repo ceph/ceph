@@ -274,9 +274,13 @@ int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
   if (ret < 0)
     return ret;
 
-  //decode and return the header
-  bufferlist::iterator map_iter = full_map.begin();
-  ::decode(*outbl, map_iter);
+  try {
+    //decode and return the header
+    bufferlist::iterator map_iter = full_map.begin();
+    ::decode(*outbl, map_iter);
+  } catch (buffer::error& e) {
+    return -EINVAL;
+  }
   return 0;
 }
 int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl)
@@ -296,18 +300,22 @@ int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outb
   bufferlist next_val;
   __u32 nkeys;
   bufferlist::iterator map_iter = full_map.begin();
-  ::decode(header, map_iter);
-  ::decode(nkeys, map_iter);
-  while (nkeys) {
-    ::decode(next_key, map_iter);
-    ::decode(next_val, map_iter);
-    if (next_key == key) {
-      *outbl = next_val;
-      return 0;
+  try {
+    ::decode(header, map_iter);
+    ::decode(nkeys, map_iter);
+    while (nkeys) {
+      ::decode(next_key, map_iter);
+      ::decode(next_val, map_iter);
+      if (next_key == key) {
+        *outbl = next_val;
+        return 0;
+      }
+      if (next_key > key)
+        return -ENOENT;
+      --nkeys;
     }
-    if (next_key > key)
-      return -ENOENT;
-    --nkeys;
+  } catch (buffer::error& e) {
+    return -EINVAL;
   }
   return -ENOENT;
 }
