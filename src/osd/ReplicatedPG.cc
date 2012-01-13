@@ -1606,6 +1606,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  t.truncate(coll, soid, op.extent.truncate_size);
 	  oi.truncate_seq = op.extent.truncate_seq;
 	  oi.truncate_size = op.extent.truncate_size;
+	  if (op.extent.truncate_size != oi.size) {
+	    ctx->delta_stats.num_bytes -= oi.size;
+	    ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+	    ctx->delta_stats.num_bytes += op.extent.truncate_size;
+	    ctx->delta_stats.num_kb +=
+	      SHIFT_ROUND_UP(op.extent.truncate_size, 10);
+	    oi.size = op.extent.truncate_size;
+	  }
 	}
 	bufferlist nbl;
 	bp.copy(op.extent.length, nbl);
