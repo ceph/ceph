@@ -131,6 +131,7 @@ namespace librados
 		      const char *name, int op, const bufferlist& val);
     void src_cmpxattr(const std::string& src_oid,
 		      const char *name, int op, uint64_t v);
+    void exec(const char *cls, const char *method, bufferlist& inbl);
 
   protected:
     ObjectOperationImpl *impl;
