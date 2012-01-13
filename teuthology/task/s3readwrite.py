@@ -118,7 +118,7 @@ def configure(ctx, config):
                         s3=s3tests_conf['s3'],
                         readwrite=s3tests_conf['readwrite'],
                     )
-        yaml.dump(conf, conf_fp, default_flow_style=False)
+        yaml.safe_dump(conf, conf_fp, default_flow_style=False)
         teuthology.write_file(
             remote=remote,
             path='/tmp/cephtest/archive/s3readwrite.{client}.config.yaml'.format(client=client),
