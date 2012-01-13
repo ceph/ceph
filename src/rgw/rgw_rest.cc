@@ -42,6 +42,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INVALID_PART, 400, "InvalidPart" },
     { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
     { ERR_REQUEST_TIMEOUT, 400, "RequestTimeout" },
+    { ERR_TOO_LARGE, 400, "EntityTooLarge" },
     { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
@@ -250,6 +251,18 @@ int RGWGetObj_REST::get_params()
 }
 
 
+int RGWPutObj_REST::verify_params()
+{
+  if (s->length) {
+    size_t len = atoll(s->length);
+    if (len > RGW_MAX_PUT_SIZE) {
+      return -ERR_TOO_LARGE;
+    }
+  }
+
+  return 0;
+}
+
 int RGWPutObj_REST::get_params()
 {
   supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
@@ -274,6 +287,10 @@ int RGWPutObj_REST::get_data(bufferlist& bl)
 
     CGI_GetStr(s, bp.c_str(), cl, len);
     bl.append(bp);
+  }
+
+  if ((uint64_t)ofs + len > RGW_MAX_PUT_SIZE) {
+    return -ERR_TOO_LARGE;
   }
 
   if (!ofs)

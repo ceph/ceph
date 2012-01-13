@@ -62,6 +62,7 @@ using ceph::crypto::MD5;
 
 #define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16
+#define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
 
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
@@ -121,6 +122,7 @@ using ceph::crypto::MD5;
 #define ERR_NOT_MODIFIED         2016
 #define ERR_INVALID_UTF8         2017
 #define ERR_UNPROCESSABLE_ENTITY 2018
+#define ERR_TOO_LARGE            2019
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
