@@ -135,6 +135,7 @@ def connect(ctx, config):
             assert all(isinstance(role, str) for role in roles), \
                 "Roles in config must be strings: %r" % roles
             ctx.cluster.add(rem, roles)
+            log.info('roles: %s - %s' % (rem, roles))
     else:
         for rem in remotes:
             ctx.cluster.add(rem, rem.name)
