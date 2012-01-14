@@ -168,7 +168,25 @@ def ls():
                     summary.update(new)
         except IOError, e:
             if e.errno == errno.ENOENT:
-                print "%s (no summary.yaml)" % j
+                print "%s      (no summary.yaml)" % j,
+
+                # pid
+                try:
+                    pidfile = '%s/%s/pid' % (args.archive_dir, j)
+                    if os.path.isfile(pidfile):
+                        pid = open(pidfile, 'r').read()
+                        if os.path.isdir("/proc/%s" % pid):
+                            cmdline = open('/proc/%s/cmdline' % pid, 'r').read()
+                            if cmdline.find(args.archive_dir) >= 0:
+                                print ' (pid %s)' % pid,
+                    # tail
+                    tail = os.popen(
+                        'tail -1 %s/%s/teuthology.log' % (args.archive_dir, j)
+                        ).read().rstrip()
+                    print " (tail '%s')" % tail
+                except IOError, e:
+                    continue
+                print ''
                 continue
             else:
                 raise
