@@ -323,6 +323,8 @@ public:
   void flush();
   void sync_and_flush();
 
+  int dump_journal(ostream& out);
+
   uuid_d get_fsid() { return fsid; }
 
   int snapshot(const string& name);

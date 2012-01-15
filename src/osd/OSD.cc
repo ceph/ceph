@@ -391,6 +391,16 @@ int OSD::flushjournal(const std::string &dev, const std::string &jdev)
   return err;
 }
 
+int OSD::dump_journal(const std::string &dev, const std::string &jdev, ostream& out)
+{
+  ObjectStore *store = create_object_store(dev, jdev);
+  if (!store)
+    return -ENOENT;
+  int err = store->dump_journal(out);
+  delete store;
+  return err;
+}
+
 int OSD::write_meta(const std::string &base, const std::string &file,
 		    const char *val, size_t vallen)
 {

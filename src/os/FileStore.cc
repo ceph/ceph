@@ -759,6 +759,19 @@ int FileStore::open_journal()
   return 0;
 }
 
+int FileStore::dump_journal(ostream& out)
+{
+  int r;
+
+  if (!journalpath.length())
+    return -EINVAL;
+
+  FileJournal *journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+  r = journal->dump(out);
+  delete journal;
+  return r;
+}
+
 int FileStore::wipe_subvol(const char *s)
 {
 #if defined(__linux__)

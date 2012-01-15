@@ -238,6 +238,8 @@ private:
   void close();
   int peek_fsid(uuid_d& fsid);
 
+  int dump(ostream& out);
+
   void flush();
 
   void throttle();

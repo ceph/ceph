@@ -504,6 +504,42 @@ void FileJournal::close()
   fd = -1;
 }
 
+
+int FileJournal::dump(ostream& out)
+{
+  dout(10) << "dump" << dendl;
+  _open(false, false);
+
+  int err = read_header();
+  if (err < 0)
+    return err;
+
+  read_pos = header.start;
+
+  while (1) {
+    bufferlist bl;
+    uint64_t seq = 0;
+    uint64_t pos = read_pos;
+    if (!read_entry(bl, seq)) {
+      dout(3) << "journal_replay: end of journal, done." << dendl;
+      break;
+    }
+
+    out << "offset " << pos << " seq " << seq << "\n";
+   
+    bufferlist::iterator p = bl.begin();
+    while (!p.end()) {
+      ObjectStore::Transaction *t = new ObjectStore::Transaction(p);
+      t->dump(out);
+      delete t;
+    }
+  }
+  out << std::endl;
+  dout(10) << "dump finish" << dendl;
+  return 0;
+}
+
+
 void FileJournal::start_writer()
 {
   write_stop = false;
