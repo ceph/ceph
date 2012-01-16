@@ -275,14 +275,20 @@ int main(int argc, const char **argv)
   SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context);
   SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context);
 
-  client_messenger->bind(g_conf->public_addr, getpid());
+  r = client_messenger->bind(g_conf->public_addr, getpid());
+  if (r < 0)
+    exit(1);
   cluster_messenger->bind(g_conf->cluster_addr, getpid());
+  if (r < 0)
+    exit(1);
 
   // hb should bind to same ip as cluster_addr (if specified)
   entity_addr_t hb_addr = g_conf->cluster_addr;
   if (!hb_addr.is_blank_ip())
     hb_addr.set_port(0);
   messenger_hbout->bind(hb_addr, getpid());
+  if (r < 0)
+    exit(1);
 
   global_print_banner();
 
