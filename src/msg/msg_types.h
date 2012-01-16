@@ -20,6 +20,10 @@
 #include "tcp.h"
 #include "include/encoding.h"
 
+
+extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
+
+
 class entity_name_t {
 public:
   __u8 _type;
@@ -404,6 +408,8 @@ inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
   entity_inst_t n = i;
   return out << n;
 }
+
+
 
 
 

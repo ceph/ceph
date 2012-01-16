@@ -14,8 +14,6 @@ using std::ostream;
 
 class CephContext;
 
-extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
-
 extern int tcp_read(CephContext *cct, int sd, char *buf, int len, int timeout=-1);
 extern int tcp_read_wait(int sd, int timeout);
 extern int tcp_read_nonblocking(CephContext *cct, int sd, char *buf, int len);
