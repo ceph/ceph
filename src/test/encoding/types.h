@@ -13,3 +13,6 @@ TYPE(pg_stat_t)
 TYPE(pool_stat_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
+
+#include "os/ObjectStore.h"
+TYPE(ObjectStore::Transaction)

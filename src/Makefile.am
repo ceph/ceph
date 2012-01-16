@@ -106,7 +106,7 @@ osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.la
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.la libos.la
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
