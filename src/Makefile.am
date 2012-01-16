@@ -1153,6 +1153,7 @@ noinst_HEADERS = \
         include/buffer.h\
         include/byteorder.h\
 	include/cephfs/libcephfs.h\
+	include/ceph_features.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
