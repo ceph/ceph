@@ -277,7 +277,7 @@ def valgrind_post(ctx, config):
                 proc = remote.run(
                     args=[
                         'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
-                        'grep', '-v', '-q', "PossiblyLost"],
+                        'egrep', '-v', '-q', '(PossiblyLost|DefinitelyLost)'],
                     wait = False,
                     check_status=False
                     )
