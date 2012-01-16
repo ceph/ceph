@@ -1030,16 +1030,14 @@ int SimpleMessenger::Pipe::connect()
   if (sd >= 0)
     ::close(sd);
 
+  char buf[80];
+
   // create socket?
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
-    char buf[80];
     lderr(msgr->cct) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    assert(0);
     goto fail;
   }
-
-  char buf[80];
 
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
