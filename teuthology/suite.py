@@ -183,7 +183,7 @@ def ls():
                     tail = os.popen(
                         'tail -1 %s/%s/teuthology.log' % (args.archive_dir, j)
                         ).read().rstrip()
-                    print " (tail '%s')" % tail
+                    print " (tail '%s')" % tail,
                 except IOError, e:
                     continue
                 print ''
