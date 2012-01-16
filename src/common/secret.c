@@ -83,6 +83,10 @@ int is_kernel_secret(const char *key_name)
 int get_secret_option(const char *secret, const char *key_name,
 		      char *secret_option, size_t max_len)
 {
+  if (!key_name) {
+    return -EINVAL;
+  }
+
   int ret = 0;
   int olen = strlen(key_name) + 7;
   if (secret) {
@@ -94,9 +98,6 @@ int get_secret_option(const char *secret, const char *key_name,
 
   option[olen] = '\0';
 
-  if (!key_name) {
-    return -EINVAL;
-  }
 
   if (secret) {
     ret = set_kernel_secret(secret, key_name);

@@ -27,7 +27,7 @@ if WITH_PROFILER
 EXTRALIBS += -lprofiler
 endif
 
-LIBGLOBAL_LDA = libglobal.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+LIBGLOBAL_LDA = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
@@ -165,16 +165,16 @@ bin_DEBUGPROGRAMS += psim
 
 test_addrs_SOURCES = test/test_addrs.cc
 test_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-test_addrs_LDADD = libglobal.la -lpthread -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+test_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_addrs
 
 test_str_list_SOURCES = test/test_str_list.cc
 test_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-test_str_list_LDADD = libglobal.la -lpthread -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+test_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_str_list
 
 test_mutate_SOURCES = test/test_mutate.cc
-test_mutate_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_mutate_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
 
 testmsgr_SOURCES = testmsgr.cc
@@ -206,23 +206,23 @@ bin_DEBUGPROGRAMS += multi_stress_watch
 
 if WITH_BUILD_TESTS
 test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
-test_libcommon_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libcommon_build_LDADD = $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_libcommon_build
 
 test_librados_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) $(librados_SOURCES)
-test_librados_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_librados_build_LDADD = $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_librados_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librados_build
 
 test_librgw_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
 			    $(librados_SOURCES) $(librgw_la_SOURCES)
-test_librgw_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_librgw_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librgw_build
 
 test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
 			    $(libcephfs_la_SOURCES) $(libosdc_la_SOURCES)
-test_libcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libcephfs_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libcephfs_build
 endif
@@ -231,7 +231,7 @@ if WITH_HADOOPCLIENT
 test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
          $(libhadoopcephfs_la_SOURCES) $(libcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
-test_libhadoopcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libhadoopcephfs_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libhadoopcephfs_build
 endif
@@ -251,12 +251,12 @@ libcephfs_la_SOURCES = \
 libcephfs_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcephfs_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libcephfs_la_LIBADD = libosdc.la
-libcephfs_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
+libcephfs_la_LDFLAGS =  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libcephfs.la
 
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libcephfs.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testceph_LDADD = libcephfs.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
@@ -278,7 +278,7 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librados_la_LIBADD = libcommon.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librados_la_LIBADD = libcommon.la $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
 
@@ -290,7 +290,7 @@ librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = librados.la
-librgw_la_LDFLAGS = -version-info 1:0:0 -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
+librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
 lib_LTLIBRARIES += librgw.la
 endif
 
@@ -300,24 +300,24 @@ librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
 librbd_la_LIBADD = librados.la 
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
-	-export-symbols-regex '^rbd_.*' -lpthread $(EXTRALIBS) 
+	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
 rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc
-rados_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
 scratchtool_SOURCES = scratchtool.c
-scratchtool_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 scratchtoolpp_SOURCES = scratchtoolpp.cc
-scratchtoolpp_LDADD = librados.la -lpthread -lm
+scratchtoolpp_LDADD = librados.la $(PTHREAD_LIBS) -lm
 radosacl_SOURCES = radosacl.cc
-radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+radosacl_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += scratchtool scratchtoolpp radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = libglobal.la librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = libglobal.la librbd.la librados.la $(PTHREAD_LIBS) -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 if LINUX
 bin_PROGRAMS += rbd
 endif
@@ -349,7 +349,7 @@ my_radosgw_src = \
 
 my_radosgw_ldadd = \
 	libglobal.la librgw.la librados.la -lfcgi -lcurl -lexpat \
-	-lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+	$(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = $(my_radosgw_src) rgw/rgw_main.cc
 radosgw_LDADD = $(my_radosgw_ldadd)
@@ -382,7 +382,7 @@ bin_DEBUGPROGRAMS += testkeys
 libcls_rbd_la_SOURCES = cls_rbd.cc
 libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
 libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
-libcls_rbd_la_LIBADD = -lpthread $(EXTRALIBS)
+libcls_rbd_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
 radoslibdir = $(libdir)/rados-classes
@@ -394,7 +394,7 @@ if WITH_RADOSGW
 libcls_rgw_la_SOURCES = cls_rgw.cc
 libcls_rgw_la_CFLAGS = ${AM_CFLAGS}
 libcls_rgw_la_CXXFLAGS= ${AM_CXXFLAGS}
-libcls_rgw_la_LIBADD = -lpthread $(EXTRALIBS)
+libcls_rgw_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
 radoslib_LTLIBRARIES += libcls_rgw.la
@@ -461,27 +461,27 @@ UNITTEST_CXXFLAGS = \
 UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.la \
 	$(top_builddir)/src/gtest/lib/libgtest_main.la \
-	-lpthread
+	$(PTHREAD_LIBS)
 UNITTEST_STATIC_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.a \
 	$(top_builddir)/src/gtest/lib/libgtest_main.a \
-	-lpthread
+	$(PTHREAD_LIBS)
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libcephfs.la -lpthread -lm \
+unittest_encoding_LDADD = libcephfs.la $(PTHREAD_LIBS) -lm \
 			  ${UNITTEST_LDADD}
 unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
 check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
-unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_base64_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_base64_LDADD = libcephfs.la -lm ${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
 unittest_ceph_argparse_SOURCES = test/ceph_argparse.cc
-unittest_ceph_argparse_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_ceph_argparse_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_ceph_argparse_LDADD = libglobal.la ${UNITTEST_LDADD}
 unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_argparse
@@ -507,7 +507,7 @@ unittest_simple_spin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_simple_spin
 
 unittest_librados_SOURCES = test/librados.cc
-unittest_librados_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_librados_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_librados_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados
@@ -542,68 +542,68 @@ unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXX
 check_PROGRAMS += unittest_ceph_crypto
 
 unittest_utf8_SOURCES = test/utf8.cc
-unittest_utf8_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_utf8_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_utf8_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_utf8
 
 unittest_mime_SOURCES = test/mime.cc
-unittest_mime_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_mime_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_mime_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_mime_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_mime
 
 unittest_escape_SOURCES = test/escape.cc
-unittest_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_escape_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_escape_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_escape
 
 unittest_strtol_SOURCES = test/strtol.cc
-unittest_strtol_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_strtol_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_strtol_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_strtol_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_strtol
 
 unittest_confutils_SOURCES = test/confutils.cc
-unittest_confutils_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_confutils_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_confutils_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_confutils_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_confutils
 
 unittest_heartbeatmap_SOURCES = test/heartbeat_map.cc common/HeartbeatMap.cc
-unittest_heartbeatmap_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_heartbeatmap_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_heartbeatmap_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_heartbeatmap_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_heartbeatmap
 
 unittest_formatter_SOURCES = test/formatter.cc rgw/rgw_formats.cc
-unittest_formatter_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_formatter_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
 unittest_libcephfs_config_SOURCES = test/libcephfs_config.cc
-unittest_libcephfs_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_libcephfs_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_libcephfs_config_LDADD =  libcephfs.la ${UNITTEST_LDADD}
 unittest_libcephfs_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_libcephfs_config
 
 unittest_librados_config_SOURCES = test/librados_config.cc
-unittest_librados_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_librados_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
 unittest_librados_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados_config
 
 unittest_daemon_config_SOURCES = test/daemon_config.cc
-unittest_daemon_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_daemon_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_daemon_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_daemon_config
 
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
-unittest_librgw_LDFLAGS = -lrt -pthread -lcurl ${AM_LDFLAGS}
+unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
 unittest_librgw_LDADD =  librgw.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
@@ -673,7 +673,7 @@ test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
 test_libcephfs_readdir_SOURCES = test/libcephfs/readdir_r_cb.cc
-test_libcephfs_readdir_LDFLAGS = -pthread ${AM_LDFLAGS}
+test_libcephfs_readdir_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 test_libcephfs_readdir_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
 test_libcephfs_readdir_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_libcephfs_readdir
@@ -1423,11 +1423,17 @@ noinst_HEADERS = \
 	tools/gui.h\
 	tools/gui_resources.h\
 	test/osd/RadosModel.h\
+	test/osd/Object.h\
+	test/osd/TestOpStat.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \
+	test/system/st_rados_delete_objs.h \
+	test/system/st_rados_delete_pool.h \
+	test/system/st_rados_notify.h \
+	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
 	test/rados-api/test.h \

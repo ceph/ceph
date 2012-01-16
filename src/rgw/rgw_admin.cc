@@ -44,9 +44,10 @@ void _usage()
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
-  cerr << "  pool add                   add an existing pool to those which can store buckets\n";
-  cerr << "  pool info                  show pool information\n";
-  cerr << "  pool create                generate pool information (requires bucket)\n";
+  cerr << "  bucket info                show bucket information\n";
+  cerr << "  pool add                   add an existing pool for data placement\n";
+  cerr << "  pool rm                    remove an existing pool from data placement set\n";
+  cerr << "  pools list                 list placement active set\n";
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log list                   list log objects\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
@@ -117,8 +118,8 @@ enum {
   OPT_BUCKET_STATS,
   OPT_POLICY,
   OPT_POOL_ADD,
-  OPT_POOL_INFO,
-  OPT_POOL_CREATE,
+  OPT_POOL_RM,
+  OPT_POOLS_LIST,
   OPT_LOG_LIST,
   OPT_LOG_SHOW,
   OPT_LOG_RM,
@@ -191,6 +192,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "pool") == 0 ||
+      strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "temp") == 0) {
     *need_more = true;
@@ -253,10 +255,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "pool") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_POOL_ADD;
-    if (strcmp(cmd, "info") == 0)
-      return OPT_POOL_INFO;
-    if (strcmp(cmd, "create") == 0)
-      return OPT_POOL_CREATE;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_POOL_RM;
+  } else if (strcmp(prev_cmd, "pools") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_POOLS_LIST;
   }
 
   return -EINVAL;
@@ -1177,82 +1180,69 @@ next:
       return usage();
     }
 
-    rgwstore->add_bucket_placement(pool_name);
+    int ret = rgwstore->add_bucket_placement(pool_name);
+    if (ret < 0)
+      cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
 
-  if (opt_cmd == OPT_POOL_INFO) {
-     if (bucket_name.empty() && bucket_id < 0) {
-       cerr << "either bucket or bucket-id needs to be specified" << std::endl;
-       return usage();
-     }
-     formatter->reset();
-     formatter->open_object_section("pool_info");
-     formatter->dump_int("id", bucket_id);
-     formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
-     formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
-     formatter->dump_string("owner", bucket_info.owner.c_str());
-     formatter->close_section();
-     formatter->flush(cout);
-     cout << std::endl;
-   }
+  if (opt_cmd == OPT_POOL_RM) {
+    if (pool_name.empty()) {
+      cerr << "need to specify pool to remove!" << std::endl;
+      return usage();
+    }
 
-   if (opt_cmd == OPT_BUCKET_STATS) {
-     if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
-       cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
-       return usage();
-     }
-     formatter->reset();
-     if (user_id.empty()) {
-       bucket_stats(bucket, formatter);
-     } else {
-       RGWUserBuckets buckets;
-       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-	 cerr << "could not get buckets for uid " << user_id << std::endl;
-       } else {
-	 formatter->open_array_section("buckets");
-	 map<string, RGWBucketEnt>& m = buckets.get_buckets();
-	 for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
-	   RGWBucketEnt obj = iter->second;
-	   bucket_stats(obj.bucket, formatter);
-	 }
-	 formatter->close_section();
-       }
-     }
-     formatter->flush(cout);
-     cout << std::endl;
-   }
+    int ret = rgwstore->remove_bucket_placement(pool_name);
+    if (ret < 0)
+      cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
+  }
 
-   if (opt_cmd == OPT_POOL_CREATE) {
- #if 0
-     if (bucket_name.empty())
-       return usage();
-     string no_object;
-     int ret;
-     bufferlist bl;
-     rgw_obj obj(bucket, no_object);
-
-     ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
-     if (ret < 0) {
-       dout(0) << "can't read bucket acls: " << ret << dendl;
-       return ret;
-     }
-     RGWAccessControlPolicy policy;
-     bufferlist::iterator iter = bl.begin();
-     policy.decode(iter);
-
-     RGWBucketInfo info;
-     info.bucket = bucket;
-     info.owner = policy.get_owner().get_id();
-
-    ret = rgw_store_bucket_info_id(bucket.bucket_id, info);
+  if (opt_cmd == OPT_POOLS_LIST) {
+    set<string> pools;
+    int ret = rgwstore->list_placement_set(pools);
     if (ret < 0) {
-      dout(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
+      cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
-#endif
+    formatter->reset();
+    formatter->open_array_section("pools");
+    set<string>::iterator siter;
+    for (siter = pools.begin(); siter != pools.end(); ++siter) {
+      formatter->open_object_section("pool");
+      formatter->dump_string("name",  *siter);
+      formatter->close_section();
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
   }
 
- if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
+  if (opt_cmd == OPT_BUCKET_STATS) {
+    if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
+      cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
+      return usage();
+    }
+    formatter->reset();
+    if (user_id.empty()) {
+      bucket_stats(bucket, formatter);
+    } else {
+      RGWUserBuckets buckets;
+      if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
+	cerr << "could not get buckets for uid " << user_id << std::endl;
+      } else {
+	formatter->open_array_section("buckets");
+	map<string, RGWBucketEnt>& m = buckets.get_buckets();
+	for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
+	  RGWBucketEnt obj = iter->second;
+	  bucket_stats(obj.bucket, formatter);
+	}
+	formatter->close_section();
+      }
+    }
+    formatter->flush(cout);
+    cout << std::endl;
+  }
+
+  if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
     string id;
     __u8 disable = (opt_cmd == OPT_USER_SUSPEND ? 1 : 0);
 

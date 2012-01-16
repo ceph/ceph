@@ -14,26 +14,7 @@ using std::ostream;
 
 class CephContext;
 
-inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
-{
-  char buf[NI_MAXHOST] = { 0 };
-  char serv[20] = { 0 };
-  size_t hostlen;
-
-  if (ss.ss_family == AF_INET)
-    hostlen = sizeof(struct sockaddr_in);
-  else if (ss.ss_family == AF_INET6)
-    hostlen = sizeof(struct sockaddr_in6);
-  else
-    hostlen = sizeof(struct sockaddr_storage);
-  getnameinfo((struct sockaddr *)&ss, hostlen, buf, sizeof(buf),
-	      serv, sizeof(serv),
-	      NI_NUMERICHOST | NI_NUMERICSERV);
-  if (ss.ss_family == AF_INET6)
-    return out << '[' << buf << "]:" << serv;
-  return out //<< ss.ss_family << ":"
-	     << buf << ':' << serv;
-}
+extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
 
 extern int tcp_read(CephContext *cct, int sd, char *buf, int len, int timeout=-1);
 extern int tcp_read_wait(int sd, int timeout);

@@ -789,7 +789,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
     request->readdir_end = end;
     request->readdir_num = numdn;
 
-    map<string,Dentry*>::iterator pd = dir->dentry_map.lower_bound(request->readdir_start);
+    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
 
     frag_t fg = request->readdir_frag;
     Inode *diri = in;
@@ -4140,9 +4140,9 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp)
 
 int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid) 
 {
-  *dirpp = new dir_result_t(in);
   if (!in->is_dir())
     return -ENOTDIR;
+  *dirpp = new dir_result_t(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
   if (in->dir)
     (*dirpp)->release_count = in->dir->release_count;

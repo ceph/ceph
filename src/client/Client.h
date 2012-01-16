@@ -524,7 +524,7 @@ public:
    * and the offset.
    *
    * Returns 0 if it reached the end of the directory.
-   * If @cb returns a negative error code, stop and return that.
+   * If @a cb returns a negative error code, stop and return that.
    */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 

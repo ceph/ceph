@@ -1437,12 +1437,22 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (!session)
     return -EPERM;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0);
   else
-    return prepare_new_pool(m->name, session->caps.auid, m->crush_rule);
+    return prepare_new_pool(m->name, session->caps.auid, m->crush_rule, 0, 0);
 }
 
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
+/**
+ * @param name The name of the new pool
+ * @param auid The auid of the pool owner. Can be -1
+ * @param crush_rule The crush rule to use. If <0, will use the system default
+ * @param pg_num The pg_num to use. If set to 0, will use the system default
+ * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ *
+ * @return 0 in all cases. That's silly.
+ */
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
+                                 unsigned pg_num, unsigned pgp_num)
 {
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
@@ -1465,8 +1475,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
   else
     pending_inc.new_pools[pool].crush_ruleset = g_conf->osd_pool_default_crush_rule;
   pending_inc.new_pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].pg_num = g_conf->osd_pool_default_pg_num;
-  pending_inc.new_pools[pool].pgp_num = g_conf->osd_pool_default_pgp_num;
+  pending_inc.new_pools[pool].pg_num = (pg_num ? pg_num :
+                                        g_conf->osd_pool_default_pg_num);
+  pending_inc.new_pools[pool].pgp_num = (pgp_num ? pgp_num :
+                                         g_conf->osd_pool_default_pgp_num);
   pending_inc.new_pools[pool].lpg_num = 0;
   pending_inc.new_pools[pool].lpgp_num = 0;
   pending_inc.new_pools[pool].last_change = pending_inc.epoch;
@@ -1927,12 +1939,33 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       }
       else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
-        int ret = prepare_new_pool(m->cmd[3], CEPH_AUTH_UID_DEFAULT, -1);
+        int pg_num = 0;
+        int pgp_num = 0;
+        if (m->cmd.size() > 4) { // try to parse out pg_num and pgp_num
+          const char *start = m->cmd[4].c_str();
+          char *end = (char*)start;
+          pg_num = strtol(start, &end, 10);
+          if (*end != '\0') { // failed to parse
+            err = -EINVAL;
+            ss << "usage: osd pool create <poolname> [pg_num [pgp_num]]";
+            goto out;
+          } else if (m->cmd.size() > 5) { // check for pgp_num too
+            start = m->cmd[5].c_str();
+            end = (char *)start;
+            pgp_num = strtol(start, &end, 10);
+            if (*end != '\0') { // failed to parse
+              err = -EINVAL;
+              ss << "usage: osd pool create <poolname> [pg_num [pgp_num]]";
+              goto out;
+            }
+          }
+        }
+        err = prepare_new_pool(m->cmd[3], CEPH_AUTH_UID_DEFAULT,
+                               -1, pg_num, pgp_num);
         // that's the default auid owner (ie, none) and the default crush rule
-        if (ret < 0) {
-          if (ret == -EEXIST)
+        if (err < 0) {
+          if (err == -EEXIST)
             ss << "pool '" << m->cmd[3] << "' exists";
-          err = ret;
           goto out;
         }
 	ss << "pool '" << m->cmd[3] << "' created";

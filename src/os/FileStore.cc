@@ -2418,13 +2418,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
     else if (r == -ENOSPC) {
       // For now, if we hit _any_ ENOSPC, crash, before we do any damage
       // by partially applying transactions.
-
-      // XXX HACK: if it was an setxattr op, silently fail, until we have a better workaround XXX
-      if (op == Transaction::OP_SETATTR || op == Transaction::OP_SETATTRS)
-	dout(0) << "WARNING: ignoring setattr ENOSPC failure, until we implement a workaround for extN"
-		<< " xattr limitations" << dendl;
-      else
-	assert(0 == "ENOSPC handling not implemented");
+      assert(0 == "ENOSPC handling not implemented");
     }
     else if (r == -ENOTEMPTY) {
       assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");

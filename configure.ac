@@ -1,5 +1,6 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
+m4_include(m4/acx_pthread.m4)
 
 # Autoconf
 AC_PREREQ(2.59)
@@ -7,7 +8,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.39], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.40], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 
@@ -68,9 +69,9 @@ AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
 # Checks for libraries.
+ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
-AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not found]))
 if test x"$linux" = x"yes"; then
 	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
 fi
@@ -87,10 +88,20 @@ AS_IF([test "x$with_cryptopp" != "xno"],
     [PKG_CHECK_MODULES([CRYPTOPP],
 	    [libcrypto++],
 	    [have_cryptopp=yes],
-	    [AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp],
-		    [have_cryptopp=yes],
-		    [true],
-		    [-lpthread])])])
+	    [
+		   AC_LANG_PUSH([C++])
+		   SAVED_CXXFLAGS="${CXXFLAGS}"
+		   SAVED_LIBS="${LIBS}"
+		   LIBS="${LIBS} ${PTHREAD_LIBS}"
+		   CXXFLAGS="${CXXFLAGS} ${PTHREAD_CFLAGS}"
+		   AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp],
+			  [have_cryptopp=yes],
+			  [true], [])
+		   CRYPTOPP_LIBS="${ac_cv_search__ZTIN8CryptoPP14CBC_EncryptionE}"
+		   LIBS="${SAVED_LIBS}"
+		   CXXFLAGS="${SAVED_CXXFLAGS}"
+		   AC_LANG_POP([C++])
+	   ])])
 # bail out if given explicit --with-cryptopp
 if test "x$have_cryptopp" = "xno" -a "x$with_cryptopp" != "xcheck" -a "x$with_cryptopp" != "xno"; then
     AC_MSG_FAILURE([--with-cryptopp was given, but library was not found])

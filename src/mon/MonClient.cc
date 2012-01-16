@@ -120,9 +120,7 @@ int MonClient::build_initial_monmap(CephContext *cct, MonMap &monmap)
       return 0;
     } else { //maybe they passed us a DNS-resolvable name
       char *hosts = NULL;
-      char *old_addrs = new char[conf->mon_host.size() + 1];
-      hosts = resolve_addrs(old_addrs);
-      delete [] old_addrs;
+      hosts = resolve_addrs(conf->mon_host.c_str());
       if (!hosts)
         return -EINVAL;
       bool success = parse_ip_port_vec(hosts, addrs);

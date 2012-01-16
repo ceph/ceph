@@ -80,7 +80,7 @@ using ceph::crypto::MD5;
      char __buf[l]; \
      n = snprintf(__buf, sizeof(__buf), format, __VA_ARGS__); \
      if (n != l) \
-       dout(0) << "--> " << __buf << dendl; \
+       dout(10) << "--> " << __buf << dendl; \
        break; \
      l *= 2; \
    } \

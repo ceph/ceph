@@ -263,7 +263,6 @@ protected:
   const char *supplied_etag;
   string etag;
   bool chunked_upload;
-  RGWPutObjProcessor *processor;
 
 public:
   RGWPutObj() {}
@@ -276,8 +275,11 @@ public:
     supplied_etag = NULL;
     etag = "";
     chunked_upload = false;
-    processor = NULL;
   }
+
+  RGWPutObjProcessor *select_processor();
+  void dispose_processor(RGWPutObjProcessor *processor);
+
   int verify_permission();
   void execute();
 
