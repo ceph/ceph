@@ -34,6 +34,10 @@
 using std::vector;
 using std::string;
 
+namespace ceph {
+  class Formatter;
+}
+
 /*
  * low-level interface to the local OSD file system
  */
@@ -525,6 +529,7 @@ public:
     }
 
     void dump(ostream& out);
+    void dump(ceph::Formatter *f);
   };
 
   struct C_DeleteTransaction : public Context {
