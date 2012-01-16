@@ -3,7 +3,7 @@
 job=$1
 test -e $1
 
-bin/teuthology-nuke $job
+bin/teuthology-nuke -t $job
 
 title() {
 	echo '\[\033]0;hammer '$job' '$N' passes\007\]'
