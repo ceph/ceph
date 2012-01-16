@@ -4119,6 +4119,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     // restart backfill
     pg->info = msg->info;
     pg->log.claim_log(msg->log);
+    pg->missing.clear();
   } else {
     pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
 		  msg->info, msg->log, logevt.from);
