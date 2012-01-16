@@ -97,13 +97,11 @@ class Thrasher(gevent.Greenlet):
             actions.append((self.revive_osd, 1.0,))
 
         total = sum([y for (x,y) in actions])
-        rev_cum = reduce(lambda l,(y1,y2): l+[(y1, (l[-1][1]+y2)/total)], actions, [(0, 0)])[1:]
-        rev_cum.reverse()
-        final_rev_cum = [(x, y-rev_cum[-1][1]) for (x,y) in rev_cum]
-        val = random.uniform(0, 1)
-        for (action, prob) in final_rev_cum:
-            if (prob < val):
+        val = random.uniform(0, total)
+        for (action, prob) in actions:
+            if val < prob:
                 return action
+            val -= prob
         return None
 
     def do_thrash(self):
