@@ -622,6 +622,11 @@ void watch_info_t::decode(bufferlist::iterator& bl)
   ::decode(timeout_seconds, bl);
 }
 
+void watch_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("cookie", cookie);
+  f->dump_unsigned("timeout_seconds", timeout_seconds);
+}
 
 // -- object_info_t --
 
@@ -718,6 +723,36 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(user_version, bl);
   }
 }
+
+void object_info_t::dump(Formatter *f) const
+{
+  f->dump_stream("oid") << soid;
+  f->dump_stream("locator") << oloc;
+  f->dump_string("category", category);
+  f->dump_stream("version") << version;
+  f->dump_stream("prior_version") << prior_version;
+  f->dump_stream("last_reqid") << last_reqid;
+  f->dump_unsigned("size", size);
+  f->dump_stream("mtime") << mtime;
+  f->dump_unsigned("lost", lost);
+  f->dump_stream("wrlock_by") << wrlock_by;
+  f->open_array_section("snaps");
+  for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
+    f->dump_unsigned("snap", *p);
+  f->close_section();
+  f->dump_unsigned("truncate_seq", truncate_seq);
+  f->dump_unsigned("truncate_size", truncate_size);
+  f->open_object_section("watchers");
+  for (map<entity_name_t,watch_info_t>::const_iterator p = watchers.begin(); p != watchers.end(); ++p) {
+    stringstream ss;
+    ss << p->first;
+    f->open_object_section(ss.str().c_str());
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
 
 ostream& operator<<(ostream& out, const object_info_t& oi)
 {

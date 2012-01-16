@@ -1196,6 +1196,7 @@ struct watch_info_t {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(watch_info_t)
 
@@ -1251,6 +1252,12 @@ struct object_info_t {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
+  void dump(Formatter *f) const;
+
+  explicit object_info_t()
+    : size(0), lost(false),
+      truncate_seq(0), truncate_size(0)
+  {}
 
   object_info_t(const hobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
