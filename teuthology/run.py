@@ -69,6 +69,7 @@ def main():
     from gevent import monkey; monkey.patch_all()
     from .orchestra import monkey; monkey.patch_all()
 
+    import time
     import logging
 
     log = logging.getLogger(__name__)
@@ -144,10 +145,16 @@ def main():
 
     ctx.config['tasks'][:0] = init_tasks
 
+    start_time = time.time()
+
     from teuthology.run_tasks import run_tasks
     try:
         run_tasks(tasks=ctx.config['tasks'], ctx=ctx)
     finally:
+        end_time = time.time()
+        duration = end_time - start_time
+        ctx.summary['duration'] = duration
+        log.info("Duration was %f seconds" % duration)
         if not ctx.summary.get('success') and ctx.config.get('nuke-on-error'):
             from teuthology.parallel import parallel
             with parallel() as p:
