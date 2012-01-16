@@ -1,6 +1,6 @@
 #!/bin/sh
 
-rados -p data load-gen \
+rados -p rbd load-gen \
     --num-objects 10240 \
     --min-object-size 1048576 \
     --max-object-size 25600000 \
