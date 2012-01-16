@@ -5,6 +5,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/Formatter.h"
+
+void entity_name_t::dump(Formatter *f) const
+{
+  f->dump_string("type", type_str());
+  f->dump_unsigned("num", num());
+}
+
+
+void entity_addr_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("nonce", nonce);
+  f->dump_stream("addr") << addr;
+}
+
+
 bool entity_addr_t::parse(const char *s, const char **end)
 {
   memset(this, 0, sizeof(*this));

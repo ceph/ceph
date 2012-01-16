@@ -20,9 +20,11 @@
 #include "tcp.h"
 #include "include/encoding.h"
 
+namespace ceph {
+  class Formatter;
+}
 
 extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
-
 
 class entity_name_t {
 public:
@@ -105,6 +107,7 @@ public:
     ::decode(_type, bl);
     ::decode(_num, bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(entity_name_t)
 
@@ -317,6 +320,9 @@ struct entity_addr_t {
     ::decode(nonce, bl);
     ::decode(addr, bl);
   }
+
+  void dump(Formatter *f) const;
+
 };
 WRITE_CLASS_ENCODER(entity_addr_t)
 
