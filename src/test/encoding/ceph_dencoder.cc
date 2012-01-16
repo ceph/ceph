@@ -17,13 +17,14 @@ void usage()
   cerr << "  decode        decode into in-core object\n";
   cerr << "  encode        encode in-core object\n";
   cerr << "  -o outfile    write encoded data to outfile\n";
+  cerr << "  -f features   set feature bits used for encoding\n";
   cerr << "  dump_json     dump in-core object as json\n";
 }
 
 struct Dencoder {
   virtual ~Dencoder() {}
   virtual string decode(bufferlist bl) = 0;
-  virtual void encode(bufferlist& out) = 0;
+  virtual void encode(bufferlist& out, uint64_t features) = 0;
   virtual void dump(Formatter *f) = 0;
   //virtual void print(ostream& out) = 0;
 };
@@ -48,9 +49,9 @@ public:
     return string();
   }
 
-  void encode(bufferlist& out) {
+  void encode(bufferlist& out, uint64_t features) {
     out.clear();
-    ::encode(m_object, out, -1);  // FIXME use real feature bits
+    ::encode(m_object, out, features);
   }
 
   void dump(Formatter *f) {
@@ -94,6 +95,10 @@ int main(int argc, const char **argv)
       cout << p->first << std::endl;
     exit(0);
   } 
+  if (cname == string("--get-features")) {
+    cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
+    exit(0);
+  } 
 
   if (!dencoders.count(cname)) {
     cerr << "class '" << cname << "' unknown" << std::endl;
@@ -101,11 +106,12 @@ int main(int argc, const char **argv)
   }
   Dencoder *den = dencoders[cname];
 
+  uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   bufferlist encbl;
   for (i++; i != args.end(); ++i) {
     string err;
     if (*i == string("encode")) {
-      den->encode(encbl);
+      den->encode(encbl, features);
     } else if (*i == string("decode")) {
       err = den->decode(encbl);
     } else if (*i == string("dump_json")) {
@@ -117,6 +123,13 @@ int main(int argc, const char **argv)
       cout << std::endl;
       //} else if (*i == string("print")) {
       //den->print(cout);
+    } else if (*i == string("-f")) {
+      i++;
+      if (i == args.end()) {
+	usage();
+	exit(1);
+      }
+      features = atoi(*i);
     } else if (*i == string("-i")) {
       i++;
       if (i == args.end()) {
