@@ -4397,7 +4397,7 @@ void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectCon
   delete t;
 }
 
-void ReplicatedPG::recover_primary_got(hobject_t oid, eversion_t v)
+void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
 {
   if (missing.is_missing(oid, v)) {
     dout(10) << "got missing " << oid << " v " << v << dendl;
@@ -4656,7 +4656,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       }
     }
 
-    recover_primary_got(soid, v);
+    recover_got(soid, v);
 
     // update pg
     write_info(*t);
@@ -5294,7 +5294,7 @@ int ReplicatedPG::recover_primary(int max)
 	      obc->obs.oi.encode(b2);
 	      t->setattr(coll, soid, OI_ATTR, b2);
 
-	      recover_primary_got(soid, latest->version);
+	      recover_got(soid, latest->version);
 
 	      osd->store->queue_transaction(&osr, t,
 					    new C_OSD_AppliedPushedObject(this, t, obc),

@@ -747,7 +747,7 @@ protected:
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
   void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
-  void recover_primary_got(hobject_t oid, eversion_t v);
+  void recover_got(hobject_t oid, eversion_t v);
   void sub_op_push(MOSDSubOp *op);
   void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
