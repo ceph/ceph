@@ -1784,7 +1784,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   ObjectReadOperation op;
   op.getxattrs(&attrset, NULL);
-  op.stat(&size, NULL);
+  op.stat(&size, &mtime, NULL);
   if (first_chunk) {
     op.read(0, RGW_MAX_CHUNK_SIZE, first_chunk, NULL);
   }

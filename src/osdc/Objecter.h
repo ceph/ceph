@@ -176,7 +176,8 @@ struct ObjectOperation {
     bufferlist bl;
     uint64_t *psize;
     utime_t *pmtime;
-    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm) : psize(ps), pmtime(pm) {}
+    time_t *ptime;
+    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt) : psize(ps), pmtime(pm), ptime(pt) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -189,6 +190,8 @@ struct ObjectOperation {
 	    *psize = size;
 	  if (pmtime)
 	    *pmtime = mtime;
+	  if (ptime)
+	    *ptime = mtime.sec();
 	}
 	catch (buffer::error& e) {
 	  r = -EIO;
@@ -198,7 +201,14 @@ struct ObjectOperation {
   };
   void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
+  void stat(uint64_t *psize, time_t *ptime, int *prval) {
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;

@@ -189,10 +189,10 @@ void librados::ObjectOperation::exec(const char *cls, const char *method, buffer
   o->call(cls, method, inbl);
 }
 
-void librados::ObjectReadOperation::stat(uint64_t *psize, int *prval)
+void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->stat(psize, NULL, prval);
+  o->stat(psize, pmtime, prval);
 }
 
 void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)
