@@ -323,6 +323,7 @@ public:
   }
 
   Mutex lock;
+  Cond cond;
 
   LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
     read_percent = 80;
@@ -360,6 +361,8 @@ public:
       op->completion->release();
 
     delete op;
+
+    cond.Signal();
   }
 };
 
@@ -508,8 +511,10 @@ int LoadGen::run()
   uint32_t total_sec = 0;
 
   while (1) {
-    usleep(1000);
-
+    lock.Lock();
+    utime_t one_second(1, 0);
+    cond.WaitInterval(g_ceph_context, lock, one_second);
+    lock.Unlock();
     utime_t now = ceph_clock_now(g_ceph_context);
 
     if (now > end_time)
