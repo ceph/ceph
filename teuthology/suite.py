@@ -168,22 +168,26 @@ def ls():
                     summary.update(new)
         except IOError, e:
             if e.errno == errno.ENOENT:
-                print "%s      (no summary.yaml)" % j,
+                print '%s      ',
 
                 # pid
                 try:
                     pidfile = '%s/%s/pid' % (args.archive_dir, j)
+                    found = False
                     if os.path.isfile(pidfile):
                         pid = open(pidfile, 'r').read()
                         if os.path.isdir("/proc/%s" % pid):
                             cmdline = open('/proc/%s/cmdline' % pid, 'r').read()
                             if cmdline.find(args.archive_dir) >= 0:
-                                print ' (pid %s)' % pid,
+                                print '(pid %s)' % pid,
+                                found = True
+                    if not found:
+                        '(no process or summary.yaml)' % j,
                     # tail
                     tail = os.popen(
                         'tail -1 %s/%s/teuthology.log' % (args.archive_dir, j)
                         ).read().rstrip()
-                    print " (tail '%s')" % tail,
+                    print tail,
                 except IOError, e:
                     continue
                 print ''
@@ -191,11 +195,12 @@ def ls():
             else:
                 raise
 
-        print "{job} {success} {owner} {desc}".format(
+        print "{job} {success} {owner} {desc} {duration}s".format(
             job=j,
             owner=summary.get('owner', '-'),
             desc=summary.get('description', '-'),
             success='pass' if summary['success'] else 'FAIL',
+            duration=int(summary.get('duration', 0))
             )
         if args.verbose and 'failure_reason' in summary:
             print '    {reason}'.format(reason=summary['failure_reason'])
