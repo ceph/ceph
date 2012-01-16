@@ -82,17 +82,19 @@ class Thrasher(gevent.Greenlet):
         minin = self.config.get("min_in", 2)
         minout = self.config.get("min_out", 0)
         minlive = self.config.get("min_live", 2)
-        mindead = self.config.get("min_dead", 1)
+        mindead = self.config.get("min_dead", 0)
 
+        self.log('choose_action: min_in %d min_out %d min_live %d min_dead %d' %
+                 (minin,minout,minlive,mindead))
         actions = []
         if len(self.in_osds) > minin:
             actions.append((self.out_osd, 1.0,))
-            if len(self.live_osds) > minlive and chance_down > 0:
-                actions.append((self.kill_osd, chance_down))
+        if len(self.live_osds) > minlive and chance_down > 0:
+            actions.append((self.kill_osd, chance_down,))
         if len(self.out_osds) > minout:
             actions.append((self.in_osd, 1.0,))
-            if len(self.dead_osds) > mindead:
-                actions.append((self.revive_osd, 1.0))
+        if len(self.dead_osds) > mindead:
+            actions.append((self.revive_osd, 1.0,))
 
         total = sum([y for (x,y) in actions])
         rev_cum = reduce(lambda l,(y1,y2): l+[(y1, (l[-1][1]+y2)/total)], actions, [(0, 0)])[1:]
