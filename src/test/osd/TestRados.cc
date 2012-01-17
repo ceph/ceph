@@ -61,6 +61,7 @@ public:
 	   it != m_weight_sums.end();
 	   ++it) {
 	if (rand_val < it->second) {
+	  cout << m_op << ": ";
 	  retval = gen_op(context, it->first);
 	  break;
 	}
