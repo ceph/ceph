@@ -22,10 +22,12 @@ public:
   WeightedTestGenerator(int ops,
 			int objects,
 			map<TestOpType, unsigned int> op_weights,
-			TestOpStat *stats) :
-    m_nextop(NULL), m_op(0), m_ops(ops), m_objects(objects), m_stats(stats),
+			TestOpStat *stats,
+			int max_seconds) :
+    m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds), m_objects(objects), m_stats(stats),
     m_total_weight(0)
   {
+    m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
 	 it != op_weights.end();
 	 ++it) {
@@ -43,7 +45,7 @@ public:
     if (m_op <= m_objects) {
       stringstream oid;
       oid << m_op;
-      cout << "Writing initial " << oid.str() << std::endl;
+      cout << m_op << ": Writing initial " << oid.str() << std::endl;
       return new WriteOp(&context, oid.str());
     } else if (m_op >= m_ops) {
       return NULL;
@@ -57,6 +59,11 @@ public:
 
     while (retval == NULL) {
       unsigned int rand_val = rand() % m_total_weight;
+
+      time_t now = time(0);
+      if (m_seconds && now - m_start > m_seconds)
+	break;
+
       for (map<TestOpType, unsigned int>::const_iterator it = m_weight_sums.begin();
 	   it != m_weight_sums.end();
 	   ++it) {
@@ -126,7 +133,9 @@ private:
   TestOp *m_nextop;
   int m_op;
   int m_ops;
+  int m_seconds;
   int m_objects;
+  time_t m_start;
   TestOpStat *m_stats;
   map<TestOpType, unsigned int> m_weight_sums;
   unsigned int m_total_weight;
@@ -139,53 +148,62 @@ int main(int argc, char **argv)
   int max_in_flight = 16;
   uint64_t size = 4000000; // 4 MB
   uint64_t min_stride_size, max_stride_size;
+  int max_seconds = 0;
 
-  const int NUM_OP_TYPES = 6;
-  TestOpType op_types[NUM_OP_TYPES] = {
-    TEST_OP_READ, TEST_OP_WRITE, TEST_OP_DELETE,
-    TEST_OP_SNAP_CREATE, TEST_OP_SNAP_REMOVE, TEST_OP_ROLLBACK
+  struct {
+    TestOpType op;
+    const char *name;
+  } op_types[] = {
+    { TEST_OP_READ, "read" },
+    { TEST_OP_WRITE, "write" },
+    { TEST_OP_DELETE, "delete" },
+    { TEST_OP_SNAP_CREATE, "snap_create" },
+    { TEST_OP_SNAP_REMOVE, "snap_remove" },
+    { TEST_OP_ROLLBACK, "rollback" },
+    { TEST_OP_READ /* grr */, NULL },
   };
 
   map<TestOpType, unsigned int> op_weights;
 
-  for (int i = 0; i < NUM_OP_TYPES; ++i) {
-    if (argc > i + 1) {
-      int weight = atoi(argv[i + 1]);
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--max-ops") == 0)
+      ops = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--max-seconds") == 0)
+      max_seconds = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--objects") == 0)
+      objects = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--max-in-flight") == 0)
+      max_in_flight = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--size") == 0)
+      size = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--min-stride-size") == 0)
+      min_stride_size = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--max-stride-size") == 0)
+      max_stride_size = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--op") == 0) {
+      i++;
+      int j;
+      for (j = 0; op_types[j].name; ++j) {
+	if (strcmp(op_types[j].name, argv[i]) == 0) {
+	  break;
+	}
+      }
+      if (!op_types[j].name) {
+	cerr << "unknown op " << argv[i] << std::endl;
+	exit(1);
+      }
+      int weight = atoi(argv[++i]);
       if (weight < 0) {
 	cerr << "Weights must be nonnegative." << std::endl;
 	return 1;
       }
-      cout << "adding op weight " << op_types[i] << " -> " << weight << std::endl;
-      op_weights.insert(pair<TestOpType, unsigned int>(op_types[i], weight));
+      cout << "adding op weight " << op_types[j].name << " -> " << weight << std::endl;
+      op_weights.insert(pair<TestOpType, unsigned int>(op_types[j].op, weight));
+    } else {
+      cerr << "unknown arg " << argv[i] << std::endl;
+      //usage();
+      exit(1);
     }
-  }
-
-  if (argc > 1 + NUM_OP_TYPES) {
-    ops = atoi(argv[1 + NUM_OP_TYPES]);
-  }
-
-  if (argc > 2 + NUM_OP_TYPES) {
-    objects = atoi(argv[2 + NUM_OP_TYPES]);
-  }
-
-  if (argc > 3 + NUM_OP_TYPES) {
-    max_in_flight = atoi(argv[3 + NUM_OP_TYPES]);
-  }
-
-  if (argc > 4 + NUM_OP_TYPES) {
-    size = atoi(argv[4 + NUM_OP_TYPES]);
-  }
-
-  if (argc > 5 + NUM_OP_TYPES) {
-    min_stride_size = atoi(argv[5 + NUM_OP_TYPES]);
-  } else {
-    min_stride_size = size / 10;
-  }
-
-  if (argc > 6 + NUM_OP_TYPES) {
-    max_stride_size = atoi(argv[6 + NUM_OP_TYPES]);
-  } else {
-    max_stride_size = size / 5;
   }
 
   cout << "Configuration:" << std::endl
@@ -221,7 +239,7 @@ int main(int argc, char **argv)
 
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(ops, objects,
-						    op_weights, &stats);
+						    op_weights, &stats, max_seconds);
   context.loop(&gen);
 
   context.shutdown();
