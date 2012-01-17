@@ -187,11 +187,14 @@ def wait_for_reboot(ctx, need_install, timeout):
         teuthology.reconnect(ctx, timeout)
         for client in need_install.keys():
             log.info('Checking client {client} for new kernel version...'.format(client=client))
-            if need_to_install(ctx, client, need_install[client]):
-                assert time.time() - starttime < timeout, \
-                    'failed to install new kernel version within timeout'
-            else:
+            try:
+                assert not need_to_install(ctx, client, need_install[client]), \
+                        'failed to install new kernel version within timeout'
                 del need_install[client]
+            except:
+                # ignore connection resets and asserts while time is left
+                if time.time() - starttime > timeout:
+                    raise
         time.sleep(1)
 
 def task(ctx, config):
