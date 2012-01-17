@@ -71,8 +71,11 @@ struct RGWRequest
   struct req_state *s;
   string req_str;
   RGWOp *op;
+  utime_t ts;
 
-  RGWRequest() : id(0), s(NULL), op(NULL) {}
+  RGWRequest() : id(0), s(NULL), op(NULL) {
+    ts = ceph_clock_now(g_ceph_context);
+  }
 
   ~RGWRequest() {
     delete s;
@@ -97,6 +100,10 @@ struct RGWRequest
     log(s, buf);
   }
 
+  uint64_t timestamp() {
+    utime_t t = ceph_clock_now(g_ceph_context) - ts;
+    return t.sec() * (1000000LL) + t.usec();
+  }
 
   void log(struct req_state *s, const char *msg) {
     if (s->method && req_str.size() == 0) {
@@ -108,7 +115,8 @@ struct RGWRequest
       }
       req_str.append(s->request_uri);
     }
-    dout(1) << "r" << id << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;
+    utime_t t = ceph_clock_now(g_ceph_context) - ts;
+    dout(1) << "req " << id << ":" << t << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;
   }
 };
 
