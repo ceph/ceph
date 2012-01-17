@@ -837,7 +837,7 @@ int FileStore::mkfs()
   dout(1) << "mkfs in " << basedir << dendl;
 
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(buf, O_CREAT|O_WRONLY, 0644);
+  fsid_fd = ::open(buf, O_CREAT|O_WRONLY|O_TRUNC, 0644);
 
   if (fsid_fd < 0) {
     ret = -errno;
