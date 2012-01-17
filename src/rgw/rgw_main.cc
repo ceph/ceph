@@ -74,7 +74,6 @@ struct RGWRequest
   utime_t ts;
 
   RGWRequest() : id(0), s(NULL), op(NULL) {
-    ts = ceph_clock_now(g_ceph_context);
   }
 
   ~RGWRequest() {
@@ -91,7 +90,6 @@ struct RGWRequest
 #define LARGE_SIZE 1024
     char buf[LARGE_SIZE];
     va_list ap;
-    const char *format;
 
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -100,9 +98,8 @@ struct RGWRequest
     log(s, buf);
   }
 
-  uint64_t timestamp() {
-    utime_t t = ceph_clock_now(g_ceph_context) - ts;
-    return t.sec() * (1000000LL) + t.usec();
+  void log_init() {
+    ts = ceph_clock_now(g_ceph_context);
   }
 
   void log(struct req_state *s, const char *msg) {
@@ -230,6 +227,8 @@ void RGWProcess::handle_request(RGWRequest *req)
   RGWRESTMgr rest;
   int ret;
   RGWEnv rgw_env;
+
+  req->log_init();
 
   dout(0) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
