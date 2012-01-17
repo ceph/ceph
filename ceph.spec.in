@@ -255,10 +255,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
-# remove *.pyc where *.pyo exists
-rm $RPM_BUILD_ROOT/%{python_sitelib}/rados.pyc
-rm $RPM_BUILD_ROOT/%{python_sitelib}/rbd.pyc
-rm $RPM_BUILD_ROOT/%{python_sitelib}/rgw.pyc
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -351,12 +347,6 @@ fi
 %ghost %dir %{_localstatedir}/run/ceph/
 %dir %{_sysconfdir}/ceph/
 /usr/sbin/rcceph
-# not sure why I need to list those for CentOS although they're removed in install
-%if 0%{defined centos_version}
-%{python_sitelib}/rados.pyc
-%{python_sitelib}/rbd.pyc
-%{python_sitelib}/rgw.pyc
-%endif
 %{_libdir}/rados-classes/libcls_rbd.so.*
 %{_libdir}/rados-classes/libcls_rgw.so.*
 
@@ -483,11 +473,8 @@ fi
 #################################################################################
 %files -n python-ceph
 %defattr(-,root,root,-)
-%{python_sitelib}/rados.py
-%{python_sitelib}/rados.pyo
-%{python_sitelib}/rbd.py
-%{python_sitelib}/rbd.pyo
-%{python_sitelib}/rgw.py
-%{python_sitelib}/rgw.pyo
+%{python_sitelib}/rados.py*
+%{python_sitelib}/rbd.py*
+%{python_sitelib}/rgw.py*
 
 %changelog
