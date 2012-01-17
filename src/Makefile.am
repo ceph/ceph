@@ -375,6 +375,12 @@ testkeys_LDADD = libmon.la $(LIBGLOBAL_LDA)
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testkeys
 
+if WITH_TCMALLOC
+testkeys_LDADD += -ltcmalloc
+testkeys_CXXFLAGS += ${tcmalloc_safety_flags}
+testkeys_SOURCES += perfglue/heap_profiler.cc
+endif
+
 
 ## rados object classes
 
