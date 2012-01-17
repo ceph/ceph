@@ -278,7 +278,7 @@ int main(int argc, const char **argv)
   r = client_messenger->bind(g_conf->public_addr, getpid());
   if (r < 0)
     exit(1);
-  cluster_messenger->bind(g_conf->cluster_addr, getpid());
+  r = cluster_messenger->bind(g_conf->cluster_addr, getpid());
   if (r < 0)
     exit(1);
 
@@ -286,7 +286,7 @@ int main(int argc, const char **argv)
   entity_addr_t hb_addr = g_conf->cluster_addr;
   if (!hb_addr.is_blank_ip())
     hb_addr.set_port(0);
-  messenger_hbout->bind(hb_addr, getpid());
+  r = messenger_hbout->bind(hb_addr, getpid());
   if (r < 0)
     exit(1);
 
