@@ -38,6 +38,7 @@ struct MClientLease : public Message {
     h.ino = i;
     h.first = sf;
     h.last = sl;
+    h.duration_ms = 0;
   }
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, const string& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
@@ -48,6 +49,7 @@ struct MClientLease : public Message {
     h.ino = i;
     h.first = sf;
     h.last = sl;
+    h.duration_ms = 0;
   }
 private:
   ~MClientLease() {}
