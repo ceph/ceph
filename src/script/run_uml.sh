@@ -36,15 +36,6 @@ CEPH_TOP="${CEPH_TOP:-/home/elder/ceph}"
 # on this plus GUEST_ID (defined below).
 GUEST_IP_OFFSET="${GUEST_IP_OFFSET:-100}"
 
-# This will be what the guest host calls itself.
-GUEST_HOSTNAME="uml-${GUEST_ID}"
-
-# This is the path to the boot disk image used by UML.
-DISK_IMAGE_A="${CEPH_TOP}/ceph-client/uml.${GUEST_ID}"
-
-# Hostid 1 uses tun/tap device tap1, hostid 2 uses tap2, etc.
-TAP_ID="${GUEST_ID}"
-
 #############################
 
 if [ $# -gt 1 ]; then
@@ -61,16 +52,23 @@ else
 	GUEST_ID=1
 fi
 
+# This will be what the guest host calls itself.
+GUEST_HOSTNAME="uml-${GUEST_ID}"
+
+# This is the path to the boot disk image used by UML.
+DISK_IMAGE_A="${CEPH_TOP}/ceph-client/uml.${GUEST_ID}"
 if [ ! -f "${DISK_IMAGE_A}" ]; then
 	echo "root disk image not found (or not a file)" >&2
 	exit 2
 fi
 
-# This is just used to mount an image temporarily
-TMP_MNT="/tmp/m$$"
-
+# Hostid 1 uses tun/tap device tap1, hostid 2 uses tap2, etc.
+TAP_ID="${GUEST_ID}"
 # This is the tap device used for this UML instance
 TAP="tap${TAP_ID}"
+
+# This is just used to mount an image temporarily
+TMP_MNT="/tmp/m$$"
 
 # Where to put a config file generated for this tap device
 TAP_IFUPDOWN_CONFIG="/tmp/interface-${TAP}"
