@@ -477,7 +477,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
 
       if (r < 0)
 	return r;
-      if (!next_recurse.max) {
+      if (!next_recurse.is_max()) {
 	if (next)
 	  *next = next_recurse;
 	return 0;

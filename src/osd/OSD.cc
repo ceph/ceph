@@ -68,6 +68,8 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGMissing.h"
 
 #include "messages/MOSDAlive.h"
@@ -549,7 +551,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   pg_stat_tid(0), pg_stat_tid_flushed(0),
   last_tid(0),
   tid_lock("OSD::tid_lock"),
-  backlog_wq(this, g_conf->osd_backlog_thread_timeout, &disk_tp),
   command_wq(this, g_conf->osd_command_thread_timeout, &command_tp),
   recovery_ops_active(0),
   recovery_wq(this, g_conf->osd_recovery_thread_timeout, &recovery_tp),
@@ -2871,6 +2872,12 @@ void OSD::_dispatch(Message *m)
       case MSG_OSD_PG_MISSING:
 	handle_pg_missing((MOSDPGMissing*)m);
 	break;
+      case MSG_OSD_PG_SCAN:
+	handle_pg_scan((MOSDPGScan*)m);
+	break;
+      case MSG_OSD_PG_BACKFILL:
+	handle_pg_backfill((MOSDPGBackfill*)m);
+	break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -3180,6 +3187,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   osd_lock.Unlock();
 
   op_tp.pause();
+  disk_tp.pause();
 
   // requeue under osd_lock to preserve ordering of _dispatch() wrt incoming messages
   osd_lock.Lock();  
@@ -3203,7 +3211,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   op_wq.unlock();
 
   recovery_tp.pause();
-  disk_tp.pause_new();   // _process() may be waiting for a replica message
 
   ObjectStore::Transaction t;
 
@@ -4114,13 +4121,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     if (!child->log.empty()) {
       child->log.head = child->log.log.rbegin()->version;
       child->log.tail =  parent->log.tail;
-      child->log.backlog = parent->log.backlog;
       child->log.index();
     }
     child->info.last_update = child->log.head;
     child->info.last_complete = parent->info.last_complete;
     child->info.log_tail =  parent->log.tail;
-    child->info.log_backlog = parent->log.backlog;
     child->info.history.last_epoch_split = osdmap->get_epoch();
 
     child->snap_trimq = parent->snap_trimq;
@@ -4506,6 +4511,84 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
   m->put();
 }
 
+void OSD::handle_pg_scan(MOSDPGScan *m)
+{
+  dout(10) << "handle_pg_scan " << *m << " from " << m->get_source() << dendl;
+  
+  if (!require_osd_peer(m))
+    return;
+  if (!require_same_or_newer_map(m, m->query_epoch))
+    return;
+
+  PG *pg;
+  
+  if (!_have_pg(m->pgid)) {
+    m->put();
+    return;
+  }
+
+  pg = _lookup_lock_pg(m->pgid);
+  assert(pg);
+
+  pg->get();
+  enqueue_op(pg, m);
+  pg->unlock();
+  pg->put();
+}
+
+bool OSD::scan_is_queueable(PG *pg, MOSDPGScan *m)
+{
+  assert(pg->is_locked());
+
+  if (m->query_epoch < pg->info.history.same_interval_since) {
+    dout(10) << *pg << " got old scan, ignoring" << dendl;
+    m->put();
+    return false;
+  }
+
+  return true;
+}
+
+void OSD::handle_pg_backfill(MOSDPGBackfill *m)
+{
+  dout(10) << "handle_pg_backfill " << *m << " from " << m->get_source() << dendl;
+  
+  if (!require_osd_peer(m))
+    return;
+  if (!require_same_or_newer_map(m, m->query_epoch))
+    return;
+
+  PG *pg;
+  
+  if (!_have_pg(m->pgid)) {
+    m->put();
+    return;
+  }
+
+  pg = _lookup_lock_pg(m->pgid);
+  assert(pg);
+
+  pg->get();
+  enqueue_op(pg, m);
+  pg->unlock();
+  pg->put();
+}
+
+bool OSD::backfill_is_queueable(PG *pg, MOSDPGBackfill *m)
+{
+  assert(pg->is_locked());
+
+  if (m->query_epoch < pg->info.history.same_interval_since) {
+    dout(10) << *pg << " got old backfill, ignoring" << dendl;
+    m->put();
+    return false;
+  }
+
+  return true;
+}
+
+
+
 void OSD::handle_pg_missing(MOSDPGMissing *m)
 {
   assert(0); // MOSDPGMissing is fantastical
@@ -4576,7 +4659,6 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << " pg " << pgid << " dne" << dendl;
       PG::Info empty(pgid);
       if (it->second.type == PG::Query::LOG ||
-	  it->second.type == PG::Query::BACKLOG ||
 	  it->second.type == PG::Query::FULLLOG) {
 	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
 					m->get_epoch());
@@ -4825,101 +4907,6 @@ void OSD::_remove_pg(PG *pg)
 
 // =========================================================
 // RECOVERY
-
-
-/*
-
-  there are a few places we need to build a backlog.
-
-  on a primary:
-    - during peering 
-      - if osd with newest update has log.bottom > our log.top
-      - if other peers have log.tops below our log.bottom
-        (most common case is they are a fresh osd with no pg info at all)
-
-  on a replica or stray:
-    - when queried by the primary (handle_pg_query)
-
-  on a replica:
-    - when activated by the primary (handle_pg_log -> merge_log)
-    
-*/
-	
-void OSD::queue_generate_backlog(PG *pg)
-{
-  if (pg->generate_backlog_epoch) {
-    dout(10) << *pg << " queue_generate_backlog - already queued epoch " 
-	     << pg->generate_backlog_epoch << dendl;
-  } else {
-    pg->generate_backlog_epoch = osdmap->get_epoch();
-    dout(10) << *pg << " queue_generate_backlog epoch " << pg->generate_backlog_epoch << dendl;
-    backlog_wq.queue(pg);
-  }
-}
-
-void OSD::cancel_generate_backlog(PG *pg)
-{
-  dout(10) << *pg << " cancel_generate_backlog" << dendl;
-  pg->generate_backlog_epoch = 0;
-  backlog_wq.dequeue(pg);
-}
-
-void OSD::generate_backlog(PG *pg)
-{
-  map<eversion_t,PG::Log::Entry> omap;
-  pg->lock();
-  dout(10) << *pg << " generate_backlog" << dendl;
-
-  int tr;
-
-  if (!pg->generate_backlog_epoch) {
-    dout(10) << *pg << " generate_backlog was canceled" << dendl;
-    goto out;
-  }
-
-  if (!pg->build_backlog_map(omap))
-    goto out;
-
-  {
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    pg->assemble_backlog(omap);
-    pg->write_info(*t);
-    pg->write_log(*t);
-    tr = store->queue_transaction(&pg->osr, t,
-				  new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(!tr);
-  }
-  
-  // take osd_lock, map_log (read)
-  pg->unlock();
-  map_lock.get_read();
-  pg->lock();
-
-  if (!pg->generate_backlog_epoch) {
-    dout(10) << *pg << " generate_backlog aborting" << dendl;
-  } else {
-    map< int, map<pg_t,PG::Query> > query_map;
-    map< int, MOSDPGInfo* > info_map;
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
-    pg->handle_backlog_generated(&rctx);
-    do_queries(query_map);
-    do_infos(info_map);
-    tr = store->queue_transaction(&pg->osr, t,
-				  new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(!tr);
-  }
-  map_lock.put_read();
-
- out:
-  pg->generate_backlog_epoch = 0;
-  pg->unlock();
-  pg->put();
-}
-
-
 
 void OSD::check_replay_queue()
 {
@@ -5476,6 +5463,16 @@ void OSD::enqueue_op(PG *pg, Message *op)
     // don't care.
     break;
 
+  case MSG_OSD_PG_SCAN:
+    if (!scan_is_queueable(pg, (MOSDPGScan*)op))
+      return;
+    break;
+
+  case MSG_OSD_PG_BACKFILL:
+    if (!backfill_is_queueable(pg, (MOSDPGBackfill*)op))
+      return;
+    break;
+
   default:
     assert(0 == "enqueued an illegal message type");
   }
@@ -5566,16 +5563,31 @@ void OSD::dequeue_op(PG *pg)
   }
   osd_lock.Unlock();
 
-  if (op->get_type() == CEPH_MSG_OSD_OP) {
+  switch (op->get_type()) {
+  case CEPH_MSG_OSD_OP:
     if (op_is_discardable((MOSDOp*)op))
       op->put();
     else
       pg->do_op((MOSDOp*)op); // do it now
-  } else if (op->get_type() == MSG_OSD_SUBOP) {
+    break;
+
+  case MSG_OSD_SUBOP:
     pg->do_sub_op((MOSDSubOp*)op);
-  } else if (op->get_type() == MSG_OSD_SUBOPREPLY) {
+    break;
+    
+  case MSG_OSD_SUBOPREPLY:
     pg->do_sub_op_reply((MOSDSubOpReply*)op);
-  } else {
+    break;
+
+  case MSG_OSD_PG_SCAN:
+    pg->do_scan((MOSDPGScan*)op);
+    break;
+
+  case MSG_OSD_PG_BACKFILL:
+    pg->do_backfill((MOSDPGBackfill*)op);
+    break;
+
+  default:
     assert(0 == "bad message type in dequeue_op");
   }
 

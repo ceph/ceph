@@ -87,7 +87,9 @@ OPTION(mon_data, OPT_STR, "")
 OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
-OPTION(mon_osd_auto_mark_in, OPT_BOOL, true)    // automatically mark new osds 'in'
+OPTION(mon_osd_auto_mark_in, OPT_BOOL, false)         // mark any booting osds 'in'
+OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL, true) // mark booting auto-marked-out osds 'in'
+OPTION(mon_osd_auto_mark_new_in, OPT_BOOL, true)      // mark booting new osds 'in'
 OPTION(mon_osd_down_out_interval, OPT_INT, 300) // seconds
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
 OPTION(mon_lease_renew_interval, OPT_FLOAT, 3) // on leader, to renew the lease
@@ -252,6 +254,8 @@ OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_recovery_threads, OPT_INT, 1)
+OPTION(osd_backfill_scan_min, OPT_INT, 64)
+OPTION(osd_backfill_scan_max, OPT_INT, 512)
 OPTION(osd_op_thread_timeout, OPT_INT, 30)
 OPTION(osd_backlog_thread_timeout, OPT_INT, 60*60*1)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
@@ -289,6 +293,8 @@ OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
 OPTION(osd_max_notify_timeout, OPT_U32, 30) // max notify timeout in seconds
+OPTION(osd_kill_backfill_at, OPT_INT, 0)
+OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in the pg log when trimming it
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds

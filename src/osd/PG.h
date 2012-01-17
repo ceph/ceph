@@ -55,6 +55,8 @@ class OSD;
 class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
+class MOSDPGScan;
+class MOSDPGBackfill;
 class MOSDPGInfo;
 class MOSDPGLog;
 
@@ -172,7 +174,8 @@ public:
     eversion_t last_complete;  // last version pg was complete through.
 
     eversion_t log_tail;     // oldest log entry.
-    bool       log_backlog;    // do we store a complete log?
+
+    hobject_t last_backfill;   // objects >= this and < last_complete may be missing
 
     interval_set<snapid_t> purged_snaps;
 
@@ -245,21 +248,28 @@ public:
       }
     } history;
     
-    Info() : log_backlog(false) {}
-    Info(pg_t p) : pgid(p), log_backlog(false) { }
+    Info()
+      : last_backfill(hobject_t::get_max())
+    { }
+    Info(pg_t p)
+      : pgid(p),
+	last_backfill(hobject_t::get_max())
+    { }
 
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return history.epoch_created == 0; }
 
+    bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
+
     void encode(bufferlist &bl) const {
-      __u8 v = 23;
+      __u8 v = 25;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
       ::encode(last_update, bl);
       ::encode(last_complete, bl);
       ::encode(log_tail, bl);
-      ::encode(log_backlog, bl);
+      ::encode(last_backfill, bl);
       ::encode(stats, bl);
       history.encode(bl);
       ::encode(purged_snaps, bl);
@@ -278,7 +288,12 @@ public:
       ::decode(last_update, bl);
       ::decode(last_complete, bl);
       ::decode(log_tail, bl);
-      ::decode(log_backlog, bl);
+      if (v < 25) {
+	bool log_backlog;
+	::decode(log_backlog, bl);
+      }
+      if (v >= 24)
+	::decode(last_backfill, bl);
       ::decode(stats, bl);
       history.decode(bl);
       if (v >= 22)
@@ -297,13 +312,11 @@ public:
    * Query - used to ask a peer for information about a pg.
    *
    * note: if version=0, type=LOG, then we just provide our full log.
-   *   only if type=BACKLOG do we generate a backlog and provide that too.
    */
   struct Query {
     enum {
       INFO = 0,
       LOG = 1,
-      BACKLOG = 3,
       MISSING = 4,
       FULLLOG = 5,
     };
@@ -311,7 +324,6 @@ public:
       switch (type) {
       case INFO: return "info";
       case LOG: return "log";
-      case BACKLOG: return "backlog";
       case MISSING: return "missing";
       case FULLLOG: return "fulllog";
       default: return "???";
@@ -344,12 +356,7 @@ public:
   
   /*
    * Log - incremental log of recent pg changes.
-   *  also, serves as a recovery queue.
-   *
-   * when backlog is true, 
-   *  objects with versions <= bottom are in log.
-   *  we do not have any deletion info before that time, however.
-   *  log is a "summary" in that it contains all objects in the PG.
+   *  serves as a recovery queue for recent changes.
    */
   struct Log {
     /** Entry
@@ -359,7 +366,7 @@ public:
 	MODIFY = 1,
 	CLONE = 2,
 	DELETE = 3,
-	BACKLOG = 4,  // event invented by generate_backlog
+	BACKLOG = 4,  // event invented by generate_backlog [deprecated]
 	LOST_REVERT = 5, // lost new version, revert to an older version.
 	LOST_DELETE = 6, // lost new version, revert to no object (deleted).
 	LOST_MARK = 7,   // lost new version, now EIO
@@ -470,21 +477,13 @@ public:
     eversion_t head;    // newest entry
     eversion_t tail;    // version prior to oldest
 
-    /*
-     * backlog - true if log is a complete summary of pg contents.
-     * updated will include all items in pg, but deleted will not
-     * include negative entries for items deleted prior to 'tail'.
-     */
-    bool backlog;
-    
     list<Entry> log;  // the actual log.
 
-    Log() : backlog(false) {}
+    Log() {}
 
     void clear() {
       eversion_t z;
       head = tail = z;
-      backlog = false;
       log.clear();
     }
 
@@ -494,6 +493,10 @@ public:
 
     bool null() const {
       return head.version == 0 && head.epoch == 0;
+    }
+
+    size_t approx_size() const {
+      return head.version - tail.version;
     }
 
     list<Entry>::iterator find_entry(eversion_t v) {
@@ -515,11 +518,10 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(head, bl);
       ::encode(tail, bl);
-      ::encode(backlog, bl);
       ::encode(log, bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -527,13 +529,38 @@ public:
       ::decode(struct_v, bl);
       ::decode(head, bl);
       ::decode(tail, bl);
-      ::decode(backlog, bl);
+      if (struct_v < 2) {
+	bool backlog;
+	::decode(backlog, bl);
+      }
       ::decode(log, bl);
     }
 
-    void copy_after(const Log &other, eversion_t v);
-    bool copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor);
-    void copy_non_backlog(const Log &other);
+    /**
+     * copy entries from the tail of another Log
+     *
+     * @param other Log to copy from
+     * @param from copy entries after this version
+     */
+    void copy_after(const Log &other, eversion_t from);
+
+    /**
+     * copy a range of entries from another Log
+     *
+     * @param other Log to copy from
+     * @param from copy entries after this version
+     * @parem to up to and including this version
+     */
+    void copy_range(const Log &other, eversion_t from, eversion_t to);
+
+    /**
+     * copy up to N entries
+     *
+     * @param o source log
+     * @param max max number of entreis to copy
+     */
+    void copy_up_to(const Log &other, int max);
+
     ostream& print(ostream& out) const;
   };
   WRITE_CLASS_ENCODER(Log)
@@ -552,6 +579,13 @@ public:
 
     /****/
     IndexedLog() {}
+
+    void claim_log(const Log& o) {
+      log = o.log;
+      head = o.head;
+      tail = o.tail;
+      index();
+    }
 
     void zero() {
       unindex();
@@ -638,8 +672,6 @@ public:
     }
 
     void trim(ObjectStore::Transaction &t, eversion_t s);
-    void trim_write_ahead(eversion_t last_update);
-
 
     ostream& print(ostream& out) const;
   };
@@ -720,6 +752,11 @@ public:
     void rm(const std::map<hobject_t, Missing::item>::iterator &m);
     void got(const hobject_t& oid, eversion_t v);
     void got(const std::map<hobject_t, Missing::item>::iterator &m);
+
+    void clear() {
+      missing.clear();
+      rmissing.clear();
+    }
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
@@ -853,13 +890,13 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, backlog_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
+  bool waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
   set<hobject_t> recovering_oids;
 #endif
 
-  epoch_t generate_backlog_epoch;  // epoch we decided to build a backlog.
   utime_t replay_until;
 
 protected:
@@ -879,7 +916,6 @@ public:
   eversion_t  pg_trim_to;
 
   // [primary only] content recovery state
-  bool        have_master_log;
  protected:
   bool prior_set_built;
 
@@ -989,8 +1025,8 @@ public:
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
-    struct BacklogComplete : boost::statechart::event< BacklogComplete > {
-      BacklogComplete() : boost::statechart::event< BacklogComplete >() {}
+    struct RecoveryComplete : boost::statechart::event< RecoveryComplete > {
+      RecoveryComplete() : boost::statechart::event< RecoveryComplete >() {}
     };
     struct ActMap : boost::statechart::event< ActMap > {
       ActMap() : boost::statechart::event< ActMap >() {}
@@ -1149,6 +1185,10 @@ public:
     struct NeedNewMap : boost::statechart::event< NeedNewMap > {
       NeedNewMap() : boost::statechart::event< NeedNewMap >() {}
     };
+    struct Incomplete;
+    struct IsIncomplete : boost::statechart::event< IsIncomplete > {
+      IsIncomplete() : boost::statechart::event< IsIncomplete >() {}
+    };
 
     struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
       Primary(my_context ctx);
@@ -1156,12 +1196,11 @@ public:
 
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
-	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::transition< NeedNewMap, WaitActingChange >
+	boost::statechart::transition< NeedNewMap, WaitActingChange >,
+	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
-      boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MNotifyRec&);
@@ -1174,6 +1213,12 @@ public:
 	> reactions;
       WaitActingChange(my_context ctx);
       boost::statechart::result react(const MLogRec&);
+      void exit();
+    };
+
+    struct Incomplete : boost::statechart::state< Incomplete, Primary>,
+			NamedState {
+      Incomplete(my_context ctx);
       void exit();
     };
     
@@ -1202,13 +1247,15 @@ public:
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::custom_reaction< MLogRec >
+	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< RecoveryComplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
       boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const RecoveryComplete&);
     };
 
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
@@ -1228,7 +1275,6 @@ public:
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
-      bool backlog_requested;
       map<int, pair<Query, epoch_t> > pending_queries;
 
       Stray(my_context ctx);
@@ -1238,12 +1284,10 @@ public:
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
-	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< Activate, ReplicaActive >
 	> reactions;
       boost::statechart::result react(const MQuery& query);
-      boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const ActMap&);
@@ -1272,8 +1316,6 @@ public:
 
     struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
       int newest_update_osd;
-      bool need_backlog;
-      bool wait_on_backlog;
       MOSDPGLog *msg;
 
       GetLog(my_context ctx);
@@ -1282,11 +1324,9 @@ public:
 
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< GotLog >
 	> reactions;
       boost::statechart::result react(const MLogRec& logevt);
-      boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const GotLog&);
     };
 
@@ -1339,20 +1379,24 @@ public:
 			    vector<int>& newup, vector<int>& newacting, 
 			    RecoveryCtx *ctx);
     void handle_activate_map(RecoveryCtx *ctx);
-    void handle_backlog_generated(RecoveryCtx *ctx);
+    void handle_recovery_complete(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
     void handle_loaded(RecoveryCtx *ctx);
   } recovery_state;
 
 protected:
 
+  /*
+   * peer_info    -- projected (updates _before_ replicas ack)
+   * peer_missing -- committed (updates _after_ replicas ack)
+   */
+  
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
   map<int,Info>        peer_info;   // info from peers (stray or prior)
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
-  set<int>             peer_backlog_requested;
   set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
   set<int>             peer_activated;
@@ -1363,7 +1407,73 @@ protected:
 
   epoch_t last_peering_reset;
 
+  /**
+   * BackfillInterval
+   *
+   * Represents the objects in a range [begin, end)
+   *
+   * Possible states:
+   * 1) begin == end == hobject_t() indicates the the interval is unpopulated
+   * 2) Else, objects contains all objects in [begin, end)
+   */
+  struct BackfillInterval {
+    // info about a backfill interval on a peer
+    map<hobject_t,eversion_t> objects;
+    hobject_t begin;
+    hobject_t end;
+    
+    /// clear content
+    void clear() {
+      objects.clear();
+      begin = end = hobject_t();
+    }
+
+    void reset(hobject_t start) {
+      clear();
+      begin = end = start;
+    }
+
+    /// true if there are no objects in this interval
+    bool empty() {
+      return objects.empty();
+    }
+
+    /// true if interval extends to the end of the range
+    bool extends_to_end() {
+      return end == hobject_t::get_max();
+    }
+
+    /// Adjusts begin to the first object
+    void trim() {
+      if (objects.size())
+	begin = objects.begin()->first;
+      else
+	begin = end;
+    }
+
+    /// drop first entry, and adjust @begin accordingly
+    void pop_front() {
+      assert(!objects.empty());
+      objects.erase(objects.begin());
+      if (objects.empty())
+	begin = end;
+      else
+	begin = objects.begin()->first;
+    }
+  };
+  
+  BackfillInterval backfill_info;
+  BackfillInterval peer_backfill_info;
+  int backfill_target;
+
   friend class OSD;
+
+public:
+  int get_backfill_target() const {
+    return backfill_target;
+  }
+
+protected:
 
 
   // pg waiters
@@ -1449,25 +1559,11 @@ public:
 
   void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
   
-  bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
-  void assemble_backlog(map<eversion_t,Log::Entry>& omap);
-  void drop_backlog();
-  
   void trim_write_ahead();
 
-  bool choose_acting(int newest_update_osd) const;
-  bool recover_master_log(map< int, map<pg_t,Query> >& query_map,
-			  eversion_t &oldest_update);
-  eversion_t calc_oldest_known_update() const;
-  void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
-	       map< int, map<pg_t,Query> >& query_map,
-	       map<int, MOSDPGInfo*> *activator_map=0);
-  bool choose_log_location(const PriorSet &prior_set,
-			   bool &need_backlog,
-			   bool &wait_on_backlog,
-			   int &pull_from,
-			   eversion_t &newest_update,
-			   eversion_t &oldest_update) const;
+  map<int, Info>::const_iterator find_best_info(const map<int, Info> &infos) const;
+  bool calc_acting(int& newest_update_osd, vector<int>& want) const;
+  bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
   void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
@@ -1557,15 +1653,15 @@ public:
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
     info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
-    recovery_item(this), backlog_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
+    recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
-    generate_backlog_epoch(0),
+    waiting_on_backfill(0),
     role(0),
     state(0),
-    have_master_log(true),
     recovery_state(this),
     need_up_thru(false),
     last_peering_reset(0),
+    backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL),
@@ -1685,8 +1781,8 @@ public:
   void handle_activate_map(RecoveryCtx *rctx) {
     recovery_state.handle_activate_map(rctx);
   }
-  void handle_backlog_generated(RecoveryCtx *rctx) {
-    recovery_state.handle_backlog_generated(rctx);
+  void handle_recovery_complete(RecoveryCtx *rctx) {
+    recovery_state.handle_recovery_complete(rctx);
   }
   void handle_create(RecoveryCtx *rctx) {
     recovery_state.handle_create(rctx);
@@ -1700,6 +1796,8 @@ public:
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
+  virtual void do_scan(MOSDPGScan *op) = 0;
+  virtual void do_backfill(MOSDPGBackfill *op) = 0;
   virtual bool snap_trimmer() = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
@@ -1750,8 +1848,9 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
     out << " v " << pgi.last_update;
     if (pgi.last_complete != pgi.last_update)
       out << " lc " << pgi.last_complete;
-    out << " (" << pgi.log_tail << "," << pgi.last_update << "]"
-        << (pgi.log_backlog ? "+backlog":"");
+    out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
+    if (pgi.is_incomplete())
+      out << " lb " << pgi.last_backfill;
   }
   //out << " c " << pgi.epoch_created;
   out << " n=" << pgi.stats.stats.sum.num_objects;
@@ -1778,7 +1877,6 @@ inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
 {
   out << "log(" << log.tail << "," << log.head << "]";
-  if (log.backlog) out << "+backlog";
   return out;
 }
 

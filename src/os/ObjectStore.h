@@ -567,6 +567,20 @@ public:
 
   virtual int statfs(struct statfs *buf) = 0;
 
+  /**
+   * get ideal min value for collection_list_partial()
+   *
+   * default to some arbitrary values; the implementation will override.
+   */
+  virtual int get_ideal_list_min() { return 32; }
+
+  /**
+   * get ideal max value for collection_list_partial()
+   *
+   * default to some arbitrary values; the implementation will override.
+   */
+  virtual int get_ideal_list_max() { return 64; }
+
   // objects
   virtual bool exists(coll_t cid, const hobject_t& oid) = 0;                   // useful?
   virtual int stat(coll_t cid, const hobject_t& oid, struct stat *st) = 0;     // struct stat?
