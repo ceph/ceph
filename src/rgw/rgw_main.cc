@@ -70,8 +70,9 @@ struct RGWRequest
   uint64_t id;
   struct req_state *s;
   string req_str;
+  RGWOp *op;
 
-  RGWRequest() : id(0), s(NULL) {}
+  RGWRequest() : id(0), s(NULL), op(NULL) {}
 
   ~RGWRequest() {
     delete s;
@@ -82,13 +83,32 @@ struct RGWRequest
     return s;
   }
 
+  void log_format(struct req_state *s, const char *fmt, ...)
+  {
+#define LARGE_SIZE 1024
+    char buf[LARGE_SIZE];
+    va_list ap;
+    const char *format;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+
+    log(s, buf);
+  }
+
+
   void log(struct req_state *s, const char *msg) {
     if (s->method && req_str.size() == 0) {
       req_str = s->method;
       req_str.append(" ");
+      if (s->host_bucket) {
+        req_str.append(s->host_bucket);
+        req_str.append("/");
+      }
       req_str.append(s->request_uri);
     }
-    dout(1) << "req" << id << ":" << s->dialect << ":" << req_str << ":" << msg << dendl;
+    dout(1) << "r" << id << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;
   }
 };
 
@@ -228,6 +248,7 @@ void RGWProcess::handle_request(RGWRequest *req)
     abort_early(s, -ERR_METHOD_NOT_ALLOWED);
     goto done;
   }
+  req->op = op;
 
   req->log(s, "authorizing");
   ret = handler->authorize();
@@ -272,6 +293,8 @@ done:
   rgw_log_op(s);
 
   int http_ret = s->err.http_ret;
+
+  req->log_format(s, "http status=%d", http_ret);
 
   handler->put_op(op);
   rgwstore->destroy_context(s->obj_ctx);
