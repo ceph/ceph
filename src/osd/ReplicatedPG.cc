@@ -1255,6 +1255,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       assert(src_obc);
     }
 
+    // munge -1 truncate to 0 truncate
+    if (op.extent.truncate_seq == 1 && op.extent.truncate_size == (-1ULL)) {
+      op.extent.truncate_size = 0;
+      op.extent.truncate_seq = 0;
+    }
+
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
 	obs.exists &&
@@ -1606,6 +1612,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  t.truncate(coll, soid, op.extent.truncate_size);
 	  oi.truncate_seq = op.extent.truncate_seq;
 	  oi.truncate_size = op.extent.truncate_size;
+	  if (op.extent.truncate_size != oi.size) {
+	    ctx->delta_stats.num_bytes -= oi.size;
+	    ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+	    ctx->delta_stats.num_bytes += op.extent.truncate_size;
+	    ctx->delta_stats.num_kb +=
+	      SHIFT_ROUND_UP(op.extent.truncate_size, 10);
+	    oi.size = op.extent.truncate_size;
+	  }
 	}
 	bufferlist nbl;
 	bp.copy(op.extent.length, nbl);
@@ -1697,10 +1711,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       // falling through
 
     case CEPH_OSD_OP_TRUNCATE:
-      if (op.extent.truncate_size > (1ULL << 63)) {
-	dout(10) << " truncate to huge size probably a client bug" << dendl;
-	result = -EINVAL;
-      } else {
+      {
 	// truncate
 	if (!obs.exists) {
 	  dout(10) << " object dne, truncate is a no-op" << dendl;
