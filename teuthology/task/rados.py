@@ -29,6 +29,7 @@ def task(ctx, config):
         - rados:
             clients: [client.0]
             ops: 1000
+            max_seconds: 0   # 0 for no limit
             objects: 25
             max_in_flight: 16
             object_size: 4000000
@@ -56,18 +57,19 @@ def task(ctx, config):
         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
         '/tmp/cephtest/archive/coverage',
         '/tmp/cephtest/binary/usr/local/bin/testrados',
-        str(op_weights.get('read', 100)),
-        str(op_weights.get('write', 100)),
-        str(op_weights.get('delete', 10)),
-        str(op_weights.get('snap_create', 0)),
-        str(op_weights.get('snap_remove', 0)),
-        str(op_weights.get('rollback', 0)),
-        str(config.get('ops', 10000)),
-        str(config.get('objects', 500)),
-        str(config.get('max_in_flight', 16)),
-        str(object_size),
-        str(config.get('min_stride_size', object_size / 10)),
-        str(config.get('max_stride_size', object_size / 5))
+        '--op', 'read', str(op_weights.get('read', 100)),
+        '--op', 'write', str(op_weights.get('write', 100)),
+        '--op', 'delete', str(op_weights.get('delete', 10)),
+        '--op', 'snap_create', str(op_weights.get('snap_create', 0)),
+        '--op', 'snap_remove', str(op_weights.get('snap_remove', 0)),
+        '--op', 'rollback', str(op_weights.get('rollback', 0)),
+        '--max-ops', str(config.get('ops', 10000)),
+        '--objects', str(config.get('objects', 500)),
+        '--max-in-flight', str(config.get('max_in_flight', 16)),
+        '--size', str(object_size),
+        '--min-stride-size', str(config.get('min_stride_size', object_size / 10)),
+        '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
+        '--max-seconds', str(config.get('max_seconds', 0))
         ]
 
     tests = {}
