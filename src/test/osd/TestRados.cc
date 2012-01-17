@@ -146,8 +146,8 @@ int main(int argc, char **argv)
   int ops = 1000;
   int objects = 50;
   int max_in_flight = 16;
-  uint64_t size = 4000000; // 4 MB
-  uint64_t min_stride_size, max_stride_size;
+  int64_t size = 4000000; // 4 MB
+  int64_t min_stride_size = -1, max_stride_size = -1;
   int max_seconds = 0;
 
   struct {
@@ -205,6 +205,11 @@ int main(int argc, char **argv)
       exit(1);
     }
   }
+
+  if (min_stride_size < 0)
+    min_stride_size = size / 10;
+  if (max_stride_size < 0)
+    max_stride_size = size / 5;
 
   cout << "Configuration:" << std::endl
        << "\tNumber of operations: " << ops << std::endl
