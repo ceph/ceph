@@ -281,20 +281,22 @@ int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle)
 int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
 {
   log_show_state *state = (log_show_state *)handle;
+  off_t off = state->p.get_off();
 
   dout(10) << "log_show_next pos " << state->pos << " bl " << state->bl.length()
-	   << " off " << state->p.get_off()
+	   << " off " << off
 	   << " eof " << (int)state->eof
 	   << dendl;
   // read some?
   unsigned chunk = 1024*1024;
-  if (state->bl.length() < chunk/2 && !state->eof) {
+  if ((state->bl.length() - off) < chunk/2 && !state->eof) {
     bufferlist more;
     int r = state->io_ctx.read(state->name, more, chunk, state->pos);
     if (r < 0)
       return r;
+    state->pos += r;
     bufferlist old;
-    old.substr_of(state->bl, state->p.get_off(), state->bl.length() - state->p.get_off());
+    old.substr_of(state->bl, state->p.get_off(), state->bl.length() - off);
     state->bl.clear();
     state->bl.claim(old);
     state->bl.claim_append(more);
