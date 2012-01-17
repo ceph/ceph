@@ -106,7 +106,7 @@ class Thrasher(gevent.Greenlet):
 
     def do_thrash(self):
         cleanint = self.config.get("clean_interval", 60)
-        maxdead = self.config.get("max_dead", 1);
+        maxdead = self.config.get("max_dead", 0);
         delay = self.config.get("op_delay", 5)
         self.log("starting do_thrash")
         while not self.stopping:

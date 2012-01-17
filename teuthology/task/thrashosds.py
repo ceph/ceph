@@ -30,7 +30,7 @@ def task(ctx, config):
 
     min_dead: (0) minimum number of osds to leave down/dead.
 
-    max_dead: (1) maximum number of osds to leave down/dead before waiting
+    max_dead: (0) maximum number of osds to leave down/dead before waiting
        for clean.  This should probably be num_replicas - 1.
 
     clean_interval: (60) the approximate length of time to loop before
