@@ -37,6 +37,7 @@ public:
   virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
   virtual void execute() = 0;
+  virtual const char *name() = 0;
 };
 
 class RGWGetObj : public RGWOp {
@@ -101,6 +102,8 @@ public:
 
   virtual int get_params() = 0;
   virtual int send_response(void *handle) = 0;
+
+  virtual const char *name() { return "get_obj"; }
 };
 
 class RGWListBuckets : public RGWOp {
@@ -120,6 +123,8 @@ public:
 
   virtual int get_params()= 0;
   virtual void send_response() = 0;
+
+  virtual const char *name() { return "list_buckets"; }
 };
 
 class RGWStatAccount : public RGWOp {
@@ -145,6 +150,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
+  virtual const char *name() { return "stat_account"; }
 };
 
 class RGWListBucket : public RGWOp {
@@ -183,6 +189,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "list_bucket"; }
 };
 
 class RGWStatBucket : public RGWOp {
@@ -203,6 +210,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
+  virtual const char *name() { return "stat_bucket"; }
 };
 
 class RGWCreateBucket : public RGWOp {
@@ -219,6 +227,7 @@ public:
     ret = 0;
   }
   virtual void send_response() = 0;
+  virtual const char *name() { return "create_bucket"; }
 };
 
 class RGWDeleteBucket : public RGWOp {
@@ -236,6 +245,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
+  virtual const char *name() { return "delete_bucket"; }
 };
 
 class RGWPutObjProcessor
@@ -287,6 +297,7 @@ public:
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "put_obj"; }
 };
 
 class RGWPutObjMetadata : public RGWOp {
@@ -305,6 +316,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "put_obj_metadata"; }
 };
 
 class RGWDeleteObj : public RGWOp {
@@ -322,6 +334,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
+  virtual const char *name() { return "delete_obj"; }
 };
 
 class RGWCopyObj : public RGWOp {
@@ -379,6 +392,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "copy_obj"; }
 };
 
 class RGWGetACLs : public RGWOp {
@@ -398,6 +412,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
+  virtual const char *name() { return "get_acls"; }
 };
 
 class RGWPutACLs : public RGWOp {
@@ -420,6 +435,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "put_acls"; }
 };
 
 class RGWInitMultipart : public RGWOp {
@@ -440,6 +456,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "init_multipart"; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
@@ -466,6 +483,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "complete_multipart"; }
 };
 
 class RGWAbortMultipart : public RGWOp {
@@ -483,6 +501,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
+  virtual const char *name() { return "abort_multipart"; }
 };
 
 class RGWListMultipart : public RGWOp {
@@ -511,6 +530,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "list_multipart"; }
 };
 
 #define MP_META_SUFFIX ".meta"
@@ -623,6 +643,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
+  virtual const char *name() { return "list_bucket_multiparts"; }
 };
 
 class RGWHandler {

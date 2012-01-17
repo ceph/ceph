@@ -216,6 +216,13 @@ done:
   end_header(s);
 }
 
+int RGWHandler_SWIFT_Auth::init(struct req_state *state, FCGX_Request *fcgx)
+{
+  state->dialect = "swift-auth";
+
+  return RGWHandler::init(state, fcgx);
+}
+
 int RGWHandler_SWIFT_Auth::authorize()
 {
   return 0;

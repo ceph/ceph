@@ -102,6 +102,7 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
   object = NULL;
   bucket_name = NULL;
   has_bad_meta = false;
+  method = NULL;
 }
 
 req_state::~req_state() {

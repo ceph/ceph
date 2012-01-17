@@ -14,6 +14,7 @@ public:
 
   int verify_permission() { return 0; }
   void execute();
+  virtual const char *name() { return "swift_auth_get"; }
 };
 
 class RGWHandler_SWIFT_Auth : public RGWHandler {
@@ -23,6 +24,7 @@ public:
   RGWOp *get_op();
   void put_op(RGWOp *op);
 
+  int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
   int read_permissions(RGWOp *op) { return 0; }
 };

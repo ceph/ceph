@@ -569,6 +569,8 @@ struct req_state {
 
    void *obj_ctx;
 
+   string dialect;
+
    req_state(struct RGWEnv *e);
    ~req_state();
 };
