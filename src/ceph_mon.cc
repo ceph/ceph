@@ -353,6 +353,8 @@ int main(int argc, const char **argv)
 
   // bind
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
+  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
+
   int rank = monmap.get_rank(g_conf->name.get_id());
 
   global_print_banner();

@@ -69,7 +69,7 @@ std::string PG::gen_prefix() const
   return out.str();
 }
   
-/******* PGLog ********/
+/******* PG::Log ********/
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 
 {
@@ -78,85 +78,53 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
-    // stop if we reach the tail; do not copy backlog entries and keep
-    // tail == other.tail.
-    if (i->version <= other.tail)
-      break;
+    assert(i->version > other.tail);
     if (i->version <= v) {
       // make tail accurate.
       tail = i->version;
       break;
     }
-    assert(i->version > v);
     log.push_front(*i);
   }
 }
 
-bool PG::Log::copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor) 
+void PG::Log::copy_range(const Log &other, eversion_t from, eversion_t to)
 {
-  assert(split >= other.tail);
-  assert(floor >= other.tail);
-  assert(floor <= split);
-  head = tail = other.head;
-  
-  /* runs on replica.  split is primary's log.head.  floor is how much they want.
-     split tell us if the primary is divergent.. e.g.:
-     -> i am A, B is primary, split is 2'6, floor is 2'2.
-A     B     C
-2'2         2'2
-2'3   2'3   2'3
-2'4   2'4   2'4
-3'5 | 2'5   2'5
-3'6 | 2'6
-3'7 |
-3'8 |
-3'9 |
-      -> i return full backlog.
-  */
+  list<Entry>::const_reverse_iterator i = other.log.rbegin();
+  assert(i != other.log.rend());
+  while (i->version > to) {
+    ++i;
+    assert(i != other.log.rend());
+  }
+  assert(i->version == to);
+  head = to;
+  for ( ; i != other.log.rend(); ++i) {
+    if (i->version <= from) {
+      tail = i->version;
+      break;
+    }
+    log.push_front(*i);
+  }
+}
 
+void PG::Log::copy_up_to(const Log &other, int max)
+{
+  int n = 0;
+  head = other.head;
+  tail = other.tail;
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
-       i++) {
-    // is primary divergent? 
-    // e.g. my 3'6 vs their 2'6 split
-    if (i->version.version == split.version && i->version.epoch > split.epoch) {
-      clear();
-      return false;   // divergent!
+       ++i) {
+    if (n++ >= max) {
+      tail = i->version;
+      break;
     }
-    if (i->version == floor) break;
-    assert(i->version > floor);
-
-    // e.g. my 2'23 > '12
     log.push_front(*i);
   }
-  tail = floor;
-  return true;
 }
-
-void PG::Log::copy_non_backlog(const Log &other)
-{
-  if (other.backlog) {
-    head = other.head;
-    tail = other.tail;
-    for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
-         i != other.log.rend();
-         i++) 
-      if (i->version > tail)
-        log.push_front(*i);
-      else
-        break;
-  } else {
-    *this = other;
-  }
-}
-
-
 
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
 {
-  if (backlog && s < tail)
-    s = tail;
-
   if (complete_to != log.end() &&
       complete_to->version <= s) {
     generic_dout(0) << " bad trim to " << s << " when complete_to is " << complete_to->version
@@ -173,36 +141,12 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   }
 
   // raise tail?
-  if (backlog)
-    backlog = false;
   if (tail < s)
     tail = s;
 }
 
 
-void PG::IndexedLog::trim_write_ahead(eversion_t last_update) 
-{
-  while (!log.empty() &&
-         log.rbegin()->version > last_update) {
-    // remove from index
-    unindex(*log.rbegin());
-    
-    // remove
-    log.pop_back();
-  }
-}
-
-void PG::trim_write_ahead()
-{
-  if (info.last_update < log.head) {
-    dout(10) << "trim_write_ahead (" << info.last_update << "," << log.head << "]" << dendl;
-    log.trim_write_ahead(info.last_update);
-  } else {
-    assert(info.last_update == log.head);
-    dout(10) << "trim_write_ahead last_update=head=" << info.last_update << dendl;
-  }
-
-}
+/********* PG **********/
 
 void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
 {
@@ -222,9 +166,11 @@ void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Mi
   peer_missing[from].swap(omissing);
 }
     
-void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
+void PG::proc_replica_log(ObjectStore::Transaction& t,
+			  Info &oinfo, Log &olog, Missing& omissing, int from)
 {
-  dout(10) << "proc_replica_log for osd." << from << ": " << oinfo << " " << olog << " " << omissing << dendl;
+  dout(10) << "proc_replica_log for osd." << from << ": "
+	   << oinfo << " " << olog << " " << omissing << dendl;
 
   /*
     basically what we're doing here is rewinding the remote log,
@@ -239,7 +185,8 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
-    dout(20) << " before missing " << i->first << " need " << i->second.need << " have " << i->second.have << dendl;
+    dout(20) << " before missing " << i->first << " need " << i->second.need
+	     << " have " << i->second.have << dendl;
   }
 
   list<Log::Entry>::const_reverse_iterator pp = olog.log.rbegin();
@@ -268,6 +215,14 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       lu = pp->version;
       break;
     }
+
+    if (oe.soid > oinfo.last_backfill) {
+      // past backfill line, don't care
+      dout(10) << " had " << oe << " beyond last_backfill : skipping" << dendl;
+      ++pp;
+      continue;
+    }
+
     if (ne.version > oe.version) {
       dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
     } else {
@@ -311,7 +266,8 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
-    dout(20) << " after missing " << i->first << " need " << i->second.need << " have " << i->second.have << dendl;
+    dout(20) << " after missing " << i->first << " need " << i->second.need
+	     << " have " << i->second.have << dendl;
   }
   peer_missing[from].swap(omissing);
 }
@@ -357,6 +313,10 @@ bool PG::proc_replica_info(int from, Info &oinfo)
  */
 bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 {
+  if (oe.soid > info.last_backfill) {
+    dout(20) << "merge_old_entry  had " << oe << " : beyond last_backfill" << dendl;
+    return false;
+  }
   if (log.objects.count(oe.soid)) {
     Log::Entry &ne = *log.objects[oe.soid];  // new(er?) entry
     
@@ -369,7 +329,6 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : same" << dendl;
       return true;
     }
-
     if (oe.is_delete()) {
       if (ne.is_delete()) {
 	// old and new are delete
@@ -410,11 +369,10 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   // Check preconditions
 
-  // If our log is empty, the incoming log either needs to have a backlog
-  // or have not been trimmed
-  assert(!log.null() || olog.backlog || olog.tail == eversion_t());
-  // If the logs don't overlap, we need both backlogs
-  assert(log.head >= olog.tail || ((log.backlog || log.null()) && olog.backlog));
+  // If our log is empty, the incoming log needs to have not been trimmed.
+  assert(!log.null() || olog.tail == eversion_t());
+  // The logs must overlap.
+  assert(log.head >= olog.tail && olog.head >= log.tail);
 
   for (map<hobject_t, Missing::item>::iterator i = missing.missing.begin();
        i != missing.missing.end();
@@ -424,168 +382,104 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   bool changed = false;
 
-  if (log.head < olog.tail) {
-    // We need to throw away our log and process the backlogs
-    hash_map<hobject_t, Log::Entry*> old_objects;
-    old_objects.swap(log.objects);
-
-    // swap in other log and index
-    log.log.swap(olog.log);
-    log.index();
-
-    // first, find split point (old log.head) in new log.
-    list<Log::Entry>::iterator p = log.log.end();
-    while (p != log.log.begin()) {
-      p--;
-      if (p->version <= log.head) {
-	dout(10) << "merge_log split point is " << *p << dendl;
-
-	hash_map<hobject_t,Log::Entry*>::const_iterator oldobj = old_objects.find(p->soid);
-	if (oldobj != old_objects.end() &&
-	    oldobj->second->version == p->version)
-	  p++;       // move past the split point, if it also exists in our old log...
+  // extend on tail?
+  //  this is just filling in history.  it does not affect our
+  //  missing set, as that should already be consistent with our
+  //  current log.
+  if (olog.tail < log.tail) {
+    dout(10) << "merge_log extending tail to " << olog.tail << dendl;
+    list<Log::Entry>::iterator from = olog.log.begin();
+    list<Log::Entry>::iterator to;
+    for (to = from;
+	 to != olog.log.end();
+	 to++) {
+      if (to->version > log.tail)
+	break;
+      log.index(*to);
+      dout(15) << *to << dendl;
+    }
+    assert(to != olog.log.end() ||
+	   (olog.head == info.last_update));
+      
+    // splice into our log.
+    log.log.splice(log.log.begin(),
+		   olog.log, from, to);
+      
+    info.log_tail = log.tail = olog.tail;
+    changed = true;
+  }
+    
+  // extend on head?
+  if (olog.head > log.head) {
+    dout(10) << "merge_log extending head to " << olog.head << dendl;
+      
+    // find start point in olog
+    list<Log::Entry>::iterator to = olog.log.end();
+    list<Log::Entry>::iterator from = olog.log.end();
+    eversion_t lower_bound = olog.tail;
+    while (1) {
+      if (from == olog.log.begin())
+	break;
+      from--;
+      dout(20) << "  ? " << *from << dendl;
+      if (from->version <= log.head) {
+	dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
+	lower_bound = from->version;
+	from++;
 	break;
       }
     }
-    
-    // then add all new items (_after_ split) to missing
-    for (; p != log.log.end(); p++) {
+
+    // index, update missing, delete deleted
+    for (list<Log::Entry>::iterator p = from; p != to; p++) {
       Log::Entry &ne = *p;
-      dout(20) << "merge_log merging " << ne << dendl;
-      missing.add_next_event(ne);
-      if (ne.is_delete())
-	t.remove(coll, ne.soid);
-    }
-
-    // find any divergent or removed items in old log.
-    //  skip anything not in the index.
-    for (p = olog.log.begin();
-	 p != olog.log.end();
-	 p++) {
-      Log::Entry &oe = *p;                      // old entry
-      if (old_objects.count(oe.soid) &&
-	  old_objects[oe.soid] == &oe)
-	merge_old_entry(t, oe);
-    }
-
-    // Remove objects whose removals we missed
-    for (hash_map<hobject_t, Log::Entry*>::iterator i = old_objects.begin();
-	 i != old_objects.end();
-	 ++i) {
-      if (!log.objects.count(i->first)) {
-	t.remove(coll, i->first);
-      }
-    }
-
-    info.last_update = log.head = olog.head;
-    info.log_tail = log.tail = olog.tail;
-    info.log_backlog = log.backlog = olog.backlog;
-    if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
-      oinfo.stats.reported = info.stats.reported;
-    info.stats = oinfo.stats;
-    changed = true;
-  } else {
-    // log.head >= olog.tail, we can do a normal merge
-
-    // extend on tail?
-    //  this is just filling in history.  it does not affect our
-    //  missing set, as that should already be consistent with our
-    //  current log.
-    if (olog.tail < log.tail && !log.backlog) {
-      dout(10) << "merge_log extending tail to " << olog.tail
-               << (olog.backlog ? " +backlog":"")
-	       << dendl;
-      list<Log::Entry>::iterator from = olog.log.begin();
-      list<Log::Entry>::iterator to;
-      for (to = from;
-           to != olog.log.end();
-           to++) {
-        if (to->version > log.tail)
-	  break;
-        log.index(*to);
-        dout(15) << *to << dendl;
-      }
-      assert(to != olog.log.end() ||
-	     (olog.head == info.last_update));
-      
-      // splice into our log.
-      log.log.splice(log.log.begin(),
-                     olog.log, from, to);
-      
-      info.log_tail = log.tail = olog.tail;
-      info.log_backlog = log.backlog = olog.backlog;
-      changed = true;
-    }
-    
-    // extend on head?
-    if (olog.head > log.head) {
-      dout(10) << "merge_log extending head to " << olog.head << dendl;
-      
-      // find start point in olog
-      list<Log::Entry>::iterator to = olog.log.end();
-      list<Log::Entry>::iterator from = olog.log.end();
-      eversion_t lower_bound = olog.tail;
-      while (1) {
-        if (from == olog.log.begin())
-	  break;
-        from--;
-        dout(20) << "  ? " << *from << dendl;
-        if (from->version <= log.head) {
-	  dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
-	  lower_bound = from->version;
-          from++;
-          break;
-        }
-      }
-
-      // index, update missing, delete deleted
-      for (list<Log::Entry>::iterator p = from; p != to; p++) {
-	Log::Entry &ne = *p;
-        dout(20) << "merge_log " << ne << dendl;
-	log.index(ne);
+      dout(20) << "merge_log " << ne << dendl;
+      log.index(ne);
+      if (ne.soid <= info.last_backfill) {
 	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  t.remove(coll, ne.soid);
       }
+    }
       
-      // move aside divergent items
-      list<Log::Entry> divergent;
-      while (!log.empty()) {
-	Log::Entry &oe = *log.log.rbegin();
-	/*
-	 * look at eversion.version here.  we want to avoid a situation like:
-	 *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
-	 *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
-	 *  lower_bound = 100'9
-	 * i.e, same request, different version.  If the eversion.version is > the
-	 * lower_bound, we it is divergent.
-	 */
-	if (oe.version.version <= lower_bound.version)
-	  break;
-	dout(10) << "merge_log divergent " << oe << dendl;
-	divergent.push_front(oe);
-	log.log.pop_back();
-      }
+    // move aside divergent items
+    list<Log::Entry> divergent;
+    while (!log.empty()) {
+      Log::Entry &oe = *log.log.rbegin();
+      /*
+       * look at eversion.version here.  we want to avoid a situation like:
+       *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+       *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+       *  lower_bound = 100'9
+       * i.e, same request, different version.  If the eversion.version is > the
+       * lower_bound, we it is divergent.
+       */
+      if (oe.version.version <= lower_bound.version)
+	break;
+      dout(10) << "merge_log divergent " << oe << dendl;
+      divergent.push_front(oe);
+      log.log.pop_back();
+    }
 
-      // splice
-      log.log.splice(log.log.end(), 
-                     olog.log, from, to);
-      log.index();   
+    // splice
+    log.log.splice(log.log.end(), 
+		   olog.log, from, to);
+    log.index();   
 
       
-      info.last_update = log.head = olog.head;
-      if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
-	oinfo.stats.reported = info.stats.reported;
+    info.last_update = log.head = olog.head;
+    if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
+      oinfo.stats.reported = info.stats.reported;
+    if (info.last_backfill.is_max())
       info.stats = oinfo.stats;
 
-      // process divergent items
-      if (!divergent.empty()) {
-	for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
-	  merge_old_entry(t, *d);
-      }
-
-      changed = true;
+    // process divergent items
+    if (!divergent.empty()) {
+      for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
+	merge_old_entry(t, *d);
     }
+
+    changed = true;
   }
   
   dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
@@ -609,6 +503,10 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
   bool stats_updated = false;
   bool found_missing = false;
 
+  // take note that we've probed this peer, for
+  // all_unfound_are_queried_or_lost()'s benefit.
+  peer_missing[fromosd];
+
   // found items?
   for (map<hobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
@@ -619,6 +517,15 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
 	       << " (last_update " << oinfo.last_update << " < needed " << need << ")"
+	       << dendl;
+      continue;
+    }
+    if (p->first >= oinfo.last_backfill) {
+      // FIXME: this is _probably_ true, although it could conceivably
+      // be in the undefined region!  Hmm!
+      dout(10) << "search_for_missing " << soid << " " << need
+	       << " also missing on osd." << fromosd
+	       << " (past last_backfill " << oinfo.last_backfill << ")"
 	       << dendl;
       continue;
     }
@@ -696,11 +603,6 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	       << ": in peer_log_requested" << dendl;
       continue;
     }
-    if (peer_backlog_requested.find(peer) != peer_backlog_requested.end()) {
-      dout(20) << __func__ << ": osd." << peer
-	       << ": in peer_backlog_requested" << dendl;
-      continue;
-    }
     if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
       dout(20) << __func__ << ": osd." << peer
 	       << ": in peer_missing_requested" << dendl;
@@ -715,169 +617,6 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
       PG::Query(PG::Query::MISSING, info.history);
   }
 }
-
-// ===============================================================
-// BACKLOG
-
-bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
-{
-  dout(10) << "build_backlog_map requested epoch " << generate_backlog_epoch << dendl;
-
-  unlock();
-
-  vector<hobject_t> olist;
-  osd->store->collection_list(coll, olist);
-
-  for (vector<hobject_t>::iterator it = olist.begin();
-       it != olist.end();
-       it++) {
-    hobject_t poid = *it;
-
-    Log::Entry e;
-    e.soid = poid;
-    bufferlist bv;
-    int r = osd->store->getattr(coll, poid, OI_ATTR, bv);
-    if (r < 0)
-      continue;  // musta just been deleted!
-    object_info_t oi(bv);
-    e.version = oi.version;
-    e.prior_version = oi.prior_version;
-    e.reqid = oi.last_reqid;
-    e.mtime = oi.mtime;
-    if (e.soid.snap && e.soid.snap < CEPH_NOSNAP) {
-      e.op = Log::Entry::CLONE;
-      ::encode(oi.snaps, e.snaps);
-    } else {
-      e.op = Log::Entry::BACKLOG;           // FIXME if/when we do smarter op codes!
-    }
-
-    omap[e.version] = e;
-
-    lock();
-    dout(10) << "build_backlog_map  " << e << dendl;
-    if (!generate_backlog_epoch || osd->is_stopping()) {
-      dout(10) << "build_backlog_map aborting" << dendl;
-      return false;
-    }
-    unlock();
-  }
-  lock();
-  dout(10) << "build_backlog_map done: " << omap.size() << " objects" << dendl;
-  if (!generate_backlog_epoch) {
-    dout(10) << "build_backlog_map aborting" << dendl;
-    return false;
-  }
-  return true;
-}
-
-void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
-{
-  dout(10) << "assemble_backlog for " << log << ", " << omap.size() << " objects" << dendl;
-  
-  assert(!log.backlog);
-  log.backlog = true;
-  info.log_backlog = true;
-
-  /*
-   * note that we don't create prior_version backlog entries for
-   * objects that no longer exist (i.e., those for which there is a
-   * delete entry in the log).  that's maybe a bit sloppy, but not a
-   * problem, since we mainly care about generating an accurate
-   * missing map, and an object that was deleted should obviously not
-   * end up as missing.
-   */
-
-  /*
-   * first pass inserts any prior_version backlog entries into the
-   * ordered map.  second pass adds it to the log.
-   */
-
-  map<eversion_t,Log::Entry>::iterator i = omap.begin();
-  while (i != omap.end()) {
-    Log::Entry& be = i->second;
-
-    dout(15) << " " << be << dendl;
-
-    /*
-     * we can skip an object if
-     *  - is already in the log AND
-     *    - it is a totally new object
-     * otherwise, if we have the object, include a prior_version backlog entry.
-     */
-    if (log.objects.count(be.soid)) {
-      Log::Entry *le = log.objects[be.soid];
-
-      for (list<Log::Entry>::iterator j = --log.log.end(); ;--j) {
-	if (j->soid == le->soid) {
-	  le = &(*j);
-	}
-
-	if (j->prior_version <= log.tail ||
-	    j == log.log.begin() ||
-	    j->version <= log.tail) {
-	  break;
-	}
-      }
-
-      if (le->prior_version == eversion_t()) { // new object
-	dout(15) << " dropping " << be << " (have " << *le << ")" << dendl;
-	omap.erase(i++);
-	continue;
-      }
-
-      be.reqid = osd_reqid_t();
-      if (be.version == le->prior_version) {
-	dout(15) << "   keeping prior_version " << be << " (have " << *le << ")" << dendl;
-	i++;
-	continue;
-      }
-
-      be.version = le->prior_version;
-      dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
-      omap[be.version] = be;
-      omap.erase(i++);
-    } else {
-      i++;
-    }
-  }
-
-  for (map<eversion_t,Log::Entry>::reverse_iterator i = omap.rbegin();
-       i != omap.rend();
-       i++) {
-    Log::Entry& be = i->second;
-    dout(15) << "   adding " << be << dendl;
-    log.log.push_front(be);
-    if (be.reqid != osd_reqid_t())   // don't index prior_version backlog entries
-      log.index( *log.log.begin() );
-  }
-
-  dout(25) << "result:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-}
-
-
-void PG::drop_backlog()
-{
-  dout(10) << "drop_backlog for " << log << dendl;
-  //log.print(cout);
-
-  assert(log.backlog);
-  log.backlog = false;
-  info.log_backlog = false;
-  
-  while (!log.empty()) {
-    Log::Entry &e = *log.log.begin();
-    if (e.version > log.tail) break;
-
-    dout(15) << "drop_backlog trimming " << e << dendl;
-    log.unindex(e);
-    log.log.pop_front();
-  }
-}
-
-
-
 
 
 ostream& PG::Log::print(ostream& out) const 
@@ -938,6 +677,11 @@ bool PG::is_all_uptodate() const
     }
     if (pm->second.num_missing()) {
       dout(10) << __func__ << ": osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
+      uptodate = false;
+    }
+    map<int,Info>::const_iterator pi = peer_info.find(peer);
+    if (pi->second.last_backfill != hobject_t::get_max()) {
+      dout(10) << __func__ << ": osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
       uptodate = false;
     }
   }
@@ -1127,10 +871,8 @@ void PG::clear_primary_state()
   dout(10) << "clear_primary_state" << dendl;
 
   // clear peering state
-  have_master_log = false;
   stray_set.clear();
   peer_log_requested.clear();
-  peer_backlog_requested.clear();
   peer_missing_requested.clear();
   peer_info.clear();
   peer_missing.clear();
@@ -1156,50 +898,204 @@ void PG::clear_primary_state()
   osd->snap_trim_wq.dequeue(this);
 }
 
-bool PG::choose_acting(int newest_update_osd) const
+/**
+ * find_best_info
+ *
+ * Returns an iterator to the best info in infos sorted by:
+ *  1) Prefer newer last_update
+ *  2) Prefer longer tail if it brings another info into contiguity
+ *  3) Prefer current primary
+ */
+map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &infos) const
 {
-  vector<int> want;
+  map<int, Info>::const_iterator best = infos.end();
+  // find osd with newest last_update.  if there are multiples, prefer
+  //  - a longer tail, if it brings another peer into log contiguity
+  //  - the current primary
+  for (map<int, Info>::const_iterator p = infos.begin();
+       p != infos.end();
+       ++p) {
+    // Disquality anyone who is incomplete (not fully backfilled)
+    if (p->second.is_incomplete())
+      continue;
+    if (best == infos.end()) {
+      best = p;
+      continue;
+    }
+    // Prefer newer last_update
+    if (p->second.last_update < best->second.last_update)
+      continue;
+    if (p->second.last_update > best->second.last_update) {
+      best = p;
+      continue;
+    }
+    // Prefer longer tail if it brings another peer into contiguity
+    for (map<int, Info>::const_iterator q = infos.begin();
+	 q != infos.end();
+	 ++q) {
+      if (q->second.is_incomplete())
+	continue;  // don't care about log contiguity
+      if (q->second.last_update < best->second.log_tail &&
+	  q->second.last_update >= p->second.log_tail) {
+	dout(10) << "calc_acting prefer osd." << p->first
+		 << " because it brings osd." << q->first << " into log contiguity" << dendl;
+	best = p;
+	continue;
+      }
+      if (q->second.last_update < p->second.log_tail &&
+	  q->second.last_update >= best->second.log_tail) {
+	continue;
+      }
+    }
+    // prefer current primary (usually the caller), all things being equal
+    if (p->first == acting[0]) {
+      dout(10) << "calc_acting prefer osd." << p->first
+	       << " because it is current primary" << dendl;
+      best = p;
+      continue;
+    }
+  }
+  return best;
+}
 
+/**
+ * calculate the desired acting set.
+ *
+ * Choose an appropriate acting set.  Prefer up[0], unless it is
+ * incomplete, or another osd has a longer tail that allows us to
+ * bring other up nodes up to date.
+ */
+bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
+{
   map<int, Info> all_info(peer_info.begin(), peer_info.end());
   all_info[osd->whoami] = info;
 
-  const Info &best_info = all_info.find(newest_update_osd)->second;
-  dout(10) << "choose_acting best_info is " << best_info
-	   << " from osd." << newest_update_osd << dendl;
-  for (vector<int>::const_iterator i = up.begin();
-       i != up.end();
-       ++i) {
-    const Info &cur_info = all_info.find(*i)->second;
-    if (best_info.log_tail <= cur_info.last_update || best_info.log_backlog) {
-      // Can be brought up to date without stopping to generate a backlog
-      want.push_back(*i);
-      dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
+  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
+    dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
+  }
+
+  map<int, Info>::const_iterator newest_update_osd = find_best_info(all_info);
+
+  if (newest_update_osd == all_info.end()) {
+    if (up != acting) {
+      dout(10) << "calc_acting no suitable info found (incomplete backfills?), reverting to up" << dendl;
+      want = up;
+      return true;
     } else {
-      dout(10) << " osd." << *i << " (up) REJECTED " << cur_info << dendl;
+      dout(10) << "calc_acting no suitable info found (incomplete backfills?)" << dendl;
+      return false;
     }
   }
 
-  for (map<int, Info>::const_iterator i = all_info.begin();
+
+  dout(10) << "calc_acting newest update on osd." << newest_update_osd->first
+	   << " with " << newest_update_osd->second << dendl;
+  newest_update_osd_id = newest_update_osd->first;
+  
+  // select primary
+  map<int,Info>::const_iterator primary;
+  if (up.size() &&
+      !all_info[up[0]].is_incomplete() &&
+      all_info[up[0]].last_update >= newest_update_osd->second.log_tail) {
+    dout(10) << "up[0](osd." << up[0] << ") selected as primary" << dendl;
+    primary = all_info.find(up[0]);         // prefer up[0], all thing being equal
+  } else if (!newest_update_osd->second.is_incomplete()) {
+    dout(10) << "up[0] needs backfill, osd." << newest_update_osd_id
+	     << " selected as primary instead" << dendl;
+    primary = newest_update_osd;
+  } else {
+    map<int, Info> complete_infos;
+    for (map<int, Info>::iterator i = all_info.begin();
+	 i != all_info.end();
+	 ++i) {
+      if (!i->second.is_incomplete())
+	complete_infos.insert(*i);
+    }
+    primary = find_best_info(complete_infos);
+    if (primary == complete_infos.end() ||
+	primary->second.last_update < newest_update_osd->second.log_tail) {
+      dout(10) << "calc_acting no acceptable primary, reverting to up " << up << dendl;
+      want = up;
+      return true;
+    } else {
+      dout(10) << "up[0] and newest_update_osd need backfill, osd."
+	       << newest_update_osd_id
+	       << " selected as primary instead" << dendl;
+    }
+  }
+
+
+  dout(10) << "calc_acting primary is osd." << primary->first
+	   << " with " << primary->second << dendl;
+  want.push_back(primary->first);
+  unsigned usable = 1;
+  unsigned backfill = 0;
+
+  // select replicas that have log contiguity with primary
+  for (vector<int>::const_iterator i = up.begin();
+       i != up.end();
+       ++i) {
+    if (*i == primary->first)
+      continue;
+    const Info &cur_info = all_info.find(*i)->second;
+    if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
+      if (backfill < 1) {
+	dout(10) << " osd." << *i << " (up) accepted (backfill) " << cur_info << dendl;
+	want.push_back(*i);
+	backfill++;
+      } else {
+	dout(10) << " osd." << *i << " (up) rejected" << cur_info << dendl;
+      }
+    } else {
+      want.push_back(*i);
+      usable++;
+      dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
+    }
+  }
+
+  for (map<int,Info>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
-    if (want.size() >= get_osdmap()->get_pg_size(info.pgid))
+    if (usable >= get_osdmap()->get_pg_size(info.pgid))
       break;
 
+    // skip up osds we already considered above
+    if (i->first == primary->first)
+      continue;
     vector<int>::const_iterator up_it = find(up.begin(), up.end(), i->first);
     if (up_it != up.end())
       continue;
 
-    if (best_info.log_tail <= i->second.last_update || best_info.log_backlog) {
-      // Can be brought up to date without stopping to generate a backlog
+    if (i->second.is_incomplete() || i->second.last_update < primary->second.log_tail) {
+      dout(10) << " osd." << i->first << " (stray) REJECTED " << i->second << dendl;
+    } else {
       want.push_back(i->first);
       dout(10) << " osd." << i->first << " (stray) accepted " << i->second << dendl;
-    } else {
-      dout(10) << " osd." << i->first << " (stray) REJECTED " << i->second << dendl;
+      usable++;
     }
   }
 
+  return true;
+}
+
+/**
+ * choose acting
+ *
+ * calculate the desired acting, and request a change with the monitor
+ * if it differs from the current acting.
+ */
+bool PG::choose_acting(int& newest_update_osd)
+{
+  vector<int> want;
+
+  if (!calc_acting(newest_update_osd, want)) {
+    dout(10) << "choose_acting failed, marking pg down" << dendl;
+    state_set(PG_STATE_DOWN);
+    return false;
+  }
+
   if (want != acting) {
-    dout(10) << "choose_acting  want " << want << " != acting " << acting
+    dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
     if (want == up) {
       vector<int> empty;
@@ -1209,116 +1105,6 @@ bool PG::choose_acting(int newest_update_osd) const
     return false;
   }
   dout(10) << "choose_acting want " << want << " (== acting)" << dendl;
-  return true;
-}
-
-bool PG::choose_log_location(const PriorSet &prior_set,
-			     bool &need_backlog,
-			     bool &wait_on_backlog,
-			     int &pull_from,
-			     eversion_t &newest_update,
-			     eversion_t &oldest_update) const
-{
-  pull_from = -1;
-  const Info *best_info = NULL;
-  need_backlog = false;
-  wait_on_backlog = false;
-  map<int, Info> all_info(peer_info.begin(), peer_info.end());
-  all_info[osd->whoami] = info;
-
-  for (map<int, Info>::const_iterator i = all_info.begin();
-       i != all_info.end();
-       ++i) {
-    if (prior_set.probe.find(i->first) == prior_set.probe.end()) {
-      dout(10) << "osd." << i->first << " not in current prior set, skipping" << dendl;
-      continue;
-    }
-
-    // We always want the latest last update, but we prefer one that
-    // has a backlog. If last update and backlog status are the same,
-    // prefer the one with the longer log.
-    if (!best_info ||
-	i->second.last_update > best_info->last_update ||
-	((i->second.last_update == best_info->last_update) &&
-	 (((i->second.log_tail < best_info->log_tail &&
-	   (i->second.log_backlog || !best_info->log_backlog))) ||
-	  (i->second.log_backlog && !best_info->log_backlog)))) {
-      best_info = &(i->second);
-      pull_from = i->first;
-      newest_update = i->second.last_update;
-    }
-    if (oldest_update > i->second.last_update) {
-      oldest_update = i->second.last_update;
-    }
-  }
-
-  dout(10) << "choose_log_location newest_update " << newest_update
-	   << " on osd." << pull_from << dendl;
-
-  if (!choose_acting(pull_from)) {
-    return false;
-  }
-
-  for (vector<int>::const_iterator it = ++acting.begin();
-       it != acting.end();
-       ++it) {
-    const Info &pi = peer_info.find(*it)->second;
-    if (best_info->log_tail > pi.last_update) {
-      wait_on_backlog = true;
-      need_backlog = true;
-    }
-  }
-
-  for (vector<int>::const_iterator it = up.begin();
-       it != up.end();
-       ++it) {
-    if (*it == osd->whoami) continue;
-    const Info &pi = peer_info.find(*it)->second;
-
-    vector<int>::const_iterator acting_it = find(acting.begin(), acting.end(), *it);
-    if (acting_it != acting.end())
-      continue;
-
-    if (pi.last_update < best_info->log_tail) {
-      dout(10) << "must generate backlog for up but !acting peer osd." << *it
-	       << " whose last_update " << pi.last_update
-	       << " < best_info->tail " << best_info->log_tail << dendl;
-      need_backlog = true;
-    }
-  }
-
-  // check our own info -- we aren't in peer_info
-  if (best_info->log_tail > info.last_update) {
-    wait_on_backlog = true;
-    need_backlog = true;
-  }
-
-  // do i need a backlog due to mis-trimmed log?  (compensate for past(!) bugs)
-  if (info.last_complete < info.log_tail && !info.log_backlog) {
-    dout(10) << "must generate backlog because my last_complete " << info.last_complete
-	     << " < log.tail " << info.log_tail << " and no backlog" << dendl;
-    need_backlog = true;
-    wait_on_backlog = true;
-  }
-  for (vector<int>::const_iterator it = ++acting.begin();
-       it != acting.end();
-       ++it) {
-    const Info& pi = peer_info.find(*it)->second;
-    if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
-	pi.last_complete < info.log_tail) {
-      dout(10) << "must generate backlog for replica peer osd." << *it
-	       << " who has a last_complete " << pi.last_complete
-	       << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
-      need_backlog = true;
-      wait_on_backlog = true;
-      break;
-    }
-  }
-
-  dout(10) << "choose_log_location"
-	   << (need_backlog ? " need_backlog" : "")
-	   << (wait_on_backlog ? " wait_on_backlog" : "")
-	   << dendl;
   return true;
 }
 
@@ -1403,12 +1189,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   state_set(PG_STATE_ACTIVE);
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
-  state_clear(PG_STATE_PEERING);
-  if (is_primary() && 
-      get_osdmap()->get_pg_size(info.pgid) != acting.size())
-    state_set(PG_STATE_DEGRADED);
-  else
-    state_clear(PG_STATE_DEGRADED);
 
   if (is_primary()) {
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -1423,16 +1203,12 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   if (role == 0) {    // primary state
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
+    assert(info.last_complete >= log.tail);
   }
   last_update_applied = info.last_update;
 
-  assert(info.last_complete >= log.tail || log.backlog);
 
   need_up_thru = false;
-
-  // if we are building a backlog, cancel it!
-  if (up == acting)
-    osd->cancel_generate_backlog(this);
 
   // write pg info, log
   write_info(t);
@@ -1489,18 +1265,21 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   // if primary..
   if (is_primary()) {
     // start up replicas
+
+    // count replicas that are not backfilling
+    unsigned active = 1;
+
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_info.count(peer));
       PG::Info& pi = peer_info[peer];
 
-      MOSDPGLog *m = 0;
-
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      bool need_old_log_entries = pi.log_tail > pi.last_complete && !pi.log_backlog;
+      MOSDPGLog *m = 0;
+      Missing& pm = peer_missing[peer];
 
-      if (pi.last_update == info.last_update && !need_old_log_entries) {
+      if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.is_empty() && activator_map) {
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
@@ -1511,41 +1290,49 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	}
-      } 
-      else {
+      } else if (log.tail > pi.last_update || pi.last_backfill == hobject_t()) {
+	// backfill
+	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
+			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
+			 << " to " << info.last_update;
+
+	pi.last_update = info.last_update;
+	pi.last_complete = info.last_update;
+	pi.last_backfill = hobject_t();
+	pi.history = info.history;
+	pi.stats.stats.clear();
+
+	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
+
+	// send some recent log, so that op dup detection works well.
+	m->log.copy_up_to(log, g_conf->osd_min_pg_log_entries);
+	m->info.log_tail = m->log.tail;
+	pi.log_tail = m->log.tail;  // sigh...
+
+	pm.clear();
+      } else {
+	// catch up
+	assert(log.tail <= pi.last_update);
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
-	if (need_old_log_entries) {
-	  // the replica's tail is after it's last_complete and it has no backlog.
-	  // ick, this shouldn't normally happen.  but we can compensate!
-	  dout(10) << "activate peer osd." << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
-	  if (log.tail <= pi.last_complete) {
-	    // _our_ log is sufficient, phew!
-	    m->log.copy_after(log, pi.last_complete);
-	  } else {
-	    assert(log.backlog);
-	    m->log = log;
-	  }
-	} else if (log.tail > pi.last_update) {
-	  // our tail is too new; send the full backlog.
-	  assert(log.backlog);
-	  m->log = log;
-	} else {
-	  // send new stuff to append to replicas log
-	  assert(info.last_update > pi.last_update);
-	  m->log.copy_after(log, pi.last_update);
-	}
+	// send new stuff to append to replicas log
+	assert(info.last_update > pi.last_update);
+	m->log.copy_after(log, pi.last_update);
       }
 
-      Missing& pm = peer_missing[peer];
+      if (pi.last_backfill != hobject_t::get_max())
+	state_set(PG_STATE_BACKFILL);
+      else
+	active++;
+
 
       // update local version of peer's missing list!
-      if (m) {
+      if (m && pi.last_backfill != hobject_t()) {
         eversion_t plu = pi.last_update;
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
-             p++) 
-          if (p->version > plu)
-            pm.add_next_event(*p);
+             p++)
+	  if (p->soid <= pi.last_backfill)
+	    pm.add_next_event(*p);
       }
       
       if (m) {
@@ -1562,10 +1349,13 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	pi.last_complete = pi.last_update;
         dout(10) << "activate peer osd." << peer << " " << pi << " uptodate" << dendl;
       } else {
-        dout(10) << "activate peer osd." << peer << " " << pi
-                 << " missing " << pm << dendl;
+        dout(10) << "activate peer osd." << peer << " " << pi << " missing " << pm << dendl;
       }
     }
+
+    // degraded?
+    if (get_osdmap()->get_pg_size(info.pgid) > active)
+      state_set(PG_STATE_DEGRADED);
 
     // all clean?
     if (is_all_uptodate()) 
@@ -1693,6 +1483,8 @@ struct C_PG_FinishRecovery : public Context {
 void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
+  state_clear(PG_STATE_DEGRADED);
+  state_clear(PG_STATE_BACKFILL);
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
@@ -1727,13 +1519,6 @@ void PG::_finish_recovery(Context *c)
     if (state_test(PG_STATE_INCONSISTENT)) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       queue_scrub();
-    } else if (log.backlog) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      drop_backlog();
-      write_info(*t);
-      write_log(*t);
-      int tr = osd->store->queue_transaction(&osr, t);
-      assert(tr == 0);
     }
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
@@ -1795,6 +1580,10 @@ void PG::clear_recovery_state()
     finish_recovery_op(soid, true);
   }
 
+  backfill_target = -1;
+  backfill_info.clear();
+  peer_backfill_info.clear();
+  waiting_on_backfill = false;
   _clear_recovery_state();  // pg impl specific hook
 }
 
@@ -1827,7 +1616,6 @@ void PG::purge_strays()
   // clear _requested maps; we may have to peer() again if we discover
   // (more) stray content
   peer_log_requested.clear();
-  peer_backlog_requested.clear();
   peer_missing_requested.clear();
 }
 
@@ -1856,17 +1644,27 @@ void PG::update_stats()
     pg_stats_stable.log_start = log.tail;
     pg_stats_stable.ondisk_log_start = log.tail;
 
-    pg_stats_stable.stats.calc_copies_degraded(get_osdmap()->get_pg_size(info.pgid), acting.size());
-
+    // calc copies, degraded
+    int target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
+    pg_stats_stable.stats.calc_copies(target);
+    pg_stats_stable.stats.sum.num_objects_degraded = 0;
     if (!is_clean() && is_active()) {
+      // NOTE: we only generate copies, degraded, unfound values for
+      // the summation, not individual stat categories.
+      uint64_t num_objects = pg_stats_stable.stats.sum.num_objects;
+
       pg_stats_stable.stats.sum.num_objects_missing_on_primary = missing.num_missing();
-      int degraded = missing.num_missing();
+      uint64_t degraded = missing.num_missing();
       for (unsigned i=1; i<acting.size(); i++) {
 	assert(peer_missing.count(acting[i]));
-	degraded += peer_missing[acting[i]].num_missing();
-      }
-      pg_stats_stable.stats.sum.num_objects_degraded += degraded;
 
+	// in missing set
+	degraded += peer_missing[acting[i]].num_missing();
+
+	// not yet backfilled
+	degraded += num_objects - peer_info[acting[i]].stats.stats.sum.num_objects;
+      }
+      pg_stats_stable.stats.sum.num_objects_degraded = degraded;
       pg_stats_stable.stats.sum.num_objects_unfound = get_num_unfound();
     }
 
@@ -1960,7 +1758,6 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_tail = log.tail;
-    info.log_backlog = log.backlog;
     trim_ondisklog(t);
   }
 }
@@ -2071,7 +1868,6 @@ void PG::read_log(ObjectStore *store)
 
   dout(10) << "read_log " << ondisklog.tail << "~" << ondisklog.length() << dendl;
 
-  log.backlog = info.log_backlog;
   log.tail = info.log_tail;
 
   // In case of sobject_t based encoding, may need to list objects in the store
@@ -2126,7 +1922,7 @@ void PG::read_log(ObjectStore *store)
 	reorder = true;
       }
 
-      if (e.version <= log.tail && !log.backlog) {
+      if (e.version <= log.tail) {
 	dout(20) << "read_log  ignoring entry at " << pos << " below log.tail" << dendl;
 	continue;
       }
@@ -2364,8 +2160,6 @@ void PG::read_state(ObjectStore *store)
 
     // reset info
     info.log_tail = info.last_update;
-    info.log_backlog = false;
-    log.backlog = false;
 
     // Move the corrupt log to a new place and create a new zero-length log entry.
     ObjectStore::Transaction t;
@@ -2377,12 +2171,8 @@ void PG::read_state(ObjectStore *store)
     write_info(t);
     store->apply_transaction(t);
 
-    
-    map<eversion_t,Log::Entry> omap;
-    generate_backlog_epoch = get_osdmap()->get_epoch();
-    if (build_backlog_map(omap))
-      assemble_backlog(omap);
-    generate_backlog_epoch = 0;
+    info.last_backfill = hobject_t();
+    info.stats.stats.clear();
   }
 
   // log any weirdness
@@ -2406,26 +2196,21 @@ void PG::log_weirdness()
     // shoudl it be?
     if (log.head != log.tail)
       osd->clog.error() << info.pgid
-			<< " log bound mismatch, empty but (" << log.tail 
-			<< "," << log.head << "]" << (log.backlog ? "+backlog":"")
-			<< "\n";
+			<< " log bound mismatch, empty but (" << log.tail << "," << log.head << "]\n";
   } else {
-    if ((log.log.begin()->version <= log.tail && !log.backlog) || // sloppy check
-	(log.log.rbegin()->version != log.head && !(log.head == log.tail && log.backlog)))
+    if ((log.log.begin()->version <= log.tail) || // sloppy check
+	(log.log.rbegin()->version != log.head && !(log.head == log.tail)))
       osd->clog.error() << info.pgid
-			<< " log bound mismatch, info (" << log.tail 
-			<< "," << log.head << "]" << (log.backlog ? "+backlog":"")
+			<< " log bound mismatch, info (" << log.tail << "," << log.head << "]"
 			<< " actual ["
-			<< log.log.begin()->version << ","
-			<< log.log.rbegin()->version << "]"
+			<< log.log.begin()->version << "," << log.log.rbegin()->version << "]"
 			<< "\n";
   }
   
-  if (info.last_complete < log.tail && !log.backlog)
+  if (info.last_complete < log.tail)
     osd->clog.error() << info.pgid
 		      << " last_complete " << info.last_complete
 		      << " < log.tail " << log.tail
-		      << " and !backlog"
 		      << "\n";
 }
 
@@ -2449,6 +2234,9 @@ void PG::update_snap_collections(vector<Log::Entry> &log_entries,
   for (vector<Log::Entry>::iterator i = log_entries.begin();
        i != log_entries.end();
        ++i) {
+    // If past backfill line, snap_collections will be updated during push
+    if (i->soid > info.last_backfill)
+      continue;
     if (i->is_clone()) {
       vector<snapid_t> snaps;
       bufferlist::iterator p = i->snaps.begin();
@@ -3344,42 +3132,33 @@ void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
   assert(!acting.empty());
   assert(from == acting[0]);
   assert(query.type != PG::Query::INFO);
-  if (query.type == PG::Query::BACKLOG &&
-      !log.backlog) {
-    assert(0); // generated in the state machine
-  } else {
-    MOSDPGLog *mlog = new MOSDPGLog(get_osdmap()->get_epoch(),
-				    info, query_epoch);
-    mlog->missing = missing;
 
-    // primary -> other, when building master log
-    if (query.type == PG::Query::LOG) {
-      dout(10) << " sending info+missing+log since " << query.since
-	       << dendl;
-      if (query.since != eversion_t() && query.since < log.tail) {
-	osd->clog.error() << info.pgid << " got broken Query::LOG since " << query.since
-			  << " when my log.tail is " << log.tail
-			  << ", sending full log instead\n";
-	mlog->log = log;           // primary should not have requested this!!
-      } else
-	mlog->log.copy_after(log, query.since);
-    }
-    else if (query.type == PG::Query::BACKLOG) {
-      dout(10) << "sending info+missing+backlog" << dendl;
-      assert(log.backlog);
-      mlog->log = log;
-    } 
-    else if (query.type == PG::Query::FULLLOG) {
-      dout(10) << " sending info+missing+full log" << dendl;
-      mlog->log.copy_non_backlog(log);
-    }
+  MOSDPGLog *mlog = new MOSDPGLog(get_osdmap()->get_epoch(),
+				  info, query_epoch);
+  mlog->missing = missing;
 
-    dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
-
-    osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
-    osd->cluster_messenger->send_message(mlog, 
-					 get_osdmap()->get_cluster_inst(from));
+  // primary -> other, when building master log
+  if (query.type == PG::Query::LOG) {
+    dout(10) << " sending info+missing+log since " << query.since
+	     << dendl;
+    if (query.since != eversion_t() && query.since < log.tail) {
+      osd->clog.error() << info.pgid << " got broken Query::LOG since " << query.since
+			<< " when my log.tail is " << log.tail
+			<< ", sending full log instead\n";
+      mlog->log = log;           // primary should not have requested this!!
+    } else
+      mlog->log.copy_after(log, query.since);
   }
+  else if (query.type == PG::Query::FULLLOG) {
+    dout(10) << " sending info+missing+full log" << dendl;
+    mlog->log = log;
+  }
+
+  dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
+
+  osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
+  osd->cluster_messenger->send_message(mlog, 
+				       get_osdmap()->get_cluster_inst(from));
 }
 
 
@@ -3487,7 +3266,6 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 void PG::on_removal()
 {
   osd->recovery_wq.dequeue(this);
-  osd->backlog_wq.dequeue(this);
   osd->scrub_wq.dequeue(this);
   osd->scrub_finalize_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
@@ -3568,18 +3346,8 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   // deactivate.
   state_clear(PG_STATE_ACTIVE);
   state_clear(PG_STATE_DOWN);
-  state_clear(PG_STATE_PEERING);  // we'll need to restart peering
-  state_clear(PG_STATE_DEGRADED);
-  state_clear(PG_STATE_REPLAY);
-
-  osd->cancel_generate_backlog(this);
 
   peer_missing.clear();
-
-  if (is_primary()) {
-    if (osdmap->get_pg_size(info.pgid) != acting.size())
-      state_set(PG_STATE_DEGRADED);
-  }
 
   // reset primary state?
   if (oldrole == 0 || get_role() == 0)
@@ -3623,7 +3391,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     } else {
       // i am now replica|stray.  we need to send a notify.
       state_set(PG_STATE_STRAY);
-      have_master_log = false;
     }
       
   } else {
@@ -3660,9 +3427,11 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
 void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
 {
-  assert(is_replica());
-  assert(is_active());
-  info.stats = oinfo.stats;
+  assert(!is_primary());
+  assert(is_stray() || is_active());
+
+  if (info.last_backfill.is_max())
+    info.stats = oinfo.stats;
 
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   info.history.merge(oinfo.history);
@@ -3745,7 +3514,7 @@ void PG::Missing::add_next_event(const Log::Entry& e)
       missing[e.soid].need = e.version;  // leave .have unchanged.
     } else if (e.is_backlog()) {
       // May not have prior version
-      missing[e.soid].need = e.version;
+      assert(0 == "these don't exist anymore");
     } else {
       // not missing, we must have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
@@ -3825,8 +3594,8 @@ ostream& operator<<(ostream& out, const PG& pg)
       out << " (log bound mismatch, empty)";
     }
   } else {
-    if ((pg.log.log.begin()->version <= pg.log.tail && !pg.log.backlog) || // sloppy check
-        (pg.log.log.rbegin()->version != pg.log.head && !(pg.log.head == pg.log.tail && pg.log.backlog))) {
+    if ((pg.log.log.begin()->version <= pg.log.tail) || // sloppy check
+        (pg.log.log.rbegin()->version != pg.log.head && !(pg.log.head == pg.log.tail))) {
       out << " (log bound mismatch, actual=["
 	  << pg.log.log.begin()->version << ","
 	  << pg.log.log.rbegin()->version << "]";
@@ -3835,13 +3604,14 @@ ostream& operator<<(ostream& out, const PG& pg)
     }
   }
 
+  if (pg.get_backfill_target() >= 0)
+    out << " bft=" << pg.get_backfill_target();
+
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
 
   if (pg.get_role() == 0) {
     out << " mlcod " << pg.min_last_complete_ondisk;
-    if (!pg.have_master_log)
-      out << " !hml";
   }
 
   out << " " << pg_state_string(pg.get_state());
@@ -3881,7 +3651,9 @@ std::ostream& operator<<(std::ostream& oss,
 		     << "state<" << get_state_name() << ">: ")
 
 /*------Crashed-------*/
-PG::RecoveryState::Crashed::Crashed(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Crashed::Crashed(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Crashed";
   context< RecoveryMachine >().log_enter(state_name);
   assert(0 == "we got a bad state machine event");
@@ -3889,48 +3661,53 @@ PG::RecoveryState::Crashed::Crashed(my_context ctx) : my_base(ctx) {
 
 
 /*------Initial-------*/
-PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Initial::Initial(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Initial";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::Initial::react(const MNotifyRec& notify) {
+boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
+{
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(notify.from, notify.info);
   return transit< Primary >();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Initial::react(const MInfoRec& i) {
+boost::statechart::result PG::RecoveryState::Initial::react(const MInfoRec& i)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Initial::react(const MLogRec& i) {
+boost::statechart::result PG::RecoveryState::Initial::react(const MLogRec& i)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
-void PG::RecoveryState::Initial::exit() {
+void PG::RecoveryState::Initial::exit()
+{
   PG *pg = context< RecoveryMachine >().pg;
   pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------Started-------*/
-PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Started::Started(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Started";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::Started::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap)
+{
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
@@ -3941,20 +3718,23 @@ PG::RecoveryState::Started::react(const AdvMap& advmap) {
   return discard_event();
 }
 
-void PG::RecoveryState::Started::exit() {
+void PG::RecoveryState::Started::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*--------Reset---------*/
-PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Reset::Reset(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Reset";
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->set_last_peering_reset();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Reset::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
@@ -3965,8 +3745,8 @@ PG::RecoveryState::Reset::react(const AdvMap& advmap) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Reset::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -3975,12 +3755,15 @@ PG::RecoveryState::Reset::react(const ActMap&) {
   return transit< Started >();
 }
 
-void PG::RecoveryState::Reset::exit() {
+void PG::RecoveryState::Reset::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*-------Start---------*/
-PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Start::Start(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Start";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -3994,26 +3777,21 @@ PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
   }
 }
 
-void PG::RecoveryState::Start::exit() {
+void PG::RecoveryState::Start::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*---------Primary--------*/
-PG::RecoveryState::Primary::Primary(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Primary::Primary(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Started/Primary";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::Primary::react(const BacklogComplete&) {
-  PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "BacklogComplete" << dendl;
-  pg->choose_acting(pg->osd->whoami);
-  return discard_event();
-}
-
-boost::statechart::result 
-PG::RecoveryState::Primary::react(const MNotifyRec& notevt) {
+boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& notevt)
+{
   dout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->peer_info.count(notevt.from) &&
@@ -4026,16 +3804,15 @@ PG::RecoveryState::Primary::react(const MNotifyRec& notevt) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Primary::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
+{
   dout(7) << "handle ActMap primary" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   pg->update_stats();
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::Primary::react(const AdvMap& advmap) 
+boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap) 
 {
   PG *pg = context< RecoveryMachine >().pg;
   OSDMapRef osdmap = advmap.osdmap;
@@ -4053,13 +3830,15 @@ PG::RecoveryState::Primary::react(const AdvMap& advmap)
   return forward_event();
 }
 
-void PG::RecoveryState::Primary::exit() {
+void PG::RecoveryState::Primary::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
-  : my_base(ctx) {
+  : my_base(ctx)
+{
   state_name = "Started/Primary/Peering";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -4076,7 +3855,6 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   dout(10) << "Peering advmap" << dendl;
   if (prior_set.get()->affected_by_map(advmap.osdmap, pg)) {
     dout(1) << "Peering, affected_by_map, going to Reset" << dendl;
-    pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
     return transit< Reset >();
   }
@@ -4086,13 +3864,18 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   return forward_event();
 }
 
-void PG::RecoveryState::Peering::exit() {
+void PG::RecoveryState::Peering::exit()
+{
   dout(10) << "Leaving Peering" << dendl;
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_PEERING);
 }
 
 /*---------Active---------*/
-PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Active::Active(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Started/Primary/Active";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -4107,8 +3890,8 @@ PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx) {
   dout(10) << "Activate Finished" << dendl;
 }
 
-boost::statechart::result 
-PG::RecoveryState::Active::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active advmap" << dendl;
   if (!pg->pool->newly_removed_snaps.empty()) {
@@ -4119,8 +3902,8 @@ PG::RecoveryState::Active::react(const AdvMap& advmap) {
   return forward_event();
 }
     
-boost::statechart::result 
-PG::RecoveryState::Active::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active: handling ActMap" << dendl;
   assert(pg->is_active());
@@ -4153,13 +3936,11 @@ PG::RecoveryState::Active::react(const ActMap&) {
 			*context< RecoveryMachine >().get_context_list());
   }
 
-  pg->choose_acting(pg->osd->whoami);
-
   return forward_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Active::react(const MNotifyRec& notevt) {
+boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& notevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->is_active());
   assert(pg->is_primary());
@@ -4179,8 +3960,8 @@ PG::RecoveryState::Active::react(const MNotifyRec& notevt) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
+boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->is_active());
   assert(pg->is_primary());
@@ -4204,8 +3985,8 @@ PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::Active::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt)
+{
   dout(10) << "searching osd." << logevt.from
            << " log for unfound items" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
@@ -4216,13 +3997,49 @@ PG::RecoveryState::Active::react(const MLogRec& logevt) {
   return discard_event();
 }
 
-void PG::RecoveryState::Active::exit() {
+boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplete& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+
+  int newest_update_osd;
+
+  // adjust acting set?  (e.g. because backfill completed...)
+  if (pg->acting != pg->up &&
+      !pg->choose_acting(newest_update_osd)) {
+    post_event(NeedNewMap());
+    return discard_event();
+  }
+
+  if (pg->is_all_uptodate()) {
+    dout(10) << "recovery complete" << dendl;
+    pg->log.reset_recovery_pointers();
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
+    pg->finish_recovery(*t, fin->contexts);
+    int tr = pg->osd->store->queue_transaction(&pg->osr, t,
+					       new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(tr == 0);
+  } else {
+    dout(10) << "recovery not yet complete: some osds not up to date" << dendl;
+  }
+
+  return discard_event();
+}
+
+void PG::RecoveryState::Active::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_DEGRADED);
+  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_REPLAY);
 }
 
 /*------ReplicaActive-----*/
 PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx) 
-  : my_base(ctx) {
+  : my_base(ctx)
+{
   state_name = "Started/ReplicaActive";
 
   context< RecoveryMachine >().log_enter(state_name);
@@ -4235,30 +4052,30 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   dout(10) << "Activate Finished" << dendl;
 }
 
-boost::statechart::result 
-PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_primary_info(*context<RecoveryMachine>().get_cur_transaction(),
 			infoevt.info);
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   MOSDPGLog *msg = logevt.msg;
   dout(10) << "received log from " << logevt.from << dendl;
   pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
 		msg->info, msg->log, logevt.from);
 
-  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::ReplicaActive::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -4267,21 +4084,22 @@ PG::RecoveryState::ReplicaActive::react(const ActMap&) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::ReplicaActive::react(const MQuery& query) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& query)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(query.query.type == Query::MISSING);
   pg->fulfill_log(query.from, query.query, query.query_epoch);
   return discard_event();
 }
 
-void PG::RecoveryState::ReplicaActive::exit() {
+void PG::RecoveryState::ReplicaActive::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
-  : my_base(ctx), backlog_requested(false) {
+  : my_base(ctx) {
   state_name = "Started/Stray";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -4291,68 +4109,45 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_primary());
 }
 
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   MOSDPGLog *msg = logevt.msg;
-  dout(10) << "received log from " << logevt.from << dendl;
-  pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
-		msg->info, msg->log, logevt.from);
+  dout(10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
 
-  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  if (msg->info.last_backfill == hobject_t()) {
+    // restart backfill
+    pg->info = msg->info;
+    pg->log.claim_log(msg->log);
+    pg->missing.clear();
+  } else {
+    pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
+		  msg->info, msg->log, logevt.from);
+  }
+
+  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
-  dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
+boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "received info from " << infoevt.from << dendl;
-  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  dout(10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
+
+  assert(infoevt.info.last_update == pg->info.last_update);
+  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
-  dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const BacklogComplete&) {
+boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
+{
   PG *pg = context< RecoveryMachine >().pg;
-  assert(backlog_requested);
-  dout(10) << "BacklogComplete" << dendl;
-  for (map<int, pair<Query, epoch_t> >::iterator i = pending_queries.begin();
-       i != pending_queries.end();
-       pending_queries.erase(i++)) {
-    dout(10) << "sending log to " << i->first << dendl;
-    pg->fulfill_log(i->first, i->second.first, i->second.second);
-  }
-  backlog_requested = false;
-  return discard_event();
-}
-
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const MQuery& query) {
-  PG *pg = context< RecoveryMachine >().pg;
-  if (query.query.type == Query::BACKLOG) {
-    if (!pg->log.backlog) {
-      dout(10) << "Stray, need a backlog!" 
-	       << dendl;
-      pending_queries[query.from] = pair<Query, epoch_t>(query.query,
-							 query.query_epoch);
-      if (!backlog_requested) {
-	dout(10) << "Stray, generating a backlog!" 
-		 << dendl;
-	backlog_requested = true;
-	pg->osd->queue_generate_backlog(pg);
-      }
-      return discard_event();
-    }
-  }
-
   if (query.query.type == Query::INFO) {
     pair<int, Info> notify_info;
     pg->fulfill_info(query.from, query.query, notify_info);
@@ -4363,8 +4158,8 @@ PG::RecoveryState::Stray::react(const MQuery& query) {
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::Stray::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -4373,12 +4168,14 @@ PG::RecoveryState::Stray::react(const ActMap&) {
   return discard_event();
 }
 
-void PG::RecoveryState::Stray::exit() {
+void PG::RecoveryState::Stray::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*--------GetInfo---------*/
-PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) 
+PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
+  : my_base(ctx) 
 {
   state_name = "Started/Primary/Peering/GetInfo";
   context< RecoveryMachine >().log_enter(state_name);
@@ -4445,63 +4242,117 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       get_infos();
     } else {
       // are we done getting everything?
-      if (peer_info_requested.empty() && !prior_set->pg_down)
+      if (peer_info_requested.empty() && !prior_set->pg_down) {
+	/*
+	 * make sure we have at least one !incomplete() osd from the
+	 * last rw interval.  the incomplete (backfilling) replicas
+	 * get a copy of the log, but they don't get all the object
+	 * updates, so they are insufficient to recover changes during
+	 * that interval.
+	 */
+	if (pg->info.history.last_epoch_started) {
+	  for (map<epoch_t,PG::Interval>::reverse_iterator p = pg->past_intervals.rbegin();
+	       p != pg->past_intervals.rend();
+	       ++p) {
+	    if (p->first < pg->info.history.last_epoch_started)
+	      break;
+	    if (!p->second.maybe_went_rw)
+	      continue;
+	    Interval& interval = p->second;
+	    dout(10) << " last maybe_went_rw interval was " << interval << dendl;
+	    OSDMapRef osdmap = pg->get_osdmap();
+
+	    /*
+	     * this mirrors the PriorSet calculation: we wait if we
+	     * don't have an up (AND !incomplete) node AND there are
+	     * nodes down that might be usable.
+	     */
+	    bool any_up_complete_now = false;
+	    bool any_down_now = false;
+	    for (unsigned i=0; i<interval.acting.size(); i++) {
+	      int o = interval.acting[i];
+	      if (!osdmap->exists(o) || osdmap->get_info(o).lost_at > interval.first)
+		continue;  // dne or lost
+	      if (osdmap->is_up(o)) {
+		PG::Info *pinfo;
+		if (o == pg->osd->whoami) {
+		  pinfo = &pg->info;
+		} else {
+		  assert(pg->peer_info.count(o));
+		  pinfo = &pg->peer_info[o];
+		}
+		if (!pinfo->is_incomplete())
+		  any_up_complete_now = true;
+	      } else {
+		any_down_now = true;
+	      }
+	    }
+	    if (!any_up_complete_now && any_down_now) {
+	      dout(10) << " no osds up+complete from interval " << interval << dendl;
+	      pg->state_set(PG_STATE_DOWN);
+	      return discard_event();
+	    }
+	    break;
+	  }
+	}
 	post_event(GotInfo());
+      }
     }
   }
   return discard_event();
 }
 
-void PG::RecoveryState::GetInfo::exit() {
+void PG::RecoveryState::GetInfo::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
-  my_base(ctx), newest_update_osd(-1), need_backlog(false),
-  wait_on_backlog(false), msg(0)
+  my_base(ctx), newest_update_osd(-1), msg(0)
 {
   state_name = "Started/Primary/Peering/GetLog";
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
 
-  eversion_t newest_update;
-  eversion_t oldest_update;
-  if (!pg->choose_log_location(*context< Peering >().prior_set.get(),
-			       need_backlog,
-			       wait_on_backlog,
-			       newest_update_osd,
-			       newest_update,
-			       oldest_update)) {
+  // adjust acting?
+  if (!pg->choose_acting(newest_update_osd)) {
     post_event(NeedNewMap());
-  } else {
-    if (need_backlog && !pg->log.backlog) {
-      pg->osd->queue_generate_backlog(pg);
-    }
-
-    if (newest_update_osd != pg->osd->whoami) {
-      dout(10) << " requesting master log from osd." << newest_update_osd << dendl;
-      context<RecoveryMachine>().send_query(newest_update_osd,
-					    wait_on_backlog ? 
-					    Query(Query::BACKLOG, pg->info.history) :
-					    Query(Query::LOG, oldest_update, pg->info.history));
-    }
-
-    if (pg->log.backlog) {
-      wait_on_backlog = false;
-    }
-
-    if (!wait_on_backlog && newest_update_osd == pg->osd->whoami) {
-      dout(10) << " neither backlog nor master log needed, "
-	       << "moving to GetMissing" << dendl;
-      post_event(GotLog());
-    }
+    return;
   }
+
+  // am i the best?
+  if (newest_update_osd == pg->osd->whoami) {
+    post_event(GotLog());
+    return;
+  }
+
+  const Info& best = pg->peer_info[newest_update_osd];
+
+  // am i broken?
+  if (pg->info.last_update < best.log_tail) {
+    dout(10) << " not contiguous with osd." << newest_update_osd << ", down" << dendl;
+    post_event(IsIncomplete());
+    return;
+  }
+
+  // how much log to request?
+  eversion_t request_log_from = pg->info.last_update;
+  for (vector<int>::iterator p = pg->acting.begin() + 1; p != pg->acting.end(); ++p) {
+    Info& ri = pg->peer_info[*p];
+    if (ri.last_update >= best.log_tail && ri.last_update < request_log_from)
+      request_log_from = ri.last_update;
+  }
+
+  // how much?
+  dout(10) << " requesting log from osd." << newest_update_osd << dendl;
+  context<RecoveryMachine>().send_query(newest_update_osd,
+					Query(Query::LOG, request_log_from, pg->info.history));
 }
 
-boost::statechart::result 
-PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
+{
   assert(!msg);
   if (logevt.from != newest_update_osd) {
     dout(10) << "GetLog: discarding log from "
@@ -4512,31 +4363,12 @@ PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
 	   << logevt.from << dendl;
   msg = logevt.msg;
   msg->get();
-  if (!wait_on_backlog) {
-    dout(10) << "GetLog: already have/don't need backlog." 
-	     << "moving on to GetMissing" << dendl;
-    post_event(GotLog());
-  }
-  dout(10) << "GetLog: Still need backlog" << dendl;
+  post_event(GotLog());
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::GetLog::react(const BacklogComplete&) {
-  wait_on_backlog = false;
-  PG *pg = context< RecoveryMachine >().pg;
-  if (msg || newest_update_osd == pg->osd->whoami) {
-    dout(10) << "GetLog: already have/don't need master log." 
-	     << "moving on to GetMissing" << dendl;
-    post_event(GotLog());
-  } else {
-    dout(10) << "GetLog: Still need master log" << dendl;
-  }
-  return forward_event();
-}
-
-boost::statechart::result 
-PG::RecoveryState::GetLog::react(const GotLog&) {
+boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
+{
   dout(10) << "leaving GetLog" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (msg) {
@@ -4548,34 +4380,59 @@ PG::RecoveryState::GetLog::react(const GotLog&) {
   return transit< GetMissing >();
 }
 
-void PG::RecoveryState::GetLog::exit() {
+void PG::RecoveryState::GetLog::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
-PG::RecoveryState::GetLog::~GetLog() {
+PG::RecoveryState::GetLog::~GetLog()
+{
   if (msg)
     msg->put();
 }
 
 /*------WaitActingChange--------*/
-PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx) : my_base(ctx)
+PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/WaitActingChange";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt)
+{
   dout(10) << "In WaitActingChange, ignoring MLocRec" << dendl;
   return discard_event();
 }
 
-void PG::RecoveryState::WaitActingChange::exit() {
+void PG::RecoveryState::WaitActingChange::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
+/*------Incomplete--------*/
+PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Peering/Incomplete";
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_PEERING);
+  pg->state_set(PG_STATE_INCOMPLETE);
+  pg->update_stats();
+}
+void PG::RecoveryState::Incomplete::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_INCOMPLETE);
+}
+
 /*------GetMissing--------*/
-PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
+PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/GetMissing";
   context< RecoveryMachine >().log_enter(state_name);
@@ -4587,7 +4444,18 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
     const Info& pi = pg->peer_info[*i];
 
     if (pi.is_empty())
-      continue;                                // Does not have the PG yet
+      continue;                                // no pg data, nothing divergent
+
+    if (pi.last_update < pg->log.tail) {
+      dout(10) << " osd." << *i << " is not contiguous, will restart backfill" << dendl;
+      pg->peer_missing[*i];
+      continue;
+    }
+    if (pi.last_backfill == hobject_t()) {
+      dout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
+      pg->peer_missing[*i];
+      continue;
+    }
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
 	pi.last_update == pg->info.last_update) {  // peer is up to date
@@ -4604,20 +4472,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
     eversion_t since(pi.history.last_epoch_started, 0);
-    if (pi.last_update < pg->info.log_tail) {
-      // Replica needs to generate a backlog for merge_log to catch deletions
-      dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
-      context< RecoveryMachine >().send_query(*i, Query(Query::BACKLOG, pg->info.history));
-    } else if (pi.log_tail <= since) {
+    assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
+    if (pi.log_tail <= since) {
       dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
       context< RecoveryMachine >().send_query(*i, Query(Query::LOG, since, pg->info.history));
-    } else if (pi.log_backlog) {
-      dout(10) << " requesting backlog+missing from osd." << *i
-	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
-	       << dendl;
-      context< RecoveryMachine >().send_query(*i, Query(Query::BACKLOG, pg->info.history));
     } else {
-      // hmm, is this case valid?
       dout(10) << " requesting fulllog+missing from osd." << *i
 	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
 	       << dendl;
@@ -4653,18 +4512,21 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   return discard_event();
 };
 
-void PG::RecoveryState::GetMissing::exit() {
+void PG::RecoveryState::GetMissing::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------WaitUpThru--------*/
-PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx) : my_base(ctx)
+PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/WaitUpThru";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am) {
+boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (!pg->need_up_thru) {
     post_event(Activate());
@@ -4689,7 +4551,8 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
   return discard_event();
 }
 
-void PG::RecoveryState::WaitUpThru::exit() {
+void PG::RecoveryState::WaitUpThru::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -4774,17 +4637,17 @@ void PG::RecoveryState::handle_activate_map(RecoveryCtx *rctx)
   end_handle();
 }
 
-void PG::RecoveryState::handle_backlog_generated(RecoveryCtx *rctx)
+void PG::RecoveryState::handle_recovery_complete(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_backlog_generated" << dendl;
+  dout(10) << "handle_recovery_complete" << dendl;
   start_handle(rctx);
-  machine.process_event(BacklogComplete());
+  machine.process_event(RecoveryComplete());
   end_handle();
 }
 
 void PG::RecoveryState::handle_loaded(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_backlog_loaded" << dendl;
+  dout(10) << "handle_loaded" << dendl;
   start_handle(rctx);
   machine.process_event(Load());
   end_handle();

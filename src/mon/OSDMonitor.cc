@@ -619,6 +619,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     return false;
   }
 
+  int oldstate = osdmap.exists(from) ? osdmap.get_state(from) : CEPH_OSD_NEW;
+  if (pending_inc.new_state.count(from))
+    oldstate ^= pending_inc.new_state[from];
+
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
     dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
@@ -636,17 +640,18 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else {
     // mark new guy up.
-    if (g_conf->mon_osd_auto_mark_in)
-      down_pending_out.erase(from);  // if any
-
     pending_inc.new_up_client[from] = m->get_orig_source_addr();
     if (!m->cluster_addr.is_blank_ip())
       pending_inc.new_up_internal[from] = m->cluster_addr;
     pending_inc.new_hb_up[from] = m->hb_addr;
 
     // mark in?
-    if (g_conf->mon_osd_auto_mark_in)
+    if ((g_conf->mon_osd_auto_mark_auto_out_in && (oldstate & CEPH_OSD_AUTOOUT)) ||
+	(g_conf->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
+	(g_conf->mon_osd_auto_mark_in)) {
       pending_inc.new_weight[from] = CEPH_OSD_IN;
+      down_pending_out.erase(from);  // if any
+    }
 
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
@@ -1088,6 +1093,12 @@ void OSDMonitor::tick()
 	dout(10) << "tick marking osd." << o << " OUT after " << down
 		 << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
 	pending_inc.new_weight[o] = CEPH_OSD_OUT;
+
+	// set the AUTOOUT bit.
+	if (pending_inc.new_state.count(o) == 0)
+	  pending_inc.new_state[o] = 0;
+	pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
 	do_propose = true;
 	
 	mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
@@ -1815,7 +1826,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
   done:
       dout(10) << " creating osd." << i << dendl;
-      pending_inc.new_state[i] |= CEPH_OSD_EXISTS;
+      pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
       ss << i;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));

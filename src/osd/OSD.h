@@ -46,6 +46,9 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+#define CEPH_OSD_PROTOCOL     9 /* cluster internal */
+
+
 enum {
   l_osd_first = 10000,
   l_osd_opq,
@@ -595,56 +598,15 @@ protected:
   void handle_pg_info(class MOSDPGInfo *m);
   void handle_pg_trim(class MOSDPGTrim *m);
 
+  void handle_pg_scan(class MOSDPGScan *m);
+  bool scan_is_queueable(PG *pg, MOSDPGScan *m);
+
+  void handle_pg_backfill(class MOSDPGBackfill *m);
+  bool backfill_is_queueable(PG *pg, MOSDPGBackfill *m);
+
   void handle_pg_remove(class MOSDPGRemove *m);
   void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
-
-  // backlogs
-  xlist<PG*> backlog_queue;
-
-  struct BacklogWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    BacklogWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::BacklogWQ", ti, 0, tp), osd(o) {}
-
-    bool _empty() {
-      return osd->backlog_queue.empty();
-    }
-    bool _enqueue(PG *pg) {
-      if (!pg->backlog_item.is_on_list()) {
-	pg->get();
-	osd->backlog_queue.push_back(&pg->backlog_item);
-	return true;
-      }
-      return false;
-    }
-    void _dequeue(PG *pg) {
-      if (pg->backlog_item.remove_myself())
-	pg->put();
-    }
-    PG *_dequeue() {
-      if (osd->backlog_queue.empty())
-	return NULL;
-      PG *pg = osd->backlog_queue.front();
-      osd->backlog_queue.pop_front();
-      return pg;
-    }
-    void _process(PG *pg) {
-      osd->generate_backlog(pg);
-    }
-    void _clear() {
-      while (!osd->backlog_queue.empty()) {
-	PG *pg = osd->backlog_queue.front();
-	osd->backlog_queue.pop_front();
-	pg->put();
-      }
-    }
-  } backlog_wq;
-
-  void queue_generate_backlog(PG *pg);
-  void cancel_generate_backlog(PG *pg);
-  void generate_backlog(PG *pg);
-
 
   // -- commands --
   struct Command {

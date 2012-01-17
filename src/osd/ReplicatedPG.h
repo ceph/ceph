@@ -271,6 +271,10 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
+    // set if writes for this object are blocked on another objects recovery
+    ObjectContext *blocked_by;      // object blocking our writes
+    set<ObjectContext*> blocking;   // objects whose writes we block
+
     // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
     map<entity_name_t, Context *> unconnected_watchers;
@@ -279,7 +283,8 @@ public:
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
       : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
 	lock("ReplicatedPG::ObjectContext::lock"),
-	unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
+	unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
+	blocked_by(0) {}
     
     void get() { ++ref; }
 
@@ -504,6 +509,7 @@ protected:
     }
     return NULL;
   }
+  ObjectContext *_lookup_object_context(const hobject_t& oid);
   ObjectContext *get_object_context(const hobject_t& soid, const object_locator_t& oloc,
 				    bool can_create);
   void register_object_context(ObjectContext *obc) {
@@ -522,6 +528,8 @@ protected:
 			  const object_locator_t& oloc,
 			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
+
+  void add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *stat);
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
@@ -547,6 +555,26 @@ protected:
   };
   map<hobject_t, pull_info_t> pulling;
 
+  /*
+   * Backfill
+   *
+   * peer_info[backfill_target].last_backfill == info.last_backfill on the peer.
+   *
+   * objects prior to peer_info[backfill_target].last_backfill
+   *   - are on the peer
+   *   - are included in the peer stats
+   *
+   * objects between last_backfill and backfill_pos
+   *   - are on the peer or are in backfills_in_flight
+   *   - are not included in pg stats (yet)
+   *   - have their stats in pending_backfill_updates on the primary
+   */
+  set<hobject_t> backfills_in_flight;
+  map<hobject_t, pg_stat_t> pending_backfill_updates;
+
+  /// leading edge of backfill
+  hobject_t backfill_pos;
+
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
 
@@ -562,9 +590,11 @@ protected:
   int recover_object_replicas(const hobject_t& soid, eversion_t v);
   void calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 			 Missing& missing,
+			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
 			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, Missing& missing,
+			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void push_to_replica(ObjectContext *obc, const hobject_t& oid, int dest);
@@ -578,6 +608,8 @@ protected:
 		   interval_set<uint64_t>& data_subset, 
 		   map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void send_push_op_blank(const hobject_t& soid, int peer);
+
+  void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_op_pulls(const OSDMapRef map);
@@ -610,6 +642,21 @@ protected:
   int start_recovery_ops(int max);
   int recover_primary(int max);
   int recover_replicas(int max);
+  int recover_backfill(int max);
+
+  /**
+   * scan a (hash) range of objects in the current pg
+   *
+   * @begin first item should be >= this value
+   * @min return at least this many items, unless we are done
+   * @max return no more than this many items
+   * @bi [out] resulting map of objects to eversion_t's
+   */
+  void scan_range(hobject_t begin, int min, int max, BackfillInterval *bi);
+
+  void push_backfill_object(hobject_t oid, eversion_t v, eversion_t have, int peer);
+  void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
+
 
   void dump_watchers(ObjectContext *obc);
   void remove_watcher(ObjectContext *obc, entity_name_t entity);
@@ -691,6 +738,8 @@ protected:
     }
   };
 
+  void sub_op_remove(MOSDSubOp *op);
+
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_applied(RepModify *rm);
   void sub_op_modify_commit(RepModify *rm);
@@ -698,7 +747,7 @@ protected:
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
   void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
-  void recover_primary_got(hobject_t oid, eversion_t v);
+  void recover_got(hobject_t oid, eversion_t v);
   void sub_op_push(MOSDSubOp *op);
   void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
@@ -729,6 +778,8 @@ public:
   void do_pg_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
+  void do_scan(MOSDPGScan *op);
+  void do_backfill(MOSDPGBackfill *op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<hobject_t> &obs_to_trim);

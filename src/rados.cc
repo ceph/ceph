@@ -269,6 +269,7 @@ public:
   uint64_t max_obj_len;
   size_t min_op_len;
   size_t max_op_len;
+  size_t max_ops;
   size_t max_backlog;
   size_t target_throughput;
   int run_length;
@@ -322,6 +323,7 @@ public:
   }
 
   Mutex lock;
+  Cond cond;
 
   LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
     read_percent = 80;
@@ -336,7 +338,7 @@ public:
     total_sent = 0;
     total_completed = 0;
     num_objs = 200;
-    max_op = 0;
+    max_op = 16;
   }
   int bootstrap(const char *pool);
   int run();
@@ -359,6 +361,8 @@ public:
       op->completion->release();
 
     delete op;
+
+    cond.Signal();
   }
 };
 
@@ -390,13 +394,26 @@ int LoadGen::bootstrap(const char *pool)
   memset(p.c_str(), 0, buf_len);
   bl.push_back(p);
 
-  vector<librados::AioCompletion *> completions;
+  list<librados::AioCompletion *> completions;
   for (i = 0; i < num_objs; i++) {
     obj_info info;
     gen_rand_alphanumeric(buf, 16);
     info.name = "obj-";
     info.name.append(buf);
     info.len = get_random(min_obj_len, max_obj_len);
+
+    // throttle...
+    while (completions.size() > max_ops) {
+      AioCompletion *c = completions.front();
+      c->wait_for_complete();
+      ret = c->get_return_value();
+      c->release();
+      completions.pop_front();
+      if (ret < 0) {
+	cerr << "aio_write failed" << std::endl;
+	return ret;
+      }
+    }
 
     librados::AioCompletion *c = rados->aio_create_completion(NULL, NULL, NULL);
     completions.push_back(c);
@@ -409,13 +426,13 @@ int LoadGen::bootstrap(const char *pool)
     objs[i] = info;
   }
 
-  vector<librados::AioCompletion *>::iterator iter;
+  list<librados::AioCompletion *>::iterator iter;
   for (iter = completions.begin(); iter != completions.end(); ++iter) {
     AioCompletion *c = *iter;
     c->wait_for_complete();
     ret = c->get_return_value();
     c->release();
-    if (ret < 0) {
+    if (ret < 0) { // yes, we leak.
       cerr << "aio_write failed" << std::endl;
       return ret;
     }
@@ -494,8 +511,10 @@ int LoadGen::run()
   uint32_t total_sec = 0;
 
   while (1) {
-    usleep(1000);
-
+    lock.Lock();
+    utime_t one_second(1, 0);
+    cond.WaitInterval(g_ceph_context, lock, one_second);
+    lock.Unlock();
     utime_t now = ceph_clock_now(g_ceph_context);
 
     if (now > end_time)
@@ -516,7 +535,8 @@ int LoadGen::run()
     }
 
     while (sent < expected &&
-           sent - completed < max_backlog) {
+           sent - completed < max_backlog &&
+	   pending_ops.size() < max_ops) {
       sent += gen_next_op();
     }
   }
@@ -578,6 +598,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t max_obj_len = 0;
   uint64_t min_op_len = 0;
   uint64_t max_op_len = 0;
+  uint64_t max_ops = 0;
   uint64_t max_backlog = 0;
   uint64_t target_throughput = 0;
   int64_t read_percent = -1;
@@ -627,13 +648,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     max_obj_len = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("min-ops");
+  i = opts.find("min-op-len");
   if (i != opts.end()) {
     min_op_len = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("max-ops");
+  i = opts.find("max-op-len");
   if (i != opts.end()) {
     max_op_len = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("max-ops");
+  if (i != opts.end()) {
+    max_ops = strtoll(i->second.c_str(), NULL, 10);
   }
   i = opts.find("max-backlog");
   if (i != opts.end()) {
@@ -1235,6 +1260,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       lg.min_op_len = min_op_len;
     if (max_op_len)
       lg.max_op_len = max_op_len;
+    if (max_ops)
+      lg.max_ops = max_ops;
     if (max_backlog)
       lg.max_backlog = max_backlog;
     if (target_throughput)
@@ -1313,8 +1340,10 @@ int main(int argc, const char **argv)
       opts["min-object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-object-size", (char*)NULL)) {
       opts["max-object-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-ops", (char*)NULL)) {
-      opts["min-ops"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-op-len", (char*)NULL)) {
+      opts["min-op-len"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-op-len", (char*)NULL)) {
+      opts["max-op-len"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-ops", (char*)NULL)) {
       opts["max-ops"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-backlog", (char*)NULL)) {

@@ -190,8 +190,10 @@ std::string pg_state_string(int state)
     oss << "peering+";
   if (state & PG_STATE_REPAIR)
     oss << "repair+";
-  if (state & PG_STATE_SCANNING)
-    oss << "scanning+";
+  if (state & PG_STATE_BACKFILL)
+    oss << "backfill+";
+  if (state & PG_STATE_INCOMPLETE)
+    oss << "incomplete+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);

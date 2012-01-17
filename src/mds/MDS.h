@@ -35,6 +35,9 @@
 #include "SessionMap.h"
 
 
+#define CEPH_MDS_PROTOCOL    14 /* cluster internal */
+
+
 enum {
   l_mds_first = 2000,
   l_mds_req,
