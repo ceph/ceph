@@ -296,7 +296,7 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
       return r;
     state->pos += r;
     bufferlist old;
-    old.substr_of(state->bl, state->p.get_off(), state->bl.length() - off);
+    old.substr_of(state->bl, off, state->bl.length() - off);
     state->bl.clear();
     state->bl.claim(old);
     state->bl.claim_append(more);
@@ -2411,6 +2411,7 @@ int RGWRados::remove_temp_objects(string date, string time)
     format.append(" %H:%M:%S");
     datetime.append(time.c_str());
   }
+  memset(&tm, 0, sizeof(tm));
   const char *s = strptime(datetime.c_str(), format.c_str(), &tm);
   if (s && *s) {
     cerr << "failed to parse date/time" << std::endl;
@@ -2449,69 +2450,81 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
 				 time_t epoch, int flags, bool purge)
 {
   cout << "processing intent log " << oid << std::endl;
-  uint64_t size;
   rgw_obj obj(bucket, oid);
-  int r = obj_stat(NULL, obj, &size, NULL, NULL, NULL);
-  if (r < 0) {
-    cerr << "error while doing stat on " << bucket << ":" << oid
-	 << " " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  bufferlist bl;
-  r = read(NULL, obj, 0, size, bl);
-  if (r < 0) {
-    cerr << "error while reading from " <<  bucket << ":" << oid
-	 << " " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
 
-  bufferlist::iterator iter = bl.begin();
+  int chunk = 1024 * 1024;
+  off_t pos = 0;
+  bool eof = false;
   bool complete = true;
-  try {
-    while (!iter.end()) {
-      struct rgw_intent_log_entry entry;
-      try {
-        ::decode(entry, iter);
-      } catch (buffer::error& err) {
-        dout(0) << "ERROR: " << __func__ << "(): caught buffer::error" << dendl;
-        return -EIO;
+  int ret = 0;
+  int r;
+
+  bufferlist bl;
+  bufferlist::iterator iter;
+  off_t off;
+
+  while (!eof || !iter.end()) {
+    off = iter.get_off();
+    if (!eof && (bl.length() - off) < chunk / 2) {
+      bufferlist more;
+      r = read(NULL, obj, pos, chunk, more);
+      if (r < 0) {
+        cerr << "error while reading from " <<  bucket << ":" << oid
+	   << " " << cpp_strerror(-r) << std::endl;
+        return -r;
       }
-      if (entry.op_time.sec() > epoch) {
-        cerr << "skipping entry for obj=" << obj << " entry.op_time=" << entry.op_time.sec() << " requested epoch=" << epoch << std::endl;
-        cerr << "skipping intent log" << std::endl; // no use to continue
-        complete = false;
-        break;
-      }
-      switch (entry.intent) {
-      case DEL_OBJ:
-        if (!flags & I_DEL_OBJ) {
-          complete = false;
-          break;
-        }
-        r = rgwstore->delete_obj(NULL, entry.obj);
-        if (r < 0 && r != -ENOENT) {
-          cerr << "failed to remove obj: " << entry.obj << std::endl;
-          complete = false;
-        }
-        break;
-      case DEL_POOL:
-        if (!flags & I_DEL_POOL) {
-          complete = false;
-          break;
-        }
-        r = delete_bucket(entry.obj.bucket);
-        if (r < 0 && r != -ENOENT) {
-          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
-          complete = false;
-        }
-        break;
-      default:
-        complete = false;
-      }
+      eof = (more.length() < chunk);
+      pos += more.length();
+      bufferlist old;
+      old.substr_of(bl, off, bl.length() - off);
+      bl.clear();
+      bl.claim(old);
+      bl.claim_append(more);
+      iter = bl.begin();
     }
-  } catch (buffer::error& err) {
-    cerr << "failed to decode intent log entry in " << bucket << ":" << oid << std::endl;
-    complete = false;
+    
+    struct rgw_intent_log_entry entry;
+    try {
+      ::decode(entry, iter);
+    } catch (buffer::error& err) {
+      cerr << "failed to decode intent log entry in " << bucket << ":" << oid << std::endl;
+      cerr << "skipping log" << std::endl; // no use to continue
+      ret = -EIO;
+      complete = false;
+      break;
+    }
+    if (entry.op_time.sec() > epoch) {
+      cerr << "skipping entry for obj=" << obj << " entry.op_time=" << entry.op_time.sec() << " requested epoch=" << epoch << std::endl;
+      cerr << "skipping log" << std::endl; // no use to continue
+      complete = false;
+      break;
+    }
+    switch (entry.intent) {
+    case DEL_OBJ:
+      if (!flags & I_DEL_OBJ) {
+        complete = false;
+        break;
+      }
+      r = rgwstore->delete_obj(NULL, entry.obj);
+      if (r < 0 && r != -ENOENT) {
+        cerr << "failed to remove obj: " << entry.obj << std::endl;
+        complete = false;
+      }
+      break;
+    case DEL_POOL:
+      if (!flags & I_DEL_POOL) {
+        complete = false;
+        break;
+      }
+      r = delete_bucket(entry.obj.bucket);
+      if (r < 0 && r != -ENOENT) {
+        cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
+        complete = false;
+      }
+      break;
+    default:
+      complete = false;
+    }
   }
 
   if (complete) {
@@ -2524,5 +2537,5 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     }
   }
 
-  return 0;
+  return ret;
 }
