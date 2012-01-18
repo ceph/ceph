@@ -65,7 +65,7 @@ static int set_kernel_secret(const char *secret, const char *key_name)
     return ret;
   }
 
-  serial = add_key("ceph", key_name, payload, sizeof(payload), KEY_SPEC_USER_KEYRING);
+  serial = add_key("ceph", key_name, payload, sizeof(payload), KEY_SPEC_PROCESS_KEYRING);
   if (serial == -1) {
     ret = -errno;
   }
