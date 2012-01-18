@@ -200,6 +200,7 @@ struct ObjectOperation {
     }
   };
   void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
+    add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
     C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL);
     out_bl[p] = &h->bl;
@@ -207,6 +208,7 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   void stat(uint64_t *psize, time_t *ptime, int *prval) {
+    add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
     C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime);
     out_bl[p] = &h->bl;
