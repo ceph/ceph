@@ -502,7 +502,9 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
-#define PG_STATE_SCANNING     (1<<14) // scanning content to generate backlog
+//PG_STATE_SCANNING (1<<14) .. deprecated.
+#define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
+#define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
 
 std::string pg_state_string(int state);
 
@@ -688,9 +690,12 @@ struct object_stat_sum_t {
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   {}
 
-  void calc_copies_degraded(int nrep, int acting_nrep) {
+  void clear() {
+    memset(this, 0, sizeof(*this));
+  }
+
+  void calc_copies(int nrep) {
     num_object_copies = nrep * num_objects;
-    num_objects_degraded = (nrep - acting_nrep) * num_objects;
   }
 
   void dump(Formatter *f) const {
@@ -775,10 +780,10 @@ struct object_stat_collection_t {
   object_stat_sum_t sum;
   map<string,object_stat_sum_t> cat_sum;
 
-  void calc_copies_degraded(int nrep, int acting_nrep) {
-    sum.calc_copies_degraded(nrep, acting_nrep);
+  void calc_copies(int nrep) {
+    sum.calc_copies(nrep);
     for (map<string,object_stat_sum_t>::iterator p = cat_sum.begin(); p != cat_sum.end(); ++p)
-      p->second.calc_copies_degraded(nrep, acting_nrep);
+      p->second.calc_copies(nrep);
   }
 
   void dump(Formatter *f) const {
@@ -804,6 +809,11 @@ struct object_stat_collection_t {
     ::decode(v, bl);
     ::decode(sum, bl);
     ::decode(cat_sum, bl);
+  }
+
+  void clear() {
+    sum.clear();
+    cat_sum.clear();
   }
 
   void add(const object_stat_sum_t& o, const string& cat) {

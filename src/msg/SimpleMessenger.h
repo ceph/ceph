@@ -552,6 +552,11 @@ private:
 
   SimpleMessenger *msgr; //hack to make dout macro work, will fix
   int timeout;
+  
+  /// internal cluster protocol version, if any, for talking to entities of the same type.
+  int cluster_protocol;
+
+  int get_proto_version(int peer_type, bool connect);
 
 public:
   SimpleMessenger(CephContext *cct) :
@@ -562,7 +567,10 @@ public:
     destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
-    dispatch_thread(this), msgr(this) {
+    dispatch_thread(this), msgr(this),
+    timeout(0),
+    cluster_protocol(0)
+  {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
   }
@@ -579,6 +587,10 @@ public:
     return start_with_nonce(0);
   }
   void wait();
+
+  void set_cluster_protocol(int p) {
+    cluster_protocol = p;
+  }
 
   int write_pid_file(int pid);
 

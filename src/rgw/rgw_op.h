@@ -33,6 +33,7 @@ public:
   virtual void init(struct req_state *s) {
     this->s = s;
   }
+  virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
   virtual void execute() = 0;

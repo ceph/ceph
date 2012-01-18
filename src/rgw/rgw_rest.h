@@ -62,6 +62,7 @@ public:
   RGWPutObj_REST() {}
   ~RGWPutObj_REST() {}
 
+  virtual int verify_params();
   virtual int get_params();
   int get_data(bufferlist& bl);
 };

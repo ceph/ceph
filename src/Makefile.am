@@ -375,6 +375,12 @@ testkeys_LDADD = libmon.la $(LIBGLOBAL_LDA)
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testkeys
 
+if WITH_TCMALLOC
+testkeys_LDADD += -ltcmalloc
+testkeys_CXXFLAGS += ${tcmalloc_safety_flags}
+testkeys_SOURCES += perfglue/heap_profiler.cc
+endif
+
 
 ## rados object classes
 
@@ -1146,6 +1152,7 @@ noinst_HEADERS = \
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
+	include/cmp.h\
 	include/color.h\
 	include/compat.h\
 	include/crc32c.h\
@@ -1313,6 +1320,7 @@ noinst_HEADERS = \
         messages/MOSDMap.h\
         messages/MOSDOp.h\
         messages/MOSDOpReply.h\
+	messages/MOSDPGBackfill.h\
         messages/MOSDPGCreate.h\
         messages/MOSDPGInfo.h\
         messages/MOSDPGLog.h\
@@ -1320,6 +1328,7 @@ noinst_HEADERS = \
         messages/MOSDPGNotify.h\
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\
+	messages/MOSDPGScan.h\
         messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\

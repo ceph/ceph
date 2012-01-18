@@ -672,14 +672,14 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1stat
   env->SetBooleanField(j_stat, c_dir_id, (0 != S_ISDIR(st.st_mode)));
   env->SetLongField(j_stat, c_block_id, st.st_blksize);
 
-  long long java_mtime(st.st_mtime);
+  long long java_mtime(st.st_mtim.tv_sec);
   java_mtime *= 1000;
-  java_mtime += st.st_mtim.tv_nsec;
+  java_mtime += st.st_mtim.tv_nsec / 1000;
   env->SetLongField(j_stat, c_mod_id, java_mtime);
 
-  long long java_atime(st.st_atime);
+  long long java_atime(st.st_atim.tv_sec);
   java_atime *= 1000;
-  java_atime += st.st_atim.tv_nsec;
+  java_atime += st.st_atim.tv_nsec / 1000;
   env->SetLongField(j_stat, c_access_id, java_atime);
 
   env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
@@ -750,9 +750,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replicati
   ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int fh = 0;
   fh = ceph_open(cmount, c_path, O_RDONLY, 0);
+  env->ReleaseStringUTFChars(j_path, c_path);
+  if (fh < 0) {
+	  return fh;
+  }
   int replication = ceph_get_file_replication(cmount, fh);
   ceph_close(cmount, fh);
-  env->ReleaseStringUTFChars(j_path, c_path);
   return replication;
 }
 

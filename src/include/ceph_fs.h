@@ -21,9 +21,6 @@
  * internal cluster protocols separately from the public,
  * client-facing protocol.
  */
-#define CEPH_OSD_PROTOCOL     8 /* cluster internal */
-#define CEPH_MDS_PROTOCOL    14 /* cluster internal */
-#define CEPH_MON_PROTOCOL     8 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL   24 /* server/client */
 #define CEPH_MDSC_PROTOCOL   32 /* server/client */
 #define CEPH_MONC_PROTOCOL   15 /* server/client */

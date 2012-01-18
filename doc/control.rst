@@ -191,7 +191,7 @@ manual intervention. ::
 
 Creates/deletes a snapshot of a pool. ::
 
-	$ ceph osd pool create POOL
+	$ ceph osd pool create POOL [pg_num [pgp_num]]
 	$ ceph osd pool delete POOL
 
 Creates/deletes a storage pool. ::

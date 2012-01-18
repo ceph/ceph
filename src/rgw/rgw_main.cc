@@ -217,6 +217,12 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
     goto done;
   }
 
+  ret = op->verify_params();
+  if (ret < 0) {
+    abort_early(s, ret);
+    goto done;
+  }
+
   if (s->expect_cont)
     dump_continue(s);
 

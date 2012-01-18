@@ -258,8 +258,19 @@ private:
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
-  int get_state(int o) {
+  int get_state(int o) const {
     assert(o < max_osd);
+    return osd_state[o];
+  }
+  int get_state(int o, set<string>& st) const {
+    assert(o < max_osd);
+    unsigned t = osd_state[o];
+    for (unsigned s = 1; t; s <<= 1) {
+      if (t & s) {
+	t &= ~s;
+	st.insert(ceph_osd_state_name(s));
+      }
+    } 
     return osd_state[o];
   }
   void set_state(int o, unsigned s) {
