@@ -145,21 +145,25 @@ static bool check_str_end(const char *s)
 
 static bool parse_rfc850(const char *s, struct tm *t)
 {
+  memset(t, 0, sizeof(*t));
   return check_str_end(strptime(s, "%A, %d-%b-%y %H:%M:%S GMT", t));
 }
 
 static bool parse_asctime(const char *s, struct tm *t)
 {
+  memset(t, 0, sizeof(*t));
   return check_str_end(strptime(s, "%a %b %d %H:%M:%S %Y", t));
 }
 
 static bool parse_rfc1123(const char *s, struct tm *t)
 {
+  memset(t, 0, sizeof(*t));
   return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
 }
 
 static bool parse_rfc1123_alt(const char *s, struct tm *t)
 {
+  memset(t, 0, sizeof(*t));
   return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S %z", t));
 }
 
