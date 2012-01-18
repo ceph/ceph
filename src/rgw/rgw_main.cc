@@ -113,7 +113,7 @@ struct RGWRequest
       req_str.append(s->request_uri);
     }
     utime_t t = ceph_clock_now(g_ceph_context) - ts;
-    dout(1) << "req " << id << ":" << t << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;
+    dout(2) << "req " << id << ":" << t << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;
   }
 };
 
