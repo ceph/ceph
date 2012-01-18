@@ -1310,13 +1310,43 @@ struct OSDOp {
   OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));
   }
+
+  /**
+   * split a bufferlist into constituent indata nembers of a vector of OSDOps
+   *
+   * @param ops [out] vector of OSDOps
+   * @param in  [in] combined data buffer
+   */
+  static void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
+
+  /**
+   * merge indata nembers of a vector of OSDOp into a single bufferlist
+   *
+   * Notably this also encodes certain other OSDOp data into the data
+   * buffer, including the sobject_t soid.
+   *
+   * @param ops [in] vector of OSDOps
+   * @param in  [out] combined data buffer
+   */
+  static void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out);
+
+  /**
+   * split a bufferlist into constituent outdata members of a vector of OSDOps
+   *
+   * @param ops [out] vector of OSDOps
+   * @param in  [in] combined data buffer
+   */
+  static void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in);
+
+  /**
+   * merge outdata members of a vector of OSDOps into a single bufferlist
+   *
+   * @param ops [in] vector of OSDOps
+   * @param in  [out] combined data buffer
+   */
+  static void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out);
 };
 
 ostream& operator<<(ostream& out, const OSDOp& op);
-
-void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
-void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out);
-void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in);
-void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out);
 
 #endif

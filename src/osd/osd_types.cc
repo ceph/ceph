@@ -856,7 +856,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 }
 
 
-void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
+void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 {
   bufferlist::iterator datap = in.begin();
   for (unsigned i = 0; i < ops.size(); i++) {
@@ -869,7 +869,7 @@ void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
   }
 }
 
-void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
+void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
 {
   for (unsigned i = 0; i < ops.size(); i++) {
     if (ceph_osd_op_type_multi(ops[i].op.op)) {
@@ -882,7 +882,7 @@ void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
   }
 }
 
-void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in)
+void OSDOp::split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in)
 {
   bufferlist::iterator datap = in.begin();
   for (unsigned i = 0; i < ops.size(); i++) {
@@ -892,7 +892,7 @@ void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in)
   }
 }
 
-void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
+void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
 {
   for (unsigned i = 0; i < ops.size(); i++) {
     if (ops[i].outdata.length()) {

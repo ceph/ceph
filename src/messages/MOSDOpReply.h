@@ -110,7 +110,7 @@ private:
 public:
   virtual void encode_payload(CephContext *cct) {
 
-    merge_osd_op_vector_out_data(ops, data);
+    OSDOp::merge_osd_op_vector_out_data(ops, data);
 
     if (!connection->has_feature(CEPH_FEATURE_PGID64)) {
       ceph_osd_reply_head head;
@@ -185,7 +185,7 @@ public:
 	for (unsigned i = 0; i < num_ops; ++i)
 	  ::decode(ops[i].rval, p);
 
-	split_osd_op_vector_out_data(ops, data);
+	OSDOp::split_osd_op_vector_out_data(ops, data);
       }
     }
   }

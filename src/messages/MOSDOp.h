@@ -185,7 +185,7 @@ public:
   // marshalling
   virtual void encode_payload(CephContext *cct) {
 
-    merge_osd_op_vector_in_data(ops, data);
+    OSDOp::merge_osd_op_vector_in_data(ops, data);
 
     if (!connection->has_feature(CEPH_FEATURE_OBJECTLOCATOR)) {
       // here is the old structure we are encoding to: //
@@ -353,7 +353,7 @@ struct ceph_osd_request_head {
 	retry_attempt = -1;
     }
 
-    split_osd_op_vector_in_data(ops, data);
+    OSDOp::split_osd_op_vector_in_data(ops, data);
   }
 
 
