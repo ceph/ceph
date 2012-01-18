@@ -1176,9 +1176,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   unsigned i = 0;
   for (vector<bufferlist*>::iterator p = op->out_bl.begin();
        p != op->out_bl.end();
-       ++p, ++i)
+       ++p, ++i) {
+    ldout(cct, 10) << " op " << i << " rval " << out_ops[i].rval
+		   << " len " << out_ops[i].outdata.length() << dendl;
     if (*p)
       **p = out_ops[i].outdata;
+  }
   i = 0;
   for (vector<int*>::iterator p = op->out_rval.begin();
        p != op->out_rval.end();
@@ -1189,8 +1192,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   for (vector<Context*>::iterator p = op->out_handler.begin();
        p != op->out_handler.end();
        ++p, ++i)
-    if (*p)
+    if (*p) {
+      ldout(cct, 10) << " op " << i << " handler " << *p << dendl;
       (*p)->complete(out_ops[i].rval);
+    }
 
   // ack|commit -> ack
   if (op->onack) {
