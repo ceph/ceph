@@ -536,6 +536,8 @@ int RGWHandler_REST_S3::init(struct req_state *state, FCGX_Request *fcgx)
 
   state->copy_source = state->env->get("HTTP_X_AMZ_COPY_SOURCE");
 
+  state->dialect = "s3";
+
   return RGWHandler_REST::init(state, fcgx);
 }
 
