@@ -269,7 +269,9 @@ struct ObjectOperation {
   struct C_ObjectOperation_getxattrs : public Context {
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
-    C_ObjectOperation_getxattrs(std::map<std::string,bufferlist> *pa) : pattrs(pa) {}
+    int *prval;
+    C_ObjectOperation_getxattrs(std::map<std::string,bufferlist> *pa, int *pr)
+      : pattrs(pa), prval(pr) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -278,17 +280,17 @@ struct ObjectOperation {
 	    ::decode(*pattrs, p);
 	}
 	catch (buffer::error& e) {
-	  r = -EIO;
+	  if (prval)
+	    *prval = -EIO;
 	}
       }	
     }
   };
   void getxattrs(std::map<std::string,bufferlist> *pattrs, int *prval) {
-    bufferlist bl;
-    add_xattr(CEPH_OSD_OP_GETXATTRS, 0, bl);
-    if (pattrs) {
+    add_op(CEPH_OSD_OP_GETXATTRS);
+    if (pattrs || prval) {
       unsigned p = ops.size() - 1;
-      C_ObjectOperation_getxattrs *h = new C_ObjectOperation_getxattrs(pattrs);
+      C_ObjectOperation_getxattrs *h = new C_ObjectOperation_getxattrs(pattrs, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
