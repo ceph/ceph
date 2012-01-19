@@ -89,11 +89,6 @@ int FileJournal::_open(bool forwrite, bool create)
   /* We really want max_size to be a multiple of block_size. */
   max_size -= max_size % block_size;
 
-  // static zeroed buffer for alignment padding
-  delete [] zero_buf;
-  zero_buf = new char[header.alignment];
-  memset(zero_buf, 0, header.alignment);
-
   dout(1) << "_open " << fn << " fd " << fd
 	  << ": " << max_size 
 	  << " bytes, block size " << block_size
@@ -344,6 +339,11 @@ int FileJournal::create()
   header.start = get_top();
   print_header();
 
+  // static zeroed buffer for alignment padding
+  delete [] zero_buf;
+  zero_buf = new char[header.alignment];
+  memset(zero_buf, 0, header.alignment);
+
   bp = prepare_header();
   if (TEMP_FAILURE_RETRY(::pwrite(fd, bp.c_str(), bp.length(), 0)) < 0) {
     ret = errno;
@@ -425,6 +425,12 @@ int FileJournal::open(uint64_t fs_op_seq)
   err = read_header();
   if (err < 0)
     return err;
+
+  // static zeroed buffer for alignment padding
+  delete [] zero_buf;
+  zero_buf = new char[header.alignment];
+  memset(zero_buf, 0, header.alignment);
+
   dout(10) << "open header.fsid = " << header.fsid 
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
