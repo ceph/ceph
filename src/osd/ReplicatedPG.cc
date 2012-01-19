@@ -984,14 +984,7 @@ void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
       info.last_backfill = m->last_backfill;
       info.stats.stats = m->stats;
 
-      log.clear();
-      log.head = info.last_update;
-      log.tail = info.last_update;
-
-      info.log_tail = log.tail;
-
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      write_log(*t);
       write_info(*t);
       int tr = osd->store->queue_transaction(&osr, t);
       assert(tr == 0);
