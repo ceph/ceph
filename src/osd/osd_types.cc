@@ -33,6 +33,24 @@ void osd_reqid_t::decode(bufferlist::iterator &bl)
   ::decode(inc, bl);
 }
 
+// -- osd_stat_t --
+void osd_stat_t::generate_test_instances(std::list<osd_stat_t>& o)
+{
+  osd_stat_t z;
+  o.push_back(z);
+
+  osd_stat_t a;
+  a.kb = 1;
+  a.kb_used = 2;
+  a.kb_avail = 3;
+  a.hb_in.push_back(5);
+  a.hb_in.push_back(6);
+  a.hb_out = a.hb_in;
+  a.hb_out.push_back(7);
+  a.snap_trim_queue_len = 8;
+  a.num_snap_trimming = 99;
+  o.push_back(a);
+}
 
 // -- pg_t --
 

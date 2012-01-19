@@ -444,6 +444,8 @@ struct osd_stat_t {
     ::decode(hb_in, bl);
     ::decode(hb_out, bl);
   }
+
+  static void generate_test_instances(std::list<osd_stat_t>& o);
   
   void add(const osd_stat_t& o) {
     kb += o.kb;
