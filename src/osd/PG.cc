@@ -458,6 +458,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	break;
       dout(10) << "merge_log divergent " << oe << dendl;
       divergent.push_front(oe);
+      log.unindex(oe);
       log.log.pop_back();
     }
 
