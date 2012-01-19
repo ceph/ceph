@@ -786,6 +786,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
     
   // add it this entry
   entry_header_t h;
+  memset(&h, 0, sizeof(h));
   h.seq = seq;
   h.pre_pad = pre_pad;
   h.len = ebl.length();
