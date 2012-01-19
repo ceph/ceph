@@ -583,6 +583,36 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
     ::decode(osd_fsid, bl);
 }
 
+void OSDSuperblock::dump(Formatter *f) const
+{
+  f->dump_stream("cluster_fsid") << cluster_fsid;
+  f->dump_stream("osd_fsid") << osd_fsid;
+  f->dump_int("whoami", whoami);
+  f->dump_int("current_epoch", current_epoch);
+  f->dump_int("oldest_map", oldest_map);
+  f->dump_int("newest_map", newest_map);
+  f->dump_float("weight", weight);
+  f->open_object_section("compat");
+  compat_features.dump(f);
+  f->close_section();
+  f->dump_int("clean_thru", clean_thru);
+  f->dump_int("last_epoch_mounted", mounted);
+}
+
+void OSDSuperblock::generate_test_instances(list<OSDSuperblock>& o)
+{
+  OSDSuperblock z;
+  o.push_back(z);
+  memset(&z.cluster_fsid, 1, sizeof(z.cluster_fsid));
+  memset(&z.osd_fsid, 2, sizeof(z.osd_fsid));
+  z.whoami = 3;
+  z.current_epoch = 4;
+  z.oldest_map = 5;
+  z.newest_map = 9;
+  z.mounted = 8;
+  z.clean_thru = 7;
+  o.push_back(z);
+}
 
 // -- SnapSet --
 

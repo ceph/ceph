@@ -5,6 +5,7 @@
 
 #include "osd/osd_types.h"
 TYPE(osd_stat_t)
+TYPE(OSDSuperblock)
 /*TYPE(pool_snap_info_t)
 TYPE(pg_pool_t)
 TYPE(object_stat_sum_t)
