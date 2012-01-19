@@ -5630,7 +5630,7 @@ int OSD::init_op_flags(MOSDOp *op)
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
       {
-	bufferlist::iterator bp = iter->data.begin();
+	bufferlist::iterator bp = iter->indata.begin();
 	int is_write, is_read, is_public;
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);

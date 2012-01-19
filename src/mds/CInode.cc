@@ -937,9 +937,9 @@ void CInode::fetch(Context *fin)
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   ObjectOperation rd;
-  rd.getxattr("inode");
+  rd.getxattr("inode", &c->bl, NULL);
 
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &c->bl, 0, gather.new_sub());
+  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
 
   // read from separate object too
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");

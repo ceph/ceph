@@ -80,7 +80,7 @@ public:
     unsigned off = 0;
     for (unsigned i = 0; i < num_ops; i++) {
       ::decode(ops[i].op, p);
-      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
+      ops[i].indata.substr_of(data, off, ops[i].op.payload_len);
       off += ops[i].op.payload_len;
     }
     ::decode(mtime, p);
@@ -119,9 +119,9 @@ public:
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].op.payload_len = ops[i].data.length();
+      ops[i].op.payload_len = ops[i].indata.length();
       ::encode(ops[i].op, payload);
-      data.append(ops[i].data);
+      data.append(ops[i].indata);
     }
     ::encode(mtime, payload);
     ::encode(noop, payload);

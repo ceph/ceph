@@ -185,15 +185,7 @@ public:
   // marshalling
   virtual void encode_payload(CephContext *cct) {
 
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	::encode(ops[i].soid, data);
-      }
-      if (ops[i].data.length()) {
-	ops[i].op.payload_len = ops[i].data.length();
-	data.append(ops[i].data);
-      }
-    }
+    OSDOp::merge_osd_op_vector_in_data(ops, data);
 
     if (!connection->has_feature(CEPH_FEATURE_OBJECTLOCATOR)) {
       // here is the old structure we are encoding to: //
@@ -361,15 +353,7 @@ struct ceph_osd_request_head {
 	retry_attempt = -1;
     }
 
-    bufferlist::iterator datap = data.begin();
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	::decode(ops[i].soid, datap);
-      }
-      if (ops[i].op.payload_len) {
-	datap.copy(ops[i].op.payload_len, ops[i].data);
-      }
-    }
+    OSDOp::split_osd_op_vector_in_data(ops, data);
   }
 
 

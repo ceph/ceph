@@ -807,9 +807,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
-    if (op.op.xattr.name_len && op.data.length()) {
+    if (op.op.xattr.name_len && op.indata.length()) {
       out << " ";
-      op.data.write(0, op.op.xattr.name_len, out);
+      op.indata.write(0, op.op.xattr.name_len, out);
     }
     if (op.op.xattr.value_len)
       out << " (" << op.op.xattr.value_len << ")";
@@ -817,11 +817,11 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
-    if (op.op.cls.class_len && op.data.length()) {
+    if (op.op.cls.class_len && op.indata.length()) {
       out << " ";
-      op.data.write(0, op.op.cls.class_len, out);
+      op.indata.write(0, op.op.cls.class_len, out);
       out << ".";
-      op.data.write(op.op.cls.class_len, op.op.cls.method_len, out);
+      op.indata.write(op.op.cls.class_len, op.op.cls.method_len, out);
     }
   } else if (ceph_osd_op_type_pg(op.op.op)) {
     switch (op.op.op) {
@@ -843,9 +843,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_SRC_CMPXATTR:
       out << " " << op.soid;
-      if (op.op.xattr.name_len && op.data.length()) {
+      if (op.op.xattr.name_len && op.indata.length()) {
 	out << " ";
-	op.data.write(0, op.op.xattr.name_len, out);
+	op.indata.write(0, op.op.xattr.name_len, out);
       }
       if (op.op.xattr.value_len)
 	out << " (" << op.op.xattr.value_len << ")";
@@ -855,4 +855,51 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     }
   }
   return out;
+}
+
+
+void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
+{
+  bufferlist::iterator datap = in.begin();
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ceph_osd_op_type_multi(ops[i].op.op)) {
+      ::decode(ops[i].soid, datap);
+    }
+    if (ops[i].op.payload_len) {
+      datap.copy(ops[i].op.payload_len, ops[i].indata);
+    }
+  }
+}
+
+void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
+{
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ceph_osd_op_type_multi(ops[i].op.op)) {
+      ::encode(ops[i].soid, out);
+    }
+    if (ops[i].indata.length()) {
+      ops[i].op.payload_len = ops[i].indata.length();
+      out.append(ops[i].indata);
+    }
+  }
+}
+
+void OSDOp::split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in)
+{
+  bufferlist::iterator datap = in.begin();
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ops[i].op.payload_len) {
+      datap.copy(ops[i].op.payload_len, ops[i].outdata);
+    }
+  }
+}
+
+void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
+{
+  for (unsigned i = 0; i < ops.size(); i++) {
+    if (ops[i].outdata.length()) {
+      ops[i].op.payload_len = ops[i].outdata.length();
+      out.append(ops[i].outdata);
+    }
+  }
 }

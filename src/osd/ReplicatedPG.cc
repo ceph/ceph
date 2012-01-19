@@ -269,7 +269,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   snapid_t snapid = op->get_snapid();
 
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
-    bufferlist::iterator bp = p->data.begin();
+    bufferlist::iterator bp = p->indata.begin();
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS_FILTER:
       try {
@@ -747,7 +747,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   // prepare the reply
   ctx->reply = new MOSDOpReply(op, 0, get_osdmap()->get_epoch(), 0);
-  ctx->reply->set_data(ctx->outdata);
+  ctx->reply->claim_op_out_data(ctx->ops);
   ctx->reply->get_header().data_off = ctx->data_off;
   ctx->reply->set_result(result);
 
@@ -1377,15 +1377,15 @@ void ReplicatedPG::remove_watchers_and_notifies()
 // ========================================================================
 // low level osd ops
 
-int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
-			     bufferlist& odata)
+int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
   int result = 0;
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
-
   const hobject_t& soid = oi.soid;
+
+  bool first_read = false;
 
   ObjectStore::Transaction& t = ctx->op_t;
 
@@ -1393,11 +1393,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); p++) {
     OSDOp& osd_op = *p;
-    ceph_osd_op& op = osd_op.op; 
-
+    ceph_osd_op& op = osd_op.op;
+ 
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
-    bufferlist::iterator bp = osd_op.data.begin();
+    bufferlist::iterator bp = osd_op.indata.begin();
 
     // user-visible modifcation?
     switch (op.op) {
@@ -1443,9 +1443,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	// read into a buffer
 	bufferlist bl;
 	int r = osd->store->read(coll, soid, op.extent.offset, op.extent.length, bl);
-	if (odata.length() == 0)
+	if (first_read) {
+	  first_read = false;
 	  ctx->data_off = op.extent.offset;
-	odata.claim_append(bl);
+	}
+	osd_op.outdata.claim_append(bl);
 	if (r >= 0) 
 	  op.extent.length = r;
 	else {
@@ -1470,11 +1472,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	  bufferlist keep;
 
-	  // keep first part of odata; trim at truncation point
+	  // keep first part of osd_op.outdata; trim at truncation point
 	  dout(10) << " obj " << soid << " seq " << seq
 	           << ": trimming overlap " << from << "~" << trim << dendl;
-	  keep.substr_of(odata, 0, odata.length() - trim);
-          odata.claim(keep);
+	  keep.substr_of(osd_op.outdata, 0, osd_op.outdata.length() - trim);
+          osd_op.outdata.claim(keep);
 	}
       }
       break;
@@ -1485,10 +1487,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	// read into a buffer
 	bufferlist bl;
 	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
-/*
-	if (odata.length() == 0)
-	  ctx->data_off = op.extent.offset; */
-	odata.claim(bl);
+	osd_op.outdata.claim(bl);
 	if (r < 0)
 	  result = r;
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
@@ -1538,8 +1537,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
         op.extent.length = total_read;
 
-        ::encode(m, odata);
-        ::encode(data_bl, odata);
+        ::encode(m, osd_op.outdata);
+        ::encode(data_bl, osd_op.outdata);
 
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
 	ctx->delta_stats.num_rd++;
@@ -1577,15 +1576,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 	dout(10) << "method called response length=" << outdata.length() << dendl;
 	op.extent.length = outdata.length();
-	odata.claim_append(outdata);
+	osd_op.outdata.claim_append(outdata);
       }
       break;
 
     case CEPH_OSD_OP_STAT:
       {
 	if (obs.exists) {
-	  ::encode(oi.size, odata);
-	  ::encode(oi.mtime, odata);
+	  ::encode(oi.size, osd_op.outdata);
+	  ::encode(oi.mtime, osd_op.outdata);
 	  dout(10) << "stat oi has " << oi.size << " " << oi.mtime << dendl;
 	} else {
 	  result = -ENOENT;
@@ -1601,7 +1600,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
 	string name = "_" + aname;
-	int r = osd->store->getattr(coll, soid, name.c_str(), odata);
+	int r = osd->store->getattr(coll, soid, name.c_str(), osd_op.outdata);
 	if (r >= 0) {
 	  op.xattr.value_len = r;
 	  result = 0;
@@ -1625,7 +1624,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         
         bufferlist bl;
         ::encode(newattrs, bl);
-        odata.claim_append(bl);
+        osd_op.outdata.claim_append(bl);
       }
       break;
       
@@ -1642,7 +1641,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = osd->store->getattr(coll, soid, name.c_str(), xattr);
 	else
 	  result = osd->store->getattr(coll, src_obc->obs.oi.soid, name.c_str(), xattr);
-	if (result < 0 && result != -EEXIST && result !=-ENODATA)
+	if (result < 0 && result != -EEXIST && result != -ENODATA)
 	  break;
 	
 	switch (op.xattr.cmp_mode) {
@@ -1848,8 +1847,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (obs.exists && (flags & CEPH_OSD_OP_FLAG_EXCL)) {
           result = -EEXIST; /* this is an exclusive create */
 	} else {
-	  if (osd_op.data.length()) {
-	    bufferlist::iterator p = osd_op.data.begin();
+	  if (osd_op.indata.length()) {
+	    bufferlist::iterator p = osd_op.indata.begin();
 	    string category;
 	    ::decode(category, p);
 	    if (category.size()) {
@@ -2023,8 +2022,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	newop.op.op = CEPH_OSD_OP_WRITE;
 	newop.op.extent.offset = oi.size;
 	newop.op.extent.length = op.extent.length;
-        newop.data = osd_op.data;
-	do_osd_ops(ctx, nops, odata);
+        newop.indata = osd_op.indata;
+	do_osd_ops(ctx, nops);
+	osd_op.outdata.claim(newop.outdata);
       }
       break;
 
@@ -2041,7 +2041,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	newop.op.op = CEPH_OSD_OP_READ;
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = 0;
-	do_osd_ops(ctx, nops, odata);
+	do_osd_ops(ctx, nops);
+	osd_op.outdata.claim(newop.outdata);
       }
       break;
 
@@ -2065,10 +2066,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	OSDOp& newop = nops[0];
 	newop.op.op = CEPH_OSD_OP_WRITEFULL;
 	newop.op.extent.offset = 0;
-	newop.op.extent.length = osd_op.data.length();
-	newop.data = osd_op.data;
-	bufferlist r;
-	do_osd_ops(ctx, nops, r);
+	newop.op.extent.length = osd_op.indata.length();
+	newop.indata = osd_op.indata;
+	do_osd_ops(ctx, nops);
       }
       break;
 
@@ -2077,30 +2077,30 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	dout(10) << "tmapup is a no-op" << dendl;
       } else {
 	// read the whole object
-	bufferlist ibl;
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
 	newop.op.op = CEPH_OSD_OP_READ;
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = 0;
-	do_osd_ops(ctx, nops, ibl);
-	dout(10) << "tmapup read " << ibl.length() << dendl;
+	do_osd_ops(ctx, nops);
+
+	dout(10) << "tmapup read " << newop.outdata.length() << dendl;
 
 	dout(30) << " starting is \n";
-	ibl.hexdump(*_dout);
+	newop.outdata.hexdump(*_dout);
 	*_dout << dendl;
 
-	bufferlist::iterator ip = ibl.begin();
+	bufferlist::iterator ip = newop.outdata.begin();
 	bufferlist obl;
 
 	dout(30) << "the update command is: \n";
-	osd_op.data.hexdump(*_dout);
+	osd_op.indata.hexdump(*_dout);
 	*_dout << dendl;
 
 	// header
 	bufferlist header;
 	__u32 nkeys = 0;
-	if (ibl.length()) {
+	if (newop.outdata.length()) {
 	  ::decode(header, ip);
 	  ::decode(nkeys, ip);
 	}
@@ -2195,9 +2195,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	if (!ip.end()) {
 	  bufferlist rest;
-	  rest.substr_of(ibl, ip.get_off(), ibl.length() - ip.get_off());
+	  rest.substr_of(newop.outdata, ip.get_off(), newop.outdata.length() - ip.get_off());
 	  dout(20) << "  keep trailing " << rest.length()
-		             << " at " << newkeydata.length() << dendl;
+		   << " at " << newkeydata.length() << dendl;
 	  newkeydata.claim_append(rest);
 	}
 
@@ -2227,8 +2227,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  newop.op.op = CEPH_OSD_OP_WRITEFULL;
 	  newop.op.extent.offset = 0;
 	  newop.op.extent.length = obl.length();
-	  newop.data = obl;
-	  do_osd_ops(ctx, nops, odata);
+	  newop.indata = obl;
+	  do_osd_ops(ctx, nops);
+	  osd_op.outdata.claim(newop.outdata);
 	}
       }
       break;
@@ -2240,6 +2241,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      << dendl;
       result = -EOPNOTSUPP;
     }
+
+    ctx->bytes_read += osd_op.outdata.length();
 
     if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
       result = 0;
@@ -2674,15 +2677,13 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   bool head_existed = ctx->obs->exists;
 
   // prepare the actual mutation
-  int result = do_osd_ops(ctx, ctx->ops, ctx->outdata);
+  int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0)
     return result;
 
   // finish side-effects
   if (result == 0)
     do_osd_op_effects(ctx);
-
-  ctx->bytes_read = ctx->outdata.length();
 
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify) {
@@ -4204,7 +4205,7 @@ int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int pe
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
   //subop->ops[0].op.extent.offset = 0;
   //subop->ops[0].op.extent.length = size;
-  subop->ops[0].data = bl;
+  subop->ops[0].indata = bl;
   subop->data_subset = data_subset;
   subop->clone_subsets = clone_subsets;
   subop->attrset.swap(attrset);

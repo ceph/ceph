@@ -48,6 +48,8 @@
 #define CEPH_FEATURE_PGID64         (1<<9)
 #define CEPH_FEATURE_INCSUBOSDMAP   (1<<10)
 #define CEPH_FEATURE_PGPOOL3        (1<<11)
+#define CEPH_FEATURE_OSDREPLYMUX    (1<<12)
+
 
 /*
  * ceph_file_layout - describe data layout for a file/inode

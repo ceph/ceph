@@ -1086,7 +1086,7 @@ int Objecter::calc_op_budget(Op *op)
        i != op->ops.end();
        ++i) {
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
-      op_budget += i->data.length();
+      op_budget += i->indata.length();
     } else if (i->op.op & CEPH_OSD_OP_MODE_RD) {
       if (ceph_osd_op_type_data(i->op.op)) {
         if ((int64_t)i->op.extent.length > 0)
@@ -1170,13 +1170,32 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (op->reply_epoch)
     *op->reply_epoch = m->get_map_epoch();
 
-  // got data?
-  if (op->outbl) {
-    if (op->con)
-      op->con->revoke_rx_buffer(op->tid);
-    m->claim_data(*op->outbl);
-    op->outbl = 0;
+  // per-op result demuxing
+  vector<OSDOp> out_ops;
+  m->claim_ops(out_ops);
+  unsigned i = 0;
+  for (vector<bufferlist*>::iterator p = op->out_bl.begin();
+       p != op->out_bl.end();
+       ++p, ++i) {
+    ldout(cct, 10) << " op " << i << " rval " << out_ops[i].rval
+		   << " len " << out_ops[i].outdata.length() << dendl;
+    if (*p)
+      **p = out_ops[i].outdata;
   }
+  i = 0;
+  for (vector<int*>::iterator p = op->out_rval.begin();
+       p != op->out_rval.end();
+       ++p, ++i)
+    if (*p)
+      **p = out_ops[i].rval;
+  i = 0;
+  for (vector<Context*>::iterator p = op->out_handler.begin();
+       p != op->out_handler.end();
+       ++p, ++i)
+    if (*p) {
+      ldout(cct, 10) << " op " << i << " handler " << *p << dendl;
+      (*p)->complete(out_ops[i].rval);
+    }
 
   // ack|commit -> ack
   if (op->onack) {
@@ -1193,6 +1212,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->oncommit = 0;
     num_uncommitted--;
     logger->inc(l_osdc_op_commit);
+  }
+
+  // got data?
+  if (op->outbl) {
+    if (op->con)
+      op->con->revoke_rx_buffer(op->tid);
+    m->claim_data(*op->outbl);
+    op->outbl = 0;
   }
 
   // done with this tid?
