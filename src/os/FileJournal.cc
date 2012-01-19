@@ -1029,6 +1029,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
   dout(5) << "submit_entry seq " << seq
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
+  assert(e.length() > 0);
 
   completions.push_back(completion_item(seq, oncommit, ceph_clock_now(g_ceph_context)));
 
