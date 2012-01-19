@@ -2428,7 +2428,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   cout << "processing intent log " << oid << std::endl;
   rgw_obj obj(bucket, oid);
 
-  int chunk = 1024 * 1024;
+  unsigned chunk = 1024 * 1024;
   off_t pos = 0;
   bool eof = false;
   bool complete = true;
