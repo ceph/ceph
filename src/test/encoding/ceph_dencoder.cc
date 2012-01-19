@@ -26,12 +26,16 @@ struct Dencoder {
   virtual string decode(bufferlist bl) = 0;
   virtual void encode(bufferlist& out, uint64_t features) = 0;
   virtual void dump(Formatter *f) = 0;
+  virtual void generate() = 0;
+  virtual int num_generated() = 0;
+  virtual string select_generated(unsigned n) = 0;
   //virtual void print(ostream& out) = 0;
 };
 
 template<class T>
 class DencoderImpl : public Dencoder {
   T m_object;
+  list<T> m_list;
 
 public:
   DencoderImpl() {}
@@ -56,6 +60,22 @@ public:
 
   void dump(Formatter *f) {
     m_object.dump(f);
+  }
+
+  void generate() {
+    T::generate_test_instances(m_list);
+  }
+  int num_generated() {
+    return m_list.size();
+  }
+  string select_generated(unsigned i) {
+    if (i >= m_list.size())
+      return "invalid id for generated object";
+    typename list<T>::iterator p;
+    p = m_list.begin();
+    for ( ; i > 0 && p != m_list.end(); ++p, --i) ;
+    m_object = *p;
+    return string();
   }
 
   //void print(ostream& out) {
@@ -105,6 +125,7 @@ int main(int argc, const char **argv)
     exit(1);
   }
   Dencoder *den = dencoders[cname];
+  den->generate();
 
   uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   bufferlist encbl;
@@ -154,6 +175,16 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       ::close(fd);
+    } else if (*i == string("count")) {
+      cout << den->num_generated() << std::endl;
+    } else if (*i == string("select")) {
+      i++;
+      if (i == args.end()) {
+	usage();
+	exit(1);
+      }
+      int n = atoi(*i);
+      err = den->select_generated(n);      
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
       usage();
