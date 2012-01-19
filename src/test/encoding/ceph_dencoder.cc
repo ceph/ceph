@@ -9,16 +9,23 @@
 #include "types.h"
 #undef TYPE
 
-void usage()
+void usage(ostream &out)
 {
-  cerr << "usage: ceph-dencoder --list-types" << std::endl;
-  cerr << "       ceph-dencoder <class> [commands ...]" << std::endl;
-  cerr << "  -i encfile    read encoded data from encfile\n";
-  cerr << "  decode        decode into in-core object\n";
-  cerr << "  encode        encode in-core object\n";
-  cerr << "  -o outfile    write encoded data to outfile\n";
-  cerr << "  -f features   set feature bits used for encoding\n";
-  cerr << "  dump_json     dump in-core object as json\n";
+  out << "usage: ceph-dencoder [commands ...]" << std::endl;
+  out << "  import <encfile> read encoded data from encfile\n";
+  out << "  export <outfile> write encoded data to outfile\n";
+  out << "\n";
+  out << "  features <num>   set feature bits used for encoding\n";
+  out << "  get_features     print feature bits (int) to stdout\n";
+  out << "\n";
+  out << "  list_types       list supported types\n";
+  out << "  type <classname> select type\n";
+  out << "  decode           decode into in-core object\n";
+  out << "  encode           encode in-core object\n";
+  out << "  dump_json        dump in-core object as json (to stdout)\n";
+  out << "\n";
+  out << "  count            print number of generated test objects (to stdout)\n";
+  out << "  select <n>       select generated test object as in-core object\n";
 }
 
 struct Dencoder {
@@ -102,66 +109,88 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  std::vector<const char*>::iterator i = args.begin();
-  if (i == args.end()) {
-    usage();
-    exit(1);
-  }
-  string cname = *i;
-  if (cname == string("--list-types")) {
-    for (map<string,Dencoder*>::iterator p = dencoders.begin();
-	 p != dencoders.end();
-	 ++p)
-      cout << p->first << std::endl;
-    exit(0);
-  } 
-  if (cname == string("--get-features")) {
-    cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
-    exit(0);
-  } 
-
-  if (!dencoders.count(cname)) {
-    cerr << "class '" << cname << "' unknown" << std::endl;
-    exit(1);
-  }
-  Dencoder *den = dencoders[cname];
-  den->generate();
-
+  Dencoder *den = NULL;
   uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   bufferlist encbl;
-  for (i++; i != args.end(); ++i) {
+
+  if (args.empty()) {
+    usage(cerr);
+    exit(1);
+  }
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
     string err;
-    if (*i == string("encode")) {
+
+    if (*i == string("help") || *i == string("-h") || *i == string("--help")) {
+      usage(cout);
+      exit(0);
+    } else if (*i == string("list_types")) {
+      for (map<string,Dencoder*>::iterator p = dencoders.begin();
+	   p != dencoders.end();
+	   ++p)
+	cout << p->first << std::endl;
+      exit(0);
+    } else if (*i == string("type")) {
+      i++;
+      if (i == args.end()) {
+	usage(cerr);
+	exit(1);
+      }
+      string cname = *i;
+      if (!dencoders.count(cname)) {
+	cerr << "class '" << cname << "' unknown" << std::endl;
+	exit(1);
+      }
+      den = dencoders[cname];
+      den->generate();
+    } else if (*i == string("get-features")) {
+      cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
+      exit(0);
+    } else if (*i == string("features")) {
+      i++;
+      if (i == args.end()) {
+	usage(cerr);
+	exit(1);
+      }
+      features = atoi(*i);
+
+    } else if (*i == string("encode")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       den->encode(encbl, features);
     } else if (*i == string("decode")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       err = den->decode(encbl);
     } else if (*i == string("dump_json")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       JSONFormatter jf(true);
       jf.open_object_section("object");
       den->dump(&jf);
       jf.close_section();
       jf.flush(cout);
       cout << std::endl;
-      //} else if (*i == string("print")) {
-      //den->print(cout);
-    } else if (*i == string("-f")) {
+
+    } else if (*i == string("import")) {
       i++;
       if (i == args.end()) {
-	usage();
-	exit(1);
-      }
-      features = atoi(*i);
-    } else if (*i == string("-i")) {
-      i++;
-      if (i == args.end()) {
-	usage();
+	usage(cerr);
 	exit(1);
       }
       encbl.read_file(*i, &err);
-    } else if (*i == string("-o")) {
+    } else if (*i == string("export")) {
       i++;
       if (i == args.end()) {
-	usage();
+	usage(cerr);
 	exit(1);
       }
       int fd = ::open(*i, O_WRONLY|O_CREAT|O_TRUNC, 0644);
@@ -175,19 +204,30 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       ::close(fd);
+
     } else if (*i == string("count")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       cout << den->num_generated() << std::endl;
     } else if (*i == string("select")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       i++;
       if (i == args.end()) {
-	usage();
+	usage(cerr);
 	exit(1);
       }
       int n = atoi(*i);
       err = den->select_generated(n);      
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
-      usage();
+      usage(cerr);
       exit(1);
     }      
     if (err.length()) {
