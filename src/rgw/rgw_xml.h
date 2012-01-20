@@ -45,7 +45,7 @@ public:
 class XMLObj
 {
   XMLObj *parent;
-  string type;
+  string obj_type;
 protected:
   string data;
   multimap<string, XMLObj *> children;

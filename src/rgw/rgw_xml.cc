@@ -41,7 +41,7 @@ get_next()
 };
 
 ostream& operator<<(ostream& out, XMLObj& obj) {
-   out << obj.type << ": " << obj.data;
+   out << obj.obj_type << ": " << obj.data;
    return out;
 }
 
@@ -54,7 +54,7 @@ bool XMLObj::
 xml_start(XMLObj *parent, const char *el, const char **attr)
 {
   this->parent = parent;
-  type = el;
+  obj_type = el;
   for (int i = 0; attr[i]; i += 2) {
     attr_map[attr[i]] = string(attr[i + 1]);
   }
