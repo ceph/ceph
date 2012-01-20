@@ -1,5 +1,6 @@
 #include <errno.h>
 #include "include/types.h"
+#include "ceph_ver.h"
 #include "include/encoding.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
@@ -12,6 +13,9 @@
 void usage(ostream &out)
 {
   out << "usage: ceph-dencoder [commands ...]" << std::endl;
+  out << "\n";
+  out << "  version          print version string (to stdout)\n";
+  out << "\n";
   out << "  import <encfile> read encoded data from encfile\n";
   out << "  export <outfile> write encoded data to outfile\n";
   out << "\n";
@@ -123,6 +127,8 @@ int main(int argc, const char **argv)
     if (*i == string("help") || *i == string("-h") || *i == string("--help")) {
       usage(cout);
       exit(0);
+    } else if (*i == string("version")) {
+      cout << CEPH_GIT_NICE_VER << std::endl;
     } else if (*i == string("list_types")) {
       for (map<string,Dencoder*>::iterator p = dencoders.begin();
 	   p != dencoders.end();
