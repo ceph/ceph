@@ -223,8 +223,7 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
 
     do {
-      bufferlist more;
-      ret = rgwstore->read(NULL, obj, ofs, len, more);
+      ret = rgwstore->read(NULL, obj, ofs, len, bl);
       if (ret == -ENOENT) {
         /* try to read the old format */
         ret = rgw_read_buckets_from_attr(user_id, buckets);
@@ -239,14 +238,11 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
       if (ret < 0)
         return ret;
 
-      size_t read_len = more.length();
-
-      bl.claim_append(more);
-
-      if (read_len != len)
+      if (bl.length() != len)
         break;
 
-      ofs += len;
+      bl.clear();
+      len *= 2;
     } while (1);
 
     bufferlist::iterator p = bl.begin();
