@@ -12,6 +12,9 @@
  * 
  */
 
+#ifndef CEPH_COMMON_ADMIN_SOCKET_H
+#define CEPH_COMMON_ADMIN_SOCKET_H
+
 #include "common/config_obs.h"
 #include "common/Thread.h"
 #include "common/Mutex.h"
@@ -90,4 +93,4 @@ private:
   friend class HelpHook;
 };
 
-
+#endif
