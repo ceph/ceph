@@ -824,47 +824,6 @@ struct pool_stat_t {
   pool_stat_t() : log_size(0), ondisk_log_size(0)
   { }
 
-  void dump(Formatter *f) const {
-    stats.dump(f);
-    f->dump_unsigned("log_size", log_size);
-    f->dump_unsigned("ondisk_log_size", ondisk_log_size);
-  }
-  void encode(bufferlist &bl) const {
-    __u8 v = 4;
-    ::encode(v, bl);
-    ::encode(stats, bl);
-    ::encode(log_size, bl);
-    ::encode(ondisk_log_size, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    if (v >= 4) {
-      ::decode(stats, bl);
-      ::decode(log_size, bl);
-      ::decode(ondisk_log_size, bl);
-    } else {
-      ::decode(stats.sum.num_bytes, bl);
-      ::decode(stats.sum.num_kb, bl);
-      ::decode(stats.sum.num_objects, bl);
-      ::decode(stats.sum.num_object_clones, bl);
-      ::decode(stats.sum.num_object_copies, bl);
-      ::decode(stats.sum.num_objects_missing_on_primary, bl);
-      ::decode(stats.sum.num_objects_degraded, bl);
-      ::decode(log_size, bl);
-      ::decode(ondisk_log_size, bl);
-      if (v >= 2) {
-	::decode(stats.sum.num_rd, bl);
-	::decode(stats.sum.num_rd_kb, bl);
-	::decode(stats.sum.num_wr, bl);
-	::decode(stats.sum.num_wr_kb, bl);
-      }
-      if (v >= 3) {
-	::decode(stats.sum.num_objects_unfound, bl);
-      }
-    }
-  }
-
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
@@ -875,6 +834,10 @@ struct pool_stat_t {
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
   }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
 };
 WRITE_CLASS_ENCODER(pool_stat_t)
 
