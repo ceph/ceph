@@ -210,22 +210,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  // output
-  int out_fd;
-  bool close_out_fd = false;
-  if (out_file.empty() || out_file == "-") {
-    out_fd = STDOUT_FILENO;
-  } else {
-    out_fd = TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
-    if (out_fd < 0) {
-      int ret = errno;
-      derr << " failed to create file '" << out_file << "': "
-	   << cpp_strerror(ret) << dendl;
-      return 1;
-    }
-    close_out_fd = true;
-  }
-
   CephToolCtx *ctx = ceph_tool_common_init(mode, concise);
   if (!ctx) {
     derr << "ceph_tool_common_init failed." << dendl;
@@ -234,6 +218,7 @@ int main(int argc, const char **argv)
   signal(SIGINT, SIG_DFL);
   signal(SIGTERM, SIG_DFL);
 
+  bufferlist outbl;
   int ret = 0;
   switch (mode) {
     case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER: // fall through
@@ -261,18 +246,10 @@ int main(int argc, const char **argv)
 	  }
 
 	  bufferlist obl;
-	  if (do_command(ctx, cmd, indata, obl))
+	  if (do_command(ctx, cmd, indata, obl) < 0)
 	    ret = 1;
-	  if (obl.length()) {
-	    int err = obl.write_fd(out_fd);
-	    if (err) {
-	      derr << " failed to write " << obl.length() << " bytes to " << out_file << ": "
-		   << cpp_strerror(err) << dendl;
-	      goto out;
-	    }
-	    if (!concise && !out_file.empty())
-	      cerr << " wrote " << obl.length() << " byte payload to " << out_file << std::endl;
-	  }
+	  else
+	    outbl.claim(obl);
 	}
       }
       if (ceph_tool_messenger_shutdown())
@@ -286,10 +263,31 @@ int main(int argc, const char **argv)
       break;
     }
   }
+ 
+  if (ret == 0 && outbl.length()) {
+    // output
+    int err;
+    if (out_file.empty() || out_file == "-") {
+      err = outbl.write_fd(STDOUT_FILENO);
+    } else {
+      int out_fd = TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
+      if (out_fd < 0) {
+	int ret = errno;
+	derr << " failed to create file '" << out_file << "': "
+	     << cpp_strerror(ret) << dendl;
+	return 1;
+      }
+      err = outbl.write_fd(out_fd);
+      ::close(out_fd);
+    }
+    if (err) {
+      derr << " failed to write " << outbl.length() << " bytes to " << out_file << ": "
+	   << cpp_strerror(err) << dendl;
+      ret = 1;
+    } else if (!concise && !out_file.empty())
+      cerr << " wrote " << outbl.length() << " byte payload to " << out_file << std::endl;
+  }
 
- out:
-  if (close_out_fd)
-    ::close(out_fd);
   if (ceph_tool_common_shutdown(ctx))
     ret = 1;
   return ret;
