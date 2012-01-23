@@ -4,6 +4,7 @@
 /ceph
 /ceph-osd
 /ceph-syn
+/ceph-dencoder
 /dupstore
 /fakefuse
 /fakesyn
