@@ -527,6 +527,38 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   calc_pg_masks();
 }
 
+void pg_pool_t::generate_test_instances(list<pg_pool_t>& o)
+{
+  pg_pool_t a;
+  o.push_back(a);
+
+  a.type = TYPE_REP;
+  a.size = 2;
+  a.crush_ruleset = 3;
+  a.object_hash = 4;
+  a.pg_num = 6;
+  a.pgp_num = 5;
+  a.lpg_num = 8;
+  a.lpgp_num = 7;
+  a.last_change = 9;
+  a.snap_seq = 10;
+  a.snap_epoch = 11;
+  a.auid = 12;
+  a.crash_replay_interval = 13;
+  o.push_back(a);
+
+  a.snaps[3].name = "asdf";
+  a.snaps[3].snapid = 3;
+  a.snaps[3].stamp = utime_t(123, 4);
+  a.snaps[6].name = "qwer";
+  a.snaps[6].snapid = 6;
+  a.snaps[6].stamp = utime_t(23423, 4);
+  o.push_back(a);
+
+  a.removed_snaps.insert(2);   // not quite valid to combine with snaps!
+  o.push_back(a);
+}
+
 ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
   out << p.get_type_name()

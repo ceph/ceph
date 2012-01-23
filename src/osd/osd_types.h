@@ -665,6 +665,8 @@ struct pg_pool_t {
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
+
+  static void generate_test_instances(list<pg_pool_t>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 
