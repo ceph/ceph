@@ -1951,7 +1951,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		<< " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
 	dout(0) << "watch: oi.user_version=" << oi.user_version.version << dendl;
 
-	watch_info_t w = {cookie, 30};  // FIXME: where does the timeout come from?
+	watch_info_t w(cookie, 30);  // FIXME: where does the timeout come from?
 	if (do_watch) {
 	  if (oi.watchers.count(entity) && oi.watchers[entity] == w) {
 	    dout(10) << " found existing watch " << w << " by " << entity << dendl;

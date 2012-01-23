@@ -985,6 +985,8 @@ struct watch_info_t {
   uint64_t cookie;
   uint32_t timeout_seconds;
 
+  watch_info_t(uint64_t c=0, uint32_t t=0) : cookie(c), timeout_seconds(t) {}
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
