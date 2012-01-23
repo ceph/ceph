@@ -13,6 +13,7 @@
  */
 
 #include "osd_types.h"
+#include "include/ceph_features.h"
 
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const

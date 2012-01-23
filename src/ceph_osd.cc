@@ -23,6 +23,7 @@
 using namespace std;
 
 #include "osd/OSD.h"
+#include "include/ceph_features.h"
 
 #include "common/config.h"
 

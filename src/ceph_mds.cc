@@ -21,6 +21,8 @@
 #include <string>
 using namespace std;
 
+#include "include/ceph_features.h"
+
 #include "common/config.h"
 #include "common/strtol.h"
 

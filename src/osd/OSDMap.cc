@@ -16,7 +16,7 @@
 
 #include "common/config.h"
 #include "common/Formatter.h"
-
+#include "include/ceph_features.h"
 
 // ----------------------------------
 // osd_info_t

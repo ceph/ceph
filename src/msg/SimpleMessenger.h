@@ -17,6 +17,7 @@
 
 #include "include/types.h"
 #include "include/xlist.h"
+#include "include/ceph_features.h"
 
 #include <list>
 #include <map>

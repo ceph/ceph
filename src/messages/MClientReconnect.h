@@ -17,6 +17,7 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
+#include "include/ceph_features.h"
 
 
 class MClientReconnect : public Message {

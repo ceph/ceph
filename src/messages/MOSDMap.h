@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 #include "osd/OSDMap.h"
-
+#include "include/ceph_features.h"
 
 class MOSDMap : public Message {
  public:

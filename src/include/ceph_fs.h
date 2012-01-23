@@ -14,7 +14,6 @@
 
 #include "msgr.h"
 #include "rados.h"
-#include "ceph_features.h"
 
 /*
  * subprotocol versions.  when specific messages types or high-level

@@ -20,6 +20,7 @@
 #include "MClientRequest.h"
 
 #include "msg/Message.h"
+#include "include/ceph_features.h"
 
 #include <vector>
 using namespace std;

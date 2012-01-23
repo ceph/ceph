@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
+#include "include/ceph_features.h"
 
 /*
  * OSD op

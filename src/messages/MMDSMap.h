@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "mds/MDSMap.h"
+#include "include/ceph_features.h"
 
 #include <uuid/uuid.h>
 
