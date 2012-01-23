@@ -685,6 +685,53 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
 }
 
 
+// -- object_stat_collection_t --
+
+void object_stat_collection_t::dump(Formatter *f) const
+{
+  f->open_object_section("stat_sum");
+  sum.dump(f);
+  f->close_section();
+  f->open_object_section("stat_cat_sum");
+  for (map<string,object_stat_sum_t>::const_iterator p = cat_sum.begin(); p != cat_sum.end(); ++p) {
+    f->open_object_section(p->first.c_str());
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void object_stat_collection_t::encode(bufferlist& bl) const
+{
+  __u8 v = 1;
+  ::encode(v, bl);
+  ::encode(sum, bl);
+  ::encode(cat_sum, bl);
+}
+
+void object_stat_collection_t::decode(bufferlist::iterator& bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(sum, bl);
+  ::decode(cat_sum, bl);
+}
+
+void object_stat_collection_t::generate_test_instances(list<object_stat_collection_t>& o)
+{
+  object_stat_collection_t a;
+  o.push_back(a);
+  list<object_stat_sum_t> l;
+  object_stat_sum_t::generate_test_instances(l);
+  char n[2] = { 'a', 0 };
+  for (list<object_stat_sum_t>::iterator p = l.begin(); p != l.end(); ++p) {
+    a.add(*p, n);
+    n[0]++;
+    o.push_back(a);
+  }
+}
+
+
 
 // -- OSDSuperblock --
 

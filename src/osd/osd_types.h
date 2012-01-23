@@ -673,8 +673,10 @@ WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 ostream& operator<<(ostream& out, const pg_pool_t& p);
 
 
-/*
- * object_stat_sum_t - a summation of object stats
+/**
+ * a summation of object stats
+ *
+ * This is just a container for object stats; we don't know what for.
  */
 struct object_stat_sum_t {
   int64_t num_bytes;    // in bytes
@@ -713,6 +715,11 @@ struct object_stat_sum_t {
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
+/**
+ * a collection of object stat sums
+ *
+ * This is a collection of stat sums over different categories.
+ */
 struct object_stat_collection_t {
   object_stat_sum_t sum;
   map<string,object_stat_sum_t> cat_sum;
@@ -723,30 +730,10 @@ struct object_stat_collection_t {
       p->second.calc_copies(nrep);
   }
 
-  void dump(Formatter *f) const {
-    f->open_object_section("stat_sum");
-    sum.dump(f);
-    f->close_section();
-    f->open_object_section("stat_cat_sum");
-    for (map<string,object_stat_sum_t>::const_iterator p = cat_sum.begin(); p != cat_sum.end(); ++p) {
-      f->open_object_section(p->first.c_str());
-      p->second.dump(f);
-      f->close_section();
-    }
-    f->close_section();
-  }
-  void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(sum, bl);
-    ::encode(cat_sum, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(sum, bl);
-    ::decode(cat_sum, bl);
-  }
+  void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<object_stat_collection_t>& o);
 
   void clear() {
     sum.clear();
