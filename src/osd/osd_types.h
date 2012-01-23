@@ -750,6 +750,8 @@ struct object_stat_sum_t {
     ::decode(num_wr, bl);
     ::decode(num_wr_kb, bl);
   }
+  static void generate_test_instances(list<object_stat_sum_t>& o);
+
   void add(const object_stat_sum_t& o) {
     num_bytes += o.num_bytes;
     num_kb += o.num_kb;

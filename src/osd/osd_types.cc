@@ -579,6 +579,26 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 }
 
 
+// -- object_stat_sum_t --
+
+void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t>& o)
+{
+  object_stat_sum_t a;
+  o.push_back(a);
+
+  a.num_bytes = 1;
+  a.num_kb = 2;
+  a.num_objects = 3;
+  a.num_object_clones = 4;
+  a.num_object_copies = 5;
+  a.num_objects_missing_on_primary = 6;
+  a.num_objects_degraded = 7;
+  a.num_objects_unfound = 8;
+  a.num_rd = 9; a.num_rd_kb = 10;
+  a.num_wr = 11; a.num_wr_kb = 12;
+  o.push_back(a);
+}
+
 
 // -- OSDSuperblock --
 
