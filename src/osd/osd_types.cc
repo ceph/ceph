@@ -842,6 +842,31 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   }
 }
 
+void pg_stat_t::generate_test_instances(list<pg_stat_t>& o)
+{
+  pg_stat_t a;
+  o.push_back(a);
+
+  a.version = eversion_t(1, 3);
+  a.reported = eversion_t(1, 2);
+  a.state = 123;
+  a.log_start = eversion_t(1, 4);
+  a.ondisk_log_start = eversion_t(1, 5);
+  a.created = 6;
+  a.last_epoch_clean = 7;
+  a.parent = pg_t(1, 2, 3);
+  a.parent_split_bits = 12;
+  a.last_scrub = eversion_t(9, 10);
+  a.last_scrub_stamp = utime_t(11, 12);
+  list<object_stat_collection_t> l;
+  object_stat_collection_t::generate_test_instances(l);
+  a.stats = l.back();
+  a.log_size = 99;
+  a.ondisk_log_size = 88;
+  a.up.push_back(123);
+  a.acting.push_back(456);
+  o.push_back(a);
+}
 
 
 // -- OSDSuperblock --
@@ -1105,6 +1130,14 @@ void object_info_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+}
+
+void object_info_t::generate_test_instances(list<object_info_t>& o)
+{
+  object_info_t a;
+  o.push_back(a);
+  
+  // fixme
 }
 
 

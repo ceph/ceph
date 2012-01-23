@@ -809,6 +809,7 @@ struct pg_stat_t {
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(list<pg_stat_t>& o);
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 
@@ -1079,6 +1080,7 @@ struct object_info_t {
     decode(p);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<object_info_t>& o);
 
   explicit object_info_t()
     : size(0), lost(false),
