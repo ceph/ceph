@@ -22,6 +22,7 @@
 #include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"
 
+#include "common/admin_socket.h"
 #include "common/Timer.h"
 
 #include <list>
@@ -424,6 +425,15 @@ class Objecter {
   void schedule_tick();
   void tick();
 
+  class RequestStateHook : public AdminSocketHook {
+    Objecter *m_objecter;
+  public:
+    RequestStateHook(Objecter *objecter);
+    bool call(std::string command, bufferlist& out);
+  };
+
+  RequestStateHook *m_request_state_hook;
+
 public:
   /*** track pending operations ***/
   // read
@@ -774,10 +784,13 @@ public:
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
     logger(NULL), tick_event(NULL),
+    m_request_state_hook(NULL),
     num_homeless_ops(0),
     op_throttler(cct->_conf->objecter_inflight_op_bytes)
   { }
   ~Objecter() {
+    assert(!tick_event);
+    assert(!m_request_state_hook);
     assert(!logger);
   }
 
@@ -813,7 +826,17 @@ private:
   bool is_active() {
     return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
+
+  /**
+   * Output in-flight requests
+   */
   void dump_active();
+  void dump_requests(Formatter& fmt) const;
+  void dump_ops(Formatter& fmt) const;
+  void dump_linger_ops(Formatter& fmt) const;
+  void dump_pool_ops(Formatter& fmt) const;
+  void dump_pool_stat_ops(Formatter& fmt) const;
+  void dump_statfs_ops(Formatter& fmt) const;
 
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
