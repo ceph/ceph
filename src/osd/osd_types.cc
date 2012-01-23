@@ -732,6 +732,117 @@ void object_stat_collection_t::generate_test_instances(list<object_stat_collecti
 }
 
 
+// -- pg_stat_t --
+
+void pg_stat_t::dump(Formatter *f) const
+{
+  f->dump_stream("version") << version;
+  f->dump_stream("reported") << reported;
+  f->dump_string("state", pg_state_string(state));
+  f->dump_stream("log_start") << log_start;
+  f->dump_stream("ondisk_log_start") << ondisk_log_start;
+  f->dump_unsigned("created", created);
+  f->dump_unsigned("last_epoch_clean", created);
+  f->dump_stream("parent") << parent;
+  f->dump_unsigned("parent_split_bits", parent_split_bits);
+  f->dump_stream("last_scrub") << last_scrub;
+  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
+  f->dump_unsigned("log_size", log_size);
+  f->dump_unsigned("ondisk_log_size", ondisk_log_size);
+  stats.dump(f);
+  f->open_array_section("up");
+  for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+  f->open_array_section("acting");
+  for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+}
+
+void pg_stat_t::encode(bufferlist &bl) const
+{
+  __u8 v = 7;
+  ::encode(v, bl);
+  
+  ::encode(version, bl);
+  ::encode(reported, bl);
+  ::encode(state, bl);
+  ::encode(log_start, bl);
+  ::encode(ondisk_log_start, bl);
+  ::encode(created, bl);
+  ::encode(last_epoch_clean, bl);
+  ::encode(parent, bl);
+  ::encode(parent_split_bits, bl);
+  ::encode(last_scrub, bl);
+  ::encode(last_scrub_stamp, bl);
+  ::encode(stats, bl);
+  ::encode(log_size, bl);
+  ::encode(ondisk_log_size, bl);
+  ::encode(up, bl);
+  ::encode(acting, bl);
+}
+
+void pg_stat_t::decode(bufferlist::iterator &bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  if (v > 7)
+    throw buffer::malformed_input("unknown pg_stat_t encoding version > 7");
+
+  ::decode(version, bl);
+  ::decode(reported, bl);
+  ::decode(state, bl);
+  ::decode(log_start, bl);
+  ::decode(ondisk_log_start, bl);
+  ::decode(created, bl);
+  if (v >= 7)
+    ::decode(last_epoch_clean, bl);
+  else
+    last_epoch_clean = 0;
+  if (v < 6) {
+    old_pg_t opgid;
+    ::decode(opgid, bl);
+    parent = opgid;
+  } else {
+    ::decode(parent, bl);
+  }
+  ::decode(parent_split_bits, bl);
+  ::decode(last_scrub, bl);
+  ::decode(last_scrub_stamp, bl);
+  if (v <= 4) {
+    ::decode(stats.sum.num_bytes, bl);
+    ::decode(stats.sum.num_kb, bl);
+    ::decode(stats.sum.num_objects, bl);
+    ::decode(stats.sum.num_object_clones, bl);
+    ::decode(stats.sum.num_object_copies, bl);
+    ::decode(stats.sum.num_objects_missing_on_primary, bl);
+    ::decode(stats.sum.num_objects_degraded, bl);
+    ::decode(log_size, bl);
+    ::decode(ondisk_log_size, bl);
+    if (v >= 2) {
+      ::decode(stats.sum.num_rd, bl);
+      ::decode(stats.sum.num_rd_kb, bl);
+      ::decode(stats.sum.num_wr, bl);
+      ::decode(stats.sum.num_wr_kb, bl);
+    }
+    if (v >= 3) {
+      ::decode(up, bl);
+    }
+    if (v == 4) {
+      ::decode(stats.sum.num_objects_unfound, bl);  // sigh.
+    }
+    ::decode(acting, bl);
+  } else {
+    ::decode(stats, bl);
+    ::decode(log_size, bl);
+    ::decode(ondisk_log_size, bl);
+    ::decode(up, bl);
+    ::decode(acting, bl);
+  }
+}
+
+
 
 // -- OSDSuperblock --
 
