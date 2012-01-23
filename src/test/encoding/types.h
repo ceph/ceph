@@ -1,7 +1,7 @@
 
-//#include "msg/msg_types.h"
-//TYPE(entity_name_t)
-//TYPE(entity_addr_t)
+#include "msg/msg_types.h"
+TYPE(entity_name_t)
+TYPE(entity_addr_t)
 
 #include "osd/osd_types.h"
 TYPE(osd_stat_t)

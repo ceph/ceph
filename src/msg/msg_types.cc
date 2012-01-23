@@ -20,6 +20,28 @@ void entity_addr_t::dump(Formatter *f) const
   f->dump_stream("addr") << addr;
 }
 
+void entity_name_t::generate_test_instances(list<entity_name_t>& o)
+{
+  o.push_back(entity_name_t::MON());
+  o.push_back(entity_name_t::MON(1));
+  o.push_back(entity_name_t::OSD(1));
+  o.push_back(entity_name_t::CLIENT(1));
+}
+
+void entity_addr_t::generate_test_instances(list<entity_addr_t>& o)
+{
+  o.push_back(entity_addr_t());
+  entity_addr_t a;
+  a.set_nonce(1);
+  o.push_back(a);
+  a.set_family(AF_INET);
+  a.set_in4_quad(0, 127);
+  a.set_in4_quad(0, 0);
+  a.set_in4_quad(0, 1);
+  a.set_in4_quad(0, 2);
+  a.set_port(2);
+  o.push_back(a);
+}
 
 bool entity_addr_t::parse(const char *s, const char **end)
 {
