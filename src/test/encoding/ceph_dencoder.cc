@@ -14,22 +14,22 @@ void usage(ostream &out)
 {
   out << "usage: ceph-dencoder [commands ...]" << std::endl;
   out << "\n";
-  out << "  version          print version string (to stdout)\n";
+  out << "  version            print version string (to stdout)\n";
   out << "\n";
-  out << "  import <encfile> read encoded data from encfile\n";
-  out << "  export <outfile> write encoded data to outfile\n";
+  out << "  import <encfile>   read encoded data from encfile\n";
+  out << "  export <outfile>    write encoded data to outfile\n";
   out << "\n";
-  out << "  features <num>   set feature bits used for encoding\n";
-  out << "  get_features     print feature bits (int) to stdout\n";
+  out << "  set_features <num>  set feature bits used for encoding\n";
+  out << "  get_features        print feature bits (int) to stdout\n";
   out << "\n";
-  out << "  list_types       list supported types\n";
-  out << "  type <classname> select type\n";
-  out << "  decode           decode into in-core object\n";
-  out << "  encode           encode in-core object\n";
-  out << "  dump_json        dump in-core object as json (to stdout)\n";
+  out << "  list_types          list supported types\n";
+  out << "  type <classname>    select in-memory type\n";
+  out << "  decode              decode into in-memory object\n";
+  out << "  encode              encode in-memory object\n";
+  out << "  dump_json           dump in-memory object as json (to stdout)\n";
   out << "\n";
-  out << "  count            print number of generated test objects (to stdout)\n";
-  out << "  select <n>       select generated test object as in-core object\n";
+  out << "  count_tests         print number of generated test objects (to stdout)\n";
+  out << "  select_test <n>     select generated test object as in-memory object\n";
 }
 
 struct Dencoder {
@@ -80,11 +80,13 @@ public:
     return m_list.size();
   }
   string select_generated(unsigned i) {
-    if (i >= m_list.size())
+    // allow 0- or 1-based (by wrapping)
+    if (i == 0)
+      i = m_list.size();
+    if (i > m_list.size())
       return "invalid id for generated object";
-    typename list<T>::iterator p;
-    p = m_list.begin();
-    for ( ; i > 0 && p != m_list.end(); ++p, --i) ;
+    typename list<T>::iterator p = m_list.begin();
+    for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
     m_object = *p;
     return string();
   }
@@ -148,10 +150,10 @@ int main(int argc, const char **argv)
       }
       den = dencoders[cname];
       den->generate();
-    } else if (*i == string("get-features")) {
+    } else if (*i == string("get_features")) {
       cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
       exit(0);
-    } else if (*i == string("features")) {
+    } else if (*i == string("set_features")) {
       i++;
       if (i == args.end()) {
 	usage(cerr);
@@ -211,14 +213,14 @@ int main(int argc, const char **argv)
       }
       ::close(fd);
 
-    } else if (*i == string("count")) {
+    } else if (*i == string("count_tests")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
 	usage(cerr);
 	exit(1);
       }
       cout << den->num_generated() << std::endl;
-    } else if (*i == string("select")) {
+    } else if (*i == string("select_test")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
 	usage(cerr);
