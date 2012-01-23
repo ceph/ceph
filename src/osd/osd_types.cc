@@ -917,6 +917,19 @@ void pool_stat_t::decode(bufferlist::iterator &bl)
   }
 }
 
+void pool_stat_t::generate_test_instances(list<pool_stat_t>& o)
+{
+  pool_stat_t a;
+  o.push_back(a);
+
+  list<object_stat_collection_t> l;
+  object_stat_collection_t::generate_test_instances(l);
+  a.stats = l.back();
+  a.log_size = 123;
+  a.ondisk_log_size = 456;
+  o.push_back(a);
+}
+
 
 // -- OSDSuperblock --
 
