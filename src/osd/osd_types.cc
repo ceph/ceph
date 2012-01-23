@@ -1069,6 +1069,17 @@ void watch_info_t::dump(Formatter *f) const
   f->dump_unsigned("timeout_seconds", timeout_seconds);
 }
 
+void watch_info_t::generate_test_instances(list<watch_info_t>& o)
+{
+  watch_info_t a;
+  o.push_back(a);
+ 
+  a.cookie = 123;
+  a.timeout_seconds = 99;
+  o.push_back(a);
+}
+
+
 // -- object_info_t --
 
 void object_info_t::copy_user_bits(const object_info_t& other)

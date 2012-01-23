@@ -988,6 +988,7 @@ struct watch_info_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<watch_info_t>& o);
 };
 WRITE_CLASS_ENCODER(watch_info_t)
 
