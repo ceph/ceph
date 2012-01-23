@@ -581,6 +581,59 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 
 // -- object_stat_sum_t --
 
+void object_stat_sum_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("num_bytes", num_bytes);
+  f->dump_unsigned("num_kb", num_kb);
+  f->dump_unsigned("num_objects", num_objects);
+  f->dump_unsigned("num_object_clones", num_object_clones);
+  f->dump_unsigned("num_object_copies", num_object_copies);
+  f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
+  f->dump_unsigned("num_objects_degraded", num_objects_degraded);
+  f->dump_unsigned("num_objects_unfound", num_objects_unfound);
+  f->dump_unsigned("num_read", num_rd);
+  f->dump_unsigned("num_read_kb", num_rd_kb);
+  f->dump_unsigned("num_write", num_wr);
+  f->dump_unsigned("num_write_kb", num_wr_kb);
+}
+
+void object_stat_sum_t::encode(bufferlist& bl) const
+{
+  __u8 v = 2;
+  ::encode(v, bl);
+  ::encode(num_bytes, bl);
+  ::encode(num_kb, bl);
+  ::encode(num_objects, bl);
+  ::encode(num_object_clones, bl);
+  ::encode(num_object_copies, bl);
+  ::encode(num_objects_missing_on_primary, bl);
+  ::encode(num_objects_degraded, bl);
+  ::encode(num_objects_unfound, bl);
+  ::encode(num_rd, bl);
+  ::encode(num_rd_kb, bl);
+  ::encode(num_wr, bl);
+  ::encode(num_wr_kb, bl);
+}
+
+void object_stat_sum_t::decode(bufferlist::iterator& bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(num_bytes, bl);
+  ::decode(num_kb, bl);
+  ::decode(num_objects, bl);
+  ::decode(num_object_clones, bl);
+  ::decode(num_object_copies, bl);
+  ::decode(num_objects_missing_on_primary, bl);
+  ::decode(num_objects_degraded, bl);
+  if (v >= 2)
+    ::decode(num_objects_unfound, bl);
+  ::decode(num_rd, bl);
+  ::decode(num_rd_kb, bl);
+  ::decode(num_wr, bl);
+  ::decode(num_wr_kb, bl);
+}
+
 void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t>& o)
 {
   object_stat_sum_t a;
@@ -598,6 +651,39 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t>& o)
   a.num_wr = 11; a.num_wr_kb = 12;
   o.push_back(a);
 }
+
+void object_stat_sum_t::add(const object_stat_sum_t& o)
+{
+  num_bytes += o.num_bytes;
+  num_kb += o.num_kb;
+  num_objects += o.num_objects;
+  num_object_clones += o.num_object_clones;
+  num_object_copies += o.num_object_copies;
+  num_objects_missing_on_primary += o.num_objects_missing_on_primary;
+  num_objects_degraded += o.num_objects_degraded;
+  num_rd += o.num_rd;
+  num_rd_kb += o.num_rd_kb;
+  num_wr += o.num_wr;
+  num_wr_kb += o.num_wr_kb;
+  num_objects_unfound += o.num_objects_unfound;
+}
+
+void object_stat_sum_t::sub(const object_stat_sum_t& o)
+{
+  num_bytes -= o.num_bytes;
+  num_kb -= o.num_kb;
+  num_objects -= o.num_objects;
+  num_object_clones -= o.num_object_clones;
+  num_object_copies -= o.num_object_copies;
+  num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
+  num_objects_degraded -= o.num_objects_degraded;
+  num_rd -= o.num_rd;
+  num_rd_kb -= o.num_rd_kb;
+  num_wr -= o.num_wr;
+  num_wr_kb -= o.num_wr_kb;
+  num_objects_unfound -= o.num_objects_unfound;
+}
+
 
 
 // -- OSDSuperblock --
