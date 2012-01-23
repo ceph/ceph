@@ -255,7 +255,7 @@ int RGWPutObj_REST::verify_params()
 {
   if (s->length) {
     off_t len = atoll(s->length);
-    if (len > RGW_MAX_PUT_SIZE) {
+    if (len > (off_t)RGW_MAX_PUT_SIZE) {
       return -ERR_TOO_LARGE;
     }
   }
