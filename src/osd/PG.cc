@@ -4406,6 +4406,18 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogR
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MInfoRec& evt)
+{
+  dout(10) << "In WaitActingChange, ignoring MInfoRec" << dendl;
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MNotifyRec& evt)
+{
+  dout(10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
+  return discard_event();
+}
+
 void PG::RecoveryState::WaitActingChange::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
