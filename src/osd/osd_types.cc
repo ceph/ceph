@@ -248,6 +248,16 @@ void pool_snap_info_t::decode(bufferlist::iterator& bl)
   ::decode(name, bl);
 }
 
+void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t>& o)
+{
+  pool_snap_info_t a;
+  o.push_back(a);
+  a.snapid = 1;
+  a.stamp = utime_t(1, 2);
+  a.name = "foo";
+  o.push_back(a);  
+}
+
 
 // -- pg_pool_t --
 

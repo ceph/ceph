@@ -524,6 +524,7 @@ struct pool_snap_info_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<pool_snap_info_t>& o);
 };
 WRITE_CLASS_ENCODER(pool_snap_info_t)
 
