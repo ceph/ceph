@@ -246,10 +246,11 @@ int main(int argc, const char **argv)
 	  }
 
 	  bufferlist obl;
-	  if (do_command(ctx, cmd, indata, obl) < 0)
+	  if (do_command(ctx, cmd, indata, obl) < 0) {
 	    ret = 1;
-	  else
-	    outbl.claim(obl);
+	    break;
+	  }
+	  outbl.claim(obl);
 	}
       }
       if (ceph_tool_messenger_shutdown())
