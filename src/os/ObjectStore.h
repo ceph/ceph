@@ -152,7 +152,6 @@ public:
     uint64_t pad_unused_bytes;
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
-    bufferlist::iterator p;
     bool sobject_encoding;
 
   public:
