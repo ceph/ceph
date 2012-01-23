@@ -502,3 +502,45 @@ void ObjectStore::Transaction::dump(ostream& out)
   }
 }
 
+void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transaction>& o)
+{
+  Transaction t;
+  o.push_back(t);
+
+  t.nop();
+  o.push_back(t);
+  
+  coll_t c("foocoll");
+  coll_t c2("foocoll2");
+  hobject_t o1("obj", "", 123, 456);
+  hobject_t o2("obj2", "", 123, 456);
+  t.touch(c, o1);
+  bufferlist bl;
+  bl.append("some data");
+  t.write(c, o1, 1, bl.length(), bl);
+  t.zero(c, o1, 22, 33);
+  t.truncate(c, o1, 99);
+  t.remove(c, o1);
+  o.push_back(t);
+
+  t.setattr(c, o1, "key", bl);
+  map<string,bufferptr> m;
+  m["a"] = buffer::copy("this", 4);
+  m["b"] = buffer::copy("that", 4);
+  t.setattrs(c, o1, m);
+  t.rmattr(c, o1, "b");
+  t.rmattrs(c, o1);
+
+  t.clone(c, o1, o2);
+  t.clone_range(c, o1, o2, 1, 12, 99);
+
+  t.create_collection(c);
+  t.collection_add(c, c2, o1);
+  t.collection_add(c, c2, o2);
+  t.remove_collection(c);
+  t.collection_setattr(c, "this", bl);
+  t.collection_rmattr(c, "foo");
+  t.collection_setattrs(c, m);
+  t.collection_rename(c, c2);
+  o.push_back(t);  
+}
