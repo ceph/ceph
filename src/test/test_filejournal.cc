@@ -222,3 +222,42 @@ TEST(TestFileJournal, WriteTrim) {
 
   j.close();
 }
+
+TEST(TestFileJournal, WriteTrimSmall) {
+  fsid.generate_random();
+  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  ASSERT_EQ(0, j.create());
+  j.make_writeable();
+
+  list<C_Sync*> ls;
+  
+  bufferlist bl;
+  char foo[1024*1024];
+  memset(foo, 1, sizeof(foo));
+
+  uint64_t seq = 1, committed = 0;
+
+  for (unsigned i=0; i<size_mb*2; i++) {
+    bl.clear();
+    for (int k=0; k<128; k++)
+      bl.push_back(buffer::copy(foo, sizeof(foo) / 128));
+    bl.zero();
+    ls.push_back(new C_Sync);
+    j.submit_entry(seq++, bl, 0, ls.back()->c);
+
+    while (ls.size() > size_mb/2) {
+      delete ls.front();
+      ls.pop_front();
+      committed++;
+      j.committed_thru(committed);
+    }
+  }
+
+  while (ls.size()) {
+    delete ls.front();
+    ls.pop_front();
+    j.committed_thru(committed);
+  }
+
+  j.close();
+}
