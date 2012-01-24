@@ -253,7 +253,7 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode
 
   r = ::open(path->path(), flags, mode);
   if (r < 0)
-    return r;
+    return -errno;
   fd = r;
 
   if ((flags & O_CREAT) && (!exist)) {
@@ -2494,9 +2494,8 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
 
   int fd = lfn_open(cid, oid, O_RDONLY);
   if (fd < 0) {
-    int err = errno;
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: " << cpp_strerror(err) << dendl;
-    return -err;
+    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: " << cpp_strerror(fd) << dendl;
+    return fd;
   }
 
   if (len == 0) {
@@ -2542,7 +2541,7 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
   int r;
   int fd = lfn_open(cid, oid, O_RDONLY);
   if (fd < 0) {
-    r = -errno;
+    r = fd;
     dout(10) << "read couldn't open " << cid << "/" << oid << ": " << cpp_strerror(r) << dendl;
   } else {
     uint64_t i;
@@ -2628,7 +2627,7 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
     ::close(fd);
     r = 0;
   } else
-    r = -errno;
+    r = fd;
   dout(10) << "touch " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
@@ -2645,7 +2644,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   int flags = O_WRONLY|O_CREAT;
   int fd = lfn_open(cid, oid, flags, 0644);
   if (fd < 0) {
-    r = -errno;
+    r = fd;
     dout(0) << "write couldn't open " << cid << "/" << oid << " flags " << flags << ": "
 	    << cpp_strerror(r) << dendl;
     goto out;
@@ -2702,12 +2701,12 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   int o, n, r;
   o = lfn_open(cid, oldoid, O_RDONLY);
   if (o < 0) {
-    r = -errno;
+    r = o;
     goto out2;
   }
   n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (n < 0) {
-    r = -errno;
+    r = n;
     goto out;
   }
   if (btrfs)
@@ -2868,12 +2867,12 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
   int o, n;
   o = lfn_open(cid, oldoid, O_RDONLY);
   if (o < 0) {
-    r = -errno;
+    r = o;
     goto out2;
   }
   n = lfn_open(cid, newoid, O_CREAT|O_WRONLY, 0644);
   if (n < 0) {
-    r = -errno;
+    r = n;
     goto out;
   }
   r = _do_clone_range(o, n, srcoff, len, dstoff);
