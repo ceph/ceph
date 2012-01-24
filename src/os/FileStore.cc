@@ -244,22 +244,33 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode
   IndexedPath path;
   int r, fd, exist;
   r = get_index(cid, &index);
-  if (r < 0)
+  if (r < 0) {
+    derr << "error getting collection index for " << cid
+	 << ": " << cpp_strerror(-r) << dendl;
     return r;
+  }
   r = index->lookup(oid, &path, &exist);
   if (r < 0) {
+    derr << "could not find " << oid << " in index: "
+	 << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = ::open(path->path(), flags, mode);
-  if (r < 0)
-    return -errno;
+  if (r < 0) {
+    r = -errno;
+    derr << "error opening file " << path->path() << " with flags="
+	 << flags << " and mode=" << mode << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
   fd = r;
 
   if ((flags & O_CREAT) && (!exist)) {
     r = index->created(oid, path->path());
     if (r < 0) {
       close(fd);
+      derr << "error creating " << oid << " (" << path->path()
+	   << ") in index: " << cpp_strerror(-r) << dendl;
       return r;
     }
   }
