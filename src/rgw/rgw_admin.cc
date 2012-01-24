@@ -16,6 +16,7 @@ using namespace std;
 #include "rgw_user.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
+#include "rgw_acl_s3.h"
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "auth/Crypto.h"
@@ -910,7 +911,7 @@ int main(int argc, char **argv)
     rgw_obj obj(bucket, object);
     int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
 
-    RGWAccessControlPolicy policy;
+    RGWAccessControlPolicy_S3 policy;
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       try {

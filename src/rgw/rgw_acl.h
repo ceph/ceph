@@ -194,6 +194,8 @@ public:
   }
   void add_grant(ACLGrant *grant);
 
+  multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
+
   void create_default(string id, string name) {
     acl_user_map.clear();
     acl_group_map.clear();

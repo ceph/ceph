@@ -261,17 +261,102 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
 }
 
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
-  RGWAccessControlList_S3 *acl_p =
+  RGWAccessControlList_S3 *s3acl =
       (RGWAccessControlList_S3 *)find_first("AccessControlList");
-  if (!acl_p)
-    return false;
-  acl = *acl_p;
+  acl = *s3acl;
 
   ACLOwner *owner_p = (ACLOwner*)find_first("Owner");
   if (!owner_p)
     return false;
   owner = *owner_p;
   return true;
+}
+
+/*
+  can only be called on object that was parsed
+ */
+int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& dest)
+{
+  if (!owner)
+    return -EINVAL;
+
+  ACLOwner *requested_owner = (ACLOwner *)find_first("Owner");
+  if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
+    return -EPERM;
+  }
+
+  RGWUserInfo owner_info;
+  if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
+    dout(10) << "owner info does not exist" << dendl;
+    return -EINVAL;
+  }
+  ACLOwner& dest_owner = dest.get_owner();
+  dest_owner.set_id(owner->get_id());
+  dest_owner.set_name(owner_info.display_name);
+
+  dout(20) << "owner id=" << owner->get_id() << dendl;
+  dout(20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+
+  RGWAccessControlList& dst_acl = dest.get_acl();
+
+  multimap<string, ACLGrant>& grant_map = acl.get_grant_map();
+  multimap<string, ACLGrant>::iterator iter;
+  for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
+    ACLGrant& src_grant = iter->second;
+    ACLGranteeType& type = src_grant.get_type();
+    ACLGrant new_grant;
+    bool grant_ok = false;
+    string uid;
+    RGWUserInfo grant_user;
+    switch (type.get_type()) {
+    case ACL_TYPE_EMAIL_USER:
+      {
+        string email = src_grant.get_id();
+        dout(10) << "grant user email=" << email << dendl;
+        if (rgw_get_user_info_by_email(email, grant_user) < 0) {
+          dout(10) << "grant user email not found or other error" << dendl;
+          return -ERR_UNRESOLVABLE_EMAIL;
+        }
+        uid = grant_user.user_id;
+      }
+    case ACL_TYPE_CANON_USER:
+      {
+        if (type.get_type() == ACL_TYPE_CANON_USER)
+          uid = src_grant.get_id();
+    
+        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(uid, grant_user) < 0) {
+          dout(10) << "grant user does not exist:" << uid << dendl;
+          return -EINVAL;
+        } else {
+          ACLPermission& perm = src_grant.get_permission();
+          new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
+          grant_ok = true;
+          dout(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << dendl;
+        }
+      }
+      break;
+    case ACL_TYPE_GROUP:
+      {
+        string group = src_grant.get_id();
+        if (group.compare(RGW_URI_ALL_USERS) == 0 ||
+            group.compare(RGW_URI_AUTH_USERS) == 0) {
+          new_grant = src_grant;
+          grant_ok = true;
+          dout(10) << "new grant: " << new_grant.get_id() << dendl;
+        } else {
+          dout(10) << "grant group does not exist:" << group << dendl;
+          return -EINVAL;
+        }
+      }
+    default:
+      break;
+    }
+    if (grant_ok) {
+      dst_acl.add_grant(&new_grant);
+    }
+  }
+
+  return 0; 
 }
 
 bool RGWAccessControlPolicy_S3::compare_group_name(string& id, ACLGroupTypeEnum group)

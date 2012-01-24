@@ -47,8 +47,8 @@ public:
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
-  RGWAccessControlList_S3();
-  ~RGWAccessControlList_S3();
+  RGWAccessControlList_S3() {}
+  ~RGWAccessControlList_S3() {}
 
   bool xml_end(const char *el);
   void to_xml(ostream& out) {
@@ -97,6 +97,7 @@ public:
     _acl.to_xml(out);
     out << "</AccessControlPolicy>";
   }
+  int rebuild(ACLOwner *owner, RGWAccessControlPolicy& dest);
   bool compare_group_name(string& id, ACLGroupTypeEnum group);
 };
 

@@ -13,6 +13,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_acl.h"
+#include "rgw_acl_s3.h"
 #include "rgw_user.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
@@ -177,8 +178,9 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
         return -EIO;
       }
       if (g_conf->debug_rgw >= 15) {
+        RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
         dout(15) << "Read AccessControlPolicy";
-        policy->to_xml(*_dout);
+        s3policy->to_xml(*_dout);
         *_dout << dendl;
       }
     }
@@ -525,7 +527,7 @@ void RGWCreateBucket::execute()
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
   s->bucket_owner = s->user.user_id;
-
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
@@ -533,12 +535,14 @@ void RGWCreateBucket::execute()
       goto done;
     }
   }
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
   pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!pol_ret) {
     ret = -EINVAL;
     goto done;
   }
   policy.encode(aclbl);
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
@@ -1223,95 +1227,13 @@ void RGWGetACLs::execute()
   }
 
   stringstream ss;
-  s->acl->to_xml(ss);
+  RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(s->acl);
+  s3policy->to_xml(ss);
   acls = ss.str(); 
   send_response();
 }
 
-static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
-{
-  if (!owner)
-    return -EINVAL;
 
-  ACLOwner *requested_owner = (ACLOwner *)src.find_first("Owner");
-  if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
-    return -EPERM;
-  }
-
-  RGWUserInfo owner_info;
-  if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
-    dout(10) << "owner info does not exist" << dendl;
-    return -EINVAL;
-  }
-  ACLOwner& dest_owner = dest.get_owner();
-  dest_owner.set_id(owner->get_id());
-  dest_owner.set_name(owner_info.display_name);
-
-  dout(20) << "owner id=" << owner->get_id() << dendl;
-  dout(20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
-
-  RGWAccessControlList& src_acl = src.get_acl();
-  RGWAccessControlList& acl = dest.get_acl();
-
-  XMLObjIter iter = src_acl.find("Grant");
-  ACLGrant *src_grant = (ACLGrant *)iter.get_next();
-  while (src_grant) {
-    ACLGranteeType& type = src_grant->get_type();
-    ACLGrant new_grant;
-    bool grant_ok = false;
-    string uid;
-    RGWUserInfo grant_user;
-    switch (type.get_type()) {
-    case ACL_TYPE_EMAIL_USER:
-      {
-        string email = src_grant->get_id();
-        dout(10) << "grant user email=" << email << dendl;
-        if (rgw_get_user_info_by_email(email, grant_user) < 0) {
-          dout(10) << "grant user email not found or other error" << dendl;
-          return -ERR_UNRESOLVABLE_EMAIL;
-        }
-        uid = grant_user.user_id;
-      }
-    case ACL_TYPE_CANON_USER:
-      {
-        if (type.get_type() == ACL_TYPE_CANON_USER)
-          uid = src_grant->get_id();
-    
-        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(uid, grant_user) < 0) {
-          dout(10) << "grant user does not exist:" << uid << dendl;
-          return -EINVAL;
-        } else {
-          ACLPermission& perm = src_grant->get_permission();
-          new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
-          grant_ok = true;
-          dout(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << dendl;
-        }
-      }
-      break;
-    case ACL_TYPE_GROUP:
-      {
-        string group = src_grant->get_id();
-        if (group.compare(RGW_URI_ALL_USERS) == 0 ||
-            group.compare(RGW_URI_AUTH_USERS) == 0) {
-          new_grant = *src_grant;
-          grant_ok = true;
-          dout(10) << "new grant: " << new_grant.get_id() << dendl;
-        } else {
-          dout(10) << "grant group does not exist:" << group << dendl;
-          return -EINVAL;
-        }
-      }
-    default:
-      break;
-    }
-    if (grant_ok) {
-      acl.add_grant(&new_grant);
-    }
-    src_grant = (ACLGrant *)iter.get_next();
-  }
-
-  return 0; 
-}
 
 int RGWPutACLs::verify_permission()
 {
@@ -1325,9 +1247,9 @@ void RGWPutACLs::execute()
 {
   bufferlist bl;
 
-  RGWAccessControlPolicy *policy = NULL;
-  RGWACLXMLParser parser;
-  RGWAccessControlPolicy new_policy;
+  RGWAccessControlPolicy_S3 *policy = NULL;
+  RGWACLXMLParser_S3 parser;
+  RGWAccessControlPolicy_S3 new_policy;
   stringstream ss;
   char *orig_data = data;
   char *new_data = NULL;
@@ -1342,7 +1264,7 @@ void RGWPutACLs::execute()
   }
 
   if (!s->acl) {
-     s->acl = new RGWAccessControlPolicy;
+     s->acl = new RGWAccessControlPolicy_S3;
      if (!s->acl) {
        ret = -ENOMEM;
        goto done;
@@ -1363,7 +1285,7 @@ void RGWPutACLs::execute()
     goto done;
   }
   if (!s->canned_acl.empty()) {
-    RGWAccessControlPolicy canned_policy;
+    RGWAccessControlPolicy_S3 canned_policy;
     bool r = canned_policy.create_canned(owner.get_id(), owner.get_display_name(), s->canned_acl);
     if (!r) {
       ret = -EINVAL;
@@ -1380,7 +1302,7 @@ void RGWPutACLs::execute()
     ret = -EACCES;
     goto done;
   }
-  policy = (RGWAccessControlPolicy *)parser.find_first("AccessControlPolicy");
+  policy = (RGWAccessControlPolicy_S3 *)parser.find_first("AccessControlPolicy");
   if (!policy) {
     ret = -EINVAL;
     goto done;
@@ -1392,7 +1314,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  ret = rebuild_policy(&owner, *policy, new_policy);
+  ret = policy->rebuild(&owner, new_policy);
   if (ret < 0)
     goto done;
 
