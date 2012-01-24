@@ -595,9 +595,9 @@ int FileJournal::read_header()
   }
 
   if (r < 0) {
-    char buf[80];
-    dout(0) << "read_header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno;
+    int err = errno;
+    dout(0) << "read_header got " << cpp_strerror(err) << dendl;
+    return -err;
   }
   print_header();
 
@@ -833,8 +833,7 @@ int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   ::lseek64(fd, pos, SEEK_SET);
   int ret = bl.write_fd(fd);
   if (ret) {
-    derr << "FileJournal::write_bl : write_fd failed: "
-	 << cpp_strerror(ret) << dendl;
+    derr << "FileJournal::write_bl : write_fd failed: " << cpp_strerror(ret) << dendl;
     return ret;
   }
   pos += bl.length();
