@@ -4712,7 +4712,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       update_stats();
     } else {
       // pull more
-      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf->osd_recovery_max_chunk);
+      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.empty() ? 0 : data_subset.range_end(),
+				      g_conf->osd_recovery_max_chunk);
       dout(10) << " pulling more, " << pi->data_subset_pulling << " of " << pi->data_subset << dendl;
       send_pull_op(soid, v, false, pi->data_subset_pulling, pi->from);
     }
