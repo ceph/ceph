@@ -35,38 +35,12 @@ public:
 
 class ACLGrant_S3 : public ACLGrant, public XMLObj
 {
-  ACLPermission *alloc_permission() {
-    return new ACLPermission_S3;
-  }
-  void free_permission(ACLPermission *perm) {
-    delete perm;
-  }
 public:
   ACLGrant_S3() {}
   ~ACLGrant_S3() {}
 
+  void to_xml(ostream& out);
   bool xml_end(const char *el);
-  void to_xml(ostream& out) {
-    out << "<Grant>" <<
-            "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << type.to_string() << "\">";
-    switch (type.get_type()) {
-    case ACL_TYPE_CANON_USER:
-      out << "<ID>" << id << "</ID>" <<
-             "<DisplayName>" << name << "</DisplayName>";
-      break;
-    case ACL_TYPE_EMAIL_USER:
-      out << "<EmailAddress>" << email << "</EmailAddress>";
-      break;
-    case ACL_TYPE_GROUP:
-       out << "<URI>" << uri << "</URI>";
-      break;
-    default:
-      break;
-    }
-    out << "</Grantee>";
-    ((ACLPermission_S3 *)permission)->to_xml(out);
-    out << "</Grant>";
-  }
   bool xml_start(const char *el, const char **attr);
 };
 
@@ -78,10 +52,10 @@ public:
 
   bool xml_end(const char *el);
   void to_xml(ostream& out) {
-    map<string, ACLGrant>::iterator iter;
+    multimap<string, ACLGrant>::iterator iter;
     out << "<AccessControlList>";
     for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
-      ACLGrant& grant = iter->second;
+      ACLGrant_S3& grant = static_cast<ACLGrant_S3 &>(iter->second);
       grant.to_xml(out);
     }
     out << "</AccessControlList>";
@@ -117,10 +91,13 @@ public:
 
   void to_xml(ostream& out) {
     out << "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
-    owner.to_xml(out);
-    acl.to_xml(out);
+    ACLOwner_S3& _owner = static_cast<ACLOwner_S3 &>(owner);
+    RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
+    _owner.to_xml(out);
+    _acl.to_xml(out);
     out << "</AccessControlPolicy>";
   }
+  bool compare_group_name(string& id, ACLGroupTypeEnum group);
 };
 
 /**

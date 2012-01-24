@@ -34,6 +34,7 @@ enum ACLGroupTypeEnum {
 
 class ACLPermission
 {
+protected:
   int flags;
 public:
   ACLPermission() : flags(0) {}
@@ -90,7 +91,6 @@ class ACLGrant
 {
 protected:
   ACLGranteeType type;
-
   string id;
   string uri;
   string email;
@@ -154,8 +154,11 @@ WRITE_CLASS_ENCODER(ACLGrant)
 
 class RGWAccessControlList
 {
+protected:
   map<string, int> acl_user_map;
   map<uint32_t, int> acl_group_map;
+  multimap<string, ACLGrant> grant_map;
+  void _add_grant(ACLGrant *grant);
 public:
   RGWAccessControlList() {}
 
@@ -169,8 +172,7 @@ public:
     bool maps_initialized = true;
     ::encode(maps_initialized, bl);
     ::encode(acl_user_map, bl);
-    multimap<string, ACLGrant> placeholder; // for v1 decoders
-    ::encode(placeholder, bl);
+    ::encode(grant_map, bl);
     ::encode(acl_group_map, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -179,7 +181,6 @@ public:
     bool maps_initialized;
     ::decode(maps_initialized, bl);
     ::decode(acl_user_map, bl);
-    multimap<string, ACLGrant> grant_map; // for v1 decoders
     ::decode(grant_map, bl);
     if (struct_v >= 2) {
       ::decode(acl_group_map, bl);
@@ -187,7 +188,7 @@ public:
       multimap<string, ACLGrant>::iterator iter;
       for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
         ACLGrant& grant = iter->second;
-        add_grant(&grant);
+        _add_grant(&grant);
       }
     }
   }
@@ -235,6 +236,7 @@ WRITE_CLASS_ENCODER(ACLOwner)
 
 class RGWAccessControlPolicy
 {
+protected:
   RGWAccessControlList acl;
   ACLOwner owner;
 
@@ -279,7 +281,7 @@ public:
     return acl;
   }
 
-  virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) = 0;
+  virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
 

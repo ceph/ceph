@@ -13,7 +13,7 @@
 using namespace std;
 
 
-void RGWAccessControlList::add_grant(ACLGrant *grant)
+void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {
   ACLPermission& perm = grant->get_permission();
   ACLGranteeType& type = grant->get_type();
@@ -23,6 +23,15 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   default:
     acl_user_map[grant->get_id()] |= perm.get_permissions();
   }
+}
+
+void RGWAccessControlList::add_grant(ACLGrant *grant)
+{
+  string id = grant->get_id();
+  if (id.size() > 0) {
+    grant_map.insert(pair<string, ACLGrant>(id, *grant));
+  }
+  _add_grant(grant);
 }
 
 int RGWAccessControlList::get_perm(string& id, int perm_mask) {

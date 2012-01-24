@@ -19,8 +19,7 @@ using namespace std;
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 
-void ACLPermission_S3::
-to_xml(ostream& out)
+void ACLPermission_S3::to_xml(ostream& out)
 {
   if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
    out << "<Permission>FULL_CONTROL</Permission>";
@@ -59,58 +58,58 @@ xml_end(const char *el)
   return false;
 }
 
-const char *ACLGranteeType_S3::
-to_string()
-{
-  switch (type) {
-  case ACL_TYPE_CANON_USER:
-    return "CanonicalUser";
-  case ACL_TYPE_EMAIL_USER:
-    return "AmazonCustomerByEmail";
-  case ACL_TYPE_GROUP:
-    return "Group";
-   default:
-    return "unknown";
-  }
-}
 
-void ACLGranteeType_S3::
-set(const char *s)
-{
-  if (!s) {
-    type = ACL_TYPE_UNKNOWN;
-    return;
+class ACLGranteeType_S3 {
+public:
+  static const char *to_string(ACLGranteeType& type) {
+    switch (type.get_type()) {
+    case ACL_TYPE_CANON_USER:
+      return "CanonicalUser";
+    case ACL_TYPE_EMAIL_USER:
+      return "AmazonCustomerByEmail";
+    case ACL_TYPE_GROUP:
+      return "Group";
+     default:
+      return "unknown";
+    }
   }
-  if (strcmp(s, "CanonicalUser") == 0)
-    type = ACL_TYPE_CANON_USER;
-  else if (strcmp(s, "AmazonCustomerByEmail") == 0)
-    type = ACL_TYPE_EMAIL_USER;
-  else if (strcmp(s, "Group") == 0)
-    type = ACL_TYPE_GROUP;
-  else
-    type = ACL_TYPE_UNKNOWN;
-}
 
-class ACLID : public XMLObj
+  static void set(const char *s, ACLGranteeType& type) {
+    if (!s) {
+      type.set(ACL_TYPE_UNKNOWN);
+      return;
+    }
+    if (strcmp(s, "CanonicalUser") == 0)
+      type.set(ACL_TYPE_CANON_USER);
+    else if (strcmp(s, "AmazonCustomerByEmail") == 0)
+      type.set(ACL_TYPE_EMAIL_USER);
+    else if (strcmp(s, "Group") == 0)
+      type.set(ACL_TYPE_GROUP);
+    else
+      type.set(ACL_TYPE_UNKNOWN);
+  }
+};
+
+class ACLID_S3 : public XMLObj
 {
 public:
-  ACLID() {}
-  ~ACLID() {}
+  ACLID_S3() {}
+  ~ACLID_S3() {}
   string& to_str() { return data; }
 };
 
-class ACLURI : public XMLObj
+class ACLURI_S3 : public XMLObj
 {
 public:
-  ACLURI() {}
-  ~ACLURI() {}
+  ACLURI_S3() {}
+  ~ACLURI_S3() {}
 };
 
-class ACLEmail : public XMLObj
+class ACLEmail_S3 : public XMLObj
 {
 public:
-  ACLEmail() {}
-  ~ACLEmail() {}
+  ACLEmail_S3() {}
+  ~ACLEmail_S3() {}
 };
 
 class ACLDisplayName_S3 : public XMLObj
@@ -121,8 +120,8 @@ public:
 };
 
 bool ACLOwner_S3::xml_end(const char *el) {
-  ACLID *acl_id = (ACLID *)find_first("ID");
-  ACLID *acl_name = (ACLID *)find_first("DisplayName");
+  ACLID_S3 *acl_id = (ACLID_S3 *)find_first("ID");
+  ACLID_S3 *acl_name = (ACLID_S3 *)find_first("DisplayName");
 
   // ID is mandatory
   if (!acl_id)
@@ -139,23 +138,26 @@ bool ACLOwner_S3::xml_end(const char *el) {
 }
 
 bool ACLGrant_S3::xml_end(const char *el) {
-  ACLGrantee *acl_grantee;
-  ACLID *acl_id;
-  ACLURI *acl_uri;
-  ACLEmail *acl_email;
+  ACLGrantee_S3 *acl_grantee;
+  ACLID_S3 *acl_id;
+  ACLURI_S3 *acl_uri;
+  ACLEmail_S3 *acl_email;
   ACLPermission_S3 *acl_permission;
-  ACLDisplayName *acl_name;
+  ACLDisplayName_S3 *acl_name;
 
-  acl_grantee = (ACLGrantee *)find_first("Grantee");
+  acl_grantee = (ACLGrantee_S3 *)find_first("Grantee");
   if (!acl_grantee)
     return false;
   string type_str;
   if (!acl_grantee->get_attr("xsi:type", type_str))
     return false;
-  type.set(type_str.c_str());
-  permission = (ACLPermission_S3 *)find_first("Permission");
-  if (!permission)
+  ACLGranteeType_S3::set(type_str.c_str(), type);
+  
+  acl_permission = (ACLPermission_S3 *)find_first("Permission");
+  if (!acl_permission)
     return false;
+
+  permission = *acl_permission;
 
   id.clear();
   name.clear();
@@ -164,22 +166,22 @@ bool ACLGrant_S3::xml_end(const char *el) {
 
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
-    acl_id = (ACLID *)acl_grantee->find_first("ID");
+    acl_id = (ACLID_S3 *)acl_grantee->find_first("ID");
     if (!acl_id)
       return false;
     id = acl_id->to_str();
-    acl_name = (ACLDisplayName *)acl_grantee->find_first("DisplayName");
+    acl_name = (ACLDisplayName_S3 *)acl_grantee->find_first("DisplayName");
     if (acl_name)
       name = acl_name->get_data();
     break;
   case ACL_TYPE_GROUP:
-    acl_uri = (ACLURI *)acl_grantee->find_first("URI");
+    acl_uri = (ACLURI_S3 *)acl_grantee->find_first("URI");
     if (!acl_uri)
       return false;
     uri = acl_uri->get_data();
     break;
   case ACL_TYPE_EMAIL_USER:
-    acl_email = (ACLEmail *)acl_grantee->find_first("EmailAddress");
+    acl_email = (ACLEmail_S3 *)acl_grantee->find_first("EmailAddress");
     if (!acl_email)
       return false;
     email = acl_email->get_data();
@@ -191,6 +193,29 @@ bool ACLGrant_S3::xml_end(const char *el) {
   return true;
 }
 
+void ACLGrant_S3::to_xml(ostream& out) {
+  out << "<Grant>" <<
+         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
+  switch (type.get_type()) {
+  case ACL_TYPE_CANON_USER:
+    out << "<ID>" << id << "</ID>" <<
+           "<DisplayName>" << name << "</DisplayName>";
+    break;
+  case ACL_TYPE_EMAIL_USER:
+    out << "<EmailAddress>" << email << "</EmailAddress>";
+    break;
+  case ACL_TYPE_GROUP:
+     out << "<URI>" << uri << "</URI>";
+    break;
+  default:
+    break;
+  }
+  out << "</Grantee>";
+  ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
+  perm.to_xml(out);
+  out << "</Grant>";
+}
+
 bool RGWAccessControlList_S3::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant *grant = (ACLGrant *)iter.get_next();
@@ -198,7 +223,6 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
     add_grant(grant);
     grant = (ACLGrant *)iter.get_next();
   }
-  init_user_map();
   return true;
 }
 
@@ -236,9 +260,9 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
 
 }
 
-bool RGWAccessControlPolicy::xml_end(const char *el) {
-  RGWAccessControlList *acl_p =
-      (RGWAccessControlList *)find_first("AccessControlList");
+bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
+  RGWAccessControlList_S3 *acl_p =
+      (RGWAccessControlList_S3 *)find_first("AccessControlList");
   if (!acl_p)
     return false;
   acl = *acl_p;
@@ -250,29 +274,44 @@ bool RGWAccessControlPolicy::xml_end(const char *el) {
   return true;
 }
 
+bool RGWAccessControlPolicy_S3::compare_group_name(string& id, ACLGroupTypeEnum group)
+{
+  switch (group) {
+  case ACL_GROUP_ALL_USERS:
+    return (id.compare(rgw_uri_all_users) == 0);
+  case ACL_GROUP_AUTHENTICATED_USERS:
+    return (id.compare(rgw_uri_auth_users) == 0);
+  default:
+    return id.empty();
+  }
+
+  // shouldn't get here
+  return false;
+}
+
 XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
 {
   XMLObj * obj = NULL;
   if (strcmp(el, "AccessControlPolicy") == 0) {
-    obj = new RGWAccessControlPolicy();
+    obj = new RGWAccessControlPolicy_S3();
   } else if (strcmp(el, "Owner") == 0) {
-    obj = new ACLOwner();
+    obj = new ACLOwner_S3();
   } else if (strcmp(el, "AccessControlList") == 0) {
-    obj = new RGWAccessControlList();
+    obj = new RGWAccessControlList_S3();
   } else if (strcmp(el, "ID") == 0) {
-    obj = new ACLID();
+    obj = new ACLID_S3();
   } else if (strcmp(el, "DisplayName") == 0) {
-    obj = new ACLDisplayName();
+    obj = new ACLDisplayName_S3();
   } else if (strcmp(el, "Grant") == 0) {
-    obj = new ACLGrant();
+    obj = new ACLGrant_S3();
   } else if (strcmp(el, "Grantee") == 0) {
-    obj = new ACLGrantee();
+    obj = new ACLGrantee_S3();
   } else if (strcmp(el, "Permission") == 0) {
     obj = new ACLPermission_S3();
   } else if (strcmp(el, "URI") == 0) {
-    obj = new ACLURI();
+    obj = new ACLURI_S3();
   } else if (strcmp(el, "EmailAddress") == 0) {
-    obj = new ACLEmail();
+    obj = new ACLEmail_S3();
   }
 
   return obj;
