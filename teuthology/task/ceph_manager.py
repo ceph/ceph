@@ -232,10 +232,15 @@ class CephManager:
     def wait_till_clean(self, timeout=None):
         self.log("waiting till clean")
         start = time.time()
+        num_active_clean = self.get_num_active_clean()
         while not self.is_clean():
             if timeout is not None:
                 assert time.time() - start < timeout, \
                     'failed to become clean before timeout expired'
+            cur_active_clean = self.get_num_active_clean()
+            if cur_active_clean != num_active_clean:
+                start = time.time()
+                num_active_clean = cur_active_clean
             time.sleep(3)
         self.log("clean!")
 
