@@ -1094,7 +1094,7 @@ bool FileStore::test_mount_in_use()
   if (fsid_fd < 0)
     return 0;   // no fsid, ok.
   bool inuse = lock_fsid() < 0;
-  ::close(fsid_fd);
+  TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
   return inuse;
 }
@@ -1290,7 +1290,7 @@ int FileStore::_detect_fs()
     btrfs = false;
   }
 
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
   return 0;
 }
 
@@ -2163,7 +2163,7 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
   if (r < 0) {
     int err = errno;
     dout(0) << "transaction_start got " << cpp_strerror(err) << " from btrfs ioctl" << dendl;    
-    ::close(fd);
+    TEMP_FAILURE_RETRY(::close(fd));
     return -err;
   }
   dout(10) << "transaction_start " << fd << dendl;
@@ -2187,7 +2187,7 @@ void FileStore::_transaction_finish(int fd)
   
   dout(10) << "transaction_finish " << fd << dendl;
   ::ioctl(fd, BTRFS_IOC_TRANS_END);
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
 }
 
 unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
@@ -2624,7 +2624,7 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
   int fd = lfn_open(cid, oid, flags, 0644);
   int r;
   if (fd >= 0) {
-    ::close(fd);
+    TEMP_FAILURE_RETRY(::close(fd));
     r = 0;
   } else
     r = fd;
@@ -2674,10 +2674,10 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
       !queue_flusher(fd, offset, len)) {
     if (m_filestore_sync_flush)
       ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-    ::close(fd);
+    TEMP_FAILURE_RETRY(::close(fd));
   }
 #else
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
 #endif
 
  out:
@@ -2720,9 +2720,9 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   if (r < 0)
     r = -errno;
 
-  ::close(n);
+  TEMP_FAILURE_RETRY(::close(n));
  out:
-  ::close(o);
+  TEMP_FAILURE_RETRY(::close(o));
  out2:
   dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   return 0;
@@ -2876,9 +2876,9 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
     goto out;
   }
   r = _do_clone_range(o, n, srcoff, len, dstoff);
-  ::close(n);
+  TEMP_FAILURE_RETRY(::close(n));
  out:
-  ::close(o);
+  TEMP_FAILURE_RETRY(::close(o));
  out2:
   dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
@@ -2940,7 +2940,7 @@ void FileStore::flusher_entry()
 	} else 
 	  dout(10) << "flusher_entry JUST closing " << fd << " (stop=" << stop << ", ep=" << ep
 		   << ", sync_epoch=" << sync_epoch << ")" << dendl;
-	::close(fd);
+	TEMP_FAILURE_RETRY(::close(fd));
       }
       lock.Lock();
       flusher_queue_len -= num;   // they're definitely closed, forget
