@@ -268,7 +268,7 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode
   if ((flags & O_CREAT) && (!exist)) {
     r = index->created(oid, path->path());
     if (r < 0) {
-      close(fd);
+      TEMP_FAILURE_RETRY(::close(fd));
       derr << "error creating " << oid << " (" << path->path()
 	   << ") in index: " << cpp_strerror(-r) << dendl;
       return r;
