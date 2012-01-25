@@ -1191,7 +1191,7 @@ int FileStore::_detect_fs()
 
     // snap_create and snap_destroy?
     struct btrfs_ioctl_vol_args volargs;
-    memset(&volargs, 0, sizefo(volargs));
+    memset(&volargs, 0, sizeof(volargs));
     volargs.fd = fd;
     strcpy(volargs.name, "sync_snap_test");
     r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &volargs);
@@ -3141,7 +3141,7 @@ void FileStore::sync_entry()
       if (btrfs_stable_commits) {
 	while (snaps.size() > 2) {
 	  btrfs_ioctl_vol_args vol_args;
-	  memset(&vol_args, 0, sizefo(vol_args));
+	  memset(&vol_args, 0, sizeof(vol_args));
 	  vol_args.fd = 0;
 	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
 		   (long long unsigned)snaps.front());
