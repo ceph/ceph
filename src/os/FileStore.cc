@@ -845,6 +845,7 @@ int FileStore::mkfs()
 #if defined(__linux__)
   int basedir_fd;
   struct btrfs_ioctl_vol_args volargs;
+  memset(&volargs, 0, sizeof(volargs));
 #endif
 
   if (!m_filestore_dev.empty()) {
@@ -945,7 +946,6 @@ int FileStore::mkfs()
 
   // current
 #if defined(__linux__)
-  memset(&volargs, 0, sizeof(volargs));
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   volargs.fd = 0;
   strcpy(volargs.name, "current");
@@ -1191,6 +1191,7 @@ int FileStore::_detect_fs()
 
     // snap_create and snap_destroy?
     struct btrfs_ioctl_vol_args volargs;
+    memset(&volargs, 0, sizefo(volargs));
     volargs.fd = fd;
     strcpy(volargs.name, "sync_snap_test");
     r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &volargs);
@@ -1247,10 +1248,12 @@ int FileStore::_detect_fs()
     if (btrfs_wait_sync) {
       // async snap creation?
       struct btrfs_ioctl_vol_args vol_args;
+      memset(&vol_args, 0, sizeof(vol_args));
       vol_args.fd = 0;
       strcpy(vol_args.name, "async_snap_test");
 
       struct btrfs_ioctl_vol_args_v2 async_args;
+      memset(&async_args, 0, sizeof(async_args));
       async_args.fd = fd;
       async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
       strcpy(async_args.name, "async_snap_test");
@@ -1615,6 +1618,7 @@ int FileStore::mount()
       }
 
       btrfs_ioctl_vol_args vol_args;
+      memset(&vol_args, 0, sizeof(vol_args));
       vol_args.fd = 0;
       strcpy(vol_args.name, "current");
 
@@ -3054,6 +3058,7 @@ void FileStore::sync_entry()
 	if (btrfs_snap_create_v2) {
 	  // be smart!
 	  struct btrfs_ioctl_vol_args_v2 async_args;
+	  memset(&async_args, 0, sizeof(async_args));
 	  async_args.fd = current_fd;
 	  async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
 	  snprintf(async_args.name, sizeof(async_args.name), COMMIT_SNAP_ITEM,
@@ -3081,6 +3086,7 @@ void FileStore::sync_entry()
 	} else {
 	  // the synchronous snap create does a sync.
 	  struct btrfs_ioctl_vol_args vol_args;
+	  memset(&vol_args, 0, sizeof(vol_args));
 	  vol_args.fd = current_fd;
 	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
 		   (long long unsigned)cp);
@@ -3135,6 +3141,7 @@ void FileStore::sync_entry()
       if (btrfs_stable_commits) {
 	while (snaps.size() > 2) {
 	  btrfs_ioctl_vol_args vol_args;
+	  memset(&vol_args, 0, sizefo(vol_args));
 	  vol_args.fd = 0;
 	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
 		   (long long unsigned)snaps.front());
