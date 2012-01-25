@@ -304,7 +304,6 @@ void PGMap::dump(ostream& ss) const
        << "\t" << st.stats.sum.num_objects_missing_on_primary
        << "\t" << st.stats.sum.num_objects_degraded
        << "\t" << st.stats.sum.num_objects_unfound
-       << "\t" << st.stats.sum.num_kb
        << "\t" << st.stats.sum.num_bytes
        << "\t" << st.log_size
        << "\t" << st.ondisk_log_size
@@ -325,7 +324,6 @@ void PGMap::dump(ostream& ss) const
        << "\t" << p->second.stats.sum.num_objects_missing_on_primary
        << "\t" << p->second.stats.sum.num_objects_degraded
        << "\t" << p->second.stats.sum.num_objects_unfound
-       << "\t" << p->second.stats.sum.num_kb
        << "\t" << p->second.stats.sum.num_bytes
        << "\t" << p->second.log_size
        << "\t" << p->second.ondisk_log_size
@@ -335,7 +333,6 @@ void PGMap::dump(ostream& ss) const
      << "\t" << pg_sum.stats.sum.num_objects_missing_on_primary
      << "\t" << pg_sum.stats.sum.num_objects_degraded
      << "\t" << pg_sum.stats.sum.num_objects_unfound
-     << "\t" << pg_sum.stats.sum.num_kb
      << "\t" << pg_sum.stats.sum.num_bytes
      << "\t" << pg_sum.log_size
      << "\t" << pg_sum.ondisk_log_size
@@ -399,7 +396,7 @@ void PGMap::print_summary(ostream& out) const
   out << "v" << version << ": "
       << pg_stat.size() << " pgs: "
       << states << "; "
-      << kb_t(pg_sum.stats.sum.num_kb) << " data, " 
+      << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, " 
       << kb_t(osd_sum.kb_used) << " used, "
       << kb_t(osd_sum.kb_avail) << " / "
       << kb_t(osd_sum.kb) << " avail";

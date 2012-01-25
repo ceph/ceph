@@ -1114,7 +1114,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
     delta.num_objects--;
     delta.num_object_clones--;
     delta.num_bytes -= snapset.clone_size[last];
-    delta.num_kb -= SHIFT_ROUND_UP(snapset.clone_size[last], 10);
     info.stats.stats.add(delta, obc->obs.oi.category);
 
     snapset.clones.erase(p);
@@ -1770,10 +1769,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  oi.truncate_size = op.extent.truncate_size;
 	  if (op.extent.truncate_size != oi.size) {
 	    ctx->delta_stats.num_bytes -= oi.size;
-	    ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 	    ctx->delta_stats.num_bytes += op.extent.truncate_size;
-	    ctx->delta_stats.num_kb +=
-	      SHIFT_ROUND_UP(op.extent.truncate_size, 10);
 	    oi.size = op.extent.truncate_size;
 	  }
 	}
@@ -1806,10 +1802,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->modified_ranges.union_of(ch);
 	if (op.extent.length + op.extent.offset != oi.size) {
 	  ctx->delta_stats.num_bytes -= oi.size;
-	  ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 	  oi.size = op.extent.length + op.extent.offset;
 	  ctx->delta_stats.num_bytes += oi.size;
-	  ctx->delta_stats.num_kb += SHIFT_ROUND_UP(oi.size, 10);
 	}
 	ctx->delta_stats.num_wr++;
 	ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
@@ -1895,9 +1889,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (op.extent.offset != oi.size) {
 	  ctx->delta_stats.num_bytes -= oi.size;
-	  ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 	  ctx->delta_stats.num_bytes += op.extent.offset;
-	  ctx->delta_stats.num_kb += SHIFT_ROUND_UP(op.extent.offset, 10);
 	  oi.size = op.extent.offset;
 	}
 	ctx->delta_stats.num_wr++;
@@ -2267,7 +2259,6 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx)
 
   ctx->delta_stats.num_objects--;
   ctx->delta_stats.num_bytes -= oi.size;
-  ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 
   oi.size = 0;
   snapset.head_exists = false;
@@ -2366,9 +2357,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	ctx->delta_stats.num_objects++;
       }
       ctx->delta_stats.num_bytes -= obs.oi.size;
-      ctx->delta_stats.num_kb -= SHIFT_ROUND_UP(obs.oi.size, 10);
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
-      ctx->delta_stats.num_kb += SHIFT_ROUND_UP(rollback_to->obs.oi.size, 10);
       obs.oi.size = rollback_to->obs.oi.size;
       snapset.head_exists = true;
     }
@@ -2508,7 +2497,6 @@ void ReplicatedPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   if (length && (offset + length > oi.size)) {
     uint64_t new_size = offset + length;
     delta_stats.num_bytes += new_size - oi.size;
-    delta_stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
     oi.size = new_size;
   }
   delta_stats.num_wr++;
@@ -2520,7 +2508,6 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
 {
   for (interval_set<uint64_t>::const_iterator p = s.begin(); p != s.end(); ++p) {
     delta_stats.num_bytes += p.get_len();
-    delta_stats.num_kb += SHIFT_ROUND_UP(p.get_start() + p.get_len(), 10) - (p.get_start() >> 10);
   }
 }
 
@@ -3498,7 +3485,6 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
     stat.num_objects++;
 
   stat.num_bytes += oi.size;
-  stat.num_kb += SHIFT_ROUND_UP(oi.size, 10);
 
   if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP) {
     stat.num_object_clones++;
@@ -3516,7 +3502,6 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
 	   r != o.end();
 	   ++r) {
 	stat.num_bytes -= r.get_len();
-	stat.num_kb -= SHIFT_ROUND_UP(r.get_start()+r.get_len(), 10) - (r.get_start() >> 10);
       }	  
     }
   }
@@ -5800,7 +5785,6 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	     r != q->second.end();
 	     ++r) {
 	  stat.num_bytes -= r.get_len();
-	  stat.num_kb -= SHIFT_ROUND_UP(r.get_start()+r.get_len(), 10) - (r.get_start() >> 10);
 	}	  
       }
     }
@@ -5830,7 +5814,6 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
     stat.num_bytes += p->second.size;
-    stat.num_kb += SHIFT_ROUND_UP(p->second.size, 10);
 
     //bufferlist data;
     //osd->store->read(c, poid, 0, 0, data);
@@ -5873,20 +5856,17 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   dout(10) << mode << " got "
 	   << cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 	   << cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
-	   << cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
-	   << cstat.sum.num_kb << "/" << info.stats.stats.sum.num_kb << " kb."
+	   << cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
 	   << dendl;
 
   if (cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
       cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
-      cstat.sum.num_bytes != info.stats.stats.sum.num_bytes ||
-      cstat.sum.num_kb != info.stats.stats.sum.num_kb) {
+      cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
-       << " stat mismatch, got "
-       << cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
-       << cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
-       << cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
-       << cstat.sum.num_kb << "/" << info.stats.stats.sum.num_kb << " kb.\n";
+		      << " stat mismatch, got "
+		      << cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
+		      << cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
+		      << cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
     errors++;
 
     if (repair) {

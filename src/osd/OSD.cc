@@ -4086,7 +4086,6 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
       // add to child stats
       child->info.stats.stats.sum.num_bytes += st.st_size;
-      child->info.stats.stats.sum.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
       child->info.stats.stats.sum.num_objects++;
       if (poid.snap && poid.snap != CEPH_NOSNAP)
 	child->info.stats.stats.sum.num_object_clones++;
