@@ -134,7 +134,7 @@ void PGMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_num_object, pg_map.pg_sum.stats.sum.num_objects);
   mon->cluster_logger->set(l_cluster_num_object_degraded, pg_map.pg_sum.stats.sum.num_objects_degraded);
   mon->cluster_logger->set(l_cluster_num_object_unfound, pg_map.pg_sum.stats.sum.num_objects_unfound);
-  mon->cluster_logger->set(l_cluster_num_kb, SHIFT_ROUND_UP(pg_map.pg_sum.stats.sum.num_bytes, 10));
+  mon->cluster_logger->set(l_cluster_num_bytes, pg_map.pg_sum.stats.sum.num_bytes);
 }
 
 void PGMonitor::update_full_ratios(float full_ratio, float nearfull_ratio)
