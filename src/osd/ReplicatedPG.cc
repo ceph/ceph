@@ -4380,10 +4380,10 @@ void ReplicatedPG::_committed_pushed_object(MOSDSubOp *op, epoch_t same_since, e
   put();
 }
 
-void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
+void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc)
 {
   lock();
-  dout(10) << "_applied_pushed_object " << *obc << dendl;
+  dout(10) << "_applied_recovered_object " << *obc << dendl;
   if (is_primary())
     populate_obc_watchers(obc);
   put_object_context(obc);
@@ -4681,7 +4681,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	ssc->snapset.decode(sp);
       }
 
-      onreadable = new C_OSD_AppliedPushedObject(this, t, obc);
+      onreadable = new C_OSD_AppliedRecoveredObject(this, t, obc);
       onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
     } else {
       onreadable = new ObjectStore::C_DeleteTransaction(t);
@@ -5254,13 +5254,22 @@ int ReplicatedPG::recover_primary(int max)
 	    ::decode(oi.snaps, i);
 	    assert(oi.snaps.size() > 0);
 	    oi.copy_user_bits(headobc->obs.oi);
-	    _make_clone(*t, head, soid, &oi);
+
+	    ObjectContext *clone_obc = new ObjectContext(oi, true, NULL);
+	    clone_obc->get();
+	    clone_obc->ondisk_write_lock();
+	    clone_obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
+	    register_object_context(clone_obc);
+
+	    _make_clone(*t, head, soid, &clone_obc->obs.oi);
+
+	    Context *onreadable = new C_OSD_AppliedRecoveredObject(this, t, clone_obc);
+	    Context *onreadable_sync = new C_OSD_OndiskWriteUnlock(clone_obc);
+	    int tr = osd->store->queue_transaction(&osr, t, onreadable, NULL, onreadable_sync);
+	    assert(tr == 0);
 
 	    put_object_context(headobc);
 
-	    // XXX: track objectcontext!
-	    int tr = osd->store->queue_transaction(&osr, t);
-	    assert(tr == 0);
 	    missing.got(latest->soid, latest->version);
 	    missing_loc.erase(latest->soid);
 	    continue;
@@ -5293,7 +5302,7 @@ int ReplicatedPG::recover_primary(int max)
 	      recover_got(soid, latest->version);
 
 	      osd->store->queue_transaction(&osr, t,
-					    new C_OSD_AppliedPushedObject(this, t, obc),
+					    new C_OSD_AppliedRecoveredObject(this, t, obc),
 					    new C_OSD_CommittedPushedObject(this, NULL,
 									    info.history.same_interval_since,
 									    info.last_complete),
