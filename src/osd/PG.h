@@ -1485,9 +1485,6 @@ protected:
   map<eversion_t,class MOSDOp*>   replay_queue;
 
   void requeue_object_waiters(map<hobject_t, list<Message*> >& m);
-  
-  bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
-
 
   // stats
   Mutex pg_stats_lock;
