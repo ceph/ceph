@@ -539,6 +539,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
+  ops_in_flight_lock("OSD::ops_in_flight_lock"),
   op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   map_lock("OSD::map_lock"),
@@ -1817,6 +1818,21 @@ void OSD::tick()
     dispatch_running = false;
     dispatch_cond.Signal();
   }
+}
+
+void OSD::register_inflight_op(xlist<OpRequest*>::item *i)
+{
+  ops_in_flight_lock.Lock();
+  ops_in_flight.push_back(i);
+  ops_in_flight_lock.Unlock();
+}
+
+void OSD::unregister_inflight_op(xlist<OpRequest*>::item *i)
+{
+  ops_in_flight_lock.Lock();
+  assert(i->get_list() == &ops_in_flight);
+  i->remove_myself();
+  ops_in_flight_lock.Unlock();
 }
 
 // =========================================

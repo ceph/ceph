@@ -325,6 +325,17 @@ private:
   }
   void do_waiters();
   
+  // -- op tracking --
+  xlist<OpRequest*> ops_in_flight;
+  /** This is an inner lock that is taken by the following three
+   * functions without regard for what locks the callers hold. It
+   * protects the xlist, but not the OpRequests. */
+  Mutex ops_in_flight_lock;
+  void register_inflight_op(xlist<OpRequest*>::item *i);
+  void check_ops_in_flight();
+  void unregister_inflight_op(xlist<OpRequest*>::item *i);
+  friend struct OpRequest;
+
   // -- op queue --
   deque<PG*> op_queue;
   int op_queue_len;
