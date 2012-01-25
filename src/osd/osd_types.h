@@ -680,7 +680,6 @@ ostream& operator<<(ostream& out, const pg_pool_t& p);
  */
 struct object_stat_sum_t {
   int64_t num_bytes;    // in bytes
-  int64_t num_kb;       // in KB
   int64_t num_objects;
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
@@ -691,7 +690,7 @@ struct object_stat_sum_t {
   int64_t num_wr, num_wr_kb;
 
   object_stat_sum_t()
-    : num_bytes(0), num_kb(0),
+    : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)

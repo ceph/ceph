@@ -543,7 +543,7 @@ void GuiMonitor::update_pg_cluster_view()
 
   ostringstream oss;
   oss << ctx->pgmap.pg_stat.size() << " Placement Groups\n"
-      << kb_t(ctx->pgmap.pg_sum.stats.sum.num_kb) << " Data, "
+      << prettybyte_t(ctx->pgmap.pg_sum.stats.sum.num_bytes) << " Data, "
       << kb_t(ctx->pgmap.osd_sum.kb_used) << " Used, "
       << kb_t(ctx->pgmap.osd_sum.kb_avail) << " / "
       << kb_t(ctx->pgmap.osd_sum.kb) << " Available";
@@ -1544,7 +1544,7 @@ void GuiMonitor::StatsWindowInfo::gen_pg_cluster_columns()
 
   {
     ostringstream oss;
-    oss << kb_t(ctx->pgmap.pg_sum.stats.sum.num_kb);
+    oss << prettybyte_t(ctx->pgmap.pg_sum.stats.sum.num_bytes);
     insert_stats("Data ", oss.str());
   }
 
@@ -1662,7 +1662,7 @@ void GuiMonitor::StatsWindowInfo::gen_pg_node_columns()
     str(boost::format("%llu") % stat.stats.sum.num_objects_degraded));
   insert_stats("Number of Objects Unfound",
     str(boost::format("%llu") % stat.stats.sum.num_objects_unfound));
-  insert_stats("KB", str(boost::format("%llu") % stat.stats.sum.num_kb));
+  insert_stats("KB", str(boost::format("%llu") % SHIFT_ROUND_UP(stat.stats.sum.num_bytes, 10)));
   insert_stats("Bytes", str(boost::format("%llu") % stat.stats.sum.num_bytes));
   insert_stats("Log Size", str(boost::format("%llu") % stat.log_size));
   insert_stats("On-Disk Log Size", str(boost::format("%llu") %

@@ -273,3 +273,16 @@ class TestImage(object):
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
         self.image.remove_snap('snap1')
+
+    def test_many_snaps(self):
+        num_snaps = 200
+        for i in xrange(num_snaps):
+            self.image.create_snap(str(i))
+        snaps = sorted(self.image.list_snaps(),
+                       key=lambda snap: int(snap['name']))
+        eq(len(snaps), num_snaps)
+        for i, snap in enumerate(snaps):
+            eq(snap['size'], IMG_SIZE)
+            eq(snap['name'], str(i))
+        for i in xrange(num_snaps):
+            self.image.remove_snap(str(i))

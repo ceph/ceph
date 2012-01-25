@@ -458,6 +458,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	break;
       dout(10) << "merge_log divergent " << oe << dendl;
       divergent.push_front(oe);
+      log.unindex(oe);
       log.log.pop_back();
     }
 
@@ -4402,6 +4403,18 @@ PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
 boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt)
 {
   dout(10) << "In WaitActingChange, ignoring MLocRec" << dendl;
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MInfoRec& evt)
+{
+  dout(10) << "In WaitActingChange, ignoring MInfoRec" << dendl;
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MNotifyRec& evt)
+{
+  dout(10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
   return discard_event();
 }
 
