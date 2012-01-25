@@ -5247,6 +5247,7 @@ int ReplicatedPG::recover_primary(int max)
 	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
 
 	    object_info_t oi(headobc->obs.oi);
+	    oi.soid = soid;
 	    oi.version = latest->version;
 	    oi.prior_version = latest->prior_version;
 	    bufferlist::iterator i = latest->snaps.begin();
