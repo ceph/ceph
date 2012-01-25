@@ -588,7 +588,6 @@ protected:
   bool require_mon_peer(Message *m);
   bool require_osd_peer(Message *m);
 
-  bool require_current_map(Message *m, epoch_t v);
   bool require_same_or_newer_map(Message *m, epoch_t e);
 
   void handle_pg_query(class MOSDPGQuery *m);

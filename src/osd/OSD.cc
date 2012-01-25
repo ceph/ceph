@@ -3850,26 +3850,6 @@ bool OSD::require_osd_peer(Message *m)
   return true;
 }
 
-bool OSD::require_current_map(Message *m, epoch_t ep) 
-{
-  // older map?
-  if (ep < osdmap->get_epoch()) {
-    dout(7) << "require_current_map epoch " << ep << " < " << osdmap->get_epoch() << dendl;
-    m->put();   // discard and ignore.
-    return false;
-  }
-
-  // newer map?
-  if (ep > osdmap->get_epoch()) {
-    dout(7) << "require_current_map epoch " << ep << " > " << osdmap->get_epoch() << dendl;
-    wait_for_new_map(m);
-    return false;
-  }
-
-  assert(ep == osdmap->get_epoch());
-  return true;
-}
-
 
 /*
  * require that we have same (or newer) map, and that
