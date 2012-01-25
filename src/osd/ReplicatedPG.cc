@@ -3296,7 +3296,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
   ObjectContext *obc;
   if (p != object_contexts.end()) {
     obc = p->second;
-    dout(10) << "get_object_context " << soid << " " << obc->ref
+    dout(10) << "get_object_context " << obc << " " << soid << " " << obc->ref
 	     << " -> " << (obc->ref+1) << dendl;
   } else {
     // check disk
@@ -3335,7 +3335,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
     } else {
       obc->obs.exists = false;
     }
-    dout(10) << "get_object_context " << soid << " read " << obc->obs.oi << dendl;
+    dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
   }
   obc->ref++;
   return obc;
@@ -3453,7 +3453,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
 void ReplicatedPG::put_object_context(ObjectContext *obc)
 {
-  dout(10) << "put_object_context " << obc->obs.oi.soid << " "
+  dout(10) << "put_object_context " << obc << " " << obc->obs.oi.soid << " "
 	   << obc->ref << " -> " << (obc->ref-1) << dendl;
 
   if (mode.wake) {
