@@ -599,6 +599,19 @@ int FileJournal::read_header()
     dout(0) << "read_header got " << cpp_strerror(err) << dendl;
     return -err;
   }
+  
+  /*
+   * Unfortunately we weren't initializing the flags field for new
+   * journals!  Aie.  This is safe(ish) now that we have only one
+   * flag.  Probably around when we add the next flag we need to
+   * remove this or else this (eventually old) code will clobber newer
+   * code's flags.
+   */
+  if (header.flags > 3) {
+    derr << "read_header appears to have gibberish flags; assuming 0" << dendl;
+    header.flags = 0;
+  }
+
   print_header();
 
   return 0;

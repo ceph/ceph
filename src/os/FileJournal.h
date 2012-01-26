@@ -33,6 +33,7 @@ public:
   struct header_t {
     enum {
       FLAG_CRC = (1<<0),
+      // NOTE: remove kludgey weirdness in read_header() next time a flag is added.
     };
 
     uint64_t flags;
