@@ -328,6 +328,7 @@ int FileJournal::create()
 
   // write empty header
   header = header_t();
+  header.flags = header_t::FLAG_CRC;  // enable crcs on any new journal.
   header.fsid = fsid;
   header.max_size = max_size;
   header.block_size = block_size;
@@ -791,6 +792,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   h.len = ebl.length();
   h.post_pad = post_pad;
   h.make_magic(queue_pos, header.get_fsid64());
+  h.crc32c = ebl.crc32c(0);
 
   bl.append((const char*)&h, sizeof(h));
   if (pre_pad) {
@@ -798,6 +800,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
     bl.push_back(bp);
   }
   bl.claim_append(ebl);
+
   if (h.post_pad) {
     bufferptr bp = buffer::create_static(post_pad, zero_buf);
     bl.push_back(bp);
@@ -1198,7 +1201,6 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   }
 
   off64_t pos = read_pos;
-  bl.clear();
 
   // header
   entry_header_t *h;
@@ -1214,7 +1216,10 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   // pad + body + pad
   if (h->pre_pad)
     pos += h->pre_pad;
+
+  bl.clear();
   wrap_read_bl(pos, h->len, bl);
+
   if (h->post_pad)
     pos += h->post_pad;
 
@@ -1226,6 +1231,16 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   if (memcmp(f, h, sizeof(*f))) {
     dout(2) << "read_entry " << read_pos << " : bad footer magic, partial entry, end of journal" << dendl;
     return false;
+  }
+
+  if ((header.flags & header_t::FLAG_CRC) ||   // if explicitly enabled (new journal)
+      h->crc32c != 0) {                        // newer entry in old journal
+    uint32_t actual_crc = bl.crc32c(0);
+    if (actual_crc != h->crc32c) {
+      dout(2) << "read_entry " << read_pos << " : header crc (" << h->crc32c
+	      << ") doesn't match body crc (" << actual_crc << ")" << dendl;
+      return false;
+    }
   }
 
   // yay!

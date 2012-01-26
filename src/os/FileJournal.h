@@ -31,6 +31,10 @@ public:
    * journal header
    */
   struct header_t {
+    enum {
+      FLAG_CRC = (1<<0),
+    };
+
     uint64_t flags;
     uuid_d fsid;
     __u32 block_size;
@@ -92,8 +96,8 @@ public:
   } header;
 
   struct entry_header_t {
-    uint64_t seq;  // fs op seq #
-    uint32_t flags;
+    uint64_t seq;     // fs op seq #
+    uint32_t crc32c;  // payload only.  not header, pre_pad, post_pad, or footer.
     uint32_t len;
     uint32_t pre_pad, post_pad;
     uint64_t magic1;
