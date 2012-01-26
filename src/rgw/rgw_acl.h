@@ -6,6 +6,8 @@
 #include <iostream>
 #include <include/types.h>
 
+#include "common/debug.h"
+
 using namespace std;
 
 
@@ -162,7 +164,7 @@ protected:
 public:
   RGWAccessControlList() {}
 
-  ~RGWAccessControlList() {}
+  virtual ~RGWAccessControlList() {}
 
   int get_perm(string& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
@@ -172,18 +174,27 @@ public:
     bool maps_initialized = true;
     ::encode(maps_initialized, bl);
     ::encode(acl_user_map, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << " acl_user_map.size()=" << acl_user_map.size() << dendl;
     ::encode(grant_map, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << " grant_map.size()=" << grant_map.size() << dendl;
     ::encode(acl_group_map, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << " acl_group_map.size()=" << acl_group_map.size() << dendl;
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     ::decode(struct_v, bl);
     bool maps_initialized;
     ::decode(maps_initialized, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     ::decode(acl_user_map, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << " acl_user_map.size()=" << acl_user_map.size() << dendl;
     ::decode(grant_map, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << " grant_map.size()=" << grant_map.size() << dendl;
     if (struct_v >= 2) {
+dout(0) << "struct_v=" << struct_v << dendl;
       ::decode(acl_group_map, bl);
+dout(0) << __FILE__ << ":" << __LINE__ << " acl_group_map.size()=" << acl_group_map.size() << dendl;
     } else if (!maps_initialized) {
       multimap<string, ACLGrant>::iterator iter;
       for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
@@ -191,6 +202,7 @@ public:
         _add_grant(&grant);
       }
     }
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
   }
   void add_grant(ACLGrant *grant);
 
@@ -203,6 +215,12 @@ public:
     ACLGrant grant;
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
+  }
+  virtual bool create_canned(string id, string name, string canned_acl) {
+    if (canned_acl.size())
+      return false;
+    create_default(id, name);
+    return true;
   }
 };
 WRITE_CLASS_ENCODER(RGWAccessControlList)
@@ -277,7 +295,12 @@ public:
     owner.set_id(id);
     owner.set_name(name);
   }
-  virtual bool create_canned(string id, string name, string canned_acl) { return false; }
+  virtual bool create_canned(string id, string name, string canned_acl) {
+    bool ret = acl.create_canned(id, name, canned_acl);
+    owner.set_id(id);
+    owner.set_name(name);
+    return ret;
+  }
 
   RGWAccessControlList& get_acl() {
     return acl;

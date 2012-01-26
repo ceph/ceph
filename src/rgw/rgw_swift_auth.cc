@@ -240,7 +240,7 @@ RGWOp *RGWHandler_SWIFT_Auth::get_op()
   }
 
   if (op) {
-    op->init(s);
+    op->init(s, this);
   }
   return op;
 }

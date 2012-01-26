@@ -12,8 +12,8 @@ protected:
 public:
   RGWGetObj_REST() {}
 
-  virtual void init(struct req_state *s) {
-    RGWGetObj::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWGetObj::init(s, h);
     sent_header = false;
   }
 

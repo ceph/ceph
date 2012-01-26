@@ -3,6 +3,7 @@
 #define TIME_BUF_SIZE 128
 
 #include "rgw_op.h"
+#include "rgw_acl_s3.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -151,6 +152,9 @@ public:
 
   virtual int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
+
+  RGWAccessControlPolicy *alloc_policy() { return new RGWAccessControlPolicy_S3; }
+  void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
 #endif

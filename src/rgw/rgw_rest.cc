@@ -893,7 +893,7 @@ RGWOp *RGWHandler_REST::get_op()
   }
 
   if (op) {
-    op->init(s);
+    op->init(s, this);
   }
   return op;
 }

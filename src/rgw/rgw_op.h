@@ -19,6 +19,7 @@
 using namespace std;
 
 struct req_state;
+class RGWHandler;
 
 /**
  * Provide the base class for all ops.
@@ -26,12 +27,14 @@ struct req_state;
 class RGWOp {
 protected:
   struct req_state *s;
+  RGWHandler *dialect_handler;
 public:
   RGWOp() {}
   virtual ~RGWOp() {}
 
-  virtual void init(struct req_state *s) {
+  virtual void init(struct req_state *s, RGWHandler *dialect_handler) {
     this->s = s;
+    this->dialect_handler = dialect_handler;
   }
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
@@ -70,8 +73,8 @@ public:
 
   virtual bool prefetch_data() { return true; }
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     range_str = NULL;
     if_mod = NULL;
     if_unmod = NULL;
@@ -112,8 +115,8 @@ protected:
   RGWUserBuckets buckets;
 
 public:
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     buckets.clear();
   }
   RGWListBuckets() {}
@@ -136,8 +139,8 @@ protected:
   uint64_t buckets_size_rounded;
 
 public:
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     buckets_count = 0;
     buckets_objcount = 0;
@@ -172,8 +175,8 @@ protected:
 public:
   RGWListBucket() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     prefix.clear();
     marker.clear();
     max_keys.clear();
@@ -198,8 +201,8 @@ protected:
   RGWBucketEnt bucket;
 
 public:
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     bucket.clear();
   }
@@ -222,8 +225,8 @@ public:
 
   int verify_permission();
   void execute();
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
   }
   virtual void send_response() = 0;
@@ -237,8 +240,8 @@ protected:
 public:
   RGWDeleteBucket() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
   }
   int verify_permission();
@@ -278,8 +281,8 @@ protected:
 public:
   RGWPutObj() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     ofs = 0;
     supplied_md5_b64 = NULL;
@@ -307,8 +310,8 @@ protected:
 public:
   RGWPutObjMetadata() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
   }
   int verify_permission();
@@ -326,8 +329,8 @@ protected:
 public:
   RGWDeleteObj() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
   }
   int verify_permission();
@@ -369,8 +372,8 @@ protected:
 public:
   RGWCopyObj() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     if_mod = NULL;
     if_unmod = NULL;
     if_match = NULL;
@@ -403,8 +406,8 @@ protected:
 public:
   RGWGetACLs() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     acls.clear();
   }
@@ -424,8 +427,8 @@ protected:
 public:
   RGWPutACLs() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     len = 0;
     data = NULL;
@@ -446,8 +449,8 @@ protected:
 public:
   RGWInitMultipart() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     upload_id = "";
   }
@@ -470,8 +473,8 @@ protected:
 public:
   RGWCompleteMultipart() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     upload_id = "";
     etag="";
@@ -493,8 +496,8 @@ protected:
 public:
   RGWAbortMultipart() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
   }
   int verify_permission();
@@ -516,8 +519,8 @@ protected:
 public:
   RGWListMultipart() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     ret = 0;
     upload_id = "";
     parts.clear();
@@ -625,8 +628,8 @@ protected:
 public:
   RGWListBucketMultiparts() {}
 
-  virtual void init(struct req_state *s) {
-    RGWOp::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
     prefix.clear();
     marker.clear();
     next_marker.clear();
@@ -660,6 +663,9 @@ public:
   virtual void put_op(RGWOp *op) = 0;
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
+
+  virtual RGWAccessControlPolicy *alloc_policy() = 0;
+  virtual void free_policy(RGWAccessControlPolicy *policy) = 0;
 };
 
 #endif

@@ -141,6 +141,9 @@ public:
 
   int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
+
+  RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
+  void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
 #endif

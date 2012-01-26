@@ -519,7 +519,8 @@ int RGWCreateBucket::verify_permission()
 
 void RGWCreateBucket::execute()
 {
-  RGWAccessControlPolicy policy, old_policy;
+  RGWAccessControlPolicy *policy = dialect_handler->alloc_policy();
+  RGWAccessControlPolicy old_policy;
   map<string, bufferlist> attrs;
   bufferlist aclbl;
   bool existed;
@@ -527,7 +528,6 @@ void RGWCreateBucket::execute()
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
   s->bucket_owner = s->user.user_id;
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
@@ -535,14 +535,12 @@ dout(0) << __FILE__ << ":" << __LINE__ << dendl;
       goto done;
     }
   }
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
-  pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  pol_ret = policy->create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!pol_ret) {
     ret = -EINVAL;
     goto done;
   }
-  policy.encode(aclbl);
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+  policy->encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
@@ -567,6 +565,8 @@ dout(0) << __FILE__ << ":" << __LINE__ << dendl;
 
 done:
   send_response();
+
+  dialect_handler->free_policy(policy);
 }
 
 int RGWDeleteBucket::verify_permission()

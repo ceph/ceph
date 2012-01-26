@@ -257,7 +257,6 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
   }
 
   return true;
-
 }
 
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
@@ -277,10 +276,13 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
  */
 int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& dest)
 {
+dout(0) << __FILE__ << ":" << __LINE__ << " owner=" << (void *)owner << dendl;
   if (!owner)
     return -EINVAL;
 
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
   ACLOwner *requested_owner = (ACLOwner *)find_first("Owner");
+dout(0) << __FILE__ << ":" << __LINE__ << " requested_owner=" << (void *)requested_owner << dendl;
   if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
     return -EPERM;
   }

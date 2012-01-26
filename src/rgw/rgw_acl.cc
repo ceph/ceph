@@ -28,6 +28,7 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
 void RGWAccessControlList::add_grant(ACLGrant *grant)
 {
   string id = grant->get_id();
+dout(0) << __FILE__ << ":" << __LINE__ << " adding grant id=" << id << dendl;
   if (id.size() > 0) {
     grant_map.insert(pair<string, ACLGrant>(id, *grant));
   }
