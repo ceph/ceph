@@ -328,7 +328,6 @@ int FileJournal::create()
 
   // write empty header
   header = header_t();
-  header.clear();
   header.fsid = fsid;
   header.max_size = max_size;
   header.block_size = block_size;

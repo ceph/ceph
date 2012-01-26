@@ -38,6 +38,8 @@ public:
     int64_t max_size;   // max size of journal ring buffer
     int64_t start;      // offset of first entry
 
+    header_t() : flags(0), block_size(0), alignment(0), max_size(0), start(0) {}
+
     void clear() {
       start = block_size;
     }
