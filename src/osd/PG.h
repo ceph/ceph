@@ -52,6 +52,7 @@ using namespace __gnu_cxx;
 
 
 class OSD;
+class OpRequest;
 class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
@@ -842,7 +843,7 @@ public:
   }
 
 
-  list<Message*> op_queue;  // op queue
+  list<OpRequest*> op_queue;  // op queue
 
   bool dirty_info, dirty_log;
 
@@ -1477,14 +1478,14 @@ protected:
 
 
   // pg waiters
-  list<class Message*>            waiting_for_active;
-  list<class Message*>            waiting_for_all_missing;
-  map<hobject_t, list<class Message*> > waiting_for_missing_object,
+  list<OpRequest*>            waiting_for_active;
+  list<OpRequest*>            waiting_for_all_missing;
+  map<hobject_t, list<OpRequest*> > waiting_for_missing_object,
                                         waiting_for_degraded_object;
-  map<eversion_t,list<Message*> > waiting_for_ondisk;
-  map<eversion_t,class MOSDOp*>   replay_queue;
+  map<eversion_t,list<OpRequest*> > waiting_for_ondisk;
+  map<eversion_t,OpRequest*>   replay_queue;
 
-  void requeue_object_waiters(map<hobject_t, list<Message*> >& m);
+  void requeue_object_waiters(map<hobject_t, list<OpRequest*> >& m);
 
   // stats
   Mutex pg_stats_lock;
@@ -1638,11 +1639,11 @@ public:
   bool sched_scrub();
 
   void replica_scrub(class MOSDRepScrub *op);
-  void sub_op_scrub_map(class MOSDSubOp *op);
-  void sub_op_scrub_reserve(class MOSDSubOp *op);
-  void sub_op_scrub_reserve_reply(class MOSDSubOpReply *op);
-  void sub_op_scrub_unreserve(class MOSDSubOp *op);
-  void sub_op_scrub_stop(class MOSDSubOp *op);
+  void sub_op_scrub_map(OpRequest *op);
+  void sub_op_scrub_reserve(OpRequest *op);
+  void sub_op_scrub_reserve_reply(OpRequest *op);
+  void sub_op_scrub_unreserve(OpRequest *op);
+  void sub_op_scrub_stop(OpRequest *op);
 
  public:  
   PG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) : 
@@ -1790,11 +1791,11 @@ public:
 
   void on_removal();
   // abstract bits
-  virtual void do_op(MOSDOp *op) = 0;
-  virtual void do_sub_op(MOSDSubOp *op) = 0;
-  virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
-  virtual void do_scan(MOSDPGScan *op) = 0;
-  virtual void do_backfill(MOSDPGBackfill *op) = 0;
+  virtual void do_op(OpRequest *op) = 0;
+  virtual void do_sub_op(OpRequest *op) = 0;
+  virtual void do_sub_op_reply(OpRequest *op) = 0;
+  virtual void do_scan(OpRequest *op) = 0;
+  virtual void do_backfill(OpRequest *op) = 0;
   virtual bool snap_trimmer() = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;

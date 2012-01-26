@@ -15,6 +15,7 @@
 #include "PG.h"
 #include "common/config.h"
 #include "OSD.h"
+#include "OpRequest.h"
 
 #include "common/Timer.h"
 
@@ -550,7 +551,7 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
 
     map<hobject_t, set<int> >::iterator ml = missing_loc.find(soid);
     if (ml == missing_loc.end()) {
-      map<hobject_t, list<class Message*> >::iterator wmo =
+      map<hobject_t, list<class OpRequest*> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
 	osd->requeue_ops(this, wmo->second);
@@ -1381,11 +1382,11 @@ void PG::replay_queued_ops()
 {
   assert(is_replay() && is_active());
   eversion_t c = info.last_update;
-  list<Message*> replay;
+  list<OpRequest*> replay;
   dout(10) << "replay_queued_ops" << dendl;
   state_clear(PG_STATE_REPLAY);
 
-  for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
+  for (map<eversion_t,OpRequest*>::iterator p = replay_queue.begin();
        p != replay_queue.end();
        p++) {
     if (p->first.version != c.version+1) {
@@ -1395,7 +1396,8 @@ void PG::replay_queued_ops()
 	       << dendl;      
       c = p->first;
     }
-    dout(10) << "activate replay " << p->first << " " << *p->second << dendl;
+    dout(10) << "activate replay " << p->first << " "
+             << *p->second->request << dendl;
     replay.push_back(p->second);
   }
   replay_queue.clear();
@@ -2257,9 +2259,9 @@ void PG::adjust_local_snaps()
   }
 }
 
-void PG::requeue_object_waiters(map<hobject_t, list<Message*> >& m)
+void PG::requeue_object_waiters(map<hobject_t, list<OpRequest*> >& m)
 {
-  for (map<hobject_t, list<Message*> >::iterator it = m.begin();
+  for (map<hobject_t, list<OpRequest*> >::iterator it = m.begin();
        it != m.end();
        it++)
     osd->requeue_ops(this, it->second);
@@ -2337,21 +2339,23 @@ bool PG::sched_scrub()
 }
 
 
-void PG::sub_op_scrub_map(MOSDSubOp *op)
+void PG::sub_op_scrub_map(OpRequest *op)
 {
+  MOSDSubOp *m = (MOSDSubOp *)op->request;
+  assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
 
-  if (op->map_epoch < info.history.same_interval_since) {
+  if (m->map_epoch < info.history.same_interval_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_interval_since << dendl;
+	     << m->map_epoch << " < " << info.history.same_interval_since << dendl;
     op->put();
     return;
   }
 
-  int from = op->get_source().num();
+  int from = m->get_source().num();
 
   dout(10) << " got osd." << from << " scrub map" << dendl;
-  bufferlist::iterator p = op->get_data().begin();
+  bufferlist::iterator p = m->get_data().begin();
   if (scrub_received_maps.count(from)) {
     ScrubMap incoming;
     incoming.decode(p);
@@ -2407,8 +2411,10 @@ void PG::_request_scrub_map(int replica, eversion_t version)
                                        get_osdmap()->get_cluster_inst(replica));
 }
 
-void PG::sub_op_scrub_reserve(MOSDSubOp *op)
+void PG::sub_op_scrub_reserve(OpRequest *op)
 {
+  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_reserve" << dendl;
 
   if (scrub_reserved) {
@@ -2419,15 +2425,17 @@ void PG::sub_op_scrub_reserve(MOSDSubOp *op)
 
   scrub_reserved = osd->inc_scrubs_pending();
 
-  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+  MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   ::encode(scrub_reserved, reply->get_data());
-  osd->cluster_messenger->send_message(reply, op->get_connection());
+  osd->cluster_messenger->send_message(reply, m->get_connection());
 
   op->put();
 }
 
-void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
+void PG::sub_op_scrub_reserve_reply(OpRequest *op)
 {
+  MOSDSubOpReply *reply = (MOSDSubOpReply*)op->request;
+  assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
   if (!scrub_reserved) {
@@ -2436,8 +2444,8 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
     return;
   }
 
-  int from = op->get_source().num();
-  bufferlist::iterator p = op->get_data().begin();
+  int from = reply->get_source().num();
+  bufferlist::iterator p = reply->get_data().begin();
   bool reserved;
   ::decode(reserved, p);
 
@@ -2458,8 +2466,9 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
   op->put();
 }
 
-void PG::sub_op_scrub_unreserve(MOSDSubOp *op)
+void PG::sub_op_scrub_unreserve(OpRequest *op)
 {
+  assert(op->request->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_unreserve" << dendl;
 
   clear_scrub_reserved();
@@ -2467,15 +2476,17 @@ void PG::sub_op_scrub_unreserve(MOSDSubOp *op)
   op->put();
 }
 
-void PG::sub_op_scrub_stop(MOSDSubOp *op)
+void PG::sub_op_scrub_stop(OpRequest *op)
 {
+  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_stop" << dendl;
 
   // see comment in sub_op_scrub_reserve
   scrub_reserved = false;
 
-  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  osd->cluster_messenger->send_message(reply, op->get_connection());
+  MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+  osd->cluster_messenger->send_message(reply, m->get_connection());
 
   op->put();
 }
@@ -3370,8 +3381,8 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
       clear_stats();
 	
       // take replay queue waiters
-      list<Message*> ls;
-      for (map<eversion_t,MOSDOp*>::iterator it = replay_queue.begin();
+      list<OpRequest*> ls;
+      for (map<eversion_t,OpRequest*>::iterator it = replay_queue.begin();
 	   it != replay_queue.end();
 	   it++)
 	ls.push_back(it->second);

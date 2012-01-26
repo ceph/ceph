@@ -5624,19 +5624,19 @@ void OSD::dequeue_op(PG *pg)
     break;
 
   case MSG_OSD_SUBOP:
-    pg->do_sub_op((MOSDSubOp*)op);
+    pg->do_sub_op(op);
     break;
     
   case MSG_OSD_SUBOPREPLY:
-    pg->do_sub_op_reply((MOSDSubOpReply*)op);
+    pg->do_sub_op_reply(op);
     break;
 
   case MSG_OSD_PG_SCAN:
-    pg->do_scan((MOSDPGScan*)op);
+    pg->do_scan(op);
     break;
 
   case MSG_OSD_PG_BACKFILL:
-    pg->do_backfill((MOSDPGBackfill*)op);
+    pg->do_backfill(op);
     break;
 
   default:
