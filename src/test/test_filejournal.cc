@@ -9,6 +9,7 @@
 #include "os/FileJournal.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
+#include "common/safe_io.h"
 
 Finisher *finisher;
 Cond sync_cond;
@@ -179,6 +180,68 @@ TEST(TestFileJournal, ReplaySmall) {
   ASSERT_EQ(seq, 2ull);
   ASSERT_EQ(true, j.read_entry(inbl, seq));
   ASSERT_EQ(seq, 3ull);
+  ASSERT_EQ(false, j.read_entry(inbl, seq));
+
+  j.make_writeable();
+  j.close();
+}
+
+TEST(TestFileJournal, ReplayCorrupt) {
+  fsid.generate_random();
+  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  ASSERT_EQ(0, j.create());
+  j.make_writeable();
+  
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  
+  const char *needle =    "i am a needle";
+  const char *newneedle = "in a haystack";
+  bufferlist bl;
+  bl.append(needle);
+  j.submit_entry(1, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(2, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(3, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(4, bl, 0, gb.new_sub());
+  gb.activate();
+  wait();
+
+  j.close();
+
+  cout << "corrupting journal" << std::endl;
+  char buf[1024*128];
+  int fd = open(path, O_RDONLY);
+  ASSERT_GE(fd, 0);
+  int r = safe_read_exact(fd, buf, sizeof(buf));
+  ASSERT_EQ(0, r);
+  int n = 0;
+  for (unsigned o=0; o < sizeof(buf) - strlen(needle); o++) {
+    if (memcmp(buf+o, needle, strlen(needle)) == 0) {
+      if (n >= 2) {
+	cout << "replacing at offset " << o << std::endl;
+	memcpy(buf+o, newneedle, strlen(newneedle));
+      } else {
+	cout << "leaving at offset " << o << std::endl;
+      }
+      n++;
+    }
+  }
+  ASSERT_EQ(n, 4);
+  close(fd);
+  fd = open(path, O_WRONLY);
+  ASSERT_GE(fd, 0);
+  r = safe_write(fd, buf, sizeof(buf));
+  ASSERT_EQ(r, 0);
+  close(fd);
+
+  j.open(1);
+
+  bufferlist inbl;
+  uint64_t seq = 0;
+  ASSERT_EQ(true, j.read_entry(inbl, seq));
+  ASSERT_EQ(seq, 2ull);
   ASSERT_EQ(false, j.read_entry(inbl, seq));
 
   j.make_writeable();
