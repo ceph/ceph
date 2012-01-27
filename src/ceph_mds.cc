@@ -134,7 +134,6 @@ int main(int argc, const char **argv)
   int rank = -1;
   std::string dump_file;
 
-  assert(0);
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
