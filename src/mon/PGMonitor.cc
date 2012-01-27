@@ -72,7 +72,8 @@ PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
   : PaxosService(mn, p),
     ratio_lock("PGMonitor::ratio_lock"),
     need_full_ratio_update(false),
-    need_nearfull_ratio_update(false)
+    need_nearfull_ratio_update(false),
+    need_check_down_pgs(false)
 {
   ratio_monitor = new RatioMonitor(this);
   g_conf->add_observer(ratio_monitor);
@@ -99,6 +100,7 @@ void PGMonitor::on_active()
 {
   if (mon->is_leader()) {
     check_osd_map(mon->osdmon()->osdmap.epoch);
+    need_check_down_pgs = true;
   }
 
   update_logger();
@@ -178,6 +180,10 @@ void PGMonitor::tick()
       }
     }
     ratio_lock.Unlock();
+    
+    if (need_check_down_pgs && check_down_pgs())
+      propose = true;
+    
     if (propose) {
       propose_pending();
     }
@@ -629,6 +635,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	pending_inc.osd_stat_rm.erase(p->first);
 	pending_inc.osd_stat_updates[p->first]; 
       }
+
+    // this is conservative: we want to know if any osds (maybe) got marked down.
+    for (map<int32_t,uint8_t>::iterator p = inc.new_state.begin();
+	 p != inc.new_state.end();
+	 ++p)
+      if (p->second & CEPH_OSD_UP)   // true if marked up OR down, but we're too lazy to check which
+	need_check_down_pgs = true;
   }
 
   bool propose = false;
@@ -639,6 +652,9 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
   // scan pg space?
   if (register_new_pgs())
+    propose = true;
+
+  if (need_check_down_pgs && check_down_pgs())
     propose = true;
   
   if (propose)
@@ -825,6 +841,38 @@ void PGMonitor::send_pg_creates()
     last_sent_pg_create[p->first] = ceph_clock_now(g_ceph_context);
   }
 }
+
+bool PGMonitor::check_down_pgs()
+{
+  dout(10) << "check_down_pgs" << dendl;
+
+  OSDMap *osdmap = &mon->osdmon()->osdmap;
+  bool ret = false;
+
+  for (hash_map<pg_t,pg_stat_t>::iterator p = pg_map.pg_stat.begin();
+       p != pg_map.pg_stat.end();
+       ++p) {
+    if ((p->second.state & PG_STATE_STALE) == 0 &&
+	p->second.acting.size() &&
+	osdmap->is_down(p->second.acting[0])) {
+      dout(10) << " marking pg " << p->first << " stale with acting " << p->second.acting << dendl;
+
+      map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(p->first);
+      pg_stat_t *stat;
+      if (q == pending_inc.pg_stat_updates.end()) {
+	stat = &pending_inc.pg_stat_updates[p->first];
+	*stat = p->second;
+      } else {
+	stat = &q->second;
+      }
+      stat->state |= PG_STATE_STALE;	
+      ret = true;
+    }
+  }
+  need_check_down_pgs = false;
+  return ret;
+}
+
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
