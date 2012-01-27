@@ -2431,44 +2431,56 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       assert(0);
     }
 
-    if (r == -ENOENT) {
-      if (op == Transaction::OP_CLONERANGE ||
-	  op == Transaction::OP_CLONE ||
-	  op == Transaction::OP_CLONERANGE2) {
-	// Halt before we incorrectly mark the pg clean
-	assert(0 == "ENOENT on clone suggests osd bug");
-      } else {
+    if (r < 0) {
+      bool ok = false;
+
+      if (r == -ENOENT && !(op == Transaction::OP_CLONERANGE ||
+			    op == Transaction::OP_CLONE ||
+			    op == Transaction::OP_CLONERANGE2))
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with !stable_commits
+	ok = true;
+      if (r == -ENODATA)
+	ok = true;
+
+      if (replaying && !btrfs_stable_commits) {
+	if (r == -EEXIST && op == Transaction::OP_MKCOLL) {
+	  dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
+	  ok = true;
+	}
+	if (r == -EEXIST && op == Transaction::OP_COLL_ADD) {
+	  dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
+	  ok = true;
+	}
+      }
+
+      if (!ok) {
+	const char *msg = "unexpected error code";
+
+	if (r == -ENOENT && (op == Transaction::OP_CLONERANGE ||
+			     op == Transaction::OP_CLONE ||
+			     op == Transaction::OP_CLONERANGE2))
+	  msg = "ENOENT on clone suggests osd bug";
+
+	if (r == -ENOSPC)
+	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
+	  // by partially applying transactions.
+	  msg = "ENOSPC handling not implemented";
+
+	if (r == -ENOTEMPTY) {
+	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
+	}
+
+	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
+		<< " (op num " << op_num << ", counting from 1)" << dendl;
+	dout(0) << msg << dendl;
+	dout(0) << " transaction dump:\n";
+	t.dump(*_dout);
+	*_dout << dendl;
+	assert(0 == "unexpected error");
       }
     }
-    else if (r == -ENODATA) {
-      // -ENODATA is okay
-    }
-    else if (r == -ENOSPC) {
-      // For now, if we hit _any_ ENOSPC, crash, before we do any damage
-      // by partially applying transactions.
-      assert(0 == "ENOSPC handling not implemented");
-    }
-    else if (r == -ENOTEMPTY) {
-      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
-    }
-    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !btrfs_stable_commits) {
-      dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
-    }
-    else if (r == -EEXIST && op == Transaction::OP_COLL_ADD && replaying && !btrfs_stable_commits) {
-      dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
-    }
-    else if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
-	      << " (op num " << op_num << ", counting from 1)" << dendl;
-      dout(0) << " transaction dump:\n";
-      t.dump(*_dout);
-      *_dout << dendl;
-      assert(0 == "unexpected error");
-    }
   }
-
   if (!idempotent && !btrfs_stable_commits) {
     dout(10) << "performed non-idempotent operation and not using btrfs snaps, triggering a commit" << dendl;
     trigger_commit(op_seq);
