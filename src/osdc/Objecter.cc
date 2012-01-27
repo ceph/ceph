@@ -1177,6 +1177,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // per-op result demuxing
   vector<OSDOp> out_ops;
   m->claim_ops(out_ops);
+  
+  if (out_ops.size() != op->ops.size())
+    ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
+		  << " != request ops " << op->ops
+		  << " from " << m->get_source_inst() << dendl;
+
   vector<bufferlist*>::iterator pb = op->out_bl.begin();
   vector<int*>::iterator pr = op->out_rval.begin();
   vector<Context*>::iterator ph = op->out_handler.begin();
