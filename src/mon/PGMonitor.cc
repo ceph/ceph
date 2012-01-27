@@ -1117,6 +1117,8 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
   hash_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
   hash_map<int,int>::const_iterator p_end = pg_map.num_pg_by_state.end();
   for (; p != p_end; ++p) {
+    if (p->first & PG_STATE_STALE)
+      note["stale"] += p->second;
     if (p->first & PG_STATE_DOWN)
       note["down"] += p->second;
     if (p->first & PG_STATE_DEGRADED)
