@@ -481,6 +481,16 @@ public:
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL) {
       ops.swap(op);
+      
+      /* initialize out_* to match op vector */
+      out_bl.resize(ops.size());
+      out_rval.resize(ops.size());
+      out_handler.resize(ops.size());
+      for (unsigned i = 0; i < ops.size(); i++) {
+	out_bl[i] = NULL;
+	out_handler[i] = NULL;
+	out_rval[i] = NULL;
+      }
 
       if (oloc.key == o)
 	oloc.key.clear();
