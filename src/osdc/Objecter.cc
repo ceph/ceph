@@ -806,6 +806,10 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
 {
   assert(client_lock.is_locked());
 
+  assert(op->ops.size() == op->out_bl.size());
+  assert(op->ops.size() == op->out_rval.size());
+  assert(op->ops.size() == op->out_handler.size());
+
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
@@ -1173,29 +1177,26 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // per-op result demuxing
   vector<OSDOp> out_ops;
   m->claim_ops(out_ops);
-  unsigned i = 0;
-  for (vector<bufferlist*>::iterator p = op->out_bl.begin();
-       p != op->out_bl.end();
-       ++p, ++i) {
-    ldout(cct, 10) << " op " << i << " rval " << out_ops[i].rval
-		   << " len " << out_ops[i].outdata.length() << dendl;
-    if (*p)
-      **p = out_ops[i].outdata;
-  }
-  i = 0;
-  for (vector<int*>::iterator p = op->out_rval.begin();
-       p != op->out_rval.end();
-       ++p, ++i)
-    if (*p)
-      **p = out_ops[i].rval;
-  i = 0;
-  for (vector<Context*>::iterator p = op->out_handler.begin();
-       p != op->out_handler.end();
-       ++p, ++i)
-    if (*p) {
-      ldout(cct, 10) << " op " << i << " handler " << *p << dendl;
-      (*p)->complete(out_ops[i].rval);
+  vector<bufferlist*>::iterator pb = op->out_bl.begin();
+  vector<int*>::iterator pr = op->out_rval.begin();
+  vector<Context*>::iterator ph = op->out_handler.begin();
+  assert(op->out_bl.size() == op->out_rval.size());
+  assert(op->out_bl.size() == op->out_handler.size());
+  vector<OSDOp>::iterator p = out_ops.begin();
+  for (unsigned i = 0;
+       p != out_ops.end() && pb != op->out_bl.end();
+       ++i, ++p, ++pb, ++pr, ++ph) {
+    ldout(cct, 10) << " op " << i << " rval " << p->rval
+		   << " len " << p->outdata.length() << dendl;
+    if (*pb)
+      **pb = p->outdata;
+    if (*pr)
+      **pr = p->rval;
+    if (*ph) {
+      ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
+      (*ph)->complete(p->rval);
     }
+  }
 
   // ack|commit -> ack
   if (op->onack) {
