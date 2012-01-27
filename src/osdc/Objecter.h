@@ -861,7 +861,16 @@ private:
                eversion_t *objver);
   void unregister_linger(uint64_t linger_id);
 
-
+  /**
+   * set up initial ops in the op vector, and allocate a final op slot.
+   *
+   * The caller is responsible for filling in the final op.
+   *
+   * @param ops op vector
+   * @param ops_count number of initial ops
+   * @param extra_ops pointer to [array of] initial op[s]
+   * @return index of final op (for caller to fill in)
+   */
   int init_ops(vector<OSDOp>& ops, int ops_count, ObjectOperation *extra_ops) {
     int i;
 
