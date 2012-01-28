@@ -16,6 +16,7 @@ Cond sync_cond;
 char path[200];
 uuid_d fsid;
 bool directio = false;
+bool aio = false;
 
 // ----
 Cond cond;
@@ -75,13 +76,20 @@ int main(int argc, char **argv) {
 
   finisher->start();
 
-  cout << "DIRECTIO OFF" << std::endl;
+  cout << "DIRECTIO OFF  AIO OFF" << std::endl;
   directio = false;
+  aio = false;
   int r = RUN_ALL_TESTS();
   if (r >= 0) {
-    cout << "DIRECTIO ON" << std::endl;
+    cout << "DIRECTIO ON  AIO OFF" << std::endl;
     directio = true;
     r = RUN_ALL_TESTS();
+
+    if (r >= 0) {
+      cout << "DIRECTIO ON  AIO ON" << std::endl;
+      aio = true;
+      r = RUN_ALL_TESTS();
+    }
   }
   
   finisher->stop();
@@ -93,13 +101,13 @@ int main(int argc, char **argv) {
 
 TEST(TestFileJournal, Create) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
 }
 
 TEST(TestFileJournal, WriteSmall) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -113,7 +121,7 @@ TEST(TestFileJournal, WriteSmall) {
 
 TEST(TestFileJournal, WriteBig) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -131,7 +139,7 @@ TEST(TestFileJournal, WriteBig) {
 
 TEST(TestFileJournal, WriteMany) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -154,7 +162,7 @@ TEST(TestFileJournal, WriteMany) {
 
 TEST(TestFileJournal, ReplaySmall) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
   
@@ -175,11 +183,22 @@ TEST(TestFileJournal, ReplaySmall) {
   j.open(1);
 
   bufferlist inbl;
+  string v;
   uint64_t seq = 0;
   ASSERT_EQ(true, j.read_entry(inbl, seq));
   ASSERT_EQ(seq, 2ull);
+  inbl.copy(0, inbl.length(), v);
+  ASSERT_EQ("small", v);
+  inbl.clear();
+  v.clear();
+
   ASSERT_EQ(true, j.read_entry(inbl, seq));
   ASSERT_EQ(seq, 3ull);
+  inbl.copy(0, inbl.length(), v);
+  ASSERT_EQ("small", v);
+  inbl.clear();
+  v.clear();
+
   ASSERT_TRUE(!j.read_entry(inbl, seq));
 
   j.make_writeable();
@@ -188,7 +207,7 @@ TEST(TestFileJournal, ReplaySmall) {
 
 TEST(TestFileJournal, ReplayCorrupt) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
   
@@ -239,9 +258,14 @@ TEST(TestFileJournal, ReplayCorrupt) {
   j.open(1);
 
   bufferlist inbl;
+  string v;
   uint64_t seq = 0;
   ASSERT_EQ(true, j.read_entry(inbl, seq));
   ASSERT_EQ(seq, 2ull);
+  inbl.copy(0, inbl.length(), v);
+  ASSERT_EQ(needle, v);
+  inbl.clear();
+  v.clear();
   ASSERT_TRUE(!j.read_entry(inbl, seq));
 
   j.make_writeable();
@@ -250,7 +274,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
 
 TEST(TestFileJournal, WriteTrim) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 

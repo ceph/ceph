@@ -640,6 +640,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   m_filestore_update_collections(g_conf->filestore_update_collections),
   m_journal_dio(g_conf->journal_dio),
+  m_journal_aio(g_conf->journal_aio),
   m_osd_rollback_to_cluster_snap(g_conf->osd_rollback_to_cluster_snap),
   m_osd_use_stale_snap(g_conf->osd_use_stale_snap),
   m_filestore_queue_max_ops(g_conf->filestore_queue_max_ops),
@@ -763,7 +764,8 @@ int FileStore::open_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(),
+			      m_journal_dio, m_journal_aio);
     if (journal)
       journal->logger = logger;
   }

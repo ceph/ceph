@@ -1005,7 +1005,7 @@ libos_la_SOURCES = \
 	os/IndexManager.cc \
 	os/FlatIndex.cc
 libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libos_la_LIBADD = libglobal.la
+libos_la_LIBADD = libglobal.la -laio
 noinst_LTLIBRARIES += libos.la
 
 libosd_la_SOURCES = \

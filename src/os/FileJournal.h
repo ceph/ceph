@@ -25,6 +25,8 @@ using std::deque;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
+#include <libaio.h>
+
 class FileJournal : public Journal {
 public:
   /*
@@ -123,10 +125,32 @@ private:
   off64_t max_size;
   size_t block_size;
   bool is_bdev;
-  bool directio;
+  bool directio, aio;
   bool writing, must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
+
+  /// state associated with an in-flight aio request
+  struct aio_info {
+    struct iocb iocb;
+    bufferlist bl;
+    struct iovec *iov;
+    bool done;
+    uint64_t off, len;    ///< these are for debug only
+    uint64_t seq;         ///< seq number to complete on aio completion, if non-zero
+
+    aio_info(bufferlist& b, uint64_t o, uint64_t s)
+      : iov(NULL), done(false), off(o), len(b.length()), seq(s) {
+      bl.claim(b);
+    }
+    ~aio_info() {
+      delete[] iov;
+    }
+  };
+  io_context_t aio_ctx;
+  list<aio_info> aio_queue;
+  int aio_num, aio_bytes;
+  Cond write_finish_cond;
 
   uint64_t last_committed_seq;
 
@@ -203,6 +227,13 @@ private:
   int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
 
+  void write_finish_thread_entry();
+  void check_aio_completion();
+  void do_aio_write(bufferlist& bl);
+  int write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq);
+
+
+  void align_bl(off64_t pos, bufferlist& bl);
   int write_bl(off64_t& pos, bufferlist& bl);
   void wrap_read_bl(off64_t& pos, int64_t len, bufferlist& bl);
 
@@ -216,18 +247,29 @@ private:
     }
   } write_thread;
 
+  class WriteFinisher : public Thread {
+    FileJournal *journal;
+  public:
+    WriteFinisher(FileJournal *fj) : journal(fj) {}
+    void *entry() {
+      journal->write_finish_thread_entry();
+      return 0;
+    }
+  } write_finish_thread;
+
   off64_t get_top() {
     return ROUND_UP_TO(sizeof(header), block_size);
   }
 
  public:
-  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
+  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true) : 
     Journal(fsid, fin, sync_cond), fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
-    is_bdev(false),directio(dio),
+    is_bdev(false), directio(dio), aio(ai),
     writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
+    aio_num(0), aio_bytes(0),
     last_committed_seq(0), 
     full_state(FULL_NOTFULL),
     fd(-1),
@@ -235,7 +277,8 @@ private:
     plug_journal_completions(false),
     write_lock("FileJournal::write_lock"),
     write_stop(false),
-    write_thread(this) { }
+    write_thread(this),
+    write_finish_thread(this) { }
   ~FileJournal() {
     delete[] zero_buf;
   }

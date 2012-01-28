@@ -44,6 +44,11 @@ int FileJournal::_open(bool forwrite, bool create)
 {
   int flags, ret;
 
+  if (aio && !directio) {
+    derr << "FileJournal::_open: aio not supported without directio; disabling aio" << dendl;
+    aio = false;
+  }
+
   if (forwrite) {
     flags = O_RDWR;
     if (directio)
@@ -64,18 +69,17 @@ int FileJournal::_open(bool forwrite, bool create)
   fd = TEMP_FAILURE_RETRY(::open(fn.c_str(), flags, 0644));
   if (fd < 0) {
     int err = errno;
-    derr << "FileJournal::_open : unable to open journal: open() "
-	 << "failed: " << cpp_strerror(err) << dendl;
+    derr << "FileJournal::_open: unable to open journal: open() failed: "
+	 << cpp_strerror(err) << dendl;
     return -err;
   }
 
   struct stat st;
   ret = ::fstat(fd, &st);
   if (ret) {
-    int err = errno;
-    derr << "FileJournal::_open: unable to fstat journal: "
-         << cpp_strerror(err) << dendl;
-    return -err;
+    ret = errno;
+    derr << "FileJournal::_open: unable to fstat journal: " << cpp_strerror(ret) << dendl;
+    goto out_fd;
   }
 
   if (S_ISBLK(st.st_mode))
@@ -84,7 +88,15 @@ int FileJournal::_open(bool forwrite, bool create)
     ret = _open_file(st.st_size, st.st_blksize, create);
 
   if (ret)
-    return ret;
+    goto out_fd;
+
+  aio_ctx = 0;
+  ret = io_setup(128, &aio_ctx);
+  if (ret < 0) {
+    ret = errno;
+    derr << "FileJouranl::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+    goto out_fd;
+  }
 
   /* We really want max_size to be a multiple of block_size. */
   max_size -= max_size % block_size;
@@ -94,6 +106,10 @@ int FileJournal::_open(bool forwrite, bool create)
 	  << " bytes, block size " << block_size
 	  << " bytes, directio = " << directio << dendl;
   return 0;
+
+ out_fd:
+  TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
 }
 
 int FileJournal::_open_block_device()
@@ -550,6 +566,7 @@ void FileJournal::start_writer()
 {
   write_stop = false;
   write_thread.create();
+  write_finish_thread.create();
 }
 
 void FileJournal::stop_writer()
@@ -558,9 +575,11 @@ void FileJournal::stop_writer()
   {
     write_stop = true;
     write_cond.Signal();
+    write_finish_cond.Signal();
   } 
   write_lock.Unlock();
   write_thread.join();
+  write_finish_thread.join();
 }
 
 
@@ -832,7 +851,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   return 0;
 }
 
-int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
+void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
   if (directio && (!bl.is_page_aligned() ||
@@ -844,6 +863,11 @@ int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
     assert((bl.length() & ~CEPH_PAGE_MASK) == 0);
     assert((pos & ~CEPH_PAGE_MASK) == 0);
   }
+}
+
+int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
+{
+  align_bl(pos, bl);
 
   ::lseek64(fd, pos, SEEK_SET);
   int ret = bl.write_fd(fd);
@@ -958,6 +982,7 @@ void FileJournal::do_write(bufferlist& bl)
   write_lock.Lock();    
 
   writing = false;
+  write_empty_cond.Signal();
 
   // wrap if we hit the end of the journal
   if (pos == header.max_size)
@@ -1013,6 +1038,26 @@ void FileJournal::write_thread_entry()
       continue;
     }
     
+    if (aio) {
+      // should we back off to limit aios in flight?  try to do this
+      // adaptively so that we submit larger aios once we have lots of
+      // them in flight.
+      int exp = MIN(aio_num * 2, 24);
+      long unsigned min_new = 1ull << exp;
+      long unsigned cur = throttle_bytes.get_current();
+      dout(20) << "write_thread_entry aio throttle: aio num " << aio_num << " bytes " << aio_bytes
+	      << " ... exp " << exp << " min_new " << min_new
+	       << " ... pending " << cur << dendl;
+      if (cur < min_new) {
+	dout(20) << "write_thread_entry deferring until more aios complete: "
+		 << aio_num << " aios with " << aio_bytes << " bytes needs " << min_new
+		 << " bytes to start a new aio (currently " << cur << " pending)" << dendl;
+	write_cond.Wait(write_lock);
+	dout(20) << "write_thread_entry woke up" << dendl;
+	continue;
+      }
+    }
+
     uint64_t orig_ops = 0;
     uint64_t orig_bytes = 0;
 
@@ -1025,7 +1070,11 @@ void FileJournal::write_thread_entry()
       continue;
     }
     assert(r == 0);
-    do_write(bl);
+
+    if (aio)
+      do_aio_write(bl);
+    else
+      do_write(bl);
     
     put_throttle(orig_ops, orig_bytes);
   }
@@ -1034,6 +1083,240 @@ void FileJournal::write_thread_entry()
   dout(10) << "write_thread_entry finish" << dendl;
 }
 
+void FileJournal::do_aio_write(bufferlist& bl)
+{
+  // nothing to do?
+  if (bl.length() == 0 && !must_write_header) 
+    return;
+
+  buffer::ptr hbp;
+  if (must_write_header) {
+    must_write_header = false;
+    hbp = prepare_header();
+  }
+
+  if (!writing) {
+    writing = true;
+    write_finish_cond.Signal();
+  }
+
+  // entry
+  off64_t pos = write_pos;
+
+  dout(15) << "do_aio_write writing " << pos << "~" << bl.length() 
+	   << (hbp.length() ? " + header":"")
+	   << dendl;
+  
+  utime_t from = ceph_clock_now(g_ceph_context);
+
+  // split?
+  off64_t split = 0;
+  if (pos + bl.length() > header.max_size) {
+    bufferlist first, second;
+    split = header.max_size - pos;
+    first.substr_of(bl, 0, split);
+    second.substr_of(bl, split, bl.length() - split);
+    assert(first.length() + second.length() == bl.length());
+    dout(10) << "do_aio_write wrapping, first bit at " << pos << "~" << first.length() << dendl;
+
+    if (write_aio_bl(pos, first, 0)) {
+      derr << "FileJournal::do_aio_write: write_aio_bl(pos=" << pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
+    assert(pos == header.max_size);
+    if (hbp.length()) {
+      // be sneaky: include the header in the second fragment
+      second.push_front(hbp);
+      pos = 0;          // we included the header
+    } else
+      pos = get_top();  // no header, start after that
+    if (write_aio_bl(pos, second, writing_seq)) {
+      derr << "FileJournal::do_aio_write: write_aio_bl(pos=" << pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
+  } else {
+    // header too?
+    if (hbp.length()) {
+      bufferlist hbl;
+      hbl.push_back(hbp);
+      loff_t pos = 0;
+      if (write_aio_bl(pos, hbl, 0)) {
+	derr << "FileJournal::do_aio_write: write_aio_bl(header) failed" << dendl;
+	ceph_abort();
+      }
+    }
+
+    if (write_aio_bl(pos, bl, writing_seq)) {
+      derr << "FileJournal::do_aio_write: write_aio_bl(pos=" << pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
+  }
+
+  write_pos = pos;
+  if (write_pos == header.max_size)
+    write_pos = get_top();
+  assert(write_pos % header.alignment == 0);
+}
+
+/**
+ * write a buffer using aio
+ *
+ * @param seq seq to trigger when this aio completes.  if 0, do not update any state
+ * on completion.
+ */
+int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
+{
+  align_bl(pos, bl);
+
+  dout(20) << "write_aio_bl " << pos << "~" << bl.length() << " seq " << seq << dendl;
+  
+  aio_queue.push_back(aio_info(bl, pos, seq));
+  aio_info& aio = aio_queue.back();
+
+  aio.iov = new iovec[aio.bl.buffers().size()];
+  int n = 0;
+  for (std::list<buffer::ptr>::const_iterator p = aio.bl.buffers().begin(); 
+       p != aio.bl.buffers().end();
+       ++p, ++n) {
+    aio.iov[n].iov_base = (void *)p->c_str();
+    aio.iov[n].iov_len = p->length();
+  }
+  io_prep_pwritev(&aio.iocb, fd, aio.iov, n, pos);
+
+  dout(20) << "write_aio_bl .. " << aio.off << "~" << aio.len
+	   << " in " << n << dendl;
+
+  aio_num++;
+  aio_bytes += aio.len;
+
+  iocb *piocb = &aio.iocb;
+  int attempts = 10;
+  do {
+    int r = io_submit(aio_ctx, 1, &piocb);
+    if (r < 0) {
+      derr << "io_submit to " << aio.off << "~" << aio.len
+	   << " got " << cpp_strerror(r) << dendl;
+      if (r == -EAGAIN && attempts-- > 0) {
+	usleep(500);
+	continue;
+      }
+      assert(0 == "io_submit got unexpected error");
+    }
+  } while (false);
+  pos += aio.len;
+  return 0;
+}
+
+void FileJournal::write_finish_thread_entry()
+{
+  dout(10) << "write_finish_thread_entry enter" << dendl;
+  write_lock.Lock();
+  while (true) {
+    if (aio_queue.empty()) {
+      if (write_stop)
+	break;
+      dout(20) << "write_finish_thread_entry sleeping" << dendl;
+      write_finish_cond.Wait(write_lock);
+      continue;
+    }
+    
+    write_lock.Unlock();
+
+    while (true) {
+      dout(20) << "write_finish_thread_entry waiting for aio" << dendl;
+      io_event event;
+      int r = io_getevents(aio_ctx, 1, 1, &event, NULL);
+      if (r < 0) {
+	if (r == -EINTR) {
+	  dout(0) << "io_getevents got " << cpp_strerror(r) << dendl;
+	  write_lock.Lock();
+	  break;
+	}
+	derr << "io_getevents got " << cpp_strerror(r) << dendl;
+	assert(0 == "got unexpected error from io_getevents");
+      }
+      write_lock.Lock();
+
+      aio_info *ai = (aio_info *)event.obj;
+      if (event.res != ai->len) {
+	derr << "aio to " << ai->off << "~" << ai->len
+	     << " got " << cpp_strerror(event.res) << dendl;
+	assert(0 == "unexpected aio error");
+      }
+      dout(10) << "write_finish_thread_entry aio " << ai->off << "~" << ai->len << " done" << dendl;
+      ai->done = true;
+      break;
+    }
+
+    check_aio_completion();
+  }	 
+  write_lock.Unlock();
+  dout(10) << "write_finish_thread_entry exit" << dendl;
+}
+
+/**
+ * check aio_wait for completed aio, and update state appropriately.
+ */
+void FileJournal::check_aio_completion()
+{
+  assert(write_lock.is_locked());
+
+  bool completed_something = false;
+
+  dout(20) << "check_aio_completion" << dendl;
+
+  while (!aio_queue.empty()) {
+    list<aio_info>::iterator p = aio_queue.begin();
+    if (!p->done)
+      break;
+      
+    // complete
+    dout(20) << "check_aio_completion completed seq " << p->seq << " "
+	     << p->off << "~" << p->len << dendl;
+    if (p->seq) {
+      journaled_seq = p->seq;
+      
+      completed_something = true;
+    }
+
+    aio_num--;
+    aio_bytes -= p->len;
+
+    aio_queue.erase(p);
+  }
+
+  if (completed_something) {
+    // kick finisher?  
+    //  only if we haven't filled up recently!
+    if (full_state != FULL_NOTFULL) {
+      dout(10) << "check_aio_completion NOT queueing finisher seq " << journaled_seq
+	       << ", full_commit_seq|full_restart_seq" << dendl;
+    } else {
+      if (plug_journal_completions) {
+	dout(20) << "check_aio_completion NOT queueing finishers through seq " << journaled_seq
+		 << " due to completion plug" << dendl;
+      } else {
+	dout(20) << "check_aio_completion queueing finishers through seq " << journaled_seq << dendl;
+	queue_completions_thru(journaled_seq);
+      }
+    }
+
+    // maybe write queue was waiting for aio count to drop?
+    if (!writeq.empty())
+      write_cond.Signal();
+
+    // wake up flush?
+    if (aio_queue.empty()) {
+      writing = false;
+      write_empty_cond.Signal();
+      assert(aio_num == 0);
+      assert(aio_bytes == 0);
+    }
+  }
+}
 
 void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit)
 {

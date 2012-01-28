@@ -70,6 +70,7 @@ AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
 # Checks for libraries.
 ACX_PTHREAD
+AC_CHECK_LIB([aio], [io_submit], [true], AC_MSG_FAILURE([libaio not found]))
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 if test x"$linux" = x"yes"; then
@@ -298,6 +299,8 @@ AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 AC_HEADER_DIRENT
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
+
+AC_CHECK_HEADER([libaio.h])
 
 # spirit?
 AC_LANG([C++])
