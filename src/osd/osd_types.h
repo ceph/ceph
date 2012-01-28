@@ -505,6 +505,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 //PG_STATE_SCANNING (1<<14) .. deprecated.
 #define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
+#define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
 
 std::string pg_state_string(int state);
 
