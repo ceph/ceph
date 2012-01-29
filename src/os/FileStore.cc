@@ -1597,7 +1597,7 @@ int FileStore::mount()
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
 	
-	if (cp != curr_seq) {
+	if (curr_seq && cp != curr_seq) {
 	  if (!m_osd_use_stale_snap) { 
 	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
 	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
