@@ -48,7 +48,7 @@ private:
 public:
   const char *get_type_name() { return "HB"; }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(load, payload);
     ::encode(beat, payload);
     ::encode(import_map, payload);

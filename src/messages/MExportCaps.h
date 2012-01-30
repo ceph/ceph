@@ -36,7 +36,7 @@ public:
     o << "export_caps(" << ino << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(ino, payload);
     ::encode(cap_bl, payload);
     ::encode(client_map, payload);

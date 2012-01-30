@@ -38,7 +38,7 @@ public:
     out << "pg_trim(" << pgid << " to " << trim_to << " e" << epoch << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(pgid, payload);
     ::encode(trim_to, payload);

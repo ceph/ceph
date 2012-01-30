@@ -41,7 +41,7 @@ public:
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(r, payload);
     ::encode(rs, payload);
   }

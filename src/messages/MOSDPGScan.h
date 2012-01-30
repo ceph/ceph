@@ -47,7 +47,7 @@ public:
     ::decode(end, p);
   }
 
-  virtual void encode_payload(CephContext *cct, uint64_t features) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);

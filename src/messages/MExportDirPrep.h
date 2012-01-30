@@ -72,7 +72,7 @@ public:
     ::decode(bystanders, p);
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(basedir, payload);
     ::encode(bounds, payload);

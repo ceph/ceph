@@ -48,7 +48,7 @@ public:
       ::decode(is_failed, p);
     else is_failed = true;
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);

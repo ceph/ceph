@@ -32,7 +32,7 @@ public:
     out << "statfs_reply(" << header.tid << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(h, payload);
   }
   void decode_payload(CephContext *cct) {

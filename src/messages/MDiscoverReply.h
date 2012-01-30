@@ -199,7 +199,7 @@ public:
     if (header.version >= 2)
       ::decode(wanted_ino, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);

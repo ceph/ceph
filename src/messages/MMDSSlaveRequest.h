@@ -127,7 +127,7 @@ private:
   ~MMDSSlaveRequest() {}
 
 public:
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(reqid, payload);
     ::encode(attempt, payload);
     ::encode(op, payload);

@@ -53,7 +53,7 @@ public:
     slave_requests.push_back(reqid);
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(subtrees, payload);
     ::encode(ambiguous_imports, payload);
     ::encode(slave_requests, payload);

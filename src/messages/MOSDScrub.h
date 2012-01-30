@@ -50,7 +50,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(scrub_pgs, payload);
     ::encode(repair, payload);

@@ -108,7 +108,7 @@ public:
       ::decode(oloc, p);
   }
 
-  virtual void encode_payload(CephContext *cct, uint64_t features) {
+  virtual void encode_payload(uint64_t features) {
     header.version = 3;
 
     ::encode(map_epoch, payload);

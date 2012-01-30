@@ -46,7 +46,7 @@ public:
       << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(dest_mds, payload);
     ::encode(num_fwd, payload);
     ::encode(client_must_resend, payload);

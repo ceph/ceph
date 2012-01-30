@@ -30,7 +30,7 @@ class PaxosServiceMessage : public Message {
     ::decode(session_mon_tid, p);
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     assert(0);
     paxos_encode();
   }

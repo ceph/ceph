@@ -39,7 +39,7 @@ public:
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }
   
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(ino, payload);
     ::encode(caps, payload);
   }

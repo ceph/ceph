@@ -79,7 +79,7 @@ public:
     ::decode(epoch, p);
     ::decode(encoded, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0) {

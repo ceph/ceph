@@ -61,7 +61,7 @@ public:
     ::decode(op, p);
     ::decode(peer_stat, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(map_epoch, payload);
     ::encode(peer_as_of_epoch, payload);

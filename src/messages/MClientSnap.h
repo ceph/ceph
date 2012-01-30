@@ -43,7 +43,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     head.num_split_inos = split_inos.size();
     head.num_split_realms = split_realms.size();
     head.trace_len = bl.length();

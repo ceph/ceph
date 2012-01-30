@@ -81,7 +81,7 @@ public:
     ::decode(object_info, p);
     ::decode(lockdata, p);
   }
-  virtual void encode_payload(CephContext *cct, uint64_t features) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(asker, payload);
     ::encode(action, payload);
     ::encode(reqid, payload);

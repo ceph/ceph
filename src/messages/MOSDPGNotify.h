@@ -49,7 +49,7 @@ private:
 public:  
   const char *get_type_name() { return "PGnot"; }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(epoch, payload);
     ::encode(pg_list, payload);

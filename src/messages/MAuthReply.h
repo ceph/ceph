@@ -53,7 +53,7 @@ public:
     ::decode(result_bl, p);
     ::decode(result_msg, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(protocol, payload);
     ::encode(result, payload);
     ::encode(global_id, payload);

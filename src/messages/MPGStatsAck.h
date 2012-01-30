@@ -32,7 +32,7 @@ public:
     out << "pg_stats_ack(" << pg_stat.size() << " pgs tid " << get_tid() << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(pg_stat, payload);
   }
   void decode_payload(CephContext *cct) {

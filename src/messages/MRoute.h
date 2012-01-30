@@ -45,10 +45,10 @@ public:
     ::decode(dest, p);
     msg = decode_message(cct, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
-    encode_message(cct, msg, features, payload);
+    encode_message(msg, features, payload);
   }
 
   const char *get_type_name() { return "route"; }

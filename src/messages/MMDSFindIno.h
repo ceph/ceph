@@ -30,7 +30,7 @@ struct MMDSFindIno : public Message {
     out << "findino(" << tid << " " << ino << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(tid, payload);
     ::encode(ino, payload);
   }

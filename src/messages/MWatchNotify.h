@@ -45,7 +45,7 @@ public:
     if (msg_ver >= 1)
       ::decode(bl, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     uint8_t msg_ver = 1;
     ::encode(msg_ver, payload);
     ::encode(opcode, payload);

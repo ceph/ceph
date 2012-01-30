@@ -52,7 +52,7 @@ public:
 	<< " v" << version << ")";
   }
 
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(replyCode, payload);

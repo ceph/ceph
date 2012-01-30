@@ -41,7 +41,7 @@ public:
     ::decode(interval, p);
     ::decode(fsid, p);
   }
-  void encode_payload(CephContext *cct, uint64_t features) {
+  void encode_payload(uint64_t features) {
     ::encode(interval, payload);
     ::encode(fsid, payload);
   }
