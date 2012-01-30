@@ -41,7 +41,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(dirfrag, payload);
   }
 };

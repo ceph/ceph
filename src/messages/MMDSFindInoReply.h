@@ -30,7 +30,7 @@ struct MMDSFindInoReply : public Message {
     out << "findinoreply(" << tid << " " << path << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(tid, payload);
     ::encode(path, payload);
   }

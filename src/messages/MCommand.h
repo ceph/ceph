@@ -45,7 +45,7 @@ public:
     o << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(fsid, payload);
     ::encode(cmd, payload);
   }

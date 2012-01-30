@@ -45,7 +45,7 @@ public:
     else
       monmap_epoch = 0;
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(protocol, payload);
     ::encode(auth_payload, payload);

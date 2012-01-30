@@ -28,7 +28,7 @@ private:
 public:
   const char *get_type_name() { return "mon_getmap"; }
   
-  void encode_payload(CephContext *cct) { }
+  void encode_payload(CephContext *cct, uint64_t features) { }
   void decode_payload(CephContext *cct) { }
 };
 

@@ -59,7 +59,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
   }
-  void encode_payload(CephContext *cct) { 
+  void encode_payload(CephContext *cct, uint64_t features) { 
     ::encode(head, payload);
   }
 };

@@ -41,7 +41,7 @@ public:
     ::decode(head, p);
     ::decode_nohead(head.num, caps, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     head.num = caps.size();
     ::encode(head, payload);
     ::encode_nohead(caps, payload);

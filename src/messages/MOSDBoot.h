@@ -41,7 +41,7 @@ public:
     out << "osd_boot(osd." << sb.whoami << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     header.version = 2;
     paxos_encode();
     ::encode(sb, payload);

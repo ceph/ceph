@@ -37,7 +37,7 @@ public:
     o << "mon_get_version(what=" << what << " handle=" << handle << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(handle, payload);
     ::encode(what, payload);
   }

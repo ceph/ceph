@@ -433,13 +433,13 @@ public:
 
   // virtual bits
   virtual void decode_payload(CephContext *cct) = 0;
-  virtual void encode_payload(CephContext *cct) = 0;
+  virtual void encode_payload(CephContext *cct, uint64_t features) = 0;
   virtual const char *get_type_name() = 0;
   virtual void print(ostream& out) {
     out << get_type_name();
   }
 
-  void encode(CephContext *cct);
+  void encode(CephContext *cct, uint64_t features);
 };
 
 extern Message *decode_message(CephContext *cct, ceph_msg_header &header,
@@ -452,7 +452,7 @@ inline ostream& operator<<(ostream& out, Message& m) {
   return out;
 }
 
-extern void encode_message(CephContext *cct, Message *m, bufferlist& bl);
+extern void encode_message(CephContext *cct, Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
 
 #endif

@@ -36,7 +36,7 @@ public:
     o << "export_caps_ack(" << ino << ")";
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(ino, payload);
   }
   virtual void decode_payload(CephContext *cct) {

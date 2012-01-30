@@ -37,7 +37,7 @@ public:
     o << "export_finish(" << dirfrag << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(dirfrag, payload);
   }
   void decode_payload(CephContext *cct) {

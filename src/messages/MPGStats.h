@@ -39,7 +39,7 @@ public:
     out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(osd_stat, payload);

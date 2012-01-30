@@ -31,7 +31,7 @@ private:
 public:
   const char *get_type_name() { return "mon_map"; }
 
-  void encode_payload(CephContext *cct) { 
+  void encode_payload(CephContext *cct, uint64_t features) { 
     ::encode(monmapbl, payload);
   }
   void decode_payload(CephContext *cct) { 

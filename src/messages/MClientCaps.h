@@ -147,7 +147,7 @@ public:
     if (header.version >= 2)
       ::decode(flockbl, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
     ::encode(head, payload);

@@ -79,7 +79,7 @@ public:
       newest_map = 0;
     }
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(fsid, payload);
     header.version = 2;
     if (connection && (!connection->has_feature(CEPH_FEATURE_PGID64) ||

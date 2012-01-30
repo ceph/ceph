@@ -238,7 +238,7 @@ public:
     ::decode(snapbl, p);
     assert(p.end());
   }
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(extra_bl, payload);

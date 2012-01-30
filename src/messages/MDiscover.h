@@ -88,7 +88,7 @@ public:
     ::decode(want_base_dir, p);
     ::decode(want_xlocked, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(snapid, payload);

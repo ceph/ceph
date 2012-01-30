@@ -73,7 +73,7 @@ public:
     ::decode(h, p);
     ::decode(dname, p);
   }
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(h, payload);
     ::encode(dname, payload);
   }

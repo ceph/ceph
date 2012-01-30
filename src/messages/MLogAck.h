@@ -33,7 +33,7 @@ public:
     out << "log(last " << last << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(fsid, payload);
     ::encode(last, payload);
   }

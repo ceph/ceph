@@ -51,7 +51,7 @@ public:
     ::decode(is_primary, p);
     ::decode(bl, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(dn, payload);
     ::encode(is_primary, payload);

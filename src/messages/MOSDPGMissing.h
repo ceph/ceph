@@ -41,7 +41,7 @@ public:
     out << "pg_missing(" << info.pgid << " e" << epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(missing, payload);

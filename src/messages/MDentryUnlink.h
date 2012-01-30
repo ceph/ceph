@@ -47,7 +47,7 @@ public:
     ::decode(dn, p);
     ::decode(straybl, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(dn, payload);
     ::encode(straybl, payload);

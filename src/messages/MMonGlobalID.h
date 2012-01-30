@@ -34,7 +34,7 @@ public:
     paxos_decode(p);
     ::decode(old_max_id, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(old_max_id, payload);
   }

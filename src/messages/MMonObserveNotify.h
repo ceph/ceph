@@ -40,7 +40,7 @@ public:
     o << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(machine_id, payload);

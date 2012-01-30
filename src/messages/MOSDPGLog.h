@@ -52,7 +52,7 @@ public:
 	<< " query_epoch " << query_epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     header.version = 2;
     ::encode(epoch, payload);
     ::encode(info, payload);

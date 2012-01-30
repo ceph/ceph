@@ -97,6 +97,59 @@ public:
   //}
 };
 
+template<class T>
+class MessageDencoderImpl : public DencoderImpl<T> {
+  T m_object;
+  list<T> m_list;
+
+public:
+  MessageDencoderImpl() {}
+
+  string decode(bufferlist bl) {
+    bufferlist::iterator p = bl.begin();
+    try {
+      ::decode(m_object, p);
+    }
+    catch (buffer::error& e) {
+      return e.what();
+    }
+    if (!p.end())
+      return "stray data at end of buffer";
+    return string();
+  }
+
+  void encode(bufferlist& out, uint64_t features) {
+    out.clear();
+    ::encode(m_object, out, features);
+  }
+
+  void dump(Formatter *f) {
+    m_object.dump(f);
+  }
+
+  void generate() {
+    T::generate_test_instances(m_list);
+  }
+  int num_generated() {
+    return m_list.size();
+  }
+  string select_generated(unsigned i) {
+    // allow 0- or 1-based (by wrapping)
+    if (i == 0)
+      i = m_list.size();
+    if (i > m_list.size())
+      return "invalid id for generated object";
+    typename list<T>::iterator p = m_list.begin();
+    for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
+    m_object = *p;
+    return string();
+  }
+
+  //void print(ostream& out) {
+  //out << m_object << std::endl;
+  //}
+};
+
 
 
 int main(int argc, const char **argv)

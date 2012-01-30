@@ -46,11 +46,11 @@ private:
   }
 
 public:
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(tid, payload);
     ::encode(client, payload);
     ::encode(client_caps, payload);
-    encode_message(cct, msg, payload);
+    encode_message(cct, msg, features, payload);
   }
 
   void decode_payload(CephContext *cct) {

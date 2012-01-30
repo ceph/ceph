@@ -39,7 +39,7 @@ public:
     o << "export_notify_ack(" << dirfrag << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(dirfrag, payload);
   }
   void decode_payload(CephContext *cct) {

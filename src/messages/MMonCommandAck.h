@@ -36,7 +36,7 @@ public:
     o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(r, payload);
     ::encode(rs, payload);

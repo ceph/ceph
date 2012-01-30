@@ -184,7 +184,7 @@ public:
   }
 
   // marshalling
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 

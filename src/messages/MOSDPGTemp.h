@@ -30,7 +30,7 @@ private:
   ~MOSDPGTemp() {}
 
 public:
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(map_epoch, payload);
     ::encode(pg_temp, payload);

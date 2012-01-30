@@ -142,11 +142,11 @@ using namespace std;
 #define DEBUGLVL  10    // debug level of output
 
 
-void Message::encode(CephContext *cct)
+void Message::encode(CephContext *cct, uint64_t features)
 {
   // encode and copy out of *m
   if (empty_payload())
-    encode_payload(cct);
+    encode_payload(cct, features);
   calc_front_crc();
   
   if (!cct->_conf->ms_nocrc)
@@ -572,10 +572,10 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 }
 
 
-void encode_message(CephContext *cct, Message *msg, bufferlist& payload)
+void encode_message(CephContext *cct, Message *msg, uint64_t features, bufferlist& payload)
 {
   bufferlist front, middle, data;
-  msg->encode(cct);
+  msg->encode(cct, features);
   ::encode(msg->get_header(), payload);
   ::encode(msg->get_footer(), payload);
   ::encode(msg->get_payload(), payload);

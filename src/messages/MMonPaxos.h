@@ -87,7 +87,7 @@ public:
     out <<  ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     if (connection->has_feature(CEPH_FEATURE_MONCLOCKCHECK))
       header.version = 1;
     ::encode(epoch, payload);

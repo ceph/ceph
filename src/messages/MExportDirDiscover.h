@@ -57,7 +57,7 @@ public:
     ::decode(path, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(from, payload);
     ::encode(dirfrag, payload);
     ::encode(path, payload);

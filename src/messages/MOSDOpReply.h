@@ -108,7 +108,7 @@ private:
   ~MOSDOpReply() {}
 
 public:
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
 
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 

@@ -54,7 +54,7 @@ public:
     ::decode(bl, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(table, payload);
     ::encode(op, payload);
     ::encode(reqid, payload);

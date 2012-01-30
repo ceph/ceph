@@ -54,7 +54,7 @@ public:
 	<< " v" << version << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     header.version = 4;
     paxos_encode();
     ::encode(fsid, payload);

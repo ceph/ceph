@@ -149,7 +149,7 @@ public:
     ::decode_nohead(head.num_releases, releases, p);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     head.num_releases = releases.size();
     ::encode(head, payload);
     ::encode(path, payload);

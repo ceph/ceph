@@ -48,7 +48,7 @@ public:
     ::decode(targets, p);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(global_id, payload);
     ::encode(targets, payload);

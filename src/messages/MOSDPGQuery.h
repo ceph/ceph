@@ -50,7 +50,7 @@ public:
     out << " epoch " << epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(epoch, payload);
     ::encode(pg_list, payload);
   }

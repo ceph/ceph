@@ -68,7 +68,7 @@ public:
       ::decode(what, p);
     }
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     if (get_connection()->has_feature(CEPH_FEATURE_SUBSCRIBE2)) {
       header.version = 2;
       ::encode(what, payload);

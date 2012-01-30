@@ -39,7 +39,7 @@ public:
     out << "getpoolstatsreply(" << get_tid() << " v" << version <<  ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool_stats, payload);

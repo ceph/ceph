@@ -1752,7 +1752,7 @@ void SimpleMessenger::Pipe::writer()
 	m->set_connection(connection_state->get());
 
 	// encode and copy out of *m
-	m->encode(msgr->cct);
+	m->encode(msgr->cct, connection_state->get_features());
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);

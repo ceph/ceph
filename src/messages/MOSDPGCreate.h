@@ -54,7 +54,7 @@ private:
 public:  
   const char *get_type_name() { return "pg_create"; }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
