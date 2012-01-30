@@ -71,6 +71,16 @@ public:
     return _heartbeat_map;
   }
 
+  /**
+   * Get the admin socket associated with this CephContext.
+   *
+   * Currently there is always an admin socket object,
+   * so this will never return NULL.
+   *
+   * @return the admin socket
+   */
+  AdminSocket *get_admin_socket();
+
 private:
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
@@ -85,7 +95,7 @@ private:
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
 
-  /* The collection of profiling loggers associated with this context */
+  /* The admin socket associated with this context */
   AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */

@@ -183,6 +183,8 @@ void coll_t::decode(bufferlist::iterator& bl)
 std::string pg_state_string(int state)
 {
   ostringstream oss;
+  if (state & PG_STATE_STALE)
+    oss << "stale+";
   if (state & PG_STATE_CREATING)
     oss << "creating+";
   if (state & PG_STATE_ACTIVE)

@@ -82,7 +82,7 @@ static void handle_shutdown_signal(int signum)
   dout_emergency(buf);
   pidfile_remove();
   if (signum == SIGTERM)
-    exit(0);
+    _exit(0);
   else
     reraise_fatal(signum);
 }

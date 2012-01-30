@@ -199,6 +199,16 @@ void Objecter::init()
     cct->get_perfcounters_collection()->add(logger);
   }
 
+  m_request_state_hook = new RequestStateHook(this);
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  int ret = admin_socket->register_command("objecter_requests",
+					   m_request_state_hook,
+					   "show in-progress osd requests");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+
   schedule_tick();
   maybe_request_map();
 }
@@ -214,6 +224,13 @@ void Objecter::shutdown()
   if (tick_event) {
     timer.cancel_event(tick_event);
     tick_event = NULL;
+  }
+
+  if (m_request_state_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("objecter_requests");
+    delete m_request_state_hook;
+    m_request_state_hook = NULL;
   }
 
   if (logger) {
@@ -806,6 +823,10 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
 {
   assert(client_lock.is_locked());
 
+  assert(op->ops.size() == op->out_bl.size());
+  assert(op->ops.size() == op->out_rval.size());
+  assert(op->ops.size() == op->out_handler.size());
+
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
@@ -1173,29 +1194,32 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // per-op result demuxing
   vector<OSDOp> out_ops;
   m->claim_ops(out_ops);
-  unsigned i = 0;
-  for (vector<bufferlist*>::iterator p = op->out_bl.begin();
-       p != op->out_bl.end();
-       ++p, ++i) {
-    ldout(cct, 10) << " op " << i << " rval " << out_ops[i].rval
-		   << " len " << out_ops[i].outdata.length() << dendl;
-    if (*p)
-      **p = out_ops[i].outdata;
-  }
-  i = 0;
-  for (vector<int*>::iterator p = op->out_rval.begin();
-       p != op->out_rval.end();
-       ++p, ++i)
-    if (*p)
-      **p = out_ops[i].rval;
-  i = 0;
-  for (vector<Context*>::iterator p = op->out_handler.begin();
-       p != op->out_handler.end();
-       ++p, ++i)
-    if (*p) {
-      ldout(cct, 10) << " op " << i << " handler " << *p << dendl;
-      (*p)->complete(out_ops[i].rval);
+  
+  if (out_ops.size() != op->ops.size())
+    ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
+		  << " != request ops " << op->ops
+		  << " from " << m->get_source_inst() << dendl;
+
+  vector<bufferlist*>::iterator pb = op->out_bl.begin();
+  vector<int*>::iterator pr = op->out_rval.begin();
+  vector<Context*>::iterator ph = op->out_handler.begin();
+  assert(op->out_bl.size() == op->out_rval.size());
+  assert(op->out_bl.size() == op->out_handler.size());
+  vector<OSDOp>::iterator p = out_ops.begin();
+  for (unsigned i = 0;
+       p != out_ops.end() && pb != op->out_bl.end();
+       ++i, ++p, ++pb, ++pr, ++ph) {
+    ldout(cct, 10) << " op " << i << " rval " << p->rval
+		   << " len " << p->outdata.length() << dendl;
+    if (*pb)
+      **pb = p->outdata;
+    if (*pr)
+      **pr = p->rval;
+    if (*ph) {
+      ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
+      (*ph)->complete(p->rval);
     }
+  }
 
   // ack|commit -> ack
   if (op->onack) {
@@ -1838,3 +1862,145 @@ void Objecter::dump_active()
   }
 }
 
+void Objecter::dump_requests(Formatter& fmt) const
+{
+  assert(client_lock.is_locked());
+
+  fmt.open_object_section("requests");
+  dump_ops(fmt);
+  dump_linger_ops(fmt);
+  dump_pool_ops(fmt);
+  dump_pool_stat_ops(fmt);
+  dump_statfs_ops(fmt);
+  fmt.close_section(); // requests object
+}
+
+void Objecter::dump_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("ops");
+  for (hash_map<tid_t,Op*>::const_iterator p = ops.begin();
+       p != ops.end();
+       ++p) {
+    Op *op = p->second;
+    fmt.open_object_section("op");
+    fmt.dump_unsigned("tid", op->tid);
+    fmt.dump_stream("pg") << op->pgid;
+    fmt.dump_int("osd", op->session ? op->session->osd : -1);
+    fmt.dump_stream("last_sent") << op->stamp;
+    fmt.dump_int("attempts", op->attempts);
+    fmt.dump_stream("object_id") << op->oid;
+    fmt.dump_stream("object_locator") << op->oloc;
+    fmt.dump_stream("snapid") << op->snapid;
+    fmt.dump_stream("snap_context") << op->snapc;
+    fmt.dump_stream("mtime") << op->mtime;
+
+    fmt.open_array_section("osd_ops");
+    for (vector<OSDOp>::const_iterator it = op->ops.begin();
+	 it != op->ops.end();
+	 ++it) {
+      fmt.dump_stream("osd_op") << *it;
+    }
+    fmt.close_section(); // osd_ops array
+
+    fmt.close_section(); // op object
+  }
+  fmt.close_section(); // ops array
+}
+
+void Objecter::dump_linger_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("linger_ops");
+  for (map<uint64_t, LingerOp*>::const_iterator p = linger_ops.begin();
+       p != linger_ops.end();
+       ++p) {
+    LingerOp *op = p->second;
+    fmt.open_object_section("linger_op");
+    fmt.dump_unsigned("linger_id", op->linger_id);
+    fmt.dump_stream("pg") << op->pgid;
+    fmt.dump_int("osd", op->session ? op->session->osd : -1);
+    fmt.dump_stream("object_id") << op->oid;
+    fmt.dump_stream("object_locator") << op->oloc;
+    fmt.dump_stream("snapid") << op->snap;
+    fmt.dump_stream("registering") << op->snap;
+    fmt.dump_stream("registered") << op->snap;
+    fmt.close_section(); // linger_op object
+  }
+  fmt.close_section(); // linger_ops array
+}
+
+void Objecter::dump_pool_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("pool_ops");
+  for (map<tid_t, PoolOp*>::const_iterator p = pool_ops.begin();
+       p != pool_ops.end();
+       ++p) {
+    PoolOp *op = p->second;
+    fmt.open_object_section("pool_op");
+    fmt.dump_unsigned("tid", op->tid);
+    fmt.dump_int("pool", op->pool);
+    fmt.dump_string("name", op->name);
+    fmt.dump_int("operation_type", op->pool_op);
+    fmt.dump_unsigned("auid", op->auid);
+    fmt.dump_unsigned("crush_rule", op->crush_rule);
+    fmt.dump_stream("snapid") << op->snapid;
+    fmt.dump_stream("last_sent") << op->last_submit;
+    fmt.close_section(); // pool_op object
+  }
+  fmt.close_section(); // pool_ops array
+}
+
+void Objecter::dump_pool_stat_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("pool_stat_ops");
+  for (map<tid_t, PoolStatOp*>::const_iterator p = poolstat_ops.begin();
+       p != poolstat_ops.end();
+       ++p) {
+    PoolStatOp *op = p->second;
+    fmt.open_object_section("pool_stat_op");
+    fmt.dump_unsigned("tid", op->tid);
+    fmt.dump_stream("last_sent") << op->last_submit;
+
+    fmt.open_array_section("pools");
+    for (list<string>::const_iterator it = op->pools.begin();
+	 it != op->pools.end();
+	 ++it) {
+      fmt.dump_string("pool", *it);
+    }
+    fmt.close_section(); // pool_op object
+
+    fmt.close_section(); // pool_stat_op object
+  }
+  fmt.close_section(); // pool_stat_ops array
+}
+
+void Objecter::dump_statfs_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("statfs_ops");
+  for (map<tid_t, StatfsOp*>::const_iterator p = statfs_ops.begin();
+       p != statfs_ops.end();
+       ++p) {
+    StatfsOp *op = p->second;
+    fmt.open_object_section("statfs_op");
+    fmt.dump_unsigned("tid", op->tid);
+    fmt.dump_stream("last_sent") << op->last_submit;
+    fmt.close_section(); // pool_stat_op object
+  }
+  fmt.close_section(); // pool_stat_ops array
+}
+
+Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
+  m_objecter(objecter)
+{
+}
+
+bool Objecter::RequestStateHook::call(std::string command, bufferlist& out)
+{
+  stringstream ss;
+  JSONFormatter formatter(true);
+  m_objecter->client_lock.Lock();
+  m_objecter->dump_requests(formatter);
+  m_objecter->client_lock.Unlock();
+  formatter.flush(ss);
+  out.append(ss);
+  return true;
+}

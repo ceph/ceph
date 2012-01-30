@@ -3396,7 +3396,7 @@ void Client::flush_cap_releases()
   for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
-    if (p->second->release) {
+    if (p->second->release && mdsmap->is_up(p->first)) {
       messenger->send_message(p->second->release, mdsmap->get_inst(p->first));
       p->second->release = 0;
     }

@@ -22,6 +22,7 @@
 #include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"
 
+#include "common/admin_socket.h"
 #include "common/Timer.h"
 
 #include <list>
@@ -424,6 +425,15 @@ class Objecter {
   void schedule_tick();
   void tick();
 
+  class RequestStateHook : public AdminSocketHook {
+    Objecter *m_objecter;
+  public:
+    RequestStateHook(Objecter *objecter);
+    bool call(std::string command, bufferlist& out);
+  };
+
+  RequestStateHook *m_request_state_hook;
+
 public:
   /*** track pending operations ***/
   // read
@@ -481,6 +491,16 @@ public:
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL) {
       ops.swap(op);
+      
+      /* initialize out_* to match op vector */
+      out_bl.resize(ops.size());
+      out_rval.resize(ops.size());
+      out_handler.resize(ops.size());
+      for (unsigned i = 0; i < ops.size(); i++) {
+	out_bl[i] = NULL;
+	out_handler[i] = NULL;
+	out_rval[i] = NULL;
+      }
 
       if (oloc.key == o)
 	oloc.key.clear();
@@ -764,10 +784,13 @@ public:
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
     logger(NULL), tick_event(NULL),
+    m_request_state_hook(NULL),
     num_homeless_ops(0),
     op_throttler(cct->_conf->objecter_inflight_op_bytes)
   { }
   ~Objecter() {
+    assert(!tick_event);
+    assert(!m_request_state_hook);
     assert(!logger);
   }
 
@@ -803,7 +826,17 @@ private:
   bool is_active() {
     return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
+
+  /**
+   * Output in-flight requests
+   */
   void dump_active();
+  void dump_requests(Formatter& fmt) const;
+  void dump_ops(Formatter& fmt) const;
+  void dump_linger_ops(Formatter& fmt) const;
+  void dump_pool_ops(Formatter& fmt) const;
+  void dump_pool_stat_ops(Formatter& fmt) const;
+  void dump_statfs_ops(Formatter& fmt) const;
 
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
@@ -851,7 +884,16 @@ private:
                eversion_t *objver);
   void unregister_linger(uint64_t linger_id);
 
-
+  /**
+   * set up initial ops in the op vector, and allocate a final op slot.
+   *
+   * The caller is responsible for filling in the final op.
+   *
+   * @param ops op vector
+   * @param ops_count number of initial ops
+   * @param extra_ops pointer to [array of] initial op[s]
+   * @return index of final op (for caller to fill in)
+   */
   int init_ops(vector<OSDOp>& ops, int ops_count, ObjectOperation *extra_ops) {
     int i;
 

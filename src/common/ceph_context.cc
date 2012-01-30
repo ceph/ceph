@@ -231,4 +231,7 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
   return _perf_counters_collection;
 }
 
-
+AdminSocket *CephContext::get_admin_socket()
+{
+  return _admin_socket;
+}
