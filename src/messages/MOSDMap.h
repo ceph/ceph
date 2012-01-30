@@ -82,8 +82,8 @@ public:
   void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(fsid, payload);
     header.version = 2;
-    if (connection && (!connection->has_feature(CEPH_FEATURE_PGID64) ||
-		       !connection->has_feature(CEPH_FEATURE_PGPOOL3))) {
+    if ((features & CEPH_FEATURE_PGID64) == 0 ||
+	(features & CEPH_FEATURE_PGPOOL3) == 0) {
       // reencode maps using old format
       //
       // FIXME: this can probably be done more efficiently higher up
@@ -101,9 +101,9 @@ public:
 	  OSDMap m;
 	  m.decode(inc.fullmap);
 	  inc.fullmap.clear();
-	  m.encode(inc.fullmap, connection->get_features());
+	  m.encode(inc.fullmap, features);
 	}
-	inc.encode(p->second, connection->get_features());
+	inc.encode(p->second, features);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
@@ -111,7 +111,7 @@ public:
 	OSDMap m;
 	m.decode(p->second);
 	p->second.clear();
-	m.encode(p->second, connection->get_features());
+	m.encode(p->second, features);
       }
       header.version = 1;
     }

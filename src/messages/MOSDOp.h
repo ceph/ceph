@@ -188,7 +188,7 @@ public:
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 
-    if (!connection->has_feature(CEPH_FEATURE_OBJECTLOCATOR)) {
+    if ((features & CEPH_FEATURE_OBJECTLOCATOR) == 0) {
       // here is the old structure we are encoding to: //
 #if 0
 struct ceph_osd_request_head {

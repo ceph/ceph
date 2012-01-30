@@ -49,8 +49,8 @@ public:
     realms.push_back(r);
   }
 
-    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
   void encode_payload(CephContext *cct, uint64_t features) {
+    if (features & CEPH_FEATURE_FLOCK) {
       // new protocol
       header.version = 2;
       ::encode(caps, data);

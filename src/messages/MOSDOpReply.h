@@ -112,7 +112,7 @@ public:
 
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 
-    if (!connection->has_feature(CEPH_FEATURE_PGID64)) {
+    if ((features & CEPH_FEATURE_PGID64) == 0) {
       ceph_osd_reply_head head;
       memset(&head, 0, sizeof(head));
       head.layout.ol_pgid = pgid.get_old_pg().v;

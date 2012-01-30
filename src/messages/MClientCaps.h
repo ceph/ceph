@@ -156,7 +156,7 @@ public:
     middle = xattrbl;
 
     // conditionally include flock metadata
-    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
+    if (features & CEPH_FEATURE_FLOCK) {
       header.version = 2;
       ::encode(flockbl, payload);
     }

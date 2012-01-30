@@ -82,7 +82,7 @@ public:
   void encode_payload(CephContext *cct, uint64_t features) {
     ::encode(fsid, payload);
     ::encode(epoch, payload);
-    if (connection && !connection->has_feature(CEPH_FEATURE_PGID64)) {
+    if ((features & CEPH_FEATURE_PGID64) == 0) {
       // reencode for old clients.
       MDSMap m(cct);
       m.decode(encoded);
