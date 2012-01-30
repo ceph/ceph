@@ -61,14 +61,13 @@ class MMonPaxos : public Message {
   map<version_t,bufferlist> values;
 
   MMonPaxos() : Message(MSG_MON_PAXOS) {}
-  MMonPaxos(epoch_t e, int o, int mid) : 
+  MMonPaxos(epoch_t e, int o, int mid, utime_t now) : 
     Message(MSG_MON_PAXOS),
     epoch(e),
     op(o), machine_id(mid),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
-    latest_version(0) {
-    sent_timestamp = ceph_clock_now(NULL);
-  }
+    sent_timestamp(now),
+    latest_version(0) { }
 
 private:
   ~MMonPaxos() {}
