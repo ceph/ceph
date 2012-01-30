@@ -38,7 +38,7 @@ public:
   bool if_osd_failed() { return is_failed; }
   epoch_t get_epoch() { return epoch; }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

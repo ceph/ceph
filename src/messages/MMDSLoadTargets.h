@@ -41,7 +41,7 @@ public:
     o << "mds_load_targets(" << global_id << " " << targets << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(global_id, p);

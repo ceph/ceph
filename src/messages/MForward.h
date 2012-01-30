@@ -53,12 +53,12 @@ public:
     encode_message(msg, features, payload);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(client, p);
     ::decode(client_caps, p);
-    msg = (PaxosServiceMessage *)decode_message(cct, p);
+    msg = (PaxosServiceMessage *)decode_message(NULL, p);
   }
 
   const char *get_type_name() { return "forward"; }

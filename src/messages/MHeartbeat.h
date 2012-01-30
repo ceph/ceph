@@ -53,7 +53,7 @@ public:
     ::encode(beat, payload);
     ::encode(import_map, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     utime_t now(ceph_clock_now(NULL));
     ::decode(load, now, p);

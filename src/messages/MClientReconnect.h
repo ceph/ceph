@@ -63,7 +63,7 @@ public:
     }
     ::encode_nohead(realms, data);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = data.begin();
     if (header.version >= 2) {
       // new protocol

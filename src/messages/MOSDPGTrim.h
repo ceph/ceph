@@ -43,7 +43,7 @@ public:
     ::encode(pgid, payload);
     ::encode(trim_to, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pgid, p);

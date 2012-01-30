@@ -39,7 +39,7 @@ public:
   virtual void encode_payload(uint64_t features) {
     ::encode(ino, payload);
   }
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
   }

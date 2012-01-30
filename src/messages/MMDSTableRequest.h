@@ -46,7 +46,7 @@ public:
     o << ")";
   }
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(table, p);
     ::decode(op, p);

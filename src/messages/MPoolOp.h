@@ -67,7 +67,7 @@ public:
     ::encode(pad, payload);  /* for v3->v4 encoding change */
     ::encode(crush_rule, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

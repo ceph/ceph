@@ -41,7 +41,7 @@ public:
     o << "dentry_unlink(" << dirfrag << " " << dn << ")";
   }
   
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(dn, p);

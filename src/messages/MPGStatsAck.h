@@ -35,7 +35,7 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(pg_stat, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(pg_stat, p);
   }

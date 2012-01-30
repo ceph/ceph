@@ -143,7 +143,7 @@ public:
     ::encode(srci_replica, payload);
     ::encode(stray, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(reqid, p);
     ::decode(attempt, p);

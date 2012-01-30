@@ -36,7 +36,7 @@ public:
     out << "client_cap_release(" << head.num << ")";
   }
   
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.num, caps, p);

@@ -34,7 +34,7 @@ struct MMDSFindIno : public Message {
     ::encode(tid, payload);
     ::encode(ino, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(ino, p);

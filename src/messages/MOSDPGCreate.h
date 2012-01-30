@@ -58,7 +58,7 @@ public:
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(mkpg, p);

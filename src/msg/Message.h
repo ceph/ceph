@@ -432,7 +432,7 @@ public:
   }
 
   // virtual bits
-  virtual void decode_payload(CephContext *cct) = 0;
+  virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
   virtual const char *get_type_name() = 0;
   virtual void print(ostream& out) {

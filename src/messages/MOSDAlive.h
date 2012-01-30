@@ -33,7 +33,7 @@ public:
     paxos_encode();
     ::encode(want, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(want, p);

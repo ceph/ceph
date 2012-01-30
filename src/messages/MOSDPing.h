@@ -53,7 +53,7 @@ private:
   ~MOSDPing() {}
 
 public:
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(map_epoch, p);

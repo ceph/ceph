@@ -58,7 +58,7 @@ public:
     ::encode(ambiguous_imports, payload);
     ::encode(slave_requests, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(subtrees, p);
     ::decode(ambiguous_imports, p);

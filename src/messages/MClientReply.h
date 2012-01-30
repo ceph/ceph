@@ -230,7 +230,7 @@ public:
   }
 
   // serialization
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(trace_bl, p);

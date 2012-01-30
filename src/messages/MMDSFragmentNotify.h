@@ -51,7 +51,7 @@ public:
     ::encode(bits, payload);
     ::encode(basebl, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(basefrag, p);

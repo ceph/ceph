@@ -34,7 +34,7 @@ private:
   ~MWatchNotify() {}
 
 public:
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     uint8_t msg_ver;
     bufferlist::iterator p = payload.begin();
     ::decode(msg_ver, p);

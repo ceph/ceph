@@ -56,7 +56,7 @@ public:
     ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     assert(header.version == 2);
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);

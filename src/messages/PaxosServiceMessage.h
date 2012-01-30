@@ -35,7 +35,7 @@ class PaxosServiceMessage : public Message {
     paxos_encode();
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     assert(0);
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);

@@ -64,7 +64,7 @@ public:
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version >= 2)
       ::decode(fsid, p);

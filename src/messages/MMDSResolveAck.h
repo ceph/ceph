@@ -49,7 +49,7 @@ public:
     ::encode(commit, payload);
     ::encode(abort, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(commit, p);
     ::decode(abort, p);

@@ -72,7 +72,7 @@ public:
     this->lockdata = lockdata;
   }
   
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(asker, p);
     ::decode(action, p);

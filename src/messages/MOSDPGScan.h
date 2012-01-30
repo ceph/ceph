@@ -37,7 +37,7 @@ public:
   pg_t pgid;
   hobject_t begin, end;
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);

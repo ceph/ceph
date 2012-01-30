@@ -35,7 +35,7 @@ public:
     ::encode(map_epoch, payload);
     ::encode(pg_temp, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(map_epoch, p);

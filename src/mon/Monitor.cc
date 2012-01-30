@@ -1099,7 +1099,7 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
 
   for (int i=0; i<(int)monmap->size(); i++) {
     if (i != rank)
-      messenger->send_message(new MRoute(cct, bl, to), monmap->get_inst(i));
+      messenger->send_message(new MRoute(bl, to), monmap->get_inst(i));
   }
 }
 

@@ -45,7 +45,7 @@ public:
     ::encode(r, payload);
     ::encode(rs, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(r, p);
     ::decode(rs, p);

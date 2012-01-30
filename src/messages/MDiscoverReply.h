@@ -180,7 +180,7 @@ public:
 
 
   // ...
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);

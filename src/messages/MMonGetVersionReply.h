@@ -43,7 +43,7 @@ public:
     ::encode(oldest_version, payload);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(handle, p);
     ::decode(version, p);

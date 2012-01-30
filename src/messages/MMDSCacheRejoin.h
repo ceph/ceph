@@ -288,7 +288,7 @@ public:
     ::encode(authpinned_dentries, payload);
     ::encode(xlocked_dentries, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(strong_inodes, p);

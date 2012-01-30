@@ -69,7 +69,7 @@ public:
     realms[df] = r;
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(from, p);
     ::decode(realms, p);

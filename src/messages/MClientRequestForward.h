@@ -52,7 +52,7 @@ public:
     ::encode(client_must_resend, payload);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dest_mds, p);
     ::decode(num_fwd, p);

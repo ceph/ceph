@@ -47,7 +47,7 @@ public:
     o << "mon_subscribe(" << what << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;

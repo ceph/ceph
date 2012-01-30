@@ -268,7 +268,7 @@ struct ceph_osd_request_head {
     }
   }
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
 
     if (header.version < 2) {

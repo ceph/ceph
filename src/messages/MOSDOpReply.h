@@ -146,7 +146,7 @@ public:
 	::encode(ops[i].rval, payload);
     }
   }
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       ceph_osd_reply_head head;

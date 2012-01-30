@@ -66,7 +66,7 @@ public:
     ::encode(new_auth, payload);
     ::encode(bounds, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base, p);
     ::decode(ack, p);

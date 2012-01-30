@@ -40,7 +40,7 @@ public:
   hobject_t last_backfill;
   object_stat_collection_t stats;
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
