@@ -1328,7 +1328,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
-        eversion_t plu = pi.last_update;
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              p++)
