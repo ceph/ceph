@@ -18,3 +18,7 @@ TYPE(watch_info_t)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
+
+// --- messages ---
+#include "messages/MPGStats.h"
+MESSAGE(MPGStats)

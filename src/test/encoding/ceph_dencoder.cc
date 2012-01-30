@@ -6,10 +6,13 @@
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "msg/Message.h"
 
 #define TYPE(t)
+#define MESSAGE(t)
 #include "types.h"
 #undef TYPE
+#undef MESSAGE
 
 void usage(ostream &out)
 {
@@ -98,17 +101,28 @@ public:
 };
 
 template<class T>
-class MessageDencoderImpl : public DencoderImpl<T> {
-  T m_object;
-  list<T> m_list;
+class MessageDencoderImpl : public Dencoder {
+  T *m_object;
+  list<T*> m_list;
 
 public:
-  MessageDencoderImpl() {}
+  MessageDencoderImpl() {
+    m_object = new T;
+  }
+  ~MessageDencoderImpl() {
+    m_object->put();
+  }
 
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(m_object, p);
+      Message *n = decode_message(NULL, p);
+      if (!n)
+	throw std::runtime_error("failed to decode");
+      if (n->get_type() != m_object->get_type())
+	throw std::runtime_error("decoded incorrect type message");
+      m_object->put();
+      m_object = (T *)n;
     }
     catch (buffer::error& e) {
       return e.what();
@@ -120,15 +134,15 @@ public:
 
   void encode(bufferlist& out, uint64_t features) {
     out.clear();
-    ::encode(m_object, out, features);
+    encode_message(m_object, features, out);
   }
 
   void dump(Formatter *f) {
-    m_object.dump(f);
+    m_object->dump(f);
   }
 
   void generate() {
-    T::generate_test_instances(m_list);
+    //T::generate_test_instances(m_list);
   }
   int num_generated() {
     return m_list.size();
@@ -139,8 +153,9 @@ public:
       i = m_list.size();
     if (i > m_list.size())
       return "invalid id for generated object";
-    typename list<T>::iterator p = m_list.begin();
+    typename list<T*>::iterator p = m_list.begin();
     for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
+    m_object->put();
     m_object = *p;
     return string();
   }
@@ -160,6 +175,7 @@ int main(int argc, const char **argv)
 #define T_STR(x) #x
 #define T_STRINGIFY(x) T_STR(x)
 #define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImpl<t>;
+#define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
 #undef T_STR
