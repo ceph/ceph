@@ -158,32 +158,38 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 			bufferlist& front, bufferlist& middle, bufferlist& data)
 {
   // verify crc
-  if (!cct->_conf->ms_nocrc) {
+  if (!cct || !cct->_conf->ms_nocrc) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
     if (front_crc != footer.front_crc) {
-      ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
-      ldout(cct, 20) << " ";
-      front.hexdump(*_dout);
-      *_dout << dendl;
+      if (cct) {
+	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+	ldout(cct, 20) << " ";
+	front.hexdump(*_dout);
+	*_dout << dendl;
+      }
       return 0;
     }
     if (middle_crc != footer.middle_crc) {
-      ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
-      ldout(cct, 20) << " ";
-      middle.hexdump(*_dout);
-      *_dout << dendl;
+      if (cct) {
+	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+	ldout(cct, 20) << " ";
+	middle.hexdump(*_dout);
+	*_dout << dendl;
+      }
       return 0;
     }
 
     if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
       __u32 data_crc = data.crc32c(0);
       if (data_crc != footer.data_crc) {
-	ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
-	ldout(cct, 20) << " ";
-	data.hexdump(*_dout);
-	*_dout << dendl;
+	if (cct) {
+	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	  ldout(cct, 20) << " ";
+	  data.hexdump(*_dout);
+	  *_dout << dendl;
+	}
 	return 0;
       }
     }
@@ -542,9 +548,11 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
 
   default:
-    ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
-    if (cct->_conf->ms_die_on_bad_msg)
-      assert(0);
+    if (cct) {
+      ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
+      if (cct->_conf->ms_die_on_bad_msg)
+	assert(0);
+    }
     return 0;
   }
   
@@ -555,14 +563,16 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   m->set_data(data);
 
   try {
-    m->decode_payload(cct);
+    m->decode_payload();
   }
   catch (const buffer::error &e) {
-    ldout(cct, 0) << "failed to decode message of type " << type
-	    << " v" << header.version
-	    << ": " << e.what() << dendl;
-    if (cct->_conf->ms_die_on_bad_msg)
-      assert(0);
+    if (cct) {
+      ldout(cct, 0) << "failed to decode message of type " << type
+		    << " v" << header.version
+		    << ": " << e.what() << dendl;
+      if (cct->_conf->ms_die_on_bad_msg)
+	assert(0);
+    }
     return 0;
   }
 
