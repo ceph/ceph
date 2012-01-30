@@ -59,8 +59,8 @@ private:
   ~MLock() {}
   
 public:
-  const char *get_type_name() { return "ILock"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "ILock"; }
+  void print(ostream& out) const {
     out << "lock(a=" << get_lock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)
 	<< " " << object_info

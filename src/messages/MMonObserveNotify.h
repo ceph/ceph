@@ -32,8 +32,8 @@ private:
   ~MMonObserveNotify() {}
 
 public:  
-  const char *get_type_name() { return "mon_observe_notify"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_observe_notify"; }
+  void print(ostream& o) const {
     o << "mon_observe_notify(v" << ver << " " << bl.length() << " bytes";
     if (is_latest)
       o << " latest";

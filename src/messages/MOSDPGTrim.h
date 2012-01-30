@@ -33,8 +33,8 @@ private:
   ~MOSDPGTrim() {}
 
 public:
-  const char *get_type_name() { return "pg_trim"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_trim"; }
+  void print(ostream& out) const {
     out << "pg_trim(" << pgid << " to " << trim_to << " e" << epoch << ")";
   }
 

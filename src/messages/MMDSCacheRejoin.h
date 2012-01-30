@@ -196,8 +196,8 @@ private:
   ~MMDSCacheRejoin() {}
 
 public:
-  const char *get_type_name() { return "cache_rejoin"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "cache_rejoin"; }
+  void print(ostream& out) const {
     out << "cache_rejoin " << get_opname(op);
   }
 

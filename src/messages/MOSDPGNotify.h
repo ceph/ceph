@@ -47,7 +47,7 @@ private:
   ~MOSDPGNotify() {}
 
 public:  
-  const char *get_type_name() { return "PGnot"; }
+  const char *get_type_name() const { return "PGnot"; }
 
   void encode_payload(uint64_t features) {
     header.version = 2;
@@ -63,9 +63,9 @@ public:
       ::decode(query_epoch, p);
     }
   }
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "pg_notify(";
-    for (vector<PG::Info>::iterator i = pg_list.begin();
+    for (vector<PG::Info>::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       if (i != pg_list.begin())

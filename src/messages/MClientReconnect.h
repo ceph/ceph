@@ -30,8 +30,8 @@ private:
   ~MClientReconnect() {}
 
 public:
-  const char *get_type_name() { return "client_reconnect"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_reconnect"; }
+  void print(ostream& out) const {
     out << "client_reconnect("
 	<< caps.size() << " caps)";
   }

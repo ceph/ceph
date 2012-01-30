@@ -34,8 +34,8 @@ private:
   ~MLog() {}
 
 public:
-  const char *get_type_name() { return "log"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "log"; }
+  void print(ostream& out) const {
     out << "log(";
     if (entries.size())
       out << entries.size() << " entries";

@@ -34,8 +34,8 @@ private:
   ~MOSDPGInfo() {}
 
 public:
-  const char *get_type_name() { return "pg_info"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_info"; }
+  void print(ostream& out) const {
     out << "pg_info(" << pg_info.size() << " pgs e" << epoch << ")";
   }
 

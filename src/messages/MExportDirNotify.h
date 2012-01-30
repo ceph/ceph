@@ -40,8 +40,8 @@ private:
   ~MExportDirNotify() {}
 
 public:
-  const char *get_type_name() { return "ExNot"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExNot"; }
+  void print(ostream& o) const {
     o << "export_notify(" << base;
     o << " " << old_auth << " -> " << new_auth;
     if (ack) 

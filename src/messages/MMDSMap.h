@@ -67,8 +67,8 @@ private:
   ~MMDSMap() {}
 
 public:
-  const char *get_type_name() { return "mdsmap"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "mdsmap"; }
+  void print(ostream& out) const {
     out << "mdsmap(e " << epoch << ")";
   }
 

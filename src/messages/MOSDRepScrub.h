@@ -41,8 +41,8 @@ private:
   ~MOSDRepScrub() {}
 
 public:
-  const char *get_type_name() { return "replica scrub"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "replica scrub"; }
+  void print(ostream& out) const {
     out << "replica scrub(pg: ";
     out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
 	<< "epoch:" << map_epoch;

@@ -51,8 +51,8 @@ public:
     encode_message(msg, features, payload);
   }
 
-  const char *get_type_name() { return "route"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "route"; }
+  void print(ostream& o) const {
     if (msg)
       o << "route(" << *msg;
     else

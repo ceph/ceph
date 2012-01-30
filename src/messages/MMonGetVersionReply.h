@@ -28,11 +28,11 @@ class MMonGetVersionReply : public Message {
 public:
   MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY) {}
 
-  const char *get_type_name() {
+  const char *get_type_name() const {
     return "mon_check_map_ack";
   }
 
-  void print(ostream& o) {
+  void print(ostream& o) const {
     o << "mon_check_map_ack(handle=" << handle << " version=" << version << ")";
   }
 

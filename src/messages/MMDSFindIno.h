@@ -25,8 +25,8 @@ struct MMDSFindIno : public Message {
   MMDSFindIno() : Message(MSG_MDS_FINDINO) {}
   MMDSFindIno(tid_t t, inodeno_t i) : Message(MSG_MDS_FINDINO), tid(t), ino(i) {}
 
-  const char *get_type_name() { return "findino"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "findino"; }
+  void print(ostream &out) const {
     out << "findino(" << tid << " " << ino << ")";
   }
 

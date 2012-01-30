@@ -161,8 +161,8 @@ public:
     ::decode(stray, p);
   }
 
-  const char *get_type_name() { return "slave_request"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "slave_request"; }
+  void print(ostream& out) const {
     out << "slave_request(" << reqid
 	<< "." << attempt
 	<< " " << get_opname(op) 

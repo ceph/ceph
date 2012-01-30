@@ -35,8 +35,8 @@ private:
   ~MCommand() {}
 
 public:  
-  const char *get_type_name() { return "command"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "command"; }
+  void print(ostream& o) const {
     o << "command(tid " << get_tid() << ": ";
     for (unsigned i=0; i<cmd.size(); i++) {
       if (i) o << ' ';

@@ -34,8 +34,8 @@ private:
   ~MPGStats() {};
 
 public:
-  const char *get_type_name() { return "pg_stats"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_stats"; }
+  void print(ostream& out) const {
     out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
   }
 

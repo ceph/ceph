@@ -29,8 +29,8 @@ private:
   ~MAuth() {}
 
 public:
-  const char *get_type_name() { return "auth"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "auth"; }
+  void print(ostream& out) const {
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes"
 	<< " epoch " << monmap_epoch << ")";
   }

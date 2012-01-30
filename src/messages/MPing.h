@@ -29,7 +29,7 @@ private:
 public:
   void decode_payload() { }
   void encode_payload(uint64_t features) { }
-  const char *get_type_name() { return "ping"; }
+  const char *get_type_name() const { return "ping"; }
 };
 
 #endif

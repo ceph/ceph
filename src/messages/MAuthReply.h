@@ -36,8 +36,8 @@ private:
   ~MAuthReply() {}
 
 public:
-  const char *get_type_name() { return "auth_reply"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "auth_reply"; }
+  void print(ostream& o) const {
     char buf[80];
     o << "auth_reply(proto " << protocol << " " << result << " " << strerror_r(-result, buf, sizeof(buf));
     if (result_msg.length())

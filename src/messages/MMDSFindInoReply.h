@@ -25,8 +25,8 @@ struct MMDSFindInoReply : public Message {
   MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
   MMDSFindInoReply(tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
 
-  const char *get_type_name() { return "findinoreply"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "findinoreply"; }
+  void print(ostream &out) const {
     out << "findinoreply(" << tid << " " << path << ")";
   }
   

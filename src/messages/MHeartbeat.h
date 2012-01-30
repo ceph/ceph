@@ -46,7 +46,7 @@ private:
   ~MHeartbeat() {}
 
 public:
-  const char *get_type_name() { return "HB"; }
+  const char *get_type_name() const { return "HB"; }
 
   void encode_payload(uint64_t features) {
     ::encode(load, payload);

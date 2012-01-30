@@ -36,8 +36,8 @@ private:
   ~MCommandReply() {}
 
 public:
-  const char *get_type_name() { return "command_reply"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "command_reply"; }
+  void print(ostream& o) const {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   

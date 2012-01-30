@@ -30,8 +30,8 @@ private:
   ~MRemoveSnaps() {}
 
 public:
-  const char *get_type_name() { return "remove_snaps"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "remove_snaps"; }
+  void print(ostream& out) const {
     out << "remove_snaps(" << snaps << " v" << version << ")";
   }
 

@@ -124,9 +124,9 @@ private:
   ~MOSDSubOpReply() {}
 
 public:
-  const char *get_type_name() { return "osd_op_reply"; }
+  const char *get_type_name() const { return "osd_op_reply"; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "osd_sub_op_reply(" << reqid
 	<< " " << pgid 
 	<< " " << poid << " " << ops;

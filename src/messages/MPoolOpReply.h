@@ -44,9 +44,9 @@ public:
       response_data.claim(*blp);
   }
 
-  const char *get_type_name() { return "poolopreply"; }
+  const char *get_type_name() const { return "poolopreply"; }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "pool_op_reply(tid " << get_tid()
 	<< " " << cpp_strerror(-replyCode)
 	<< " v" << version << ")";

@@ -57,8 +57,8 @@ public:
     ::encode(is_failed, payload);
   }
 
-  const char *get_type_name() { return "osd_failure"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_failure"; }
+  void print(ostream& out) const {
     out << "osd_failure(" << target_osd << " e" << epoch << " v" << version << ")";
   }
 };

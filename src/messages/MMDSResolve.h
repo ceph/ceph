@@ -30,9 +30,9 @@ private:
   ~MMDSResolve() {}
 
 public:
-  const char *get_type_name() { return "mds_resolve"; }
+  const char *get_type_name() const { return "mds_resolve"; }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "mds_resolve(" << subtrees.size()
 	<< "+" << ambiguous_imports.size()
 	<< " subtrees +" << slave_requests.size() << " slave requests)";

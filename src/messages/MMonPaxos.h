@@ -73,9 +73,9 @@ private:
   ~MMonPaxos() {}
 
 public:  
-  const char *get_type_name() { return "paxos"; }
+  const char *get_type_name() const { return "paxos"; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "paxos(" << get_paxos_name(machine_id)
 	<< " " << get_opname(op) 
 	<< " lc " << last_committed

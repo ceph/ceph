@@ -34,8 +34,8 @@ private:
   ~MExportDirNotifyAck() {}
 
 public:
-  const char *get_type_name() { return "ExNotA"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExNotA"; }
+  void print(ostream& o) const {
     o << "export_notify_ack(" << dirfrag << ")";
   }
 

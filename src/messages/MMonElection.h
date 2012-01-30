@@ -51,8 +51,8 @@ private:
   ~MMonElection() {}
 
 public:  
-  const char *get_type_name() { return "election"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "election"; }
+  void print(ostream& out) const {
     out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }
   

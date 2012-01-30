@@ -34,8 +34,8 @@ private:
   ~MMonCommand() {}
 
 public:  
-  const char *get_type_name() { return "mon_command"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_command"; }
+  void print(ostream& o) const {
     o << "mon_command(";
     for (unsigned i=0; i<cmd.size(); i++) {
       if (i) o << ' ';

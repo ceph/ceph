@@ -36,8 +36,8 @@ private:
   ~MExportDirDiscoverAck() {}
 
 public:
-  const char *get_type_name() { return "ExDisA"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExDisA"; }
+  void print(ostream& o) const {
     o << "export_discover_ack(" << dirfrag;
     if (success) 
       o << " success)";

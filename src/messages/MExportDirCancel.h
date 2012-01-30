@@ -32,8 +32,8 @@ private:
   ~MExportDirCancel() {}
 
 public:
-  const char *get_type_name() { return "ExCancel"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExCancel"; }
+  void print(ostream& o) const {
     o << "export_cancel(" << dirfrag << ")";
   }
 

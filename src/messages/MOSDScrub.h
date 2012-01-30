@@ -38,8 +38,8 @@ private:
   ~MOSDScrub() {}
 
 public:
-  const char *get_type_name() { return "scrub"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "scrub"; }
+  void print(ostream& out) const {
     out << "scrub(";
     if (scrub_pgs.empty())
       out << "osd";

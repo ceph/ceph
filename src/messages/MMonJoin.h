@@ -36,8 +36,8 @@ private:
   ~MMonJoin() {}
 
 public:  
-  const char *get_type_name() { return "mon_join"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_join"; }
+  void print(ostream& o) const {
     o << "mon_join(" << name << " " << addr << ")";
   }
   

@@ -45,8 +45,8 @@ private:
   ~MExportDirDiscover() {}
 
 public:
-  const char *get_type_name() { return "ExDis"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExDis"; }
+  void print(ostream& o) const {
     o << "export_discover(" << dirfrag << " " << path << ")";
   }
 

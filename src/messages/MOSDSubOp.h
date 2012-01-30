@@ -170,8 +170,8 @@ private:
   ~MOSDSubOp() {}
 
 public:
-  const char *get_type_name() { return "osd_sub_op"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_sub_op"; }
+  void print(ostream& out) const {
     out << "osd_sub_op(" << reqid
 	<< " " << pgid
 	<< " " << poid

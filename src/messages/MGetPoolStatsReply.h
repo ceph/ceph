@@ -34,8 +34,8 @@ private:
   ~MGetPoolStatsReply() {}
 
 public:
-  const char *get_type_name() { return "getpoolstats"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "getpoolstats"; }
+  void print(ostream& out) const {
     out << "getpoolstatsreply(" << get_tid() << " v" << version <<  ")";
   }
 

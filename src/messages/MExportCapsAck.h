@@ -31,8 +31,8 @@ private:
   ~MExportCapsAck() {}
 
 public:
-  const char *get_type_name() { return "export_caps_ack"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "export_caps_ack"; }
+  void print(ostream& o) const {
     o << "export_caps_ack(" << ino << ")";
   }
 

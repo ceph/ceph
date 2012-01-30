@@ -32,8 +32,8 @@ private:
   ~MExportDirFinish() {}
 
 public:
-  const char *get_type_name() { return "ExFin"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExFin"; }
+  void print(ostream& o) const {
     o << "export_finish(" << dirfrag << ")";
   }
   

@@ -45,8 +45,8 @@ private:
   ~MPoolOp() {}
 
 public:
-  const char *get_type_name() { return "poolop"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "poolop"; }
+  void print(ostream& out) const {
     out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
 	<< " auid " << auid
 	<< " tid " << get_tid()

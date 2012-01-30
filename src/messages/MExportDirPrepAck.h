@@ -32,8 +32,8 @@ private:
   ~MExportDirPrepAck() {}
 
 public:  
-  const char *get_type_name() { return "ExPAck"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExPAck"; }
+  void print(ostream& o) const {
     o << "export_prep_ack(" << dirfrag << ")";
   }
 

@@ -33,8 +33,8 @@ private:
   ~MStatfs() {}
 
 public:
-  const char *get_type_name() { return "statfs"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "statfs"; }
+  void print(ostream& out) const {
     out << "statfs(" << get_tid() << " v" << version << ")";
   }
 

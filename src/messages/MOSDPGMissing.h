@@ -36,8 +36,8 @@ private:
   ~MOSDPGMissing() {}
 
 public:
-  const char *get_type_name() { return "pg_missing"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_missing"; }
+  void print(ostream& out) const {
     out << "pg_missing(" << info.pgid << " e" << epoch << ")";
   }
 

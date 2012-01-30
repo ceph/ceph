@@ -29,7 +29,7 @@ class MOSDPing : public Message {
     YOU_DIED = 2,
     STOP_HEARTBEAT = 3,
   };
-  const char *get_op_name(int op) {
+  const char *get_op_name(int op) const {
     switch (op) {
     case HEARTBEAT: return "heartbeat";
     case START_HEARTBEAT: return "start_heartbeat";
@@ -69,8 +69,8 @@ public:
     ::encode(peer_stat, payload);
   }
 
-  const char *get_type_name() { return "osd_ping"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_ping"; }
+  void print(ostream& out) const {
     out << "osd_ping(" << get_op_name(op) << " e" << map_epoch << " as_of " << peer_as_of_epoch << ")";
   }
 };

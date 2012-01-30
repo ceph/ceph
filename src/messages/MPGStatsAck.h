@@ -27,8 +27,8 @@ private:
   ~MPGStatsAck() {}
 
 public:
-  const char *get_type_name() { return "pg_stats_ack"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_stats_ack"; }
+  void print(ostream& out) const {
     out << "pg_stats_ack(" << pg_stat.size() << " pgs tid " << get_tid() << ")";
   }
 

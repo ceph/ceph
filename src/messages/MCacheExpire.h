@@ -53,7 +53,7 @@ private:
   ~MCacheExpire() {}
 
 public:
-  virtual const char *get_type_name() { return "cache_expire";}
+  virtual const char *get_type_name() const { return "cache_expire";}
   
   void add_inode(dirfrag_t r, vinodeno_t vino, int nonce) {
     realms[r].inodes[vino] = nonce;

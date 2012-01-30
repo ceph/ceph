@@ -21,11 +21,11 @@ class MClientSession : public Message {
 public:
   ceph_mds_session_head head;
 
-  int get_op() { return head.op; }
-  version_t get_seq() { return head.seq; }
-  utime_t get_stamp() { return utime_t(head.stamp); }
-  int get_max_caps() { return head.max_caps; }
-  int get_max_leases() { return head.max_leases; }
+  int get_op() const { return head.op; }
+  version_t get_seq() const { return head.seq; }
+  utime_t get_stamp() const { return utime_t(head.stamp); }
+  int get_max_caps() const { return head.max_caps; }
+  int get_max_leases() const { return head.max_leases; }
 
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
   MClientSession(int o, version_t s=0) : 
@@ -45,8 +45,8 @@ private:
   ~MClientSession() {}
 
 public:
-  const char *get_type_name() { return "client_session"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_session"; }
+  void print(ostream& out) const {
     out << "client_session(" << ceph_session_op_name(get_op());
     if (get_seq())
       out << " seq " << get_seq();

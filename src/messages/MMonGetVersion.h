@@ -29,11 +29,11 @@ class MMonGetVersion : public Message {
 public:
   MMonGetVersion() : Message(CEPH_MSG_MON_GET_VERSION) {}
 
-  const char *get_type_name() {
+  const char *get_type_name() const {
     return "mon_get_version";
   }
 
-  void print(ostream& o) {
+  void print(ostream& o) const {
     o << "mon_get_version(what=" << what << " handle=" << handle << ")";
   }
 

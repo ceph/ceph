@@ -48,8 +48,8 @@ private:
   ~MExportDirPrep() {}
 
 public:
-  const char *get_type_name() { return "ExP"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExP"; }
+  void print(ostream& o) const {
     o << "export_prep(" << dirfrag << ")";
   }
 

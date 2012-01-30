@@ -39,8 +39,8 @@ private:
   ~MDentryLink() {}
 
 public:
-  const char *get_type_name() { return "dentry_link";}
-  void print(ostream& o) {
+  const char *get_type_name() const { return "dentry_link";}
+  void print(ostream& o) const {
     o << "dentry_link(" << dirfrag << " " << dn << ")";
   }
   

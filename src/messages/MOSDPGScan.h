@@ -24,7 +24,7 @@ public:
     OP_SCAN_GET_DIGEST = 1,      // just objects and versions
     OP_SCAN_DIGEST = 2,          // result
   };
-  const char *get_op_name(int o) {
+  const char *get_op_name(int o) const {
     switch (o) {
     case OP_SCAN_GET_DIGEST: return "get_digest";
     case OP_SCAN_DIGEST: return "digest";
@@ -68,8 +68,8 @@ private:
   ~MOSDPGScan() {}
 
 public:
-  const char *get_type_name() { return "pg_scan"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_scan"; }
+  void print(ostream& out) const {
     out << "pg_scan(" << get_op_name(op)
 	<< " " << pgid
 	<< " " << begin << "-" << end

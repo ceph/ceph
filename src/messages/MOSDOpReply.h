@@ -40,18 +40,18 @@ class MOSDOpReply : public Message {
   int32_t retry_attempt;
 
 public:
-  object_t get_oid() { return oid; }
-  pg_t     get_pg() { return pgid; }
-  int      get_flags() { return flags; }
+  object_t get_oid() const { return oid; }
+  pg_t     get_pg() const { return pgid; }
+  int      get_flags() const { return flags; }
 
-  bool     is_ondisk() { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
-  bool     is_onnvram() { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
+  bool     is_ondisk() const { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
+  bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
-  int get_result() { return result; }
+  int get_result() const { return result; }
   eversion_t get_version() { return reassert_version; }
   
-  bool may_read() { return flags & CEPH_OSD_FLAG_READ; }
-  bool may_write() { return flags & CEPH_OSD_FLAG_WRITE; }
+  bool may_read() const { return flags & CEPH_OSD_FLAG_READ; }
+  bool may_write() const { return flags & CEPH_OSD_FLAG_WRITE; }
 
   void set_result(int r) { result = r; }
   void set_version(eversion_t v) { reassert_version = v; }
@@ -190,9 +190,9 @@ public:
     }
   }
 
-  const char *get_type_name() { return "osd_op_reply"; }
+  const char *get_type_name() const { return "osd_op_reply"; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops;
     if (may_write()) {

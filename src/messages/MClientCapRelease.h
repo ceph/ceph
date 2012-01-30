@@ -31,8 +31,8 @@ private:
   ~MClientCapRelease() {}
 
 public:
-  const char *get_type_name() { return "client_cap_release";}
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_cap_release";}
+  void print(ostream& out) const {
     out << "client_cap_release(" << head.num << ")";
   }
   

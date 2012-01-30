@@ -34,8 +34,8 @@ private:
   ~MClientSnap() {}
 
 public:  
-  const char *get_type_name() { return "client_snap"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_snap"; }
+  void print(ostream& out) const {
     out << "client_snap(" << ceph_snap_op_name(head.op);
     if (head.split)
       out << " split=" << inodeno_t(head.split);

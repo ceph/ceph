@@ -61,8 +61,8 @@ public:
     msg = (PaxosServiceMessage *)decode_message(NULL, p);
   }
 
-  const char *get_type_name() { return "forward"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "forward"; }
+  void print(ostream& o) const {
     if (msg)
       o << "forward(" << *msg << ") to leader";
     else o << "forward(??? ) to leader";

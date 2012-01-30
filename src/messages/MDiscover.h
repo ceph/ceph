@@ -69,8 +69,8 @@ private:
   ~MDiscover() {}
 
 public:
-  const char *get_type_name() { return "Dis"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "Dis"; }
+  void print(ostream &out) const {
     out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want;
     if (want_ino)

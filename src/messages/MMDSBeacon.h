@@ -51,7 +51,7 @@ public:
   epoch_t get_last_epoch_seen() { return version; }
   int get_state() { return state; }
   version_t get_seq() { return seq; }
-  const char *get_type_name() { return "mdsbeacon"; }
+  const char *get_type_name() const { return "mdsbeacon"; }
   int get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
 
@@ -62,7 +62,7 @@ public:
   void set_standby_for_name(string& n) { standby_for_name = n; }
   void set_standby_for_name(const char* c) { standby_for_name.assign(c); }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "mdsbeacon(" << global_id << "/" << name << " " << ceph_mds_state_name(state) 
 	<< " seq " << seq << " v" << version << ")";
   }

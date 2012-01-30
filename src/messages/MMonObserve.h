@@ -34,8 +34,8 @@ private:
   ~MMonObserve() {}
   
 public:
-  const char *get_type_name() { return "mon_observe"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_observe"; }
+  void print(ostream& o) const {
     o << "observe(" << machine_id << " v" << ver << ")";
   }
   

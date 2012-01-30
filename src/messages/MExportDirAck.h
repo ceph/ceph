@@ -30,8 +30,8 @@ private:
   ~MExportDirAck() {}
 
 public:
-  const char *get_type_name() { return "ExAck"; }
-    void print(ostream& o) {
+  const char *get_type_name() const { return "ExAck"; }
+    void print(ostream& o) const {
     o << "export_ack(" << dirfrag << ")";
   }
 

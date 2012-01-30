@@ -55,8 +55,8 @@ public:
     ::encode(bl, payload);
   }
 
-  const char *get_type_name() { return "watch-notify"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "watch-notify"; }
+  void print(ostream& out) const {
     out << "watch-notify(c=" << cookie << " v=" << ver << " i=" << notify_id << " opcode=" << (int)opcode << ")";
   }
 };

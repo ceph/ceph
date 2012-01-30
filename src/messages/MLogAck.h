@@ -28,8 +28,8 @@ private:
   ~MLogAck() {}
 
 public:
-  const char *get_type_name() { return "log_ack"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "log_ack"; }
+  void print(ostream& out) const {
     out << "log(last " << last << ")";
   }
 

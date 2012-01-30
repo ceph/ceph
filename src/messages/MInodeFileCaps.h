@@ -34,8 +34,8 @@ private:
   ~MInodeFileCaps() {}
 
 public:
-  const char *get_type_name() { return "inode_file_caps";}
-  void print(ostream& out) {
+  const char *get_type_name() const { return "inode_file_caps";}
+  void print(ostream& out) const {
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }
   

@@ -31,8 +31,8 @@ private:
   ~MMonSubscribeAck() {}
 
 public:
-  const char *get_type_name() { return "mon_subscribe_ack"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_subscribe_ack"; }
+  void print(ostream& o) const {
     o << "mon_subscribe_ack(" << interval << "s)";
   }
 

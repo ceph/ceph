@@ -56,7 +56,7 @@ class PaxosServiceMessage : public Message {
     return session;
   }
   
-  const char *get_type_name() { return "PaxosServiceMessage"; }
+  const char *get_type_name() const { return "PaxosServiceMessage"; }
 };
 
 #endif

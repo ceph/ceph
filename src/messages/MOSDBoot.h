@@ -36,8 +36,8 @@ private:
   ~MOSDBoot() { }
 
 public:
-  const char *get_type_name() { return "osd_boot"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_boot"; }
+  void print(ostream& out) const {
     out << "osd_boot(osd." << sb.whoami << " v" << version << ")";
   }
   

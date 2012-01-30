@@ -37,8 +37,8 @@ public:
   int get_num_fwd() { return num_fwd; }
   bool must_resend() { return client_must_resend; }
 
-  const char *get_type_name() { return "client_request_forward"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "client_request_forward"; }
+  void print(ostream& o) const {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds
       << " num_fwd=" << num_fwd

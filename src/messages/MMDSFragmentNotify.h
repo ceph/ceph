@@ -39,8 +39,8 @@ private:
   ~MMDSFragmentNotify() {}
 
 public:  
-  const char *get_type_name() { return "fragment_notify"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "fragment_notify"; }
+  void print(ostream& o) const {
     o << "fragment_notify(" << ino << "." << basefrag
       << " " << (int)bits << ")";
   }

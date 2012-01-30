@@ -1082,7 +1082,7 @@ void Objecter::send_op(Op *op)
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);
-  m->get_snaps() = op->snapc.snaps;
+  m->set_snaps(op->snapc.snaps);
 
   m->ops = op->ops;
   m->set_mtime(op->mtime);

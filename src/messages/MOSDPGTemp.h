@@ -42,8 +42,8 @@ public:
     ::decode(pg_temp, p);
   }
 
-  const char *get_type_name() { return "osd_pgtemp"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "osd_pgtemp"; }
+  void print(ostream &out) const {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
   

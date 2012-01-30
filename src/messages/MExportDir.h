@@ -35,8 +35,8 @@ private:
   ~MExportDir() {}
 
 public:
-  const char *get_type_name() { return "Ex"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "Ex"; }
+  void print(ostream& o) const {
     o << "export(" << dirfrag << ")";
   }
 

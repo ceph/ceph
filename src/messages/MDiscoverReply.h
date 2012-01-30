@@ -146,8 +146,8 @@ private:
   ~MDiscoverReply() {}
 
 public:
-  const char *get_type_name() { return "discover_reply"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "discover_reply"; }
+  void print(ostream& out) const {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
   

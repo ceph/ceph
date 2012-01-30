@@ -27,8 +27,8 @@ public:
     h.version = epoch;
   }
 
-  const char *get_type_name() { return "statfs_reply"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "statfs_reply"; }
+  void print(ostream& out) const {
     out << "statfs_reply(" << header.tid << ")";
   }
 

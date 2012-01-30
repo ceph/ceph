@@ -36,8 +36,8 @@ private:
   ~MMDSLoadTargets() {}
 
 public:
-  const char* get_type_name() { return "mds_load_targets"; }
-  void print(ostream& o) {
+  const char* get_type_name() const { return "mds_load_targets"; }
+  void print(ostream& o) const {
     o << "mds_load_targets(" << global_id << " " << targets << ")";
   }
 

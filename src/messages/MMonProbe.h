@@ -60,8 +60,8 @@ private:
   ~MMonProbe() {}
 
 public:  
-  const char *get_type_name() { return "mon_probe"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "mon_probe"; }
+  void print(ostream& out) const {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;

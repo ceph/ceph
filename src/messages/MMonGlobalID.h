@@ -24,8 +24,8 @@ private:
   ~MMonGlobalID() {}
 
 public:
-  const char *get_type_name() { return "global_id"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "global_id"; }
+  void print(ostream& out) const {
     out << "global_id  (" << old_max_id << ")";
   }
 

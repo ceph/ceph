@@ -39,10 +39,10 @@ private:
   ~MOSDPGQuery() {}
 
 public:  
-  const char *get_type_name() { return "pg_query"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_query"; }
+  void print(ostream& out) const {
     out << "pg_query(";
-    for (map<pg_t,PG::Query>::iterator p = pg_list.begin(); p != pg_list.end(); ++p) {
+    for (map<pg_t,PG::Query>::const_iterator p = pg_list.begin(); p != pg_list.end(); ++p) {
       if (p != pg_list.begin())
 	out << ",";
       out << p->first;

@@ -36,8 +36,8 @@ private:
   ~MMDSTableRequest() {}
 
 public:  
-  virtual const char *get_type_name() { return "mds_table_request"; }
-  void print(ostream& o) {
+  virtual const char *get_type_name() const { return "mds_table_request"; }
+  void print(ostream& o) const {
     o << "mds_table_request(" << get_mdstable_name(table)
       << " " << get_mdstableserver_opname(op);
     if (reqid) o << " " << reqid;

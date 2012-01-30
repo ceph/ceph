@@ -106,8 +106,8 @@ private:
   ~MClientCaps() {}
 
 public:
-  const char *get_type_name() { return "Cfcap";}
-  void print(ostream& out) {
+  const char *get_type_name() const { return "Cfcap";}
+  void print(ostream& out) const {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
