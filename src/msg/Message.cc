@@ -154,6 +154,13 @@ void Message::encode(uint64_t features, bool datacrc)
     footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
 }
 
+void Message::dump(Formatter *f) const
+{
+  stringstream ss;
+  print(ss);
+  f->dump_string("summary", ss.str());
+}
+
 Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle, bufferlist& data)
 {
@@ -604,3 +611,4 @@ Message *decode_message(CephContext *cct, bufferlist::iterator& p)
   ::decode(da, p);
   return decode_message(cct, h, f, fr, mi, da);
 }
+

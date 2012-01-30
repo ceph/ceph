@@ -439,6 +439,8 @@ public:
     out << get_type_name();
   }
 
+  virtual void dump(Formatter *f) const;
+
   void encode(uint64_t features, bool datacrc);
 };
 
