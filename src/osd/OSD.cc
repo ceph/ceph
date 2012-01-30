@@ -3105,6 +3105,7 @@ void OSD::wait_for_new_map(OpRequest *op)
   }
   
   waiting_for_osdmap.push_back(op);
+  op->mark_delayed();
 }
 
 
@@ -4162,6 +4163,8 @@ void OSD::handle_pg_create(OpRequest *op)
 
   if (!require_same_or_newer_map(op, m->epoch)) return;
 
+  op->mark_started();
+
   map< int, map<pg_t,PG::Query> > query_map;
   map<int, MOSDPGInfo*> info_map;
 
@@ -4346,6 +4349,8 @@ void OSD::handle_pg_notify(OpRequest *op)
 
   if (!require_same_or_newer_map(op, m->get_epoch())) return;
 
+  op->mark_started();
+
   // look for unknown PGs i'm primary for
   map< int, map<pg_t,PG::Query> > query_map;
   map<int, MOSDPGInfo*> info_map;
@@ -4419,6 +4424,8 @@ void OSD::handle_pg_log(OpRequest *op)
     return;
   }
 
+  op->mark_started();
+
   map< int, map<pg_t,PG::Query> > query_map;
   map< int, MOSDPGInfo* > info_map;
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
@@ -4446,6 +4453,9 @@ void OSD::handle_pg_info(OpRequest *op)
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->get_epoch())) return;
+
+  op->mark_started();
+
   map< int, MOSDPGInfo* > info_map;
 
   int created = 0;
@@ -4497,6 +4507,8 @@ void OSD::handle_pg_trim(OpRequest *op)
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->epoch)) return;
+
+  op->mark_started();
 
   if (!_have_pg(m->pgid)) {
     dout(10) << " don't have pg " << m->pgid << dendl;
@@ -4633,6 +4645,8 @@ void OSD::handle_pg_missing(OpRequest *op)
   if (!require_same_or_newer_map(op, m->get_epoch()))
     return;
 
+  op->mark_started();
+
   map< int, map<pg_t,PG::Query> > query_map;
   PG::Log empty_log;
   int created = 0;
@@ -4664,6 +4678,8 @@ void OSD::handle_pg_query(OpRequest *op)
   int from = m->get_source().num();
   
   if (!require_same_or_newer_map(op, m->get_epoch())) return;
+
+  op->mark_started();
 
   map< int, vector<PG::Info> > notify_list;
   
@@ -4764,6 +4780,8 @@ void OSD::handle_pg_remove(OpRequest *op)
   
   if (!require_same_or_newer_map(op, m->get_epoch())) return;
   
+  op->mark_started();
+
   for (vector<pg_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
        it++) {
@@ -5258,6 +5276,7 @@ void OSD::handle_op(OpRequest *op)
     if (osdmap->get_pg_role(pgid, whoami) >= 0) {
       dout(7) << "we are valid target for op, waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
+      op->mark_delayed();
       return;
     }
 
@@ -5454,6 +5473,7 @@ bool OSD::op_is_queueable(PG *pg, OpRequest *op)
   if (!pg->is_active()) {
     dout(7) << *pg << " not active (yet)" << dendl;
     pg->waiting_for_active.push_back(op);
+    op->mark_delayed();
     return false;
   }
 
@@ -5462,6 +5482,7 @@ bool OSD::op_is_queueable(PG *pg, OpRequest *op)
       dout(7) << *pg << " queueing replay at " << m->get_version()
 	      << " for " << *m << dendl;
       pg->replay_queue[m->get_version()] = op;
+      op->mark_delayed();
       return false;
     }
   }
@@ -5533,6 +5554,8 @@ void OSD::enqueue_op(PG *pg, OpRequest *op)
   pg->op_queue.push_back(op);
   
   op_wq.queue(pg);
+
+  op->mark_queued_for_pg();
 }
 
 bool OSD::OpWQ::_enqueue(PG *pg)
@@ -5614,6 +5637,8 @@ void OSD::dequeue_op(PG *pg)
       _share_map_outgoing( osdmap->get_cluster_inst(pg->acting[i]) );
   }
   osd_lock.Unlock();
+
+  op->mark_reached_pg();
 
   switch (op->request->get_type()) {
   case CEPH_MSG_OSD_OP:

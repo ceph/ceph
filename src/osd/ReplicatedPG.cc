@@ -120,6 +120,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequest *op)
     pull(soid, v);
   }
   waiting_for_missing_object[soid].push_back(op);
+  op->mark_delayed();
 }
 
 void ReplicatedPG::wait_for_all_missing(OpRequest *op)
@@ -175,6 +176,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequest *op
     recover_object_replicas(soid, v);
   }
   waiting_for_degraded_object[soid].push_back(op);
+  op->mark_delayed();
 }
 
 bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
@@ -262,6 +264,8 @@ void ReplicatedPG::do_pg_op(OpRequest *op)
   MOSDOp *m = (MOSDOp *)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   dout(10) << "do_pg_op " << *m << dendl;
+
+  op->mark_started();
 
   bufferlist outdata;
   int result = 0;
@@ -465,6 +469,7 @@ void ReplicatedPG::do_op(OpRequest *op)
   if (finalizing_scrub && m->may_write()) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
+    op->mark_delayed();
     return;
   }
 
@@ -560,6 +565,7 @@ void ReplicatedPG::do_op(OpRequest *op)
   if (!ok) {
     dout(10) << "do_op waiting on mode " << mode << dendl;
     mode.waiting.push_back(op);
+    op->mark_delayed();
     return;
   }
 
@@ -648,6 +654,8 @@ void ReplicatedPG::do_op(OpRequest *op)
     return;
   }
 
+  op->mark_started();
+
   const hobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops,
 				 &obc->obs, obc->ssc, 
@@ -688,9 +696,12 @@ void ReplicatedPG::do_op(OpRequest *op)
       } else {
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
 	waiting_for_ondisk[oldv].push_back(op);
+	op->mark_delayed();
       }
       return;
     }
+
+    op->mark_started();
 
     // version
     ctx->at_version = log.head;
@@ -933,6 +944,8 @@ void ReplicatedPG::do_scan(OpRequest *op)
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
   dout(10) << "do_scan " << *m << dendl;
 
+  op->mark_started();
+
   switch (m->op) {
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
@@ -976,6 +989,8 @@ void ReplicatedPG::do_backfill(OpRequest *op)
   MOSDPGBackfill *m = (MOSDPGBackfill*)op->request;
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
   dout(10) << "do_backfill " << *m << dendl;
+
+  op->mark_started();
 
   switch (m->op) {
   case MOSDPGBackfill::OP_BACKFILL_FINISH:
@@ -3068,6 +3083,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
   for (unsigned i=1; i<acting.size(); i++) {
+    ctx->op->mark_sub_op_sent();
     int peer = acting[i];
     Info &pinfo = peer_info[peer];
 
@@ -3778,6 +3794,9 @@ void ReplicatedPG::sub_op_modify_reply(OpRequest *op)
 {
   MOSDSubOpReply *r = (MOSDSubOpReply*)op->request;
   assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
+
+  op->mark_started();
+
   // must be replication.
   tid_t rep_tid = r->get_tid();
   int fromosd = r->get_source().num();
@@ -4257,6 +4276,8 @@ void ReplicatedPG::sub_op_push_reply(OpRequest *op)
   MOSDSubOpReply *reply = (MOSDSubOpReply*)op->request;
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
+
+  op->mark_started();
   
   int peer = reply->get_source().num();
   const hobject_t& soid = reply->get_poid();
@@ -4340,6 +4361,8 @@ void ReplicatedPG::sub_op_pull(OpRequest *op)
 {
   MOSDSubOp *m = (MOSDSubOp*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
+
+  op->mark_started();
 
   const hobject_t soid = m->poid;
 
@@ -4480,6 +4503,8 @@ void ReplicatedPG::sub_op_push(OpRequest *op)
     _failed_push(op);
     return;
   }
+
+  op->mark_started();
 
   interval_set<uint64_t> data_subset;
   map<hobject_t, interval_set<uint64_t> > clone_subsets;
@@ -4830,6 +4855,8 @@ void ReplicatedPG::sub_op_remove(OpRequest *op)
   MOSDSubOp *m = (MOSDSubOp*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_remove " << m->poid << dendl;
+
+  op->mark_started();
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   remove_object_with_snap_hardlinks(*t, m->poid);

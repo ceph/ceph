@@ -2352,6 +2352,8 @@ void PG::sub_op_scrub_map(OpRequest *op)
     return;
   }
 
+  op->mark_started();
+
   int from = m->get_source().num();
 
   dout(10) << " got osd." << from << " scrub map" << dendl;
@@ -2423,6 +2425,8 @@ void PG::sub_op_scrub_reserve(OpRequest *op)
     return;
   }
 
+  op->mark_started();
+
   scrub_reserved = osd->inc_scrubs_pending();
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
@@ -2443,6 +2447,8 @@ void PG::sub_op_scrub_reserve_reply(OpRequest *op)
     op->put();
     return;
   }
+
+  op->mark_started();
 
   int from = reply->get_source().num();
   bufferlist::iterator p = reply->get_data().begin();
@@ -2471,6 +2477,8 @@ void PG::sub_op_scrub_unreserve(OpRequest *op)
   assert(op->request->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_unreserve" << dendl;
 
+  op->mark_started();
+
   clear_scrub_reserved();
 
   op->put();
@@ -2478,6 +2486,8 @@ void PG::sub_op_scrub_unreserve(OpRequest *op)
 
 void PG::sub_op_scrub_stop(OpRequest *op)
 {
+  op->mark_started();
+
   MOSDSubOp *m = (MOSDSubOp*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_stop" << dendl;
