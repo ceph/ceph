@@ -105,7 +105,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 
   monc->set_messenger(messenger);
 
-  mdsmap = new MDSMap(g_ceph_context);
+  mdsmap = new MDSMap;
   osdmap = new OSDMap;
 
   objecter = new Objecter(m->cct, messenger, monc, osdmap, mds_lock, timer);
@@ -806,7 +806,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   entity_addr_t addr;
 
   // decode and process
-  mdsmap = new MDSMap(g_ceph_context);
+  mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());

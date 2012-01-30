@@ -84,7 +84,7 @@ public:
     ::encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0) {
       // reencode for old clients.
-      MDSMap m(cct);
+      MDSMap m;
       m.decode(encoded);
       encoded.clear();
       m.encode_client_old(encoded);
