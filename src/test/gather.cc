@@ -26,7 +26,7 @@ public:
 TEST(ContextGather, Constructor) {
   C_GatherBuilder gather(g_ceph_context);
   EXPECT_FALSE(gather.has_subs());
-  EXPECT_EQ(NULL, gather.get());
+  EXPECT_TRUE(gather.get() == NULL);
 }
 
 TEST(ContextGather, OneSub) {

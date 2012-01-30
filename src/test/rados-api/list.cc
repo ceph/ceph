@@ -40,7 +40,7 @@ TEST(LibRadosList, ListObjectsPP) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
-  ASSERT_EQ(false, (iter == ioctx.objects_end()));
+  ASSERT_EQ((iter == ioctx.objects_end()), false);
   ASSERT_EQ((*iter).first, "foo");
   ++iter;
   ASSERT_EQ(true, (iter == ioctx.objects_end()));
