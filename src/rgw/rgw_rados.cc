@@ -920,6 +920,16 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
   if (r < 0)
     return r;
 
+  ObjectWriteOperation op;
+  op.remove();
+  string oid = dir_oid_prefix;
+  oid.append(marker);
+  librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+  r = list_ctx.aio_operate(oid, completion, &op);
+  completion->release();
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
@@ -2364,7 +2374,7 @@ public:
 
 enum IntentFlags { // bitmask
   I_DEL_OBJ = 1,
-  I_DEL_POOL = 2,
+  I_DEL_DIR = 2,
 };
 
 
@@ -2415,7 +2425,7 @@ int RGWRados::remove_temp_objects(string date, string time)
     }
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
+      process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_DIR, true);
     }
   } while (is_truncated);
 
@@ -2487,15 +2497,22 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
       }
       break;
-    case DEL_POOL:
-      if (!flags & I_DEL_POOL) {
+    case DEL_DIR:
+      if (!flags & I_DEL_DIR) {
         complete = false;
         break;
-      }
-      r = delete_bucket(entry.obj.bucket);
-      if (r < 0 && r != -ENOENT) {
-        cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
-        complete = false;
+      } else {
+        librados::IoCtx io_ctx;
+        int r = open_bucket_ctx(entry.obj.bucket, io_ctx);
+        if (r < 0)
+          return r;
+        string oid = dir_oid_prefix;
+        oid.append(entry.obj.bucket.marker);
+        r = io_ctx.remove(oid);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
+          complete = false;
+        }
       }
       break;
     default:
