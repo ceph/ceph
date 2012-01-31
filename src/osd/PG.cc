@@ -361,6 +361,48 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
   return false;
 }
 
+/**
+ * rewind divergent entries at the head of the log
+ *
+ * This rewinds entries off the head of our log that are divergent.
+ * This is used by replicas during activation.
+ *
+ * @param t transaction
+ * @param newhead new head to rewind to
+ */
+void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
+{
+  dout(10) << "rewind_divergent_log truncate divergent future " << newhead << dendl;
+  assert(newhead > log.tail);
+
+  list<Log::Entry>::iterator p = log.log.end();
+  list<Log::Entry> divergent;
+  while (true) {
+    if (p == log.log.begin()) {
+      // yikes, the whole thing is divergent!
+      divergent.swap(log.log);
+      break;
+    }
+    --p;
+    if (p->version == newhead) {
+      ++p;
+      divergent.splice(divergent.begin(), log.log, p, log.log.end());
+      break;
+    }
+    assert(p->version > newhead);
+    dout(10) << "rewind_divergent_log future divergent " << *p << dendl;
+    log.unindex(*p);
+  }
+
+  log.head = newhead;
+  info.last_update = newhead;
+  if (info.last_complete > newhead)
+    info.last_complete == newhead;
+
+  for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
+    merge_old_entry(t, *d);
+}
+
 void PG::merge_log(ObjectStore::Transaction& t,
 		   Info &oinfo, Log &olog, int fromosd)
 {
@@ -408,7 +450,12 @@ void PG::merge_log(ObjectStore::Transaction& t,
     info.log_tail = log.tail = olog.tail;
     changed = true;
   }
-    
+
+  // do we have divergent entries to throw out?
+  if (olog.head < log.head) {
+    rewind_divergent_log(t, olog.head);
+  }
+
   // extend on head?
   if (olog.head > log.head) {
     dout(10) << "merge_log extending head to " << olog.head << dendl;
@@ -467,7 +514,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
 		   olog.log, from, to);
     log.index();   
 
-      
     info.last_update = log.head = olog.head;
     if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
       oinfo.stats.reported = info.stats.reported;
@@ -1316,7 +1362,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	assert(log.tail <= pi.last_update);
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	// send new stuff to append to replicas log
-	assert(info.last_update > pi.last_update);
 	m->log.copy_after(log, pi.last_update);
       }
 
@@ -4137,6 +4182,12 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
 
+  if (pg->info.last_update > infoevt.info.last_update) {
+    // rewind divergent log entries
+    pg->rewind_divergent_log(*context< RecoveryMachine >().get_cur_transaction(),
+			     infoevt.info.last_update);
+  }
+  
   assert(infoevt.info.last_update == pg->info.last_update);
   assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);

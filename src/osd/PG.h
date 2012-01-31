@@ -1555,6 +1555,8 @@ public:
   bool proc_replica_info(int from, Info &info);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
+  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
+
   bool search_for_missing(const Info &oinfo, const Missing *omissing,
 			  int fromosd);
 
