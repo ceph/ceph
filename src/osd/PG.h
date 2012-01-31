@@ -910,7 +910,7 @@ public:
 
   // primary state
  public:
-  vector<int> up, acting;
+  vector<int> up, acting, want_acting;
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -1209,11 +1209,13 @@ public:
     struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
 			      NamedState {
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       WaitActingChange(my_context ctx);
+      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MLogRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MNotifyRec&);
@@ -1524,7 +1526,8 @@ public:
   void generate_past_intervals();
   void trim_past_intervals();
   void build_prior(std::auto_ptr<PriorSet> &prior_set);
-  void clear_prior();
+
+  void remove_down_peer_info(const OSDMapRef osdmap);
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);
 

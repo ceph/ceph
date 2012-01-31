@@ -854,6 +854,20 @@ bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
   return false;
 }
 
+void PG::remove_down_peer_info(const OSDMapRef osdmap)
+{
+  // Remove any downed osds from peer_info
+  map<int,PG::Info>::iterator p = peer_info.begin();
+  while (p != peer_info.end()) {
+    if (!osdmap->is_up(p->first)) {
+      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
+      peer_missing.erase(p->first);
+      peer_info.erase(p++);
+    } else
+      p++;
+  }
+}
+
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
@@ -1144,6 +1158,7 @@ bool PG::choose_acting(int& newest_update_osd)
   if (want != acting) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
+    want_acting = want;
     if (want == up) {
       vector<int> empty;
       osd->queue_want_pg_temp(info.pgid, empty);
@@ -3346,6 +3361,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
   up = newup;
   acting = newacting;
+  want_acting.clear();
 
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
@@ -3860,18 +3876,7 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
 boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap) 
 {
   PG *pg = context< RecoveryMachine >().pg;
-  OSDMapRef osdmap = advmap.osdmap;
-
-  // Remove any downed osds from peer_info
-  map<int,PG::Info>::iterator p = pg->peer_info.begin();
-  while (p != pg->peer_info.end()) {
-    if (!osdmap->is_up(p->first)) {
-      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
-      pg->peer_missing.erase(p->first);
-      pg->peer_info.erase(p++);
-    } else
-      p++;
-  }
+  pg->remove_down_peer_info(advmap.osdmap);
   return forward_event();
 }
 
@@ -4444,6 +4449,24 @@ PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
 {
   state_name = "Started/Primary/Peering/WaitActingChange";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const AdvMap& advmap)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  OSDMapRef osdmap = advmap.osdmap;
+
+  pg->remove_down_peer_info(osdmap);
+
+  dout(10) << "verifying no want_acting " << pg->want_acting << " targets didn't go down" << dendl;
+  for (vector<int>::iterator p = pg->want_acting.begin(); p != pg->want_acting.end(); ++p) {
+    if (!osdmap->is_up(*p)) {
+      dout(10) << " want_acting target osd." << *p << " went down, resetting" << dendl;
+      post_event(advmap);
+      return transit< Reset >();
+    }
+  }
+  return forward_event();
 }
 
 boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt)
