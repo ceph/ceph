@@ -25,7 +25,9 @@ using std::deque;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
-#include <libaio.h>
+#ifdef HAVE_LIBAIO
+# include <libaio.h>
+#endif
 
 class FileJournal : public Journal {
 public:
@@ -130,6 +132,7 @@ private:
   off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
 
+#ifdef HAVE_LIBAIO
   /// state associated with an in-flight aio request
   struct aio_info {
     struct iocb iocb;
@@ -151,6 +154,7 @@ private:
   list<aio_info> aio_queue;
   int aio_num, aio_bytes;
   Cond write_finish_cond;
+#endif
 
   uint64_t last_committed_seq;
 
@@ -269,7 +273,9 @@ private:
     is_bdev(false), directio(dio), aio(ai),
     writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
+#ifdef HAVE_LIBAIO
     aio_num(0), aio_bytes(0),
+#endif
     last_committed_seq(0), 
     full_state(FULL_NOTFULL),
     fd(-1),

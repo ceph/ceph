@@ -48,6 +48,12 @@ int FileJournal::_open(bool forwrite, bool create)
     derr << "FileJournal::_open: aio not supported without directio; disabling aio" << dendl;
     aio = false;
   }
+#ifndef HAVE_LIBAIO
+  if (aio) {
+    derr << "FileJournal::_open: libaio not compiled in; disabling aio" << dendl;
+    aio = false;
+  }
+#endif
 
   if (forwrite) {
     flags = O_RDWR;
@@ -90,13 +96,15 @@ int FileJournal::_open(bool forwrite, bool create)
   if (ret)
     goto out_fd;
 
+#ifdef HAVE_LIBAIO
   aio_ctx = 0;
   ret = io_setup(128, &aio_ctx);
   if (ret < 0) {
     ret = errno;
-    derr << "FileJouranl::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+    derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
     goto out_fd;
   }
+#endif
 
   /* We really want max_size to be a multiple of block_size. */
   max_size -= max_size % block_size;
@@ -566,7 +574,9 @@ void FileJournal::start_writer()
 {
   write_stop = false;
   write_thread.create();
+#ifdef HAVE_LIBAIO
   write_finish_thread.create();
+#endif
 }
 
 void FileJournal::stop_writer()
@@ -575,11 +585,15 @@ void FileJournal::stop_writer()
   {
     write_stop = true;
     write_cond.Signal();
+#ifdef HAVE_LIBAIO
     write_finish_cond.Signal();
+#endif
   } 
   write_lock.Unlock();
   write_thread.join();
+#ifdef HAVE_LIBAIO
   write_finish_thread.join();
+#endif
 }
 
 
@@ -1038,6 +1052,7 @@ void FileJournal::write_thread_entry()
       continue;
     }
     
+#ifdef HAVE_LIBAIO
     if (aio) {
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1057,6 +1072,7 @@ void FileJournal::write_thread_entry()
 	continue;
       }
     }
+#endif
 
     uint64_t orig_ops = 0;
     uint64_t orig_bytes = 0;
@@ -1071,10 +1087,14 @@ void FileJournal::write_thread_entry()
     }
     assert(r == 0);
 
+#ifdef HAVE_LIBAIO
     if (aio)
       do_aio_write(bl);
     else
       do_write(bl);
+#else
+    do_write(bl);
+#endif
     
     put_throttle(orig_ops, orig_bytes);
   }
@@ -1083,6 +1103,7 @@ void FileJournal::write_thread_entry()
   dout(10) << "write_thread_entry finish" << dendl;
 }
 
+#ifdef HAVE_LIBAIO
 void FileJournal::do_aio_write(bufferlist& bl)
 {
   // nothing to do?
@@ -1209,9 +1230,11 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
   pos += aio.len;
   return 0;
 }
+#endif
 
 void FileJournal::write_finish_thread_entry()
 {
+#ifdef HAVE_LIBAIO
   dout(10) << "write_finish_thread_entry enter" << dendl;
   write_lock.Lock();
   while (true) {
@@ -1255,8 +1278,10 @@ void FileJournal::write_finish_thread_entry()
   }	 
   write_lock.Unlock();
   dout(10) << "write_finish_thread_entry exit" << dendl;
+#endif
 }
 
+#ifdef HAVE_LIBAIO
 /**
  * check aio_wait for completed aio, and update state appropriately.
  */
@@ -1317,6 +1342,7 @@ void FileJournal::check_aio_completion()
     }
   }
 }
+#endif
 
 void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit)
 {
