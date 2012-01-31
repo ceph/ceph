@@ -37,6 +37,7 @@ BuildRequires:	perl
 BuildRequires:	gdbm
 BuildRequires:	pkgconfig
 BuildRequires:	python
+BuildRequires:  libaio-devel
 
 #################################################################################
 # specific
