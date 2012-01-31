@@ -4058,12 +4058,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   if (pg->is_all_uptodate()) {
     dout(10) << "recovery complete" << dendl;
     pg->log.reset_recovery_pointers();
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    pg->finish_recovery(*t, fin->contexts);
-    int tr = pg->osd->store->queue_transaction(&pg->osr, t,
-					       new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
+    pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
+			*context< RecoveryMachine >().get_context_list());
   } else {
     dout(10) << "recovery not yet complete: some osds not up to date" << dendl;
   }

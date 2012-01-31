@@ -5005,7 +5005,14 @@ void OSD::do_recovery(PG *pg)
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
-    int started = pg->start_recovery_ops(max);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
+    map< int, vector<PG::Info> >  notify_list;  // primary -> list
+    map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+    map<int,MOSDPGInfo*> info_map;  // peer -> message
+    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+
+    int started = pg->start_recovery_ops(max, &rctx);
     
     dout(10) << "do_recovery started " << started
 	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
@@ -5018,11 +5025,8 @@ void OSD::do_recovery(PG *pg)
      * out while trying to pull.
      */
     if (!started && pg->have_unfound()) {
-      map< int, map<pg_t,PG::Query> > query_map;
       pg->discover_all_missing(query_map);
-      if (query_map.size())
-	do_queries(query_map);
-      else {
+      if (!query_map.size()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
 	recovery_wq.lock();
 	pg->recovery_item.remove_myself();	// sigh...
@@ -5036,6 +5040,18 @@ void OSD::do_recovery(PG *pg)
       recovery_wq.unlock();
     }
     
+    do_notifies(notify_list, pg->get_osdmap()->get_epoch());  // notify? (residual|replica)
+    do_queries(query_map);
+    do_infos(info_map);
+
+    if (!t->empty()) {
+      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+      assert(tr == 0);
+    } else {
+      delete t;
+      delete fin;
+    }
+
     pg->unlock();
   }
   pg->put();

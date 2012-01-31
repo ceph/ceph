@@ -1589,7 +1589,7 @@ public:
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
-  virtual int start_recovery_ops(int max) = 0;
+  virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
   void purge_strays();
 
