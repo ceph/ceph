@@ -101,6 +101,9 @@ def save_config(ctx, config):
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
 def check_lock(ctx, config):
+    if ctx.config.get('check-locks') == False:
+        log.info('Lock checking disabled.')
+        return
     log.info('Checking locks...')
     for machine in ctx.config['targets'].iterkeys():
         status = lock.get_status(ctx, machine)
