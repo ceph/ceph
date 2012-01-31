@@ -909,18 +909,36 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('ceph', {}))
 
     ctx.daemons = CephState()
-    flavor = None
+
+    # Flavor tells us what gitbuilder to fetch the prebuilt software
+    # from. It's a combination of possible keywords, in a specific
+    # order, joined by dashes. It is used as a URL path name. If a
+    # match is not found, the teuthology run fails. This is ugly,
+    # and should be cleaned up at some point.
+
+    flavor = []
+
+    # First element: controlled by user (or not there, by default):
+    # used to choose the right distribution, e.g. "oneiric".
+    flavor_user = config.get('flavor')
+    if flavor_user is not None:
+        flavor.append(flavor_user)
+
     if config.get('path'):
         # local dir precludes any other flavors
-        flavor = 'local'
+        flavor = ['local']
     else:
         if config.get('coverage'):
             log.info('Recording coverage for this run.')
-            flavor = 'gcov'
+            flavor.append('gcov')
         else:
             if config.get('valgrind'):
                 log.info('Using notcmalloc flavor and running some daemons under valgrind')
-                flavor = 'notcmalloc'
+                flavor.append('notcmalloc')
+
+    flavor = '-'.join(flavor)
+    if flavor == '':
+        flavor = None
     ctx.summary['flavor'] = flavor or 'default'
 
     if config.get('coverage'):
