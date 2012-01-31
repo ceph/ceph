@@ -2439,6 +2439,8 @@ void librados::RadosClient::watch_notify(MWatchNotify *m)
     return;
 
   wc->notify(this, m);
+
+  m->put();
 }
 
 int librados::RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
