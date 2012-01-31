@@ -1182,8 +1182,8 @@ public:
 
     struct Peering;
     struct WaitActingChange;
-    struct NeedNewMap : boost::statechart::event< NeedNewMap > {
-      NeedNewMap() : boost::statechart::event< NeedNewMap >() {}
+    struct NeedActingChange : boost::statechart::event< NeedActingChange > {
+      NeedActingChange() : boost::statechart::event< NeedActingChange >() {}
     };
     struct Incomplete;
     struct IsIncomplete : boost::statechart::event< IsIncomplete > {
@@ -1198,7 +1198,7 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::transition< NeedNewMap, WaitActingChange >,
+	boost::statechart::transition< NeedActingChange, WaitActingChange >,
 	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);

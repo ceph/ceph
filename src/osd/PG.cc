@@ -4051,7 +4051,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
-    post_event(NeedNewMap());
+    post_event(NeedActingChange());
     return discard_event();
   }
 
@@ -4365,7 +4365,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   // adjust acting?
   if (!pg->choose_acting(newest_update_osd)) {
-    post_event(NeedNewMap());
+    post_event(NeedActingChange());
     return;
   }
 
