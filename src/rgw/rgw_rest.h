@@ -105,7 +105,7 @@ public:
   RGWInitMultipart_REST() {}
   ~RGWInitMultipart_REST() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWCompleteMultipart_REST : public RGWCompleteMultipart {

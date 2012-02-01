@@ -219,6 +219,7 @@ public:
 class RGWCreateBucket : public RGWOp {
 protected:
   int ret;
+  RGWAccessControlPolicy policy;
 
 public:
   RGWCreateBucket() {}
@@ -229,6 +230,7 @@ public:
     RGWOp::init(s, h);
     ret = 0;
   }
+  virtual int get_params() { return 0; }
   virtual void send_response() = 0;
   virtual const char *name() { return "create_bucket"; }
 };
@@ -277,6 +279,7 @@ protected:
   const char *supplied_etag;
   string etag;
   bool chunked_upload;
+  RGWAccessControlPolicy policy;
 
 public:
   RGWPutObj() {}
@@ -341,8 +344,8 @@ public:
 };
 
 class RGWCopyObj : public RGWOp {
-  bufferlist aclbl;
 protected:
+  RGWAccessControlPolicy dest_policy;
   const char *if_mod;
   const char *if_unmod;
   const char *if_match;
@@ -388,11 +391,11 @@ public:
     src_bucket.clear();
     src_object.clear();
     mtime = 0;
-    aclbl.clear();
   }
   int verify_permission();
   void execute();
 
+  virtual int init_dest_policy() { return 0; }
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "copy_obj"; }
@@ -436,6 +439,7 @@ public:
   int verify_permission();
   void execute();
 
+  virtual int get_canned_policy(ACLOwner& owner, stringstream& ss) { return 0; }
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_acls"; }
@@ -445,6 +449,7 @@ class RGWInitMultipart : public RGWOp {
 protected:
   int ret;
   string upload_id;
+  RGWAccessControlPolicy policy;
 
 public:
   RGWInitMultipart() {}
@@ -663,9 +668,6 @@ public:
   virtual void put_op(RGWOp *op) = 0;
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
-
-  virtual RGWAccessControlPolicy *alloc_policy() = 0;
-  virtual void free_policy(RGWAccessControlPolicy *policy) = 0;
 };
 
 #endif

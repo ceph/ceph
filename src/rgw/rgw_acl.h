@@ -216,12 +216,6 @@ dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
   }
-  virtual bool create_canned(string id, string name, string canned_acl) {
-    if (canned_acl.size())
-      return false;
-    create_default(id, name);
-    return true;
-  }
 };
 WRITE_CLASS_ENCODER(RGWAccessControlList)
 
@@ -295,13 +289,6 @@ public:
     owner.set_id(id);
     owner.set_name(name);
   }
-  virtual bool create_canned(string id, string name, string canned_acl) {
-    bool ret = acl.create_canned(id, name, canned_acl);
-    owner.set_id(id);
-    owner.set_name(name);
-    return ret;
-  }
-
   RGWAccessControlList& get_acl() {
     return acl;
   }

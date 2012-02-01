@@ -519,28 +519,26 @@ int RGWCreateBucket::verify_permission()
 
 void RGWCreateBucket::execute()
 {
-  RGWAccessControlPolicy *policy = dialect_handler->alloc_policy();
   RGWAccessControlPolicy old_policy;
   map<string, bufferlist> attrs;
   bufferlist aclbl;
   bool existed;
-  bool pol_ret;
-
+  int r;
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
+
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
   s->bucket_owner = s->user.user_id;
-  int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
+  r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
       ret = -EEXIST;
       goto done;
     }
   }
-  pol_ret = policy->create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-  if (!pol_ret) {
-    ret = -EINVAL;
-    goto done;
-  }
-  policy->encode(aclbl);
+  policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
@@ -565,8 +563,6 @@ void RGWCreateBucket::execute()
 
 done:
   send_response();
-
-  dialect_handler->free_policy(policy);
 }
 
 int RGWDeleteBucket::verify_permission()
@@ -885,7 +881,6 @@ void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
 void RGWPutObj::execute()
 {
   rgw_obj obj;
-  RGWAccessControlPolicy policy;
   RGWPutObjProcessor *processor = NULL;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -906,12 +901,6 @@ void RGWPutObj::execute()
   ret = get_params();
   if (ret < 0)
     goto done;
-
-  ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-  if (!ret) {
-     ret = -EINVAL;
-     goto done;
-  }
 
   if (supplied_md5_b64) {
     dout(15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
@@ -1146,14 +1135,9 @@ int RGWCopyObj::verify_permission()
   if (!::verify_permission(&dest_bucket_policy, s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
     return -EACCES;
 
-  /* build a polict for the target object */
-  RGWAccessControlPolicy dest_policy;
-
-  ret = dest_policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-  if (!ret)
-     return -EINVAL;
-
-  dest_policy.encode(aclbl);
+  ret = init_dest_policy();
+  if (ret < 0)
+    return ret;
 
   return 0;
 }
@@ -1176,6 +1160,9 @@ int RGWCopyObj::init_common()
     }
     unmod_ptr = &unmod_time;
   }
+
+  bufferlist aclbl;
+  dest_policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
   get_request_metadata(s, attrs);
@@ -1285,13 +1272,10 @@ void RGWPutACLs::execute()
     goto done;
   }
   if (!s->canned_acl.empty()) {
-    RGWAccessControlPolicy_S3 canned_policy;
-    bool r = canned_policy.create_canned(owner.get_id(), owner.get_display_name(), s->canned_acl);
-    if (!r) {
-      ret = -EINVAL;
+    ret = get_canned_policy(owner, ss);
+    if (ret < 0)
       goto done;
-    }
-    canned_policy.to_xml(ss);
+
     new_data = strdup(ss.str().c_str());
     data = new_data;
     len = ss.str().size();
@@ -1348,7 +1332,6 @@ void RGWInitMultipart::execute()
 {
   bufferlist bl;
   bufferlist aclbl;
-  RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
   rgw_obj obj;
 
@@ -1357,12 +1340,6 @@ void RGWInitMultipart::execute()
   ret = -EINVAL;
   if (!s->object)
     goto done;
-
-  ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-  if (!ret) {
-     ret = -EINVAL;
-     goto done;
-  }
 
   policy.encode(aclbl);
 

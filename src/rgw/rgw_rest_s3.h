@@ -41,6 +41,7 @@ public:
   RGWCreateBucket_REST_S3() {}
   ~RGWCreateBucket_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -74,6 +75,7 @@ public:
   RGWCopyObj_REST_S3() {}
   ~RGWCopyObj_REST_S3() {}
 
+  int init_dest_policy();
   int get_params();
   void send_response();
 };
@@ -91,6 +93,7 @@ public:
   RGWPutACLs_REST_S3() {}
   ~RGWPutACLs_REST_S3() {}
 
+  int get_canned_policy(ACLOwner& owner, stringstream& ss);
   void send_response();
 };
 
@@ -100,6 +103,7 @@ public:
   RGWInitMultipart_REST_S3() {}
   ~RGWInitMultipart_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -152,9 +156,6 @@ public:
 
   virtual int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
-
-  RGWAccessControlPolicy *alloc_policy() { return new RGWAccessControlPolicy_S3; }
-  void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
 #endif
