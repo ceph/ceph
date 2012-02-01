@@ -397,7 +397,7 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
   log.head = newhead;
   info.last_update = newhead;
   if (info.last_complete > newhead)
-    info.last_complete == newhead;
+    info.last_complete = newhead;
 
   for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
     merge_old_entry(t, *d);
