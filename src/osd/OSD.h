@@ -436,7 +436,7 @@ protected:
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 
-  PG *get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& pcreated, bool primary,
+  PG *get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& pcreated, bool primary,
 		       ObjectStore::Transaction **pt,
 		       C_Contexts **pfin);
   
@@ -579,7 +579,7 @@ protected:
 
 
   // -- generic pg peering --
-  void do_notifies(map< int, vector<PG::Info> >& notify_list,
+  void do_notifies(map< int, vector<pg_info_t> >& notify_list,
 		   epoch_t query_epoch);
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
   void do_infos(map<int, MOSDPGInfo*>& info_map);

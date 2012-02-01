@@ -30,15 +30,15 @@ class MOSDPGNotify : public Message {
   /// query. This allows the recipient to disregard responses to old
   /// queries.
   epoch_t query_epoch;
-  vector<PG::Info> pg_list;   // pgid -> version
+  vector<pg_info_t> pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
-  vector<PG::Info>& get_pg_list() { return pg_list; }
+  vector<pg_info_t>& get_pg_list() { return pg_list; }
   epoch_t get_query_epoch() { return query_epoch; }
 
   MOSDPGNotify() {}
-  MOSDPGNotify(epoch_t e, vector<PG::Info>& l, epoch_t query_epoch) :
+  MOSDPGNotify(epoch_t e, vector<pg_info_t>& l, epoch_t query_epoch) :
     Message(MSG_OSD_PG_NOTIFY), epoch(e),
     query_epoch(query_epoch) {
     pg_list.swap(l);
@@ -65,7 +65,7 @@ public:
   }
   void print(ostream& out) const {
     out << "pg_notify(";
-    for (vector<PG::Info>::const_iterator i = pg_list.begin();
+    for (vector<pg_info_t>::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       if (i != pg_list.begin())

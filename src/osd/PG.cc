@@ -70,46 +70,6 @@ std::string PG::gen_prefix() const
 }
   
 
-/******* PG::Info *******/
-
-void PG::Info::dump(Formatter *f) const
-{
-  f->dump_stream("pgid") << pgid;
-  f->dump_stream("last_update") << last_update;
-  f->dump_stream("last_complete") << last_complete;
-  f->dump_stream("log_tail") << log_tail;
-  f->dump_stream("last_backfill") << last_backfill;
-  f->dump_stream("purged_snaps") << purged_snaps;
-  f->open_object_section("history");
-  history.dump(f);
-  f->close_section();
-  f->open_object_section("stats");
-  stats.dump(f);
-  f->close_section();
-
-  f->dump_int("empty", is_empty());
-  f->dump_int("dne", dne());
-  f->dump_int("incomplete", is_incomplete());
-}
-
-void PG::Info::generate_test_instances(list<PG::Info*>& o)
-{
-  o.push_back(new Info);
-  o.push_back(new Info);
-  list<pg_history_t*> h;
-  pg_history_t::generate_test_instances(h);
-  o.back()->history = *h.back();
-  o.back()->pgid = pg_t(1, 2, -1);
-  o.back()->last_update = eversion_t(3, 4);
-  o.back()->last_complete = eversion_t(5, 6);
-  o.back()->log_tail = eversion_t(7, 8);
-  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456);
-  list<pg_stat_t*> s;
-  pg_stat_t::generate_test_instances(s);
-  o.back()->stats = *s.back();
-}
-
-
 /******* PG::Log ********/
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 
@@ -189,7 +149,7 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
 
 /********* PG **********/
 
-void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
+void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_master_log for osd." << from << ": " << olog << " " << omissing << dendl;
   assert(!is_active() && is_primary());
@@ -208,7 +168,7 @@ void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Mi
 }
     
 void PG::proc_replica_log(ObjectStore::Transaction& t,
-			  Info &oinfo, Log &olog, Missing& omissing, int from)
+			  pg_info_t &oinfo, Log &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -313,9 +273,9 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
   peer_missing[from].swap(omissing);
 }
 
-bool PG::proc_replica_info(int from, Info &oinfo)
+bool PG::proc_replica_info(int from, pg_info_t &oinfo)
 {
-  map<int,PG::Info>::iterator p = peer_info.find(from);
+  map<int,pg_info_t>::iterator p = peer_info.find(from);
   if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
     dout(10) << " got dup osd." << from << " info " << oinfo << ", identical to ours" << dendl;
     return false;
@@ -403,7 +363,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 }
 
 void PG::merge_log(ObjectStore::Transaction& t,
-		   Info &oinfo, Log &olog, int fromosd)
+		   pg_info_t &oinfo, Log &olog, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -539,7 +499,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
  * TODO: if the missing set becomes very large, this could get expensive.
  * Instead, we probably want to just iterate over our unfound set.
  */
-bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
+bool PG::search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
 			    int fromosd)
 {
   bool stats_updated = false;
@@ -721,7 +681,7 @@ bool PG::is_all_uptodate() const
       dout(10) << __func__ << ": osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
       uptodate = false;
     }
-    map<int,Info>::const_iterator pi = peer_info.find(peer);
+    map<int,pg_info_t>::const_iterator pi = peer_info.find(peer);
     if (pi->second.last_backfill != hobject_t::get_max()) {
       dout(10) << __func__ << ": osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
       uptodate = false;
@@ -877,7 +837,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
 {
   if (1) {
     // sanity check
-    for (map<int,Info>::iterator it = peer_info.begin();
+    for (map<int,pg_info_t>::iterator it = peer_info.begin();
 	 it != peer_info.end();
 	 it++) {
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
@@ -948,13 +908,13 @@ void PG::clear_primary_state()
  *  2) Prefer longer tail if it brings another info into contiguity
  *  3) Prefer current primary
  */
-map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &infos) const
+map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t> &infos) const
 {
-  map<int, Info>::const_iterator best = infos.end();
+  map<int, pg_info_t>::const_iterator best = infos.end();
   // find osd with newest last_update.  if there are multiples, prefer
   //  - a longer tail, if it brings another peer into log contiguity
   //  - the current primary
-  for (map<int, Info>::const_iterator p = infos.begin();
+  for (map<int, pg_info_t>::const_iterator p = infos.begin();
        p != infos.end();
        ++p) {
     // Disquality anyone who is incomplete (not fully backfilled)
@@ -972,7 +932,7 @@ map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &info
       continue;
     }
     // Prefer longer tail if it brings another peer into contiguity
-    for (map<int, Info>::const_iterator q = infos.begin();
+    for (map<int, pg_info_t>::const_iterator q = infos.begin();
 	 q != infos.end();
 	 ++q) {
       if (q->second.is_incomplete())
@@ -1009,14 +969,14 @@ map<int, PG::Info>::const_iterator PG::find_best_info(const map<int, Info> &info
  */
 bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 {
-  map<int, Info> all_info(peer_info.begin(), peer_info.end());
+  map<int, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[osd->whoami] = info;
 
-  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
+  for (map<int,pg_info_t>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
     dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
   }
 
-  map<int, Info>::const_iterator newest_update_osd = find_best_info(all_info);
+  map<int, pg_info_t>::const_iterator newest_update_osd = find_best_info(all_info);
 
   if (newest_update_osd == all_info.end()) {
     if (up != acting) {
@@ -1035,7 +995,7 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
   newest_update_osd_id = newest_update_osd->first;
   
   // select primary
-  map<int,Info>::const_iterator primary;
+  map<int,pg_info_t>::const_iterator primary;
   if (up.size() &&
       !all_info[up[0]].is_incomplete() &&
       all_info[up[0]].last_update >= newest_update_osd->second.log_tail) {
@@ -1046,8 +1006,8 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
 	     << " selected as primary instead" << dendl;
     primary = newest_update_osd;
   } else {
-    map<int, Info> complete_infos;
-    for (map<int, Info>::iterator i = all_info.begin();
+    map<int, pg_info_t> complete_infos;
+    for (map<int, pg_info_t>::iterator i = all_info.begin();
 	 i != all_info.end();
 	 ++i) {
       if (!i->second.is_incomplete())
@@ -1079,7 +1039,7 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
        ++i) {
     if (*i == primary->first)
       continue;
-    const Info &cur_info = all_info.find(*i)->second;
+    const pg_info_t &cur_info = all_info.find(*i)->second;
     if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
       if (backfill < 1) {
 	dout(10) << " osd." << *i << " (up) accepted (backfill) " << cur_info << dendl;
@@ -1095,7 +1055,7 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want) const
     }
   }
 
-  for (map<int,Info>::const_iterator i = all_info.begin();
+  for (map<int,pg_info_t>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
     if (usable >= get_osdmap()->get_pg_size(info.pgid))
@@ -1191,7 +1151,7 @@ void PG::build_might_have_unfound()
   }
 
   // include any (stray) peers
-  for (map<int,Info>::iterator p = peer_info.begin();
+  for (map<int,pg_info_t>::iterator p = peer_info.begin();
        p != peer_info.end();
        p++)
     might_have_unfound.insert(p->first);
@@ -1314,7 +1274,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_info.count(peer));
-      PG::Info& pi = peer_info[peer];
+      pg_info_t& pi = peer_info[peer];
 
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
@@ -1464,7 +1424,7 @@ void PG::_activate_committed(epoch_t e)
     epoch_t cur_epoch = get_osdmap()->get_epoch();
     entity_inst_t primary = get_osdmap()->get_cluster_inst(acting[0]);
     MOSDPGInfo *m = new MOSDPGInfo(cur_epoch);
-    PG::Info i = info;
+    pg_info_t i = info;
     i.history.last_epoch_started = e;
     m->pg_info.push_back(i);
     osd->cluster_messenger->send_message(m, primary);
@@ -3116,7 +3076,7 @@ void PG::share_pg_info()
 {
   dout(10) << "share_pg_info" << dendl;
 
-  // share new PG::Info with replicas
+  // share new pg_info_t with replicas
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
@@ -3141,7 +3101,7 @@ void PG::share_pg_log()
   while (++a != end) {
     int peer(*a);
     PG::Missing& pmissing(peer_missing[peer]);
-    PG::Info& pinfo(peer_info[peer]);
+    pg_info_t& pinfo(peer_info[peer]);
 
     MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
     m->log.copy_after(log, pinfo.last_update);
@@ -3158,7 +3118,7 @@ void PG::share_pg_log()
 }
 
 void PG::fulfill_info(int from, const Query &query, 
-		      pair<int, Info> &notify_info)
+		      pair<int, pg_info_t> &notify_info)
 {
   assert(!acting.empty());
   assert(from == acting[0]);
@@ -3467,7 +3427,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   }
 }
 
-void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
+void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 {
   assert(!is_primary());
   assert(is_stray() || is_active());
@@ -3860,7 +3820,7 @@ boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap
   OSDMapRef osdmap = advmap.osdmap;
 
   // Remove any downed osds from peer_info
-  map<int,PG::Info>::iterator p = pg->peer_info.begin();
+  map<int,pg_info_t>::iterator p = pg->peer_info.begin();
   while (p != pg->peer_info.end()) {
     if (!osdmap->is_up(p->first)) {
       dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
@@ -4191,7 +4151,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == Query::INFO) {
-    pair<int, Info> notify_info;
+    pair<int, pg_info_t> notify_info;
     pg->fulfill_info(query.from, query.query, notify_info);
     context< RecoveryMachine >().send_notify(notify_info.first, notify_info.second);
   } else {
@@ -4316,7 +4276,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	      if (!osdmap->exists(o) || osdmap->get_info(o).lost_at > interval.first)
 		continue;  // dne or lost
 	      if (osdmap->is_up(o)) {
-		PG::Info *pinfo;
+		pg_info_t *pinfo;
 		if (o == pg->osd->whoami) {
 		  pinfo = &pg->info;
 		} else {
@@ -4370,7 +4330,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
     return;
   }
 
-  const Info& best = pg->peer_info[newest_update_osd];
+  const pg_info_t& best = pg->peer_info[newest_update_osd];
 
   // am i broken?
   if (pg->info.last_update < best.log_tail) {
@@ -4382,7 +4342,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
   // how much log to request?
   eversion_t request_log_from = pg->info.last_update;
   for (vector<int>::iterator p = pg->acting.begin() + 1; p != pg->acting.end(); ++p) {
-    Info& ri = pg->peer_info[*p];
+    pg_info_t& ri = pg->peer_info[*p];
     if (ri.last_update >= best.log_tail && ri.last_update < request_log_from)
       request_log_from = ri.last_update;
   }
@@ -4495,7 +4455,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
   for (vector<int>::iterator i = pg->acting.begin() + 1;
        i != pg->acting.end();
        ++i) {
-    const Info& pi = pg->peer_info[*i];
+    const pg_info_t& pi = pg->peer_info[*i];
 
     if (pi.is_empty())
       continue;                                // no pg data, nothing divergent
@@ -4635,7 +4595,7 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 #undef dout_prefix
 #define dout_prefix *_dout << machine.pg->gen_prefix() 
 
-void PG::RecoveryState::handle_notify(int from, PG::Info& i,
+void PG::RecoveryState::handle_notify(int from, pg_info_t& i,
 				      RecoveryCtx *rctx)
 {
   dout(10) << "handle_notify " << i << " from osd." << from << dendl;
@@ -4644,7 +4604,7 @@ void PG::RecoveryState::handle_notify(int from, PG::Info& i,
   end_handle();
 }
 
-void PG::RecoveryState::handle_info(int from, PG::Info& i,
+void PG::RecoveryState::handle_info(int from, pg_info_t& i,
 				    RecoveryCtx *rctx)
 {
   dout(10) << "handle_info " << i << " from osd." << from << dendl;
@@ -4723,7 +4683,7 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 		       const map<epoch_t, Interval> &past_intervals,
 		       const vector<int> &up,
 		       const vector<int> &acting,
-		       const PG::Info &info,
+		       const pg_info_t &info,
 		       const PG *debug_pg)
   : pg_down(false)
 {

@@ -997,6 +997,94 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 }
 
 
+// -- pg_info_t --
+
+void pg_info_t::encode(bufferlist &bl) const
+{
+  __u8 v = 25;
+  ::encode(v, bl);
+    
+  ::encode(pgid, bl);
+  ::encode(last_update, bl);
+  ::encode(last_complete, bl);
+  ::encode(log_tail, bl);
+  ::encode(last_backfill, bl);
+  ::encode(stats, bl);
+  history.encode(bl);
+  ::encode(purged_snaps, bl);
+}
+
+void pg_info_t::decode(bufferlist::iterator &bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+
+  if (v < 23) {
+    old_pg_t opgid;
+    ::decode(opgid, bl);
+    pgid = opgid;
+  } else {
+    ::decode(pgid, bl);
+  }
+  ::decode(last_update, bl);
+  ::decode(last_complete, bl);
+  ::decode(log_tail, bl);
+  if (v < 25) {
+    bool log_backlog;
+    ::decode(log_backlog, bl);
+  }
+  if (v >= 24)
+    ::decode(last_backfill, bl);
+  ::decode(stats, bl);
+  history.decode(bl);
+  if (v >= 22)
+    ::decode(purged_snaps, bl);
+  else {
+    set<snapid_t> snap_trimq;
+    ::decode(snap_trimq, bl);
+  }
+}
+
+/******* PG::Info *******/
+
+void pg_info_t::dump(Formatter *f) const
+{
+  f->dump_stream("pgid") << pgid;
+  f->dump_stream("last_update") << last_update;
+  f->dump_stream("last_complete") << last_complete;
+  f->dump_stream("log_tail") << log_tail;
+  f->dump_stream("last_backfill") << last_backfill;
+  f->dump_stream("purged_snaps") << purged_snaps;
+  f->open_object_section("history");
+  history.dump(f);
+  f->close_section();
+  f->open_object_section("stats");
+  stats.dump(f);
+  f->close_section();
+
+  f->dump_int("empty", is_empty());
+  f->dump_int("dne", dne());
+  f->dump_int("incomplete", is_incomplete());
+}
+
+void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
+{
+  o.push_back(new pg_info_t);
+  o.push_back(new pg_info_t);
+  list<pg_history_t*> h;
+  pg_history_t::generate_test_instances(h);
+  o.back()->history = *h.back();
+  o.back()->pgid = pg_t(1, 2, -1);
+  o.back()->last_update = eversion_t(3, 4);
+  o.back()->last_complete = eversion_t(5, 6);
+  o.back()->log_tail = eversion_t(7, 8);
+  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456);
+  list<pg_stat_t*> s;
+  pg_stat_t::generate_test_instances(s);
+  o.back()->stats = *s.back();
+}
+
+
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const

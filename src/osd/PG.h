@@ -159,91 +159,7 @@ public:
 
   std::string gen_prefix() const;
 
-  /*
-   * PG::Info - summary of PG statistics.
-   *
-   * some notes: 
-   *  - last_complete implies we have all objects that existed as of that
-   *    stamp, OR a newer object, OR have already applied a later delete.
-   *  - if last_complete >= log.bottom, then we know pg contents thru log.head.
-   *    otherwise, we have no idea what the pg is supposed to contain.
-   */
-  struct Info {
-    pg_t pgid;
-    eversion_t last_update;    // last object version applied to store.
-    eversion_t last_complete;  // last version pg was complete through.
 
-    eversion_t log_tail;     // oldest log entry.
-
-    hobject_t last_backfill;   // objects >= this and < last_complete may be missing
-
-    interval_set<snapid_t> purged_snaps;
-
-    pg_stat_t stats;
-
-    pg_history_t history;
-
-    Info()
-      : last_backfill(hobject_t::get_max())
-    { }
-    Info(pg_t p)
-      : pgid(p),
-	last_backfill(hobject_t::get_max())
-    { }
-
-    bool is_empty() const { return last_update.version == 0; }
-    bool dne() const { return history.epoch_created == 0; }
-
-    bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
-
-    void encode(bufferlist &bl) const {
-      __u8 v = 25;
-      ::encode(v, bl);
-
-      ::encode(pgid, bl);
-      ::encode(last_update, bl);
-      ::encode(last_complete, bl);
-      ::encode(log_tail, bl);
-      ::encode(last_backfill, bl);
-      ::encode(stats, bl);
-      history.encode(bl);
-      ::encode(purged_snaps, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 v;
-      ::decode(v, bl);
-
-      if (v < 23) {
-	old_pg_t opgid;
-	::decode(opgid, bl);
-	pgid = opgid;
-      } else {
-	::decode(pgid, bl);
-      }
-      ::decode(last_update, bl);
-      ::decode(last_complete, bl);
-      ::decode(log_tail, bl);
-      if (v < 25) {
-	bool log_backlog;
-	::decode(log_backlog, bl);
-      }
-      if (v >= 24)
-	::decode(last_backfill, bl);
-      ::decode(stats, bl);
-      history.decode(bl);
-      if (v >= 22)
-	::decode(purged_snaps, bl);
-      else {
-	set<snapid_t> snap_trimq;
-	::decode(snap_trimq, bl);
-      }
-    }
-    void dump(Formatter *f) const;
-    static void generate_test_instances(list<Info*>& o);
-  };
-  WRITE_CLASS_ENCODER(Info)
-
-  
   /** 
    * Query - used to ask a peer for information about a pg.
    *
@@ -843,7 +759,7 @@ public:
   WRITE_CLASS_ENCODER(Interval)
 
   // pg state
-  Info        info;
+  pg_info_t        info;
   const coll_t coll;
   IndexedLog  log;
   hobject_t    log_oid;
@@ -898,7 +814,7 @@ public:
 	     const map<epoch_t, Interval> &past_intervals,
 	     const vector<int> &up,
 	     const vector<int> &acting,
-	     const Info &info,
+	     const pg_info_t &info,
 	     const PG *debug_pg=NULL);
 
     bool affected_by_map(const OSDMapRef osdmap, const PG *debug_pg=0) const;
@@ -915,14 +831,14 @@ public:
     utime_t start_time;
     map< int, map<pg_t, Query> > *query_map;
     map< int, MOSDPGInfo* > *info_map;
-    map< int, vector<Info> > *notify_list;
+    map< int, vector<pg_info_t> > *notify_list;
     list< Context* > *context_list;
     ObjectStore::Transaction *transaction;
     RecoveryCtx() : query_map(0), info_map(0), notify_list(0),
 		    context_list(0), transaction(0) {}
     RecoveryCtx(map< int, map<pg_t, Query> > *query_map,
 		map< int, MOSDPGInfo* > *info_map,
-		map< int, vector<Info> > *notify_list,
+		map< int, vector<pg_info_t> > *notify_list,
 		list< Context* > *context_list,
 		ObjectStore::Transaction *transaction)
       : query_map(query_map), info_map(info_map), 
@@ -959,8 +875,8 @@ public:
 
     struct MInfoRec : boost::statechart::event< MInfoRec > {
       int from;
-      Info &info;
-      MInfoRec(int from, Info &info) :
+      pg_info_t &info;
+      MInfoRec(int from, pg_info_t &info) :
 	from(from), info(info) {}
     };
 
@@ -973,8 +889,8 @@ public:
 
     struct MNotifyRec : boost::statechart::event< MNotifyRec > {
       int from;
-      Info &info;
-      MNotifyRec(int from, Info &info) :
+      pg_info_t &info;
+      MNotifyRec(int from, pg_info_t &info) :
 	from(from), info(info) {}
     };
 
@@ -1063,7 +979,7 @@ public:
 	return state->rctx->context_list;
       }
 
-      void send_notify(int to, const Info &info) {
+      void send_notify(int to, const pg_info_t &info) {
 	assert(state->rctx->notify_list);
 	(*state->rctx->notify_list)[to].push_back(info);
       }
@@ -1340,8 +1256,8 @@ public:
       machine.initiate();
     }
 
-    void handle_notify(int from, Info& i, RecoveryCtx *ctx);
-    void handle_info(int from, Info& i, RecoveryCtx *ctx);
+    void handle_notify(int from, pg_info_t& i, RecoveryCtx *ctx);
+    void handle_info(int from, pg_info_t& i, RecoveryCtx *ctx);
     void handle_log(int from,
 		    MOSDPGLog *msg,
 		    RecoveryCtx *ctx);
@@ -1367,7 +1283,7 @@ protected:
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
-  map<int,Info>        peer_info;   // info from peers (stray or prior)
+  map<int,pg_info_t>        peer_info;   // info from peers (stray or prior)
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_missing_requested;
@@ -1517,14 +1433,14 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
+  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog,
 			Missing& omissing, int from);
-  void proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
+  void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog,
 		       Missing& omissing, int from);
-  bool proc_replica_info(int from, Info &info);
+  bool proc_replica_info(int from, pg_info_t &info);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
-  void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
-  bool search_for_missing(const Info &oinfo, const Missing *omissing,
+  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog, int from);
+  bool search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
 			  int fromosd);
 
   void check_for_lost_objects();
@@ -1534,7 +1450,7 @@ public:
   
   void trim_write_ahead();
 
-  map<int, Info>::const_iterator find_best_info(const map<int, Info> &infos) const;
+  map<int, pg_info_t>::const_iterator find_best_info(const map<int, pg_info_t> &infos) const;
   bool calc_acting(int& newest_update_osd, vector<int>& want) const;
   bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
@@ -1545,7 +1461,7 @@ public:
   void _activate_committed(epoch_t e);
   void all_activated_and_committed();
 
-  void proc_primary_info(ObjectStore::Transaction &t, const Info &info);
+  void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
     return missing.num_missing() > missing_loc.size();
@@ -1724,16 +1640,16 @@ public:
   void set_last_peering_reset();
 
   void fulfill_info(int from, const Query &query, 
-		    pair<int, Info> &notify_info);
+		    pair<int, pg_info_t> &notify_info);
   void fulfill_log(int from, const Query &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
 
   // recovery bits
-  void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
+  void handle_notify(int from, pg_info_t& i, RecoveryCtx *rctx) {
     recovery_state.handle_notify(from, i, rctx);
   }
-  void handle_info(int from, PG::Info& i, RecoveryCtx *rctx) {
+  void handle_info(int from, pg_info_t& i, RecoveryCtx *rctx) {
     recovery_state.handle_info(from, i, rctx);
   }
   void handle_log(int from,
@@ -1793,7 +1709,6 @@ public:
 				    utime_t expire) = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Info)
 WRITE_CLASS_ENCODER(PG::Query)
 WRITE_CLASS_ENCODER(PG::Missing::item)
 WRITE_CLASS_ENCODER(PG::Missing)
@@ -1801,28 +1716,6 @@ WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
 WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
-{
-  out << pgi.pgid << "(";
-  if (pgi.dne())
-    out << " DNE";
-  if (pgi.is_empty())
-    out << " empty";
-  else {
-    out << " v " << pgi.last_update;
-    if (pgi.last_complete != pgi.last_update)
-      out << " lc " << pgi.last_complete;
-    out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
-    if (pgi.is_incomplete())
-      out << " lb " << pgi.last_backfill;
-  }
-  //out << " c " << pgi.epoch_created;
-  out << " n=" << pgi.stats.stats.sum.num_objects;
-  out << " " << pgi.history
-      << ")";
-  return out;
-}
 
 inline ostream& operator<<(ostream& out, const PG::Query& q) 
 {

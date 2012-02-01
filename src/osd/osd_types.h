@@ -892,6 +892,73 @@ inline ostream& operator<<(ostream& out, const pg_history_t& h) {
 }
 
 
+/**
+ * pg_info_t - summary of PG statistics.
+ *
+ * some notes: 
+ *  - last_complete implies we have all objects that existed as of that
+ *    stamp, OR a newer object, OR have already applied a later delete.
+ *  - if last_complete >= log.bottom, then we know pg contents thru log.head.
+ *    otherwise, we have no idea what the pg is supposed to contain.
+ */
+struct pg_info_t {
+  pg_t pgid;
+  eversion_t last_update;    // last object version applied to store.
+  eversion_t last_complete;  // last version pg was complete through.
+  
+  eversion_t log_tail;     // oldest log entry.
+
+  hobject_t last_backfill;   // objects >= this and < last_complete may be missing
+
+  interval_set<snapid_t> purged_snaps;
+
+  pg_stat_t stats;
+
+  pg_history_t history;
+
+  pg_info_t()
+    : last_backfill(hobject_t::get_max())
+  { }
+  pg_info_t(pg_t p)
+    : pgid(p),
+      last_backfill(hobject_t::get_max())
+  { }
+  
+  bool is_empty() const { return last_update.version == 0; }
+  bool dne() const { return history.epoch_created == 0; }
+
+  bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_info_t)
+
+inline ostream& operator<<(ostream& out, const pg_info_t& pgi) 
+{
+  out << pgi.pgid << "(";
+  if (pgi.dne())
+    out << " DNE";
+  if (pgi.is_empty())
+    out << " empty";
+  else {
+    out << " v " << pgi.last_update;
+    if (pgi.last_complete != pgi.last_update)
+      out << " lc " << pgi.last_complete;
+    out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
+    if (pgi.is_incomplete())
+      out << " lb " << pgi.last_backfill;
+  }
+  //out << " c " << pgi.epoch_created;
+  out << " n=" << pgi.stats.stats.sum.num_objects;
+  out << " " << pgi.history
+      << ")";
+  return out;
+}
+
+
 
 
 struct osd_peer_stat_t {

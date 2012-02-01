@@ -580,7 +580,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   // operation won't apply properly on the backfill_target.  (the
   // opposite is not a problem; if the target is after the line, we
   // don't apply on the backfill_target and it doesn't matter.)
-  Info *backfill_target_info = NULL;
+  pg_info_t *backfill_target_info = NULL;
   bool before_backfill = false;
   if (backfill_target >= 0) {
     backfill_target_info = &peer_info[backfill_target];
@@ -2769,7 +2769,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   info.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
 
   if (backfill_target >= 0) {
-    Info& pinfo = peer_info[backfill_target];
+    pg_info_t& pinfo = peer_info[backfill_target];
     if (soid < pinfo.last_backfill)
       pinfo.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     else if (soid < backfill_pos)
@@ -3035,7 +3035,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
-    Info &pinfo = peer_info[peer];
+    pg_info_t &pinfo = peer_info[peer];
 
     repop->waitfor_ack.insert(peer);
     repop->waitfor_disk.insert(peer);
@@ -5470,7 +5470,7 @@ int ReplicatedPG::recover_backfill(int max)
   dout(10) << "recover_backfill (" << max << ")" << dendl;
   assert(backfill_target >= 0);
 
-  Info& pinfo = peer_info[backfill_target];
+  pg_info_t& pinfo = peer_info[backfill_target];
   BackfillInterval& pbi = peer_backfill_info;
 
   // Initialize from prior backfill state

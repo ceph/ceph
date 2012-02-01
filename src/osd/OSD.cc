@@ -1206,7 +1206,7 @@ void OSD::load_pgs()
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
  * hasn't changed since the given epoch and we are the primary.
  */
-PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& created,
+PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& created,
 			  bool primary,
 			  ObjectStore::Transaction **pt,
 			  C_Contexts **pfin)
@@ -1464,7 +1464,7 @@ void OSD::update_heartbeat_peers()
 	_add_heartbeat_source(pg->acting[i], old_from, old_from_stamp, old_con);
       for (unsigned i=0; i<pg->up.size(); i++)
 	_add_heartbeat_source(pg->up[i], old_from, old_from_stamp, old_con);
-      for (map<int,PG::Info>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
+      for (map<int,pg_info_t>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
 	if (osdmap->is_up(p->first))
 	  _add_heartbeat_source(p->first, old_from, old_from_stamp, old_con);
     }
@@ -3599,7 +3599,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  map< int, vector<PG::Info> >  notify_list;  // primary -> list
+  map< int, vector<pg_info_t> >  notify_list;  // primary -> list
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
@@ -4272,10 +4272,10 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list,
+void OSD::do_notifies(map< int, vector<pg_info_t> >& notify_list,
 		      epoch_t query_epoch)
 {
-  for (map< int, vector<PG::Info> >::iterator it = notify_list.begin();
+  for (map< int, vector<pg_info_t> >::iterator it = notify_list.begin();
        it != notify_list.end();
        it++) {
     if (it->first == whoami) {
@@ -4316,7 +4316,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
        ++p) { 
-    for (vector<PG::Info>::iterator i = p->second->pg_info.begin();
+    for (vector<pg_info_t>::iterator i = p->second->pg_info.begin();
 	 i != p->second->pg_info.end();
 	 ++i) {
       dout(20) << "Sending info " << *i << " to osd." << p->first << dendl;
@@ -4329,7 +4329,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
 
 /** PGNotify
  * from non-primary to primary
- * includes PG::Info.
+ * includes pg_info_t.
  * NOTE: called with opqueue active.
  */
 void OSD::handle_pg_notify(MOSDPGNotify *m)
@@ -4347,7 +4347,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
-  for (vector<PG::Info>::iterator it = m->get_pg_list().begin();
+  for (vector<pg_info_t>::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        it++) {
     PG *pg = 0;
@@ -4442,7 +4442,7 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
 
   int created = 0;
 
-  for (vector<PG::Info>::iterator p = m->pg_info.begin();
+  for (vector<pg_info_t>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) {
     ObjectStore::Transaction *t = 0;
@@ -4641,7 +4641,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
-  map< int, vector<PG::Info> > notify_list;
+  map< int, vector<pg_info_t> > notify_list;
   
   for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
@@ -4667,7 +4667,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
       assert(role != 0);
       dout(10) << " pg " << pgid << " dne" << dendl;
-      PG::Info empty(pgid);
+      pg_info_t empty(pgid);
       if (it->second.type == PG::Query::LOG ||
 	  it->second.type == PG::Query::FULLLOG) {
 	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,

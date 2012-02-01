@@ -27,7 +27,7 @@ class MOSDPGLog : public Message {
   epoch_t query_epoch;
 
 public:
-  PG::Info info;
+  pg_info_t info;
   PG::Log log;
   PG::Missing missing;
 
@@ -36,10 +36,10 @@ public:
   epoch_t get_query_epoch() { return query_epoch; }
 
   MOSDPGLog() {}
-  MOSDPGLog(version_t mv, PG::Info& i) :
+  MOSDPGLog(version_t mv, pg_info_t& i) :
     Message(MSG_OSD_PG_LOG),
     epoch(mv), query_epoch(mv), info(i)  { }
-  MOSDPGLog(version_t mv, PG::Info& i, epoch_t query_epoch) :
+  MOSDPGLog(version_t mv, pg_info_t& i, epoch_t query_epoch) :
     Message(MSG_OSD_PG_LOG),
     epoch(mv), query_epoch(query_epoch), info(i)  { }
 private:

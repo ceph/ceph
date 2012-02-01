@@ -22,13 +22,13 @@ class MOSDPGMissing : public Message {
   epoch_t epoch;
 
 public:
-  PG::Info info;
+  pg_info_t info;
   PG::Missing missing;
 
   epoch_t get_epoch() { return epoch; }
 
   MOSDPGMissing() {}
-  MOSDPGMissing(version_t mv, const PG::Info &info_,
+  MOSDPGMissing(version_t mv, const pg_info_t &info_,
 		const PG::Missing &missing_)
     : Message(MSG_OSD_PG_MISSING), epoch(mv), info(info_),
       missing(missing_) { }
