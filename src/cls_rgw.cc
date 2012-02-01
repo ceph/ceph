@@ -248,8 +248,14 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       if (!entry.pending_map.size()) {
         op_bl.append(CEPH_OSD_TMAP_RM);
         ::encode(op.name, op_bl);
-      } else
+      } else {
         entry.exists = false;
+        bufferlist new_key_bl;
+        ::encode(entry, new_key_bl);
+        op_bl.append(CEPH_OSD_TMAP_SET);
+        ::encode(op.name, op_bl);
+        ::encode(new_key_bl, op_bl);
+      }
     } else {
       return -ENOENT;
     }
