@@ -359,7 +359,7 @@ public:
     eversion_t reply_version;    // the version that we report the client (depends on the op)
 
     ObjectStore::Transaction op_t, local_t;
-    vector<PG::Log::Entry> log;
+    vector<pg_log_entry_t> log;
 
     interval_set<uint64_t> modified_ranges;
     ObjectContext *obc;          // For ref counting purposes

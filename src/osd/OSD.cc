@@ -2373,12 +2373,12 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     int mode;
     if (cmd[2] == "revert")
-      mode = PG::Log::Entry::LOST_REVERT;
+      mode = pg_log_entry_t::LOST_REVERT;
     /*
     else if (cmd[2] == "mark")
-      mode = PG::Log::Entry::LOST_MARK;
+      mode = pg_log_entry_t::LOST_MARK;
     else if (cmd[2] == "delete" || cmd[2] == "remove")
-      mode = PG::Log::Entry::LOST_DELETE;
+      mode = pg_log_entry_t::LOST_DELETE;
     */
     else {
       //ss << "mode must be mark|revert|delete";
@@ -4102,9 +4102,9 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   *_dout << dendl;
   parent->log.unindex();
 
-  list<PG::Log::Entry>::iterator p = parent->log.log.begin();
+  list<pg_log_entry_t>::iterator p = parent->log.log.begin();
   while (p != parent->log.log.end()) {
-    list<PG::Log::Entry>::iterator cur = p;
+    list<pg_log_entry_t>::iterator cur = p;
     p++;
     hobject_t& poid = cur->soid;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());

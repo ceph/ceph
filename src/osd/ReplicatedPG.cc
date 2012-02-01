@@ -406,7 +406,7 @@ void ReplicatedPG::calc_trim_to()
 	min_last_complete_ondisk != pg_trim_to &&
 	log.approx_size() > g_conf->osd_min_pg_log_entries) {
       size_t num_to_trim = log.approx_size() - g_conf->osd_min_pg_log_entries;
-      list<Log::Entry>::const_iterator it = log.log.begin();
+      list<pg_log_entry_t>::const_iterator it = log.log.begin();
       eversion_t new_trim_to;
       for (size_t i = 0; i < num_to_trim; ++i) {
 	new_trim_to = it->version;
@@ -1120,7 +1120,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
     snapset.clone_overlap.erase(last);
     snapset.clone_size.erase(last);
 	
-    ctx->log.push_back(Log::Entry(Log::Entry::DELETE, coid, ctx->at_version, ctx->obs->oi.version,
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, coid, ctx->at_version, ctx->obs->oi.version,
 				  osd_reqid_t(), ctx->mtime));
     ctx->at_version.version++;
   } else {
@@ -1145,7 +1145,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 	t->collection_add(coll_t(info.pgid, snaps[snaps.size()-1]), coll, coid);
     }	      
 
-    ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, coid, coi.version, coi.prior_version,
 				  osd_reqid_t(), ctx->mtime));
     ::encode(coi, ctx->log.back().snaps);
     ctx->at_version.version++;
@@ -1159,14 +1159,14 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
   assert(ctx->snapset_obc->registered);
   if (snapset.clones.empty() && !snapset.head_exists) {
     dout(10) << coid << " removing " << snapoid << dendl;
-    ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, 
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid, ctx->at_version, 
 				  ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
     ctx->snapset_obc->obs.exists = false;
 
     t->remove(coll, snapoid);
   } else {
     dout(10) << coid << " updating snapset on " << snapoid << dendl;
-    ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, 
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid, ctx->at_version, 
 				  ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
 
     ctx->snapset_obc->obs.oi.prior_version = ctx->snapset_obc->obs.oi.version;
@@ -2458,7 +2458,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     dout(10) << " cloning v " << ctx->obs->oi.version
 	     << " to " << coid << " v " << ctx->at_version
 	     << " snaps=" << snaps << dendl;
-    ctx->log.push_back(Log::Entry(PG::Log::Entry::CLONE, coid, ctx->at_version,
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::CLONE, coid, ctx->at_version,
 				  ctx->obs->oi.version, ctx->reqid, ctx->new_obs.oi.mtime));
     ::encode(snaps, ctx->log.back().snaps);
 
@@ -2699,10 +2699,10 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
 
   // append to log
-  int logopcode = Log::Entry::MODIFY;
+  int logopcode = pg_log_entry_t::MODIFY;
   if (!ctx->new_obs.exists)
-    logopcode = Log::Entry::DELETE;
-  ctx->log.push_back(Log::Entry(logopcode, soid, ctx->at_version, old_version,
+    logopcode = pg_log_entry_t::DELETE;
+  ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version, old_version,
 				ctx->reqid, ctx->mtime));
 
   if (ctx->new_obs.exists) {
@@ -2733,7 +2733,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	dout(10) << " removing old " << snapoid << dendl;
 
 	ctx->at_version.version++;
-	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, old_version,
+	ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid, ctx->at_version, old_version,
 				      osd_reqid_t(), ctx->mtime));
 
 	ctx->snapset_obc->obs.exists = false;
@@ -2746,7 +2746,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     dout(10) << " final snapset " << ctx->new_snapset
 	     << " in " << snapoid << dendl;
     ctx->at_version.version++;
-    ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, old_version,
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid, ctx->at_version, old_version,
 				  osd_reqid_t(), ctx->mtime));
 
     ctx->snapset_obc = get_object_context(snapoid, ctx->new_obs.oi.oloc, true);
@@ -3243,7 +3243,7 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
 
   ObjectStore::Transaction *t = &ctx->op_t;
 
-  ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, obc->obs.oi.soid,
+  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
 				ctx->at_version,
 				obc->obs.oi.version,
 				osd_reqid_t(), ctx->mtime));
@@ -3602,7 +3602,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   if (!op->noop) {
     if (op->logbl.length()) {
       // shipped transaction and log entries
-      vector<Log::Entry> log;
+      vector<pg_log_entry_t> log;
       
       bufferlist::iterator p = op->get_data().begin();
       ::decode(rm->opt, p);
@@ -4626,8 +4626,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
     bool revert = false;
     if (missing.is_missing(soid) && missing.missing[soid].need > v) {
-      Log::Entry *latest = log.objects[soid];
-      if (latest->op == Log::Entry::LOST_REVERT &&
+      pg_log_entry_t *latest = log.objects[soid];
+      if (latest->op == pg_log_entry_t::LOST_REVERT &&
 	  latest->prior_version == v) {
 	dout(10) << " got old revert version " << v << " for " << *latest << dendl;
 	revert = true;
@@ -4827,7 +4827,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transac
 
   // Add log entry
   ++info.last_update.version;
-  Log::Entry e(what, oid, info.last_update, version, osd_reqid_t(), mtime);
+  pg_log_entry_t e(what, oid, info.last_update, version, osd_reqid_t(), mtime);
   log.add(e);
   
   object_locator_t oloc;
@@ -4863,7 +4863,7 @@ struct C_PG_MarkUnfoundLost : public Context {
  */
 void ReplicatedPG::mark_all_unfound_lost(int what)
 {
-  dout(3) << __func__ << " " << Log::Entry::get_op_name(what) << dendl;
+  dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
 
   dout(30) << __func__ << ": log before:\n";
   log.print(*_dout);
@@ -4888,19 +4888,19 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
     eversion_t prev;
 
     switch (what) {
-    case Log::Entry::LOST_MARK:
-      obc = mark_object_lost(t, oid, m->second.need, mtime, Log::Entry::LOST_MARK);
+    case pg_log_entry_t::LOST_MARK:
+      obc = mark_object_lost(t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
       missing.got(m++);
       assert(0 == "actually, not implemented yet!");
       // we need to be careful about how this is handled on the replica!
       break;
 
-    case Log::Entry::LOST_REVERT:
+    case pg_log_entry_t::LOST_REVERT:
       prev = pick_newest_available(oid);
       if (prev > eversion_t()) {
 	// log it
 	++info.last_update.version;
-	Log::Entry e(Log::Entry::LOST_REVERT, oid, info.last_update, prev, osd_reqid_t(), mtime);
+	pg_log_entry_t e(pg_log_entry_t::LOST_REVERT, oid, info.last_update, prev, osd_reqid_t(), mtime);
 	log.add(e);
 	dout(10) << e << dendl;
 
@@ -4911,11 +4911,11 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
       }
       /** fall-thru **/
 
-    case Log::Entry::LOST_DELETE:
+    case pg_log_entry_t::LOST_DELETE:
       {
 	// log it
       	++info.last_update.version;
-	Log::Entry e(Log::Entry::LOST_DELETE, oid, info.last_update, m->second.need,
+	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, info.last_update, m->second.need,
 		     osd_reqid_t(), mtime);
 	log.add(e);
 	dout(10) << e << dendl;
@@ -5179,7 +5179,7 @@ int ReplicatedPG::recover_primary(int max)
   dout(25) << "recover_primary " << missing.missing << dendl;
 
   // look at log!
-  Log::Entry *latest = 0;
+  pg_log_entry_t *latest = 0;
   int started = 0;
   int skipped = 0;
 
@@ -5217,7 +5217,7 @@ int ReplicatedPG::recover_primary(int max)
 
     if (latest) {
       switch (latest->op) {
-      case Log::Entry::CLONE:
+      case pg_log_entry_t::CLONE:
 	{
 	  // is this a clone operation that we can do locally?
 	  if (missing.is_missing(head) &&
@@ -5262,7 +5262,7 @@ int ReplicatedPG::recover_primary(int max)
 	}
 	break;
 
-      case Log::Entry::LOST_REVERT:
+      case pg_log_entry_t::LOST_REVERT:
 	{
 	  if (item.have == latest->prior_version) {
 	    // I have it locally.  Revert.
@@ -5701,7 +5701,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
   // just scan the log.
   set<hobject_t> did;
-  for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
+  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
        p != log.log.rend();
        p++) {
     if (did.count(p->soid))

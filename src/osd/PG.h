@@ -165,115 +165,6 @@ public:
    *  serves as a recovery queue for recent changes.
    */
   struct Log {
-    /** Entry
-     */
-    struct Entry {
-      enum {
-	MODIFY = 1,
-	CLONE = 2,
-	DELETE = 3,
-	BACKLOG = 4,  // event invented by generate_backlog [deprecated]
-	LOST_REVERT = 5, // lost new version, revert to an older version.
-	LOST_DELETE = 6, // lost new version, revert to no object (deleted).
-	LOST_MARK = 7,   // lost new version, now EIO
-      };
-      static const char *get_op_name(int op) {
-	switch (op) {
-	case MODIFY:
-	  return "modify  ";
-	case CLONE:
-	  return "clone   ";
-	case DELETE:
-	  return "delete  ";
-	case BACKLOG:
-	  return "backlog ";
-	case LOST_REVERT:
-	  return "l_revert";
-	case LOST_DELETE:
-	  return "l_delete";
-	case LOST_MARK:
-	  return "l_mark  ";
-	default:
-	  return "unknown ";
-	}
-      }
-      const char *get_op_name() const {
-	return get_op_name(op);
-      }
-
-      __s32      op;
-      hobject_t  soid;
-      eversion_t version, prior_version;
-      osd_reqid_t reqid;  // caller+tid to uniquely identify request
-      utime_t     mtime;  // this is the _user_ mtime, mind you
-      bufferlist snaps;   // only for clone entries
-      bool invalid_hash; // only when decoding sobject_t based entries
-
-      uint64_t offset;   // [soft state] my offset on disk
-      
-      Entry() : op(0), invalid_hash(false) {}
-      Entry(int _op, const hobject_t& _soid, 
-	    const eversion_t& v, const eversion_t& pv,
-	    const osd_reqid_t& rid, const utime_t& mt) :
-        op(_op), soid(_soid), version(v),
-	prior_version(pv),
-	reqid(rid), mtime(mt), invalid_hash(false) {}
-      
-      bool is_clone() const { return op == CLONE; }
-      bool is_modify() const { return op == MODIFY; }
-      bool is_backlog() const { return op == BACKLOG; }
-      bool is_lost_revert() const { return op == LOST_REVERT; }
-      bool is_lost_delete() const { return op == LOST_DELETE; }
-      bool is_lost_mark() const { return op == LOST_MARK; }
-
-      bool is_update() const {
-	return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
-      }
-      bool is_delete() const {
-	return op == DELETE || op == LOST_DELETE;
-      }
-      
-      bool reqid_is_indexed() const {
-	return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
-      }
-
-      void encode(bufferlist &bl) const {
-	__u8 struct_v = 3;
-	::encode(struct_v, bl);
-	::encode(op, bl);
-	::encode(soid, bl);
-	::encode(version, bl);
-	::encode(prior_version, bl);
-	::encode(reqid, bl);
-	::encode(mtime, bl);
-	if (op == CLONE)
-	  ::encode(snaps, bl);
-      }
-      void decode(bufferlist::iterator &bl) {
-	__u8 struct_v;
-	::decode(struct_v, bl);
-	::decode(op, bl);
-	if (struct_v < 2) {
-	  sobject_t old_soid;
-	  ::decode(old_soid, bl);
-	  soid.oid = old_soid.oid;
-	  soid.snap = old_soid.snap;
-	  invalid_hash = true;
-	} else {
-	  ::decode(soid, bl);
-	}
-	if (struct_v < 3)
-	  invalid_hash = true;
-	::decode(version, bl);
-	::decode(prior_version, bl);
-	::decode(reqid, bl);
-	::decode(mtime, bl);
-	if (op == CLONE)
-	  ::decode(snaps, bl);
-      }
-    };
-    WRITE_CLASS_ENCODER(Entry)
-
     /*
      *   head - newest entry (update|delete)
      *   tail - entry previous to oldest (update|delete) for which we have
@@ -283,7 +174,7 @@ public:
     eversion_t head;    // newest entry
     eversion_t tail;    // version prior to oldest
 
-    list<Entry> log;  // the actual log.
+    list<pg_log_entry_t> log;  // the actual log.
 
     Log() {}
 
@@ -305,10 +196,10 @@ public:
       return head.version - tail.version;
     }
 
-    list<Entry>::iterator find_entry(eversion_t v) {
+    list<pg_log_entry_t>::iterator find_entry(eversion_t v) {
       int fromhead = head.version - v.version;
       int fromtail = v.version - tail.version;
-      list<Entry>::iterator p;
+      list<pg_log_entry_t>::iterator p;
       if (fromhead < fromtail) {
 	p = log.end();
 	p--;
@@ -376,11 +267,11 @@ public:
    * plus some methods to manipulate it all.
    */
   struct IndexedLog : public Log {
-    hash_map<hobject_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_map<osd_reqid_t,Entry*> caller_ops;
+    hash_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
+    hash_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
 
     // recovery pointers
-    list<Entry>::iterator complete_to;  // not inclusive of referenced item
+    list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
     version_t last_requested;           // last object requested by primary
 
     /****/
@@ -410,7 +301,7 @@ public:
       return caller_ops.count(r);
     }
     eversion_t get_request_version(const osd_reqid_t &r) const {
-      hash_map<osd_reqid_t,Entry*>::const_iterator p = caller_ops.find(r);
+      hash_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
       if (p == caller_ops.end())
 	return eversion_t();
       return p->second->version;    
@@ -419,7 +310,7 @@ public:
     void index() {
       objects.clear();
       caller_ops.clear();
-      for (list<Entry>::iterator i = log.begin();
+      for (list<pg_log_entry_t>::iterator i = log.begin();
            i != log.end();
            i++) {
         objects[i->soid] = &(*i);
@@ -430,7 +321,7 @@ public:
       }
     }
 
-    void index(Entry& e) {
+    void index(pg_log_entry_t& e) {
       if (objects.count(e.soid) == 0 || 
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
@@ -443,7 +334,7 @@ public:
       objects.clear();
       caller_ops.clear();
     }
-    void unindex(Entry& e) {
+    void unindex(pg_log_entry_t& e) {
       // NOTE: this only works if we remove from the _tail_ of the log!
       if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
@@ -455,17 +346,17 @@ public:
 
 
     // accessors
-    Entry *is_updated(const hobject_t& oid) {
+    pg_log_entry_t *is_updated(const hobject_t& oid) {
       if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
       return 0;
     }
-    Entry *is_deleted(const hobject_t& oid) {
+    pg_log_entry_t *is_deleted(const hobject_t& oid) {
       if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
       return 0;
     }
     
     // actors
-    void add(Entry& e) {
+    void add(pg_log_entry_t& e) {
       // add to log
       log.push_back(e);
       assert(e.version > head);
@@ -561,7 +452,7 @@ public:
     bool is_missing(const hobject_t& oid) const;
     bool is_missing(const hobject_t& oid, eversion_t v) const;
     eversion_t have_old(const hobject_t& oid) const;
-    void add_next_event(const Log::Entry& e);
+    void add_next_event(const pg_log_entry_t& e);
     void revise_need(hobject_t oid, eversion_t need);
     void add(const hobject_t& oid, eversion_t need, eversion_t have);
     void rm(const hobject_t& oid, eversion_t v);
@@ -1392,7 +1283,7 @@ public:
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog,
 		       Missing& omissing, int from);
   bool proc_replica_info(int from, pg_info_t &info);
-  bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
+  bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog, int from);
   bool search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
 			  int fromosd);
@@ -1562,8 +1453,8 @@ public:
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
 
-  void add_log_entry(Log::Entry& e, bufferlist& log_bl);
-  void append_log(vector<Log::Entry>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
+  void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
+  void append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
 
   void read_log(ObjectStore *store);
   bool check_log_for_corruption(ObjectStore *store);
@@ -1574,7 +1465,7 @@ public:
   std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
-  void update_snap_collections(vector<Log::Entry> &log_entries,
+  void update_snap_collections(vector<pg_log_entry_t> &log_entries,
 			       ObjectStore::Transaction& t);
   void adjust_local_snaps();
 
@@ -1665,16 +1556,9 @@ public:
 
 WRITE_CLASS_ENCODER(PG::Missing::item)
 WRITE_CLASS_ENCODER(PG::Missing)
-WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
 WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
-{
-  return out << e.version << " (" << e.prior_version << ") "
-             << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
-}
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
 {

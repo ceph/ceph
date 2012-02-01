@@ -1045,7 +1045,7 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   }
 }
 
-/******* PG::Info *******/
+// -- pg_info_t --
 
 void pg_info_t::dump(Formatter *f) const
 {
@@ -1106,6 +1106,70 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
   o.push_back(new pg_query_t(pg_query_t::FULLLOG, *h.back()));
 }
 
+
+// -- pg_log_entry_t --
+
+void pg_log_entry_t::encode(bufferlist &bl) const
+{
+  __u8 struct_v = 3;
+  ::encode(struct_v, bl);
+  ::encode(op, bl);
+  ::encode(soid, bl);
+  ::encode(version, bl);
+  ::encode(prior_version, bl);
+  ::encode(reqid, bl);
+  ::encode(mtime, bl);
+  if (op == CLONE)
+    ::encode(snaps, bl);
+}
+
+void pg_log_entry_t::decode(bufferlist::iterator &bl)
+{
+  __u8 struct_v;
+  ::decode(struct_v, bl);
+  ::decode(op, bl);
+  if (struct_v < 2) {
+    sobject_t old_soid;
+    ::decode(old_soid, bl);
+    soid.oid = old_soid.oid;
+    soid.snap = old_soid.snap;
+    invalid_hash = true;
+  } else {
+    ::decode(soid, bl);
+  }
+  if (struct_v < 3)
+    invalid_hash = true;
+  ::decode(version, bl);
+  ::decode(prior_version, bl);
+  ::decode(reqid, bl);
+  ::decode(mtime, bl);
+  if (op == CLONE)
+    ::decode(snaps, bl);
+}
+
+void pg_log_entry_t::dump(Formatter *f) const
+{
+  f->dump_string("op", get_op_name());
+  f->dump_stream("object") << soid;
+  f->dump_stream("version") << version;
+  f->dump_stream("prior_version") << version;
+  f->dump_stream("reqid") << reqid;
+  f->dump_stream("mtime") << mtime;
+}
+
+void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
+{
+  o.push_back(new pg_log_entry_t());
+  hobject_t oid(object_t("objname"), "key", 123, 456);
+  o.push_back(new pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
+				 osd_reqid_t(entity_name_t::CLIENT(777), 8, 999), utime_t(8,9)));
+}
+
+ostream& operator<<(ostream& out, const pg_log_entry_t& e)
+{
+  return out << e.version << " (" << e.prior_version << ") "
+             << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+}
 
 
 // -- OSDSuperblock --

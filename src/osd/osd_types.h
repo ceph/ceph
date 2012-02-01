@@ -1019,6 +1019,90 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
 }
 
 
+struct pg_log_entry_t {
+  enum {
+    MODIFY = 1,
+    CLONE = 2,
+    DELETE = 3,
+    BACKLOG = 4,  // event invented by generate_backlog [deprecated]
+    LOST_REVERT = 5, // lost new version, revert to an older version.
+    LOST_DELETE = 6, // lost new version, revert to no object (deleted).
+    LOST_MARK = 7,   // lost new version, now EIO
+  };
+  static const char *get_op_name(int op) {
+    switch (op) {
+    case MODIFY:
+      return "modify  ";
+    case CLONE:
+      return "clone   ";
+    case DELETE:
+      return "delete  ";
+    case BACKLOG:
+      return "backlog ";
+    case LOST_REVERT:
+      return "l_revert";
+    case LOST_DELETE:
+      return "l_delete";
+    case LOST_MARK:
+      return "l_mark  ";
+    default:
+      return "unknown ";
+    }
+  }
+  const char *get_op_name() const {
+    return get_op_name(op);
+  }
+
+  __s32      op;
+  hobject_t  soid;
+  eversion_t version, prior_version;
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  utime_t     mtime;  // this is the _user_ mtime, mind you
+  bufferlist snaps;   // only for clone entries
+  bool invalid_hash; // only when decoding sobject_t based entries
+
+  uint64_t offset;   // [soft state] my offset on disk
+      
+  pg_log_entry_t()
+    : op(0), invalid_hash(false), offset(0) {}
+  pg_log_entry_t(int _op, const hobject_t& _soid, 
+		 const eversion_t& v, const eversion_t& pv,
+		 const osd_reqid_t& rid, const utime_t& mt)
+    : op(_op), soid(_soid), version(v),
+      prior_version(pv),
+      reqid(rid), mtime(mt), invalid_hash(false), offset(0) {}
+      
+  bool is_clone() const { return op == CLONE; }
+  bool is_modify() const { return op == MODIFY; }
+  bool is_backlog() const { return op == BACKLOG; }
+  bool is_lost_revert() const { return op == LOST_REVERT; }
+  bool is_lost_delete() const { return op == LOST_DELETE; }
+  bool is_lost_mark() const { return op == LOST_MARK; }
+
+  bool is_update() const {
+    return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+  }
+  bool is_delete() const {
+    return op == DELETE || op == LOST_DELETE;
+  }
+      
+  bool reqid_is_indexed() const {
+    return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_entry_t*>& o);
+
+};
+WRITE_CLASS_ENCODER(pg_log_entry_t)
+
+ostream& operator<<(ostream& out, const pg_log_entry_t& e);
+
+
+
+
 
 struct osd_peer_stat_t {
   struct ceph_timespec stamp;

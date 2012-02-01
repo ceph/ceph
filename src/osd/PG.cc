@@ -76,7 +76,7 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
 {
   head = other.head;
   tail = other.tail;
-  for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
+  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
     assert(i->version > other.tail);
@@ -91,7 +91,7 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
 
 void PG::Log::copy_range(const Log &other, eversion_t from, eversion_t to)
 {
-  list<Entry>::const_reverse_iterator i = other.log.rbegin();
+  list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
   assert(i != other.log.rend());
   while (i->version > to) {
     ++i;
@@ -113,7 +113,7 @@ void PG::Log::copy_up_to(const Log &other, int max)
   int n = 0;
   head = other.head;
   tail = other.tail;
-  for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
+  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        ++i) {
     if (n++ >= max) {
@@ -133,7 +133,7 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   }
 
   while (!log.empty()) {
-    Entry &e = *log.begin();
+    pg_log_entry_t &e = *log.begin();
     if (e.version > s)
       break;
     generic_dout(20) << "trim " << e << dendl;
@@ -190,7 +190,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
 	     << " have " << i->second.have << dendl;
   }
 
-  list<Log::Entry>::const_reverse_iterator pp = olog.log.rbegin();
+  list<pg_log_entry_t>::const_reverse_iterator pp = olog.log.rbegin();
   eversion_t lu(oinfo.last_update);
   while (true) {
     if (pp == olog.log.rend()) {
@@ -198,7 +198,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
 	lu = olog.tail;
       break;
     }
-    const Log::Entry& oe = *pp;
+    const pg_log_entry_t& oe = *pp;
 
     // don't continue past the tail of our log.
     if (oe.version <= log.tail)
@@ -210,7 +210,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
       continue;
     }
       
-    Log::Entry& ne = *log.objects[oe.soid];
+    pg_log_entry_t& ne = *log.objects[oe.soid];
     if (ne.version == oe.version) {
       dout(10) << " had " << oe << " new " << ne << " : match, stopping" << dendl;
       lu = pp->version;
@@ -312,14 +312,14 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
  *
  * return true if entry is not divergent.
  */
-bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
+bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
 {
   if (oe.soid > info.last_backfill) {
     dout(20) << "merge_old_entry  had " << oe << " : beyond last_backfill" << dendl;
     return false;
   }
   if (log.objects.count(oe.soid)) {
-    Log::Entry &ne = *log.objects[oe.soid];  // new(er?) entry
+    pg_log_entry_t &ne = *log.objects[oe.soid];  // new(er?) entry
     
     if (ne.version > oe.version) {
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : older, missing" << dendl;
@@ -389,8 +389,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
   //  current log.
   if (olog.tail < log.tail) {
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
-    list<Log::Entry>::iterator from = olog.log.begin();
-    list<Log::Entry>::iterator to;
+    list<pg_log_entry_t>::iterator from = olog.log.begin();
+    list<pg_log_entry_t>::iterator to;
     for (to = from;
 	 to != olog.log.end();
 	 to++) {
@@ -415,8 +415,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
     dout(10) << "merge_log extending head to " << olog.head << dendl;
       
     // find start point in olog
-    list<Log::Entry>::iterator to = olog.log.end();
-    list<Log::Entry>::iterator from = olog.log.end();
+    list<pg_log_entry_t>::iterator to = olog.log.end();
+    list<pg_log_entry_t>::iterator from = olog.log.end();
     eversion_t lower_bound = olog.tail;
     while (1) {
       if (from == olog.log.begin())
@@ -432,8 +432,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
     }
 
     // index, update missing, delete deleted
-    for (list<Log::Entry>::iterator p = from; p != to; p++) {
-      Log::Entry &ne = *p;
+    for (list<pg_log_entry_t>::iterator p = from; p != to; p++) {
+      pg_log_entry_t &ne = *p;
       dout(20) << "merge_log " << ne << dendl;
       log.index(ne);
       if (ne.soid <= info.last_backfill) {
@@ -444,9 +444,9 @@ void PG::merge_log(ObjectStore::Transaction& t,
     }
       
     // move aside divergent items
-    list<Log::Entry> divergent;
+    list<pg_log_entry_t> divergent;
     while (!log.empty()) {
-      Log::Entry &oe = *log.log.rbegin();
+      pg_log_entry_t &oe = *log.log.rbegin();
       /*
        * look at eversion.version here.  we want to avoid a situation like:
        *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
@@ -477,7 +477,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
     // process divergent items
     if (!divergent.empty()) {
-      for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
+      for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); d++)
 	merge_old_entry(t, *d);
     }
 
@@ -624,7 +624,7 @@ void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
 ostream& PG::Log::print(ostream& out) const 
 {
   out << *this << std::endl;
-  for (list<Entry>::const_iterator p = log.begin();
+  for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
        p++) 
     out << *p << std::endl;
@@ -634,7 +634,7 @@ ostream& PG::Log::print(ostream& out) const
 ostream& PG::IndexedLog::print(ostream& out) const 
 {
   out << *this << std::endl;
-  for (list<Entry>::const_iterator p = log.begin();
+  for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
        p++) {
     out << *p << " " << (logged_object(p->soid) ? "indexed":"NOT INDEXED") << std::endl;
@@ -1330,7 +1330,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
         eversion_t plu = pi.last_update;
-        for (list<Log::Entry>::iterator p = m->log.log.begin();
+        for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              p++)
 	  if (p->soid <= pi.last_backfill)
@@ -1722,7 +1722,7 @@ void PG::write_log(ObjectStore::Transaction& t)
 
   // build buffer
   ondisklog.tail = 0;
-  for (list<Log::Entry>::iterator p = log.log.begin();
+  for (list<pg_log_entry_t>::iterator p = log.log.begin();
        p != log.log.end();
        p++) {
     uint64_t startoff = bl.length();
@@ -1804,7 +1804,7 @@ void PG::trim_peers()
   }
 }
 
-void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
+void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -1829,12 +1829,12 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 }
 
 
-void PG::append_log(vector<Log::Entry>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
+void PG::append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
 {
   dout(10) << "append_log " << log << " " << logv << dendl;
 
   bufferlist bl;
-  for (vector<Log::Entry>::iterator p = logv.begin();
+  for (vector<pg_log_entry_t>::iterator p = logv.begin();
        p != logv.end();
        p++) {
     p->offset = ondisklog.head + bl.length();
@@ -1889,7 +1889,7 @@ void PG::read_log(ObjectStore *store)
       throw read_log_error(oss.str().c_str());
     }
     
-    PG::Log::Entry e;
+    pg_log_entry_t e;
     bufferlist::iterator p = bl.begin();
     assert(log.empty());
     eversion_t last;
@@ -1979,11 +1979,11 @@ void PG::read_log(ObjectStore *store)
   
     if (reorder) {
       dout(0) << "read_log reordering log" << dendl;
-      map<eversion_t, Log::Entry> m;
-      for (list<Log::Entry>::iterator p = log.log.begin(); p != log.log.end(); p++)
+      map<eversion_t, pg_log_entry_t> m;
+      for (list<pg_log_entry_t>::iterator p = log.log.begin(); p != log.log.end(); p++)
 	m[p->version] = *p;
       log.log.clear();
-      for (map<eversion_t, Log::Entry>::iterator p = m.begin(); p != m.end(); p++)
+      for (map<eversion_t, pg_log_entry_t>::iterator p = m.begin(); p != m.end(); p++)
 	log.log.push_back(p->second);
     }
   }
@@ -1997,7 +1997,7 @@ void PG::read_log(ObjectStore *store)
 	     << "," << info.last_update << "]" << dendl;
 
     set<hobject_t> did;
-    for (list<Log::Entry>::reverse_iterator i = log.log.rbegin();
+    for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
 	 i++) {
       if (i->version <= info.last_complete) break;
@@ -2055,7 +2055,7 @@ bool PG::check_log_for_corruption(ObjectStore *store)
       ss << "short log, " << bl.length() << " bytes, expected " << bounds.length();
       ok = false;
     } else {
-      PG::Log::Entry e;
+      pg_log_entry_t e;
       bufferlist::iterator p = bl.begin();
       while (!p.end()) {
 	pos = bounds.tail + p.get_off();
@@ -2230,10 +2230,10 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   return c;
 }
 
-void PG::update_snap_collections(vector<Log::Entry> &log_entries,
+void PG::update_snap_collections(vector<pg_log_entry_t> &log_entries,
 				 ObjectStore::Transaction &t)
 {
-  for (vector<Log::Entry>::iterator i = log_entries.begin();
+  for (vector<pg_log_entry_t>::iterator i = log_entries.begin();
        i != log_entries.end();
        ++i) {
     // If past backfill line, snap_collections will be updated during push
@@ -2576,7 +2576,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
   map.valid_through = last_update_applied;
   map.incr_since = v;
   vector<hobject_t> ls;
-  list<Log::Entry>::iterator p;
+  list<pg_log_entry_t>::iterator p;
   if (v == log.tail) {
     p = log.log.begin();
   } else if (v > log.tail) {
@@ -3106,7 +3106,7 @@ void PG::share_pg_log()
     MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
     m->log.copy_after(log, pinfo.last_update);
 
-    for (list<Log::Entry>::const_iterator i = m->log.log.begin();
+    for (list<pg_log_entry_t>::const_iterator i = m->log.log.begin();
 	 i != m->log.log.end();
 	 ++i) {
       pmissing.add_next_event(*i);
@@ -3500,7 +3500,7 @@ eversion_t PG::Missing::have_old(const hobject_t& oid) const
  * this needs to be called in log order as we extend the log.  it
  * assumes missing is accurate up through the previous log entry.
  */
-void PG::Missing::add_next_event(const Log::Entry& e)
+void PG::Missing::add_next_event(const pg_log_entry_t& e)
 {
   if (e.is_update()) {
     if (e.prior_version == eversion_t() || e.is_clone()) {
