@@ -791,9 +791,11 @@ struct pg_stat_t {
   vector<int> up, acting;
 
 
-  pg_stat_t() : state(0),
-		created(0), parent_split_bits(0), 
-		log_size(0), ondisk_log_size(0)
+  pg_stat_t()
+    : state(0),
+      created(0), last_epoch_clean(0),
+      parent_split_bits(0), 
+      log_size(0), ondisk_log_size(0)
   { }
 
   void add(const pg_stat_t& o) {
