@@ -1819,6 +1819,36 @@ void OSD::tick()
     dispatch_running = false;
     dispatch_cond.Signal();
   }
+
+  check_ops_in_flight();
+}
+
+void OSD::check_ops_in_flight()
+{
+  ops_in_flight_lock.Lock();
+  if (ops_in_flight.size()) {
+    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t too_old = now;
+    too_old -= g_conf->osd_op_complaint_time;
+    dout(1) << "ops_in_flight.size: " << ops_in_flight.size()
+              << "; oldest is " << now - ops_in_flight.front()->received_time
+              << " seconds old" << dendl;
+    xlist<OpRequest*>::iterator i = ops_in_flight.begin();
+    while (!i.end() && (*i)->received_time < too_old) {
+      // exponential backoff of warning intervals
+      if ( ( (*i)->received_time +
+            (g_conf->osd_op_complaint_time *
+              (*i)->warn_interval_multiplier) )< now) {
+        stringstream ss;
+        ss << "old request " << *((*i)->request) << " received at "
+           << (*i)->received_time << " currently " << (*i)->state_string();
+        clog.warn(ss);
+        ++(*i)->warn_interval_multiplier;
+      }
+      ++i;
+    }
+  }
+  ops_in_flight_lock.Unlock();
 }
 
 void OSD::register_inflight_op(xlist<OpRequest*>::item *i)

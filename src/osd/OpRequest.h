@@ -25,6 +25,7 @@ struct OpRequest : public RefCountedObject {
   Message *request;
   xlist<OpRequest*>::item xitem;
   utime_t received_time;
+  uint8_t warn_interval_multiplier;
 private:
   OSD *osd;
   uint8_t hit_flag_points;
@@ -37,7 +38,9 @@ private:
 
 public:
   OpRequest() : request(NULL), xitem(this) {}
-  OpRequest(Message *req, OSD *o) : request(req), xitem(this), osd(o) {
+  OpRequest(Message *req, OSD *o) : request(req), xitem(this),
+      warn_interval_multiplier(1),
+      osd(o) {
     received_time = request->get_recv_stamp();
   }
   ~OpRequest() {
@@ -57,6 +60,18 @@ public:
   bool currently_delayed() { return hit_flag_points & flag_delayed; }
   bool currently_started() { return hit_flag_points & flag_started; }
   bool currently_sub_op_sent() { return hit_flag_points & flag_sub_op_sent; }
+
+  const char *state_string() {
+    switch(latest_flag_point) {
+    case flag_queued_for_pg: return "queued for pg";
+    case flag_reached_pg: return "reached pg";
+    case flag_delayed: return "delayed";
+    case flag_started: return "started";
+    case flag_sub_op_sent: return "waiting for sub ops";
+    default: break;
+    }
+    return "no flag points reached";
+  }
 
   void mark_queued_for_pg() {
     hit_flag_points |= flag_queued_for_pg;
