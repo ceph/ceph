@@ -690,6 +690,12 @@ test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
 test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_store
 
+test_filejournal_SOURCES = test/test_filejournal.cc
+test_filejournal_LDFLAGS = ${AM_LDFLAGS}
+test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_filejournal_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_filejournal
+
 test_stress_watch_SOURCES = test/test_stress_watch.cc test/rados-api/test.cc
 test_stress_watch_LDFLAGS = ${AM_LDFLAGS}
 test_stress_watch_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
