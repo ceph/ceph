@@ -49,8 +49,8 @@ struct Dencoder {
 
 template<class T>
 class DencoderImpl : public Dencoder {
-  T m_object;
-  list<T> m_list;
+  T* m_object;
+  list<T*> m_list;
 
 public:
   DencoderImpl() {}
@@ -58,7 +58,7 @@ public:
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(m_object, p);
+      ::decode(*m_object, p);
     }
     catch (buffer::error& e) {
       return e.what();
@@ -70,11 +70,11 @@ public:
 
   void encode(bufferlist& out, uint64_t features) {
     out.clear();
-    ::encode(m_object, out, features);
+    ::encode(*m_object, out, features);
   }
 
   void dump(Formatter *f) {
-    m_object.dump(f);
+    m_object->dump(f);
   }
 
   void generate() {
@@ -89,7 +89,7 @@ public:
       i = m_list.size();
     if (i > m_list.size())
       return "invalid id for generated object";
-    typename list<T>::iterator p = m_list.begin();
+    typename list<T*>::iterator p = m_list.begin();
     for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
     m_object = *p;
     return string();

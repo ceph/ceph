@@ -7,6 +7,20 @@ TYPE(entity_addr_t)
 TYPE(osd_info_t)
 TYPE(OSDMap)
 
+#include "osd/PG.h"
+//TYPE(PG::Info)
+//TYPE(PG::Info::History)
+//TYPE(PG::Query)
+//TYPE(PG::Missing::item)
+//TYPE(PG::Missing)
+//TYPE(PG::Log::Entry)
+//TYPE(PG::Log)
+TYPE(PG::Interval)
+TYPE(PG::OndiskLog)
+
+#include "osd/PGLS.h"
+//TYPE(PGLSResponse)
+
 #include "osd/osd_types.h"
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
@@ -17,7 +31,7 @@ TYPE(object_stat_collection_t)
 TYPE(pg_stat_t)
 TYPE(pool_stat_t)
 TYPE(watch_info_t)
-//TYPE(object_info_t)
+TYPE(object_info_t)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)

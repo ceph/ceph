@@ -93,7 +93,7 @@ struct osd_info_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
-  static void generate_test_instances(list<osd_info_t>& o);
+  static void generate_test_instances(list<osd_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 
@@ -672,7 +672,7 @@ public:
   string get_flag_string() const;
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<OSDMap>& o);
+  static void generate_test_instances(list<OSDMap*>& o);
 };
 WRITE_CLASS_ENCODER(OSDMap)
 

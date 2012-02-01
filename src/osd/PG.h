@@ -714,12 +714,11 @@ public:
       f->dump_unsigned("head", head);
       f->dump_unsigned("tail", tail);
     }
-    static void generate_test_instances(list<OndiskLog>& o) {
-      OndiskLog a;
-      o.push_back(a);
-      a.tail = 1;
-      a.head = 2;
-      o.push_back(a);
+    static void generate_test_instances(list<OndiskLog*>& o) {
+      o.push_back(new OndiskLog);
+      o.push_back(new OndiskLog);
+      o.back()->tail = 1;
+      o.back()->head = 2;
     }
   };
   WRITE_CLASS_ENCODER(OndiskLog)
@@ -894,16 +893,15 @@ public:
 	f->dump_int("osd", *p);
       f->close_section();
     }
-    static void generate_test_instances(list<Interval>& o) {
-      Interval a;
-      o.push_back(a);
-      a.up.push_back(1);
-      a.acting.push_back(2);
-      a.acting.push_back(3);
-      a.first = 4;
-      a.last = 5;
-      a.maybe_went_rw = true;
-      o.push_back(a);
+    static void generate_test_instances(list<Interval*>& o) {
+      o.push_back(new Interval);
+      o.push_back(new Interval);
+      o.back()->up.push_back(1);
+      o.back()->acting.push_back(2);
+      o.back()->acting.push_back(3);
+      o.back()->first = 4;
+      o.back()->last = 5;
+      o.back()->maybe_went_rw = true;
     }
   };
   WRITE_CLASS_ENCODER(Interval)

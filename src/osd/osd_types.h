@@ -445,7 +445,7 @@ struct osd_stat_t {
     ::decode(hb_out, bl);
   }
 
-  static void generate_test_instances(std::list<osd_stat_t>& o);
+  static void generate_test_instances(std::list<osd_stat_t*>& o);
   
   void add(const osd_stat_t& o) {
     kb += o.kb;
@@ -525,7 +525,7 @@ struct pool_snap_info_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
-  static void generate_test_instances(list<pool_snap_info_t>& o);
+  static void generate_test_instances(list<pool_snap_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pool_snap_info_t)
 
@@ -667,7 +667,7 @@ struct pg_pool_t {
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
 
-  static void generate_test_instances(list<pg_pool_t>& o);
+  static void generate_test_instances(list<pg_pool_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 
@@ -711,7 +711,7 @@ struct object_stat_sum_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
-  static void generate_test_instances(list<object_stat_sum_t>& o);
+  static void generate_test_instances(list<object_stat_sum_t*>& o);
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
@@ -733,7 +733,7 @@ struct object_stat_collection_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
-  static void generate_test_instances(list<object_stat_collection_t>& o);
+  static void generate_test_instances(list<object_stat_collection_t*>& o);
 
   void clear() {
     sum.clear();
@@ -809,7 +809,7 @@ struct pg_stat_t {
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
-  static void generate_test_instances(list<pg_stat_t>& o);
+  static void generate_test_instances(list<pg_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 
@@ -838,7 +838,7 @@ struct pool_stat_t {
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
-  static void generate_test_instances(list<pool_stat_t>& o);
+  static void generate_test_instances(list<pool_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pool_stat_t)
 
@@ -927,7 +927,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<OSDSuperblock>& o);
+  static void generate_test_instances(list<OSDSuperblock*>& o);
 };
 WRITE_CLASS_ENCODER(OSDSuperblock)
 
@@ -990,7 +990,7 @@ struct watch_info_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<watch_info_t>& o);
+  static void generate_test_instances(list<watch_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(watch_info_t)
 
@@ -1047,7 +1047,7 @@ struct object_info_t {
     decode(p);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<object_info_t>& o);
+  static void generate_test_instances(list<object_info_t*>& o);
 
   explicit object_info_t()
     : size(0), lost(false),

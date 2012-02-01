@@ -35,22 +35,20 @@ void osd_reqid_t::decode(bufferlist::iterator &bl)
 }
 
 // -- osd_stat_t --
-void osd_stat_t::generate_test_instances(std::list<osd_stat_t>& o)
+void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
 {
-  osd_stat_t z;
-  o.push_back(z);
+  o.push_back(new osd_stat_t);
 
-  osd_stat_t a;
-  a.kb = 1;
-  a.kb_used = 2;
-  a.kb_avail = 3;
-  a.hb_in.push_back(5);
-  a.hb_in.push_back(6);
-  a.hb_out = a.hb_in;
-  a.hb_out.push_back(7);
-  a.snap_trim_queue_len = 8;
-  a.num_snap_trimming = 99;
-  o.push_back(a);
+  o.push_back(new osd_stat_t);
+  o.back()->kb = 1;
+  o.back()->kb_used = 2;
+  o.back()->kb_avail = 3;
+  o.back()->hb_in.push_back(5);
+  o.back()->hb_in.push_back(6);
+  o.back()->hb_out = o.back()->hb_in;
+  o.back()->hb_out.push_back(7);
+  o.back()->snap_trim_queue_len = 8;
+  o.back()->num_snap_trimming = 99;
 }
 
 // -- pg_t --
@@ -251,14 +249,13 @@ void pool_snap_info_t::decode(bufferlist::iterator& bl)
   ::decode(name, bl);
 }
 
-void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t>& o)
+void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
 {
-  pool_snap_info_t a;
-  o.push_back(a);
-  a.snapid = 1;
-  a.stamp = utime_t(1, 2);
-  a.name = "foo";
-  o.push_back(a);  
+  o.push_back(new pool_snap_info_t);
+  o.push_back(new pool_snap_info_t);
+  o.back()->snapid = 1;
+  o.back()->stamp = utime_t(1, 2);
+  o.back()->name = "foo";
 }
 
 
@@ -530,10 +527,10 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   calc_pg_masks();
 }
 
-void pg_pool_t::generate_test_instances(list<pg_pool_t>& o)
+void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
 {
   pg_pool_t a;
-  o.push_back(a);
+  o.push_back(new pg_pool_t(a));
 
   a.type = TYPE_REP;
   a.size = 2;
@@ -548,7 +545,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t>& o)
   a.snap_epoch = 11;
   a.auid = 12;
   a.crash_replay_interval = 13;
-  o.push_back(a);
+  o.push_back(new pg_pool_t(a));
 
   a.snaps[3].name = "asdf";
   a.snaps[3].snapid = 3;
@@ -556,10 +553,10 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t>& o)
   a.snaps[6].name = "qwer";
   a.snaps[6].snapid = 6;
   a.snaps[6].stamp = utime_t(23423, 4);
-  o.push_back(a);
+  o.push_back(new pg_pool_t(a));
 
   a.removed_snaps.insert(2);   // not quite valid to combine with snaps!
-  o.push_back(a);
+  o.push_back(new pg_pool_t(a));
 }
 
 ostream& operator<<(ostream& out, const pg_pool_t& p)
@@ -638,10 +635,10 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
   ::decode(num_wr_kb, bl);
 }
 
-void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t>& o)
+void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
 {
   object_stat_sum_t a;
-  o.push_back(a);
+  o.push_back(new object_stat_sum_t(a));
 
   a.num_bytes = 1;
   a.num_objects = 3;
@@ -652,7 +649,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t>& o)
   a.num_objects_unfound = 8;
   a.num_rd = 9; a.num_rd_kb = 10;
   a.num_wr = 11; a.num_wr_kb = 12;
-  o.push_back(a);
+  o.push_back(new object_stat_sum_t(a));
 }
 
 void object_stat_sum_t::add(const object_stat_sum_t& o)
@@ -718,17 +715,17 @@ void object_stat_collection_t::decode(bufferlist::iterator& bl)
   ::decode(cat_sum, bl);
 }
 
-void object_stat_collection_t::generate_test_instances(list<object_stat_collection_t>& o)
+void object_stat_collection_t::generate_test_instances(list<object_stat_collection_t*>& o)
 {
   object_stat_collection_t a;
-  o.push_back(a);
-  list<object_stat_sum_t> l;
+  o.push_back(new object_stat_collection_t(a));
+  list<object_stat_sum_t*> l;
   object_stat_sum_t::generate_test_instances(l);
   char n[2] = { 'a', 0 };
-  for (list<object_stat_sum_t>::iterator p = l.begin(); p != l.end(); ++p) {
-    a.add(*p, n);
+  for (list<object_stat_sum_t*>::iterator p = l.begin(); p != l.end(); ++p) {
+    a.add(**p, n);
     n[0]++;
-    o.push_back(a);
+    o.push_back(new object_stat_collection_t(a));
   }
 }
 
@@ -844,10 +841,10 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   }
 }
 
-void pg_stat_t::generate_test_instances(list<pg_stat_t>& o)
+void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
 {
   pg_stat_t a;
-  o.push_back(a);
+  o.push_back(new pg_stat_t(a));
 
   a.version = eversion_t(1, 3);
   a.reported = eversion_t(1, 2);
@@ -860,14 +857,14 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t>& o)
   a.parent_split_bits = 12;
   a.last_scrub = eversion_t(9, 10);
   a.last_scrub_stamp = utime_t(11, 12);
-  list<object_stat_collection_t> l;
+  list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
-  a.stats = l.back();
+  a.stats = *l.back();
   a.log_size = 99;
   a.ondisk_log_size = 88;
   a.up.push_back(123);
   a.acting.push_back(456);
-  o.push_back(a);
+  o.push_back(new pg_stat_t(a));
 }
 
 
@@ -920,17 +917,17 @@ void pool_stat_t::decode(bufferlist::iterator &bl)
   }
 }
 
-void pool_stat_t::generate_test_instances(list<pool_stat_t>& o)
+void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 {
   pool_stat_t a;
-  o.push_back(a);
+  o.push_back(new pool_stat_t(a));
 
-  list<object_stat_collection_t> l;
+  list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
-  a.stats = l.back();
+  a.stats = *l.back();
   a.log_size = 123;
   a.ondisk_log_size = 456;
-  o.push_back(a);
+  o.push_back(new pool_stat_t(a));
 }
 
 
@@ -995,10 +992,10 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_int("last_epoch_mounted", mounted);
 }
 
-void OSDSuperblock::generate_test_instances(list<OSDSuperblock>& o)
+void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
 {
   OSDSuperblock z;
-  o.push_back(z);
+  o.push_back(new OSDSuperblock(z));
   memset(&z.cluster_fsid, 1, sizeof(z.cluster_fsid));
   memset(&z.osd_fsid, 2, sizeof(z.osd_fsid));
   z.whoami = 3;
@@ -1007,7 +1004,7 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock>& o)
   z.newest_map = 9;
   z.mounted = 8;
   z.clean_thru = 7;
-  o.push_back(z);
+  o.push_back(new OSDSuperblock(z));
 }
 
 // -- SnapSet --
@@ -1072,14 +1069,12 @@ void watch_info_t::dump(Formatter *f) const
   f->dump_unsigned("timeout_seconds", timeout_seconds);
 }
 
-void watch_info_t::generate_test_instances(list<watch_info_t>& o)
+void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
 {
-  watch_info_t a;
-  o.push_back(a);
- 
-  a.cookie = 123;
-  a.timeout_seconds = 99;
-  o.push_back(a);
+  o.push_back(new watch_info_t);
+  o.push_back(new watch_info_t);
+  o.back()->cookie = 123;
+  o.back()->timeout_seconds = 99;
 }
 
 
@@ -1208,10 +1203,9 @@ void object_info_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void object_info_t::generate_test_instances(list<object_info_t>& o)
+void object_info_t::generate_test_instances(list<object_info_t*>& o)
 {
-  object_info_t a;
-  o.push_back(a);
+  o.push_back(new object_info_t());
   
   // fixme
 }

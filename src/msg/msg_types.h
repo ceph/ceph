@@ -109,7 +109,7 @@ public:
   }
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(list<entity_name_t>& o);
+  static void generate_test_instances(list<entity_name_t*>& o);
 };
 WRITE_CLASS_ENCODER(entity_name_t)
 
@@ -325,7 +325,7 @@ struct entity_addr_t {
 
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(list<entity_addr_t>& o);
+  static void generate_test_instances(list<entity_addr_t*>& o);
 };
 WRITE_CLASS_ENCODER(entity_addr_t)
 

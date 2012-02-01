@@ -57,18 +57,16 @@ void osd_info_t::decode(bufferlist::iterator& bl)
   ::decode(lost_at, bl);
 }
 
-void osd_info_t::generate_test_instances(list<osd_info_t>& o)
+void osd_info_t::generate_test_instances(list<osd_info_t*>& o)
 {
-  osd_info_t a;
-  o.push_back(a);
-
-  a.last_clean_begin = 1;
-  a.last_clean_end = 2;
-  a.up_from = 30;
-  a.up_thru = 40;
-  a.down_at = 5;
-  a.lost_at = 6;
-  o.push_back(a);
+  o.push_back(new osd_info_t);
+  o.push_back(new osd_info_t);
+  o.back()->last_clean_begin = 1;
+  o.back()->last_clean_end = 2;
+  o.back()->up_from = 30;
+  o.back()->up_thru = 40;
+  o.back()->down_at = 5;
+  o.back()->lost_at = 6;
 }
 
 ostream& operator<<(ostream& out, const osd_info_t& info)
@@ -743,17 +741,14 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 }
 
-void OSDMap::generate_test_instances(list<OSDMap>& o)
+void OSDMap::generate_test_instances(list<OSDMap*>& o)
 {
-  OSDMap m;
-  o.push_back(m);
+  o.push_back(new OSDMap);
 
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
-
+  o.push_back(new OSDMap);
   uuid_d fsid;
-  m.build_simple(cct, 1, fsid, 16, 7, 8, 9);
-  o.push_back(m);
-
+  o.back()->build_simple(cct, 1, fsid, 16, 7, 8, 9);
   delete cct;
 }
 
