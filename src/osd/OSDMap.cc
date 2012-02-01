@@ -1008,6 +1008,8 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, p->second);
   }
+
+  crush.finalize();
 }
 
 void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
@@ -1156,6 +1158,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     crush.set_rule_name(rno, p->second);
   }
 
+  crush.finalize();
 }
 
 
