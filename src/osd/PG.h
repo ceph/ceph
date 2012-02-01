@@ -160,52 +160,6 @@ public:
   std::string gen_prefix() const;
 
 
-  /** 
-   * Query - used to ask a peer for information about a pg.
-   *
-   * note: if version=0, type=LOG, then we just provide our full log.
-   */
-  struct Query {
-    enum {
-      INFO = 0,
-      LOG = 1,
-      MISSING = 4,
-      FULLLOG = 5,
-    };
-    const char *get_type_name() const {
-      switch (type) {
-      case INFO: return "info";
-      case LOG: return "log";
-      case MISSING: return "missing";
-      case FULLLOG: return "fulllog";
-      default: return "???";
-      }
-    }
-
-    __s32 type;
-    eversion_t since;
-    pg_history_t history;
-
-    Query() : type(-1) {}
-    Query(int t, const pg_history_t& h) :
-      type(t), history(h) { assert(t != LOG); }
-    Query(int t, eversion_t s, const pg_history_t& h) :
-      type(t), since(s), history(h) { assert(t == LOG); }
-
-    void encode(bufferlist &bl) const {
-      ::encode(type, bl);
-      ::encode(since, bl);
-      history.encode(bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(type, bl);
-      ::decode(since, bl);
-      history.decode(bl);
-    }
-  };
-  WRITE_CLASS_ENCODER(Query)
-
-  
   /*
    * Log - incremental log of recent pg changes.
    *  serves as a recovery queue for recent changes.
@@ -829,14 +783,14 @@ public:
 public:    
   struct RecoveryCtx {
     utime_t start_time;
-    map< int, map<pg_t, Query> > *query_map;
+    map< int, map<pg_t, pg_query_t> > *query_map;
     map< int, MOSDPGInfo* > *info_map;
     map< int, vector<pg_info_t> > *notify_list;
     list< Context* > *context_list;
     ObjectStore::Transaction *transaction;
     RecoveryCtx() : query_map(0), info_map(0), notify_list(0),
 		    context_list(0), transaction(0) {}
-    RecoveryCtx(map< int, map<pg_t, Query> > *query_map,
+    RecoveryCtx(map< int, map<pg_t, pg_query_t> > *query_map,
 		map< int, MOSDPGInfo* > *info_map,
 		map< int, vector<pg_info_t> > *notify_list,
 		list< Context* > *context_list,
@@ -896,9 +850,9 @@ public:
 
     struct MQuery : boost::statechart::event< MQuery > {
       int from;
-      const Query &query;
+      const pg_query_t &query;
       epoch_t query_epoch;
-      MQuery(int from, const Query &query, epoch_t query_epoch):
+      MQuery(int from, const pg_query_t &query, epoch_t query_epoch):
 	from(from), query(query), query_epoch(query_epoch) {}
     };
 
@@ -959,12 +913,12 @@ public:
 	return state->rctx->transaction;
       }
 
-      void send_query(int to, const Query &query) {
+      void send_query(int to, const pg_query_t &query) {
 	assert(state->rctx->query_map);
 	(*state->rctx->query_map)[to][pg->info.pgid] = query;
       }
 
-      map<int, map<pg_t, Query> > *get_query_map() {
+      map<int, map<pg_t, pg_query_t> > *get_query_map() {
 	assert(state->rctx->query_map);
 	return state->rctx->query_map;
       }
@@ -1164,7 +1118,7 @@ public:
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
-      map<int, pair<Query, epoch_t> > pending_queries;
+      map<int, pair<pg_query_t, epoch_t> > pending_queries;
 
       Stray(my_context ctx);
       void exit();
@@ -1261,7 +1215,7 @@ public:
     void handle_log(int from,
 		    MOSDPGLog *msg,
 		    RecoveryCtx *ctx);
-    void handle_query(int from, const PG::Query& q,
+    void handle_query(int from, const pg_query_t& q,
 		      epoch_t query_epoch,
 		      RecoveryCtx *ctx);
     void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
@@ -1446,7 +1400,7 @@ public:
   void check_for_lost_objects();
   void forget_lost_objects();
 
-  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
+  void discover_all_missing(std::map< int, map<pg_t,pg_query_t> > &query_map);
   
   void trim_write_ahead();
 
@@ -1456,7 +1410,7 @@ public:
   void build_might_have_unfound();
   void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
-		map< int, map<pg_t,Query> >& query_map,
+		map< int, map<pg_t,pg_query_t> >& query_map,
 		map<int, MOSDPGInfo*> *activator_map=0);
   void _activate_committed(epoch_t e);
   void all_activated_and_committed();
@@ -1639,9 +1593,9 @@ public:
 			      const vector<int>& newacting);
   void set_last_peering_reset();
 
-  void fulfill_info(int from, const Query &query, 
+  void fulfill_info(int from, const pg_query_t &query, 
 		    pair<int, pg_info_t> &notify_info);
-  void fulfill_log(int from, const Query &query, epoch_t query_epoch);
+  void fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
 
@@ -1657,7 +1611,7 @@ public:
 		  RecoveryCtx *rctx) {
     recovery_state.handle_log(from, msg, rctx);
   }
-  void handle_query(int from, const PG::Query& q,
+  void handle_query(int from, const pg_query_t& q,
 		    epoch_t query_epoch,
 		    RecoveryCtx *rctx) {
     recovery_state.handle_query(from, q, query_epoch, rctx);
@@ -1709,22 +1663,12 @@ public:
 				    utime_t expire) = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Query)
 WRITE_CLASS_ENCODER(PG::Missing::item)
 WRITE_CLASS_ENCODER(PG::Missing)
 WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
 WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Query& q) 
-{
-  out << "query(" << q.get_type_name() << " " << q.since;
-  if (q.type == PG::Query::LOG)
-    out << " " << q.history;
-  out << ")";
-  return out;
-}
 
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 {

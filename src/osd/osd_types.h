@@ -959,6 +959,65 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
 }
 
 
+/** 
+ * pg_query_t - used to ask a peer for information about a pg.
+ *
+ * note: if version=0, type=LOG, then we just provide our full log.
+ */
+struct pg_query_t {
+  enum {
+    INFO = 0,
+    LOG = 1,
+    MISSING = 4,
+    FULLLOG = 5,
+  };
+  const char *get_type_name() const {
+    switch (type) {
+    case INFO: return "info";
+    case LOG: return "log";
+    case MISSING: return "missing";
+    case FULLLOG: return "fulllog";
+    default: return "???";
+    }
+  }
+
+  __s32 type;
+  eversion_t since;
+  pg_history_t history;
+
+  pg_query_t() : type(-1) {}
+  pg_query_t(int t, const pg_history_t& h)
+    : type(t), history(h) {
+    assert(t != LOG);
+  }
+  pg_query_t(int t, eversion_t s, const pg_history_t& h)
+    : type(t), since(s), history(h) {
+    assert(t == LOG);
+  }
+  
+  void encode(bufferlist &bl) const {
+    ::encode(type, bl);
+    ::encode(since, bl);
+    history.encode(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(type, bl);
+    ::decode(since, bl);
+    history.decode(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_query_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_query_t)
+
+inline ostream& operator<<(ostream& out, const pg_query_t& q) {
+  out << "query(" << q.get_type_name() << " " << q.since;
+  if (q.type == pg_query_t::LOG)
+    out << " " << q.history;
+  out << ")";
+  return out;
+}
+
 
 
 struct osd_peer_stat_t {

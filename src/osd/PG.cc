@@ -573,7 +573,7 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
   return found_missing;
 }
 
-void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
+void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
 {
   assert(missing.have_missing());
 
@@ -616,7 +616,7 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	     << dendl;
     peer_missing_requested.insert(peer);
     query_map[peer][info.pgid] =
-      PG::Query(PG::Query::MISSING, info.history);
+      pg_query_t(pg_query_t::MISSING, info.history);
   }
 }
 
@@ -1169,7 +1169,7 @@ struct C_PG_ActivateCommitted : public Context {
 };
 
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
-		  map< int, map<pg_t,Query> >& query_map,
+		  map< int, map<pg_t,pg_query_t> >& query_map,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
@@ -3117,41 +3117,41 @@ void PG::share_pg_log()
   }
 }
 
-void PG::fulfill_info(int from, const Query &query, 
+void PG::fulfill_info(int from, const pg_query_t &query, 
 		      pair<int, pg_info_t> &notify_info)
 {
   assert(!acting.empty());
   assert(from == acting[0]);
-  assert(query.type == PG::Query::INFO);
+  assert(query.type == pg_query_t::INFO);
 
   // info
   dout(10) << "sending info" << dendl;
   notify_info = make_pair(from, info);
 }
 
-void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
+void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 {
   assert(!acting.empty());
   assert(from == acting[0]);
-  assert(query.type != PG::Query::INFO);
+  assert(query.type != pg_query_t::INFO);
 
   MOSDPGLog *mlog = new MOSDPGLog(get_osdmap()->get_epoch(),
 				  info, query_epoch);
   mlog->missing = missing;
 
   // primary -> other, when building master log
-  if (query.type == PG::Query::LOG) {
+  if (query.type == pg_query_t::LOG) {
     dout(10) << " sending info+missing+log since " << query.since
 	     << dendl;
     if (query.since != eversion_t() && query.since < log.tail) {
-      osd->clog.error() << info.pgid << " got broken Query::LOG since " << query.since
+      osd->clog.error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
 			<< " when my log.tail is " << log.tail
 			<< ", sending full log instead\n";
       mlog->log = log;           // primary should not have requested this!!
     } else
       mlog->log.copy_after(log, query.since);
   }
-  else if (query.type == PG::Query::FULLLOG) {
+  else if (query.type == pg_query_t::FULLLOG) {
     dout(10) << " sending info+missing+full log" << dendl;
     mlog->log = log;
   }
@@ -4047,7 +4047,7 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
   dout(10) << "In ReplicaActive, about to call activate" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  map< int, map< pg_t, Query> > query_map;
+  map< int, map< pg_t, pg_query_t> > query_map;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       *context< RecoveryMachine >().get_context_list(),
 	       query_map, NULL);
@@ -4089,7 +4089,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
 boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  assert(query.query.type == Query::MISSING);
+  assert(query.query.type == pg_query_t::MISSING);
   pg->fulfill_log(query.from, query.query, query.query_epoch);
   return discard_event();
 }
@@ -4150,7 +4150,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
 boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (query.query.type == Query::INFO) {
+  if (query.query.type == pg_query_t::INFO) {
     pair<int, pg_info_t> notify_info;
     pg->fulfill_info(query.from, query.query, notify_info);
     context< RecoveryMachine >().send_notify(notify_info.first, notify_info.second);
@@ -4217,7 +4217,7 @@ void PG::RecoveryState::GetInfo::get_infos()
       dout(10) << " not querying info from down osd." << peer << dendl;
     } else {
       dout(10) << " querying info from osd." << peer << dendl;
-      context< RecoveryMachine >().send_query(peer, Query(Query::INFO, pg->info.history));
+      context< RecoveryMachine >().send_query(peer, pg_query_t(pg_query_t::INFO, pg->info.history));
       peer_info_requested.insert(peer);
     }
   }
@@ -4350,7 +4350,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
   // how much?
   dout(10) << " requesting log from osd." << newest_update_osd << dendl;
   context<RecoveryMachine>().send_query(newest_update_osd,
-					Query(Query::LOG, request_log_from, pg->info.history));
+					pg_query_t(pg_query_t::LOG, request_log_from, pg->info.history));
 }
 
 boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
@@ -4489,12 +4489,12 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
     assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
       dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
-      context< RecoveryMachine >().send_query(*i, Query(Query::LOG, since, pg->info.history));
+      context< RecoveryMachine >().send_query(*i, pg_query_t(pg_query_t::LOG, since, pg->info.history));
     } else {
       dout(10) << " requesting fulllog+missing from osd." << *i
 	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
 	       << dendl;
-      context< RecoveryMachine >().send_query(*i, Query(Query::FULLLOG, pg->info.history));
+      context< RecoveryMachine >().send_query(*i, pg_query_t(pg_query_t::FULLLOG, pg->info.history));
     }
     peer_missing_requested.insert(*i);
   }
@@ -4623,7 +4623,7 @@ void PG::RecoveryState::handle_log(int from,
   end_handle();
 }
 
-void PG::RecoveryState::handle_query(int from, const PG::Query& q,
+void PG::RecoveryState::handle_query(int from, const pg_query_t& q,
 				     epoch_t query_epoch,
 				     RecoveryCtx *rctx)
 {

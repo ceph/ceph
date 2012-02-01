@@ -1085,6 +1085,29 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
 }
 
 
+// -- pg_query_t --
+
+void pg_query_t::dump(Formatter *f) const
+{
+  f->dump_string("type", get_type_name());
+  f->dump_stream("since") << since;
+  f->open_object_section("history");
+  history.dump(f);
+  f->close_section();
+}
+void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
+{
+  o.push_back(new pg_query_t());
+  list<pg_history_t*> h;
+  pg_history_t::generate_test_instances(h);
+  o.push_back(new pg_query_t(pg_query_t::INFO, *h.back()));
+  o.push_back(new pg_query_t(pg_query_t::MISSING, *h.back()));
+  o.push_back(new pg_query_t(pg_query_t::LOG, eversion_t(4, 5), *h.back()));
+  o.push_back(new pg_query_t(pg_query_t::FULLLOG, *h.back()));
+}
+
+
+
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const

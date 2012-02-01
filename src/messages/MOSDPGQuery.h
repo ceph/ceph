@@ -27,10 +27,10 @@ class MOSDPGQuery : public Message {
 
  public:
   version_t get_epoch() { return epoch; }
-  map<pg_t,PG::Query>  pg_list;
+  map<pg_t,pg_query_t>  pg_list;
 
   MOSDPGQuery() {}
-  MOSDPGQuery(epoch_t e, map<pg_t,PG::Query>& ls) :
+  MOSDPGQuery(epoch_t e, map<pg_t,pg_query_t>& ls) :
     Message(MSG_OSD_PG_QUERY),
     epoch(e) {
     pg_list.swap(ls);
@@ -42,7 +42,7 @@ public:
   const char *get_type_name() const { return "pg_query"; }
   void print(ostream& out) const {
     out << "pg_query(";
-    for (map<pg_t,PG::Query>::const_iterator p = pg_list.begin(); p != pg_list.end(); ++p) {
+    for (map<pg_t,pg_query_t>::const_iterator p = pg_list.begin(); p != pg_list.end(); ++p) {
       if (p != pg_list.begin())
 	out << ",";
       out << p->first;

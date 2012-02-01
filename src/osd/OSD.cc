@@ -3600,7 +3600,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
   map< int, vector<pg_info_t> >  notify_list;  // primary -> list
-  map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+  map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
@@ -3963,7 +3963,7 @@ bool OSD::can_create_pg(pg_t pgid)
 
 void OSD::kick_pg_split_queue()
 {
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
@@ -4161,7 +4161,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 
   if (!require_same_or_newer_map(m, m->epoch)) return;
 
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map<int, MOSDPGInfo*> info_map;
 
   int num_created = 0;
@@ -4232,7 +4232,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 	     << " : querying priors " << pset << dendl;
     for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
       if (osdmap->is_up(*p))
-	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
+	query_map[*p][pgid] = pg_query_t(pg_query_t::INFO, history);
     
     if (can_create_pg(pgid)) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -4296,9 +4296,9 @@ void OSD::do_notifies(map< int, vector<pg_info_t> >& notify_list,
 /** do_queries
  * send out pending queries for info | summaries
  */
-void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
+void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map)
 {
-  for (map< int, map<pg_t,PG::Query> >::iterator pit = query_map.begin();
+  for (map< int, map<pg_t,pg_query_t> >::iterator pit = query_map.begin();
        pit != query_map.end();
        pit++) {
     int who = pit->first;
@@ -4343,7 +4343,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   // look for unknown PGs i'm primary for
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
@@ -4413,7 +4413,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     return;
   }
 
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map< int, MOSDPGInfo* > info_map;
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
   pg->handle_log(from, m, &rctx);
@@ -4612,7 +4612,7 @@ void OSD::handle_pg_missing(MOSDPGMissing *m)
   if (!require_same_or_newer_map(m, m->get_epoch()))
     return;
 
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   PG::Log empty_log;
   int created = 0;
   _pro-cess_pg_info(m->get_epoch(), from, m->info, //misspelling added to prevent erroneous finds
@@ -4643,7 +4643,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
   map< int, vector<pg_info_t> > notify_list;
   
-  for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
+  for (map<pg_t,pg_query_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
        it++) {
     pg_t pgid = it->first;
@@ -4668,8 +4668,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       assert(role != 0);
       dout(10) << " pg " << pgid << " dne" << dendl;
       pg_info_t empty(pgid);
-      if (it->second.type == PG::Query::LOG ||
-	  it->second.type == PG::Query::FULLLOG) {
+      if (it->second.type == pg_query_t::LOG ||
+	  it->second.type == pg_query_t::FULLLOG) {
 	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
 					m->get_epoch());
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
@@ -5018,7 +5018,7 @@ void OSD::do_recovery(PG *pg)
      * out while trying to pull.
      */
     if (!started && pg->have_unfound()) {
-      map< int, map<pg_t,PG::Query> > query_map;
+      map< int, map<pg_t,pg_query_t> > query_map;
       pg->discover_all_missing(query_map);
       if (query_map.size())
 	do_queries(query_map);
