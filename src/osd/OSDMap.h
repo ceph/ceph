@@ -93,6 +93,7 @@ struct osd_info_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<osd_info_t>& o);
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 

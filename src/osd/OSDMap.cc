@@ -57,6 +57,20 @@ void osd_info_t::decode(bufferlist::iterator& bl)
   ::decode(lost_at, bl);
 }
 
+void osd_info_t::generate_test_instances(list<osd_info_t>& o)
+{
+  osd_info_t a;
+  o.push_back(a);
+
+  a.last_clean_begin = 1;
+  a.last_clean_end = 2;
+  a.up_from = 30;
+  a.up_thru = 40;
+  a.down_at = 5;
+  a.lost_at = 6;
+  o.push_back(a);
+}
+
 ostream& operator<<(ostream& out, const osd_info_t& info)
 {
   out << "up_from " << info.up_from
