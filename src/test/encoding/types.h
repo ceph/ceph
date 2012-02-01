@@ -8,10 +8,6 @@ TYPE(osd_info_t)
 TYPE(OSDMap)
 
 #include "osd/PG.h"
-//TYPE(PG::Missing::item)
-//TYPE(PG::Missing)
-//TYPE(PG::Log::Entry)
-//TYPE(PG::Log)
 TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
@@ -32,6 +28,8 @@ TYPE(pg_info_t)
 TYPE(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
+TYPE(pg_missing_t::item)
+TYPE(pg_missing_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
 

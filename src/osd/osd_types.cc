@@ -1286,6 +1286,178 @@ ostream& pg_log_t::print(ostream& out) const
 }
 
 
+// -- pg_missing_t --
+
+void pg_missing_t::encode(bufferlist &bl) const
+{
+  __u8 struct_v = 1;
+  ::encode(struct_v, bl);
+  ::encode(missing, bl);
+}
+
+void pg_missing_t::decode(bufferlist::iterator &bl)
+{
+  __u8 struct_v;
+  ::decode(struct_v, bl);
+  ::decode(missing, bl);
+    
+  for (map<hobject_t,item>::iterator it = missing.begin();
+       it != missing.end();
+       ++it)
+    rmissing[it->second.need.version] = it->first;
+}
+
+void pg_missing_t::dump(Formatter *f) const
+{
+  f->open_array_section("missing");
+  for (map<hobject_t,item>::const_iterator p = missing.begin(); p != missing.end(); ++p) {
+    f->open_object_section("item");
+    f->dump_stream("object") << p->first;
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void pg_missing_t::generate_test_instances(list<pg_missing_t*>& o)
+{
+  o.push_back(new pg_missing_t);
+  o.push_back(new pg_missing_t);
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456), eversion_t(5, 6), eversion_t(5, 1));
+}
+
+ostream& operator<<(ostream& out, const pg_missing_t::item& i) 
+{
+  out << i.need;
+  if (i.have != eversion_t())
+    out << "(" << i.have << ")";
+  return out;
+}
+
+ostream& operator<<(ostream& out, const pg_missing_t& missing) 
+{
+  out << "missing(" << missing.num_missing();
+  //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
+  out << ")";
+  return out;
+}
+
+
+unsigned int pg_missing_t::num_missing() const
+{
+  return missing.size();
+}
+
+bool pg_missing_t::have_missing() const
+{
+  return !missing.empty();
+}
+
+void pg_missing_t::swap(pg_missing_t& o)
+{
+  missing.swap(o.missing);
+  rmissing.swap(o.rmissing);
+}
+
+bool pg_missing_t::is_missing(const hobject_t& oid) const
+{
+  return (missing.find(oid) != missing.end());
+}
+
+bool pg_missing_t::is_missing(const hobject_t& oid, eversion_t v) const
+{
+  map<hobject_t, item>::const_iterator m = missing.find(oid);
+  if (m == missing.end())
+    return false;
+  const pg_missing_t::item &item(m->second);
+  if (item.need > v)
+    return false;
+  return true;
+}
+
+eversion_t pg_missing_t::have_old(const hobject_t& oid) const
+{
+  map<hobject_t, item>::const_iterator m = missing.find(oid);
+  if (m == missing.end())
+    return eversion_t();
+  const pg_missing_t::item &item(m->second);
+  return item.have;
+}
+
+/*
+ * this needs to be called in log order as we extend the log.  it
+ * assumes missing is accurate up through the previous log entry.
+ */
+void pg_missing_t::add_next_event(const pg_log_entry_t& e)
+{
+  if (e.is_update()) {
+    if (e.prior_version == eversion_t() || e.is_clone()) {
+      // new object.
+      //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
+      if (missing.count(e.soid))  // already missing divergent item
+	rmissing.erase(missing[e.soid].need.version);
+      missing[e.soid] = item(e.version, eversion_t());  // .have = nil
+    } else if (missing.count(e.soid)) {
+      // already missing (prior).
+      //assert(missing[e.soid].need == e.prior_version);
+      rmissing.erase(missing[e.soid].need.version);
+      missing[e.soid].need = e.version;  // leave .have unchanged.
+    } else if (e.is_backlog()) {
+      // May not have prior version
+      assert(0 == "these don't exist anymore");
+    } else {
+      // not missing, we must have prior_version (if any)
+      missing[e.soid] = item(e.version, e.prior_version);
+    }
+    rmissing[e.version.version] = e.soid;
+  } else
+    rm(e.soid, e.version);
+}
+
+void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
+{
+  if (missing.count(oid)) {
+    rmissing.erase(missing[oid].need.version);
+    missing[oid].need = need;            // no not adjust .have
+  } else {
+    missing[oid] = item(need, eversion_t());
+  }
+  rmissing[need.version] = oid;
+}
+
+void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
+{
+  missing[oid] = item(need, have);
+  rmissing[need.version] = oid;
+}
+
+void pg_missing_t::rm(const hobject_t& oid, eversion_t v)
+{
+  std::map<hobject_t, pg_missing_t::item>::iterator p = missing.find(oid);
+  if (p != missing.end() && p->second.need <= v)
+    rm(p);
+}
+
+void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+{
+  rmissing.erase(m->second.need.version);
+  missing.erase(m);
+}
+
+void pg_missing_t::got(const hobject_t& oid, eversion_t v)
+{
+  std::map<hobject_t, pg_missing_t::item>::iterator p = missing.find(oid);
+  assert(p != missing.end());
+  assert(p->second.need <= v);
+  got(p);
+}
+
+void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+{
+  rmissing.erase(m->second.need.version);
+  missing.erase(m);
+}
+
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const

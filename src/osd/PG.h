@@ -319,69 +319,6 @@ public:
   WRITE_CLASS_ENCODER(OndiskLog)
 
 
-  /*
-   * Missing - summary of missing objects.
-   *  kept in memory, as a supplement to Log.
-   *  also used to pass missing info in messages.
-   */
-  struct Missing {
-    struct item {
-      eversion_t need, have;
-      item() {}
-      item(eversion_t n) : need(n) {}  // have no old version
-      item(eversion_t n, eversion_t h) : need(n), have(h) {}
-      void encode(bufferlist& bl) const {
-	::encode(need, bl);
-	::encode(have, bl);
-      }
-      void decode(bufferlist::iterator& bl) {
-	::decode(need, bl);
-	::decode(have, bl);
-      }
-    }; 
-    WRITE_CLASS_ENCODER(item)
-
-    map<hobject_t, item> missing;         // oid -> (need v, have v)
-    map<version_t, hobject_t> rmissing;  // v -> oid
-
-    unsigned int num_missing() const;
-    bool have_missing() const;
-    void swap(Missing& o);
-    bool is_missing(const hobject_t& oid) const;
-    bool is_missing(const hobject_t& oid, eversion_t v) const;
-    eversion_t have_old(const hobject_t& oid) const;
-    void add_next_event(const pg_log_entry_t& e);
-    void revise_need(hobject_t oid, eversion_t need);
-    void add(const hobject_t& oid, eversion_t need, eversion_t have);
-    void rm(const hobject_t& oid, eversion_t v);
-    void rm(const std::map<hobject_t, Missing::item>::iterator &m);
-    void got(const hobject_t& oid, eversion_t v);
-    void got(const std::map<hobject_t, Missing::item>::iterator &m);
-
-    void clear() {
-      missing.clear();
-      rmissing.clear();
-    }
-
-    void encode(bufferlist &bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(missing, bl);
-    }
-
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(missing, bl);
-
-      for (map<hobject_t,item>::iterator it = missing.begin();
-	   it != missing.end();
-	   ++it)
-	rmissing[it->second.need.version] = it->first;
-    }
-  };
-  WRITE_CLASS_ENCODER(Missing)
-
 
   /*** PG ****/
 protected:
@@ -508,7 +445,7 @@ public:
   hobject_t    log_oid;
   hobject_t    biginfo_oid;
   OndiskLog   ondisklog;
-  Missing     missing;
+  pg_missing_t     missing;
   map<hobject_t, set<int> > missing_loc;
   
   interval_set<snapid_t> snap_collections;
@@ -1026,8 +963,8 @@ protected:
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
-  map<int,pg_info_t>        peer_info;   // info from peers (stray or prior)
-  map<int, Missing>    peer_missing;
+  map<int,pg_info_t>    peer_info;   // info from peers (stray or prior)
+  map<int,pg_missing_t> peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
@@ -1177,13 +1114,13 @@ public:
   virtual void calc_trim_to() = 0;
 
   void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
-			Missing& omissing, int from);
+			pg_missing_t& omissing, int from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
-		       Missing& omissing, int from);
+		       pg_missing_t& omissing, int from);
   bool proc_replica_info(int from, pg_info_t &info);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
-  bool search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
+  bool search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
 			  int fromosd);
 
   void check_for_lost_objects();
@@ -1452,26 +1389,8 @@ public:
 				    utime_t expire) = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Missing::item)
-WRITE_CLASS_ENCODER(PG::Missing)
 WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Missing::item& i) 
-{
-  out << i.need;
-  if (i.have != eversion_t())
-    out << "(" << i.have << ")";
-  return out;
-}
-
-inline ostream& operator<<(ostream& out, const PG::Missing& missing) 
-{
-  out << "missing(" << missing.num_missing();
-  //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
-  out << ")";
-  return out;
-}
 
 inline ostream& operator<<(ostream& out, const PG::Interval& i)
 {

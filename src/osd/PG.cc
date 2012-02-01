@@ -96,7 +96,7 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
 
 /********* PG **********/
 
-void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, Missing& omissing, int from)
+void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, pg_missing_t& omissing, int from)
 {
   dout(10) << "proc_master_log for osd." << from << ": " << olog << " " << omissing << dendl;
   assert(!is_active() && is_primary());
@@ -115,7 +115,7 @@ void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t
 }
     
 void PG::proc_replica_log(ObjectStore::Transaction& t,
-			  pg_info_t &oinfo, pg_log_t &olog, Missing& omissing, int from)
+			  pg_info_t &oinfo, pg_log_t &olog, pg_missing_t& omissing, int from)
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -130,7 +130,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
@@ -211,7 +211,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
   might_have_unfound.insert(from);
 
   search_for_missing(oinfo, &omissing, from);
-  for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(20) << " after missing " << i->first << " need " << i->second.need
@@ -322,10 +322,10 @@ void PG::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, Missing::item>::iterator i = missing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item>::iterator i = missing.missing.begin();
        i != missing.missing.end();
        ++i) {
-    dout(20) << "Missing sobject: " << i->first << dendl;
+    dout(20) << "pg_missing_t sobject: " << i->first << dendl;
   }
 
   bool changed = false;
@@ -446,7 +446,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
  * TODO: if the missing set becomes very large, this could get expensive.
  * Instead, we probably want to just iterate over our unfound set.
  */
-bool PG::search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
+bool PG::search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
 			    int fromosd)
 {
   bool stats_updated = false;
@@ -457,7 +457,7 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
   peer_missing[fromosd];
 
   // found items?
-  for (map<hobject_t,Missing::item>::iterator p = missing.missing.begin();
+  for (map<hobject_t,pg_missing_t::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
        ++p) {
     const hobject_t &soid(p->first);
@@ -539,12 +539,12 @@ void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
       continue;
     }
 
-    // If we've requested any of this stuff, the Missing information
+    // If we've requested any of this stuff, the pg_missing_t information
     // should be on its way.
     // TODO: coalsce requested_* into a single data structure
     if (peer_missing.find(peer) != peer_missing.end()) {
       dout(20) << __func__ << ": osd." << peer
-	       << ": we already have Missing" << dendl;
+	       << ": we already have pg_missing_t" << dendl;
       continue;
     }
     if (peer_log_requested.find(peer) != peer_log_requested.end()) {
@@ -559,7 +559,7 @@ void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
     }
 
     // Request missing
-    dout(10) << __func__ << ": osd." << peer << ": requesting Missing"
+    dout(10) << __func__ << ": osd." << peer << ": requesting pg_missing_t"
 	     << dendl;
     peer_missing_requested.insert(peer);
     query_map[peer][info.pgid] =
@@ -608,7 +608,7 @@ bool PG::is_all_uptodate() const
   ++a;
   for (; a != end; ++a) {
     int peer = *a;
-    map<int, Missing>::const_iterator pm = peer_missing.find(peer);
+    map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
       dout(10) << __func__ << ": osd." << peer << " don't have missing set" << dendl;
       uptodate = false;
@@ -1052,7 +1052,7 @@ bool PG::choose_acting(int& newest_update_osd)
  * This is used by the primary OSD during recovery.
  *
  * This set tracks the OSDs which might have unfound objects that the primary
- * OSD needs. As we receive Missing from each OSD in might_have_unfound, we
+ * OSD needs. As we receive pg_missing_t from each OSD in might_have_unfound, we
  * will remove the OSD from the set.
  */
 void PG::build_might_have_unfound()
@@ -1216,7 +1216,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
       MOSDPGLog *m = 0;
-      Missing& pm = peer_missing[peer];
+      pg_missing_t& pm = peer_missing[peer];
 
       if (pi.last_update == info.last_update) {
         // empty log
@@ -3037,7 +3037,7 @@ void PG::share_pg_log()
   vector<int>::const_iterator end = acting.end();
   while (++a != end) {
     int peer(*a);
-    PG::Missing& pmissing(peer_missing[peer]);
+    pg_missing_t& pmissing(peer_missing[peer]);
     pg_info_t& pinfo(peer_info[peer]);
 
     MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
@@ -3390,121 +3390,6 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
     }
     write_info(t);
   }
-}
-
-unsigned int PG::Missing::num_missing() const
-{
-  return missing.size();
-}
-
-bool PG::Missing::have_missing() const
-{
-  return !missing.empty();
-}
-
-void PG::Missing::swap(Missing& o)
-{
-  missing.swap(o.missing);
-  rmissing.swap(o.rmissing);
-}
-
-bool PG::Missing::is_missing(const hobject_t& oid) const
-{
-  return (missing.find(oid) != missing.end());
-}
-
-bool PG::Missing::is_missing(const hobject_t& oid, eversion_t v) const
-{
-  map<hobject_t, item>::const_iterator m = missing.find(oid);
-  if (m == missing.end())
-    return false;
-  const Missing::item &item(m->second);
-  if (item.need > v)
-    return false;
-  return true;
-}
-
-eversion_t PG::Missing::have_old(const hobject_t& oid) const
-{
-  map<hobject_t, item>::const_iterator m = missing.find(oid);
-  if (m == missing.end())
-    return eversion_t();
-  const Missing::item &item(m->second);
-  return item.have;
-}
-
-/*
- * this needs to be called in log order as we extend the log.  it
- * assumes missing is accurate up through the previous log entry.
- */
-void PG::Missing::add_next_event(const pg_log_entry_t& e)
-{
-  if (e.is_update()) {
-    if (e.prior_version == eversion_t() || e.is_clone()) {
-      // new object.
-      //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
-      if (missing.count(e.soid))  // already missing divergent item
-	rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid] = item(e.version, eversion_t());  // .have = nil
-    } else if (missing.count(e.soid)) {
-      // already missing (prior).
-      //assert(missing[e.soid].need == e.prior_version);
-      rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid].need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog()) {
-      // May not have prior version
-      assert(0 == "these don't exist anymore");
-    } else {
-      // not missing, we must have prior_version (if any)
-      missing[e.soid] = item(e.version, e.prior_version);
-    }
-    rmissing[e.version.version] = e.soid;
-  } else
-    rm(e.soid, e.version);
-}
-
-void PG::Missing::revise_need(hobject_t oid, eversion_t need)
-{
-  if (missing.count(oid)) {
-    rmissing.erase(missing[oid].need.version);
-    missing[oid].need = need;            // no not adjust .have
-  } else {
-    missing[oid] = item(need, eversion_t());
-  }
-  rmissing[need.version] = oid;
-}
-
-void PG::Missing::add(const hobject_t& oid, eversion_t need, eversion_t have)
-{
-  missing[oid] = item(need, have);
-  rmissing[need.version] = oid;
-}
-
-void PG::Missing::rm(const hobject_t& oid, eversion_t v)
-{
-  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
-  if (p != missing.end() && p->second.need <= v)
-    rm(p);
-}
-
-void PG::Missing::rm(const std::map<hobject_t, Missing::item>::iterator &m)
-{
-  rmissing.erase(m->second.need.version);
-  missing.erase(m);
-}
-
-void PG::Missing::got(const hobject_t& oid, eversion_t v)
-{
-  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
-  assert(p != missing.end());
-  assert(p->second.need <= v);
-  got(p);
-}
-
-void PG::Missing::got(const std::map<hobject_t, Missing::item>::iterator &m)
-{
-  rmissing.erase(m->second.need.version);
-  missing.erase(m);
 }
 
 ostream& operator<<(ostream& out, const PG& pg)

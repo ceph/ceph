@@ -44,6 +44,7 @@ struct osd_reqid_t {
   entity_name_t name; // who
   tid_t         tid;
   int32_t       inc;  // incarnation
+
   osd_reqid_t()
     : tid(0), inc(0) {}
   osd_reqid_t(const entity_name_t& a, int i, tid_t t)
@@ -843,7 +844,12 @@ struct pool_stat_t {
 WRITE_CLASS_ENCODER(pool_stat_t)
 
 
-
+/**
+ * pg_history_t - information about recent pg peering/mapping history
+ *
+ * This is aggressively shared between OSDs to bound the amount of past
+ * history they need to worry about.
+ */
 struct pg_history_t {
   epoch_t epoch_created;       // epoch in which PG was created
   epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
@@ -1019,6 +1025,10 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
 }
 
 
+/**
+ * pg_log_entry_t - single entry/event in pg log
+ *
+ */
 struct pg_log_entry_t {
   enum {
     MODIFY = 1,
@@ -1198,7 +1208,75 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
 }
 
 
+/**
+ * pg_missing_t - summary of missing objects.
+ *
+ *  kept in memory, as a supplement to pg_log_t
+ *  also used to pass missing info in messages.
+ */
+struct pg_missing_t {
+  struct item {
+    eversion_t need, have;
+    item() {}
+    item(eversion_t n) : need(n) {}  // have no old version
+    item(eversion_t n, eversion_t h) : need(n), have(h) {}
 
+    void encode(bufferlist& bl) const {
+      ::encode(need, bl);
+      ::encode(have, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(need, bl);
+      ::decode(have, bl);
+    }
+    void dump(Formatter *f) const {
+      f->dump_stream("need") << need;
+      f->dump_stream("have") << have;
+    }
+    static void generate_test_instances(list<item*>& o) {
+      o.push_back(new item);
+      o.push_back(new item);
+      o.back()->need = eversion_t(1, 2);
+      o.back()->have = eversion_t(1, 1);
+    }
+  }; 
+  WRITE_CLASS_ENCODER(item)
+
+  map<hobject_t, item> missing;         // oid -> (need v, have v)
+  map<version_t, hobject_t> rmissing;  // v -> oid
+
+  unsigned int num_missing() const;
+  bool have_missing() const;
+  void swap(pg_missing_t& o);
+  bool is_missing(const hobject_t& oid) const;
+  bool is_missing(const hobject_t& oid, eversion_t v) const;
+  eversion_t have_old(const hobject_t& oid) const;
+  void add_next_event(const pg_log_entry_t& e);
+  void revise_need(hobject_t oid, eversion_t need);
+  void add(const hobject_t& oid, eversion_t need, eversion_t have);
+  void rm(const hobject_t& oid, eversion_t v);
+  void rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+  void got(const hobject_t& oid, eversion_t v);
+  void got(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+
+  void clear() {
+    missing.clear();
+    rmissing.clear();
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_missing_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_missing_t::item)
+WRITE_CLASS_ENCODER(pg_missing_t)
+
+ostream& operator<<(ostream& out, const pg_missing_t::item& i);
+ostream& operator<<(ostream& out, const pg_missing_t& missing);
+
+
+// -----------------------------------------
 
 struct osd_peer_stat_t {
   struct ceph_timespec stamp;

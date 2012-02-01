@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-#include "osd/PG.h"
+#include "osd/osd_types.h"
 
 /*
  * PGNotify - notify primary of my PGs and versions.

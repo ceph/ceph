@@ -29,7 +29,7 @@ class MOSDPGLog : public Message {
 public:
   pg_info_t info;
   pg_log_t log;
-  PG::Missing missing;
+  pg_missing_t missing;
 
   epoch_t get_epoch() { return epoch; }
   pg_t get_pgid() { return info.pgid; }

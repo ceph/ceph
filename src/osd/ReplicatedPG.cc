@@ -103,7 +103,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, Message *m)
   assert(is_missing_object(soid));
 
   // we don't have it (yet).
-  map<hobject_t, Missing::item>::const_iterator g = missing.missing.find(soid);
+  map<hobject_t, pg_missing_t::item>::const_iterator g = missing.missing.find(soid);
   assert(g != missing.missing.end());
   const eversion_t &v(g->second.need);
 
@@ -322,7 +322,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || missing.missing.empty());
-	map<hobject_t, Missing::item>::iterator missing_iter =
+	map<hobject_t, pg_missing_t::item>::iterator missing_iter =
 	  missing.missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	while (1) {
@@ -3762,7 +3762,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 // ===========================================================
 
 void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
-				     Missing& missing,
+				     pg_missing_t& missing,
 				     const hobject_t &last_backfill,
 				     interval_set<uint64_t>& data_subset,
 				     map<hobject_t, interval_set<uint64_t> >& clone_subsets)
@@ -3804,7 +3804,7 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 }
 
 void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
-				      Missing& missing,
+				      pg_missing_t& missing,
 				      const hobject_t &last_backfill,
 				      interval_set<uint64_t>& data_subset,
 				      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
@@ -4874,8 +4874,8 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
   utime_t mtime = ceph_clock_now(g_ceph_context);
   info.last_update.epoch = get_osdmap()->get_epoch();
-  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
-  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
+  map<hobject_t, pg_missing_t::item>::iterator m = missing.missing.begin();
+  map<hobject_t, pg_missing_t::item>::iterator mend = missing.missing.end();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (missing_loc.find(oid) != missing_loc.end()) {
@@ -5196,7 +5196,7 @@ int ReplicatedPG::recover_primary(int max)
       latest = 0;
       soid = p->second;
     }
-    Missing::item& item = missing.missing[p->second];
+    pg_missing_t::item& item = missing.missing[p->second];
     p++;
 
     hobject_t head = soid;
@@ -5310,7 +5310,7 @@ int ReplicatedPG::recover_primary(int max)
 	    dout(10) << " need to pull prior_version " << need << " for revert " << item << dendl;
 
 	    set<int>& loc = missing_loc[soid];
-	    for (map<int,Missing>::iterator p = peer_missing.begin(); p != peer_missing.end(); ++p)
+	    for (map<int,pg_missing_t>::iterator p = peer_missing.begin(); p != peer_missing.end(); ++p)
 	      if (p->second.missing[soid].have == need)
 		loc.insert(p->first);
 	    dout(10) << " will pull " << need << " from one of " << loc << dendl;
@@ -5408,7 +5408,7 @@ int ReplicatedPG::recover_replicas(int max)
   // this is FAR from an optimal recovery order.  pretty lame, really.
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
-    map<int, Missing>::const_iterator pm = peer_missing.find(peer);
+    map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     assert(pm != peer_missing.end());
     size_t m_sz = pm->second.num_missing();
 
@@ -5416,7 +5416,7 @@ int ReplicatedPG::recover_replicas(int max)
     dout(20) << " peer osd." << peer << " missing " << pm->second.missing << dendl;
 
     // oldest first!
-    const Missing &m(pm->second);
+    const pg_missing_t &m(pm->second);
     for (map<version_t, hobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
@@ -5436,7 +5436,7 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,Missing::item>::const_iterator p = m.missing.find(soid);
+      map<hobject_t,pg_missing_t::item>::const_iterator p = m.missing.find(soid);
       started += recover_object_replicas(soid, p->second.need);
     }
   }
