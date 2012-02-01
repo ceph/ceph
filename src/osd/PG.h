@@ -246,6 +246,8 @@ public:
 	  ::decode(last_scrub_stamp, bl);
 	}
       }
+      void dump(Formatter *f) const;
+      static void generate_test_instances(list<History*>& o);
     } history;
     
     Info()
@@ -303,6 +305,8 @@ public:
 	::decode(snap_trimq, bl);
       }
     }
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<Info*>& o);
   };
   //WRITE_CLASS_ENCODER(Info::History)
   WRITE_CLASS_ENCODER(Info)
@@ -1857,7 +1861,7 @@ public:
 				    utime_t expire) = 0;
 };
 
-//WRITE_CLASS_ENCODER(PG::Info::History)
+WRITE_CLASS_ENCODER(PG::Info::History)
 WRITE_CLASS_ENCODER(PG::Info)
 WRITE_CLASS_ENCODER(PG::Query)
 WRITE_CLASS_ENCODER(PG::Missing::item)

@@ -69,6 +69,76 @@ std::string PG::gen_prefix() const
   return out.str();
 }
   
+
+/******* PG::Info *******/
+
+void PG::Info::dump(Formatter *f) const
+{
+  f->dump_stream("pgid") << pgid;
+  f->dump_stream("last_update") << last_update;
+  f->dump_stream("last_complete") << last_complete;
+  f->dump_stream("log_tail") << log_tail;
+  f->dump_stream("last_backfill") << last_backfill;
+  f->dump_stream("purged_snaps") << purged_snaps;
+  f->open_object_section("history");
+  history.dump(f);
+  f->close_section();
+  f->open_object_section("stats");
+  stats.dump(f);
+  f->close_section();
+
+  f->dump_int("empty", is_empty());
+  f->dump_int("dne", dne());
+  f->dump_int("incomplete", is_incomplete());
+}
+
+void PG::Info::generate_test_instances(list<PG::Info*>& o)
+{
+  o.push_back(new Info);
+  o.push_back(new Info);
+  list<History*> h;
+  History::generate_test_instances(h);
+  o.back()->history = *h.back();
+  o.back()->pgid = pg_t(1, 2, -1);
+  o.back()->last_update = eversion_t(3, 4);
+  o.back()->last_complete = eversion_t(5, 6);
+  o.back()->log_tail = eversion_t(7, 8);
+  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456);
+  list<pg_stat_t*> s;
+  pg_stat_t::generate_test_instances(s);
+  o.back()->stats = *s.back();
+}
+
+/******* PG::Info::History *******/
+
+void PG::Info::History::dump(Formatter *f) const
+{
+  f->dump_int("epoch_created", epoch_created);
+  f->dump_int("last_epoch_started", last_epoch_started);
+  f->dump_int("last_epoch_clean", last_epoch_clean);
+  f->dump_int("last_epoch_split", last_epoch_split);
+  f->dump_int("same_up_since", same_up_since);
+  f->dump_int("same_interval_since", same_interval_since);
+  f->dump_int("same_primary_since", same_primary_since);
+  f->dump_stream("last_scrub") << last_scrub;
+  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
+}
+
+void PG::Info::History::generate_test_instances(list<PG::Info::History*>& o)
+{
+  o.push_back(new History);
+  o.push_back(new History);
+  o.back()->epoch_created = 1;
+  o.back()->last_epoch_started = 2;
+  o.back()->last_epoch_clean = 3;
+  o.back()->last_epoch_split = 4;
+  o.back()->same_up_since = 5;
+  o.back()->same_interval_since = 6;
+  o.back()->same_primary_since = 7;
+  o.back()->last_scrub = eversion_t(8, 9);
+  o.back()->last_scrub_stamp = utime_t(10, 11);  
+}
+
 /******* PG::Log ********/
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 

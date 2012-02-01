@@ -8,8 +8,8 @@ TYPE(osd_info_t)
 TYPE(OSDMap)
 
 #include "osd/PG.h"
-//TYPE(PG::Info)
-//TYPE(PG::Info::History)
+TYPE(PG::Info)
+TYPE(PG::Info::History)
 //TYPE(PG::Query)
 //TYPE(PG::Missing::item)
 //TYPE(PG::Missing)
