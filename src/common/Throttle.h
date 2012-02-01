@@ -3,22 +3,30 @@
 
 #include "Mutex.h"
 #include "Cond.h"
+#include <list>
 
 class Throttle {
-  int64_t count, max, waiting;
+  int64_t count, max;
   Mutex lock;
-  Cond cond;
+  list<Cond*> cond;
   
 public:
-  Throttle(int64_t m = 0) : count(0), max(m), waiting(0),
+  Throttle(int64_t m = 0) : count(0), max(m),
 			  lock("Throttle::lock") {
     assert(m >= 0);
+  }
+  ~Throttle() {
+    while (!cond.empty()) {
+      Cond *cv = cond.front();
+      delete cv;
+      cond.pop_front();
+    }
   }
 
 private:
   void _reset_max(int64_t m) {
-    if (m < max)
-      cond.SignalOne();
+    if (m < max && !cond.empty())
+      cond.front()->SignalOne();
     max = m;
   }
   bool _should_wait(int64_t c) {
@@ -27,19 +35,22 @@ private:
       ((c < max && count + c > max) ||   // normally stay under max
        (c >= max && count > max));       // except for large c
   }
+
   bool _wait(int64_t c) {
     bool waited = false;
-    if (_should_wait(c)) {
-      waiting += c;
+    if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
+      Cond *cv = new Cond;
+      cond.push_back(cv);
       do {
 	waited = true;
-	cond.Wait(lock);
-      } while (_should_wait(c));
-      waiting -= c;
+        cv->Wait(lock);
+      } while (_should_wait(c) || cv != cond.front());
+      delete cv;
+      cond.pop_front();
 
       // wake up the next guy
-      if (waiting)
-	cond.SignalOne();
+      if (!cond.empty())
+        cond.front()->SignalOne();
     }
     return waited;
   }
@@ -85,7 +96,7 @@ public:
   bool get_or_fail(int64_t c = 1) {
     assert (c >= 0);
     Mutex::Locker l(lock);
-    if (_should_wait(c)) return false;
+    if (_should_wait(c) || !cond.empty()) return false;
     count += c;
     return true;
   }
@@ -94,7 +105,8 @@ public:
     assert(c >= 0);
     Mutex::Locker l(lock);
     if (c) {
-      cond.SignalOne();
+      if (!cond.empty())
+        cond.front()->SignalOne();
       count -= c;
       assert(count >= 0); //if count goes negative, we failed somewhere!
     }
