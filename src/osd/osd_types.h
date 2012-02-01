@@ -1102,6 +1102,102 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e);
 
 
 
+/**
+ * pg_log_t - incremental log of recent pg changes.
+ *
+ *  serves as a recovery queue for recent changes.
+ */
+struct pg_log_t {
+  /*
+   *   head - newest entry (update|delete)
+   *   tail - entry previous to oldest (update|delete) for which we have
+   *          complete negative information.  
+   * i.e. we can infer pg contents for any store whose last_update >= tail.
+   */
+  eversion_t head;    // newest entry
+  eversion_t tail;    // version prior to oldest
+
+  list<pg_log_entry_t> log;  // the actual log.
+  
+  pg_log_t() {}
+
+  void clear() {
+    eversion_t z;
+    head = tail = z;
+    log.clear();
+  }
+
+  bool empty() const {
+    return log.empty();
+  }
+
+  bool null() const {
+    return head.version == 0 && head.epoch == 0;
+  }
+
+  size_t approx_size() const {
+    return head.version - tail.version;
+  }
+
+  list<pg_log_entry_t>::iterator find_entry(eversion_t v) {
+    int fromhead = head.version - v.version;
+    int fromtail = v.version - tail.version;
+    list<pg_log_entry_t>::iterator p;
+    if (fromhead < fromtail) {
+      p = log.end();
+      p--;
+      while (p->version > v)
+	p--;
+      return p;
+    } else {
+      p = log.begin();
+      while (p->version < v)
+	p++;
+      return p;
+    }      
+  }
+
+  /**
+   * copy entries from the tail of another pg_log_t
+   *
+   * @param other pg_log_t to copy from
+   * @param from copy entries after this version
+   */
+  void copy_after(const pg_log_t &other, eversion_t from);
+
+  /**
+   * copy a range of entries from another pg_log_t
+   *
+   * @param other pg_log_t to copy from
+   * @param from copy entries after this version
+   * @parem to up to and including this version
+   */
+  void copy_range(const pg_log_t &other, eversion_t from, eversion_t to);
+
+  /**
+   * copy up to N entries
+   *
+   * @param o source log
+   * @param max max number of entreis to copy
+   */
+  void copy_up_to(const pg_log_t &other, int max);
+
+  ostream& print(ostream& out) const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_log_t)
+
+inline ostream& operator<<(ostream& out, const pg_log_t& log) 
+{
+  out << "log(" << log.tail << "," << log.head << "]";
+  return out;
+}
+
+
 
 
 struct osd_peer_stat_t {

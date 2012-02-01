@@ -160,113 +160,11 @@ public:
   std::string gen_prefix() const;
 
 
-  /*
-   * Log - incremental log of recent pg changes.
-   *  serves as a recovery queue for recent changes.
-   */
-  struct Log {
-    /*
-     *   head - newest entry (update|delete)
-     *   tail - entry previous to oldest (update|delete) for which we have
-     *          complete negative information.  
-     * i.e. we can infer pg contents for any store whose last_update >= tail.
-     */
-    eversion_t head;    // newest entry
-    eversion_t tail;    // version prior to oldest
-
-    list<pg_log_entry_t> log;  // the actual log.
-
-    Log() {}
-
-    void clear() {
-      eversion_t z;
-      head = tail = z;
-      log.clear();
-    }
-
-    bool empty() const {
-      return log.empty();
-    }
-
-    bool null() const {
-      return head.version == 0 && head.epoch == 0;
-    }
-
-    size_t approx_size() const {
-      return head.version - tail.version;
-    }
-
-    list<pg_log_entry_t>::iterator find_entry(eversion_t v) {
-      int fromhead = head.version - v.version;
-      int fromtail = v.version - tail.version;
-      list<pg_log_entry_t>::iterator p;
-      if (fromhead < fromtail) {
-	p = log.end();
-	p--;
-	while (p->version > v)
-	  p--;
-	return p;
-      } else {
-	p = log.begin();
-	while (p->version < v)
-	  p++;
-	return p;
-      }      
-    }
-
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 2;
-      ::encode(struct_v, bl);
-      ::encode(head, bl);
-      ::encode(tail, bl);
-      ::encode(log, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v = 1;
-      ::decode(struct_v, bl);
-      ::decode(head, bl);
-      ::decode(tail, bl);
-      if (struct_v < 2) {
-	bool backlog;
-	::decode(backlog, bl);
-      }
-      ::decode(log, bl);
-    }
-
-    /**
-     * copy entries from the tail of another Log
-     *
-     * @param other Log to copy from
-     * @param from copy entries after this version
-     */
-    void copy_after(const Log &other, eversion_t from);
-
-    /**
-     * copy a range of entries from another Log
-     *
-     * @param other Log to copy from
-     * @param from copy entries after this version
-     * @parem to up to and including this version
-     */
-    void copy_range(const Log &other, eversion_t from, eversion_t to);
-
-    /**
-     * copy up to N entries
-     *
-     * @param o source log
-     * @param max max number of entreis to copy
-     */
-    void copy_up_to(const Log &other, int max);
-
-    ostream& print(ostream& out) const;
-  };
-  WRITE_CLASS_ENCODER(Log)
-
   /**
    * IndexLog - adds in-memory index of the log, by oid.
    * plus some methods to manipulate it all.
    */
-  struct IndexedLog : public Log {
+  struct IndexedLog : public pg_log_t {
     hash_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
     hash_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
 
@@ -277,7 +175,7 @@ public:
     /****/
     IndexedLog() {}
 
-    void claim_log(const Log& o) {
+    void claim_log(const pg_log_t& o) {
       log = o.log;
       head = o.head;
       tail = o.tail;
@@ -286,7 +184,7 @@ public:
 
     void zero() {
       unindex();
-      Log::clear();
+      pg_log_t::clear();
       reset_recovery_pointers();
     }
     void reset_recovery_pointers() {
@@ -1278,13 +1176,13 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog,
+  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 			Missing& omissing, int from);
-  void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog,
+  void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       Missing& omissing, int from);
   bool proc_replica_info(int from, pg_info_t &info);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
-  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog, int from);
+  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
   bool search_for_missing(const pg_info_t &oinfo, const Missing *omissing,
 			  int fromosd);
 
@@ -1556,15 +1454,8 @@ public:
 
 WRITE_CLASS_ENCODER(PG::Missing::item)
 WRITE_CLASS_ENCODER(PG::Missing)
-WRITE_CLASS_ENCODER(PG::Log)
 WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Log& log) 
-{
-  out << "log(" << log.tail << "," << log.head << "]";
-  return out;
-}
 
 inline ostream& operator<<(ostream& out, const PG::Missing::item& i) 
 {

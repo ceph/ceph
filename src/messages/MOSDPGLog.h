@@ -28,7 +28,7 @@ class MOSDPGLog : public Message {
 
 public:
   pg_info_t info;
-  PG::Log log;
+  pg_log_t log;
   PG::Missing missing;
 
   epoch_t get_epoch() { return epoch; }

@@ -1172,6 +1172,120 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 }
 
 
+// -- pg_log_t --
+
+void pg_log_t::encode(bufferlist& bl) const
+{
+  __u8 struct_v = 2;
+  ::encode(struct_v, bl);
+  ::encode(head, bl);
+  ::encode(tail, bl);
+  ::encode(log, bl);
+}
+ 
+void pg_log_t::decode(bufferlist::iterator &bl)
+{
+  __u8 struct_v = 1;
+  ::decode(struct_v, bl);
+  ::decode(head, bl);
+  ::decode(tail, bl);
+  if (struct_v < 2) {
+    bool backlog;
+    ::decode(backlog, bl);
+  }
+  ::decode(log, bl);
+}
+
+void pg_log_t::dump(Formatter *f) const
+{
+  f->dump_stream("head") << head;
+  f->dump_stream("tail") << head;
+  f->open_array_section("log");
+  for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
+    f->open_object_section("entry");
+    p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void pg_log_t::generate_test_instances(list<pg_log_t*>& o)
+{
+  o.push_back(new pg_log_t);
+
+  // this is nonsensical:
+  o.push_back(new pg_log_t);
+  o.back()->head = eversion_t(1,2);
+  o.back()->tail = eversion_t(3,4);
+  list<pg_log_entry_t*> e;
+  pg_log_entry_t::generate_test_instances(e);
+  for (list<pg_log_entry_t*>::iterator p = e.begin(); p != e.end(); ++p)
+    o.back()->log.push_back(**p);
+}
+
+void pg_log_t::copy_after(const pg_log_t &other, eversion_t v) 
+{
+  head = other.head;
+  tail = other.tail;
+  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
+       i != other.log.rend();
+       i++) {
+    assert(i->version > other.tail);
+    if (i->version <= v) {
+      // make tail accurate.
+      tail = i->version;
+      break;
+    }
+    log.push_front(*i);
+  }
+}
+
+void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
+{
+  list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
+  assert(i != other.log.rend());
+  while (i->version > to) {
+    ++i;
+    assert(i != other.log.rend());
+  }
+  assert(i->version == to);
+  head = to;
+  for ( ; i != other.log.rend(); ++i) {
+    if (i->version <= from) {
+      tail = i->version;
+      break;
+    }
+    log.push_front(*i);
+  }
+}
+
+void pg_log_t::copy_up_to(const pg_log_t &other, int max)
+{
+  int n = 0;
+  head = other.head;
+  tail = other.tail;
+  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
+       i != other.log.rend();
+       ++i) {
+    if (n++ >= max) {
+      tail = i->version;
+      break;
+    }
+    log.push_front(*i);
+  }
+}
+
+ostream& pg_log_t::print(ostream& out) const 
+{
+  out << *this << std::endl;
+  for (list<pg_log_entry_t>::const_iterator p = log.begin();
+       p != log.end();
+       p++) 
+    out << *p << std::endl;
+  return out;
+}
+
+
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const

@@ -31,6 +31,7 @@ TYPE(pg_history_t)
 TYPE(pg_info_t)
 TYPE(pg_query_t)
 TYPE(pg_log_entry_t)
+TYPE(pg_log_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
 

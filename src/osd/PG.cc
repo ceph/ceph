@@ -70,59 +70,6 @@ std::string PG::gen_prefix() const
 }
   
 
-/******* PG::Log ********/
-
-void PG::Log::copy_after(const Log &other, eversion_t v) 
-{
-  head = other.head;
-  tail = other.tail;
-  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-       i != other.log.rend();
-       i++) {
-    assert(i->version > other.tail);
-    if (i->version <= v) {
-      // make tail accurate.
-      tail = i->version;
-      break;
-    }
-    log.push_front(*i);
-  }
-}
-
-void PG::Log::copy_range(const Log &other, eversion_t from, eversion_t to)
-{
-  list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-  assert(i != other.log.rend());
-  while (i->version > to) {
-    ++i;
-    assert(i != other.log.rend());
-  }
-  assert(i->version == to);
-  head = to;
-  for ( ; i != other.log.rend(); ++i) {
-    if (i->version <= from) {
-      tail = i->version;
-      break;
-    }
-    log.push_front(*i);
-  }
-}
-
-void PG::Log::copy_up_to(const Log &other, int max)
-{
-  int n = 0;
-  head = other.head;
-  tail = other.tail;
-  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-       i != other.log.rend();
-       ++i) {
-    if (n++ >= max) {
-      tail = i->version;
-      break;
-    }
-    log.push_front(*i);
-  }
-}
 
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
 {
@@ -149,7 +96,7 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
 
 /********* PG **********/
 
-void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olog, Missing& omissing, int from)
+void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_master_log for osd." << from << ": " << olog << " " << omissing << dendl;
   assert(!is_active() && is_primary());
@@ -168,7 +115,7 @@ void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, Log &olo
 }
     
 void PG::proc_replica_log(ObjectStore::Transaction& t,
-			  pg_info_t &oinfo, Log &olog, Missing& omissing, int from)
+			  pg_info_t &oinfo, pg_log_t &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -363,7 +310,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
 }
 
 void PG::merge_log(ObjectStore::Transaction& t,
-		   pg_info_t &oinfo, Log &olog, int fromosd)
+		   pg_info_t &oinfo, pg_log_t &olog, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -620,16 +567,6 @@ void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
   }
 }
 
-
-ostream& PG::Log::print(ostream& out) const 
-{
-  out << *this << std::endl;
-  for (list<pg_log_entry_t>::const_iterator p = log.begin();
-       p != log.end();
-       p++) 
-    out << *p << std::endl;
-  return out;
-}
 
 ostream& PG::IndexedLog::print(ostream& out) const 
 {
