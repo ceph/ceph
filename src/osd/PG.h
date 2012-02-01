@@ -710,6 +710,17 @@ public:
       ::decode(tail, bl);
       ::decode(head, bl);
     }
+    void dump(Formatter *f) const {
+      f->dump_unsigned("head", head);
+      f->dump_unsigned("tail", tail);
+    }
+    static void generate_test_instances(list<OndiskLog>& o) {
+      OndiskLog a;
+      o.push_back(a);
+      a.tail = 1;
+      a.head = 2;
+      o.push_back(a);
+    }
   };
   WRITE_CLASS_ENCODER(OndiskLog)
 
