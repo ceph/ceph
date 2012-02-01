@@ -39,6 +39,14 @@ class Thrasher(gevent.Greenlet):
         self.dead_osds.append(osd)
         self.ceph_manager.kill_osd(osd)
 
+    def blackhole_kill_osd(self, osd=None):
+        if osd is None:
+            osd = random.choice(self.live_osds)
+        self.log("Blackholing and then killing osd %s, live_osds are %s"%(str(osd),str(self.live_osds)))
+        self.live_osds.remove(osd)
+        self.dead_osds.append(osd)
+        self.ceph_manager.blackhole_kill_osd(osd)
+
     def revive_osd(self, osd=None):
         if osd is None:
             osd = random.choice(self.dead_osds)
@@ -275,6 +283,12 @@ class CephManager:
         self.raw_cluster_cmd('osd', 'out', str(osd))
 
     def kill_osd(self, osd):
+        self.ctx.daemons.get_daemon('osd', osd).stop()
+
+    def blackhole_kill_osd(self, osd):
+        self.raw_cluster_cmd('--', 'tell', 'osd.%d' % osd,
+                             'injectargs', '--filestore-blackhole')
+        time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd).stop()
 
     def revive_osd(self, osd):
