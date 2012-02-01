@@ -17,6 +17,7 @@
 #define CEPH_MOSDPGINFO_H
 
 #include "msg/Message.h"
+#include "osd/PG.h"
 
 class MOSDPGInfo : public Message {
   epoch_t epoch;

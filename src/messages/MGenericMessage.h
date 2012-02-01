@@ -23,7 +23,7 @@ class MGenericMessage : public Message {
   //long pcid;
 
  public:
-  MGenericMessage(int t) : Message(t) { 
+  MGenericMessage(int t=0) : Message(t) { 
     snprintf(tname, sizeof(tname), "generic%d", get_type());
   }
 
