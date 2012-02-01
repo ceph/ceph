@@ -3,6 +3,10 @@
 TYPE(entity_name_t)
 TYPE(entity_addr_t)
 
+#include "osd/OSDMap.h"
+TYPE(osd_info_t)
+TYPE(OSDMap)
+
 #include "osd/osd_types.h"
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
