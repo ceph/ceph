@@ -53,7 +53,7 @@ class DencoderImpl : public Dencoder {
   list<T*> m_list;
 
 public:
-  DencoderImpl() {}
+  DencoderImpl() : m_object(new T) {}
 
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
