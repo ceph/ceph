@@ -931,6 +931,72 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 }
 
 
+// -- pg_history_t --
+
+void pg_history_t::encode(bufferlist &bl) const
+{
+  __u8 struct_v = 3;
+  ::encode(struct_v, bl);
+  ::encode(epoch_created, bl);
+  ::encode(last_epoch_started, bl);
+  ::encode(last_epoch_clean, bl);
+  ::encode(last_epoch_split, bl);
+  ::encode(same_interval_since, bl);
+  ::encode(same_up_since, bl);
+  ::encode(same_primary_since, bl);
+  ::encode(last_scrub, bl);
+  ::encode(last_scrub_stamp, bl);
+}
+
+void pg_history_t::decode(bufferlist::iterator &bl)
+{
+  __u8 struct_v;
+  ::decode(struct_v, bl);
+  ::decode(epoch_created, bl);
+  ::decode(last_epoch_started, bl);
+  if (struct_v >= 3)
+    ::decode(last_epoch_clean, bl);
+  else
+    last_epoch_clean = last_epoch_started;  // careful, it's a lie!
+  ::decode(last_epoch_split, bl);
+  ::decode(same_interval_since, bl);
+  ::decode(same_up_since, bl);
+  ::decode(same_primary_since, bl);
+  if (struct_v >= 2) {
+    ::decode(last_scrub, bl);
+    ::decode(last_scrub_stamp, bl);
+  }
+}
+
+void pg_history_t::dump(Formatter *f) const
+{
+  f->dump_int("epoch_created", epoch_created);
+  f->dump_int("last_epoch_started", last_epoch_started);
+  f->dump_int("last_epoch_clean", last_epoch_clean);
+  f->dump_int("last_epoch_split", last_epoch_split);
+  f->dump_int("same_up_since", same_up_since);
+  f->dump_int("same_interval_since", same_interval_since);
+  f->dump_int("same_primary_since", same_primary_since);
+  f->dump_stream("last_scrub") << last_scrub;
+  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
+}
+
+void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
+{
+  o.push_back(new pg_history_t);
+  o.push_back(new pg_history_t);
+  o.back()->epoch_created = 1;
+  o.back()->last_epoch_started = 2;
+  o.back()->last_epoch_clean = 3;
+  o.back()->last_epoch_split = 4;
+  o.back()->same_up_since = 5;
+  o.back()->same_interval_since = 6;
+  o.back()->same_primary_since = 7;
+  o.back()->last_scrub = eversion_t(8, 9);
+  o.back()->last_scrub_stamp = utime_t(10, 11);  
+}
+
+
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const

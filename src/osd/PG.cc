@@ -96,8 +96,8 @@ void PG::Info::generate_test_instances(list<PG::Info*>& o)
 {
   o.push_back(new Info);
   o.push_back(new Info);
-  list<History*> h;
-  History::generate_test_instances(h);
+  list<pg_history_t*> h;
+  pg_history_t::generate_test_instances(h);
   o.back()->history = *h.back();
   o.back()->pgid = pg_t(1, 2, -1);
   o.back()->last_update = eversion_t(3, 4);
@@ -109,35 +109,6 @@ void PG::Info::generate_test_instances(list<PG::Info*>& o)
   o.back()->stats = *s.back();
 }
 
-/******* PG::Info::History *******/
-
-void PG::Info::History::dump(Formatter *f) const
-{
-  f->dump_int("epoch_created", epoch_created);
-  f->dump_int("last_epoch_started", last_epoch_started);
-  f->dump_int("last_epoch_clean", last_epoch_clean);
-  f->dump_int("last_epoch_split", last_epoch_split);
-  f->dump_int("same_up_since", same_up_since);
-  f->dump_int("same_interval_since", same_interval_since);
-  f->dump_int("same_primary_since", same_primary_since);
-  f->dump_stream("last_scrub") << last_scrub;
-  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
-}
-
-void PG::Info::History::generate_test_instances(list<PG::Info::History*>& o)
-{
-  o.push_back(new History);
-  o.push_back(new History);
-  o.back()->epoch_created = 1;
-  o.back()->last_epoch_started = 2;
-  o.back()->last_epoch_clean = 3;
-  o.back()->last_epoch_split = 4;
-  o.back()->same_up_since = 5;
-  o.back()->same_interval_since = 6;
-  o.back()->same_primary_since = 7;
-  o.back()->last_scrub = eversion_t(8, 9);
-  o.back()->last_scrub_stamp = utime_t(10, 11);  
-}
 
 /******* PG::Log ********/
 

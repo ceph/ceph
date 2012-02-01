@@ -181,75 +181,8 @@ public:
 
     pg_stat_t stats;
 
-    struct History {
-      epoch_t epoch_created;       // epoch in which PG was created
-      epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
-      epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
-      epoch_t last_epoch_split;    // as parent
+    pg_history_t history;
 
-      epoch_t same_up_since;       // same acting set since
-      epoch_t same_interval_since;   // same acting AND up set since
-      epoch_t same_primary_since;  // same primary at least back through this epoch.
-
-      eversion_t last_scrub;
-      utime_t last_scrub_stamp;
-
-      History() : 	      
-	epoch_created(0),
-	last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
-	same_up_since(0), same_interval_since(0), same_primary_since(0) {}
-
-      void merge(const History &other) {
-	// Here, we only update the fields which cannot be calculated from the OSDmap.
-	if (epoch_created < other.epoch_created)
-	  epoch_created = other.epoch_created;
-	if (last_epoch_started < other.last_epoch_started)
-	  last_epoch_started = other.last_epoch_started;
-	if (last_epoch_clean < other.last_epoch_clean)
-	  last_epoch_clean = other.last_epoch_clean;
-	if (last_epoch_split < other.last_epoch_started)
-	  last_epoch_split = other.last_epoch_started;
-	if (other.last_scrub > last_scrub)
-	  last_scrub = other.last_scrub;
-	if (other.last_scrub_stamp > last_scrub_stamp)
-	  last_scrub_stamp = other.last_scrub_stamp;
-      }
-
-      void encode(bufferlist &bl) const {
-	__u8 struct_v = 3;
-	::encode(struct_v, bl);
-	::encode(epoch_created, bl);
-	::encode(last_epoch_started, bl);
-	::encode(last_epoch_clean, bl);
-	::encode(last_epoch_split, bl);
-	::encode(same_interval_since, bl);
-	::encode(same_up_since, bl);
-	::encode(same_primary_since, bl);
-	::encode(last_scrub, bl);
-	::encode(last_scrub_stamp, bl);
-      }
-      void decode(bufferlist::iterator &bl) {
-	__u8 struct_v;
-	::decode(struct_v, bl);
-	::decode(epoch_created, bl);
-	::decode(last_epoch_started, bl);
-	if (struct_v >= 3)
-	  ::decode(last_epoch_clean, bl);
-	else
-	  last_epoch_clean = last_epoch_started;  // careful, it's a lie!
-	::decode(last_epoch_split, bl);
-	::decode(same_interval_since, bl);
-	::decode(same_up_since, bl);
-	::decode(same_primary_since, bl);
-	if (struct_v >= 2) {
-	  ::decode(last_scrub, bl);
-	  ::decode(last_scrub_stamp, bl);
-	}
-      }
-      void dump(Formatter *f) const;
-      static void generate_test_instances(list<History*>& o);
-    } history;
-    
     Info()
       : last_backfill(hobject_t::get_max())
     { }
@@ -308,7 +241,6 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Info*>& o);
   };
-  //WRITE_CLASS_ENCODER(Info::History)
   WRITE_CLASS_ENCODER(Info)
 
   
@@ -336,12 +268,12 @@ public:
 
     __s32 type;
     eversion_t since;
-    Info::History history;
+    pg_history_t history;
 
     Query() : type(-1) {}
-    Query(int t, const Info::History& h) :
+    Query(int t, const pg_history_t& h) :
       type(t), history(h) { assert(t != LOG); }
-    Query(int t, eversion_t s, const Info::History& h) :
+    Query(int t, eversion_t s, const pg_history_t& h) :
       type(t), since(s), history(h) { assert(t == LOG); }
 
     void encode(bufferlist &bl) const {
@@ -1861,7 +1793,6 @@ public:
 				    utime_t expire) = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Info::History)
 WRITE_CLASS_ENCODER(PG::Info)
 WRITE_CLASS_ENCODER(PG::Query)
 WRITE_CLASS_ENCODER(PG::Missing::item)
@@ -1870,13 +1801,6 @@ WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
 WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
-{
-  return out << "ec=" << h.epoch_created
-	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
-	     << " " << h.same_up_since << "/" << h.same_interval_since << "/" << h.same_primary_since;
-}
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {

@@ -431,7 +431,7 @@ protected:
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
-                            PG::Info::History history);
+                            pg_history_t history);
   //void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
   PG *lookup_lock_raw_pg(pg_t pgid);
@@ -442,7 +442,7 @@ protected:
   
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
-  void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
+  void project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 			  vector<int>& lastup, vector<int>& lastacting);
 
   void wake_pg_waiters(pg_t pgid) {
@@ -462,7 +462,7 @@ protected:
 
   // -- pg creation --
   struct create_pg_info {
-    PG::Info::History history;
+    pg_history_t history;
     vector<int> acting;
     set<int> prior;
     pg_t parent;

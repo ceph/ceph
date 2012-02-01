@@ -1085,7 +1085,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 }
 
 PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
-                             PG::Info::History history)
+                             pg_history_t history)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
@@ -1219,7 +1219,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    PG::Info::History history = info.history;
+    pg_history_t history = info.history;
     project_pg_history(info.pgid, history, epoch, up, acting);
 
     if (epoch < history.same_interval_since) {
@@ -1330,7 +1330,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
  * Fill in the passed history so you know same_interval_since, same_up_since,
  * and same_primary_since.
  */
-void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
+void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 			     vector<int>& currentup, vector<int>& currentacting)
 {
   dout(15) << "project_pg_history " << pgid
@@ -4000,7 +4000,7 @@ void OSD::kick_pg_split_queue()
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      PG::Info::History history;
+      pg_history_t history;
       history.epoch_created = history.same_up_since =
           history.same_interval_since = history.same_primary_since =
           osdmap->get_epoch();
@@ -4212,7 +4212,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     }
 
     // figure history
-    PG::Info::History history;
+    pg_history_t history;
     history.epoch_created = created;
     history.last_epoch_clean = created;
     project_pg_history(pgid, history, created, up, acting);
@@ -4656,7 +4656,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
       // same primary?
-      PG::Info::History history = it->second.history;
+      pg_history_t history = it->second.history;
       project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
       if (m->get_epoch() < history.same_interval_since) {
