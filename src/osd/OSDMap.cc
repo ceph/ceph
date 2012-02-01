@@ -18,6 +18,8 @@
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
 
+#include "common/code_environment.h"
+
 // ----------------------------------
 // osd_info_t
 
@@ -725,6 +727,20 @@ void OSDMap::dump(Formatter *f) const
     f->dump_stream(ss.str().c_str()) << p->second;
   }
   f->close_section();
+}
+
+void OSDMap::generate_test_instances(list<OSDMap>& o)
+{
+  OSDMap m;
+  o.push_back(m);
+
+  CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
+
+  uuid_d fsid;
+  m.build_simple(cct, 1, fsid, 16, 7, 8, 9);
+  o.push_back(m);
+
+  delete cct;
 }
 
 string OSDMap::get_flag_string() const

@@ -671,7 +671,7 @@ public:
   string get_flag_string() const;
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
-
+  static void generate_test_instances(list<OSDMap>& o);
 };
 WRITE_CLASS_ENCODER(OSDMap)
 
