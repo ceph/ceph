@@ -116,7 +116,7 @@ public:
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
     try {
-      Message *n = decode_message(NULL, p);
+      Message *n = decode_message(g_ceph_context, p);
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type())
