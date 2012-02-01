@@ -881,6 +881,30 @@ public:
       ::decode(acting, bl);
       ::decode(maybe_went_rw, bl);
     }
+    void dump(Formatter *f) const {
+      f->dump_unsigned("first", first);
+      f->dump_unsigned("last", last);
+      f->dump_int("maybe_went_rw", (int)maybe_went_rw);
+      f->open_array_section("up");
+      for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+	f->dump_int("osd", *p);
+      f->close_section();
+      f->open_array_section("acting");
+      for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+	f->dump_int("osd", *p);
+      f->close_section();
+    }
+    static void generate_test_instances(list<Interval>& o) {
+      Interval a;
+      o.push_back(a);
+      a.up.push_back(1);
+      a.acting.push_back(2);
+      a.acting.push_back(3);
+      a.first = 4;
+      a.last = 5;
+      a.maybe_went_rw = true;
+      o.push_back(a);
+    }
   };
   WRITE_CLASS_ENCODER(Interval)
 
