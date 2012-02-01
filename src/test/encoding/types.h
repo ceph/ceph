@@ -38,11 +38,6 @@ TYPE(ObjectStore::Transaction)
 
 
 // --- messages ---
-#include "messages/MPGStats.h"
-MESSAGE(MPGStats)
-#include "messages/MAuth.h"
-MESSAGE(MAuth)
-
 #include "messages/MAuth.h"
 MESSAGE(MAuth)
 #include "messages/MAuthReply.h"
