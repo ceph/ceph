@@ -398,6 +398,7 @@ private:
 public:
   void encode(bufferlist& bl, uint64_t features=-1) const;
   void decode(bufferlist& bl);
+  void decode(bufferlist::iterator& p);
 
 
   /****   mapping facilities   ****/
@@ -672,6 +673,7 @@ public:
   void dump(Formatter *f) const;
 
 };
+WRITE_CLASS_ENCODER(OSDMap)
 
 typedef std::tr1::shared_ptr<const OSDMap> OSDMapRef;
 

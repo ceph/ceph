@@ -551,8 +551,13 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
 void OSDMap::decode(bufferlist& bl)
 {
-  __u32 n, t;
   bufferlist::iterator p = bl.begin();
+  decode(p);
+}
+
+void OSDMap::decode(bufferlist::iterator& p)
+{
+  __u32 n, t;
   __u16 v;
   ::decode(v, p);
 
