@@ -14,7 +14,6 @@
 
 #include "Objecter.h"
 #include "osd/OSDMap.h"
-#include "osd/PGLS.h"
 
 #include "mon/MonClient.h"
 
@@ -1339,7 +1338,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
   ldout(cct, 10) << "_list_reply" << dendl;
 
   bufferlist::iterator iter = bl->begin();
-  PGLSResponse response;
+  pg_ls_response_t response;
   bufferlist extra_info;
   ::decode(response, iter);
   if (!iter.end()) {

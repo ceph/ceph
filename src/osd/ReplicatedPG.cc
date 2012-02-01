@@ -14,7 +14,6 @@
 #include "PG.h"
 #include "ReplicatedPG.h"
 #include "OSD.h"
-#include "PGLS.h"
 
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -297,7 +296,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         dout(10) << " pgls pg=" << op->get_pg() << " count " << p->op.pgls.count << dendl;
 	// read into a buffer
         vector<hobject_t> sentries;
-        PGLSResponse response;
+        pg_ls_response_t response;
 	try {
 	  ::decode(response.handle, bp);
 	}

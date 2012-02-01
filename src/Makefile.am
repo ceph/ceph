@@ -1402,7 +1402,6 @@ noinst_HEADERS = \
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
         osd/PG.h\
-        osd/PGLS.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\

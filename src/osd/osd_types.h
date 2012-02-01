@@ -1275,6 +1275,49 @@ WRITE_CLASS_ENCODER(pg_missing_t)
 ostream& operator<<(ostream& out, const pg_missing_t::item& i);
 ostream& operator<<(ostream& out, const pg_missing_t& missing);
 
+/**
+ * pg list objects response format
+ *
+ */
+struct pg_ls_response_t {
+  collection_list_handle_t handle; 
+  list<pair<object_t, string> > entries;
+
+  void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(handle, bl);
+    ::encode(entries, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    assert(v == 1);
+    ::decode(handle, bl);
+    ::decode(entries, bl);
+  }
+  void dump(Formatter *f) const {
+    f->dump_stream("handle") << handle;
+    f->open_array_section("entries");
+    for (list<pair<object_t, string> >::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+      f->open_object_section("object");
+      f->dump_stream("object") << p->first;
+      f->dump_string("key", p->second);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pg_ls_response_t*>& o) {
+    o.push_back(new pg_ls_response_t);
+    o.push_back(new pg_ls_response_t);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2);
+    o.back()->entries.push_back(make_pair(object_t("one"), string()));
+    o.back()->entries.push_back(make_pair(object_t("two"), string("twokey")));
+  }
+};
+
+WRITE_CLASS_ENCODER(pg_ls_response_t)
+
 
 // -----------------------------------------
 

@@ -11,9 +11,6 @@ TYPE(OSDMap)
 TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
-#include "osd/PGLS.h"
-//TYPE(PGLSResponse)
-
 #include "osd/osd_types.h"
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
@@ -30,6 +27,7 @@ TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
 TYPE(pg_missing_t::item)
 TYPE(pg_missing_t)
+TYPE(pg_ls_response_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
 
