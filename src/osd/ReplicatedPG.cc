@@ -5127,7 +5127,7 @@ void ReplicatedPG::check_recovery_op_pulls(const OSDMapRef osdmap)
 }
   
 
-int ReplicatedPG::start_recovery_ops(int max)
+int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
 {
   int started = 0;
   assert(is_primary());
@@ -5166,8 +5166,8 @@ int ReplicatedPG::start_recovery_ops(int max)
 
   assert(recovery_ops_active == 0);
 
-  PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
-  handle_recovery_complete(&rctx);
+  handle_recovery_complete(prctx);
+
   return 0;
 }
 

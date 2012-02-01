@@ -2016,6 +2016,11 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  Context *onreadable, Context *ondisk,
 				  Context *onreadable_sync)
 {
+  if (g_conf->filestore_blackhole) {
+    dout(0) << "queue_transactions filestore_blackhole = TRUE, dropping transaction" << dendl;
+    return 0;
+  }
+
   // set up the sequencer
   OpSequencer *osr;
   if (!posr)
