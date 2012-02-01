@@ -394,6 +394,8 @@ public:
     epoch_t first, last;
     bool maybe_went_rw;
 
+    Interval() : first(0), last(0), maybe_went_rw(false) {}
+
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
@@ -415,7 +417,7 @@ public:
     void dump(Formatter *f) const {
       f->dump_unsigned("first", first);
       f->dump_unsigned("last", last);
-      f->dump_int("maybe_went_rw", (int)maybe_went_rw);
+      f->dump_int("maybe_went_rw", maybe_went_rw ? 1 : 0);
       f->open_array_section("up");
       for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
 	f->dump_int("osd", *p);
