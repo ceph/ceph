@@ -1,6 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#ifdef ENCODE_DUMP
+# include <typeinfo>
+# include <cxxabi.h>
+#endif
+
 #include <iostream>
 using namespace std;
 
@@ -145,11 +150,42 @@ using namespace std;
 void Message::encode(uint64_t features, bool datacrc)
 {
   // encode and copy out of *m
-  if (empty_payload())
+  if (empty_payload()) {
     encode_payload(features);
+
+  }
   calc_front_crc();
-  if (datacrc)
+  if (datacrc) {
     calc_data_crc();
+
+#ifdef ENCODE_DUMP
+    bufferlist bl;
+    ::encode(get_header(), bl);
+    ::encode(get_footer(), bl);
+    ::encode(get_payload(), bl);
+    ::encode(get_middle(), bl);
+    ::encode(get_data(), bl);
+
+    static int i = 0;
+    i++;
+    int bits = 0;
+    for (unsigned t = i; t; bits++)
+      t &= t - 1;
+    if (bits <= 2) {
+      char fn[200];
+      int status;
+      snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
+	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
+	       getpid(), i++);
+      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+      if (fd >= 0) {
+	bl.write_fd(fd);
+	::close(fd);
+      }
+    }
+#endif
+
+  }
   else
     footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
 }
