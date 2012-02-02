@@ -55,11 +55,11 @@ public:
   bool been_delayed() { return hit_flag_points & flag_delayed; }
   bool been_started() { return hit_flag_points & flag_started; }
   bool been_sub_op_sent() { return hit_flag_points & flag_sub_op_sent; }
-  bool currently_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
-  bool currently_reached_pg() { return hit_flag_points & flag_reached_pg; }
-  bool currently_delayed() { return hit_flag_points & flag_delayed; }
-  bool currently_started() { return hit_flag_points & flag_started; }
-  bool currently_sub_op_sent() { return hit_flag_points & flag_sub_op_sent; }
+  bool currently_queued_for_pg() { return latest_flag_point & flag_queued_for_pg; }
+  bool currently_reached_pg() { return latest_flag_point & flag_reached_pg; }
+  bool currently_delayed() { return latest_flag_point & flag_delayed; }
+  bool currently_started() { return latest_flag_point & flag_started; }
+  bool currently_sub_op_sent() { return latest_flag_point & flag_sub_op_sent; }
 
   const char *state_string() {
     switch(latest_flag_point) {
