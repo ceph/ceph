@@ -658,8 +658,15 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
 #define DECODE_ERR_VERSION(func, v)			\
   "" #func " unknown encoding version > " #v
 
+#define DECODE_ERR_OLDVERSION(func, v)			\
+  "" #func " no longer understand old encoding version < " #v
+
 #define DECODE_ERR_PAST(func) \
   "" #func " decode past end of struct encoding"
+
+#define DECODE_OLDEST(oldestv)						\
+  if (struct_v < oldestv)						\
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v)); 
 
 #define DECODE_START(v, bl)						\
   __u8 struct_v = v, struct_compat = compat;				\
