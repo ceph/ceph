@@ -3156,7 +3156,10 @@ void ReplicatedPG::remove_repop(RepGather *repop)
 void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 			     int fromosd, eversion_t peer_lcod)
 {
-  MOSDOp *m = (MOSDOp *)repop->ctx->op->request;
+  MOSDOp *m = NULL;
+
+  if (repop->ctx->op)
+    m = (MOSDOp *)repop->ctx->op->request;
 
   if (m)
     dout(7) << "repop_ack rep_tid " << repop->rep_tid << " op " << *m
