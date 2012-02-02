@@ -726,11 +726,8 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  __u8 v = 2;
-  ::encode(v, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(num_bytes, bl);
-  uint64_t num_kb = SHIFT_ROUND_UP(num_bytes, 10);
-  ::encode(num_kb, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
   ::encode(num_object_copies, bl);
@@ -741,26 +738,29 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_rd_kb, bl);
   ::encode(num_wr, bl);
   ::encode(num_wr_kb, bl);
+  ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   ::decode(num_bytes, bl);
-  uint64_t num_kb;
-  ::decode(num_kb, bl);
+  if (struct_v < 3) {
+    uint64_t num_kb;
+    ::decode(num_kb, bl);
+  }
   ::decode(num_objects, bl);
   ::decode(num_object_clones, bl);
   ::decode(num_object_copies, bl);
   ::decode(num_objects_missing_on_primary, bl);
   ::decode(num_objects_degraded, bl);
-  if (v >= 2)
+  if (struct_v >= 2)
     ::decode(num_objects_unfound, bl);
   ::decode(num_rd, bl);
   ::decode(num_rd_kb, bl);
   ::decode(num_wr, bl);
   ::decode(num_wr_kb, bl);
+  DECODE_FINISH(bl);
 }
 
 void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
