@@ -254,6 +254,7 @@ OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_recovery_threads, OPT_INT, 1)
+OPTION(osd_recover_clone_overlap, OPT_BOOL, false)   // preserve clone_overlap during recovery/migration
 OPTION(osd_backfill_scan_min, OPT_INT, 64)
 OPTION(osd_backfill_scan_max, OPT_INT, 512)
 OPTION(osd_op_thread_timeout, OPT_INT, 30)
@@ -325,6 +326,7 @@ OPTION(filestore_fiemap_threshold, OPT_INT, 4096)
 OPTION(filestore_merge_threshold, OPT_INT, 10)
 OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_collections, OPT_BOOL, false)
+OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_block_align, OPT_BOOL, true)
 OPTION(journal_max_write_bytes, OPT_INT, 10 << 20)

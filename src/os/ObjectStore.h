@@ -674,6 +674,8 @@ public:
   virtual void flush() {}
   virtual void sync_and_flush() {}
 
+  virtual int dump_journal(ostream& out) { return -EOPNOTSUPP; }
+
   virtual int snapshot(const string& name) { return -EOPNOTSUPP; }
     
   virtual void _fake_writes(bool b) {};

@@ -1024,6 +1024,7 @@ protected:
 		  uuid_d fsid, int whoami);
   static int mkjournal(const std::string &dev, const std::string &jdev);
   static int flushjournal(const std::string &dev, const std::string &jdev);
+  static int dump_journal(const std::string &dev, const std::string &jdev, ostream& out);
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();

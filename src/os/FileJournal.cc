@@ -89,11 +89,6 @@ int FileJournal::_open(bool forwrite, bool create)
   /* We really want max_size to be a multiple of block_size. */
   max_size -= max_size % block_size;
 
-  // static zeroed buffer for alignment padding
-  delete [] zero_buf;
-  zero_buf = new char[header.alignment];
-  memset(zero_buf, 0, header.alignment);
-
   dout(1) << "_open " << fn << " fd " << fd
 	  << ": " << max_size 
 	  << " bytes, block size " << block_size
@@ -333,7 +328,7 @@ int FileJournal::create()
 
   // write empty header
   header = header_t();
-  header.clear();
+  header.flags = header_t::FLAG_CRC;  // enable crcs on any new journal.
   header.fsid = fsid;
   header.max_size = max_size;
   header.block_size = block_size;
@@ -343,6 +338,11 @@ int FileJournal::create()
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
   header.start = get_top();
   print_header();
+
+  // static zeroed buffer for alignment padding
+  delete [] zero_buf;
+  zero_buf = new char[header.alignment];
+  memset(zero_buf, 0, header.alignment);
 
   bp = prepare_header();
   if (TEMP_FAILURE_RETRY(::pwrite(fd, bp.c_str(), bp.length(), 0)) < 0) {
@@ -425,6 +425,12 @@ int FileJournal::open(uint64_t fs_op_seq)
   err = read_header();
   if (err < 0)
     return err;
+
+  // static zeroed buffer for alignment padding
+  delete [] zero_buf;
+  zero_buf = new char[header.alignment];
+  memset(zero_buf, 0, header.alignment);
+
   dout(10) << "open header.fsid = " << header.fsid 
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
@@ -504,6 +510,42 @@ void FileJournal::close()
   fd = -1;
 }
 
+
+int FileJournal::dump(ostream& out)
+{
+  dout(10) << "dump" << dendl;
+  _open(false, false);
+
+  int err = read_header();
+  if (err < 0)
+    return err;
+
+  read_pos = header.start;
+
+  while (1) {
+    bufferlist bl;
+    uint64_t seq = 0;
+    uint64_t pos = read_pos;
+    if (!read_entry(bl, seq)) {
+      dout(3) << "journal_replay: end of journal, done." << dendl;
+      break;
+    }
+
+    out << "offset " << pos << " seq " << seq << "\n";
+   
+    bufferlist::iterator p = bl.begin();
+    while (!p.end()) {
+      ObjectStore::Transaction *t = new ObjectStore::Transaction(p);
+      t->dump(out);
+      delete t;
+    }
+  }
+  out << std::endl;
+  dout(10) << "dump finish" << dendl;
+  return 0;
+}
+
+
 void FileJournal::start_writer()
 {
   write_stop = false;
@@ -553,10 +595,23 @@ int FileJournal::read_header()
   }
 
   if (r < 0) {
-    char buf[80];
-    dout(0) << "read_header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno;
+    int err = errno;
+    dout(0) << "read_header got " << cpp_strerror(err) << dendl;
+    return -err;
   }
+  
+  /*
+   * Unfortunately we weren't initializing the flags field for new
+   * journals!  Aie.  This is safe(ish) now that we have only one
+   * flag.  Probably around when we add the next flag we need to
+   * remove this or else this (eventually old) code will clobber newer
+   * code's flags.
+   */
+  if (header.flags > 3) {
+    derr << "read_header appears to have gibberish flags; assuming 0" << dendl;
+    header.flags = 0;
+  }
+
   print_header();
 
   return 0;
@@ -744,11 +799,13 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
     
   // add it this entry
   entry_header_t h;
+  memset(&h, 0, sizeof(h));
   h.seq = seq;
   h.pre_pad = pre_pad;
   h.len = ebl.length();
   h.post_pad = post_pad;
   h.make_magic(queue_pos, header.get_fsid64());
+  h.crc32c = ebl.crc32c(0);
 
   bl.append((const char*)&h, sizeof(h));
   if (pre_pad) {
@@ -756,6 +813,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
     bl.push_back(bp);
   }
   bl.claim_append(ebl);
+
   if (h.post_pad) {
     bufferptr bp = buffer::create_static(post_pad, zero_buf);
     bl.push_back(bp);
@@ -790,8 +848,7 @@ int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   ::lseek64(fd, pos, SEEK_SET);
   int ret = bl.write_fd(fd);
   if (ret) {
-    derr << "FileJournal::write_bl : write_fd failed: "
-	 << cpp_strerror(ret) << dendl;
+    derr << "FileJournal::write_bl : write_fd failed: " << cpp_strerror(ret) << dendl;
     return ret;
   }
   pos += bl.length();
@@ -986,6 +1043,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
   dout(5) << "submit_entry seq " << seq
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
+  assert(e.length() > 0);
 
   completions.push_back(completion_item(seq, oncommit, ceph_clock_now(g_ceph_context)));
 
@@ -1156,7 +1214,6 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   }
 
   off64_t pos = read_pos;
-  bl.clear();
 
   // header
   entry_header_t *h;
@@ -1172,7 +1229,10 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   // pad + body + pad
   if (h->pre_pad)
     pos += h->pre_pad;
+
+  bl.clear();
   wrap_read_bl(pos, h->len, bl);
+
   if (h->post_pad)
     pos += h->post_pad;
 
@@ -1184,6 +1244,16 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   if (memcmp(f, h, sizeof(*f))) {
     dout(2) << "read_entry " << read_pos << " : bad footer magic, partial entry, end of journal" << dendl;
     return false;
+  }
+
+  if ((header.flags & header_t::FLAG_CRC) ||   // if explicitly enabled (new journal)
+      h->crc32c != 0) {                        // newer entry in old journal
+    uint32_t actual_crc = bl.crc32c(0);
+    if (actual_crc != h->crc32c) {
+      dout(2) << "read_entry " << read_pos << " : header crc (" << h->crc32c
+	      << ") doesn't match body crc (" << actual_crc << ")" << dendl;
+      return false;
+    }
   }
 
   // yay!

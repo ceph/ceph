@@ -64,6 +64,7 @@ int main(int argc, const char **argv)
   bool mkjournal = false;
   bool mkkey = false;
   bool flushjournal = false;
+  bool dump_journal = false;
   bool convertfilestore = false;
   bool get_journal_fsid = false;
   bool get_osd_fsid = false;
@@ -89,6 +90,8 @@ int main(int argc, const char **argv)
       convertfilestore = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--dump-pg-log", (char*)NULL)) {
       dump_pg_log = val;
+    } else if (ceph_argparse_flag(args, i, "--dump-journal", (char*)NULL)) {
+      dump_journal = true;
     } else if (ceph_argparse_flag(args, i, "--get-cluster-fsid", (char*)NULL)) {
       get_cluster_fsid = true;
     } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", (char*)NULL)) {
@@ -211,6 +214,22 @@ int main(int argc, const char **argv)
 	 << dendl;
     exit(0);
   }
+  if (dump_journal) {
+    common_init_finish(g_ceph_context);
+    int err = OSD::dump_journal(g_conf->osd_data, g_conf->osd_journal, cout);
+    if (err < 0) {
+      derr << TEXT_RED << " ** ERROR: error dumping journal " << g_conf->osd_journal
+	   << " for object store " << g_conf->osd_data
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+      exit(1);
+    }
+    derr << "dumped journal " << g_conf->osd_journal
+	 << " for object store " << g_conf->osd_data
+	 << dendl;
+    exit(0);
+
+  }
+
 
   if (convertfilestore) {
     int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);

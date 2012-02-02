@@ -244,22 +244,33 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode
   IndexedPath path;
   int r, fd, exist;
   r = get_index(cid, &index);
-  if (r < 0)
+  if (r < 0) {
+    derr << "error getting collection index for " << cid
+	 << ": " << cpp_strerror(-r) << dendl;
     return r;
+  }
   r = index->lookup(oid, &path, &exist);
   if (r < 0) {
+    derr << "could not find " << oid << " in index: "
+	 << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = ::open(path->path(), flags, mode);
-  if (r < 0)
+  if (r < 0) {
+    r = -errno;
+    derr << "error opening file " << path->path() << " with flags="
+	 << flags << " and mode=" << mode << ": " << cpp_strerror(-r) << dendl;
     return r;
+  }
   fd = r;
 
   if ((flags & O_CREAT) && (!exist)) {
     r = index->created(oid, path->path());
     if (r < 0) {
-      close(fd);
+      TEMP_FAILURE_RETRY(::close(fd));
+      derr << "error creating " << oid << " (" << path->path()
+	   << ") in index: " << cpp_strerror(-r) << dendl;
       return r;
     }
   }
@@ -759,6 +770,19 @@ int FileStore::open_journal()
   return 0;
 }
 
+int FileStore::dump_journal(ostream& out)
+{
+  int r;
+
+  if (!journalpath.length())
+    return -EINVAL;
+
+  FileJournal *journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+  r = journal->dump(out);
+  delete journal;
+  return r;
+}
+
 int FileStore::wipe_subvol(const char *s)
 {
 #if defined(__linux__)
@@ -821,6 +845,7 @@ int FileStore::mkfs()
 #if defined(__linux__)
   int basedir_fd;
   struct btrfs_ioctl_vol_args volargs;
+  memset(&volargs, 0, sizeof(volargs));
 #endif
 
   if (!m_filestore_dev.empty()) {
@@ -921,7 +946,6 @@ int FileStore::mkfs()
 
   // current
 #if defined(__linux__)
-  memset(&volargs, 0, sizeof(volargs));
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   volargs.fd = 0;
   strcpy(volargs.name, "current");
@@ -1061,9 +1085,10 @@ int FileStore::lock_fsid()
   l.l_len = 0;
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
-    char buf[80];
-    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another ceph-osd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno;
+    int err = errno;
+    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another ceph-osd still running? "
+	    << cpp_strerror(err) << dendl;
+    return -err;
   }
   return 0;
 }
@@ -1080,7 +1105,7 @@ bool FileStore::test_mount_in_use()
   if (fsid_fd < 0)
     return 0;   // no fsid, ok.
   bool inuse = lock_fsid() < 0;
-  ::close(fsid_fd);
+  TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
   return inuse;
 }
@@ -1143,7 +1168,6 @@ int FileStore::_detect_fs()
   blk_size = st.f_bsize;
 
 #if defined(__linux__)
-  char buf[80];
   static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
   if (st.f_type == BTRFS_F_TYPE) {
     dout(0) << "mount detected btrfs" << dendl;      
@@ -1159,7 +1183,7 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
       } else {
 	btrfs_clone_range = false;
-	dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << cpp_strerror(r) << dendl;
       }
     } else {
       dout(0) << "mount btrfs CLONE_RANGE ioctl is DISABLED via 'filestore btrfs clone range' option" << dendl;
@@ -1167,9 +1191,11 @@ int FileStore::_detect_fs()
 
     // snap_create and snap_destroy?
     struct btrfs_ioctl_vol_args volargs;
+    memset(&volargs, 0, sizeof(volargs));
     volargs.fd = fd;
     strcpy(volargs.name, "sync_snap_test");
     r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &volargs);
+    int err = errno;
     if (r == 0 || errno == EEXIST) {
       dout(0) << "mount btrfs SNAP_CREATE is supported" << dendl;
       btrfs_snap_create = true;
@@ -1179,10 +1205,10 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_DESTROY is supported" << dendl;
 	btrfs_snap_destroy = true;
       } else {
-	dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	dout(0) << "mount btrfs SNAP_DESTROY failed: " << cpp_strerror(err) << dendl;
       }
     } else {
-      dout(0) << "mount btrfs SNAP_CREATE failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      dout(0) << "mount btrfs SNAP_CREATE failed: " << cpp_strerror(err) << dendl;
     }
 
     if (m_filestore_btrfs_snap && !btrfs_snap_destroy) {
@@ -1198,29 +1224,36 @@ int FileStore::_detect_fs()
     // start_sync?
     __u64 transid = 0;
     r = ::ioctl(fd, BTRFS_IOC_START_SYNC, &transid);
-    dout(0) << "mount btrfs START_SYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    if (r < 0) {
+      int err = errno;
+      dout(0) << "mount btrfs START_SYNC got " << cpp_strerror(err) << dendl;
+    }
     if (r == 0 && transid > 0) {
       dout(0) << "mount btrfs START_SYNC is supported (transid " << transid << ")" << dendl;
 
       // do we have wait_sync too?
       r = ::ioctl(fd, BTRFS_IOC_WAIT_SYNC, &transid);
-      if (r == 0 || r == -ERANGE) {
+      if (r == 0 || errno == ERANGE) {
 	dout(0) << "mount btrfs WAIT_SYNC is supported" << dendl;
 	btrfs_wait_sync = true;
       } else {
-	dout(0) << "mount btrfs WAIT_SYNC is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	int err = errno;
+	dout(0) << "mount btrfs WAIT_SYNC is NOT supported: " << cpp_strerror(err) << dendl;
       }
     } else {
-      dout(0) << "mount btrfs START_SYNC is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      int err = errno;
+      dout(0) << "mount btrfs START_SYNC is NOT supported: " << cpp_strerror(err) << dendl;
     }
 
     if (btrfs_wait_sync) {
       // async snap creation?
       struct btrfs_ioctl_vol_args vol_args;
+      memset(&vol_args, 0, sizeof(vol_args));
       vol_args.fd = 0;
       strcpy(vol_args.name, "async_snap_test");
 
       struct btrfs_ioctl_vol_args_v2 async_args;
+      memset(&async_args, 0, sizeof(async_args));
       async_args.fd = fd;
       async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
       strcpy(async_args.name, "async_snap_test");
@@ -1230,12 +1263,13 @@ int FileStore::_detect_fs()
       if (::fstatat(fd, vol_args.name, &st, 0) == 0) {
 	dout(0) << "mount btrfs removing old async_snap_test" << dendl;
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
-	if (r != 0)
-	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	if (r != 0) {
+	  int err = errno;
+	  dout(0) << "mount  failed to remove old async_snap_test: " << cpp_strerror(err) << dendl;
+	}
       }
 
       r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_V2, &async_args);
-      dout(0) << "mount btrfs SNAP_CREATE_V2 got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
 	dout(0) << "mount btrfs SNAP_CREATE_V2 is supported" << dendl;
 	btrfs_snap_create_v2 = true;
@@ -1243,11 +1277,13 @@ int FileStore::_detect_fs()
 	// clean up
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	if (r != 0) {
-	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	  int err = errno;
+	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << cpp_strerror(err) << dendl;
 	}
       } else {
+	int err = errno;
 	dout(0) << "mount btrfs SNAP_CREATE_V2 is NOT supported: "
-		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
+		<< cpp_strerror(err) << dendl;
       }
     }
 
@@ -1268,7 +1304,7 @@ int FileStore::_detect_fs()
     btrfs = false;
   }
 
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
   return 0;
 }
 
@@ -1384,8 +1420,7 @@ int FileStore::read_op_seq(const char *fn, uint64_t *seq)
   memset(s, 0, sizeof(s));
   int ret = safe_read(op_fd, s, sizeof(s) - 1);
   if (ret < 0) {
-    derr << "error reading " << current_op_seq_fn << ": "
-	 << cpp_strerror(ret) << dendl;
+    derr << "error reading " << current_op_seq_fn << ": " << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(op_fd));
     return ret;
   }
@@ -1396,9 +1431,10 @@ int FileStore::read_op_seq(const char *fn, uint64_t *seq)
 int FileStore::write_op_seq(int fd, uint64_t seq)
 {
   char s[30];
-  int ret;
   snprintf(s, sizeof(s), "%" PRId64 "\n", seq);
-  ret = TEMP_FAILURE_RETRY(::pwrite(fd, s, strlen(s), 0));
+  int ret = TEMP_FAILURE_RETRY(::pwrite(fd, s, strlen(s), 0));
+  if (ret < 0)
+    return -errno;
   return ret;
 }
 
@@ -1420,7 +1456,7 @@ int FileStore::mount()
   if (::access(basedir.c_str(), R_OK | W_OK)) {
     ret = -errno;
     derr << "FileStore::mount: unable to access basedir '" << basedir << "': "
-	    << cpp_strerror(ret) << dendl;
+	 << cpp_strerror(ret) << dendl;
     goto done;
   }
 
@@ -1561,7 +1597,7 @@ int FileStore::mount()
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
 	
-	if (cp != curr_seq) {
+	if (curr_seq && cp != curr_seq) {
 	  if (!m_osd_use_stale_snap) { 
 	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
 	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
@@ -1582,18 +1618,16 @@ int FileStore::mount()
       }
 
       btrfs_ioctl_vol_args vol_args;
+      memset(&vol_args, 0, sizeof(vol_args));
       vol_args.fd = 0;
       strcpy(vol_args.name, "current");
 
       // drop current?
       if (curr_seq > 0) {
-	ret = ::ioctl(basedir_fd,
-		      BTRFS_IOC_SNAP_DESTROY,
-		      &vol_args);
+	ret = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	if (ret) {
-	  ret = errno;
-	  derr << "FileStore::mount: error removing old current subvol: "
-	       << cpp_strerror(ret) << dendl;
+	  ret = -errno;
+	  derr << "FileStore::mount: error removing old current subvol: " << cpp_strerror(ret) << dendl;
 	  char s[PATH_MAX];
 	  snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
 	  if (::rename(current_fn.c_str(), s)) {
@@ -1609,14 +1643,12 @@ int FileStore::mount()
       vol_args.fd = ::open(s, O_RDONLY);
       if (vol_args.fd < 0) {
 	ret = -errno;
-	derr << "FileStore::mount: error opening '" << s << "': "
-	     << cpp_strerror(ret) << dendl;
+	derr << "FileStore::mount: error opening '" << s << "': " << cpp_strerror(ret) << dendl;
 	goto close_basedir_fd;
       }
       if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args)) {
 	ret = -errno;
-	derr << "FileStore::mount: error ioctl(BTRFS_IOC_SNAP_CREATE) failed: "
-	     << cpp_strerror(ret) << dendl;
+	derr << "FileStore::mount: error ioctl(BTRFS_IOC_SNAP_CREATE) failed: " << cpp_strerror(ret) << dendl;
 	TEMP_FAILURE_RETRY(::close(vol_args.fd));
 	goto close_basedir_fd;
       }
@@ -1627,8 +1659,8 @@ int FileStore::mount()
 
   current_fd = ::open(current_fn.c_str(), O_RDONLY);
   if (current_fd < 0) {
-    derr << "FileStore::mount: error opening: " << current_fn << ": "
-	 << cpp_strerror(ret) << dendl;
+    ret = -errno;
+    derr << "FileStore::mount: error opening: " << current_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
 
@@ -1708,8 +1740,7 @@ int FileStore::mount()
 
   ret = journal_replay(initial_op_seq);
   if (ret < 0) {
-    derr << "mount failed to open journal " << journalpath << ": "
-	 << cpp_strerror(ret) << dendl;
+    derr << "mount failed to open journal " << journalpath << ": " << cpp_strerror(ret) << dendl;
     if (ret == -ENOTTY) {
       derr << "maybe journal is not pointing to a block device and its size "
 	   << "wasn't configured?" << dendl;
@@ -1985,6 +2016,11 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  Context *onreadable, Context *ondisk,
 				  Context *onreadable_sync)
 {
+  if (g_conf->filestore_blackhole) {
+    dout(0) << "queue_transactions filestore_blackhole = TRUE, dropping transaction" << dendl;
+    return 0;
+  }
+
   // set up the sequencer
   OpSequencer *osr;
   if (!posr)
@@ -2136,20 +2172,19 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
       !m_filestore_btrfs_trans)
     return 0;
 
-  char buf[80];
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) {
-    dout(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
- 	    << " from btrfs open" << dendl;
-    assert(0);
+    int err = errno;
+    dout(0) << "transaction_start got " << cpp_strerror(err) << " from btrfs open" << dendl;
+    assert(0 == "couldn't open basedir");
   }
 
   int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
   if (r < 0) {
-    dout(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
- 	    << " from btrfs ioctl" << dendl;    
-    ::close(fd);
-    return -errno;
+    int err = errno;
+    dout(0) << "transaction_start got " << cpp_strerror(err) << " from btrfs ioctl" << dendl;    
+    TEMP_FAILURE_RETRY(::close(fd));
+    return -err;
   }
   dout(10) << "transaction_start " << fd << dendl;
 
@@ -2172,7 +2207,7 @@ void FileStore::_transaction_finish(int fd)
   
   dout(10) << "transaction_finish " << fd << dendl;
   ::ioctl(fd, BTRFS_IOC_TRANS_END);
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
 }
 
 unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
@@ -2401,44 +2436,56 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       assert(0);
     }
 
-    if (r == -ENOENT) {
-      if (op == Transaction::OP_CLONERANGE ||
-	  op == Transaction::OP_CLONE ||
-	  op == Transaction::OP_CLONERANGE2) {
-	// Halt before we incorrectly mark the pg clean
-	assert(0 == "ENOENT on clone suggests osd bug");
-      } else {
+    if (r < 0) {
+      bool ok = false;
+
+      if (r == -ENOENT && !(op == Transaction::OP_CLONERANGE ||
+			    op == Transaction::OP_CLONE ||
+			    op == Transaction::OP_CLONERANGE2))
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with !stable_commits
+	ok = true;
+      if (r == -ENODATA)
+	ok = true;
+
+      if (replaying && !btrfs_stable_commits) {
+	if (r == -EEXIST && op == Transaction::OP_MKCOLL) {
+	  dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
+	  ok = true;
+	}
+	if (r == -EEXIST && op == Transaction::OP_COLL_ADD) {
+	  dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
+	  ok = true;
+	}
+      }
+
+      if (!ok) {
+	const char *msg = "unexpected error code";
+
+	if (r == -ENOENT && (op == Transaction::OP_CLONERANGE ||
+			     op == Transaction::OP_CLONE ||
+			     op == Transaction::OP_CLONERANGE2))
+	  msg = "ENOENT on clone suggests osd bug";
+
+	if (r == -ENOSPC)
+	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
+	  // by partially applying transactions.
+	  msg = "ENOSPC handling not implemented";
+
+	if (r == -ENOTEMPTY) {
+	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
+	}
+
+	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
+		<< " (op num " << op_num << ", counting from 1)" << dendl;
+	dout(0) << msg << dendl;
+	dout(0) << " transaction dump:\n";
+	t.dump(*_dout);
+	*_dout << dendl;
+	assert(0 == "unexpected error");
       }
     }
-    else if (r == -ENODATA) {
-      // -ENODATA is okay
-    }
-    else if (r == -ENOSPC) {
-      // For now, if we hit _any_ ENOSPC, crash, before we do any damage
-      // by partially applying transactions.
-      assert(0 == "ENOSPC handling not implemented");
-    }
-    else if (r == -ENOTEMPTY) {
-      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
-    }
-    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !btrfs_stable_commits) {
-      dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
-    }
-    else if (r == -EEXIST && op == Transaction::OP_COLL_ADD && replaying && !btrfs_stable_commits) {
-      dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
-    }
-    else if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
-	      << " (op num " << op_num << ", counting from 1)" << dendl;
-      dout(0) << " transaction dump:\n";
-      t.dump(*_dout);
-      *_dout << dendl;
-      assert(0 == "unexpected error");
-    }
   }
-
   if (!idempotent && !btrfs_stable_commits) {
     dout(10) << "performed non-idempotent operation and not using btrfs snaps, triggering a commit" << dendl;
     trigger_commit(op_seq);
@@ -2479,10 +2526,8 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
 
   int fd = lfn_open(cid, oid, O_RDONLY);
   if (fd < 0) {
-    int err = errno;
-    dout(10) << "FileStore::read(" << cid << "/" << oid << "): open error "
-	     << cpp_strerror(err) << dendl;
-    return -err;
+    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: " << cpp_strerror(fd) << dendl;
+    return fd;
   }
 
   if (len == 0) {
@@ -2495,8 +2540,7 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(fd, bptr.c_str(), len, offset);
   if (got < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << "): pread error "
-	     << cpp_strerror(got) << dendl;
+    dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
     return got;
   }
@@ -2529,9 +2573,8 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
   int r;
   int fd = lfn_open(cid, oid, O_RDONLY);
   if (fd < 0) {
-    char buf[80];
-    dout(10) << "read couldn't open " << cid << "/" << oid << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    r = -errno;
+    r = fd;
+    dout(10) << "read couldn't open " << cid << "/" << oid << ": " << cpp_strerror(r) << dendl;
   } else {
     uint64_t i;
 
@@ -2613,10 +2656,10 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
   int fd = lfn_open(cid, oid, flags, 0644);
   int r;
   if (fd >= 0) {
-    ::close(fd);
+    TEMP_FAILURE_RETRY(::close(fd));
     r = 0;
   } else
-    r = -errno;
+    r = fd;
   dout(10) << "touch " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
@@ -2630,20 +2673,20 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
 
   int64_t actual;
 
-  char buf[80];
   int flags = O_WRONLY|O_CREAT;
   int fd = lfn_open(cid, oid, flags, 0644);
   if (fd < 0) {
-    dout(0) << "write couldn't open " << cid << "/" << oid << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    r = -errno;
+    r = fd;
+    dout(0) << "write couldn't open " << cid << "/" << oid << " flags " << flags << ": "
+	    << cpp_strerror(r) << dendl;
     goto out;
   }
     
   // seek
   actual = ::lseek64(fd, offset, SEEK_SET);
   if (actual < 0) {
-    dout(0) << "write lseek64 to " << offset << " failed: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
+    dout(0) << "write lseek64 to " << offset << " failed: " << cpp_strerror(r) << dendl;
     goto out;
   }
   if (actual != (int64_t)offset) {
@@ -2663,10 +2706,10 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
       !queue_flusher(fd, offset, len)) {
     if (m_filestore_sync_flush)
       ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-    ::close(fd);
+    TEMP_FAILURE_RETRY(::close(fd));
   }
 #else
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
 #endif
 
  out:
@@ -2690,12 +2733,12 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   int o, n, r;
   o = lfn_open(cid, oldoid, O_RDONLY);
   if (o < 0) {
-    r = -errno;
+    r = o;
     goto out2;
   }
   n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (n < 0) {
-    r = -errno;
+    r = n;
     goto out;
   }
   if (btrfs)
@@ -2709,9 +2752,9 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   if (r < 0)
     r = -errno;
 
-  ::close(n);
+  TEMP_FAILURE_RETRY(::close(n));
  out:
-  ::close(o);
+  TEMP_FAILURE_RETRY(::close(o));
  out2:
   dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   return 0;
@@ -2856,18 +2899,18 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
   int o, n;
   o = lfn_open(cid, oldoid, O_RDONLY);
   if (o < 0) {
-    r = -errno;
+    r = o;
     goto out2;
   }
   n = lfn_open(cid, newoid, O_CREAT|O_WRONLY, 0644);
   if (n < 0) {
-    r = -errno;
+    r = n;
     goto out;
   }
   r = _do_clone_range(o, n, srcoff, len, dstoff);
-  ::close(n);
+  TEMP_FAILURE_RETRY(::close(n));
  out:
-  ::close(o);
+  TEMP_FAILURE_RETRY(::close(o));
  out2:
   dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
@@ -2929,7 +2972,7 @@ void FileStore::flusher_entry()
 	} else 
 	  dout(10) << "flusher_entry JUST closing " << fd << " (stop=" << stop << ", ep=" << ep
 		   << ", sync_epoch=" << sync_epoch << ")" << dendl;
-	::close(fd);
+	TEMP_FAILURE_RETRY(::close(fd));
       }
       lock.Lock();
       flusher_queue_len -= num;   // they're definitely closed, forget
@@ -3021,9 +3064,9 @@ void FileStore::sync_entry()
       sync_epoch++;
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
-      if (write_op_seq(op_fd, cp) < 0) {
-	derr << "Error: " << cpp_strerror(errno) 
-	     << " during write_op_seq" << dendl;
+      int err = write_op_seq(op_fd, cp);
+      if (err < 0) {
+	derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
 	assert(0);
       }
 
@@ -3032,6 +3075,7 @@ void FileStore::sync_entry()
 	if (btrfs_snap_create_v2) {
 	  // be smart!
 	  struct btrfs_ioctl_vol_args_v2 async_args;
+	  memset(&async_args, 0, sizeof(async_args));
 	  async_args.fd = current_fd;
 	  async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
 	  snprintf(async_args.name, sizeof(async_args.name), COMMIT_SNAP_ITEM,
@@ -3039,11 +3083,14 @@ void FileStore::sync_entry()
 
 	  dout(10) << "taking async snap '" << async_args.name << "'" << dendl;
 	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_V2, &async_args);
-	  char buf[100];
-	  dout(20) << "async snap create '" << async_args.name
-		   << "' transid " << async_args.transid
-		   << " got " << r << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
-	  assert(r == 0);
+	  if (r < 0) {
+	    int err = errno;
+	    derr << "async snap create '" << async_args.name << "' transid " << async_args.transid
+		 << " got " << cpp_strerror(err) << dendl;
+	    assert(0 == "async snap ioctl error");
+	  }
+	  dout(20) << "async snap create '" << async_args.name << "' transid " << async_args.transid << dendl;
+
 	  snaps.push_back(cp);
 
 	  commit_started();
@@ -3056,6 +3103,7 @@ void FileStore::sync_entry()
 	} else {
 	  // the synchronous snap create does a sync.
 	  struct btrfs_ioctl_vol_args vol_args;
+	  memset(&vol_args, 0, sizeof(vol_args));
 	  vol_args.fd = current_fd;
 	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
 		   (long long unsigned)cp);
@@ -3110,6 +3158,7 @@ void FileStore::sync_entry()
       if (btrfs_stable_commits) {
 	while (snaps.size() > 2) {
 	  btrfs_ioctl_vol_args vol_args;
+	  memset(&vol_args, 0, sizeof(vol_args));
 	  vol_args.fd = 0;
 	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
 		   (long long unsigned)snaps.front());
@@ -3118,9 +3167,8 @@ void FileStore::sync_entry()
 	  dout(10) << "removing snap '" << vol_args.name << "'" << dendl;
 	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	  if (r) {
-	    char buf[100];
-	    dout(20) << "unable to destroy snap '" << vol_args.name << "' got " << r
-		     << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	    int err = errno;
+	    derr << "unable to destroy snap '" << vol_args.name << "' got " << cpp_strerror(err) << dendl;
 	  }
 	}
       }
@@ -3269,8 +3317,10 @@ int FileStore::snapshot(const string& name)
   snprintf(vol_args.name, sizeof(vol_args.name), CLUSTER_SNAP_ITEM, name.c_str());
 
   int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
-  if (r)
+  if (r) {
+    r = -errno;
     derr << "snapshot " << name << " failed: " << cpp_strerror(r) << dendl;
+  }
 
   return r;
 }
@@ -3686,7 +3736,7 @@ int FileStore::list_collections(vector<coll_t>& ls)
       snprintf(filename, sizeof(filename), "%s/%s", fn, de->d_name);
 
       r = ::stat(filename, &sb);
-      if (r == -1) {
+      if (r < 0) {
 	r = -errno;
 	derr << "stat on " << filename << ": " << cpp_strerror(-r) << dendl;
 	break;

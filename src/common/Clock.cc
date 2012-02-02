@@ -25,13 +25,15 @@ utime_t ceph_clock_now(CephContext *cct)
   struct timeval tv;
   gettimeofday(&tv, NULL);
   utime_t n(&tv);
-  n += cct->_conf->clock_offset;
+  if (cct)
+    n += cct->_conf->clock_offset;
   return n;
 }
 
 time_t ceph_clock_gettime(CephContext *cct)
 {
   time_t ret = time(NULL);
-  ret += ((time_t)cct->_conf->clock_offset);
+  if (cct)
+    ret += ((time_t)cct->_conf->clock_offset);
   return ret;
 }

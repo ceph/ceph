@@ -505,6 +505,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 //PG_STATE_SCANNING (1<<14) .. deprecated.
 #define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
+#define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
 
 std::string pg_state_string(int state);
 
@@ -673,7 +674,6 @@ ostream& operator<<(ostream& out, const pg_pool_t& p);
  */
 struct object_stat_sum_t {
   int64_t num_bytes;    // in bytes
-  int64_t num_kb;       // in KB
   int64_t num_objects;
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
@@ -684,7 +684,7 @@ struct object_stat_sum_t {
   int64_t num_wr, num_wr_kb;
 
   object_stat_sum_t()
-    : num_bytes(0), num_kb(0),
+    : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
@@ -700,7 +700,6 @@ struct object_stat_sum_t {
 
   void dump(Formatter *f) const {
     f->dump_unsigned("num_bytes", num_bytes);
-    f->dump_unsigned("num_kb", num_kb);
     f->dump_unsigned("num_objects", num_objects);
     f->dump_unsigned("num_object_clones", num_object_clones);
     f->dump_unsigned("num_object_copies", num_object_copies);
@@ -716,6 +715,7 @@ struct object_stat_sum_t {
     __u8 v = 2;
     ::encode(v, bl);
     ::encode(num_bytes, bl);
+    uint64_t num_kb = SHIFT_ROUND_UP(num_bytes, 10);
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
     ::encode(num_object_clones, bl);
@@ -732,6 +732,7 @@ struct object_stat_sum_t {
     __u8 v;
     ::decode(v, bl);
     ::decode(num_bytes, bl);
+    uint64_t num_kb;
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
     ::decode(num_object_clones, bl);
@@ -747,7 +748,6 @@ struct object_stat_sum_t {
   }
   void add(const object_stat_sum_t& o) {
     num_bytes += o.num_bytes;
-    num_kb += o.num_kb;
     num_objects += o.num_objects;
     num_object_clones += o.num_object_clones;
     num_object_copies += o.num_object_copies;
@@ -761,7 +761,6 @@ struct object_stat_sum_t {
   }
   void sub(const object_stat_sum_t& o) {
     num_bytes -= o.num_bytes;
-    num_kb -= o.num_kb;
     num_objects -= o.num_objects;
     num_object_clones -= o.num_object_clones;
     num_object_copies -= o.num_object_copies;
@@ -945,7 +944,8 @@ struct pg_stat_t {
     ::decode(last_scrub_stamp, bl);
     if (v <= 4) {
       ::decode(stats.sum.num_bytes, bl);
-      ::decode(stats.sum.num_kb, bl);
+      uint64_t num_kb;
+      ::decode(num_kb, bl);
       ::decode(stats.sum.num_objects, bl);
       ::decode(stats.sum.num_object_clones, bl);
       ::decode(stats.sum.num_object_copies, bl);
@@ -1020,7 +1020,8 @@ struct pool_stat_t {
       ::decode(ondisk_log_size, bl);
     } else {
       ::decode(stats.sum.num_bytes, bl);
-      ::decode(stats.sum.num_kb, bl);
+      uint64_t num_kb;
+      ::decode(num_kb, bl);
       ::decode(stats.sum.num_objects, bl);
       ::decode(stats.sum.num_object_clones, bl);
       ::decode(stats.sum.num_object_copies, bl);

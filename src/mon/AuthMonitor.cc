@@ -186,6 +186,11 @@ bool AuthMonitor::update_from_paxos()
   ::encode(mon->key_server, bl);
   paxos->stash_latest(paxosv, bl);
 
+  unsigned max = g_conf->paxos_max_join_drift * 2;
+  if (mon->is_leader() &&
+      paxosv > max)
+    paxos->trim_to(paxosv - max);
+
   return true;
 }
 

@@ -31,12 +31,19 @@ public:
    * journal header
    */
   struct header_t {
+    enum {
+      FLAG_CRC = (1<<0),
+      // NOTE: remove kludgey weirdness in read_header() next time a flag is added.
+    };
+
     uint64_t flags;
     uuid_d fsid;
     __u32 block_size;
     __u32 alignment;
     int64_t max_size;   // max size of journal ring buffer
     int64_t start;      // offset of first entry
+
+    header_t() : flags(0), block_size(0), alignment(0), max_size(0), start(0) {}
 
     void clear() {
       start = block_size;
@@ -90,8 +97,8 @@ public:
   } header;
 
   struct entry_header_t {
-    uint64_t seq;  // fs op seq #
-    uint32_t flags;
+    uint64_t seq;     // fs op seq #
+    uint32_t crc32c;  // payload only.  not header, pre_pad, post_pad, or footer.
     uint32_t len;
     uint32_t pre_pad, post_pad;
     uint64_t magic1;
@@ -237,6 +244,8 @@ private:
   int open(uint64_t fs_op_seq);
   void close();
   int peek_fsid(uuid_d& fsid);
+
+  int dump(ostream& out);
 
   void flush();
 

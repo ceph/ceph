@@ -392,6 +392,16 @@ int OSD::flushjournal(const std::string &dev, const std::string &jdev)
   return err;
 }
 
+int OSD::dump_journal(const std::string &dev, const std::string &jdev, ostream& out)
+{
+  ObjectStore *store = create_object_store(dev, jdev);
+  if (!store)
+    return -ENOENT;
+  int err = store->dump_journal(out);
+  delete store;
+  return err;
+}
+
 int OSD::write_meta(const std::string &base, const std::string &file,
 		    const char *val, size_t vallen)
 {
@@ -1806,8 +1816,9 @@ void OSD::tick()
   if (outstanding_pg_stats
       &&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
     dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
-            << "seconds, reconnecting elsewhere" << dendl;
+            << " seconds, reconnecting elsewhere" << dendl;
     monc->reopen_session();
+    last_pg_stats_ack = ceph_clock_now(g_ceph_context);  // reset clock
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
@@ -4110,7 +4121,6 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
       // add to child stats
       child->info.stats.stats.sum.num_bytes += st.st_size;
-      child->info.stats.stats.sum.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
       child->info.stats.stats.sum.num_objects++;
       if (poid.snap && poid.snap != CEPH_NOSNAP)
 	child->info.stats.stats.sum.num_object_clones++;
@@ -5079,7 +5089,14 @@ void OSD::do_recovery(PG *pg)
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
-    int started = pg->start_recovery_ops(max);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
+    map< int, vector<PG::Info> >  notify_list;  // primary -> list
+    map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+    map<int,MOSDPGInfo*> info_map;  // peer -> message
+    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+
+    int started = pg->start_recovery_ops(max, &rctx);
     
     dout(10) << "do_recovery started " << started
 	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
@@ -5092,11 +5109,8 @@ void OSD::do_recovery(PG *pg)
      * out while trying to pull.
      */
     if (!started && pg->have_unfound()) {
-      map< int, map<pg_t,PG::Query> > query_map;
       pg->discover_all_missing(query_map);
-      if (query_map.size())
-	do_queries(query_map);
-      else {
+      if (!query_map.size()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
 	recovery_wq.lock();
 	pg->recovery_item.remove_myself();	// sigh...
@@ -5110,6 +5124,18 @@ void OSD::do_recovery(PG *pg)
       recovery_wq.unlock();
     }
     
+    do_notifies(notify_list, pg->get_osdmap()->get_epoch());  // notify? (residual|replica)
+    do_queries(query_map);
+    do_infos(info_map);
+
+    if (!t->empty()) {
+      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+      assert(tr == 0);
+    } else {
+      delete t;
+      delete fin;
+    }
+
     pg->unlock();
   }
   pg->put();

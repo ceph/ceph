@@ -47,6 +47,8 @@ public:
   bool need_full_ratio_update, need_nearfull_ratio_update;
   float new_full_ratio, new_nearfull_ratio;
 
+  bool need_check_down_pgs;
+
 private:
   PGMap::Incremental pending_inc;
 
@@ -91,8 +93,24 @@ private:
   map<int,utime_t> last_osd_report;
 
   void register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool);
+
+  /**
+   * check latest osdmap for new pgs to register
+   *
+   * @return true if we updated pending_inc (and should propose)
+   */
   bool register_new_pgs();
+
   void send_pg_creates();
+
+  /**
+   * check pgs for down primary osds
+   *
+   * clears need_check_down_pgs
+   *
+   * @return true if we updated pending_inc (and should propose)
+   */
+  bool check_down_pgs();
 
 public:
   PGMonitor(Monitor *mn, Paxos *p);

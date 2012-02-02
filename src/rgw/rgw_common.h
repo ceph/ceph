@@ -165,8 +165,8 @@ extern int gen_rand_alphanumeric(char *dest, int size);
 extern int gen_rand_alphanumeric_upper(char *dest, int size);
 
 enum RGWIntentEvent {
-  DEL_OBJ,
-  DEL_POOL,
+  DEL_OBJ = 0,
+  DEL_DIR = 1,
 };
 
 enum RGWObjCategory {

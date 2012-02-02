@@ -128,14 +128,14 @@ AdminSocketClient(const std::string &path)
 
 std::string AdminSocketClient::do_request(std::string request, std::string *result)
 {
-  int socket_fd, res;
+  int socket_fd = 0, res;
   std::vector<uint8_t> vec(65536, 0);
   uint8_t *buffer = &vec[0];
   uint32_t message_size_raw, message_size;
 
   std::string err = asok_connect(m_path, &socket_fd);
   if (!err.empty()) {
-    goto done;
+    goto out;
   }
   err = asok_request(socket_fd, request);
   if (!err.empty()) {
@@ -164,5 +164,6 @@ std::string AdminSocketClient::do_request(std::string request, std::string *resu
   result->assign((const char*)buffer);
 done:
   close(socket_fd);
+ out:
   return err;
 }
