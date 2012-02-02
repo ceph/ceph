@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from teuthology import misc as teuthology
@@ -31,15 +32,24 @@ class DaemonState(object):
             self.logger.info("%s.%s: %s"%(self.role, self.id_, msg))
 
     def stop(self):
-        if self.proc is not None:
-            self.proc.stdin.close()
-            run.wait([self.proc])
-            self.proc = None
-            self.log("Stopped")
+        """
+        Note: this can raise a run.CommandFailedError,
+        run.CommandCrashedError, or run.ConnectionLostError.
+        """
+        if not self.running():
+            self.log('tried to stop a non-running daemon')
+            return
+        self.proc.stdin.close()
+        self.log('waiting for process to exit')
+        run.wait([self.proc])
+        self.proc = None
+        self.log("Stopped")
 
     def restart(self):
         self.log("Restarting")
-        self.stop()
+        if self.proc is not None:
+            self.log("stopping old one...")
+            self.stop()
         self.proc = self.remote.run(*self.command_args, **self.command_kwargs)
         self.log("Started")
 
@@ -795,8 +805,17 @@ def run_daemon(ctx, config, type):
         yield
     finally:
         log.info('Shutting down %s daemons...' % type)
-        [i.stop() for i in ctx.daemons.iter_daemons_of_role(type)]
-
+        exc_info = (None, None, None)
+        for daemon in ctx.daemons.iter_daemons_of_role(type):
+            try:
+                daemon.stop()
+            except (run.CommandFailedError,
+                    run.CommandCrashedError,
+                    run.ConnectionLostError):
+                exc_info = sys.exc_info()
+                log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
+        if exc_info != (None, None, None):
+            raise exc_info[0], exc_info[1], exc_info[2]
 
 def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
