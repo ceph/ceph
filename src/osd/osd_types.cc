@@ -588,8 +588,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  __u8 struct_v = 4;
-  ::encode(struct_v, bl);
+  ENCODE_START(5, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -606,15 +605,12 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(auid, bl);
   ::encode(flags, bl);
   ::encode(crash_replay_interval, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
-  if (struct_v > 4)
-    throw buffer::error();
-
+  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -655,7 +651,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     else
       crash_replay_interval = 0;
   }
-
+  DECODE_FINISH(bl);
   calc_pg_masks();
 }
 
