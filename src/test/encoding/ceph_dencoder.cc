@@ -309,7 +309,7 @@ int main(int argc, const char **argv)
       exit(1);
     }      
     if (err.length()) {
-      cout << err << std::endl;
+      cerr << "error: " << err << std::endl;
       exit(1);
     }
   }
