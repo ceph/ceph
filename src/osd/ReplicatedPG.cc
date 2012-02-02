@@ -3774,6 +3774,11 @@ void ReplicatedPG::calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const
   if (size)
     data_subset.insert(0, size);
 
+  if (!g_conf->osd_recover_clone_overlap) {
+    dout(10) << "calc_head_subsets " << head << " -- osd_recover_clone_overlap disabled" << dendl;
+    return;
+  }
+
 
   interval_set<uint64_t> cloning;
   interval_set<uint64_t> prev;
@@ -3809,16 +3814,18 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
 				      interval_set<uint64_t>& data_subset,
 				      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
+  dout(10) << "calc_clone_subsets " << soid
+	   << " clone_overlap " << snapset.clone_overlap << dendl;
+
+  uint64_t size = snapset.clone_size[soid.snap];
+  if (size)
+    data_subset.insert(0, size);
+
   if (!g_conf->osd_recover_clone_overlap) {
     dout(10) << "calc_clone_subsets " << soid << " -- osd_recover_clone_overlap disabled" << dendl;
     return;
   }
   
-  dout(10) << "calc_clone_subsets " << soid
-	   << " clone_overlap " << snapset.clone_overlap << dendl;
-
-  uint64_t size = snapset.clone_size[soid.snap];
-
   unsigned i;
   for (i=0; i < snapset.clones.size(); i++)
     if (snapset.clones[i] == soid.snap)
@@ -3864,8 +3871,6 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
   }
   
   // what's left for us to push?
-  if (size)
-    data_subset.insert(0, size);
   data_subset.subtract(cloning);
 
   dout(10) << "calc_clone_subsets " << soid
