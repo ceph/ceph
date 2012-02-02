@@ -3941,8 +3941,12 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
   int fromosd = -1;
   map<hobject_t,set<int> >::iterator q = missing_loc.find(soid);
   if (q != missing_loc.end()) {
-    for (set<int>::iterator p = q->second.begin();
-	 p != q->second.end();
+    // randomize the list of possible sources
+    // should we take weights into account?
+    vector<int> shuffle(q->second.begin(), q->second.end());
+    random_shuffle(shuffle.begin(), shuffle.end());
+    for (vector<int>::iterator p = shuffle.begin();
+	 p != shuffle.end();
 	 p++) {
       if (get_osdmap()->is_up(*p)) {
 	fromosd = *p;
