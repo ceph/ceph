@@ -394,6 +394,7 @@ class Objecter {
   OSDMap    *osdmap;
   CephContext *cct;
 
+  bool initialized;
  
  private:
   tid_t last_tid;
@@ -776,6 +777,7 @@ public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
 	   OSDMap *om, Mutex& l, SafeTimer& t) : 
     messenger(m), monc(mc), osdmap(om), cct(cct_),
+    initialized(false),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),
     global_op_flags(0),

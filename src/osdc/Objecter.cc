@@ -124,6 +124,7 @@ enum {
 void Objecter::init()
 {
   assert(client_lock.is_locked());
+  assert(!initialized);
 
   if (!logger) {
     PerfCountersBuilder pcb(cct, "objecter", l_osdc_first, l_osdc_last);
@@ -211,10 +212,16 @@ void Objecter::init()
 
   schedule_tick();
   maybe_request_map();
+
+  initialized = true;
 }
 
 void Objecter::shutdown() 
 {
+  assert(client_lock.is_locked());
+  assert(initialized);
+  initialized = false;
+
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {
     p = osd_sessions.begin();
@@ -366,6 +373,7 @@ void Objecter::dispatch(Message *m)
 void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(client_lock.is_locked());
+  assert(initialized);
   assert(osdmap); 
 
   if (m->fsid != monc->get_fsid()) {
@@ -746,6 +754,7 @@ void Objecter::tick()
 {
   ldout(cct, 10) << "tick" << dendl;
   assert(client_lock.is_locked());
+  assert(initialized);
 
   // we are only called by C_Tick
   assert(tick_event);
@@ -822,6 +831,7 @@ void Objecter::resend_mon_ops()
 tid_t Objecter::op_submit(Op *op, OSDSession *s)
 {
   assert(client_lock.is_locked());
+  assert(initialized);
 
   assert(op->ops.size() == op->out_bl.size());
   assert(op->ops.size() == op->out_rval.size());
@@ -1135,6 +1145,7 @@ void Objecter::throttle_op(Op *op, int op_budget)
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
   assert(client_lock.is_locked());
+  assert(initialized);
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
   // get pio
@@ -1566,6 +1577,7 @@ void Objecter::pool_op_submit(PoolOp *op)
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
   assert(client_lock.is_locked());
+  assert(initialized);
   ldout(cct, 10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->get_tid();
   if (pool_ops.count(tid)) {
@@ -1628,6 +1640,7 @@ void Objecter::poolstat_submit(PoolStatOp *op)
 void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
 {
   assert(client_lock.is_locked());
+  assert(initialized);
   ldout(cct, 10) << "handle_get_pool_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
@@ -1679,6 +1692,7 @@ void Objecter::fs_stats_submit(StatfsOp *op)
 void Objecter::handle_fs_stats_reply(MStatfsReply *m)
 {
   assert(client_lock.is_locked());
+  assert(initialized);
   ldout(cct, 10) << "handle_fs_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
