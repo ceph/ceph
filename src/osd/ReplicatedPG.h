@@ -18,6 +18,7 @@
 #include "PG.h"
 #include "OSD.h"
 #include "Watch.h"
+#include "OpRequest.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -132,7 +133,7 @@ public:
     }
     state_t state;
     int num_wr;
-    list<Message*> waiting;
+    list<OpRequest*> waiting;
     list<Cond*> waiting_cond;
     bool wake;
 
@@ -330,7 +331,7 @@ public:
    * Capture all object state associated with an in-progress read or write.
    */
   struct OpContext {
-    Message *op;
+    OpRequest *op;
     osd_reqid_t reqid;
     vector<OSDOp>& ops;
 
@@ -377,7 +378,7 @@ public:
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
+    OpContext(OpRequest *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
@@ -664,7 +665,7 @@ protected:
 
   struct RepModify {
     ReplicatedPG *pg;
-    MOSDSubOp *op;
+    OpRequest *op;
     OpContext *ctx;
     bool applied, committed;
     int ackerosd;
@@ -722,10 +723,10 @@ protected:
   };
   struct C_OSD_CommittedPushedObject : public Context {
     ReplicatedPG *pg;
-    MOSDSubOp *op;
+    OpRequest *op;
     epoch_t same_since;
     eversion_t last_complete;
-    C_OSD_CommittedPushedObject(ReplicatedPG *p, MOSDSubOp *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
+    C_OSD_CommittedPushedObject(ReplicatedPG *p, OpRequest *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
       if (op)
 	op->get();
       pg->get();
@@ -737,22 +738,22 @@ protected:
     }
   };
 
-  void sub_op_remove(MOSDSubOp *op);
+  void sub_op_remove(OpRequest *op);
 
-  void sub_op_modify(MOSDSubOp *op);
+  void sub_op_modify(OpRequest *op);
   void sub_op_modify_applied(RepModify *rm);
   void sub_op_modify_commit(RepModify *rm);
 
-  void sub_op_modify_reply(MOSDSubOpReply *reply);
+  void sub_op_modify_reply(OpRequest *op);
   void _applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc);
-  void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
+  void _committed_pushed_object(OpRequest *op, epoch_t same_since, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
-  void sub_op_push(MOSDSubOp *op);
-  void _failed_push(MOSDSubOp *op);
-  void sub_op_push_reply(MOSDSubOpReply *reply);
-  void sub_op_pull(MOSDSubOp *op);
+  void sub_op_push(OpRequest *op);
+  void _failed_push(OpRequest *op);
+  void sub_op_push_reply(OpRequest *op);
+  void sub_op_pull(OpRequest *op);
 
-  void log_subop_stats(MOSDSubOp *ctx, int tag_inb, int tag_lat);
+  void log_subop_stats(OpRequest *op, int tag_inb, int tag_lat);
 
 
   // -- scrub --
@@ -772,13 +773,13 @@ public:
   ~ReplicatedPG() {}
 
 
-  void do_op(MOSDOp *op);
+  void do_op(OpRequest *op);
   bool pg_op_must_wait(MOSDOp *op);
-  void do_pg_op(MOSDOp *op);
-  void do_sub_op(MOSDSubOp *op);
-  void do_sub_op_reply(MOSDSubOpReply *op);
-  void do_scan(MOSDPGScan *op);
-  void do_backfill(MOSDPGBackfill *op);
+  void do_pg_op(OpRequest *op);
+  void do_sub_op(OpRequest *op);
+  void do_sub_op_reply(OpRequest *op);
+  void do_scan(OpRequest *op);
+  void do_backfill(OpRequest *op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<hobject_t> &obs_to_trim);
@@ -858,11 +859,11 @@ public:
   bool same_for_rep_modify_since(epoch_t e);
 
   bool is_missing_object(const hobject_t& oid);
-  void wait_for_missing_object(const hobject_t& oid, Message *op);
-  void wait_for_all_missing(Message *op);
+  void wait_for_missing_object(const hobject_t& oid, OpRequest *op);
+  void wait_for_all_missing(OpRequest *op);
 
   bool is_degraded_object(const hobject_t& oid);
-  void wait_for_degraded_object(const hobject_t& oid, Message *op);
+  void wait_for_degraded_object(const hobject_t& oid, OpRequest *op);
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
@@ -902,7 +903,7 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
   if (repop.ctx->op)
-    out << " op=" << *(repop.ctx->op);
+    out << " op=" << *(repop.ctx->op->request);
   out << ")";
   return out;
 }

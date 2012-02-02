@@ -1401,6 +1401,7 @@ noinst_HEADERS = \
         osd/OSDCaps.h\
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
+	osd/OpRequest.h\
         osd/PG.h\
         osd/PGLS.h\
         osd/ReplicatedPG.h\

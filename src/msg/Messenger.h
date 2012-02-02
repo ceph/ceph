@@ -96,6 +96,7 @@ protected:
 
   // dispatch incoming messages
   void ms_deliver_dispatch(Message *m) {
+    m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
