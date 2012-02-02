@@ -605,6 +605,21 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     }
     return 0;
   }
+
+  // m->header.version, if non-zero, should be populated with the
+  // newest version of the encoding the code supports.  If set, check
+  // it against compat_version.
+  if (m->get_header().version &&
+      m->get_header().version < header.compat_version) {
+    ldout(cct, 0) << "will not decode message of type " << type
+		  << " version " << header.version
+		  << " because compat_version " << header.compat_version
+		  << " > supported version " << m->get_header().version << dendl;
+    if (cct->_conf->ms_die_on_bad_msg)
+      assert(0);
+    m->put();
+    return 0;
+  }
   
   m->set_header(header);
   m->set_footer(footer);
