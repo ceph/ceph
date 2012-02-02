@@ -294,17 +294,17 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 2;
-      ::encode(struct_v, bl);
+      ENCODE_START(3, 3, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
       has_checksums = (struct_v >= 2);
       ::decode(tail, bl);
       ::decode(head, bl);
+      DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
       f->dump_unsigned("head", head);
