@@ -174,27 +174,18 @@ public:
     bool maps_initialized = true;
     ::encode(maps_initialized, bl);
     ::encode(acl_user_map, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << " acl_user_map.size()=" << acl_user_map.size() << dendl;
     ::encode(grant_map, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << " grant_map.size()=" << grant_map.size() << dendl;
     ::encode(acl_group_map, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << " acl_group_map.size()=" << acl_group_map.size() << dendl;
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     ::decode(struct_v, bl);
     bool maps_initialized;
     ::decode(maps_initialized, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     ::decode(acl_user_map, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << " acl_user_map.size()=" << acl_user_map.size() << dendl;
     ::decode(grant_map, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << " grant_map.size()=" << grant_map.size() << dendl;
     if (struct_v >= 2) {
-dout(0) << "struct_v=" << struct_v << dendl;
       ::decode(acl_group_map, bl);
-dout(0) << __FILE__ << ":" << __LINE__ << " acl_group_map.size()=" << acl_group_map.size() << dendl;
     } else if (!maps_initialized) {
       multimap<string, ACLGrant>::iterator iter;
       for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
@@ -202,7 +193,6 @@ dout(0) << __FILE__ << ":" << __LINE__ << " acl_group_map.size()=" << acl_group_
         _add_grant(&grant);
       }
     }
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
   }
   void add_grant(ACLGrant *grant);
 

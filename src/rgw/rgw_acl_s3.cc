@@ -218,10 +218,10 @@ void ACLGrant_S3::to_xml(ostream& out) {
 
 bool RGWAccessControlList_S3::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
-  ACLGrant *grant = (ACLGrant *)iter.get_next();
+  ACLGrant_S3 *grant = (ACLGrant_S3 *)iter.get_next();
   while (grant) {
     add_grant(grant);
-    grant = (ACLGrant *)iter.get_next();
+    grant = (ACLGrant_S3 *)iter.get_next();
   }
   return true;
 }
@@ -264,7 +264,7 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
       (RGWAccessControlList_S3 *)find_first("AccessControlList");
   acl = *s3acl;
 
-  ACLOwner *owner_p = (ACLOwner*)find_first("Owner");
+  ACLOwner *owner_p = (ACLOwner_S3 *)find_first("Owner");
   if (!owner_p)
     return false;
   owner = *owner_p;
@@ -276,13 +276,10 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
  */
 int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& dest)
 {
-dout(0) << __FILE__ << ":" << __LINE__ << " owner=" << (void *)owner << dendl;
   if (!owner)
     return -EINVAL;
 
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
-  ACLOwner *requested_owner = (ACLOwner *)find_first("Owner");
-dout(0) << __FILE__ << ":" << __LINE__ << " requested_owner=" << (void *)requested_owner << dendl;
+  ACLOwner *requested_owner = (ACLOwner_S3 *)find_first("Owner");
   if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
     return -EPERM;
   }
