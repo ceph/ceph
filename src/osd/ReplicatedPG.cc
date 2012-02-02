@@ -3624,6 +3624,8 @@ void ReplicatedPG::sub_op_modify(OpRequest *op)
 
   int ackerosd = acting[0];
   
+  op->mark_started();
+
   RepModify *rm = new RepModify;
   rm->pg = this;
   get();
