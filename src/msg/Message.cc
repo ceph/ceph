@@ -153,6 +153,10 @@ void Message::encode(uint64_t features, bool datacrc)
   if (empty_payload()) {
     encode_payload(features);
 
+    // if the encoder didn't specify past compatibility, we assume it
+    // is incompatible.
+    if (header.compat_version == 0)
+      header.compat_version = header.version;
   }
   calc_front_crc();
   if (datacrc) {
