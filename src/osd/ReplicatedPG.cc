@@ -2955,7 +2955,9 @@ void ReplicatedPG::op_commit(RepGather *repop)
 
 void ReplicatedPG::eval_repop(RepGather *repop)
 {
-  MOSDOp *m = (MOSDOp *)repop->ctx->op->request;
+  MOSDOp *m = NULL;
+  if (repop->ctx->op)
+    m = (MOSDOp *)repop->ctx->op->request;
 
   if (m)
     dout(10) << "eval_repop " << *repop
