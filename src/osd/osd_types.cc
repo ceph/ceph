@@ -1623,9 +1623,7 @@ void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  __u8 v = 4;
-  ::encode(v, bl);
-
+  ENCODE_START(5, 5, bl);
   ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
@@ -1636,14 +1634,13 @@ void OSDSuperblock::encode(bufferlist &bl) const
   ::encode(clean_thru, bl);
   ::encode(mounted, bl);
   ::encode(osd_fsid, bl);
+  ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
-
-  if (v < 3) {
+  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  if (struct_v < 3) {
     string magic;
     ::decode(magic, bl);
   }
@@ -1653,15 +1650,16 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
   ::decode(oldest_map, bl);
   ::decode(newest_map, bl);
   ::decode(weight, bl);
-  if (v >= 2) {
+  if (struct_v >= 2) {
     compat_features.decode(bl);
   } else { //upgrade it!
     compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
   }
   ::decode(clean_thru, bl);
   ::decode(mounted, bl);
-  if (v >= 4)
+  if (struct_v >= 4)
     ::decode(osd_fsid, bl);
+  DECODE_FINISH(bl);
 }
 
 void OSDSuperblock::dump(Formatter *f) const
