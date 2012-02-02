@@ -735,9 +735,9 @@ def cluster(ctx, config):
 
 
 @contextlib.contextmanager
-def run_daemon(ctx, config, type):
-    log.info('Starting %s daemons...' % type)
-    daemons = ctx.cluster.only(teuthology.is_type(type))
+def run_daemon(ctx, config, type_):
+    log.info('Starting %s daemons...' % type_)
+    daemons = ctx.cluster.only(teuthology.is_type(type_))
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
     daemon_signal = 'kill'
@@ -747,8 +747,8 @@ def run_daemon(ctx, config, type):
 
     num_active = 0
     for remote, roles_for_host in daemons.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, type):
-            name = '%s.%s' % (type, id_)
+        for id_ in teuthology.roles_of_type(roles_for_host, type_):
+            name = '%s.%s' % (type_, id_)
 
             if not id_.endswith('-s'):
                 num_active += 1
@@ -760,7 +760,7 @@ def run_daemon(ctx, config, type):
                     '/tmp/cephtest/daemon-helper'
                        ]
             run_cmd_tail = [
-                '/tmp/cephtest/binary/usr/local/bin/ceph-%s' % type,
+                '/tmp/cephtest/binary/usr/local/bin/ceph-%s' % type_,
                 '-f',
                 '-i', id_,
                 '-c', '/tmp/cephtest/ceph.conf']
@@ -776,23 +776,23 @@ def run_daemon(ctx, config, type):
                 proc_signal = 'term'
                 if '--tool=memcheck' in valgrind_args or \
                         '--tool=helgrind' in valgrind_args:
-                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_)]
+                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type_, id=id_)]
                 else:
-                    extra_args = ['valgrind', '--log-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type, id=id_)]
+                    extra_args = ['valgrind', '--log-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type_, id=id_)]
                 extra_args.extend(valgrind_args)
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
                 run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
-            ctx.daemons.add_daemon(remote, type, id_,
+            ctx.daemons.add_daemon(remote, type_, id_,
                                    args=run_cmd,
                                    logger=log.getChild(name),
                                    stdin=run.PIPE,
                                    wait=False,
                                    )
 
-    if type == 'mds':
+    if type_ == 'mds':
         firstmon = teuthology.get_first_mon(ctx, config)
         (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
         mon0_remote.run(args=[
@@ -806,9 +806,9 @@ def run_daemon(ctx, config, type):
     try:
         yield
     finally:
-        log.info('Shutting down %s daemons...' % type)
+        log.info('Shutting down %s daemons...' % type_)
         exc_info = (None, None, None)
-        for daemon in ctx.daemons.iter_daemons_of_role(type):
+        for daemon in ctx.daemons.iter_daemons_of_role(type_):
             try:
                 daemon.stop()
             except (run.CommandFailedError,
@@ -1003,9 +1003,9 @@ def task(ctx, config):
                 btrfs=config.get('btrfs', False),
                 log_whitelist=config.get('log-whitelist', []),
                 )),
-        lambda: run_daemon(ctx=ctx, config=config, type='mon'),
-        lambda: run_daemon(ctx=ctx, config=config, type='osd'),
-        lambda: run_daemon(ctx=ctx, config=config, type='mds'),
+        lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
+        lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         ):
         healthy(ctx=ctx, config=None)
         yield
