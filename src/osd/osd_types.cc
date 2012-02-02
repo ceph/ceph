@@ -1756,22 +1756,22 @@ ostream& operator<<(ostream& out, const SnapSet& cs)
 
 void watch_info_t::encode(bufferlist& bl) const
 {
-  const __u8 v = 2;
-  ::encode(v, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
+  ENCODE_FINISH(bl);
 }
 
 void watch_info_t::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   ::decode(cookie, bl);
-  if (v < 2) {
+  if (struct_v < 2) {
     uint64_t ver;
     ::decode(ver, bl);
   }
   ::decode(timeout_seconds, bl);
+  DECODE_FINISH(bl);
 }
 
 void watch_info_t::dump(Formatter *f) const
