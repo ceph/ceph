@@ -16,6 +16,9 @@ check_PROGRAMS =
 # target by target
 TESTS = $(check_PROGRAMS)
 
+check-local:
+	test/encoding/check-generated.sh
+
 EXTRALIBS = -luuid
 if FREEBSD
 EXTRALIBS += -lexecinfo
