@@ -644,6 +644,13 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
  * guards
  */
 
+/**
+ * start encoding block
+ *
+ * @param v current (code) version of the encoding
+ * @param compat oldest code version that can decode it
+ * @param bl bufferlist to encode to
+ */
 #define ENCODE_START(v, compat, bl)			     \
   __u8 struct_v = v, struct_compat = compat;		     \
   ::encode(struct_v, bl);				     \
@@ -653,6 +660,11 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   ::encode(struct_len, bl);				     \
   do {
 
+/**
+ * finish encoding block
+ *
+ * @param bl bufferlist we were encoding to
+ */
 #define ENCODE_FINISH(bl)						\
   } while (false);							\
   struct_len = bl.length() - struct_len_pos - sizeof(struct_len);	\
@@ -667,10 +679,23 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
 #define DECODE_ERR_PAST(func) \
   "" #func " decode past end of struct encoding"
 
+/**
+ * check for very old encoding
+ *
+ * If the encoded data is older than oldestv, raise an exception.
+ *
+ * @param oldestv oldest version of the code we can successfully decode.
+ */
 #define DECODE_OLDEST(oldestv)						\
   if (struct_v < oldestv)						\
     throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v)); 
 
+/**
+ * start a decoding block
+ *
+ * @param v current version of the encoding that the code supports/encodes
+ * @param bl bufferlist::iterator for the encoded data
+ */
 #define DECODE_START(v, bl)						\
   __u8 struct_v, struct_compat;						\
   ::decode(struct_v, bl);						\
@@ -684,6 +709,20 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   unsigned struct_end = bl.get_off() + struct_len;			\
   do {
 
+/**
+ * start a decoding block with legacy support for older encoding schemes
+ *
+ * The old encoding schemes has a __u8 struct_v only, or lacked either
+ * the compat version or length.  Skip those fields conditionally.
+ *
+ * Most of the time, v, compatv, and lenv will all match the version
+ * where the structure was switched over to the new macros.
+ *
+ * @param v current version of the encoding that the code supports/encodes
+ * @param compatv oldest version that includes a __u8 compat version field
+ * @param lenv oldest version that includes a __u32 length wrapper
+ * @param bl bufferlist::iterator containing the encoded data
+ */
 #define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
   __u8 struct_v;							\
   ::decode(struct_v, bl);						\
@@ -703,6 +742,11 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   }									\
   do {
 
+/**
+ * finish decode block
+ *
+ * @param bl bufferlist::iterator we were decoding from
+ */
 #define DECODE_FINISH(bl)						\
   } while (false);							\
   if (struct_end) {							\
