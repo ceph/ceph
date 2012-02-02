@@ -888,9 +888,7 @@ void pg_stat_t::dump(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  __u8 v = 7;
-  ::encode(v, bl);
-  
+  ENCODE_START(8, 8, bl);
   ::encode(version, bl);
   ::encode(reported, bl);
   ::encode(state, bl);
@@ -907,26 +905,23 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(ondisk_log_size, bl);
   ::encode(up, bl);
   ::encode(acting, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
-  if (v > 7)
-    throw buffer::malformed_input("unknown pg_stat_t encoding version > 7");
-
+  DECODE_START_LEGACY_COMPAT_LEN(8, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported, bl);
   ::decode(state, bl);
   ::decode(log_start, bl);
   ::decode(ondisk_log_start, bl);
   ::decode(created, bl);
-  if (v >= 7)
+  if (struct_v >= 7)
     ::decode(last_epoch_clean, bl);
   else
     last_epoch_clean = 0;
-  if (v < 6) {
+  if (struct_v < 6) {
     old_pg_t opgid;
     ::decode(opgid, bl);
     parent = opgid;
@@ -936,7 +931,7 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   ::decode(parent_split_bits, bl);
   ::decode(last_scrub, bl);
   ::decode(last_scrub_stamp, bl);
-  if (v <= 4) {
+  if (struct_v <= 4) {
     ::decode(stats.sum.num_bytes, bl);
     uint64_t num_kb;
     ::decode(num_kb, bl);
@@ -947,16 +942,16 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     ::decode(stats.sum.num_objects_degraded, bl);
     ::decode(log_size, bl);
     ::decode(ondisk_log_size, bl);
-    if (v >= 2) {
+    if (struct_v >= 2) {
       ::decode(stats.sum.num_rd, bl);
       ::decode(stats.sum.num_rd_kb, bl);
       ::decode(stats.sum.num_wr, bl);
       ::decode(stats.sum.num_wr_kb, bl);
     }
-    if (v >= 3) {
+    if (struct_v >= 3) {
       ::decode(up, bl);
     }
-    if (v == 4) {
+    if (struct_v == 4) {
       ::decode(stats.sum.num_objects_unfound, bl);  // sigh.
     }
     ::decode(acting, bl);
@@ -967,6 +962,7 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     ::decode(up, bl);
     ::decode(acting, bl);
   }
+  DECODE_FINISH(bl);
 }
 
 void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
