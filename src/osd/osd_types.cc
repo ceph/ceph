@@ -1298,17 +1298,16 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 2;
-  ::encode(struct_v, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
+  ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl)
 {
-  __u8 struct_v = 1;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -1316,6 +1315,7 @@ void pg_log_t::decode(bufferlist::iterator &bl)
     ::decode(backlog, bl);
   }
   ::decode(log, bl);
+  DECODE_FINISH(bl);
 }
 
 void pg_log_t::dump(Formatter *f) const
