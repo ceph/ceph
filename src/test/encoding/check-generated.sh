@@ -44,6 +44,9 @@ for type in `./ceph-dencoder list_types`; do
 	numtests=$(($numtests + 3))
     done
 done
+
+rm -f $tmp1 $tmp2
+
 if [ $failed -gt 0 ]; then
     echo "FAILED $failed / $numtests tests."
     exit 1
