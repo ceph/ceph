@@ -1125,9 +1125,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  __u8 v = 25;
-  ::encode(v, bl);
-    
+  ENCODE_START(26, 26, bl);
   ::encode(pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
@@ -1136,14 +1134,13 @@ void pg_info_t::encode(bufferlist &bl) const
   ::encode(stats, bl);
   history.encode(bl);
   ::encode(purged_snaps, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
-
-  if (v < 23) {
+  DECODE_START_LEGACY_COMPAT_LEN(26, 26, 26, bl);
+  if (struct_v < 23) {
     old_pg_t opgid;
     ::decode(opgid, bl);
     pgid = opgid;
@@ -1153,20 +1150,21 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   ::decode(last_update, bl);
   ::decode(last_complete, bl);
   ::decode(log_tail, bl);
-  if (v < 25) {
+  if (struct_v < 25) {
     bool log_backlog;
     ::decode(log_backlog, bl);
   }
-  if (v >= 24)
+  if (struct_v >= 24)
     ::decode(last_backfill, bl);
   ::decode(stats, bl);
   history.decode(bl);
-  if (v >= 22)
+  if (struct_v >= 22)
     ::decode(purged_snaps, bl);
   else {
     set<snapid_t> snap_trimq;
     ::decode(snap_trimq, bl);
   }
+  DECODE_FINISH(bl);
 }
 
 // -- pg_info_t --
