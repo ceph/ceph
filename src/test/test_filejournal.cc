@@ -180,7 +180,7 @@ TEST(TestFileJournal, ReplaySmall) {
   ASSERT_EQ(seq, 2ull);
   ASSERT_EQ(true, j.read_entry(inbl, seq));
   ASSERT_EQ(seq, 3ull);
-  ASSERT_EQ(false, j.read_entry(inbl, seq));
+  ASSERT_TRUE(!j.read_entry(inbl, seq));
 
   j.make_writeable();
   j.close();
@@ -242,7 +242,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
   uint64_t seq = 0;
   ASSERT_EQ(true, j.read_entry(inbl, seq));
   ASSERT_EQ(seq, 2ull);
-  ASSERT_EQ(false, j.read_entry(inbl, seq));
+  ASSERT_TRUE(!j.read_entry(inbl, seq));
 
   j.make_writeable();
   j.close();
