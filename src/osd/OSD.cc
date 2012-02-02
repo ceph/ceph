@@ -1854,7 +1854,7 @@ void OSD::check_ops_in_flight()
         ss << "old request " << *((*i)->request) << " received at "
            << (*i)->received_time << " currently " << (*i)->state_string();
         clog.warn(ss);
-        ++(*i)->warn_interval_multiplier;
+        (*i)->warn_interval_multiplier *= 2;
       }
       ++i;
     }
