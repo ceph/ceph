@@ -398,22 +398,22 @@ public:
     Interval() : first(0), last(0), maybe_went_rw(false) {}
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
+      ENCODE_START(2, 2, bl);
       ::encode(first, bl);
       ::encode(last, bl);
       ::encode(up, bl);
       ::encode(acting, bl);
       ::encode(maybe_went_rw, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       ::decode(first, bl);
       ::decode(last, bl);
       ::decode(up, bl);
       ::decode(acting, bl);
       ::decode(maybe_went_rw, bl);
+      DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
       f->dump_unsigned("first", first);
