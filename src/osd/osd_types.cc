@@ -1822,8 +1822,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
 
 void object_info_t::encode(bufferlist& bl) const
 {
-  const __u8 v = 7;
-  ::encode(v, bl);
+  ENCODE_START(8, 8, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
   ::encode(category, bl);
@@ -1841,28 +1840,28 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(lost, bl);
   ::encode(watchers, bl);
   ::encode(user_version, bl);
+  ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
-  if (v >= 2 && v <= 5) {
+  DECODE_START_LEGACY_COMPAT_LEN(8, 8, 8, bl);
+  if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
     ::decode(obj, bl);
     ::decode(oloc, bl);
     soid = hobject_t(obj.oid, oloc.key, obj.snap, 0);
     soid.hash = legacy_object_locator_to_ps(soid.oid, oloc);
-  } else if (v >= 6) {
+  } else if (struct_v >= 6) {
     ::decode(soid, bl);
     ::decode(oloc, bl);
-    if (v == 6) {
+    if (struct_v == 6) {
       hobject_t hoid(soid.oid, oloc.key, soid.snap, hoid.hash);
       soid = hoid;
     }
   }
     
-  if (v >= 5)
+  if (struct_v >= 5)
     ::decode(category, bl);
   ::decode(version, bl);
   ::decode(prior_version, bl);
@@ -1875,14 +1874,15 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(snaps, bl);
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
-  if (v >= 3)
+  if (struct_v >= 3)
     ::decode(lost, bl);
   else
     lost = false;
-  if (v >= 4) {
+  if (struct_v >= 4) {
     ::decode(watchers, bl);
     ::decode(user_version, bl);
   }
+  DECODE_FINISH(bl);
 }
 
 void object_info_t::dump(Formatter *f) const
