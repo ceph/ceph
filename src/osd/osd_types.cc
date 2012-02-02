@@ -1687,26 +1687,26 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
 
 void SnapSet::encode(bufferlist& bl) const
 {
-  __u8 v = 1;
-  ::encode(v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(seq, bl);
   ::encode(head_exists, bl);
   ::encode(snaps, bl);
   ::encode(clones, bl);
   ::encode(clone_overlap, bl);
   ::encode(clone_size, bl);
+  ENCODE_FINISH(bl);
 }
 
 void SnapSet::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(seq, bl);
   ::decode(head_exists, bl);
   ::decode(snaps, bl);
   ::decode(clones, bl);
   ::decode(clone_overlap, bl);
   ::decode(clone_size, bl);
+  DECODE_FINISH(bl);
 }
 
 void SnapSet::dump(Formatter *f) const
