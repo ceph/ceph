@@ -272,6 +272,8 @@ void Client::dump_cache()
 int Client::init() 
 {
   Mutex::Locker lock(client_lock);
+  assert(!initialized);
+
   timer.init();
 
   objectcacher->start();
@@ -297,6 +299,7 @@ int Client::init()
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
+  initialized = true;
   return r;
 }
 
@@ -307,6 +310,8 @@ void Client::shutdown()
   objectcacher->stop();  // outside of client_lock! this does a join.
 
   client_lock.Lock();
+  assert(initialized);
+  initialized = false;
   timer.shutdown();
   objecter->shutdown();
   client_lock.Unlock();
@@ -1463,6 +1468,11 @@ void Client::handle_client_reply(MClientReply *reply)
 bool Client::ms_dispatch(Message *m)
 {
   client_lock.Lock();
+  if (!initialized) {
+    ldout(cct, 10) << "inactive, discarding " << *m << dendl;
+    m->put();
+    return true;
+  }
 
   switch (m->get_type()) {
     // osd
@@ -6908,7 +6918,8 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
-  assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+  assert(flags == 0 ||
+	 flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->add_global_op_flags(flags);
 }
 

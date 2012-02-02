@@ -1035,8 +1035,16 @@ librados::RadosClient::~RadosClient()
 
 bool librados::RadosClient::ms_dispatch(Message *m)
 {
+  bool ret;
+
   lock.Lock();
-  bool ret = _dispatch(m);
+  if (state == DISCONNECTED) {
+    ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
+    m->put();
+    ret = true;
+  } else {
+  ret = _dispatch(m);
+  }
   lock.Unlock();
   return ret;
 }

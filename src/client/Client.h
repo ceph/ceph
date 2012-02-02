@@ -242,6 +242,7 @@ public:
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
 
+  bool   initialized;
   bool   mounted;
   bool   unmounting;
 
