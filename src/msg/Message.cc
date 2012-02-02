@@ -619,6 +619,7 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
       if (cct->_conf->ms_die_on_bad_msg)
 	assert(0);
     }
+    m->put();
     return 0;
   }
 
