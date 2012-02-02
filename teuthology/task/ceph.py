@@ -296,7 +296,7 @@ def valgrind_post(ctx, config):
             valgrind_exception = None
             for (proc, remote) in lookup_procs:
                 result = proc.exitstatus.get()
-                if result is not 1:
+                if result != 1:
                     valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
 
             if valgrind_exception is not None:
@@ -792,7 +792,7 @@ def run_daemon(ctx, config, type):
                                    wait=False,
                                    )
 
-    if type is 'mds':
+    if type == 'mds':
         firstmon = teuthology.get_first_mon(ctx, config)
         (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
         mon0_remote.run(args=[
