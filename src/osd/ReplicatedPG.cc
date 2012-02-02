@@ -3761,7 +3761,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 
 // ===========================================================
 
-void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
+void ReplicatedPG::calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
 				     Missing& missing,
 				     const hobject_t &last_backfill,
 				     interval_set<uint64_t>& data_subset,
@@ -3770,13 +3770,15 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
   dout(10) << "calc_head_subsets " << head
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
 
-  struct stat st;
-  osd->store->stat(coll, head, &st);
+  uint64_t size = obc->obs.oi.size;
+  if (size)
+    data_subset.insert(0, size);
+
 
   interval_set<uint64_t> cloning;
   interval_set<uint64_t> prev;
-  if (st.st_size)
-    prev.insert(0, st.st_size);    
+  if (size)
+    prev.insert(0, size);    
   
   for (int j=snapset.clones.size()-1; j>=0; j--) {
     hobject_t c = head;
@@ -3794,8 +3796,6 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
   }
 
   // what's left for us to push?
-  if (st.st_size)
-    data_subset.insert(0, st.st_size);
   data_subset.subtract(cloning);
 
   dout(10) << "calc_head_subsets " << head
@@ -4080,7 +4080,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const hobject_t& soid, in
     // base this on partially on replica's clones?
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
     dout(15) << "push_to_replica snapset is " << ssc->snapset << dendl;
-    calc_head_subsets(ssc->snapset, soid, peer_missing[peer],
+    calc_head_subsets(obc, ssc->snapset, soid, peer_missing[peer],
 		      peer_info[peer].last_backfill,
 		      data_subset, clone_subsets);
     put_snapset_context(ssc);

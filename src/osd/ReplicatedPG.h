@@ -587,7 +587,7 @@ protected:
   map<hobject_t, map<int, push_info_t> > pushing;
 
   int recover_object_replicas(const hobject_t& soid, eversion_t v);
-  void calc_head_subsets(SnapSet& snapset, const hobject_t& head,
+  void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
 			 Missing& missing,
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
