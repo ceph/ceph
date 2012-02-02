@@ -669,7 +669,7 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
     throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v)); 
 
 #define DECODE_START(v, bl)						\
-  __u8 struct_v = v, struct_compat = compat;				\
+  __u8 struct_v, struct_compat;						\
   ::decode(struct_v, bl);						\
   ::decode(struct_compat, bl);						\
   if (v < struct_compat)						\
