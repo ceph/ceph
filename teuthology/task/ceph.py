@@ -707,9 +707,11 @@ def cluster(ctx, config):
                 log.info('Unmounting %s on %s' % (dir_, remote))
                 remote.run(
                     args=[
-                        "sudo",
-                        "umount",
-                        "-f",
+                        'sync',
+                        run.Raw('&&'),
+                        'sudo',
+                        'umount',
+                        '-f',
                         dir_
                         ]
                     )
