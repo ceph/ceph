@@ -114,6 +114,9 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 # define ENCODE_DUMP_PRE()			\
   unsigned pre_off = bl.length()
+
+// NOTE: This is almost an exponential backoff, but because we count
+// bits we get a better sample of things we encode later on.
 # define ENCODE_DUMP_POST(cl)						\
   do {									\
     static int i = 0;							\

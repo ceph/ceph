@@ -166,6 +166,9 @@ void Message::encode(uint64_t features, bool datacrc)
     ::encode(get_middle(), bl);
     ::encode(get_data(), bl);
 
+    // this is almost an exponential backoff, except because we count
+    // bits we tend to sample things we encode later, which should be
+    // more representative.
     static int i = 0;
     i++;
     int bits = 0;
