@@ -3062,7 +3062,8 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
   for (unsigned i=1; i<acting.size(); i++) {
-    ctx->op->mark_sub_op_sent();
+    if (ctx->op)
+      ctx->op->mark_sub_op_sent();
     int peer = acting[i];
     Info &pinfo = peer_info[peer];
 
