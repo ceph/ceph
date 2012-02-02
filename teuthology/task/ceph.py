@@ -24,12 +24,8 @@ class DaemonState(object):
         self.command_kwargs = command_kwargs
         self.role = role
         self.id_ = id_
-        self.logger = command_kwargs.get("logger", None)
+        self.log = command_kwargs.get('logger', log)
         self.proc = None
-
-    def log(self, msg):
-        if self.logger is not None:
-            self.logger.info("%s.%s: %s"%(self.role, self.id_, msg))
 
     def stop(self):
         """
@@ -37,21 +33,21 @@ class DaemonState(object):
         run.CommandCrashedError, or run.ConnectionLostError.
         """
         if not self.running():
-            self.log('tried to stop a non-running daemon')
+            self.log.error('tried to stop a non-running daemon')
             return
         self.proc.stdin.close()
-        self.log('waiting for process to exit')
+        self.log.debug('waiting for process to exit')
         run.wait([self.proc])
         self.proc = None
-        self.log("Stopped")
+        self.log.info('Stopped')
 
     def restart(self):
-        self.log("Restarting")
+        self.log.info('Restarting')
         if self.proc is not None:
-            self.log("stopping old one...")
+            self.log.debug('stopping old one...')
             self.stop()
         self.proc = self.remote.run(*self.command_args, **self.command_kwargs)
-        self.log("Started")
+        self.log.info('Started')
 
     def running(self):
         return self.proc is not None
