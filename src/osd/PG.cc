@@ -309,6 +309,48 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
   return false;
 }
 
+/**
+ * rewind divergent entries at the head of the log
+ *
+ * This rewinds entries off the head of our log that are divergent.
+ * This is used by replicas during activation.
+ *
+ * @param t transaction
+ * @param newhead new head to rewind to
+ */
+void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
+{
+  dout(10) << "rewind_divergent_log truncate divergent future " << newhead << dendl;
+  assert(newhead > log.tail);
+
+  list<pg_log_entry_t>::iterator p = log.log.end();
+  list<pg_log_entry_t> divergent;
+  while (true) {
+    if (p == log.log.begin()) {
+      // yikes, the whole thing is divergent!
+      divergent.swap(log.log);
+      break;
+    }
+    --p;
+    if (p->version == newhead) {
+      ++p;
+      divergent.splice(divergent.begin(), log.log, p, log.log.end());
+      break;
+    }
+    assert(p->version > newhead);
+    dout(10) << "rewind_divergent_log future divergent " << *p << dendl;
+    log.unindex(*p);
+  }
+
+  log.head = newhead;
+  info.last_update = newhead;
+  if (info.last_complete > newhead)
+    info.last_complete = newhead;
+
+  for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); d++)
+    merge_old_entry(t, *d);
+}
+
 void PG::merge_log(ObjectStore::Transaction& t,
 		   pg_info_t &oinfo, pg_log_t &olog, int fromosd)
 {
@@ -356,7 +398,12 @@ void PG::merge_log(ObjectStore::Transaction& t,
     info.log_tail = log.tail = olog.tail;
     changed = true;
   }
-    
+
+  // do we have divergent entries to throw out?
+  if (olog.head < log.head) {
+    rewind_divergent_log(t, olog.head);
+  }
+
   // extend on head?
   if (olog.head > log.head) {
     dout(10) << "merge_log extending head to " << olog.head << dendl;
@@ -415,7 +462,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
 		   olog.log, from, to);
     log.index();   
 
-      
     info.last_update = log.head = olog.head;
     if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
       oinfo.stats.reported = info.stats.reported;
@@ -746,6 +792,20 @@ bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
   return false;
 }
 
+void PG::remove_down_peer_info(const OSDMapRef osdmap)
+{
+  // Remove any downed osds from peer_info
+  map<int,pg_info_t>::iterator p = peer_info.begin();
+  while (p != peer_info.end()) {
+    if (!osdmap->is_up(p->first)) {
+      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
+      peer_missing.erase(p->first);
+      peer_info.erase(p++);
+    } else
+      p++;
+  }
+}
+
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
@@ -1036,6 +1096,7 @@ bool PG::choose_acting(int& newest_update_osd)
   if (want != acting) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
+    want_acting = want;
     if (want == up) {
       vector<int> empty;
       osd->queue_want_pg_temp(info.pgid, empty);
@@ -1254,7 +1315,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	assert(log.tail <= pi.last_update);
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	// send new stuff to append to replicas log
-	assert(info.last_update > pi.last_update);
 	m->log.copy_after(log, pi.last_update);
       }
 
@@ -1266,7 +1326,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
-        eversion_t plu = pi.last_update;
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              p++)
@@ -3240,6 +3299,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
   up = newup;
   acting = newacting;
+  want_acting.clear();
 
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
@@ -3639,18 +3699,7 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
 boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap) 
 {
   PG *pg = context< RecoveryMachine >().pg;
-  OSDMapRef osdmap = advmap.osdmap;
-
-  // Remove any downed osds from peer_info
-  map<int,pg_info_t>::iterator p = pg->peer_info.begin();
-  while (p != pg->peer_info.end()) {
-    if (!osdmap->is_up(p->first)) {
-      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
-      pg->peer_missing.erase(p->first);
-      pg->peer_info.erase(p++);
-    } else
-      p++;
-  }
+  pg->remove_down_peer_info(advmap.osdmap);
   return forward_event();
 }
 
@@ -3830,19 +3879,15 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
-    post_event(NeedNewMap());
+    post_event(NeedActingChange());
     return discard_event();
   }
 
   if (pg->is_all_uptodate()) {
     dout(10) << "recovery complete" << dendl;
     pg->log.reset_recovery_pointers();
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    pg->finish_recovery(*t, fin->contexts);
-    int tr = pg->osd->store->queue_transaction(&pg->osr, t,
-					       new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
+    pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
+			*context< RecoveryMachine >().get_context_list());
   } else {
     dout(10) << "recovery not yet complete: some osds not up to date" << dendl;
   }
@@ -3961,6 +4006,12 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
 
+  if (pg->info.last_update > infoevt.info.last_update) {
+    // rewind divergent log entries
+    pg->rewind_divergent_log(*context< RecoveryMachine >().get_cur_transaction(),
+			     infoevt.info.last_update);
+  }
+  
   assert(infoevt.info.last_update == pg->info.last_update);
   assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
@@ -4142,7 +4193,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   // adjust acting?
   if (!pg->choose_acting(newest_update_osd)) {
-    post_event(NeedNewMap());
+    post_event(NeedActingChange());
     return;
   }
 
@@ -4221,6 +4272,24 @@ PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
 {
   state_name = "Started/Primary/Peering/WaitActingChange";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const AdvMap& advmap)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  OSDMapRef osdmap = advmap.osdmap;
+
+  pg->remove_down_peer_info(osdmap);
+
+  dout(10) << "verifying no want_acting " << pg->want_acting << " targets didn't go down" << dendl;
+  for (vector<int>::iterator p = pg->want_acting.begin(); p != pg->want_acting.end(); ++p) {
+    if (!osdmap->is_up(*p)) {
+      dout(10) << " want_acting target osd." << *p << " went down, resetting" << dendl;
+      post_event(advmap);
+      return transit< Reset >();
+    }
+  }
+  return forward_event();
 }
 
 boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt)

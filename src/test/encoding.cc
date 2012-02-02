@@ -64,7 +64,7 @@ template <typename T>
 class ConstructorCounter
 {
 public:
-  ConstructorCounter()
+  ConstructorCounter() : data(0)
   {
     default_ctor++;
   }

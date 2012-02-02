@@ -638,7 +638,7 @@ protected:
   void _clear_recovery_state();
 
   void queue_for_recovery();
-  int start_recovery_ops(int max);
+  int start_recovery_ops(int max, RecoveryCtx *prctx);
   int recover_primary(int max);
   int recover_replicas(int max);
   int recover_backfill(int max);

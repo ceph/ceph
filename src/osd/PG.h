@@ -477,7 +477,7 @@ public:
 
   // primary state
  public:
-  vector<int> up, acting;
+  vector<int> up, acting, want_acting;
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -749,8 +749,8 @@ public:
 
     struct Peering;
     struct WaitActingChange;
-    struct NeedNewMap : boost::statechart::event< NeedNewMap > {
-      NeedNewMap() : boost::statechart::event< NeedNewMap >() {}
+    struct NeedActingChange : boost::statechart::event< NeedActingChange > {
+      NeedActingChange() : boost::statechart::event< NeedActingChange >() {}
     };
     struct Incomplete;
     struct IsIncomplete : boost::statechart::event< IsIncomplete > {
@@ -765,7 +765,7 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::transition< NeedNewMap, WaitActingChange >,
+	boost::statechart::transition< NeedActingChange, WaitActingChange >,
 	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);
@@ -776,11 +776,13 @@ public:
     struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
 			      NamedState {
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       WaitActingChange(my_context ctx);
+      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MLogRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MNotifyRec&);
@@ -1091,7 +1093,8 @@ public:
   void generate_past_intervals();
   void trim_past_intervals();
   void build_prior(std::auto_ptr<PriorSet> &prior_set);
-  void clear_prior();
+
+  void remove_down_peer_info(const OSDMapRef osdmap);
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);
 
@@ -1122,6 +1125,7 @@ public:
   bool proc_replica_info(int from, pg_info_t &info);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
+  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   bool search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
 			  int fromosd);
 
@@ -1154,7 +1158,7 @@ public:
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
-  virtual int start_recovery_ops(int max) = 0;
+  virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
   void purge_strays();
 
