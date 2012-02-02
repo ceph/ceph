@@ -1233,8 +1233,7 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  __u8 struct_v = 3;
-  ::encode(struct_v, bl);
+  ENCODE_START(4, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1243,12 +1242,12 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(mtime, bl);
   if (op == CLONE)
     ::encode(snaps, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1267,6 +1266,7 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   ::decode(mtime, bl);
   if (op == CLONE)
     ::decode(snaps, bl);
+  DECODE_FINISH(bl);
 }
 
 void pg_log_entry_t::dump(Formatter *f) const
