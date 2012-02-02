@@ -1059,8 +1059,7 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 void pg_history_t::encode(bufferlist &bl) const
 {
-  __u8 struct_v = 3;
-  ::encode(struct_v, bl);
+  ENCODE_START(4, 4, bl);
   ::encode(epoch_created, bl);
   ::encode(last_epoch_started, bl);
   ::encode(last_epoch_clean, bl);
@@ -1070,12 +1069,12 @@ void pg_history_t::encode(bufferlist &bl) const
   ::encode(same_primary_since, bl);
   ::encode(last_scrub, bl);
   ::encode(last_scrub_stamp, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(bufferlist::iterator &bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
   ::decode(epoch_created, bl);
   ::decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -1090,6 +1089,7 @@ void pg_history_t::decode(bufferlist::iterator &bl)
     ::decode(last_scrub, bl);
     ::decode(last_scrub_stamp, bl);
   }
+  DECODE_FINISH(bl);
 }
 
 void pg_history_t::dump(Formatter *f) const
