@@ -365,20 +365,20 @@ void pool_snap_info_t::dump(Formatter *f) const
 
 void pool_snap_info_t::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 1;
-  ::encode(struct_v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(snapid, bl);
   ::encode(stamp, bl);
   ::encode(name, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pool_snap_info_t::decode(bufferlist::iterator& bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(snapid, bl);
   ::decode(stamp, bl);
   ::decode(name, bl);
+  DECODE_FINISH(bl);
 }
 
 void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
