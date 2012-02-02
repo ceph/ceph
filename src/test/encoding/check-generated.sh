@@ -15,6 +15,13 @@ for type in `./ceph-dencoder list_types`; do
     num=`./ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 $num`; do
+	if ! ./ceph-dencoder type $type select_test $n encode decode; then
+	    echo "**** $type test $n encode+decode check failed ****"
+	    echo "   ceph-dencoder type $type select_test $n encode decode"
+	    failed=$(($failed + 3))
+	    continue
+	fi
+
 	./ceph-dencoder type $type select_test $n dump_json > $tmp1
 	./ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2
 	if ! cmp $tmp1 $tmp2; then
@@ -34,7 +41,7 @@ for type in `./ceph-dencoder list_types`; do
 	    echo "   cmp $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
-	numtests=$(($numtests + 1))
+	numtests=$(($numtests + 3))
     done
 done
 if [ $failed -gt 0 ]; then
