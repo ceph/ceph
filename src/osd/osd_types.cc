@@ -1962,24 +1962,24 @@ void ScrubMap::merge_incr(const ScrubMap &l)
 
 void ScrubMap::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 1;
-  ::encode(struct_v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(objects, bl);
   ::encode(attrs, bl);
   ::encode(logbl, bl);
   ::encode(valid_through, bl);
   ::encode(incr_since, bl);
+  ENCODE_FINISH(bl);
 }
 
 void ScrubMap::decode(bufferlist::iterator& bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(objects, bl);
   ::decode(attrs, bl);
   ::decode(logbl, bl);
   ::decode(valid_through, bl);
   ::decode(incr_since, bl);
+  DECODE_FINISH(bl);
 }
 
 void ScrubMap::dump(Formatter *f) const
