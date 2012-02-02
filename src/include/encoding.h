@@ -669,25 +669,31 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
     throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
   __u32 struct_len;							\
   ::decode(struct_len, bl);						\
+  if (struct_len > bl.get_remaining())					\
+    throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
   unsigned struct_end = bl.get_off() + struct_len;			\
   do {
 
-#define DECODE_START_LEGACY(v, lencompat, bl)				\
+#define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
   __u8 struct_v;							\
   ::decode(struct_v, bl);						\
-  unsigned struct_end = 0;						\
-  if (struct_v >= lencompat) {						\
+  if (struct_v >= compatv) {						\
     __u8 struct_compat;							\
     ::decode(struct_compat, bl);					\
-    if (v < struct_compat)					\
+    if (v < struct_compat)						\
       throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
+  }									\
+  unsigned struct_end = 0;						\
+  if (struct_v >= lenv) {						\
     __u32 struct_len;							\
     ::decode(struct_len, bl);						\
+    if (struct_len > bl.get_remaining())				\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     struct_end = bl.get_off() + struct_len;				\
   }									\
   do {
 
-#define DECODE_FINISH(bl)							\
+#define DECODE_FINISH(bl)						\
   } while (false);							\
   if (struct_end) {							\
     if (bl.get_off() > struct_end)					\
