@@ -1335,18 +1335,6 @@ int FileStore::_sanity_check_fs()
 	   << "        filestore journal writeahead = true\n"
 	   << TEXT_NORMAL;
     }
-
-    // ext3?
-    struct statfs buf;
-    int r = ::statfs(basedir.c_str(), &buf);
-    if (r == 0 && buf.f_type != 0xEF53 /*EXT3_SUPER_MAGIC*/) {
-      dout(0) << "mount WARNING: not btrfs or ext3; data may be lost" << dendl;
-      cerr << TEXT_YELLOW
-	   << " ** WARNING: not btrfs or ext3.  We don't currently support file systems other\n"
-	   << "             than btrfs and ext3 (data=journal or data=ordered).  Data may be\n"
-	   << "             lost in the event of a crash.\n"
-	   << TEXT_NORMAL;
-    }    
   }
 
   if (!journal) {
