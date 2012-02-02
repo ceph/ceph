@@ -3048,7 +3048,6 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 {
   OpContext *ctx = repop->ctx;
   const hobject_t& soid = ctx->obs->oi.soid;
-  MOSDOp *m = (MOSDOp *)ctx->op->request;
 
   dout(7) << "issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
@@ -3075,8 +3074,8 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 				  false, acks_wanted,
 				  get_osdmap()->get_epoch(),
 				  repop->rep_tid, repop->ctx->at_version);
-
-    if (m && m->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC) {
+    if (ctx->op &&
+	(((MOSDOp *)ctx->op->request)->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)) {
       // replicate original op for parallel execution on replica
       assert(0 == "broken implementation, do not use");
       wr->oloc = repop->ctx->obs->oi.oloc;
