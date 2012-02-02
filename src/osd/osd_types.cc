@@ -1412,17 +1412,17 @@ ostream& pg_log_t::print(ostream& out) const
 
 void pg_missing_t::encode(bufferlist &bl) const
 {
-  __u8 struct_v = 1;
-  ::encode(struct_v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(missing, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_missing_t::decode(bufferlist::iterator &bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(missing, bl);
-    
+  DECODE_FINISH(bl);
+
   for (map<hobject_t,item>::iterator it = missing.begin();
        it != missing.end();
        ++it)
