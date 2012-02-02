@@ -829,18 +829,18 @@ void object_stat_collection_t::dump(Formatter *f) const
 
 void object_stat_collection_t::encode(bufferlist& bl) const
 {
-  __u8 v = 1;
-  ::encode(v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(sum, bl);
   ::encode(cat_sum, bl);
+  ENCODE_FINISH(bl);
 }
 
 void object_stat_collection_t::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(sum, bl);
   ::decode(cat_sum, bl);
+  DECODE_FINISH(bl);
 }
 
 void object_stat_collection_t::generate_test_instances(list<object_stat_collection_t*>& o)
