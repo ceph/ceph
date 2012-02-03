@@ -445,7 +445,7 @@ static int init_entities_from_header(struct req_state *s)
   } else
     s->host_bucket = NULL;
 
-  const char *req_name = s->path_name;
+  const char *req_name = s->path_name.c_str();
   const char *p;
 
   if (*req_name == '?') {
@@ -771,6 +771,8 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     s->request_uri = s->request_uri.substr(0, pos);
   }
   url_decode(s->request_uri, s->path_name_url);
+  if (s->path_name.empty())
+    s->path_name = s->path_name_url.c_str();
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
   s->query = s->env->get("QUERY_STRING");

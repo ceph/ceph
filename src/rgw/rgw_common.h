@@ -516,7 +516,7 @@ struct req_state {
    bool content_started;
    int format;
    ceph::Formatter *formatter;
-   const char *path_name;
+   string path_name;
    string path_name_url;
    string request_uri;
    const char *host;
