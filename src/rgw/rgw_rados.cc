@@ -2473,7 +2473,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
 	   << " " << cpp_strerror(-r) << std::endl;
         return -r;
       }
-      eof = (more.length() < chunk);
+      eof = (more.length() < (off_t)chunk);
       pos += more.length();
       bufferlist old;
       old.substr_of(bl, off, bl.length() - off);
