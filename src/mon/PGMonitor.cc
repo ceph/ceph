@@ -1108,8 +1108,12 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     ss << "pg " << pgid << " already creating";
     goto out;
   }
-  pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
-  pending_inc.pg_stat_updates[pgid].created = epoch;
+  {
+    pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
+    s.state = PG_STATE_CREATING;
+    s.created = epoch;
+    s.last_change = ceph_clock_now(g_ceph_context);
+  }
   ss << "pg " << m->cmd[2] << " now creating, ok";
   getline(ss, rs);
   paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
