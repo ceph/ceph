@@ -877,7 +877,8 @@ bool PGMonitor::check_down_pgs()
       } else {
 	stat = &q->second;
       }
-      stat->state |= PG_STATE_STALE;	
+      stat->state |= PG_STATE_STALE;
+      stat->last_unstale = ceph_clock_now(g_ceph_context);
       ret = true;
     }
   }
