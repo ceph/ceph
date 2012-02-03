@@ -1150,5 +1150,18 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
     ss << rss.str();
   }
 
+  if (pg_map.nearfull_osds.size() > 0) {
+    if (ret != HEALTH_OK)
+      ss << ", ";
+    ss << pg_map.nearfull_osds.size() << " near full osd(s)";
+    ret = HEALTH_WARN;
+  }
+  if (pg_map.full_osds.size() > 0) {
+    if (ret != HEALTH_OK)
+      ss << ", ";
+    ss << pg_map.full_osds.size() << " full osd(s)";
+    ret = HEALTH_ERR;
+  }
+
   return ret;
 }
