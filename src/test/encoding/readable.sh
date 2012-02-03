@@ -17,8 +17,9 @@ do
     do
 	if ./ceph-dencoder type $type 2>/dev/null; then
 #	    echo "type $type";
+	    echo "\t$vdir/$type"
 	    for f in `ls $vdir/$type`; do
-		echo "\t$vdir/$type/$f"
+#		echo "\t$vdir/$type/$f"
 		if ! ./ceph-dencoder type $type import $vdir/$type/$f decode dump_json > $tmp1; then
 		    echo "**** failed to decode $vdir/$type/$f ****"
 		    failed=$(($failed + 1))
@@ -37,7 +38,7 @@ do
 		numtests=$(($numtests + 1))
 	    done
 	else
-            echo "skip $type"
+            echo "skipping unrecognized type $type"
 	fi
     done
 done
