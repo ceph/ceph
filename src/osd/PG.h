@@ -538,6 +538,271 @@ public:
   };
 
 
+protected:
+
+  /*
+   * peer_info    -- projected (updates _before_ replicas ack)
+   * peer_missing -- committed (updates _after_ replicas ack)
+   */
+  
+  bool        need_up_thru;
+  set<int>    stray_set;   // non-acting osds that have PG data.
+  eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
+  map<int,pg_info_t>    peer_info;   // info from peers (stray or prior)
+  map<int,pg_missing_t> peer_missing;
+  set<int>             peer_log_requested;  // logs i've requested (and start stamps)
+  set<int>             peer_missing_requested;
+  set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
+  set<int>             peer_activated;
+
+  // primary-only, recovery-only state
+  set<int>             might_have_unfound;  // These osds might have objects on them
+					    // which are unfound on the primary
+
+  epoch_t last_peering_reset;
+
+  /**
+   * BackfillInterval
+   *
+   * Represents the objects in a range [begin, end)
+   *
+   * Possible states:
+   * 1) begin == end == hobject_t() indicates the the interval is unpopulated
+   * 2) Else, objects contains all objects in [begin, end)
+   */
+  struct BackfillInterval {
+    // info about a backfill interval on a peer
+    map<hobject_t,eversion_t> objects;
+    hobject_t begin;
+    hobject_t end;
+    
+    /// clear content
+    void clear() {
+      objects.clear();
+      begin = end = hobject_t();
+    }
+
+    void reset(hobject_t start) {
+      clear();
+      begin = end = start;
+    }
+
+    /// true if there are no objects in this interval
+    bool empty() {
+      return objects.empty();
+    }
+
+    /// true if interval extends to the end of the range
+    bool extends_to_end() {
+      return end == hobject_t::get_max();
+    }
+
+    /// Adjusts begin to the first object
+    void trim() {
+      if (objects.size())
+	begin = objects.begin()->first;
+      else
+	begin = end;
+    }
+
+    /// drop first entry, and adjust @begin accordingly
+    void pop_front() {
+      assert(!objects.empty());
+      objects.erase(objects.begin());
+      if (objects.empty())
+	begin = end;
+      else
+	begin = objects.begin()->first;
+    }
+  };
+  
+  BackfillInterval backfill_info;
+  BackfillInterval peer_backfill_info;
+  int backfill_target;
+
+  friend class OSD;
+
+public:
+  int get_backfill_target() const {
+    return backfill_target;
+  }
+
+protected:
+
+
+  // pg waiters
+  list<OpRequest*>            waiting_for_active;
+  list<OpRequest*>            waiting_for_all_missing;
+  map<hobject_t, list<OpRequest*> > waiting_for_missing_object,
+                                        waiting_for_degraded_object;
+  map<eversion_t,list<OpRequest*> > waiting_for_ondisk;
+  map<eversion_t,OpRequest*>   replay_queue;
+
+  void requeue_object_waiters(map<hobject_t, list<OpRequest*> >& m);
+
+  // stats
+  Mutex pg_stats_lock;
+  bool pg_stats_valid;
+  pg_stat_t pg_stats_stable;
+
+  // for ordering writes
+  ObjectStore::Sequencer osr;
+
+  void update_stats();
+  void clear_stats();
+
+public:
+  void clear_primary_state();
+
+ public:
+  bool is_acting(int osd) const { 
+    for (unsigned i=0; i<acting.size(); i++)
+      if (acting[i] == osd) return true;
+    return false;
+  }
+  bool is_up(int osd) const { 
+    for (unsigned i=0; i<up.size(); i++)
+      if (up[i] == osd) return true;
+    return false;
+  }
+  
+  bool is_all_uptodate() const;
+
+  void generate_past_intervals();
+  void trim_past_intervals();
+  void build_prior(std::auto_ptr<PriorSet> &prior_set);
+
+  void remove_down_peer_info(const OSDMapRef osdmap);
+
+  bool adjust_need_up_thru(const OSDMapRef osdmap);
+
+  bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
+  virtual void mark_all_unfound_lost(int how) = 0;
+
+  bool calc_min_last_complete_ondisk() {
+    eversion_t min = last_complete_ondisk;
+    for (unsigned i=1; i<acting.size(); i++) {
+      if (peer_last_complete_ondisk.count(acting[i]) == 0)
+	return false;   // we don't have complete info
+      eversion_t a = peer_last_complete_ondisk[acting[i]];
+      if (a < min)
+	min = a;
+    }
+    if (min == min_last_complete_ondisk)
+      return false;
+    min_last_complete_ondisk = min;
+    return true;
+  }
+
+  virtual void calc_trim_to() = 0;
+
+  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+			pg_missing_t& omissing, int from);
+  void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+		       pg_missing_t& omissing, int from);
+  bool proc_replica_info(int from, pg_info_t &info);
+  bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
+  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
+  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
+  bool search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
+			  int fromosd);
+
+  void check_for_lost_objects();
+  void forget_lost_objects();
+
+  void discover_all_missing(std::map< int, map<pg_t,pg_query_t> > &query_map);
+  
+  void trim_write_ahead();
+
+  map<int, pg_info_t>::const_iterator find_best_info(const map<int, pg_info_t> &infos) const;
+  bool calc_acting(int& newest_update_osd, vector<int>& want) const;
+  bool choose_acting(int& newest_update_osd);
+  void build_might_have_unfound();
+  void replay_queued_ops();
+  void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
+		map< int, map<pg_t,pg_query_t> >& query_map,
+		map<int, MOSDPGInfo*> *activator_map=0);
+  void _activate_committed(epoch_t e);
+  void all_activated_and_committed();
+
+  void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
+
+  bool have_unfound() const { 
+    return missing.num_missing() > missing_loc.size();
+  }
+  int get_num_unfound() const {
+    return missing.num_missing() - missing_loc.size();
+  }
+
+  virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
+
+  virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
+
+  void purge_strays();
+
+  Context *finish_sync_event;
+
+  void finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin);
+  void _finish_recovery(Context *c);
+  void cancel_recovery();
+  void clear_recovery_state();
+  virtual void _clear_recovery_state() = 0;
+  void defer_recovery();
+  virtual void check_recovery_op_pulls(const OSDMapRef newmap) = 0;
+  void start_recovery_op(const hobject_t& soid);
+  void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
+
+  loff_t get_log_write_pos() {
+    return 0;
+  }
+
+  friend class C_OSD_RepModify_Commit;
+
+
+  // -- scrub --
+  set<int> scrub_reserved_peers;
+  map<int,ScrubMap> scrub_received_maps;
+  bool finalizing_scrub; 
+  bool scrub_reserved, scrub_reserve_failed;
+  int scrub_waiting_on;
+  epoch_t scrub_epoch_start;
+  ScrubMap primary_scrubmap;
+  MOSDRepScrub *active_rep_scrub;
+
+  void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
+  bool _compare_scrub_objects(ScrubMap::object &auth,
+			      ScrubMap::object &candidate,
+			      ostream &errorstream);
+  void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
+			  map<hobject_t, set<int> > &missing,
+			  map<hobject_t, set<int> > &inconsistent,
+			  map<hobject_t, int> &authoritative,
+			  ostream &errorstream);
+  void scrub();
+  void scrub_finalize();
+  void scrub_clear_state();
+  bool scrub_gather_replica_maps();
+  void _scan_list(ScrubMap &map, vector<hobject_t> &ls);
+  void _request_scrub_map(int replica, eversion_t version);
+  void build_scrub_map(ScrubMap &map);
+  void build_inc_scrub_map(ScrubMap &map, eversion_t v);
+  virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  void clear_scrub_reserved();
+  void scrub_reserve_replicas();
+  void scrub_unreserve_replicas();
+  bool scrub_all_replicas_reserved() const;
+  bool sched_scrub();
+
+  void replica_scrub(class MOSDRepScrub *op);
+  void sub_op_scrub_map(OpRequest *op);
+  void sub_op_scrub_reserve(OpRequest *op);
+  void sub_op_scrub_reserve_reply(OpRequest *op);
+  void sub_op_scrub_unreserve(OpRequest *op);
+  void sub_op_scrub_stop(OpRequest *op);
+
+
+  // -- recovery state --
+
   /* Encapsulates PG recovery process */
   class RecoveryState {
     void start_handle(RecoveryCtx *new_ctx) {
@@ -958,267 +1223,6 @@ public:
     void handle_loaded(RecoveryCtx *ctx);
   } recovery_state;
 
-protected:
-
-  /*
-   * peer_info    -- projected (updates _before_ replicas ack)
-   * peer_missing -- committed (updates _after_ replicas ack)
-   */
-  
-  bool        need_up_thru;
-  set<int>    stray_set;   // non-acting osds that have PG data.
-  eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
-  map<int,pg_info_t>    peer_info;   // info from peers (stray or prior)
-  map<int,pg_missing_t> peer_missing;
-  set<int>             peer_log_requested;  // logs i've requested (and start stamps)
-  set<int>             peer_missing_requested;
-  set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
-  set<int>             peer_activated;
-
-  // primary-only, recovery-only state
-  set<int>             might_have_unfound;  // These osds might have objects on them
-					    // which are unfound on the primary
-
-  epoch_t last_peering_reset;
-
-  /**
-   * BackfillInterval
-   *
-   * Represents the objects in a range [begin, end)
-   *
-   * Possible states:
-   * 1) begin == end == hobject_t() indicates the the interval is unpopulated
-   * 2) Else, objects contains all objects in [begin, end)
-   */
-  struct BackfillInterval {
-    // info about a backfill interval on a peer
-    map<hobject_t,eversion_t> objects;
-    hobject_t begin;
-    hobject_t end;
-    
-    /// clear content
-    void clear() {
-      objects.clear();
-      begin = end = hobject_t();
-    }
-
-    void reset(hobject_t start) {
-      clear();
-      begin = end = start;
-    }
-
-    /// true if there are no objects in this interval
-    bool empty() {
-      return objects.empty();
-    }
-
-    /// true if interval extends to the end of the range
-    bool extends_to_end() {
-      return end == hobject_t::get_max();
-    }
-
-    /// Adjusts begin to the first object
-    void trim() {
-      if (objects.size())
-	begin = objects.begin()->first;
-      else
-	begin = end;
-    }
-
-    /// drop first entry, and adjust @begin accordingly
-    void pop_front() {
-      assert(!objects.empty());
-      objects.erase(objects.begin());
-      if (objects.empty())
-	begin = end;
-      else
-	begin = objects.begin()->first;
-    }
-  };
-  
-  BackfillInterval backfill_info;
-  BackfillInterval peer_backfill_info;
-  int backfill_target;
-
-  friend class OSD;
-
-public:
-  int get_backfill_target() const {
-    return backfill_target;
-  }
-
-protected:
-
-
-  // pg waiters
-  list<OpRequest*>            waiting_for_active;
-  list<OpRequest*>            waiting_for_all_missing;
-  map<hobject_t, list<OpRequest*> > waiting_for_missing_object,
-                                        waiting_for_degraded_object;
-  map<eversion_t,list<OpRequest*> > waiting_for_ondisk;
-  map<eversion_t,OpRequest*>   replay_queue;
-
-  void requeue_object_waiters(map<hobject_t, list<OpRequest*> >& m);
-
-  // stats
-  Mutex pg_stats_lock;
-  bool pg_stats_valid;
-  pg_stat_t pg_stats_stable;
-
-  // for ordering writes
-  ObjectStore::Sequencer osr;
-
-  void update_stats();
-  void clear_stats();
-
-public:
-  void clear_primary_state();
-
- public:
-  bool is_acting(int osd) const { 
-    for (unsigned i=0; i<acting.size(); i++)
-      if (acting[i] == osd) return true;
-    return false;
-  }
-  bool is_up(int osd) const { 
-    for (unsigned i=0; i<up.size(); i++)
-      if (up[i] == osd) return true;
-    return false;
-  }
-  
-  bool is_all_uptodate() const;
-
-  void generate_past_intervals();
-  void trim_past_intervals();
-  void build_prior(std::auto_ptr<PriorSet> &prior_set);
-
-  void remove_down_peer_info(const OSDMapRef osdmap);
-
-  bool adjust_need_up_thru(const OSDMapRef osdmap);
-
-  bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
-  virtual void mark_all_unfound_lost(int how) = 0;
-
-  bool calc_min_last_complete_ondisk() {
-    eversion_t min = last_complete_ondisk;
-    for (unsigned i=1; i<acting.size(); i++) {
-      if (peer_last_complete_ondisk.count(acting[i]) == 0)
-	return false;   // we don't have complete info
-      eversion_t a = peer_last_complete_ondisk[acting[i]];
-      if (a < min)
-	min = a;
-    }
-    if (min == min_last_complete_ondisk)
-      return false;
-    min_last_complete_ondisk = min;
-    return true;
-  }
-
-  virtual void calc_trim_to() = 0;
-
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
-			pg_missing_t& omissing, int from);
-  void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
-		       pg_missing_t& omissing, int from);
-  bool proc_replica_info(int from, pg_info_t &info);
-  bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
-  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
-  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
-  bool search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
-			  int fromosd);
-
-  void check_for_lost_objects();
-  void forget_lost_objects();
-
-  void discover_all_missing(std::map< int, map<pg_t,pg_query_t> > &query_map);
-  
-  void trim_write_ahead();
-
-  map<int, pg_info_t>::const_iterator find_best_info(const map<int, pg_info_t> &infos) const;
-  bool calc_acting(int& newest_update_osd, vector<int>& want) const;
-  bool choose_acting(int& newest_update_osd);
-  void build_might_have_unfound();
-  void replay_queued_ops();
-  void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
-		map< int, map<pg_t,pg_query_t> >& query_map,
-		map<int, MOSDPGInfo*> *activator_map=0);
-  void _activate_committed(epoch_t e);
-  void all_activated_and_committed();
-
-  void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
-
-  bool have_unfound() const { 
-    return missing.num_missing() > missing_loc.size();
-  }
-  int get_num_unfound() const {
-    return missing.num_missing() - missing_loc.size();
-  }
-
-  virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
-
-  virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
-
-  void purge_strays();
-
-  Context *finish_sync_event;
-
-  void finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin);
-  void _finish_recovery(Context *c);
-  void cancel_recovery();
-  void clear_recovery_state();
-  virtual void _clear_recovery_state() = 0;
-  void defer_recovery();
-  virtual void check_recovery_op_pulls(const OSDMapRef newmap) = 0;
-  void start_recovery_op(const hobject_t& soid);
-  void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
-
-  loff_t get_log_write_pos() {
-    return 0;
-  }
-
-  friend class C_OSD_RepModify_Commit;
-
-
-  // -- scrub --
-  set<int> scrub_reserved_peers;
-  map<int,ScrubMap> scrub_received_maps;
-  bool finalizing_scrub; 
-  bool scrub_reserved, scrub_reserve_failed;
-  int scrub_waiting_on;
-  epoch_t scrub_epoch_start;
-  ScrubMap primary_scrubmap;
-  MOSDRepScrub *active_rep_scrub;
-
-  void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
-  bool _compare_scrub_objects(ScrubMap::object &auth,
-			      ScrubMap::object &candidate,
-			      ostream &errorstream);
-  void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
-			  map<hobject_t, set<int> > &missing,
-			  map<hobject_t, set<int> > &inconsistent,
-			  map<hobject_t, int> &authoritative,
-			  ostream &errorstream);
-  void scrub();
-  void scrub_finalize();
-  void scrub_clear_state();
-  bool scrub_gather_replica_maps();
-  void _scan_list(ScrubMap &map, vector<hobject_t> &ls);
-  void _request_scrub_map(int replica, eversion_t version);
-  void build_scrub_map(ScrubMap &map);
-  void build_inc_scrub_map(ScrubMap &map, eversion_t v);
-  virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
-  void clear_scrub_reserved();
-  void scrub_reserve_replicas();
-  void scrub_unreserve_replicas();
-  bool scrub_all_replicas_reserved() const;
-  bool sched_scrub();
-
-  void replica_scrub(class MOSDRepScrub *op);
-  void sub_op_scrub_map(OpRequest *op);
-  void sub_op_scrub_reserve(OpRequest *op);
-  void sub_op_scrub_reserve_reply(OpRequest *op);
-  void sub_op_scrub_unreserve(OpRequest *op);
-  void sub_op_scrub_stop(OpRequest *op);
 
  public:  
   PG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) : 
@@ -1231,7 +1235,6 @@ public:
     waiting_on_backfill(0),
     role(0),
     state(0),
-    recovery_state(this),
     need_up_thru(false),
     last_peering_reset(0),
     backfill_target(-1),
@@ -1241,7 +1244,8 @@ public:
     finalizing_scrub(false),
     scrub_reserved(false), scrub_reserve_failed(false),
     scrub_waiting_on(0),
-    active_rep_scrub(0)
+    active_rep_scrub(0),
+    recovery_state(this)
   {
     pool->get();
   }
