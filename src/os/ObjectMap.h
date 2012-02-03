@@ -109,6 +109,8 @@ public:
     CollectionIndex::IndexedPath target_path ///< [in] path to target
     ) { return 0; }
 
+  virtual bool check(std::ostream &out) { return true; }
+
   class ObjectMapIteratorImpl {
   public:
     virtual int seek_to_first() = 0;

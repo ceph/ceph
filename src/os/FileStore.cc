@@ -1727,7 +1727,20 @@ int FileStore::mount()
       ret = -1;
       goto close_current_fd;
     }
-    object_map.reset(new DBObjectMap(omap_store));
+    DBObjectMap *dbomap = new DBObjectMap(omap_store);
+    ret = dbomap->init();
+    if (ret < 0) {
+      derr << "Error initializing DBObjectMap: " << ret << dendl;
+      goto close_current_fd;
+    }
+    stringstream err2;
+
+    if (g_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
+      derr << err2.str() << dendl;;
+      ret = -EINVAL;
+      goto close_current_fd;
+    }
+    object_map.reset(dbomap);
   }
 
   // journal
@@ -1810,6 +1823,15 @@ int FileStore::mount()
     sync_thread.join();
 
     goto close_current_fd;
+  }
+
+  {
+    stringstream err2;
+    if (!object_map->check(err2)) {
+      derr << err2.str() << dendl;;
+      ret = -EINVAL;
+      goto close_current_fd;
+    }
   }
 
   journal_start();
@@ -3162,6 +3184,11 @@ void FileStore::sync_entry()
 	derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
 	assert(0);
       }
+      stringstream errstream;
+      if (!object_map->check(errstream)) {
+	derr << errstream.str() << dendl;
+	assert(0);
+      }
 
       if (btrfs_stable_commits) {
 
@@ -3936,6 +3963,7 @@ int FileStore::omap_get(coll_t c, const hobject_t &hoid,
 			bufferlist *header,
 			map<string, bufferlist> *out)
 {
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
@@ -3946,6 +3974,7 @@ int FileStore::omap_get(coll_t c, const hobject_t &hoid,
 int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
 			       bufferlist *bl)
 {
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
@@ -3955,6 +3984,7 @@ int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
 
 int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
 {
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
@@ -3966,6 +3996,7 @@ int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
 			       const set<string> &keys,
 			       map<string, bufferlist> *out)
 {
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
@@ -3977,6 +4008,7 @@ int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
 			       const set<string> &keys,
 			       set<string> *out)
 {
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
@@ -3987,6 +4019,7 @@ int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
 ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
 							  const hobject_t &hoid)
 {
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
@@ -4045,6 +4078,7 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
 
 
 int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
@@ -4053,6 +4087,7 @@ int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
 }
 int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
 			     const map<string, bufferlist> &aset) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
@@ -4061,6 +4096,7 @@ int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
 }
 int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
 			   const set<string> &keys) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
@@ -4070,6 +4106,7 @@ int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
 int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
 			       const bufferlist &bl)
 {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   IndexedPath path;
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
