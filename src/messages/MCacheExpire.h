@@ -47,7 +47,7 @@ public:
 
   int get_from() { return from; }
 
-  MCacheExpire() {}
+  MCacheExpire() : Message(MSG_MDS_CACHEEXPIRE) {}
   MCacheExpire(int f) : 
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }

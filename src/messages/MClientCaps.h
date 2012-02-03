@@ -69,7 +69,7 @@ class MClientCaps : public Message {
   void set_mtime(const utime_t &t) { t.encode_timeval(&head.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&head.atime); }
 
-  MClientCaps() {}
+  MClientCaps() : Message(CEPH_MSG_CLIENT_CAPS) {}
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,

@@ -49,7 +49,7 @@ class MDiscover : public Message {
   
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
-  MDiscover() { }
+  MDiscover() : Message(MSG_MDS_DISCOVER) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,

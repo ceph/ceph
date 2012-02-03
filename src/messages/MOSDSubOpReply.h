@@ -119,7 +119,7 @@ public:
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(req->get_tid());
   }
-  MOSDSubOpReply() {}
+  MOSDSubOpReply() : Message(MSG_OSD_SUBOPREPLY) {}
 private:
   ~MOSDSubOpReply() {}
 

@@ -27,7 +27,7 @@ public:
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGMissing() {}
+  MOSDPGMissing() : Message(MSG_OSD_PG_MISSING) {}
   MOSDPGMissing(version_t mv, const pg_info_t &info_,
 		const pg_missing_t &missing_)
     : Message(MSG_OSD_PG_MISSING), epoch(mv), info(info_),

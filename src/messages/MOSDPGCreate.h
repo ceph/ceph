@@ -44,7 +44,7 @@ struct MOSDPGCreate : public Message {
 
   map<pg_t,create_rec> mkpg;
 
-  MOSDPGCreate() {}
+  MOSDPGCreate() : Message(MSG_OSD_PG_CREATE) {}
   MOSDPGCreate(epoch_t e) :
     Message(MSG_OSD_PG_CREATE),
     epoch(e) { }

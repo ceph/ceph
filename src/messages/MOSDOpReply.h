@@ -103,7 +103,7 @@ public:
     for (unsigned i = 0; i < ops.size(); i++)
       ops[i].op.payload_len = 0;
   }
-  MOSDOpReply() {}
+  MOSDOpReply() : Message(CEPH_MSG_OSD_OPREPLY) {}
 private:
   ~MOSDOpReply() {}
 

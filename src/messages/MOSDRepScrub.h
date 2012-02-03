@@ -28,7 +28,7 @@ struct MOSDRepScrub : public Message {
   eversion_t scrub_to;   // last_update_applied when message sent
   epoch_t map_epoch;
 
-  MOSDRepScrub() {}
+  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB) {}
   MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
 	       epoch_t map_epoch) :
     Message(MSG_OSD_REP_SCRUB),

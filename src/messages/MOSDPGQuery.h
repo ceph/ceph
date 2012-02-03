@@ -29,7 +29,7 @@ class MOSDPGQuery : public Message {
   version_t get_epoch() { return epoch; }
   map<pg_t,pg_query_t>  pg_list;
 
-  MOSDPGQuery() {}
+  MOSDPGQuery() : Message(MSG_OSD_PG_QUERY) {}
   MOSDPGQuery(epoch_t e, map<pg_t,pg_query_t>& ls) :
     Message(MSG_OSD_PG_QUERY),
     epoch(e) {

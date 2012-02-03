@@ -23,7 +23,7 @@ class MExportDirAck : public Message {
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
   
-  MExportDirAck() {}
+  MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t i) :
     Message(MSG_MDS_EXPORTDIRACK), dirfrag(i) { }
 private:

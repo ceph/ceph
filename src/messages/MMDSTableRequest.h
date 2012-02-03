@@ -26,7 +26,7 @@ class MMDSTableRequest : public Message {
   uint64_t reqid;
   bufferlist bl;
 
-  MMDSTableRequest() {}
+  MMDSTableRequest() : Message(MSG_MDS_TABLE_REQUEST) {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
     Message(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {

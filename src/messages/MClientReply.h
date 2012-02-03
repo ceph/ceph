@@ -199,7 +199,7 @@ public:
 
   bool is_safe() const { return head.safe; }
 
-  MClientReply() {}
+  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&head, 0, sizeof(head));

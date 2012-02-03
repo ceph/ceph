@@ -27,7 +27,7 @@ class MOSDPGRemove : public Message {
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGRemove() {}
+  MOSDPGRemove() : Message(MSG_OSD_PG_REMOVE) {}
   MOSDPGRemove(epoch_t e, vector<pg_t>& l) :
     Message(MSG_OSD_PG_REMOVE) {
     this->epoch = e;

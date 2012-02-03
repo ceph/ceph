@@ -26,7 +26,7 @@ class MExportDir : public Message {
   vector<dirfrag_t> bounds;
   bufferlist client_map;
 
-  MExportDir() {}
+  MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df) : 
     Message(MSG_MDS_EXPORTDIR),
     dirfrag(df) {

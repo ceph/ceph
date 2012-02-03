@@ -114,7 +114,7 @@ public:
     rmw_flags(flags) {
     set_tid(tid);
   }
-  MOSDOp() : rmw_flags(0) {}
+  MOSDOp() : Message(CEPH_MSG_OSD_OP) {}
 private:
   ~MOSDOp() {}
 

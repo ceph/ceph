@@ -38,7 +38,7 @@ class MDirUpdate : public Message {
     if (discover) discover--;
   }
 
-  MDirUpdate() {}
+  MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
   MDirUpdate(int f, 
 	     dirfrag_t dirfrag,
              int dir_rep,

@@ -27,7 +27,7 @@ class MExportDirDiscoverAck : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   bool is_success() { return success; }
 
-  MExportDirDiscoverAck() {}
+  MExportDirDiscoverAck() : Message(MSG_MDS_EXPORTDIRDISCOVERACK) {}
   MExportDirDiscoverAck(dirfrag_t df, bool s=true) : 
     Message(MSG_MDS_EXPORTDIRDISCOVERACK),
     dirfrag(df),

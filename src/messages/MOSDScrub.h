@@ -27,7 +27,7 @@ struct MOSDScrub : public Message {
   vector<pg_t> scrub_pgs;
   bool repair;
 
-  MOSDScrub() {}
+  MOSDScrub() : Message(MSG_OSD_SCRUB) {}
   MOSDScrub(const uuid_d& f, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), repair(r) {}

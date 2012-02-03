@@ -37,7 +37,7 @@ class MOSDPGNotify : public Message {
   vector<pg_info_t>& get_pg_list() { return pg_list; }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGNotify() {}
+  MOSDPGNotify() : Message(MSG_OSD_PG_NOTIFY) {}
   MOSDPGNotify(epoch_t e, vector<pg_info_t>& l, epoch_t query_epoch) :
     Message(MSG_OSD_PG_NOTIFY), epoch(e),
     query_epoch(query_epoch) {

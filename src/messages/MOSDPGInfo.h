@@ -27,7 +27,7 @@ public:
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGInfo() {}
+  MOSDPGInfo() : Message(MSG_OSD_PG_INFO) {}
   MOSDPGInfo(version_t mv) :
     Message(MSG_OSD_PG_INFO),
     epoch(mv) { }

@@ -165,7 +165,7 @@ public:
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
-  MOSDSubOp() {}
+  MOSDSubOp() : Message(MSG_OSD_SUBOP) {}
 private:
   ~MOSDSubOp() {}
 

@@ -48,7 +48,7 @@ class MOSDPing : public Message {
     Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o) { }
   MOSDPing(const uuid_d& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, __u8 o=HEARTBEAT) : 
     Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o), peer_stat(ps) { }
-  MOSDPing() {}
+  MOSDPing() : Message(MSG_OSD_PING) {}
 private:
   ~MOSDPing() {}
 

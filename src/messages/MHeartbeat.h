@@ -33,13 +33,10 @@ class MHeartbeat : public Message {
   }
 
   MHeartbeat()
-    : load(utime_t())
-  {
-  }
-  MHeartbeat(mds_load_t& load, int beat) :
-    Message(MSG_MDS_HEARTBEAT),
-    load(load)
-  {
+    : Message(MSG_MDS_HEARTBEAT), load(utime_t()) { }
+  MHeartbeat(mds_load_t& load, int beat)
+    : Message(MSG_MDS_HEARTBEAT),
+      load(load) {
     this->beat = beat;
   }
 private:

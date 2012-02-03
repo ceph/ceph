@@ -39,7 +39,7 @@ public:
   int get_lock_type() { return lock_type; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
   
-  MLock() {}
+  MLock() : Message(MSG_MDS_LOCK) {}
   MLock(int ac, int as) :
     Message(MSG_MDS_LOCK),
     action(ac), asker(as),

@@ -24,7 +24,7 @@ class MInodeFileCaps : public Message {
   inodeno_t get_ino() { return ino; }
   int       get_caps() { return caps; }
 
-  MInodeFileCaps() {}
+  MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
     Message(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;

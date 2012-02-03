@@ -35,7 +35,7 @@ public:
   pg_t get_pgid() { return info.pgid; }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGLog() {}
+  MOSDPGLog() : Message(MSG_OSD_PG_LOG) {}
   MOSDPGLog(version_t mv, pg_info_t& i) :
     Message(MSG_OSD_PG_LOG),
     epoch(mv), query_epoch(mv), info(i)  { }

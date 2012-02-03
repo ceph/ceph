@@ -112,7 +112,7 @@ class MDiscoverReply : public Message {
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
   // cons
-  MDiscoverReply() {}
+  MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY) {}
   MDiscoverReply(MDiscover *dis) :
     Message(MSG_MDS_DISCOVERREPLY),
     base_ino(dis->get_base_ino()),
