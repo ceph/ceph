@@ -2733,9 +2733,7 @@ bool OSD::ms_dispatch(Message *m)
   do_waiters();
 
   dispatch_running = false;
-  
-  // no need to signal here, since tick() doesn't wait.
-  //dispatch_cond.Signal();
+  dispatch_cond.Signal();
 
   osd_lock.Unlock();
   return true;
