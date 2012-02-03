@@ -25,6 +25,7 @@
 #include "common/Mutex.h"
 #include "HashIndex.h"
 #include "IndexManager.h"
+#include "ObjectMap.h"
 
 #include "Fake.h"
 
@@ -32,6 +33,7 @@
 
 #include <map>
 #include <deque>
+#include <boost/scoped_ptr.hpp>
 using namespace std;
 
 #include <ext/hash_map>
@@ -47,6 +49,7 @@ class FileStore : public JournalingObjectStore,
   string basedir, journalpath;
   std::string current_fn;
   std::string current_op_seq_fn;
+  std::string omap_dir;
   uuid_d fsid;
   
   bool btrfs;                   ///< fs is btrfs
@@ -76,6 +79,9 @@ class FileStore : public JournalingObjectStore,
   IndexManager index_manager;
   int get_index(coll_t c, Index *index);
   int init_index(coll_t c);
+
+  // ObjectMap
+  boost::scoped_ptr<ObjectMap> object_map;
   
   Finisher ondisk_finisher;
 
@@ -259,6 +265,10 @@ public:
   int lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len);
   int lfn_truncate(coll_t cid, const hobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf);
+  int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
+	       IndexedPath *path);
+  int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
+	       IndexedPath *path, Index *index);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags);
   int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
@@ -367,6 +377,17 @@ public:
 			      int min, int max, snapid_t snap,
 			      vector<hobject_t> *ls, hobject_t *next);
 
+  // omap (see ObjectStore.h for documentation)
+  int omap_get(coll_t c, const hobject_t &hoid, bufferlist *header,
+	       map<string, bufferlist> *out);
+  int omap_get_header(coll_t c, const hobject_t &hoid, bufferlist *out);
+  int omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys);
+  int omap_get_values(coll_t c, const hobject_t &hoid, const set<string> &keys,
+		      map<string, bufferlist> *out);
+  int omap_check_keys(coll_t c, const hobject_t &hoid, const set<string> &keys,
+		      set<string> *out);
+  ObjectMap::ObjectMapIterator get_omap_iterator(coll_t c, const hobject_t &hoid);
+
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o);
@@ -375,10 +396,17 @@ public:
   void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) {}
   int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) { return -1; }
 
+private:
+  // omap
+  int _omap_clear(coll_t cid, const hobject_t &hoid);
+  int _omap_setkeys(coll_t cid, const hobject_t &hoid,
+		    const map<string, bufferlist> &aset);
+  int _omap_rmkeys(coll_t cid, const hobject_t &hoid, const set<string> &keys);
+  int _omap_setheader(coll_t cid, const hobject_t &hoid, const bufferlist &bl);
+
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed);
-private:
   bool m_filestore_btrfs_clone_range;
   bool m_filestore_btrfs_snap;
   bool m_filestore_btrfs_trans;
