@@ -119,8 +119,11 @@ public:
       Message *n = decode_message(g_ceph_context, p);
       if (!n)
 	throw std::runtime_error("failed to decode");
-      if (n->get_type() != m_object->get_type())
-	throw std::runtime_error("decoded incorrect type message");
+      if (n->get_type() != m_object->get_type()) {
+	stringstream ss;
+	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
+	throw std::runtime_error(ss.str());
+      }
       m_object->put();
       m_object = (T *)n;
     }
