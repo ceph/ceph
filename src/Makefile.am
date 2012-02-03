@@ -327,14 +327,12 @@ my_libradosgw_src = \
 	rgw/librgw.cc \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
-	rgw/rgw_xml.cc
-
-my_radosgw_src = \
+	rgw/rgw_xml.cc \
+	rgw/rgw_user.cc \
+	rgw/rgw_tools.cc \
+	rgw/rgw_access.cc \
 	rgw/rgw_fs.cc \
 	rgw/rgw_rados.cc \
-	rgw/rgw_tools.cc \
-	rgw/rgw_user.cc \
-	rgw/rgw_access.cc \
 	rgw/rgw_op.cc \
 	rgw/rgw_rest.cc \
 	rgw/rgw_rest_swift.cc \
@@ -352,15 +350,15 @@ my_radosgw_ldadd = \
 	libglobal.la librgw.la librados.la -lfcgi -lcurl -lexpat \
 	$(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
-radosgw_SOURCES = $(my_radosgw_src) rgw/rgw_main.cc
+radosgw_SOURCES = $(my_libradosgw_src) rgw/rgw_main.cc
 radosgw_LDADD = $(my_radosgw_ldadd)
 radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-radosgw_admin_SOURCES = $(my_radosgw_src) rgw/rgw_admin.cc
+radosgw_admin_SOURCES = $(my_libradosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_LDADD = $(my_radosgw_ldadd)
 bin_PROGRAMS += radosgw radosgw-admin
 
-rgw_multiparser_SOURCES = $(my_radosgw_src) rgw/rgw_multiparser.cc
+rgw_multiparser_SOURCES = $(my_libradosgw_src) rgw/rgw_multiparser.cc
 rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
