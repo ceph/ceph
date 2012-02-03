@@ -1451,6 +1451,7 @@ noinst_HEADERS = \
 	test/osd/TestOpStat.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
+	test/encoding/types.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \
