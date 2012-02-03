@@ -101,7 +101,7 @@ protected:
   ACLGroupTypeEnum group;
 
 public:
-  ACLGrant() {}
+  ACLGrant() : group(ACL_GROUP_NONE) {}
   virtual ~ACLGrant() {}
 
   /* there's an assumption here that email/uri/id encodings are
@@ -121,7 +121,7 @@ public:
   ACLGroupTypeEnum get_group() { return group; }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(id, bl);
@@ -129,6 +129,8 @@ public:
     ::encode(email, bl);
     ::encode(permission, bl);
     ::encode(name, bl);
+    __u32 g = (__u32)group;
+    ::encode(g, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
@@ -139,16 +141,27 @@ public:
     ::decode(email, bl);
     ::decode(permission, bl);
     ::decode(name, bl);
+    if (struct_v > 1) {
+      __u32 g;
+      ::decode(g, bl);
+      group = (ACLGroupTypeEnum)g;
+    } else {
+      group = uri_to_group();
+    }
   }
+
+  ACLGroupTypeEnum uri_to_group();
+  
   void set_canon(string& _id, string& _name, int perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
     permission.set_permissions(perm);
   }
-  void set_group(string& _uri, int perm) {
+  void set_group(string& _uri, ACLGroupTypeEnum _group, int perm) {
     type.set(ACL_TYPE_GROUP);
     uri = _uri;
+    group = _group;
     permission.set_permissions(perm);
   }
 };

@@ -8,6 +8,8 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 
+#include "rgw_acl_s3.h" // required for backward compatibility
+
 #define DOUT_SUBSYS rgw
 
 using namespace std;
@@ -20,6 +22,7 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
   switch (type.get_type()) {
   case ACL_TYPE_GROUP:
     acl_group_map[grant->get_group()] |= perm.get_permissions();
+    break;
   default:
     acl_user_map[grant->get_id()] |= perm.get_permissions();
   }
@@ -28,7 +31,6 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
 void RGWAccessControlList::add_grant(ACLGrant *grant)
 {
   string id = grant->get_id();
-dout(0) << __FILE__ << ":" << __LINE__ << " adding grant id=" << id << dendl;
   if (id.size() > 0) {
     grant_map.insert(pair<string, ACLGrant>(id, *grant));
   }
@@ -86,3 +88,9 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   return perm;
 }
 
+
+ACLGroupTypeEnum ACLGrant::uri_to_group()
+{
+  // this is required for backward compatibility
+  return ACLGrant_S3::uri_to_group(uri);
+}

@@ -179,6 +179,7 @@ bool ACLGrant_S3::xml_end(const char *el) {
     if (!acl_uri)
       return false;
     uri = acl_uri->get_data();
+    group = uri_to_group(uri);
     break;
   case ACL_TYPE_EMAIL_USER:
     acl_email = (ACLEmail_S3 *)acl_grantee->find_first("EmailAddress");
@@ -216,6 +217,16 @@ void ACLGrant_S3::to_xml(ostream& out) {
   out << "</Grant>";
 }
 
+ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
+{
+  if (uri.compare(rgw_uri_all_users) == 0)
+    return ACL_GROUP_ALL_USERS;
+  else if (uri.compare(rgw_uri_auth_users) == 0)
+    return ACL_GROUP_AUTHENTICATED_USERS;
+
+  return ACL_GROUP_NONE;
+}
+
 bool RGWAccessControlList_S3::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant_S3 *grant = (ACLGrant_S3 *)iter.get_next();
@@ -242,15 +253,15 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
 
   ACLGrant group_grant;
   if (canned_acl.compare("public-read") == 0) {
-    group_grant.set_group(rgw_uri_all_users, RGW_PERM_READ);
+    group_grant.set_group(rgw_uri_all_users, ACL_GROUP_ALL_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
   } else if (canned_acl.compare("public-read-write") == 0) {
-    group_grant.set_group(rgw_uri_all_users, RGW_PERM_READ);
+    group_grant.set_group(rgw_uri_all_users, ACL_GROUP_ALL_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
-    group_grant.set_group(rgw_uri_all_users, RGW_PERM_WRITE);
+    group_grant.set_group(rgw_uri_all_users, ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
     add_grant(&group_grant);
   } else if (canned_acl.compare("authenticated-read") == 0) {
-    group_grant.set_group(rgw_uri_auth_users, RGW_PERM_READ);
+    group_grant.set_group(rgw_uri_auth_users, ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
   } else {
     return false;
