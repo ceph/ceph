@@ -258,8 +258,13 @@ public:
 	return *this;
       }
 
+      /// get current iterator offset in buffer::list
       unsigned get_off() { return off; }
+      
+      /// get number of bytes remaining from iterator position to the end of the buffer::list
+      unsigned get_remaining() { return bl->length() - off; }
 
+      /// true if iterator is at the end of the buffer::list
       bool end() {
 	return p == ls->end();
 	//return off == bl->length();

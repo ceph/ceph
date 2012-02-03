@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 #include "osd/OSDMap.h"
-
+#include "include/ceph_features.h"
 
 class MOSDMap : public Message {
  public:
@@ -27,18 +27,18 @@ class MOSDMap : public Message {
   map<epoch_t, bufferlist> incremental_maps;
   epoch_t oldest_map, newest_map;
 
-  epoch_t get_first() {
+  epoch_t get_first() const {
     epoch_t e = 0;
-    map<epoch_t, bufferlist>::iterator i = maps.begin();
+    map<epoch_t, bufferlist>::const_iterator i = maps.begin();
     if (i != maps.end())  e = i->first;
     i = incremental_maps.begin();    
     if (i != incremental_maps.end() &&
         (e == 0 || i->first < e)) e = i->first;
     return e;
   }
-  epoch_t get_last() {
+  epoch_t get_last() const {
     epoch_t e = 0;
-    map<epoch_t, bufferlist>::reverse_iterator i = maps.rbegin();
+    map<epoch_t, bufferlist>::const_reverse_iterator i = maps.rbegin();
     if (i != maps.rend())  e = i->first;
     i = incremental_maps.rbegin();    
     if (i != incremental_maps.rend() &&
@@ -66,7 +66,7 @@ private:
 
 public:
   // marshalling
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(incremental_maps, p);
@@ -79,11 +79,11 @@ public:
       newest_map = 0;
     }
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     header.version = 2;
-    if (connection && (!connection->has_feature(CEPH_FEATURE_PGID64) ||
-		       !connection->has_feature(CEPH_FEATURE_PGPOOL3))) {
+    if ((features & CEPH_FEATURE_PGID64) == 0 ||
+	(features & CEPH_FEATURE_PGPOOL3) == 0) {
       // reencode maps using old format
       //
       // FIXME: this can probably be done more efficiently higher up
@@ -101,9 +101,9 @@ public:
 	  OSDMap m;
 	  m.decode(inc.fullmap);
 	  inc.fullmap.clear();
-	  m.encode(inc.fullmap, connection->get_features());
+	  m.encode(inc.fullmap, features);
 	}
-	inc.encode(p->second, connection->get_features());
+	inc.encode(p->second, features);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
@@ -111,7 +111,7 @@ public:
 	OSDMap m;
 	m.decode(p->second);
 	p->second.clear();
-	m.encode(p->second, connection->get_features());
+	m.encode(p->second, features);
       }
       header.version = 1;
     }
@@ -123,8 +123,8 @@ public:
     }
   }
 
-  const char *get_type_name() { return "omap"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "omap"; }
+  void print(ostream& out) const {
     out << "osd_map(" << get_first() << ".." << get_last();
     if (oldest_map || newest_map)
       out << " src has " << oldest_map << ".." << newest_map;

@@ -29,7 +29,6 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
 #include "osd/OSDMap.h"
-#include "osd/PGLS.h"
 
 #include "msg/SimpleMessenger.h"
 

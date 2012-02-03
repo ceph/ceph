@@ -22,12 +22,12 @@ struct MClientLease : public Message {
   struct ceph_mds_lease h;
   string dname;
   
-  int get_action() { return h.action; }
-  ceph_seq_t get_seq() { return h.seq; }
-  int get_mask() { return h.mask; }
-  inodeno_t get_ino() { return inodeno_t(h.ino); }
-  snapid_t get_first() { return snapid_t(h.first); }
-  snapid_t get_last() { return snapid_t(h.last); }
+  int get_action() const { return h.action; }
+  ceph_seq_t get_seq() const { return h.seq; }
+  int get_mask() const { return h.mask; }
+  inodeno_t get_ino() const { return inodeno_t(h.ino); }
+  snapid_t get_first() const { return snapid_t(h.first); }
+  snapid_t get_last() const { return snapid_t(h.last); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
@@ -55,8 +55,8 @@ private:
   ~MClientLease() {}
 
 public:
-  const char *get_type_name() { return "client_lease"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_lease"; }
+  void print(ostream& out) const {
     out << "client_lease(a=" << ceph_lease_op_name(get_action())
 	<< " seq " << get_seq()
 	<< " mask " << get_mask();
@@ -68,12 +68,12 @@ public:
     out << ")";
   }
   
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(h, p);
     ::decode(dname, p);
   }
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(h, payload);
     ::encode(dname, payload);
   }

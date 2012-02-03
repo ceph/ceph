@@ -360,7 +360,7 @@ public:
     eversion_t reply_version;    // the version that we report the client (depends on the op)
 
     ObjectStore::Transaction op_t, local_t;
-    vector<PG::Log::Entry> log;
+    vector<pg_log_entry_t> log;
 
     interval_set<uint64_t> modified_ranges;
     ObjectContext *obc;          // For ref counting purposes
@@ -589,11 +589,11 @@ protected:
 
   int recover_object_replicas(const hobject_t& soid, eversion_t v);
   void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
-			 Missing& missing,
+			 pg_missing_t& missing,
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
 			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, Missing& missing,
+  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, pg_missing_t& missing,
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);

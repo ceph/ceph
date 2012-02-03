@@ -24,7 +24,7 @@ public:
     OP_SCAN_GET_DIGEST = 1,      // just objects and versions
     OP_SCAN_DIGEST = 2,          // result
   };
-  const char *get_op_name(int o) {
+  const char *get_op_name(int o) const {
     switch (o) {
     case OP_SCAN_GET_DIGEST: return "get_digest";
     case OP_SCAN_DIGEST: return "digest";
@@ -37,7 +37,7 @@ public:
   pg_t pgid;
   hobject_t begin, end;
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
@@ -47,7 +47,7 @@ public:
     ::decode(end, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
@@ -68,8 +68,8 @@ private:
   ~MOSDPGScan() {}
 
 public:
-  const char *get_type_name() { return "pg_scan"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_scan"; }
+  void print(ostream& out) const {
     out << "pg_scan(" << get_op_name(op)
 	<< " " << pgid
 	<< " " << begin << "-" << end

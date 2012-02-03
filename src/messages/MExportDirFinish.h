@@ -32,15 +32,15 @@ private:
   ~MExportDirFinish() {}
 
 public:
-  const char *get_type_name() { return "ExFin"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExFin"; }
+  void print(ostream& o) const {
     o << "export_finish(" << dirfrag << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }

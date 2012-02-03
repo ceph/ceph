@@ -88,7 +88,8 @@ void Paxos::collect(version_t oldpn)
        ++p) {
     if (*p == mon->rank) continue;
     
-    MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT, machine_id);
+    MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT, machine_id,
+				       ceph_clock_now(g_ceph_context));
     collect->last_committed = last_committed;
     collect->first_committed = first_committed;
     collect->pn = accepted_pn;
@@ -112,7 +113,8 @@ void Paxos::handle_collect(MMonPaxos *collect)
   state = STATE_RECOVERING;
 
   // reply
-  MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST, machine_id);
+  MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST, machine_id,
+				  ceph_clock_now(g_ceph_context));
   last->last_committed = last_committed;
   last->first_committed = first_committed;
   
@@ -297,7 +299,8 @@ void Paxos::handle_last(MMonPaxos *last)
 	if (p->second < last_committed) {
 	  // share committed values
 	  dout(10) << " sending commit to mon." << p->first << dendl;
-	  MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
+	  MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id,
+					    ceph_clock_now(g_ceph_context));
 	  share_state(commit, peer_first_committed[p->first], p->second);
 	  mon->messenger->send_message(commit, mon->monmap->get_inst(p->first));
 	}
@@ -384,7 +387,8 @@ void Paxos::begin(bufferlist& v)
     if (*p == mon->rank) continue;
     
     dout(10) << " sending begin to mon." << *p << dendl;
-    MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN, machine_id);
+    MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN, machine_id,
+				     ceph_clock_now(g_ceph_context));
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
     begin->pn = accepted_pn;
@@ -421,7 +425,8 @@ void Paxos::handle_begin(MMonPaxos *begin)
   mon->store->put_bl_sn(begin->values[v], machine_name, v);
   
   // reply
-  MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT, machine_id);
+  MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT, machine_id,
+				    ceph_clock_now(g_ceph_context));
   accept->pn = accepted_pn;
   accept->last_committed = last_committed;
   mon->messenger->send_message(accept, begin->get_source_inst());
@@ -517,7 +522,8 @@ void Paxos::commit()
     if (*p == mon->rank) continue;
 
     dout(10) << " sending commit to mon." << *p << dendl;
-    MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
+    MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id,
+				      ceph_clock_now(g_ceph_context));
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;
     commit->last_committed = last_committed;
@@ -567,7 +573,8 @@ void Paxos::extend_lease()
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
-    MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
+    MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id,
+				     ceph_clock_now(g_ceph_context));
     lease->last_committed = last_committed;
     lease->lease_timestamp = lease_expire;
     lease->first_committed = first_committed;
@@ -632,7 +639,8 @@ void Paxos::handle_lease(MMonPaxos *lease)
 	   << " now " << lease_expire << dendl;
 
   // ack
-  MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
+  MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id,
+				 ceph_clock_now(g_ceph_context));
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
   ack->lease_timestamp = ceph_clock_now(g_ceph_context);

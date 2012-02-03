@@ -294,7 +294,7 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
 	data_len = t->get_data_length();
 	data_align = (t->get_data_alignment() - tbl.length()) & ~CEPH_PAGE_MASK;
       }
-      t->encode(tbl);
+      ::encode(*t, tbl);
     }
     journal->submit_entry(op, tbl, data_align, onjournal);
   } else if (onjournal)

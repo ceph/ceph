@@ -36,19 +36,19 @@ private:
   ~MOSDBoot() { }
 
 public:
-  const char *get_type_name() { return "osd_boot"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_boot"; }
+  void print(ostream& out) const {
     out << "osd_boot(osd." << sb.whoami << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_addr, payload);
     ::encode(cluster_addr, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);

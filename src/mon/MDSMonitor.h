@@ -106,9 +106,7 @@ class MDSMonitor : public PaxosService {
 
 public:
   MDSMonitor(Monitor *mn, Paxos *p)
-    : PaxosService(mn, p),
-      mdsmap(g_ceph_context),
-      pending_mdsmap(g_ceph_context)
+    : PaxosService(mn, p)
   {
   }
 

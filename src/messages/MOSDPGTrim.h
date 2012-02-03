@@ -33,17 +33,17 @@ private:
   ~MOSDPGTrim() {}
 
 public:
-  const char *get_type_name() { return "pg_trim"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_trim"; }
+  void print(ostream& out) const {
     out << "pg_trim(" << pgid << " to " << trim_to << " e" << epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(pgid, payload);
     ::encode(trim_to, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pgid, p);

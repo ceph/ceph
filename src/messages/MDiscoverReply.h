@@ -23,7 +23,6 @@
 #include <string>
 using namespace std;
 
-#define max(a,b)  ((a)>(b) ? (a):(b))
 
 
 /**
@@ -146,8 +145,8 @@ private:
   ~MDiscoverReply() {}
 
 public:
-  const char *get_type_name() { return "discover_reply"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "discover_reply"; }
+  void print(ostream& out) const {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
   
@@ -180,7 +179,7 @@ public:
 
 
   // ...
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -199,7 +198,7 @@ public:
     if (header.version >= 2)
       ::decode(wanted_ino, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);

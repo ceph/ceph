@@ -36,18 +36,18 @@ private:
   ~MMonJoin() {}
 
 public:  
-  const char *get_type_name() { return "mon_join"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_join"; }
+  void print(ostream& o) const {
     o << "mon_join(" << name << " " << addr << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(name, payload);
     ::encode(addr, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

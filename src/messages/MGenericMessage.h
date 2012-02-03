@@ -23,17 +23,17 @@ class MGenericMessage : public Message {
   //long pcid;
 
  public:
-  MGenericMessage(int t) : Message(t) { 
+  MGenericMessage(int t=0) : Message(t) { 
     snprintf(tname, sizeof(tname), "generic%d", get_type());
   }
 
   //void set_pcid(long pcid) { this->pcid = pcid; }
   //long get_pcid() { return pcid; }
 
-  const char *get_type_name() { return tname; }
+  const char *get_type_name() const { return tname; }
 
-  void decode_payload(CephContext *cct) { }
-  void encode_payload(CephContext *cct) { }
+  void decode_payload() { }
+  void encode_payload(uint64_t features) { }
 };
 
 #endif

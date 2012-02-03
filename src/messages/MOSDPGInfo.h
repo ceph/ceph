@@ -17,12 +17,13 @@
 #define CEPH_MOSDPGINFO_H
 
 #include "msg/Message.h"
+#include "osd/osd_types.h"
 
 class MOSDPGInfo : public Message {
   epoch_t epoch;
 
 public:
-  vector<PG::Info> pg_info;
+  vector<pg_info_t> pg_info;
 
   epoch_t get_epoch() { return epoch; }
 
@@ -34,16 +35,16 @@ private:
   ~MOSDPGInfo() {}
 
 public:
-  const char *get_type_name() { return "pg_info"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_info"; }
+  void print(ostream& out) const {
     out << "pg_info(" << pg_info.size() << " pgs e" << epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(pg_info, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_info, p);

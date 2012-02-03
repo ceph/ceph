@@ -51,12 +51,12 @@ private:
   ~MMonElection() {}
 
 public:  
-  const char *get_type_name() { return "election"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "election"; }
+  void print(ostream& out) const {
     out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(fsid, payload);
     ::encode(op, payload);
@@ -64,7 +64,7 @@ public:
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version >= 2)
       ::decode(fsid, p);

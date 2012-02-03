@@ -25,16 +25,16 @@ struct MMDSFindInoReply : public Message {
   MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
   MMDSFindInoReply(tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
 
-  const char *get_type_name() { return "findinoreply"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "findinoreply"; }
+  void print(ostream &out) const {
     out << "findinoreply(" << tid << " " << path << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(tid, payload);
     ::encode(path, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(path, p);

@@ -38,8 +38,8 @@ private:
   ~MOSDScrub() {}
 
 public:
-  const char *get_type_name() { return "scrub"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "scrub"; }
+  void print(ostream& out) const {
     out << "scrub(";
     if (scrub_pgs.empty())
       out << "osd";
@@ -50,12 +50,12 @@ public:
     out << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(scrub_pgs, payload);
     ::encode(repair, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(scrub_pgs, p);

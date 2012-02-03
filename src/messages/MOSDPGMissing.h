@@ -22,31 +22,31 @@ class MOSDPGMissing : public Message {
   epoch_t epoch;
 
 public:
-  PG::Info info;
-  PG::Missing missing;
+  pg_info_t info;
+  pg_missing_t missing;
 
   epoch_t get_epoch() { return epoch; }
 
   MOSDPGMissing() {}
-  MOSDPGMissing(version_t mv, const PG::Info &info_,
-		const PG::Missing &missing_)
+  MOSDPGMissing(version_t mv, const pg_info_t &info_,
+		const pg_missing_t &missing_)
     : Message(MSG_OSD_PG_MISSING), epoch(mv), info(info_),
       missing(missing_) { }
 private:
   ~MOSDPGMissing() {}
 
 public:
-  const char *get_type_name() { return "pg_missing"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_missing"; }
+  void print(ostream& out) const {
     out << "pg_missing(" << info.pgid << " e" << epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(missing, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(info, p);

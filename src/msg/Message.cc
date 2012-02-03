@@ -1,6 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#ifdef ENCODE_DUMP
+# include <typeinfo>
+# include <cxxabi.h>
+#endif
+
 #include <iostream>
 using namespace std;
 
@@ -142,49 +147,95 @@ using namespace std;
 #define DEBUGLVL  10    // debug level of output
 
 
-void Message::encode(CephContext *cct)
+void Message::encode(uint64_t features, bool datacrc)
 {
   // encode and copy out of *m
-  if (empty_payload())
-    encode_payload(cct);
+  if (empty_payload()) {
+    encode_payload(features);
+
+  }
   calc_front_crc();
-  
-  if (!cct->_conf->ms_nocrc)
+  if (datacrc) {
     calc_data_crc();
+
+#ifdef ENCODE_DUMP
+    bufferlist bl;
+    ::encode(get_header(), bl);
+    ::encode(get_footer(), bl);
+    ::encode(get_payload(), bl);
+    ::encode(get_middle(), bl);
+    ::encode(get_data(), bl);
+
+    // this is almost an exponential backoff, except because we count
+    // bits we tend to sample things we encode later, which should be
+    // more representative.
+    static int i = 0;
+    i++;
+    int bits = 0;
+    for (unsigned t = i; t; bits++)
+      t &= t - 1;
+    if (bits <= 2) {
+      char fn[200];
+      int status;
+      snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
+	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
+	       getpid(), i++);
+      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+      if (fd >= 0) {
+	bl.write_fd(fd);
+	::close(fd);
+      }
+    }
+#endif
+
+  }
   else
     footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
+}
+
+void Message::dump(Formatter *f) const
+{
+  stringstream ss;
+  print(ss);
+  f->dump_string("summary", ss.str());
 }
 
 Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle, bufferlist& data)
 {
   // verify crc
-  if (!cct->_conf->ms_nocrc) {
+  if (!cct || !cct->_conf->ms_nocrc) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
     if (front_crc != footer.front_crc) {
-      ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
-      ldout(cct, 20) << " ";
-      front.hexdump(*_dout);
-      *_dout << dendl;
+      if (cct) {
+	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+	ldout(cct, 20) << " ";
+	front.hexdump(*_dout);
+	*_dout << dendl;
+      }
       return 0;
     }
     if (middle_crc != footer.middle_crc) {
-      ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
-      ldout(cct, 20) << " ";
-      middle.hexdump(*_dout);
-      *_dout << dendl;
+      if (cct) {
+	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+	ldout(cct, 20) << " ";
+	middle.hexdump(*_dout);
+	*_dout << dendl;
+      }
       return 0;
     }
 
     if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
       __u32 data_crc = data.crc32c(0);
       if (data_crc != footer.data_crc) {
-	ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
-	ldout(cct, 20) << " ";
-	data.hexdump(*_dout);
-	*_dout << dendl;
+	if (cct) {
+	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	  ldout(cct, 20) << " ";
+	  data.hexdump(*_dout);
+	  *_dout << dendl;
+	}
 	return 0;
       }
     }
@@ -543,9 +594,11 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
 
   default:
-    ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
-    if (cct->_conf->ms_die_on_bad_msg)
-      assert(0);
+    if (cct) {
+      ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
+      if (cct->_conf->ms_die_on_bad_msg)
+	assert(0);
+    }
     return 0;
   }
   
@@ -556,14 +609,16 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   m->set_data(data);
 
   try {
-    m->decode_payload(cct);
+    m->decode_payload();
   }
   catch (const buffer::error &e) {
-    ldout(cct, 0) << "failed to decode message of type " << type
-	    << " v" << header.version
-	    << ": " << e.what() << dendl;
-    if (cct->_conf->ms_die_on_bad_msg)
-      assert(0);
+    if (cct) {
+      ldout(cct, 0) << "failed to decode message of type " << type
+		    << " v" << header.version
+		    << ": " << e.what() << dendl;
+      if (cct->_conf->ms_die_on_bad_msg)
+	assert(0);
+    }
     return 0;
   }
 
@@ -572,10 +627,10 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 }
 
 
-void encode_message(CephContext *cct, Message *msg, bufferlist& payload)
+void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 {
   bufferlist front, middle, data;
-  msg->encode(cct);
+  msg->encode(features, true);
   ::encode(msg->get_header(), payload);
   ::encode(msg->get_footer(), payload);
   ::encode(msg->get_payload(), payload);
@@ -595,3 +650,4 @@ Message *decode_message(CephContext *cct, bufferlist::iterator& p)
   ::decode(da, p);
   return decode_message(cct, h, f, fr, mi, da);
 }
+

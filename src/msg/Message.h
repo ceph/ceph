@@ -389,11 +389,11 @@ public:
   off_t get_data_len() { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
-  const utime_t& get_recv_stamp() { return recv_stamp; }
+  const utime_t& get_recv_stamp() const { return recv_stamp; }
   void set_dispatch_stamp(utime_t t) { dispatch_stamp = t; }
-  const utime_t& get_dispatch_stamp() { return dispatch_stamp; }
+  const utime_t& get_dispatch_stamp() const { return dispatch_stamp; }
   void set_throttle_wait(utime_t t) { throttle_wait = t; }
-  const utime_t& get_throttle_wait() { return throttle_wait; }
+  const utime_t& get_throttle_wait() const { return throttle_wait; }
 
   void calc_header_crc() {
     header.crc = ceph_crc32c_le(0, (unsigned char*)&header,
@@ -408,51 +408,53 @@ public:
   }
 
   // type
-  int get_type() { return header.type; }
+  int get_type() const { return header.type; }
   void set_type(int t) { header.type = t; }
 
-  uint64_t get_tid() { return header.tid; }
+  uint64_t get_tid() const { return header.tid; }
   void set_tid(uint64_t t) { header.tid = t; }
 
-  unsigned get_seq() { return header.seq; }
+  unsigned get_seq() const { return header.seq; }
   void set_seq(unsigned s) { header.seq = s; }
 
-  unsigned get_priority() { return header.priority; }
+  unsigned get_priority() const { return header.priority; }
   void set_priority(__s16 p) { header.priority = p; }
 
   // source/dest
-  entity_inst_t get_source_inst() {
+  entity_inst_t get_source_inst() const {
     return entity_inst_t(get_source(), get_source_addr());
   }
-  entity_name_t get_source() {
+  entity_name_t get_source() const {
     return entity_name_t(header.src);
   }
-  entity_addr_t get_source_addr() {
+  entity_addr_t get_source_addr() const {
     if (connection)
       return connection->get_peer_addr();
     return entity_addr_t();
   }
 
   // forwarded?
-  entity_inst_t get_orig_source_inst() {
+  entity_inst_t get_orig_source_inst() const {
     return get_source_inst();
   }
-  entity_name_t get_orig_source() {
+  entity_name_t get_orig_source() const {
     return get_orig_source_inst().name;
   }
-  entity_addr_t get_orig_source_addr() {
+  entity_addr_t get_orig_source_addr() const {
     return get_orig_source_inst().addr;
   }
 
   // virtual bits
-  virtual void decode_payload(CephContext *cct) = 0;
-  virtual void encode_payload(CephContext *cct) = 0;
-  virtual const char *get_type_name() = 0;
-  virtual void print(ostream& out) {
+  virtual void decode_payload() = 0;
+  virtual void encode_payload(uint64_t features) = 0;
+  virtual const char *get_type_name() const = 0;
+  virtual void print(ostream& out) const {
     out << get_type_name();
   }
 
-  void encode(CephContext *cct);
+  virtual void dump(Formatter *f) const;
+
+  void encode(uint64_t features, bool datacrc);
 };
 
 extern Message *decode_message(CephContext *cct, ceph_msg_header &header,
@@ -465,7 +467,7 @@ inline ostream& operator<<(ostream& out, Message& m) {
   return out;
 }
 
-extern void encode_message(CephContext *cct, Message *m, bufferlist& bl);
+extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
 
 #endif

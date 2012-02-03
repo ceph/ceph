@@ -32,15 +32,15 @@ private:
   ~MMonObserveNotify() {}
 
 public:  
-  const char *get_type_name() { return "mon_observe_notify"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_observe_notify"; }
+  void print(ostream& o) const {
     o << "mon_observe_notify(v" << ver << " " << bl.length() << " bytes";
     if (is_latest)
       o << " latest";
     o << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(machine_id, payload);
@@ -48,7 +48,7 @@ public:
     ::encode(ver, payload);
     ::encode(is_latest, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

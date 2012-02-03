@@ -67,7 +67,7 @@ public:
 
   bool first, complete;
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -108,7 +108,7 @@ public:
       ::decode(oloc, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     header.version = 3;
 
     ::encode(map_epoch, payload);
@@ -170,8 +170,8 @@ private:
   ~MOSDSubOp() {}
 
 public:
-  const char *get_type_name() { return "osd_sub_op"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_sub_op"; }
+  void print(ostream& out) const {
     out << "osd_sub_op(" << reqid
 	<< " " << pgid
 	<< " " << poid

@@ -28,22 +28,22 @@ class MMonGetVersionReply : public Message {
 public:
   MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY) {}
 
-  const char *get_type_name() {
+  const char *get_type_name() const {
     return "mon_check_map_ack";
   }
 
-  void print(ostream& o) {
+  void print(ostream& o) const {
     o << "mon_check_map_ack(handle=" << handle << " version=" << version << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(handle, payload);
     ::encode(version, payload);
     ::encode(oldest_version, payload);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(handle, p);
     ::decode(version, p);

@@ -18,6 +18,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "mon/mon_types.h"
+#include "include/ceph_features.h"
 
 class MMonPaxos : public Message {
  public:
@@ -60,22 +61,21 @@ class MMonPaxos : public Message {
   map<version_t,bufferlist> values;
 
   MMonPaxos() : Message(MSG_MON_PAXOS) {}
-  MMonPaxos(epoch_t e, int o, int mid) : 
+  MMonPaxos(epoch_t e, int o, int mid, utime_t now) : 
     Message(MSG_MON_PAXOS),
     epoch(e),
     op(o), machine_id(mid),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
-    latest_version(0) {
-    sent_timestamp = ceph_clock_now(g_ceph_context);
-  }
+    sent_timestamp(now),
+    latest_version(0) { }
 
 private:
   ~MMonPaxos() {}
 
 public:  
-  const char *get_type_name() { return "paxos"; }
+  const char *get_type_name() const { return "paxos"; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "paxos(" << get_paxos_name(machine_id)
 	<< " " << get_opname(op) 
 	<< " lc " << last_committed
@@ -86,8 +86,8 @@ public:
     out <<  ")";
   }
 
-  void encode_payload(CephContext *cct) {
-    if (connection->has_feature(CEPH_FEATURE_MONCLOCKCHECK))
+  void encode_payload(uint64_t features) {
+    if (features & CEPH_FEATURE_MONCLOCKCHECK)
       header.version = 1;
     ::encode(epoch, payload);
     ::encode(op, payload);
@@ -98,13 +98,13 @@ public:
     ::encode(pn, payload);
     ::encode(uncommitted_pn, payload);
     ::encode(lease_timestamp, payload);
-    if (connection->has_feature(CEPH_FEATURE_MONCLOCKCHECK))
+    if (features & CEPH_FEATURE_MONCLOCKCHECK)
       ::encode(sent_timestamp, payload);
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(op, p);

@@ -36,8 +36,8 @@ private:
   ~MExportDirDiscoverAck() {}
 
 public:
-  const char *get_type_name() { return "ExDisA"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExDisA"; }
+  void print(ostream& o) const {
     o << "export_discover_ack(" << dirfrag;
     if (success) 
       o << " success)";
@@ -45,12 +45,12 @@ public:
       o << " failure)";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(success, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(success, payload);
   }

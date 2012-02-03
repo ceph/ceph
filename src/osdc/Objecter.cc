@@ -14,7 +14,6 @@
 
 #include "Objecter.h"
 #include "osd/OSDMap.h"
-#include "osd/PGLS.h"
 
 #include "mon/MonClient.h"
 
@@ -1092,7 +1091,7 @@ void Objecter::send_op(Op *op)
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);
-  m->get_snaps() = op->snapc.snaps;
+  m->set_snaps(op->snapc.snaps);
 
   m->ops = op->ops;
   m->set_mtime(op->mtime);
@@ -1350,7 +1349,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
   ldout(cct, 10) << "_list_reply" << dendl;
 
   bufferlist::iterator iter = bl->begin();
-  PGLSResponse response;
+  pg_ls_response_t response;
   bufferlist extra_info;
   ::decode(response, iter);
   if (!iter.end()) {

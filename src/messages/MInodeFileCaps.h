@@ -34,16 +34,16 @@ private:
   ~MInodeFileCaps() {}
 
 public:
-  const char *get_type_name() { return "inode_file_caps";}
-  void print(ostream& out) {
+  const char *get_type_name() const { return "inode_file_caps";}
+  void print(ostream& out) const {
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(ino, payload);
     ::encode(caps, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(caps, p);

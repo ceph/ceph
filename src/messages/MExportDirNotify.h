@@ -40,8 +40,8 @@ private:
   ~MExportDirNotify() {}
 
 public:
-  const char *get_type_name() { return "ExNot"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExNot"; }
+  void print(ostream& o) const {
     o << "export_notify(" << base;
     o << " " << old_auth << " -> " << new_auth;
     if (ack) 
@@ -59,14 +59,14 @@ public:
       bounds.push_back(*i);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(base, payload);
     ::encode(ack, payload);
     ::encode(old_auth, payload);
     ::encode(new_auth, payload);
     ::encode(bounds, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base, p);
     ::decode(ack, p);

@@ -17,6 +17,7 @@
 
 #include "include/types.h"
 #include "include/xlist.h"
+#include "include/ceph_features.h"
 
 #include <list>
 #include <map>
@@ -51,20 +52,6 @@ using namespace __gnu_cxx;
  * the destructor will lead to badness.
  */
 
-// default feature(s) everyone gets
-#define MSGR_FEATURES_SUPPORTED  \
-  CEPH_FEATURE_NOSRCADDR |	 \
-  CEPH_FEATURE_SUBSCRIBE2 |	 \
-  CEPH_FEATURE_MONNAMES |        \
-  CEPH_FEATURE_FLOCK |           \
-  CEPH_FEATURE_RECONNECT_SEQ |   \
-  CEPH_FEATURE_DIRLAYOUTHASH |   \
-  CEPH_FEATURE_OBJECTLOCATOR |	 \
-  CEPH_FEATURE_PGID64 |		 \
-  CEPH_FEATURE_INCSUBOSDMAP |	 \
-  CEPH_FEATURE_PGPOOL3 |	 \
-  CEPH_FEATURE_OSDREPLYMUX
-
 class SimpleMessenger : public Messenger {
 public:
   struct Policy {
@@ -77,11 +64,11 @@ public:
 
     Policy() :
       lossy(false), server(false), throttler(NULL),
-      features_supported(MSGR_FEATURES_SUPPORTED),
+      features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
       features_required(0) {}
     Policy(bool l, bool s, uint64_t sup, uint64_t req) :
       lossy(l), server(s), throttler(NULL),
-      features_supported(sup | MSGR_FEATURES_SUPPORTED),
+      features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
       features_required(req) {}
 
     static Policy stateful_server(uint64_t sup, uint64_t req) { return Policy(false, true, sup, req); }

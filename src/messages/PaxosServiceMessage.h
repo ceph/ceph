@@ -30,12 +30,12 @@ class PaxosServiceMessage : public Message {
     ::decode(session_mon_tid, p);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     assert(0);
     paxos_encode();
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     assert(0);
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
@@ -56,7 +56,7 @@ class PaxosServiceMessage : public Message {
     return session;
   }
   
-  const char *get_type_name() { return "PaxosServiceMessage"; }
+  const char *get_type_name() const { return "PaxosServiceMessage"; }
 };
 
 #endif

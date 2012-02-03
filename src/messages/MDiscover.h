@@ -69,8 +69,8 @@ private:
   ~MDiscover() {}
 
 public:
-  const char *get_type_name() { return "Dis"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "Dis"; }
+  void print(ostream &out) const {
     out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want;
     if (want_ino)
@@ -78,7 +78,7 @@ public:
     out << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -88,7 +88,7 @@ public:
     ::decode(want_base_dir, p);
     ::decode(want_xlocked, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(snapid, payload);

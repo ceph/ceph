@@ -38,7 +38,7 @@ public:
   bool if_osd_failed() { return is_failed; }
   epoch_t get_epoch() { return epoch; }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
@@ -48,7 +48,7 @@ public:
       ::decode(is_failed, p);
     else is_failed = true;
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
@@ -57,8 +57,8 @@ public:
     ::encode(is_failed, payload);
   }
 
-  const char *get_type_name() { return "osd_failure"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_failure"; }
+  void print(ostream& out) const {
     out << "osd_failure(" << target_osd << " e" << epoch << " v" << version << ")";
   }
 };

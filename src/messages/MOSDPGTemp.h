@@ -30,20 +30,20 @@ private:
   ~MOSDPGTemp() {}
 
 public:
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(map_epoch, payload);
     ::encode(pg_temp, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(map_epoch, p);
     ::decode(pg_temp, p);
   }
 
-  const char *get_type_name() { return "osd_pgtemp"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "osd_pgtemp"; }
+  void print(ostream &out) const {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
   

@@ -22,6 +22,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "include/ceph_features.h"
 
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"

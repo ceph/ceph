@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
+#include "include/ceph_features.h"
 
 /*
  * OSD op
@@ -59,13 +60,18 @@ public:
   snapid_t get_snapid() { return snapid; }
   void set_snapid(snapid_t s) { snapid = s; }
   // writ
-  snapid_t get_snap_seq() { return snap_seq; }
-  vector<snapid_t> &get_snaps() { return snaps; }
+  snapid_t get_snap_seq() const { return snap_seq; }
+  const vector<snapid_t> &get_snaps() const { return snaps; }
+  void set_snaps(const vector<snapid_t>& i) {
+    snaps = i;
+  }
   void set_snap_seq(snapid_t s) { snap_seq = s; }
 
-  osd_reqid_t get_reqid() { return osd_reqid_t(get_orig_source(),
-					       client_inc,
-					       header.tid); }
+  osd_reqid_t get_reqid() const {
+    return osd_reqid_t(get_orig_source(),
+		       client_inc,
+		       header.tid);
+  }
   int get_client_inc() { return client_inc; }
   tid_t get_client_tid() { return header.tid; }
   
@@ -183,11 +189,11 @@ public:
   }
 
   // marshalling
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 
-    if (!connection->has_feature(CEPH_FEATURE_OBJECTLOCATOR)) {
+    if ((features & CEPH_FEATURE_OBJECTLOCATOR) == 0) {
       // here is the old structure we are encoding to: //
 #if 0
 struct ceph_osd_request_head {
@@ -267,7 +273,7 @@ struct ceph_osd_request_head {
     }
   }
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
 
     if (header.version < 2) {
@@ -357,8 +363,8 @@ struct ceph_osd_request_head {
   }
 
 
-  const char *get_type_name() { return "osd_op"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_op"; }
+  void print(ostream& out) const {
     out << "osd_op(" << get_reqid();
     out << " " << oid;
 

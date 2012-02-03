@@ -32,16 +32,16 @@ private:
   ~MExportDirPrepAck() {}
 
 public:  
-  const char *get_type_name() { return "ExPAck"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExPAck"; }
+  void print(ostream& o) const {
     o << "export_prep_ack(" << dirfrag << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
   }
 };

@@ -28,16 +28,16 @@ private:
   ~MLogAck() {}
 
 public:
-  const char *get_type_name() { return "log_ack"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "log_ack"; }
+  void print(ostream& out) const {
     out << "log(last " << last << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(last, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(last, p);

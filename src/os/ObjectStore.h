@@ -34,6 +34,10 @@
 using std::vector;
 using std::string;
 
+namespace ceph {
+  class Formatter;
+}
+
 /*
  * low-level interface to the local OSD file system
  */
@@ -148,7 +152,6 @@ public:
     uint64_t pad_unused_bytes;
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
-    bufferlist::iterator p;
     bool sobject_encoding;
 
   public:
@@ -338,12 +341,6 @@ public:
       ::encode(oid, tbl);
       ops++;
     }
-    void setattr(coll_t cid, const hobject_t& oid, const char* name, const void* val, int len) {
-      string n(name);
-      bufferlist bl;
-      bl.append((char*)val, len);
-      setattr(cid, oid, n, tbl);
-    }
     void setattr(coll_t cid, const hobject_t& oid, const char* name, bufferlist& val) {
       string n(name);
       setattr(cid, oid, n, val);
@@ -430,11 +427,6 @@ public:
       ::encode(cid, tbl);
       ::encode(oid, tbl);
       ops++;
-    }
-    void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
-      bufferlist bl;
-      bl.append((char*)val, len);
-      collection_setattr(cid, name, tbl);
     }
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
       string n(name);
@@ -525,6 +517,8 @@ public:
     }
 
     void dump(ostream& out);
+    void dump(ceph::Formatter *f);
+    static void generate_test_instances(list<Transaction*>& o);
   };
 
   struct C_DeleteTransaction : public Context {

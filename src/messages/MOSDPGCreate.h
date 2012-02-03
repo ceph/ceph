@@ -52,21 +52,21 @@ private:
   ~MOSDPGCreate() {}
 
 public:  
-  const char *get_type_name() { return "pg_create"; }
+  const char *get_type_name() const { return "pg_create"; }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(mkpg, p);
   }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "osd pg create(";
-    for (map<pg_t,create_rec>::iterator i = mkpg.begin();
+    for (map<pg_t,create_rec>::const_iterator i = mkpg.begin();
          i != mkpg.end();
          ++i) {
       out << "pg" << i->first << "," << i->second.created << "; ";

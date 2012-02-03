@@ -32,25 +32,6 @@
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
 #define CEPH_MAX_MON   31
 
-
-/*
- * feature bits
- */
-#define CEPH_FEATURE_UID            (1<<0)
-#define CEPH_FEATURE_NOSRCADDR      (1<<1)
-#define CEPH_FEATURE_MONCLOCKCHECK  (1<<2)
-#define CEPH_FEATURE_FLOCK          (1<<3)
-#define CEPH_FEATURE_SUBSCRIBE2     (1<<4)
-#define CEPH_FEATURE_MONNAMES       (1<<5)
-#define CEPH_FEATURE_RECONNECT_SEQ  (1<<6)
-#define CEPH_FEATURE_DIRLAYOUTHASH  (1<<7)
-#define CEPH_FEATURE_OBJECTLOCATOR  (1<<8)
-#define CEPH_FEATURE_PGID64         (1<<9)
-#define CEPH_FEATURE_INCSUBOSDMAP   (1<<10)
-#define CEPH_FEATURE_PGPOOL3        (1<<11)
-#define CEPH_FEATURE_OSDREPLYMUX    (1<<12)
-
-
 /*
  * ceph_file_layout - describe data layout for a file/inode
  */

@@ -16,6 +16,9 @@ check_PROGRAMS =
 # target by target
 TESTS = $(check_PROGRAMS)
 
+check-local:
+	test/encoding/check-generated.sh
+
 EXTRALIBS = -luuid
 if FREEBSD
 EXTRALIBS += -lexecinfo
@@ -104,6 +107,10 @@ crushtool_LDADD = $(LIBGLOBAL_LDA)
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
+
+ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la
+bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
@@ -828,6 +835,7 @@ ceph_ver.h: .git_version
 
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
+test/encoding/ceph_dencoder.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
@@ -1155,6 +1163,7 @@ noinst_HEADERS = \
         include/buffer.h\
         include/byteorder.h\
 	include/cephfs/libcephfs.h\
+	include/ceph_features.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
@@ -1403,7 +1412,6 @@ noinst_HEADERS = \
         osd/ObjectVersioner.h\
 	osd/OpRequest.h\
         osd/PG.h\
-        osd/PGLS.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\

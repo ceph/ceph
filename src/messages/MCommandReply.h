@@ -36,16 +36,16 @@ private:
   ~MCommandReply() {}
 
 public:
-  const char *get_type_name() { return "command_reply"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "command_reply"; }
+  void print(ostream& o) const {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(r, payload);
     ::encode(rs, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(r, p);
     ::decode(rs, p);

@@ -27,9 +27,9 @@ private:
   ~MPing() {}
 
 public:
-  void decode_payload(CephContext *cct) { }
-  void encode_payload(CephContext *cct) { }
-  const char *get_type_name() { return "ping"; }
+  void decode_payload() { }
+  void encode_payload(uint64_t features) { }
+  const char *get_type_name() const { return "ping"; }
 };
 
 #endif

@@ -23,6 +23,7 @@
 using namespace std;
 
 #include "osd/OSD.h"
+#include "include/ceph_features.h"
 
 #include "common/config.h"
 
@@ -113,7 +114,7 @@ int main(int argc, const char **argv)
     std::string error;
     int r = bl.read_file(dump_pg_log.c_str(), &error);
     if (r >= 0) {
-      PG::Log::Entry e;
+      pg_log_entry_t e;
       bufferlist::iterator p = bl.begin();
       while (!p.end()) {
 	uint64_t pos = p.get_off();

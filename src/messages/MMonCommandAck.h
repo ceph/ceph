@@ -31,18 +31,18 @@ private:
   ~MMonCommandAck() {}
 
 public:
-  const char *get_type_name() { return "mon_command"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_command"; }
+  void print(ostream& o) const {
     o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(r, payload);
     ::encode(rs, payload);
     ::encode(cmd, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(r, p);

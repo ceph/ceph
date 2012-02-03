@@ -45,8 +45,8 @@ private:
   ~MPoolOp() {}
 
 public:
-  const char *get_type_name() { return "poolop"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "poolop"; }
+  void print(ostream& out) const {
     out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
 	<< " auid " << auid
 	<< " tid " << get_tid()
@@ -54,7 +54,7 @@ public:
 	<< " v" << version << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 4;
     paxos_encode();
     ::encode(fsid, payload);
@@ -67,7 +67,7 @@ public:
     ::encode(pad, payload);  /* for v3->v4 encoding change */
     ::encode(crush_rule, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

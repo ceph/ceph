@@ -17,6 +17,7 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
+#include "include/ceph_features.h"
 
 
 class MClientReconnect : public Message {
@@ -29,8 +30,8 @@ private:
   ~MClientReconnect() {}
 
 public:
-  const char *get_type_name() { return "client_reconnect"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_reconnect"; }
+  void print(ostream& out) const {
     out << "client_reconnect("
 	<< caps.size() << " caps)";
   }
@@ -48,8 +49,8 @@ public:
     realms.push_back(r);
   }
 
-  void encode_payload(CephContext *cct) {
-    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
+  void encode_payload(uint64_t features) {
+    if (features & CEPH_FEATURE_FLOCK) {
       // new protocol
       header.version = 2;
       ::encode(caps, data);
@@ -62,7 +63,7 @@ public:
     }
     ::encode_nohead(realms, data);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = data.begin();
     if (header.version >= 2) {
       // new protocol

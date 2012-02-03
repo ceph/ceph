@@ -1087,7 +1087,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 }
 
 PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
-                             PG::Info::History history)
+                             pg_history_t history)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
@@ -1208,7 +1208,7 @@ void OSD::load_pgs()
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
  * hasn't changed since the given epoch and we are the primary.
  */
-PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& created,
+PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& created,
 			  bool primary,
 			  ObjectStore::Transaction **pt,
 			  C_Contexts **pfin)
@@ -1221,7 +1221,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    PG::Info::History history = info.history;
+    pg_history_t history = info.history;
     project_pg_history(info.pgid, history, epoch, up, acting);
 
     if (epoch < history.same_interval_since) {
@@ -1332,7 +1332,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
  * Fill in the passed history so you know same_interval_since, same_up_since,
  * and same_primary_since.
  */
-void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
+void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 			     vector<int>& currentup, vector<int>& currentacting)
 {
   dout(15) << "project_pg_history " << pgid
@@ -1466,7 +1466,7 @@ void OSD::update_heartbeat_peers()
 	_add_heartbeat_source(pg->acting[i], old_from, old_from_stamp, old_con);
       for (unsigned i=0; i<pg->up.size(); i++)
 	_add_heartbeat_source(pg->up[i], old_from, old_from_stamp, old_con);
-      for (map<int,PG::Info>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
+      for (map<int,pg_info_t>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
 	if (osdmap->is_up(p->first))
 	  _add_heartbeat_source(p->first, old_from, old_from_stamp, old_con);
     }
@@ -2420,12 +2420,12 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     int mode;
     if (cmd[2] == "revert")
-      mode = PG::Log::Entry::LOST_REVERT;
+      mode = pg_log_entry_t::LOST_REVERT;
     /*
     else if (cmd[2] == "mark")
-      mode = PG::Log::Entry::LOST_MARK;
+      mode = pg_log_entry_t::LOST_MARK;
     else if (cmd[2] == "delete" || cmd[2] == "remove")
-      mode = PG::Log::Entry::LOST_DELETE;
+      mode = pg_log_entry_t::LOST_DELETE;
     */
     else {
       //ss << "mode must be mark|revert|delete";
@@ -2500,8 +2500,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	pg->lock();
 
 	fout << *pg << std::endl;
-	std::map<hobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
-	std::map<hobject_t, PG::Missing::item>::iterator mi = pg->missing.missing.begin();
+	std::map<hobject_t, pg_missing_t::item>::iterator mend = pg->missing.missing.end();
+	std::map<hobject_t, pg_missing_t::item>::iterator mi = pg->missing.missing.begin();
 	for (; mi != mend; ++mi) {
 	  fout << mi->first << " -> " << mi->second << std::endl;
 	  map<hobject_t, set<int> >::const_iterator mli =
@@ -3653,8 +3653,8 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  map< int, vector<PG::Info> >  notify_list;  // primary -> list
-  map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+  map< int, vector<pg_info_t> >  notify_list;  // primary -> list
+  map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
@@ -3997,7 +3997,7 @@ bool OSD::can_create_pg(pg_t pgid)
 
 void OSD::kick_pg_split_queue()
 {
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
@@ -4034,7 +4034,7 @@ void OSD::kick_pg_split_queue()
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      PG::Info::History history;
+      pg_history_t history;
       history.epoch_created = history.same_up_since =
           history.same_interval_since = history.same_primary_since =
           osdmap->get_epoch();
@@ -4136,9 +4136,9 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   *_dout << dendl;
   parent->log.unindex();
 
-  list<PG::Log::Entry>::iterator p = parent->log.log.begin();
+  list<pg_log_entry_t>::iterator p = parent->log.log.begin();
   while (p != parent->log.log.end()) {
-    list<PG::Log::Entry>::iterator cur = p;
+    list<pg_log_entry_t>::iterator cur = p;
     p++;
     hobject_t& poid = cur->soid;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
@@ -4205,7 +4205,7 @@ void OSD::handle_pg_create(OpRequest *op)
 
   op->mark_started();
 
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map<int, MOSDPGInfo*> info_map;
 
   int num_created = 0;
@@ -4256,7 +4256,7 @@ void OSD::handle_pg_create(OpRequest *op)
     }
 
     // figure history
-    PG::Info::History history;
+    pg_history_t history;
     history.epoch_created = created;
     history.last_epoch_clean = created;
     project_pg_history(pgid, history, created, up, acting);
@@ -4276,7 +4276,7 @@ void OSD::handle_pg_create(OpRequest *op)
 	     << " : querying priors " << pset << dendl;
     for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
       if (osdmap->is_up(*p))
-	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
+	query_map[*p][pgid] = pg_query_t(pg_query_t::INFO, history);
     
     if (can_create_pg(pgid)) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -4316,10 +4316,10 @@ void OSD::handle_pg_create(OpRequest *op)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list,
+void OSD::do_notifies(map< int, vector<pg_info_t> >& notify_list,
 		      epoch_t query_epoch)
 {
-  for (map< int, vector<PG::Info> >::iterator it = notify_list.begin();
+  for (map< int, vector<pg_info_t> >::iterator it = notify_list.begin();
        it != notify_list.end();
        it++) {
     if (it->first == whoami) {
@@ -4340,9 +4340,9 @@ void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list,
 /** do_queries
  * send out pending queries for info | summaries
  */
-void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
+void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map)
 {
-  for (map< int, map<pg_t,PG::Query> >::iterator pit = query_map.begin();
+  for (map< int, map<pg_t,pg_query_t> >::iterator pit = query_map.begin();
        pit != query_map.end();
        pit++) {
     int who = pit->first;
@@ -4360,7 +4360,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
        ++p) { 
-    for (vector<PG::Info>::iterator i = p->second->pg_info.begin();
+    for (vector<pg_info_t>::iterator i = p->second->pg_info.begin();
 	 i != p->second->pg_info.end();
 	 ++i) {
       dout(20) << "Sending info " << *i << " to osd." << p->first << dendl;
@@ -4373,7 +4373,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
 
 /** PGNotify
  * from non-primary to primary
- * includes PG::Info.
+ * includes pg_info_t.
  * NOTE: called with opqueue active.
  */
 void OSD::handle_pg_notify(OpRequest *op)
@@ -4392,11 +4392,11 @@ void OSD::handle_pg_notify(OpRequest *op)
   op->mark_started();
 
   // look for unknown PGs i'm primary for
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
-  for (vector<PG::Info>::iterator it = m->get_pg_list().begin();
+  for (vector<pg_info_t>::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        it++) {
     PG *pg = 0;
@@ -4466,7 +4466,7 @@ void OSD::handle_pg_log(OpRequest *op)
 
   op->mark_started();
 
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   map< int, MOSDPGInfo* > info_map;
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
   pg->handle_log(from, m, &rctx);
@@ -4500,7 +4500,7 @@ void OSD::handle_pg_info(OpRequest *op)
 
   int created = 0;
 
-  for (vector<PG::Info>::iterator p = m->pg_info.begin();
+  for (vector<pg_info_t>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) {
     ObjectStore::Transaction *t = 0;
@@ -4687,7 +4687,7 @@ void OSD::handle_pg_missing(OpRequest *op)
 
   op->mark_started();
 
-  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, map<pg_t,pg_query_t> > query_map;
   PG::Log empty_log;
   int created = 0;
   _pro-cess_pg_info(m->get_epoch(), from, m->info, //misspelling added to prevent erroneous finds
@@ -4721,9 +4721,9 @@ void OSD::handle_pg_query(OpRequest *op)
 
   op->mark_started();
 
-  map< int, vector<PG::Info> > notify_list;
+  map< int, vector<pg_info_t> > notify_list;
   
-  for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
+  for (map<pg_t,pg_query_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
        it++) {
     pg_t pgid = it->first;
@@ -4736,7 +4736,7 @@ void OSD::handle_pg_query(OpRequest *op)
       int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
       // same primary?
-      PG::Info::History history = it->second.history;
+      pg_history_t history = it->second.history;
       project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
       if (m->get_epoch() < history.same_interval_since) {
@@ -4747,9 +4747,9 @@ void OSD::handle_pg_query(OpRequest *op)
 
       assert(role != 0);
       dout(10) << " pg " << pgid << " dne" << dendl;
-      PG::Info empty(pgid);
-      if (it->second.type == PG::Query::LOG ||
-	  it->second.type == PG::Query::FULLLOG) {
+      pg_info_t empty(pgid);
+      if (it->second.type == pg_query_t::LOG ||
+	  it->second.type == pg_query_t::FULLLOG) {
 	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
 					m->get_epoch());
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
@@ -5091,8 +5091,8 @@ void OSD::do_recovery(PG *pg)
     
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts(g_ceph_context);
-    map< int, vector<PG::Info> >  notify_list;  // primary -> list
-    map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+    map< int, vector<pg_info_t> >  notify_list;  // primary -> list
+    map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
     map<int,MOSDPGInfo*> info_map;  // peer -> message
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
 

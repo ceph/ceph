@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-#include "osd/PG.h"
+#include "osd/osd_types.h"
 
 /*
  * PGNotify - notify primary of my PGs and versions.
@@ -30,15 +30,15 @@ class MOSDPGNotify : public Message {
   /// query. This allows the recipient to disregard responses to old
   /// queries.
   epoch_t query_epoch;
-  vector<PG::Info> pg_list;   // pgid -> version
+  vector<pg_info_t> pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
-  vector<PG::Info>& get_pg_list() { return pg_list; }
+  vector<pg_info_t>& get_pg_list() { return pg_list; }
   epoch_t get_query_epoch() { return query_epoch; }
 
   MOSDPGNotify() {}
-  MOSDPGNotify(epoch_t e, vector<PG::Info>& l, epoch_t query_epoch) :
+  MOSDPGNotify(epoch_t e, vector<pg_info_t>& l, epoch_t query_epoch) :
     Message(MSG_OSD_PG_NOTIFY), epoch(e),
     query_epoch(query_epoch) {
     pg_list.swap(l);
@@ -47,15 +47,15 @@ private:
   ~MOSDPGNotify() {}
 
 public:  
-  const char *get_type_name() { return "PGnot"; }
+  const char *get_type_name() const { return "PGnot"; }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(epoch, payload);
     ::encode(pg_list, payload);
     ::encode(query_epoch, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_list, p);
@@ -63,9 +63,9 @@ public:
       ::decode(query_epoch, p);
     }
   }
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "pg_notify(";
-    for (vector<PG::Info>::iterator i = pg_list.begin();
+    for (vector<pg_info_t>::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       if (i != pg_list.begin())

@@ -16,6 +16,7 @@
 #define CEPH_MMONSUBSCRIBE_H
 
 #include "msg/Message.h"
+#include "include/ceph_features.h"
 
 /*
  * compatibility with old crap
@@ -41,12 +42,12 @@ public:
     what[w].flags = flags;
   }
 
-  const char *get_type_name() { return "mon_subscribe"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_subscribe"; }
+  void print(ostream& o) const {
     o << "mon_subscribe(" << what << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;
@@ -67,8 +68,8 @@ public:
       ::decode(what, p);
     }
   }
-  void encode_payload(CephContext *cct) {
-    if (get_connection()->has_feature(CEPH_FEATURE_SUBSCRIBE2)) {
+  void encode_payload(uint64_t features) {
+    if (features & CEPH_FEATURE_SUBSCRIBE2) {
       header.version = 2;
       ::encode(what, payload);
     } else {

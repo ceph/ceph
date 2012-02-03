@@ -1027,7 +1027,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client = req->get_source_inst();
-    encode_message(g_ceph_context, req, rr->request_bl);
+    encode_message(req, -1, rr->request_bl);   // for my use only; use all features
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
@@ -1093,13 +1093,13 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(g_ceph_context, m, bl);
+  encode_message(m, -1, bl);  // fixme: assume peers have all features we do.
 
   messenger->send_message(m, to);
 
   for (int i=0; i<(int)monmap->size(); i++) {
     if (i != rank)
-      messenger->send_message(new MRoute(cct, bl, to), monmap->get_inst(i));
+      messenger->send_message(new MRoute(bl, to), monmap->get_inst(i));
   }
 }
 

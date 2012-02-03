@@ -196,8 +196,8 @@ private:
   ~MMDSCacheRejoin() {}
 
 public:
-  const char *get_type_name() { return "cache_rejoin"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "cache_rejoin"; }
+  void print(ostream& out) const {
     out << "cache_rejoin " << get_opname(op);
   }
 
@@ -271,7 +271,7 @@ public:
   }
 
   // -- encoding --
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(strong_inodes, payload);
     ::encode(inode_base, payload);
@@ -288,7 +288,7 @@ public:
     ::encode(authpinned_dentries, payload);
     ::encode(xlocked_dentries, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(strong_inodes, p);

@@ -25,7 +25,7 @@ public:
     OP_BACKFILL_FINISH = 3,
     OP_BACKFILL_FINISH_ACK = 4,
   };
-  const char *get_op_name(int o) {
+  const char *get_op_name(int o) const {
     switch (o) {
     case OP_BACKFILL_PROGRESS: return "progress";
     case OP_BACKFILL_FINISH: return "finish";
@@ -40,7 +40,7 @@ public:
   hobject_t last_backfill;
   object_stat_collection_t stats;
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
@@ -50,7 +50,7 @@ public:
     ::decode(stats, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
@@ -70,8 +70,8 @@ private:
   ~MOSDPGBackfill() {}
 
 public:
-  const char *get_type_name() { return "pg_backfill"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "pg_backfill"; }
+  void print(ostream& out) const {
     out << "pg_backfill(" << get_op_name(op)
 	<< " " << pgid
 	<< " e " << map_epoch << "/" << query_epoch

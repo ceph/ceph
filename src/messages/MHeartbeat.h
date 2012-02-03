@@ -46,16 +46,16 @@ private:
   ~MHeartbeat() {}
 
 public:
-  const char *get_type_name() { return "HB"; }
+  const char *get_type_name() const { return "HB"; }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(load, payload);
     ::encode(beat, payload);
     ::encode(import_map, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    utime_t now(ceph_clock_now(cct));
+    utime_t now(ceph_clock_now(NULL));
     ::decode(load, now, p);
     ::decode(beat, p);
     ::decode(import_map, p);

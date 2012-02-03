@@ -41,22 +41,22 @@ private:
   ~MOSDRepScrub() {}
 
 public:
-  const char *get_type_name() { return "replica scrub"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "replica scrub"; }
+  void print(ostream& out) const {
     out << "replica scrub(pg: ";
     out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
 	<< "epoch:" << map_epoch;
     out << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     header.version = 2;
     ::encode(pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     assert(header.version == 2);
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);
