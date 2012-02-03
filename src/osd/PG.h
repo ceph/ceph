@@ -469,7 +469,7 @@ public:
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
-  int         state;   // see bit defns above
+  unsigned    state;   // PG_STATE_*
 
 public:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()

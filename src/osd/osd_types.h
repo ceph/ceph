@@ -817,6 +817,11 @@ struct pg_stat_t {
   eversion_t version;
   eversion_t reported;
   __u32 state;
+  utime_t last_fresh;   // last reported
+  utime_t last_change;  // new state != previous state
+  utime_t last_active;  // state & PG_STATE_ACTIVE
+  utime_t last_clean;   // state & PG_STATE_CLEAN
+  utime_t last_unstale; // (state & PG_STATE_STALE) == 0
 
   eversion_t log_start;         // (log_start,version]
   eversion_t ondisk_log_start;  // there may be more on disk
@@ -835,13 +840,14 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
 
   vector<int> up, acting;
-
+  epoch_t mapping_epoch;
 
   pg_stat_t()
     : state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0), 
-      log_size(0), ondisk_log_size(0)
+      log_size(0), ondisk_log_size(0),
+      mapping_epoch(0)
   { }
 
   void add(const pg_stat_t& o) {

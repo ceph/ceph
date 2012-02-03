@@ -865,6 +865,12 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("version") << version;
   f->dump_stream("reported") << reported;
   f->dump_string("state", pg_state_string(state));
+  f->dump_stream("last_fresh") << last_fresh;
+  f->dump_stream("last_change") << last_change;
+  f->dump_stream("last_active") << last_active;
+  f->dump_stream("last_clean") << last_clean;
+  f->dump_stream("last_unstale") << last_unstale;
+  f->dump_unsigned("mapping_epoch", mapping_epoch);
   f->dump_stream("log_start") << log_start;
   f->dump_stream("ondisk_log_start") << ondisk_log_start;
   f->dump_unsigned("created", created);
@@ -888,7 +894,7 @@ void pg_stat_t::dump(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(8, 8, bl);
+  ENCODE_START(9, 8, bl);
   ::encode(version, bl);
   ::encode(reported, bl);
   ::encode(state, bl);
@@ -905,12 +911,18 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(ondisk_log_size, bl);
   ::encode(up, bl);
   ::encode(acting, bl);
+  ::encode(last_fresh, bl);
+  ::encode(last_change, bl);
+  ::encode(last_active, bl);
+  ::encode(last_clean, bl);
+  ::encode(last_unstale, bl);
+  ::encode(mapping_epoch, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported, bl);
   ::decode(state, bl);
@@ -961,6 +973,14 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     ::decode(ondisk_log_size, bl);
     ::decode(up, bl);
     ::decode(acting, bl);
+    if (struct_v >= 9) {
+      ::decode(last_fresh, bl);
+      ::decode(last_change, bl);
+      ::decode(last_active, bl);
+      ::decode(last_clean, bl);
+      ::decode(last_unstale, bl);
+      ::decode(mapping_epoch, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -973,6 +993,12 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.version = eversion_t(1, 3);
   a.reported = eversion_t(1, 2);
   a.state = 123;
+  a.mapping_epoch = 998;
+  a.last_fresh = utime_t(1002, 1);
+  a.last_change = utime_t(1002, 2);
+  a.last_active = utime_t(1002, 3);
+  a.last_clean = utime_t(1002, 4);
+  a.last_unstale = utime_t(1002, 5);
   a.log_start = eversion_t(1, 4);
   a.ondisk_log_start = eversion_t(1, 5);
   a.created = 6;
