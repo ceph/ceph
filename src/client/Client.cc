@@ -285,6 +285,8 @@ int Client::init()
   if (r < 0)
     return r;
 
+  objecter->init();
+
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);
   monclient->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
@@ -3226,8 +3228,6 @@ int Client::mount(const std::string &mount_root)
   whoami = monclient->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
 
-  objecter->init();
-
   mounted = true;
 
   tick(); // start tick
@@ -3385,8 +3385,6 @@ void Client::unmount()
   mounted = false;
 
   ldout(cct, 2) << "unmounted." << dendl;
-
-  objecter->shutdown();
 }
 
 
