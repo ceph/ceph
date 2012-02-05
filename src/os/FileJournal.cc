@@ -112,7 +112,9 @@ int FileJournal::_open(bool forwrite, bool create)
   dout(1) << "_open " << fn << " fd " << fd
 	  << ": " << max_size 
 	  << " bytes, block size " << block_size
-	  << " bytes, directio = " << directio << dendl;
+	  << " bytes, directio = " << directio
+	  << ", aio = " << aio
+	  << dendl;
   return 0;
 
  out_fd:
