@@ -78,6 +78,21 @@ bool pg_t::parse(const char *s)
   return true;
 }
 
+void pg_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("pool", m_pool);
+  f->dump_unsigned("seed", m_seed);
+  f->dump_int("preferred_osd", m_preferred);
+}
+
+void pg_t::generate_test_instances(list<pg_t*>& o)
+{
+  o.push_back(new pg_t);
+  o.push_back(new pg_t(1, 2, -1));
+  o.push_back(new pg_t(13123, 3, -1));
+  o.push_back(new pg_t(131223, 4, 23));
+}
+
 ostream& operator<<(ostream& out, const pg_t &pg)
 {
   out << pg.pool() << '.';

@@ -193,6 +193,8 @@ struct pg_t {
     ::decode(opg, bl);
     *this = opg;
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_t)
 
