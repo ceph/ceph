@@ -52,6 +52,9 @@ TYPE(ObjectStore::Transaction)
 TYPE(PGMap::Incremental)
 TYPE(PGMap)
 
+#include "mon/MonMap.h"
+TYPE(MonMap)
+
 // --- messages ---
 #include "messages/MAuth.h"
 MESSAGE(MAuth)

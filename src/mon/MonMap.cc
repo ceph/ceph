@@ -57,6 +57,16 @@ void MonMap::decode(bufferlist::iterator &p)
   calc_ranks();
 }
 
+void MonMap::generate_test_instances(list<MonMap*>& o)
+{
+  o.push_back(new MonMap);
+  o.push_back(new MonMap);
+  o.back()->epoch = 1;
+  o.back()->last_changed = utime_t(123, 456);
+  o.back()->created = utime_t(789, 101112);
+  o.back()->add("one", entity_addr_t());
+}
+
 // read from/write to a file
 int MonMap::write(const char *fn) 
 {

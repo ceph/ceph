@@ -186,14 +186,10 @@ class MonMap {
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
-};
 
-inline void encode(MonMap &m, bufferlist &bl) {
-  m.encode(bl);
-}
-inline void decode(MonMap &m, bufferlist::iterator &p) {
-  m.decode(p);
-}
+  static void generate_test_instances(list<MonMap*>& o);
+};
+WRITE_CLASS_ENCODER(MonMap)
 
 inline ostream& operator<<(ostream& out, MonMap& m) {
   m.print_summary(out);
