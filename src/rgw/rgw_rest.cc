@@ -528,7 +528,7 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      s->object_str = req;
+      url_decode(req, s->object_str);
       s->object = strdup(s->object_str.c_str());
     }
 
@@ -539,7 +539,7 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
   } else {
-    s->object_str = first;
+    url_decode(first, s->object_str);
     s->object = strdup(s->object_str.c_str());
     goto done;
   }
@@ -549,7 +549,7 @@ static int init_entities_from_header(struct req_state *s)
 
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
-    s->object_str = encoded_obj_str;
+    url_decode(encoded_obj_str, s->object_str);
 
     if (s->object_str.size() > 0) {
       s->object = strdup(s->object_str.c_str());
