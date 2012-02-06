@@ -1,3 +1,5 @@
+#include "include/CompatSet.h"
+TYPE(CompatSet)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
