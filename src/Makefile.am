@@ -1171,7 +1171,6 @@ noinst_HEADERS = \
 	include/color.h\
 	include/compat.h\
 	include/crc32c.h\
-        include/cstring.h\
         include/encoding.h\
         include/err.h\
         include/error.h\
@@ -1186,7 +1185,6 @@ noinst_HEADERS = \
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
-        include/nstring.h\
         include/object.h\
         include/page.h\
         include/rangeset.h\
