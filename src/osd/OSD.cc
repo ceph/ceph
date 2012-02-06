@@ -707,6 +707,7 @@ int OSD::init()
   if (r < 0) {
     monc->shutdown();
     store->umount();
+    osd_lock.Lock(); // locker is going to unlock this on function exit
     return r;
   }
 
