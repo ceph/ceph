@@ -413,47 +413,6 @@ struct osd_stat_t {
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
-  void dump(Formatter *f) const {
-    f->dump_unsigned("kb", kb);
-    f->dump_unsigned("kb_used", kb_used);
-    f->dump_unsigned("kb_avail", kb_avail);
-    f->open_array_section("hb_in");
-    for (vector<int>::const_iterator p = hb_in.begin(); p != hb_in.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->open_array_section("hb_out");
-    for (vector<int>::const_iterator p = hb_out.begin(); p != hb_out.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
-    f->dump_int("num_snap_trimming", num_snap_trimming);
-  }
-
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(kb, bl);
-    ::encode(kb_used, bl);
-    ::encode(kb_avail, bl);
-    ::encode(snap_trim_queue_len, bl);
-    ::encode(num_snap_trimming, bl);
-    ::encode(hb_in, bl);
-    ::encode(hb_out, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(kb, bl);
-    ::decode(kb_used, bl);
-    ::decode(kb_avail, bl);
-    ::decode(snap_trim_queue_len, bl);
-    ::decode(num_snap_trimming, bl);
-    ::decode(hb_in, bl);
-    ::decode(hb_out, bl);
-  }
-
-  static void generate_test_instances(std::list<osd_stat_t*>& o);
-  
   void add(const osd_stat_t& o) {
     kb += o.kb;
     kb_used += o.kb_used;
@@ -469,6 +428,10 @@ struct osd_stat_t {
     num_snap_trimming -= o.num_snap_trimming;
   }
 
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(std::list<osd_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_stat_t)
 
