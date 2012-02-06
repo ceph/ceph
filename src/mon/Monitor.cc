@@ -144,6 +144,25 @@ Paxos *Monitor::get_paxos_by_name(const string& name)
   return NULL;
 }
 
+PaxosService *Monitor::get_paxos_service_by_name(const string& name)
+{
+  if (name == "mdsmap")
+    return paxos_service[PAXOS_MDSMAP];
+  if (name == "monmap")
+    return paxos_service[PAXOS_MONMAP];
+  if (name == "osdmap")
+    return paxos_service[PAXOS_OSDMAP];
+  if (name == "pgmap")
+    return paxos_service[PAXOS_PGMAP];
+  if (name == "logm")
+    return paxos_service[PAXOS_LOG];
+  if (name == "auth")
+    return paxos_service[PAXOS_AUTH];
+
+  assert(0 == "given name does not match known paxos service");
+  return NULL;
+}
+
 Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -573,6 +592,10 @@ void Monitor::slurp()
       messenger->send_message(m, slurp_source);
       return;
     }
+
+    PaxosService *paxs = get_paxos_service_by_name(p->first);
+    assert(paxs);
+    paxs->update_from_paxos();
 
     slurp_versions.erase(p++);
   }
