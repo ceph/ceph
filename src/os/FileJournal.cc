@@ -1290,29 +1290,21 @@ void FileJournal::write_finish_thread_entry()
 void FileJournal::check_aio_completion()
 {
   assert(write_lock.is_locked());
+  dout(20) << "check_aio_completion" << dendl;
 
   bool completed_something = false;
 
-  dout(20) << "check_aio_completion" << dendl;
-
-  while (!aio_queue.empty()) {
-    list<aio_info>::iterator p = aio_queue.begin();
-    if (!p->done)
-      break;
-      
-    // complete
+  list<aio_info>::iterator p = aio_queue.begin();
+  while (p != aio_queue.end() && p->done) {
     dout(20) << "check_aio_completion completed seq " << p->seq << " "
 	     << p->off << "~" << p->len << dendl;
     if (p->seq) {
       journaled_seq = p->seq;
-      
       completed_something = true;
     }
-
     aio_num--;
     aio_bytes -= p->len;
-
-    aio_queue.erase(p);
+    aio_queue.erase(p++);
   }
 
   if (completed_something) {
