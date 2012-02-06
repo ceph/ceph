@@ -284,6 +284,9 @@ public:
     return str != rhs.str;
   }
 
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<coll_t*>& o);
+
 private:
   static std::string pg_and_snap_to_str(pg_t p, snapid_t s) {
     std::ostringstream oss;

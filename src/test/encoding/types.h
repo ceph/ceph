@@ -22,6 +22,7 @@ TYPE(PG::OndiskLog)
 
 #include "osd/osd_types.h"
 TYPE(pg_t)
+TYPE(coll_t)
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
 TYPE(pool_snap_info_t)

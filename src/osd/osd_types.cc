@@ -191,6 +191,20 @@ void coll_t::decode(bufferlist::iterator& bl)
   }
 }
 
+void coll_t::dump(Formatter *f) const
+{
+  f->dump_string("name", str);
+}
+
+void coll_t::generate_test_instances(list<coll_t*>& o)
+{
+  o.push_back(new coll_t);
+  o.push_back(new coll_t("meta"));
+  o.push_back(new coll_t("temp"));
+  o.push_back(new coll_t("foo"));
+  o.push_back(new coll_t("bar"));
+}
+
 // ---
 
 std::string pg_state_string(int state)
