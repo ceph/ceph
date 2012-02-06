@@ -34,7 +34,7 @@ private:
   LogSummary pending_summary, summary;
 
   void create_initial();
-  bool update_from_paxos();
+  void update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);  // propose pending update to peers
 

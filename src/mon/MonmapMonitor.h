@@ -45,7 +45,7 @@ class MonmapMonitor : public PaxosService {
 
   void create_initial();
 
-  bool update_from_paxos();
+  void update_from_paxos();
 
   void create_pending();
 

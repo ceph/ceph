@@ -53,7 +53,7 @@ private:
 public:  
   void create_initial();
 private:
-  bool update_from_paxos();
+  void update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);
   void on_active();
