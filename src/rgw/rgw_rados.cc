@@ -391,7 +391,9 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         }
       }
 
-      result.push_back(eiter->second);
+      RGWObjEnt ent = eiter->second;
+      ent.name = obj;
+      result.push_back(ent);
       count++;
     }
   } while (truncated && count < max);

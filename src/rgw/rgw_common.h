@@ -735,7 +735,7 @@ public:
         object = o;
         return;
       }
-      object = "__";
+      object = "_";
       object.append(o);
     } else {
       object = "_";
