@@ -42,7 +42,7 @@ struct SnapContext {
   vector<snapid_t> snaps;  // existent snaps, in descending order
 
   SnapContext() {}
-  SnapContext(snapid_t s, vector<snapid_t>& v) : seq(s), snaps(v) {}    
+  SnapContext(snapid_t s, const vector<snapid_t>& v) : seq(s), snaps(v) {}    
 
   bool is_valid() const;
 

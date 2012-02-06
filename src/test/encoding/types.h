@@ -39,6 +39,7 @@ TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
+TYPE(SnapSet)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)

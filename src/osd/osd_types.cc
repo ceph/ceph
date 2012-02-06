@@ -1560,13 +1560,48 @@ void SnapSet::decode(bufferlist::iterator& bl)
   ::decode(clone_size, bl);
 }
 
+void SnapSet::dump(Formatter *f) const
+{
+  SnapContext sc(seq, snaps);
+  f->open_object_section("snap_context");
+  sc.dump(f);
+  f->close_section();
+  f->dump_int("head_exists", head_exists);
+  f->open_array_section("clones");
+  for (vector<snapid_t>::const_iterator p = clones.begin(); p != clones.end(); ++p) {
+    f->open_object_section("clone");
+    f->dump_unsigned("snap", *p);
+    f->dump_unsigned("size", clone_size.find(*p)->second);
+    f->dump_stream("overlap") << clone_overlap.find(*p)->second;
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void SnapSet::generate_test_instances(list<SnapSet*>& o)
+{
+  o.push_back(new SnapSet);
+  o.push_back(new SnapSet);
+  o.back()->head_exists = true;
+  o.back()->seq = 123;
+  o.back()->snaps.push_back(123);
+  o.back()->snaps.push_back(12);
+  o.push_back(new SnapSet);
+  o.back()->head_exists = true;
+  o.back()->seq = 123;
+  o.back()->snaps.push_back(123);
+  o.back()->snaps.push_back(12);
+  o.back()->clones.push_back(12);
+  o.back()->clone_size[12] = 12345;
+  o.back()->clone_overlap[12];
+}
+
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
   return out << cs.seq << "=" << cs.snaps << ":"
 	     << cs.clones
 	     << (cs.head_exists ? "+head":"");
 }
-
 
 // -- watch_info_t --
 
