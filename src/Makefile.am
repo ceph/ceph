@@ -899,6 +899,7 @@ libcommon_files = \
 	common/armor.c \
 	common/xattr.c \
 	common/safe_io.c \
+	common/snap_types.cc \
 	common/str_list.cc \
 	common/errno.cc \
 	msg/SimpleMessenger.cc \
@@ -1103,6 +1104,7 @@ noinst_HEADERS = \
 	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
+	common/snap_types.h\
         common/Clock.h\
         common/Cond.h\
         common/ConfUtils.h\

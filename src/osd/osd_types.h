@@ -24,6 +24,7 @@
 #include "include/utime.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
+#include "common/snap_types.h"
 #include "common/Formatter.h"
 
 

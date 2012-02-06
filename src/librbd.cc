@@ -15,6 +15,7 @@
 #include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/snap_types.h"
 #include "include/rbd/librbd.hpp"
 
 #include <errno.h>
