@@ -1527,20 +1527,10 @@ struct ScrubMap {
 
     object(): size(0),negative(0),attrs() {}
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(size, bl);
-      ::encode(negative, bl);
-      ::encode(attrs, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(size, bl);
-      ::decode(negative, bl);
-      ::decode(attrs, bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<object*>& o);
   };
   WRITE_CLASS_ENCODER(object)
 
@@ -1554,6 +1544,8 @@ struct ScrubMap {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)

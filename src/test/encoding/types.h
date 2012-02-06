@@ -42,6 +42,8 @@ TYPE(pg_ls_response_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
 TYPE(SnapSet)
+TYPE(ScrubMap::object)
+TYPE(ScrubMap)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)

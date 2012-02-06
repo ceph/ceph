@@ -1906,6 +1906,90 @@ void ScrubMap::decode(bufferlist::iterator& bl)
   ::decode(incr_since, bl);
 }
 
+void ScrubMap::dump(Formatter *f) const
+{
+  f->dump_stream("valid_through") << valid_through;
+  f->dump_stream("incremental_since") << incr_since;
+  f->open_array_section("attrs");
+  for (map<string,bufferptr>::const_iterator p = attrs.begin(); p != attrs.end(); ++p) {
+    f->open_object_section("attr");
+    f->dump_string("name", p->first);
+    f->dump_int("length", p->second.length());
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("objects");
+  for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
+    f->open_object_section("object");
+    f->dump_string("name", p->first.oid.name);
+    f->dump_unsigned("hash", p->first.hash);
+    f->dump_string("key", p->first.get_key());
+    f->dump_int("snapid", p->first.snap);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
+{
+  o.push_back(new ScrubMap);
+  o.push_back(new ScrubMap);
+  o.back()->valid_through = eversion_t(1, 2);
+  o.back()->incr_since = eversion_t(3, 4);
+  o.back()->attrs["foo"] = buffer::copy("foo", 3);
+  o.back()->attrs["bar"] = buffer::copy("barval", 6);
+  list<object*> obj;
+  object::generate_test_instances(obj);
+  o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456)] = *obj.back();
+  obj.pop_back();
+  o.back()->objects[hobject_t(object_t("bar"), string(), 123, 456)] = *obj.back();
+}
+
+// -- ScrubMap::object --
+
+void ScrubMap::object::encode(bufferlist& bl) const
+{
+  __u8 struct_v = 1;
+  ::encode(struct_v, bl);
+  ::encode(size, bl);
+  ::encode(negative, bl);
+  ::encode(attrs, bl);
+}
+
+void ScrubMap::object::decode(bufferlist::iterator& bl)
+{
+  __u8 struct_v;
+  ::decode(struct_v, bl);
+  ::decode(size, bl);
+  ::decode(negative, bl);
+  ::decode(attrs, bl);
+}
+
+void ScrubMap::object::dump(Formatter *f) const
+{
+  f->dump_int("size", size);
+  f->dump_int("negative", negative);
+  f->open_array_section("attrs");
+  for (map<string,bufferptr>::const_iterator p = attrs.begin(); p != attrs.end(); ++p) {
+    f->open_object_section("attr");
+    f->dump_string("name", p->first);
+    f->dump_int("length", p->second.length());
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ScrubMap::object::generate_test_instances(list<object*>& o)
+{
+  o.push_back(new object);
+  o.push_back(new object);
+  o.back()->negative = true;
+  o.push_back(new object);
+  o.back()->size = 123;
+  o.back()->attrs["foo"] = buffer::copy("foo", 3);
+  o.back()->attrs["bar"] = buffer::copy("barval", 6);
+}
 
 // -- OSDOp --
 
