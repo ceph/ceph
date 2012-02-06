@@ -158,7 +158,7 @@ class MonMap {
     i.name = entity_name_t::MON(m);
     return i;
   }
-  entity_inst_t get_inst(unsigned m) {
+  entity_inst_t get_inst(unsigned m) const {
     assert(m < rank_addr.size());
     entity_inst_t i;
     i.addr = rank_addr[m];
@@ -166,53 +166,14 @@ class MonMap {
     return i;
   }
 
-  void encode(bufferlist& blist) {
-    __u16 v = 2;
-    ::encode(v, blist);
-    ::encode_raw(fsid, blist);
-    ::encode(epoch, blist);
-    ::encode(mon_addr, blist);
-    ::encode(last_changed, blist);
-    ::encode(created, blist);
-  }
-  void encode_v1(bufferlist& blist) {
-    __u16 v = 1;
-    ::encode(v, blist);
-    ::encode_raw(fsid, blist);
-    ::encode(epoch, blist);
-    vector<entity_inst_t> mon_inst(mon_addr.size());
-    for (unsigned n = 0; n < mon_addr.size(); n++)
-      mon_inst[n] = get_inst(n);
-    ::encode(mon_inst, blist);
-    ::encode(last_changed, blist);
-    ::encode(created, blist);
-  }
+  void encode(bufferlist& blist) const;
+  void encode_v1(bufferlist& blist) const;
 
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
     decode(p);
   }
-  void decode(bufferlist::iterator &p) {
-    __u16 v;
-    ::decode(v, p);
-    ::decode_raw(fsid, p);
-    ::decode(epoch, p);
-    if (v == 1) {
-      vector<entity_inst_t> mon_inst;
-      ::decode(mon_inst, p);
-      for (unsigned i = 0; i < mon_inst.size(); i++) {
-	char n[2];
-	n[0] = '0' + i;
-	n[1] = 0;
-	string name = n;
-	mon_addr[name] = mon_inst[i].addr;
-      }
-    } else
-      ::decode(mon_addr, p);
-    ::decode(last_changed, p);
-    ::decode(created, p);
-    calc_ranks();
-  }
+  void decode(bufferlist::iterator &p);
 
   void generate_fsid() {
     fsid.generate_random();
