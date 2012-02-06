@@ -354,7 +354,11 @@ static int crush_choose(const struct crush_map *map,
 					item = bucket_perm_choose(in, x, r);
 				else
 					item = crush_bucket_choose(in, x, r);
-				BUG_ON(item >= map->max_devices);
+				if (item >= map->max_devices) {
+					dprintk("   bad item %d\n", item);
+					skip_rep = 1;
+					break;
+				}
 
 				/* desired type? */
 				if (item < 0)
@@ -365,8 +369,12 @@ static int crush_choose(const struct crush_map *map,
 
 				/* keep going? */
 				if (itemtype != type) {
-					BUG_ON(item >= 0 ||
-					       (-1-item) >= map->max_buckets);
+					if (item >= 0 ||
+					    (-1-item) >= map->max_buckets) {
+						dprintk("   bad item type %d\n", type);
+						skip_rep = 1;
+						break;
+					}
 					in = map->buckets[-1-item];
 					retry_bucket = 1;
 					continue;
