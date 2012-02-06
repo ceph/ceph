@@ -26,6 +26,8 @@
 #include "common/config.h"
 #include <sstream>
 
+namespace ceph { class Formatter; }
+
 class PGMap {
 public:
   // the map
@@ -49,57 +51,10 @@ public:
     float full_ratio;
     float nearfull_ratio;
 
-    void encode(bufferlist &bl) const {
-      __u8 v = 3;
-      ::encode(v, bl);
-      ::encode(version, bl);
-      ::encode(pg_stat_updates, bl);
-      ::encode(osd_stat_updates, bl);
-      ::encode(osd_stat_rm, bl);
-      ::encode(osdmap_epoch, bl);
-      ::encode(pg_scan, bl);
-      ::encode(full_ratio, bl);
-      ::encode(nearfull_ratio, bl);
-      ::encode(pg_remove, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 v;
-      ::decode(v, bl);
-      ::decode(version, bl);
-      if (v < 3) {
-	pg_stat_updates.clear();
-	__u32 n;
-	::decode(n, bl);
-	while (n--) {
-	  old_pg_t opgid;
-	  ::decode(opgid, bl);
-	  pg_t pgid = opgid;
-	  ::decode(pg_stat_updates[pgid], bl);
-	}
-      } else {
-	::decode(pg_stat_updates, bl);
-      }
-      ::decode(osd_stat_updates, bl);
-      ::decode(osd_stat_rm, bl);
-      ::decode(osdmap_epoch, bl);
-      ::decode(pg_scan, bl);
-      if (v >= 2) {
-        ::decode(full_ratio, bl);
-        ::decode(nearfull_ratio, bl);
-      }
-      if (v < 3) {
-	pg_remove.clear();
-  	__u32 n;
-	::decode(n, bl);
-	while (n--) {
-	  old_pg_t opgid;
-	  ::decode(opgid, bl);
-	  pg_remove.insert(pg_t(opgid));
-	}
-      } else {
-	::decode(pg_remove, bl);
-      }
-    }
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<Incremental*>& o);
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0),
         full_ratio(0), nearfull_ratio(0) {}
@@ -133,7 +88,7 @@ public:
   void stat_osd_add(const osd_stat_t &s);
   void stat_osd_sub(const osd_stat_t &s);
   
-  void encode(bufferlist &bl);
+  void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
 
   void dump(Formatter *f) const; 
@@ -148,7 +103,11 @@ public:
   void print_summary(ostream& out) const;
 
   epoch_t calc_min_last_epoch_clean() const;
+
+  static void generate_test_instances(list<PGMap*>& o);
 };
+WRITE_CLASS_ENCODER(PGMap::Incremental)
+WRITE_CLASS_ENCODER(PGMap)
 
 inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_summary(out);
