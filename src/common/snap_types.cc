@@ -80,3 +80,14 @@ void SnapContext::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
   f->close_section();
 }
+
+void SnapContext::generate_test_instances(list<SnapContext*>& o)
+{
+  o.push_back(new SnapContext);
+  vector<snapid_t> v;
+  o.push_back(new SnapContext(10, v));
+  v.push_back(18);
+  v.push_back(3);
+  v.push_back(1);
+  o.push_back(new SnapContext(20, v));
+}
