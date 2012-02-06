@@ -1,6 +1,9 @@
 #include "include/CompatSet.h"
 TYPE(CompatSet)
 
+#include "include/filepath.h"
+TYPE(filepath)
+
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE(entity_addr_t)
