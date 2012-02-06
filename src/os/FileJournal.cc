@@ -1250,30 +1250,30 @@ void FileJournal::write_finish_thread_entry()
     
     write_lock.Unlock();
 
-    while (true) {
-      dout(20) << "write_finish_thread_entry waiting for aio" << dendl;
-      io_event event;
-      int r = io_getevents(aio_ctx, 1, 1, &event, NULL);
-      if (r < 0) {
-	if (r == -EINTR) {
-	  dout(0) << "io_getevents got " << cpp_strerror(r) << dendl;
-	  write_lock.Lock();
-	  break;
-	}
-	derr << "io_getevents got " << cpp_strerror(r) << dendl;
-	assert(0 == "got unexpected error from io_getevents");
+    dout(20) << "write_finish_thread_entry waiting for aio(s)" << dendl;
+    io_event event[16];
+    int r = io_getevents(aio_ctx, 1, 16, event, NULL);
+    if (r < 0) {
+      if (r == -EINTR) {
+	dout(0) << "io_getevents got " << cpp_strerror(r) << dendl;
+	write_lock.Lock();
+	continue;
       }
-      write_lock.Lock();
+      derr << "io_getevents got " << cpp_strerror(r) << dendl;
+      assert(0 == "got unexpected error from io_getevents");
+    }
 
-      aio_info *ai = (aio_info *)event.obj;
-      if (event.res != ai->len) {
+    write_lock.Lock();
+
+    for (int i=0; i<r; i++) {
+      aio_info *ai = (aio_info *)event[i].obj;
+      if (event[i].res != ai->len) {
 	derr << "aio to " << ai->off << "~" << ai->len
-	     << " got " << cpp_strerror(event.res) << dendl;
+	     << " got " << cpp_strerror(event[i].res) << dendl;
 	assert(0 == "unexpected aio error");
       }
       dout(10) << "write_finish_thread_entry aio " << ai->off << "~" << ai->len << " done" << dendl;
       ai->done = true;
-      break;
     }
 
     check_aio_completion();
