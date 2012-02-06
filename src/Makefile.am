@@ -1193,7 +1193,6 @@ noinst_HEADERS = \
         include/statlite.h\
 	include/str_list.h\
         include/triple.h\
-        include/tstring.h\
         include/types.h\
         include/utime.h\
         include/dlist.h\
