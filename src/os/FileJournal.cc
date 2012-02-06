@@ -1027,7 +1027,7 @@ void FileJournal::do_write(bufferlist& bl)
 void FileJournal::flush()
 {
   write_lock.Lock();
-  while ((!writeq.empty() || writing) && !write_stop) {
+  while ((!writeq.empty() || writing)) {
     dout(5) << "flush waiting for writeq to empty and writes to complete" << dendl;
     write_empty_cond.Wait(write_lock);
   }
