@@ -223,14 +223,26 @@ void PGMap::redo_full_sets()
   }
 }
 
-void PGMap::stat_zero()
+void PGMap::calc_stats()
 {
-  num_pg = 0;
   num_pg_by_state.clear();
+  num_pg = 0;
   num_osd = 0;
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
+
+  for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
+       p != pg_stat.end();
+       ++p) {
+    stat_pg_add(p->first, p->second);
+  }
+  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+       p != osd_stat.end();
+       ++p)
+    stat_osd_add(p->second);
+
+  redo_full_sets();
 }
 
 void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
@@ -317,18 +329,8 @@ void PGMap::decode(bufferlist::iterator &bl)
     ::decode(full_ratio, bl);
     ::decode(nearfull_ratio, bl);
   }
-  stat_zero();
-  for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
-       p != pg_stat.end();
-       ++p) {
-    stat_pg_add(p->first, p->second);
-  }
-  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
-       p != osd_stat.end();
-       ++p)
-    stat_osd_add(p->second);
-  
-  redo_full_sets();
+
+  calc_stats();
 }
 
 void PGMap::dump(Formatter *f) const

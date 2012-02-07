@@ -81,7 +81,7 @@ public:
 
   void apply_incremental(const Incremental& inc);
   void redo_full_sets();
-  void stat_zero();
+  void calc_stats();
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s);
   void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s);
   void stat_osd_add(const osd_stat_t &s);
