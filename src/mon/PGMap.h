@@ -77,8 +77,7 @@ public:
 	    last_osdmap_epoch(0), last_pg_scan(0),
 	    num_pg(0),
 	    num_osd(0),
-	    full_ratio(((float)g_conf->mon_osd_full_ratio)/100),
-	    nearfull_ratio(((float)g_conf->mon_osd_nearfull_ratio)/100) {}
+	    full_ratio(.8), nearfull_ratio(.9) {}
 
   void apply_incremental(const Incremental& inc);
   void redo_full_sets();
