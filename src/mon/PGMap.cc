@@ -104,13 +104,21 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
 {
   o.push_back(new Incremental);
   o.push_back(new Incremental);
-  o.back()->version = 12;
+  o.back()->version = 1;
+  o.push_back(new Incremental);
+  o.back()->version = 2;
+  o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
+  o.back()->osd_stat_updates[5] = osd_stat_t();
+  o.push_back(new Incremental);
+  o.back()->version = 3;
   o.back()->osdmap_epoch = 1;
   o.back()->pg_scan = 2;
   o.back()->full_ratio = .2;
   o.back()->nearfull_ratio = .3;
-  o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
-  o.back()->osd_stat_updates[5] = osd_stat_t();  
+  o.back()->pg_stat_updates[pg_t(4,5,6)] = pg_stat_t();
+  o.back()->osd_stat_updates[6] = osd_stat_t();
+  o.back()->pg_remove.insert(pg_t(1,2,3));
+  o.back()->osd_stat_rm.insert(5);
 }
 
 
@@ -260,7 +268,12 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
   num_pg--;
   if (--num_pg_by_state[s.state] == 0)
     num_pg_by_state.erase(s.state);
-  pg_pool_sum[pgid.pool()].sub(s);
+
+  pool_stat_t& ps = pg_pool_sum[pgid.pool()];
+  ps.sub(s);
+  if (ps.is_zero())
+    pg_pool_sum.erase(pgid.pool());
+
   pg_sum.sub(s);
   if (s.state & PG_STATE_CREATING)
     creating_pgs.erase(pgid);
@@ -524,11 +537,12 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
 {
   o.push_back(new PGMap);
   o.push_back(new PGMap);
-  o.back()->version = 888;
-  o.back()->last_osdmap_epoch = 12;
-  o.back()->last_pg_scan = 34;
-  o.back()->full_osds.insert(3);
-  o.back()->nearfull_osds.insert(4);
-  o.back()->pg_stat[pg_t(1,2,3)] = pg_stat_t();  
-  o.back()->osd_stat[5] = osd_stat_t();  
+  list<Incremental*> inc;
+  Incremental::generate_test_instances(inc);
+  inc.pop_front();
+  while (!inc.empty()) {
+    o.back()->apply_incremental(*inc.front());
+    delete inc.front();
+    inc.pop_front();
+  }
 }
