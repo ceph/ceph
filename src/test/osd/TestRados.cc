@@ -83,6 +83,8 @@ private:
   TestOp *gen_op(RadosTestContext &context, TestOpType type)
   {
     string oid;
+    cout << "oids not in use " << context.oid_not_in_use.size() << std::endl;
+    assert(context.oid_not_in_use.size());
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -121,9 +123,20 @@ private:
 	int snap = rand_choose(context.snaps)->first;
 	string oid = *(rand_choose(context.oid_not_in_use));
 	cout << "RollingBack " << oid << " to " << snap << std::endl;
-	m_nextop = new ReadOp(&context, oid, m_stats);
         return new RollbackOp(&context, oid, snap);
       }
+
+    case TEST_OP_SETATTR:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << "Setting attrs on " << oid
+	   << " current snap is " << context.current_snap << std::endl;
+      return new SetAttrsOp(&context, oid, m_stats);
+
+    case TEST_OP_RMATTR:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << "Removing attrs on " << oid
+	   << " current snap is " << context.current_snap << std::endl;
+      return new RemoveAttrsOp(&context, oid, m_stats);
 
     default:
       cerr << "Invalid op type " << type << std::endl;
@@ -161,6 +174,8 @@ int main(int argc, char **argv)
     { TEST_OP_SNAP_CREATE, "snap_create" },
     { TEST_OP_SNAP_REMOVE, "snap_remove" },
     { TEST_OP_ROLLBACK, "rollback" },
+    { TEST_OP_SETATTR, "setattr" },
+    { TEST_OP_RMATTR, "rmattr" },
     { TEST_OP_READ /* grr */, NULL },
   };
 
