@@ -195,8 +195,12 @@ void PGMonitor::tick()
 void PGMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
-  pg_map.full_ratio = ((float)g_conf->mon_osd_full_ratio) / 100.0;
-  pg_map.nearfull_ratio = ((float)g_conf->mon_osd_nearfull_ratio) / 100.0;
+  pg_map.full_ratio = g_conf->mon_osd_full_ratio;
+  if (pg_map.full_ratio > 1.0)
+    pg_map.full_ratio /= 100.0;
+  pg_map.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+  if (pg_map.nearfull_ratio > 1.0)
+    pg_map.nearfull_ratio /= 100.0;
 }
 
 bool PGMonitor::update_from_paxos()
