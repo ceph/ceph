@@ -376,8 +376,8 @@ int RGWListMultipart_REST::get_params()
 
 int RGWListBucketMultiparts_REST::get_params()
 {
-  url_decode(s->args.get("delimiter"), delimiter);
-  url_decode(s->args.get("prefix"), prefix);
+  delimiter = s->args.get("delimiter");
+  prefix = s->args.get("prefix");
   string str = s->args.get("max-parts");
   if (!str.empty())
     max_uploads = atoi(str.c_str());
@@ -436,7 +436,7 @@ static int init_entities_from_header(struct req_state *s)
 
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = h.substr(0, pos-1);
-      url_decode(encoded_bucket, s->bucket_name_str);
+      s->bucket_name_str = encoded_bucket;
       s->bucket_name = strdup(s->bucket_name_str.c_str());
       s->host_bucket = s->bucket_name;
     } else {
@@ -451,7 +451,7 @@ static int init_entities_from_header(struct req_state *s)
   if (*req_name == '?') {
     p = req_name;
   } else {
-    p = s->query;
+    p = s->query_str.c_str();
   }
 
   s->args.set(p);
@@ -528,7 +528,7 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      url_decode(req, s->object_str);
+      req = s->object_str;
       s->object = strdup(s->object_str.c_str());
     }
 
@@ -539,7 +539,7 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
   } else {
-    url_decode(first, s->object_str);
+    s->object_str = first;
     s->object = strdup(s->object_str.c_str());
     goto done;
   }
@@ -549,7 +549,7 @@ static int init_entities_from_header(struct req_state *s)
 
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
-    url_decode(encoded_obj_str, s->object_str);
+    s->object_str = encoded_obj_str;
 
     if (s->object_str.size() > 0) {
       s->object = strdup(s->object_str.c_str());
@@ -764,7 +764,8 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   int ret = 0;
 
   s->fcgx = fcgx;
-  s->path_name = s->env->get("SCRIPT_NAME");
+  string script_name = s->env->get("SCRIPT_NAME");
+  url_decode(script_name, s->path_name);
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {
@@ -775,7 +776,8 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     s->path_name = s->path_name_url.c_str();
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
-  s->query = s->env->get("QUERY_STRING");
+  string query_string = s->env->get("QUERY_STRING");
+  url_decode(query_string, s->query_str);
   s->length = s->env->get("CONTENT_LENGTH");
   s->content_type = s->env->get("CONTENT_TYPE");
   s->prot_flags = 0;

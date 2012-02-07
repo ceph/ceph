@@ -521,7 +521,7 @@ struct req_state {
    string request_uri;
    const char *host;
    const char *method;
-   const char *query;
+   string query_str;
    const char *length;
    uint64_t content_length;
    const char *content_type;
