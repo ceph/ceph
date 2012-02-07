@@ -223,7 +223,7 @@ void Elector::handle_ack(MMonElection *m)
 {
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
-  
+
   assert(m->epoch % 2 == 1); // election
   if (m->epoch > epoch) {
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
@@ -293,6 +293,12 @@ void Elector::dispatch(Message *m)
         m->put();
         return;
       }
+      if (m->get_source().num() >= mon->monmap->size()) {
+	dout(5) << " ignoring bogus election message with bad mon rank " << m->get_source() << dendl;
+	m->put();
+	return;
+      }
+
       MMonElection *em = (MMonElection*)m;
 
       // assume an old message encoding would have matched
