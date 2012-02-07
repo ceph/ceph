@@ -675,6 +675,11 @@ struct object_stat_sum_t {
     num_object_copies = nrep * num_objects;
   }
 
+  bool is_zero() const {
+    object_stat_sum_t zero;
+    return memcmp(this, &zero, sizeof(zero)) == 0;
+  }
+
   void add(const object_stat_sum_t& o);
   void sub(const object_stat_sum_t& o);
 
@@ -705,6 +710,10 @@ struct object_stat_collection_t {
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<object_stat_collection_t*>& o);
 
+  bool is_zero() const {
+    return (cat_sum.empty() && sum.is_zero());
+  }
+
   void clear() {
     sum.clear();
     cat_sum.clear();
@@ -727,8 +736,12 @@ struct object_stat_collection_t {
     sum.sub(o.sum);
     for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
 	 p != o.cat_sum.end();
-	 ++p)
-      cat_sum[p->first].sub(p->second);
+	 ++p) {
+      object_stat_sum_t& s = cat_sum[p->first];
+      s.sub(p->second);
+      if (s.is_zero())
+	cat_sum.erase(p->first);
+    }
   }
 };
 WRITE_CLASS_ENCODER(object_stat_collection_t)
@@ -805,6 +818,12 @@ struct pool_stat_t {
     stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+  }
+
+  bool is_zero() const {
+    return (stats.is_zero() &&
+	    log_size == 0 &&
+	    ondisk_log_size == 0);
   }
 
   void dump(Formatter *f) const;
