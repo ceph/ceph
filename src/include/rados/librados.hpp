@@ -191,6 +191,7 @@ namespace librados
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    void tmap_get(bufferlist *pbl);
   };
 
 
@@ -308,7 +309,9 @@ namespace librados
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectOperation *op);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectReadOperation *op,
+		    bufferlist *pbl);
 
     // watch/notify
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,

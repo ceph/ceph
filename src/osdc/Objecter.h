@@ -330,6 +330,11 @@ struct ObjectOperation {
   void tmap_put(bufferlist& bl) {
     add_data(CEPH_OSD_OP_TMAPPUT, 0, bl.length(), bl);
   }
+  void tmap_get(bufferlist *pbl) {
+    add_op(CEPH_OSD_OP_TMAPGET);
+    unsigned p = ops.size() - 1;
+    out_bl[p] = pbl;
+  }
   void tmap_get() {
     add_op(CEPH_OSD_OP_TMAPGET);
   }

@@ -200,6 +200,12 @@ void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *p
   o->read(off, len, pbl, prval);
 }
 
+void librados::ObjectReadOperation::tmap_get(bufferlist *pbl)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->tmap_get(pbl);
+}
+
 void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -631,6 +637,7 @@ public:
   int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime);
   int operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
   int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c);
+  int aio_operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
     AioCompletionImpl *c;
@@ -1786,6 +1793,21 @@ int librados::RadosClient::operate_read(IoCtxImpl& io, const object_t& oid,
   return r;
 }
 
+int librados::RadosClient::aio_operate_read(IoCtxImpl& io, const object_t &oid,
+					    ::ObjectOperation *o,
+					    AioCompletionImpl *c, bufferlist *pbl)
+{
+  Context *onack = new C_aio_Ack(c);
+
+  c->pbl = pbl;
+
+  Mutex::Locker l(lock);
+  objecter->read(oid, io.oloc,
+		 *o, io.snap_seq, pbl, 0,
+		 onack, 0);
+  return 0;
+}
+
 int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
 				       ::ObjectOperation *o, AioCompletionImpl *c)
 {
@@ -2078,8 +2100,8 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   lock.Lock();
   ::ObjectOperation rd;
   prepare_assert_ops(&io, &rd);
-  rd.tmap_get();
-  objecter->read(oid, io.oloc, rd, io.snap_seq, &bl, 0, onack, &ver);
+  rd.tmap_get(&bl);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, 0, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2941,12 +2963,17 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
   return io_ctx_impl->client->operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
   return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc);
 }
 
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectReadOperation *o, bufferlist *pbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->aio_operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc, pbl);
+}
 
 void librados::IoCtx::snap_set_read(snap_t seq)
 {
