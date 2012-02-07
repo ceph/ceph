@@ -29,7 +29,6 @@
 #define CEPH_MONCAPS_H
 
 #include "include/types.h"
-//#include ""
 
 #define MON_CAP_R 0x1
 #define MON_CAP_W 0x2
@@ -44,7 +43,9 @@ typedef __u8 rwx_t;
 struct MonCap {
   rwx_t allow;
   rwx_t deny;
+
   MonCap() : allow(0), deny(0) {}
+  MonCap(rwx_t a, rwx_t d) : allow(a), deny(d) {}
 
   void encode(bufferlist& bl) const {
     ::encode(allow, bl);
@@ -55,6 +56,8 @@ struct MonCap {
     ::decode(allow, bl);
     ::decode(deny, bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<MonCap*>& o);
 };
 WRITE_RAW_ENCODER(MonCap);
 
@@ -63,21 +66,24 @@ struct MonCaps {
   rwx_t default_action;
   map<int, MonCap> services_map;
   map<int, MonCap> pool_auid_map;
-  bool get_next_token(string s, size_t& pos, string& token);
-  bool is_rwx(string& token, rwx_t& cap_val);
-  int get_service_id(string& token);
   bool allow_all;
   uint64_t auid;
 
   // command whitelist
   list<list<string> > cmd_allow;
 
+  bool get_next_token(string s, size_t& pos, string& token);
+  bool is_rwx(string& token, rwx_t& cap_val);
+  int get_service_id(string& token);
+
 public:
   MonCaps()
     : text(), default_action(0),
       allow_all(false), auid(CEPH_AUTH_UID_DEFAULT)
   {}
+
   const string& get_str() const { return text; }
+
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service) const;
   bool check_privileges(int service, int req_perm,
@@ -85,33 +91,15 @@ public:
   void set_allow_all(bool allow) { allow_all = allow; }
   void set_auid(uint64_t uid) { auid = uid; }
 
-  void encode(bufferlist& bl) const {
-    __u8 v = 2;
-    ::encode(v, bl);
-    ::encode(text, bl);
-    ::encode(default_action, bl);
-    ::encode(services_map, bl);
-    ::encode(pool_auid_map, bl);
-    ::encode(allow_all, bl);
-    ::encode(auid, bl);
-    ::encode(cmd_allow, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(text, bl);
-    ::decode(default_action, bl);
-    ::decode(services_map, bl);
-    ::decode(pool_auid_map, bl);
-    ::decode(allow_all, bl);
-    ::decode(auid, bl);
-    ::decode(cmd_allow, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<MonCaps*>& o);
 };
 WRITE_CLASS_ENCODER(MonCaps);
 
 inline ostream& operator<<(ostream& out, const MonCaps& m) {
   return out << m.get_str();
 }
+
 #endif

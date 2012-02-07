@@ -15,6 +15,7 @@
 #include <errno.h>
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "MonCaps.h"
 #include "mon_types.h"
 
@@ -284,4 +285,95 @@ bool MonCaps::check_privileges(int service, int req_perms, uint64_t req_auid)
   if ((service_caps & req_perms) != req_perms)
     return false;
   return true;
+}
+
+// ----
+
+string rwx_to_string(rwx_t r)
+{
+  string s;
+  if (r & MON_CAP_R)
+    s += "r";
+  else
+    s += "-";
+  if (r & MON_CAP_W)
+    s += "w";
+  else
+    s += "-";
+  if (r & MON_CAP_X)
+    s += "x";
+  else
+    s += "-";
+  return s;
+}
+
+// ----
+
+void MonCap::dump(Formatter *f) const
+{
+  f->dump_string("allow", rwx_to_string(allow));
+  f->dump_string("deny", rwx_to_string(deny));
+}
+
+void MonCap::generate_test_instances(list<MonCap*>& o)
+{
+  o.push_back(new MonCap);
+  o.push_back(new MonCap(MON_CAP_R, MON_CAP_W));
+  o.push_back(new MonCap(MON_CAP_RW, MON_CAP_ALL));
+}
+
+// ----
+
+void MonCaps::encode(bufferlist& bl) const
+{
+  __u8 v = 2;
+  ::encode(v, bl);
+  ::encode(text, bl);
+  ::encode(default_action, bl);
+  ::encode(services_map, bl);
+  ::encode(pool_auid_map, bl);
+  ::encode(allow_all, bl);
+  ::encode(auid, bl);
+  ::encode(cmd_allow, bl);
+}
+
+void MonCaps::decode(bufferlist::iterator& bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(text, bl);
+  ::decode(default_action, bl);
+  ::decode(services_map, bl);
+  ::decode(pool_auid_map, bl);
+  ::decode(allow_all, bl);
+  ::decode(auid, bl);
+  ::decode(cmd_allow, bl);
+}
+
+void MonCaps::dump(Formatter *f) const
+{
+  f->dump_string("text", text);
+  f->dump_string("default_action", rwx_to_string(default_action));
+  f->dump_int("allow_all", allow_all);
+  f->dump_unsigned("auid", auid);
+  f->open_object_section("services_map");
+  for (map<int,MonCap>::const_iterator p = services_map.begin(); p != services_map.end(); ++p) {
+    f->open_object_section("moncap");
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("pool_auid_map");
+  for (map<int,MonCap>::const_iterator p = pool_auid_map.begin(); p != pool_auid_map.end(); ++p) {
+    f->open_object_section("moncap");
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();   
+}
+
+void MonCaps::generate_test_instances(list<MonCaps*>& o)
+{
+  o.push_back(new MonCaps);
+  // FIXME.
 }

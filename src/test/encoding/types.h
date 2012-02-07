@@ -55,6 +55,10 @@ TYPE(PGMap)
 #include "mon/MonMap.h"
 TYPE(MonMap)
 
+#include "mon/MonCaps.h"
+TYPE(MonCap)
+TYPE(MonCaps)
+
 // --- messages ---
 #include "messages/MAuth.h"
 MESSAGE(MAuth)
