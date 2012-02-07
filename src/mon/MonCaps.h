@@ -73,7 +73,7 @@ struct MonCaps {
   list<list<string> > cmd_allow;
 
   bool get_next_token(string s, size_t& pos, string& token);
-  bool is_rwx(string& token, rwx_t& cap_val);
+  bool is_rwx(CephContext *cct, string& token, rwx_t& cap_val);
   int get_service_id(string& token);
 
 public:
@@ -84,7 +84,8 @@ public:
 
   const string& get_str() const { return text; }
 
-  bool parse(bufferlist::iterator& iter);
+  bool parse(string s, CephContext *cct);
+  bool parse(bufferlist::iterator& iter, CephContext *cct);
   rwx_t get_caps(int service) const;
   bool check_privileges(int service, int req_perm,
 			uint64_t auid=CEPH_AUTH_UID_DEFAULT);

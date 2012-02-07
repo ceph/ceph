@@ -898,8 +898,9 @@ libcommon_files = \
 	common/str_list.cc \
 	common/errno.cc \
 	msg/SimpleMessenger.cc \
-	mon/MonMap.cc \
+	mon/MonCaps.cc \
 	mon/MonClient.cc \
+	mon/MonMap.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -957,8 +958,7 @@ libmon_la_SOURCES = \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
-	mon/MonitorStore.cc \
-	mon/MonCaps.cc
+	mon/MonitorStore.cc
 libmon_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libmon.la
 
