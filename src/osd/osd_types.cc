@@ -2052,20 +2052,20 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 1;
-  ::encode(struct_v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
+  ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(size, bl);
   ::decode(negative, bl);
   ::decode(attrs, bl);
+  DECODE_FINISH(bl);
 }
 
 void ScrubMap::object::dump(Formatter *f) const
