@@ -1525,7 +1525,7 @@ struct ScrubMap {
     bool negative;
     map<string,bufferptr> attrs;
 
-    object(): size(0),negative(0),attrs() {}
+    object(): size(0), negative(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
