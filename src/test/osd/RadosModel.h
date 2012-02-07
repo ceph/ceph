@@ -117,6 +117,8 @@ public:
   int seq_num;
   map<int,uint64_t> snaps;
   uint64_t seq;
+  const char *rados_id;
+  bool initialized;
   
 	
   RadosTestContext(const string &pool_name, 
@@ -129,27 +131,50 @@ public:
     pool_name(pool_name),
     errors(0),
     max_in_flight(max_in_flight),
-    cont_gen(cont_gen), seq_num(0), seq(0)
+    cont_gen(cont_gen), seq_num(0), seq(0),
+    rados_id(id), initialized(false)
   {
-    rados.init(id);
-    rados.conf_read_file(NULL);
-    rados.conf_parse_env(NULL);
-    rados.connect();
-    rados.ioctx_create(pool_name.c_str(), io_ctx);
+  }
+
+  int init()
+  {
+    int r = rados.init(rados_id);
+    if (r < 0)
+      return r;
+    r = rados.conf_read_file(NULL);
+    if (r < 0)
+      return r;
+    r = rados.conf_parse_env(NULL);
+    if (r < 0)
+      return r;
+    r = rados.connect();
+    if (r < 0)
+      return r;
+    r = rados.ioctx_create(pool_name.c_str(), io_ctx);
+    if (r < 0) {
+      rados.shutdown();
+      return r;
+    }
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     stringstream hostpid;
     hostpid << hostname_cstr << getpid() << "-";
     prefix = hostpid.str();
+    assert(!initialized);
+    initialized = true;
+    return 0;
   }
 
   void shutdown()
   {
-    rados.shutdown();
+    if (initialized) {
+      rados.shutdown();
+    }
   }
 
   void loop(TestOpGenerator *gen)
   {
+    assert(initialized);
     list<TestOp*> inflight;
     state_lock.Lock();
 

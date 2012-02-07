@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/errno.h"
 
 #include <iostream>
 #include <sstream>
@@ -245,6 +246,12 @@ int main(int argc, char **argv)
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(ops, objects,
 						    op_weights, &stats, max_seconds);
+  int r = context.init();
+  if (r < 0) {
+    cerr << "Error initializing rados test context: "
+	 << cpp_strerror(r) << std::endl;
+    exit(1);
+  }
   context.loop(&gen);
 
   context.shutdown();
