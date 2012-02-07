@@ -1015,11 +1015,11 @@ void librados::RadosClient::shutdown()
     lock.Unlock();
     return;
   }
-  state = DISCONNECTED;
   monclient.shutdown();
-  if (objecter)
+  if (objecter && state == CONNECTED)
     objecter->shutdown();
   timer.shutdown();
+  state = DISCONNECTED;
   lock.Unlock();
   if (messenger) {
     messenger->shutdown();
