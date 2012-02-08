@@ -112,6 +112,7 @@ dir_result_t::dir_result_t(Inode *in)
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
+    initialized(false),
     client_lock("Client::client_lock")
 {
   // which client am i?
