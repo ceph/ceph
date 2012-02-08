@@ -767,6 +767,7 @@ void Monitor::finish_election()
 {
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
+  finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
@@ -1271,6 +1272,8 @@ bool Monitor::_ms_dispatch(Message *m)
   EntityName entity_name;
   bool src_is_mon;
 
+  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+
   if (connection) {
     dout(20) << "have connection" << dendl;
     s = (MonSession *)connection->get_priv();
@@ -1281,6 +1284,37 @@ bool Monitor::_ms_dispatch(Message *m)
       s = NULL;
     }
     if (!s) {
+      if (!exited_quorum.is_zero()
+          && !src_is_mon) {
+        /**
+         * Wait list the new session until we're in the quorum, assuming it's
+         * sufficiently new.
+         * tick() will periodically send them back through so we can send
+         * the client elsewhere if we don't think we're getting back in.
+         *
+         * But we whitelist a few sorts of messages:
+         * 1) Monitors can talk to us at any time, of course.
+         * 2) auth messages. It's unlikely to go through much faster, but
+         * it's possible we've just lost our quorum status and we want to take...
+         * 3) command messages. We want to accept these under all possible
+         * circumstances.
+         */
+        utime_t too_old = ceph_clock_now(g_ceph_context);
+        too_old -= g_ceph_context->_conf->mon_lease;
+        if (m->get_recv_stamp() > too_old
+            && connection->is_connected()) {
+          dout(5) << "waitlisting message " << *m
+                  << " until we get in quorum" << dendl;
+          maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
+        } else {
+          dout(1) << "discarding message " << *m
+                  << " and sending client elsewhere; we are not in quorum"
+                  << dendl;
+          messenger->mark_down(connection);
+          m->put();
+        }
+        return true;
+      }
       dout(10) << "do not have session, making new one" << dendl;
       s = session_map.new_session(m->get_source_inst(), m->get_connection());
       m->get_connection()->set_priv(s->get());
@@ -1308,7 +1342,6 @@ bool Monitor::_ms_dispatch(Message *m)
       entity_name = s->auth_handler->get_entity_name();
     }
   }
-  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 
   if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
@@ -1653,21 +1686,18 @@ void Monitor::tick()
       messenger->mark_down(s->inst.addr);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
-      if (s->time_established < exited_quorum) {
-        if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
-          // boot the client Session because we've taken too long getting back in
-          dout(10) << " trimming session " << s->inst
-              << " because we've been out of quorum too long" << dendl;
-          messenger->mark_down(s->inst.addr);
-          remove_session(s);
-        }
-      } else if (s->time_established + g_conf->mon_lease < now) {
+      if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
+        // boot the client Session because we've taken too long getting back in
         dout(10) << " trimming session " << s->inst
-                 << " because we're still not in quorum" << dendl;
+            << " because we've been out of quorum too long" << dendl;
         messenger->mark_down(s->inst.addr);
         remove_session(s);
       }
     }
+  }
+
+  if (!maybe_wait_for_quorum.empty()) {
+    finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   }
 
   new_tick();

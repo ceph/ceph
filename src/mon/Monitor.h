@@ -171,6 +171,7 @@ private:
   map<string,version_t> slurp_versions;
 
   list<Context*> waitfor_quorum;
+  list<Context*> maybe_wait_for_quorum;
 
   Context *probe_timeout_event;  // for probing and slurping states
 
