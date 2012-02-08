@@ -112,35 +112,24 @@ dir_result_t::dir_result_t(Inode *in)
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
-    initialized(false),
+    tick_event(NULL),
+    monclient(mc), messenger(m), whoami(m->get_myname().num()),
+    initialized(false), mounted(false), unmounting(false),
+    local_osd(-1), local_osd_epoch(0),
+    unsafe_sync_write(0),
+    file_stripe_unit(0),
+    file_stripe_count(0),
+    object_size(0),
+    file_replication(0),
+    preferred_pg(-1),
     client_lock("Client::client_lock")
 {
-  // which client am i?
-  whoami = m->get_myname().num();
-
-  monclient = mc;
   monclient->set_messenger(m);
-  
-  tick_event = 0;
-
-  mounted = false;
-  unmounting = false;
 
   last_tid = 0;
   last_flush_seq = 0;
 
-  local_osd = -1;
-  local_osd_epoch = 0;
-
-  unsafe_sync_write = 0;
-
   cwd = NULL;
-
-  file_stripe_unit = 0;
-  file_stripe_count = 0;
-  object_size = 0;
-  file_replication = 0;
-  preferred_pg = -1;
 
   // 
   root = 0;
