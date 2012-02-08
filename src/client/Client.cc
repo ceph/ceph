@@ -5260,6 +5260,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   assert(in->snapid == CEPH_NOSNAP);
 
+  // was Fh opened as writeable?
+  if ((f->mode & CEPH_FILE_MODE_WR) == 0)
+    return -EINVAL;
+
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
