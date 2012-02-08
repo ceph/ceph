@@ -17,7 +17,7 @@ using namespace ceph::crypto;
 void list_all_buckets_start(struct req_state *s)
 {
   s->formatter->open_array_section_in_ns("ListAllMyBucketsResult",
-			      "http://doc.s3.amazonaws.com/2006-03-01");
+			      "http://s3.amazonaws.com/doc/2006-03-01/");
 }
 
 void list_all_buckets_end(struct req_state *s)
