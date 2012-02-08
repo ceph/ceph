@@ -63,8 +63,8 @@ public:
   }
   virtual void handle_conf_change(const md_config_t *conf,
 				  const std::set<std::string>& changed) {
-    mon->update_full_ratios(((float)conf->mon_osd_full_ratio) / 100,
-			    ((float)conf->mon_osd_nearfull_ratio) / 100);
+    mon->update_full_ratios(conf->mon_osd_full_ratio,
+			    conf->mon_osd_nearfull_ratio);
   }
 };
 
@@ -142,6 +142,12 @@ void PGMonitor::update_logger()
 void PGMonitor::update_full_ratios(float full_ratio, float nearfull_ratio)
 {
   Mutex::Locker l(ratio_lock);
+
+  if (full_ratio > 1.0)
+    full_ratio /= 100.0;
+  if (nearfull_ratio > 1.0)
+    nearfull_ratio /= 100.0;
+
   dout(10) << "update_full_ratios full " << full_ratio << " nearfull " << nearfull_ratio << dendl;
   if (full_ratio != 0) {
     new_full_ratio = full_ratio;
