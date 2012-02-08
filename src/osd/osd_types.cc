@@ -2000,6 +2000,80 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
   return out;
 }
 
+// -- ObjectRecovery --
+void ObjectRecoveryProgress::encode(bufferlist &bl) const
+{
+  ::encode(first, bl);
+  ::encode(data_complete, bl);
+  ::encode(data_recovered_to, bl);
+  ::encode(omap_recovered_to, bl);
+  ::encode(omap_complete, bl);
+}
+
+void ObjectRecoveryProgress::decode(bufferlist::iterator &bl)
+{
+  ::decode(first, bl);
+  ::decode(data_complete, bl);
+  ::decode(data_recovered_to, bl);
+  ::decode(omap_recovered_to, bl);
+  ::decode(omap_complete, bl);
+}
+
+ostream &operator<<(ostream &out, const ObjectRecoveryProgress &prog)
+{
+  return prog.print(out);
+}
+
+ostream &ObjectRecoveryProgress::print(ostream &out) const
+{
+  return out << "ObjectRecoveryProgress("
+	     << ( first ? "" : "!" ) << "first, "
+	     << "data_recovered_to:" << data_recovered_to
+	     << ", data_complete:" << ( data_complete ? "true" : "false" )
+	     << ", omap_recovered_to:" << omap_recovered_to
+	     << ", omap_complete:" << ( omap_complete ? "true" : "false" )
+	     << ")";
+}
+
+void ObjectRecoveryInfo::encode(bufferlist &bl) const
+{
+  __u8 v = 0;
+  ::encode(v, bl);
+  ::encode(soid, bl);
+  ::encode(version, bl);
+  ::encode(size, bl);
+  ::encode(oi, bl);
+  ::encode(ss, bl);
+  ::encode(copy_subset, bl);
+  ::encode(clone_subset, bl);
+}
+
+void ObjectRecoveryInfo::decode(bufferlist::iterator &bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(soid, bl);
+  ::decode(version, bl);
+  ::decode(size, bl);
+  ::decode(oi, bl);
+  ::decode(ss, bl);
+  ::decode(copy_subset, bl);
+  ::decode(clone_subset, bl);
+}
+
+ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf)
+{
+  return inf.print(out);
+}
+
+ostream &ObjectRecoveryInfo::print(ostream &out) const
+{
+  return out << "ObjectRecoveryInfo("
+	     << soid << "@" << version
+	     << ", copy_subset: " << copy_subset
+	     << ", clone_subset: " << clone_subset
+	     << ")";
+}
 
 // -- ScrubMap --
 

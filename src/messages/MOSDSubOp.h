@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -71,6 +71,15 @@ public:
 
   bool first, complete;
 
+  interval_set<uint64_t> data_included;
+  ObjectRecoveryInfo recovery_info;
+
+  // reflects result of current push
+  ObjectRecoveryProgress recovery_progress;
+
+  // reflects progress before current push
+  ObjectRecoveryProgress current_progress;
+
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
@@ -101,6 +110,7 @@ public:
     ::decode(pg_trim_to, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
+
     ::decode(data_subset, p);
     ::decode(clone_subsets, p);
     
@@ -110,6 +120,12 @@ public:
     }
     if (header.version >= 3)
       ::decode(oloc, p);
+    if (header.version >= 4) {
+      ::decode(data_included, p);
+      ::decode(recovery_info, p);
+      ::decode(recovery_progress, p);
+      ::decode(current_progress, p);
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -148,8 +164,11 @@ public:
     ::encode(first, payload);
     ::encode(complete, payload);
     ::encode(oloc, payload);
+    ::encode(data_included, payload);
+    ::encode(recovery_info, payload);
+    ::encode(recovery_progress, payload);
+    ::encode(current_progress, payload);
   }
-
 
   MOSDSubOp()
     : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }

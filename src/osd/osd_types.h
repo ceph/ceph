@@ -1612,7 +1612,37 @@ WRITE_CLASS_ENCODER(object_info_t)
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
 
+// Object recovery
+struct ObjectRecoveryProgress {
+  bool first;
+  uint64_t data_recovered_to;
+  bool data_complete;
+  string omap_recovered_to;
+  bool omap_complete;
 
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryProgress)
+ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
+
+
+struct ObjectRecoveryInfo {
+  hobject_t soid;
+  eversion_t version;
+  uint64_t size;
+  object_info_t oi;
+  SnapSet ss;
+  interval_set<uint64_t> copy_subset;
+  map<hobject_t, interval_set<uint64_t> > clone_subset;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 /*
  * summarize pg contents for purposes of a scrub
