@@ -3644,6 +3644,27 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->handle_advance_map(osdmap, lastmap, newup, newacting, 0);
     pg->unlock();
   }
+
+  // scan pgs with waiters
+  map<pg_t, list<OpRequest*> >::iterator p = waiting_for_pg.begin();
+  while (p != waiting_for_pg.end()) {
+    pg_t pgid = p->first;
+
+    // am i still primary?
+    vector<int> acting;
+    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, nrep);
+    if (role >= 0) {
+      ++p;  // still me
+    } else {
+      dout(10) << " discarding waiting ops for " << pgid << dendl;
+      while (!p->second.empty()) {
+	p->second.front()->put();
+	p->second.pop_front();
+      }
+      waiting_for_pg.erase(p++);
+    }
+  }
 }
 
 void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
