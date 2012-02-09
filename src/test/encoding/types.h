@@ -48,6 +48,16 @@ TYPE(ScrubMap)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
+#include "mon/PGMap.h"
+TYPE(PGMap::Incremental)
+TYPE(PGMap)
+
+#include "mon/MonMap.h"
+TYPE(MonMap)
+
+#include "mon/MonCaps.h"
+TYPE(MonCap)
+TYPE(MonCaps)
 
 // --- messages ---
 #include "messages/MAuth.h"

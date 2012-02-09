@@ -4,6 +4,126 @@
 #define DOUT_SUBSYS mon
 #include "common/debug.h"
 
+#include "common/Formatter.h"
+
+// --
+
+void PGMap::Incremental::encode(bufferlist &bl) const
+{
+  __u8 v = 3;
+  ::encode(v, bl);
+  ::encode(version, bl);
+  ::encode(pg_stat_updates, bl);
+  ::encode(osd_stat_updates, bl);
+  ::encode(osd_stat_rm, bl);
+  ::encode(osdmap_epoch, bl);
+  ::encode(pg_scan, bl);
+  ::encode(full_ratio, bl);
+  ::encode(nearfull_ratio, bl);
+  ::encode(pg_remove, bl);
+}
+
+void PGMap::Incremental::decode(bufferlist::iterator &bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(version, bl);
+  if (v < 3) {
+    pg_stat_updates.clear();
+    __u32 n;
+    ::decode(n, bl);
+    while (n--) {
+      old_pg_t opgid;
+      ::decode(opgid, bl);
+      pg_t pgid = opgid;
+      ::decode(pg_stat_updates[pgid], bl);
+    }
+      } else {
+    ::decode(pg_stat_updates, bl);
+  }
+  ::decode(osd_stat_updates, bl);
+  ::decode(osd_stat_rm, bl);
+  ::decode(osdmap_epoch, bl);
+  ::decode(pg_scan, bl);
+  if (v >= 2) {
+    ::decode(full_ratio, bl);
+    ::decode(nearfull_ratio, bl);
+  }
+  if (v < 3) {
+    pg_remove.clear();
+    __u32 n;
+    ::decode(n, bl);
+    while (n--) {
+      old_pg_t opgid;
+      ::decode(opgid, bl);
+      pg_remove.insert(pg_t(opgid));
+    }
+  } else {
+    ::decode(pg_remove, bl);
+  }
+}
+
+void PGMap::Incremental::dump(Formatter *f) const
+{
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("osdmap_epoch", osdmap_epoch);
+  f->dump_unsigned("pg_scan_epoch", pg_scan);
+  f->dump_float("full_ratio", full_ratio);
+  f->dump_float("nearfull_ratio", nearfull_ratio);
+
+  f->open_array_section("pg_stat_updates");
+  for (map<pg_t,pg_stat_t>::const_iterator p = pg_stat_updates.begin(); p != pg_stat_updates.end(); ++p) {
+    f->open_object_section("pg_stat");
+    f->dump_stream("pgid") << p->first;
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("osd_stat_updates");
+  for (map<int,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
+    f->open_object_section("osd_stat");
+    f->dump_int("osd", p->first);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("osd_stat_removals");
+  for (set<int>::const_iterator p = osd_stat_rm.begin(); p != osd_stat_rm.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+
+  f->open_array_section("pg_removals");
+  for (set<pg_t>::const_iterator p = pg_remove.begin(); p != pg_remove.end(); ++p)
+    f->dump_stream("pgid") << *p;
+  f->close_section();
+}
+
+void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
+{
+  o.push_back(new Incremental);
+  o.push_back(new Incremental);
+  o.back()->version = 1;
+  o.push_back(new Incremental);
+  o.back()->version = 2;
+  o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
+  o.back()->osd_stat_updates[5] = osd_stat_t();
+  o.push_back(new Incremental);
+  o.back()->version = 3;
+  o.back()->osdmap_epoch = 1;
+  o.back()->pg_scan = 2;
+  o.back()->full_ratio = .2;
+  o.back()->nearfull_ratio = .3;
+  o.back()->pg_stat_updates[pg_t(4,5,6)] = pg_stat_t();
+  o.back()->osd_stat_updates[6] = osd_stat_t();
+  o.back()->pg_remove.insert(pg_t(1,2,3));
+  o.back()->osd_stat_rm.insert(5);
+}
+
+
+// --
+
 void PGMap::apply_incremental(const Incremental& inc)
 {
   assert(inc.version == version+1);
@@ -111,14 +231,26 @@ void PGMap::redo_full_sets()
   }
 }
 
-void PGMap::stat_zero()
+void PGMap::calc_stats()
 {
-  num_pg = 0;
   num_pg_by_state.clear();
+  num_pg = 0;
   num_osd = 0;
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
+
+  for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
+       p != pg_stat.end();
+       ++p) {
+    stat_pg_add(p->first, p->second);
+  }
+  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+       p != osd_stat.end();
+       ++p)
+    stat_osd_add(p->second);
+
+  redo_full_sets();
 }
 
 void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
@@ -136,7 +268,12 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
   num_pg--;
   if (--num_pg_by_state[s.state] == 0)
     num_pg_by_state.erase(s.state);
-  pg_pool_sum[pgid.pool()].sub(s);
+
+  pool_stat_t& ps = pg_pool_sum[pgid.pool()];
+  ps.sub(s);
+  if (ps.is_zero())
+    pg_pool_sum.erase(pgid.pool());
+
   pg_sum.sub(s);
   if (s.state & PG_STATE_CREATING)
     creating_pgs.erase(pgid);
@@ -167,7 +304,7 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
   return min;
 }
 
-void PGMap::encode(bufferlist &bl)
+void PGMap::encode(bufferlist &bl) const
 {
   __u8 v = 3;
   ::encode(v, bl);
@@ -205,18 +342,8 @@ void PGMap::decode(bufferlist::iterator &bl)
     ::decode(full_ratio, bl);
     ::decode(nearfull_ratio, bl);
   }
-  stat_zero();
-  for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
-       p != pg_stat.end();
-       ++p) {
-    stat_pg_add(p->first, p->second);
-  }
-  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
-       p != osd_stat.end();
-       ++p)
-    stat_osd_add(p->second);
-  
-  redo_full_sets();
+
+  calc_stats();
 }
 
 void PGMap::dump(Formatter *f) const
@@ -406,3 +533,16 @@ void PGMap::print_summary(ostream& out) const
     out << "; " << ssr.str();
 }
 
+void PGMap::generate_test_instances(list<PGMap*>& o)
+{
+  o.push_back(new PGMap);
+  o.push_back(new PGMap);
+  list<Incremental*> inc;
+  Incremental::generate_test_instances(inc);
+  inc.pop_front();
+  while (!inc.empty()) {
+    o.back()->apply_incremental(*inc.front());
+    delete inc.front();
+    inc.pop_front();
+  }
+}

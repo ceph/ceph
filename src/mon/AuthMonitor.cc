@@ -400,7 +400,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     }
     if (caps_info.caps.length()) {
       bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter);
+      s->caps.parse(iter, NULL);
       s->caps.set_auid(auid);
     }
   } catch (const buffer::error &err) {
