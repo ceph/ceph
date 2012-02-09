@@ -5620,7 +5620,10 @@ int ReplicatedPG::recover_backfill(int max)
       dout(20) << " removing peer " << pbi.begin << dendl;
       to_remove[pbi.begin] = pbi.objects.begin()->second;
       pbi.pop_front();
-      ops++;
+      // Don't increment ops here because deletions
+      // are cheap and not replied to unlike real recovery_ops,
+      // and we can't increment ops without requeueing ourself
+      // for recovery.
     } else if (pbi.begin == backfill_info.begin) {
       if (pbi.objects.begin()->second !=
 	  backfill_info.objects.begin()->second) {

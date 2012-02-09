@@ -5138,12 +5138,7 @@ void OSD::do_recovery(PG *pg)
 
       }
     }
-    else if (started < max) {
-      recovery_wq.lock();
-      pg->recovery_item.remove_myself();
-      recovery_wq.unlock();
-    }
-    
+
     do_notifies(notify_list, pg->get_osdmap()->get_epoch());  // notify? (residual|replica)
     do_queries(query_map);
     do_infos(info_map);
