@@ -19,6 +19,10 @@
 
 
 class MPoolOp : public PaxosServiceMessage {
+
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 2;
+
 public:
   uuid_d fsid;
   __u32 pool;
@@ -28,16 +32,19 @@ public:
   snapid_t snapid;
   __s16 crush_rule;
 
-  MPoolOp() : PaxosServiceMessage(CEPH_MSG_POOLOP, 0) {}
-  MPoolOp(const uuid_d& f, tid_t t, int p, string& n, int o, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(0), snapid(0), crush_rule(0) {
+  MPoolOp()
+    : PaxosServiceMessage(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
+  MPoolOp(const uuid_d& f, tid_t t, int p, string& n, int o, version_t v)
+    : PaxosServiceMessage(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
+      fsid(f), pool(p), name(n), op(o),
+      auid(0), snapid(0), crush_rule(0) {
     set_tid(t);
   }
   MPoolOp(const uuid_d& f, tid_t t, int p, string& n,
-	  int o, uint64_t uid, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(uid), snapid(0), crush_rule(0) {
+	  int o, uint64_t uid, version_t v)
+    : PaxosServiceMessage(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
+      fsid(f), pool(p), name(n), op(o),
+      auid(uid), snapid(0), crush_rule(0) {
     set_tid(t);
   }
 
@@ -55,7 +62,6 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    header.version = 4;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool, payload);

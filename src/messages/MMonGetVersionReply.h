@@ -25,8 +25,11 @@
  * back.
  */
 class MMonGetVersionReply : public Message {
+
+  static const int HEAD_VERSION = 2;
+
 public:
-  MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY) {}
+  MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
 
   const char *get_type_name() const {
     return "mon_check_map_ack";
@@ -37,7 +40,6 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    header.version = 2;
     ::encode(handle, payload);
     ::encode(version, payload);
     ::encode(oldest_version, payload);
@@ -47,7 +49,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(handle, p);
     ::decode(version, p);
-    if (header.version > 1)
+    if (header.version >= 2)
       ::decode(oldest_version, p);
   }
 

@@ -21,6 +21,9 @@
 #include "include/ceph_features.h"
 
 class MOSDMap : public Message {
+
+  static const int HEAD_VERSION = 2;
+
  public:
   uuid_d fsid;
   map<epoch_t, bufferlist> maps;
@@ -53,11 +56,11 @@ class MOSDMap : public Message {
   }
 
 
-  MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }
+  MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION) { }
   MOSDMap(const uuid_d &f, OSDMap *oc=0)
-    : Message(CEPH_MSG_OSD_MAP), fsid(f),
-      oldest_map(0), newest_map(0)
-  {
+    : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION),
+      fsid(f),
+      oldest_map(0), newest_map(0) {
     if (oc)
       oc->encode(maps[oc->get_epoch()]);
   }
@@ -71,7 +74,7 @@ public:
     ::decode(fsid, p);
     ::decode(incremental_maps, p);
     ::decode(maps, p);
-    if (header.version > 1) {
+    if (header.version >= 2) {
       ::decode(oldest_map, p);
       ::decode(newest_map, p);
     } else {
@@ -81,9 +84,10 @@ public:
   }
   void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
-    header.version = 2;
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0) {
+      header.version = 1;
+
       // reencode maps using old format
       //
       // FIXME: this can probably be done more efficiently higher up
@@ -113,7 +117,6 @@ public:
 	p->second.clear();
 	m.encode(p->second, features);
       }
-      header.version = 1;
     }
     ::encode(incremental_maps, payload);
     ::encode(maps, payload);

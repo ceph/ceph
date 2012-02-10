@@ -21,11 +21,14 @@
 
 
 class MClientReconnect : public Message {
+
+  const static int HEAD_VERSION = 2;
+
 public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
   vector<ceph_mds_snaprealm_reconnect> realms;
 
-  MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT) {}
+  MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION) { }
 private:
   ~MClientReconnect() {}
 
@@ -52,10 +55,10 @@ public:
   void encode_payload(uint64_t features) {
     if (features & CEPH_FEATURE_FLOCK) {
       // new protocol
-      header.version = 2;
       ::encode(caps, data);
     } else {
       // compat crap
+      header.version = 1;
       map<inodeno_t, old_cap_reconnect_t> ocaps;
       for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); p++)
 	ocaps[p->first] = p->second;

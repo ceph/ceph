@@ -24,6 +24,9 @@
 #include <uuid/uuid.h>
 
 class MMDSBeacon : public PaxosServiceMessage {
+
+  static const int HEAD_VERSION = 2;
+
   uuid_d fsid;
   uint64_t global_id;
   string name;
@@ -36,11 +39,12 @@ class MMDSBeacon : public PaxosServiceMessage {
   CompatSet compat;
 
  public:
-  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
+  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION) { }
   MMDSBeacon(const uuid_d &f, uint64_t g, string& n, epoch_t les, int st, version_t se) : 
-    PaxosServiceMessage(MSG_MDS_BEACON, les), 
+    PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION), 
     fsid(f), global_id(g), name(n), state(st), seq(se),
-    standby_for_rank(-1) { }
+    standby_for_rank(-1) {
+  }
 private:
   ~MMDSBeacon() {}
 
@@ -68,7 +72,6 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(global_id, payload);

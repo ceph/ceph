@@ -23,19 +23,22 @@
  */
 
 struct MOSDRepScrub : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   pg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
   eversion_t scrub_to;   // last_update_applied when message sent
   epoch_t map_epoch;
 
-  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB) {}
+  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION) { }
   MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
-	       epoch_t map_epoch) :
-    Message(MSG_OSD_REP_SCRUB),
-    pgid(pgid),
-    scrub_from(scrub_from),
-    scrub_to(scrub_to),
-    map_epoch(map_epoch) {}
+	       epoch_t map_epoch)
+    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION),
+      pgid(pgid),
+      scrub_from(scrub_from),
+      scrub_to(scrub_to),
+      map_epoch(map_epoch) { }
   
 private:
   ~MOSDRepScrub() {}
@@ -50,14 +53,12 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    header.version = 2;
     ::encode(pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
   }
   void decode_payload() {
-    assert(header.version == 2);
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);
     ::decode(scrub_from, p);

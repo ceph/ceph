@@ -19,6 +19,9 @@
 #include "msg/Message.h"
 
 class MOSDPGLog : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   epoch_t epoch;
   /// query_epoch is the epoch of the query being responded to, or
   /// the current epoch if this is not being sent in response to a
@@ -35,13 +38,14 @@ public:
   pg_t get_pgid() { return info.pgid; }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGLog() : Message(MSG_OSD_PG_LOG) {}
-  MOSDPGLog(version_t mv, pg_info_t& i) :
-    Message(MSG_OSD_PG_LOG),
-    epoch(mv), query_epoch(mv), info(i)  { }
-  MOSDPGLog(version_t mv, pg_info_t& i, epoch_t query_epoch) :
-    Message(MSG_OSD_PG_LOG),
-    epoch(mv), query_epoch(query_epoch), info(i)  { }
+  MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION) { }
+  MOSDPGLog(version_t mv, pg_info_t& i)
+    : Message(MSG_OSD_PG_LOG, HEAD_VERSION),
+      epoch(mv), query_epoch(mv), info(i)  { }
+  MOSDPGLog(version_t mv, pg_info_t& i, epoch_t query_epoch)
+    : Message(MSG_OSD_PG_LOG, HEAD_VERSION),
+      epoch(mv), query_epoch(query_epoch), info(i)  { }
+
 private:
   ~MOSDPGLog() {}
 
@@ -53,7 +57,6 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    header.version = 2;
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(log, payload);
@@ -66,7 +69,7 @@ public:
     ::decode(info, p);
     ::decode(log, p);
     ::decode(missing, p);
-    if (header.version > 1) {
+    if (header.version >= 2) {
       ::decode(query_epoch, p);
     }
   }
