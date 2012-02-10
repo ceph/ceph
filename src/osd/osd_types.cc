@@ -51,17 +51,16 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
 
 void object_locator_t::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 2;
-  ::encode(struct_v, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(pool, bl);
   ::encode(preferred, bl);
   ::encode(key, bl);
+  ENCODE_FINISH(bl);
 }
 
 void object_locator_t::decode(bufferlist::iterator& p)
 {
-  __u8 struct_v;
-  ::decode(struct_v, p);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
   if (struct_v < 2) {
     int32_t op;
     ::decode(op, p);
@@ -74,6 +73,7 @@ void object_locator_t::decode(bufferlist::iterator& p)
     ::decode(preferred, p);
   }
   ::decode(key, p);
+  DECODE_FINISH(p);
 }
 
 void object_locator_t::dump(Formatter *f) const
