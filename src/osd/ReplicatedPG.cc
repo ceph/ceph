@@ -757,7 +757,6 @@ void ReplicatedPG::do_op(OpRequest *op)
     delete ctx;
     put_object_context(obc);
     put_object_contexts(src_obc);
-    op->put();
     return;
   }
 
