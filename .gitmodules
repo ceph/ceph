@@ -1,0 +1,3 @@
+[submodule "ceph-object-corpus"]
+	path = ceph-object-corpus
+	url = git://ceph.newdream.net/git/ceph-object-corpus.git
