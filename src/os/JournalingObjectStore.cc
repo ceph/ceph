@@ -118,7 +118,9 @@ uint64_t JournalingObjectStore::_op_apply_start(uint64_t op)
 {
   assert(journal_lock.is_locked());
 
-  if (blocked) {
+  // if we ops are blocked, or there are already people (left) in
+  // line, get in line.
+  if (blocked || !ops_apply_blocked.empty()) {
     Cond cond;
     ops_apply_blocked.push_back(&cond);
     dout(10) << "op_apply_start " << op << " blocked (getting in back of line)" << dendl;
