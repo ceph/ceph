@@ -18,20 +18,20 @@
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
-  __u8 struct_v = 1;
-  ::encode(struct_v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(name, bl);
   ::encode(tid, bl);
   ::encode(inc, bl);
+  ENCODE_FINISH(bl);
 }
 
 void osd_reqid_t::decode(bufferlist::iterator &bl)
 {
-  __u8 struct_v;
-  ::decode(struct_v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(name, bl);
   ::decode(tid, bl);
   ::decode(inc, bl);
+  DECODE_FINISH(bl);
 }
 
 void osd_reqid_t::dump(Formatter *f) const
