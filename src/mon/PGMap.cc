@@ -40,7 +40,7 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
       pg_t pgid = opgid;
       ::decode(pg_stat_updates[pgid], bl);
     }
-      } else {
+  } else {
     ::decode(pg_stat_updates, bl);
   }
   ::decode(osd_stat_updates, bl);
