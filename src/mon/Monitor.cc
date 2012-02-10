@@ -572,8 +572,12 @@ void Monitor::slurp()
       p++;
       continue;
     }
+
     dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
     if (p->second > pax->get_version()) {
+      if (!pax->is_slurping()) {
+        pax->start_slurping();
+      }
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -585,6 +589,9 @@ void Monitor::slurp()
     // latest?
     if (pax->get_first_committed() > 1 &&   // don't need it!
 	pax->get_stashed_version() < pax->get_first_committed()) {
+      if (!pax->is_slurping()) {
+        pax->start_slurping();
+      }
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -596,6 +603,8 @@ void Monitor::slurp()
     PaxosService *paxs = get_paxos_service_by_name(p->first);
     assert(paxs);
     paxs->update_from_paxos();
+
+    pax->end_slurping();
 
     slurp_versions.erase(p++);
   }

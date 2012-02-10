@@ -204,7 +204,7 @@ public:
 
   void update_logger();
 
-  // -- paxos --
+  // -- paxos -- These vector indices are matched
   vector<Paxos*> paxos;
   vector<PaxosService*> paxos_service;
 

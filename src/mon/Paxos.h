@@ -112,6 +112,7 @@ private:
   version_t accepted_pn;
   version_t accepted_pn_from;
   map<int,version_t> peer_first_committed, peer_last_committed;
+  int slurping;
 
   // active (phase 2)
   utime_t lease_expire;
@@ -241,6 +242,7 @@ public:
 		   last_committed(0),
 		   accepted_pn(0),
 		   accepted_pn_from(0),
+		   slurping(0),
 		   collect_timeout_event(0),
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
@@ -255,6 +257,13 @@ public:
   void dispatch(PaxosServiceMessage *m);
 
   void init();
+  /**
+   * This function runs basic consistency checks. Importantly, if
+   * it is inconsistent and shouldn't be, it asserts out.
+   *
+   * @return True if consistent, false if not.
+   */
+  bool is_consistent();
 
   void restart();
   void leader_init();
@@ -274,6 +283,10 @@ public:
 
   void trim_to(version_t first, bool force=false);
   
+  void start_slurping();
+  void end_slurping();
+  bool is_slurping() { return slurping == 1; }
+
   // read
   version_t get_version() { return last_committed; }
   bool is_readable(version_t seen=0);
