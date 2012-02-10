@@ -1609,16 +1609,20 @@ void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &
 
 void pg_create_t::encode(bufferlist &bl) const
 {
+  ENCODE_START(1, 1, bl);
   ::encode(created, bl);
   ::encode(parent, bl);
   ::encode(split_bits, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_create_t::decode(bufferlist::iterator &bl)
 {
+  DECODE_START(1, bl);
   ::decode(created, bl);
   ::decode(parent, bl);
   ::decode(split_bits, bl);
+  DECODE_FINISH(bl);
 }
 
 void pg_create_t::dump(Formatter *f) const
