@@ -24,6 +24,10 @@
  */
 
 class MOSDSubOp : public Message {
+
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 1;
+
 public:
   epoch_t map_epoch;
   
@@ -109,8 +113,6 @@ public:
   }
 
   virtual void encode_payload(uint64_t features) {
-    header.version = 3;
-
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -149,23 +151,23 @@ public:
   }
 
 
+  MOSDSubOp()
+    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDSubOp(osd_reqid_t r, pg_t p, const hobject_t& po, bool noop_, int aw,
-	    epoch_t mape, tid_t rtid, eversion_t v) :
-    Message(MSG_OSD_SUBOP),
-    map_epoch(mape),
-    reqid(r),
-    pgid(p),
-    poid(po),
-    acks_wanted(aw),
-    noop(noop_),   
-    old_exists(false), old_size(0),
-    version(v),
-    first(false), complete(false)
-  {
+	    epoch_t mape, tid_t rtid, eversion_t v)
+    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(mape),
+      reqid(r),
+      pgid(p),
+      poid(po),
+      acks_wanted(aw),
+      noop(noop_),   
+      old_exists(false), old_size(0),
+      version(v),
+      first(false), complete(false) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
-  MOSDSubOp() : Message(MSG_OSD_SUBOP) {}
 private:
   ~MOSDSubOp() {}
 

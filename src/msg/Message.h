@@ -298,19 +298,24 @@ protected:
   friend class Messenger;
 
 public:
-  Message() : connection(NULL), dispatch_throttle_size(0) {
+  Message()
+    : connection(NULL),
+      throttler(NULL),
+      dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
-    throttler = NULL;
   };
-  Message(int t) : connection(NULL), dispatch_throttle_size(0) {
+  Message(int t, int version=1, int compat_version=0)
+    : connection(NULL),
+      throttler(NULL),
+      dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
-    header.version = 1;
+    header.version = version;
+    header.compat_version = compat_version;
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
-    throttler = NULL;
   }
 
   Message *get() {

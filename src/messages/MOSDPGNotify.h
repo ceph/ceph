@@ -24,6 +24,10 @@
  */
 
 class MOSDPGNotify : public Message {
+
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
+
   epoch_t epoch;
   /// query_epoch is the epoch of the query being responded to, or
   /// the current epoch if this is not being sent in response to a
@@ -37,10 +41,11 @@ class MOSDPGNotify : public Message {
   vector<pg_info_t>& get_pg_list() { return pg_list; }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGNotify() : Message(MSG_OSD_PG_NOTIFY) {}
-  MOSDPGNotify(epoch_t e, vector<pg_info_t>& l, epoch_t query_epoch) :
-    Message(MSG_OSD_PG_NOTIFY), epoch(e),
-    query_epoch(query_epoch) {
+  MOSDPGNotify()
+    : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDPGNotify(epoch_t e, vector<pg_info_t>& l, epoch_t query_epoch)
+    : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+      epoch(e), query_epoch(query_epoch) {
     pg_list.swap(l);
   }
 private:
@@ -50,7 +55,6 @@ public:
   const char *get_type_name() const { return "PGnot"; }
 
   void encode_payload(uint64_t features) {
-    header.version = 2;
     ::encode(epoch, payload);
     ::encode(pg_list, payload);
     ::encode(query_epoch, payload);
@@ -59,7 +63,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_list, p);
-    if (header.version > 1) {
+    if (header.version >= 2) {
       ::decode(query_epoch, p);
     }
   }

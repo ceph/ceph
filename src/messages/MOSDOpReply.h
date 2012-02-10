@@ -30,6 +30,10 @@
  */
 
 class MOSDOpReply : public Message {
+
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 2;
+
   object_t oid;
   pg_t pgid;
   vector<OSDOp> ops;
@@ -86,8 +90,10 @@ public:
   */
 
 public:
-  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype) :
-    Message(CEPH_MSG_OSD_OPREPLY) {
+  MOSDOpReply()
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype)
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
     set_tid(req->get_tid());
     ops = req->ops;
     result = r;
@@ -103,7 +109,6 @@ public:
     for (unsigned i = 0; i < ops.size(); i++)
       ops[i].op.payload_len = 0;
   }
-  MOSDOpReply() : Message(CEPH_MSG_OSD_OPREPLY) {}
 private:
   ~MOSDOpReply() {}
 
@@ -113,6 +118,7 @@ public:
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 
     if ((features & CEPH_FEATURE_PGID64) == 0) {
+      header.version = 1;
       ceph_osd_reply_head head;
       memset(&head, 0, sizeof(head));
       head.layout.ol_pgid = pgid.get_old_pg().v;
@@ -127,7 +133,6 @@ public:
       }
       ::encode_nohead(oid.name, payload);
     } else {
-      header.version = 4;
       ::encode(oid, payload);
       ::encode(pgid, payload);
       ::encode(flags, payload);

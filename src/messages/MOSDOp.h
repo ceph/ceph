@@ -31,6 +31,10 @@
 class OSD;
 
 class MOSDOp : public Message {
+
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 3;
+
 private:
   uint32_t client_inc;
   __u32 osdmap_epoch;
@@ -104,17 +108,18 @@ public:
     return peer_stat; 
   }
 
+  MOSDOp()
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDOp(int inc, long tid,
          object_t& _oid, object_locator_t& _oloc, pg_t _pgid, epoch_t _osdmap_epoch,
-	 int _flags) :
-    Message(CEPH_MSG_OSD_OP),
-    client_inc(inc),
-    osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-    oid(_oid), oloc(_oloc), pgid(_pgid),
-    rmw_flags(flags) {
+	 int _flags)
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+      client_inc(inc),
+      osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
+      oid(_oid), oloc(_oloc), pgid(_pgid),
+      rmw_flags(flags) {
     set_tid(tid);
   }
-  MOSDOp() : Message(CEPH_MSG_OSD_OP) {}
 private:
   ~MOSDOp() {}
 
@@ -216,6 +221,7 @@ struct ceph_osd_request_head {
 	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 #endif
+      header.version = 1;
 
       ::encode(client_inc, payload);
 
@@ -246,7 +252,6 @@ struct ceph_osd_request_head {
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
     } else {
-      header.version = 4;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);

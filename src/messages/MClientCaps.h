@@ -20,6 +20,10 @@
 
 
 class MClientCaps : public Message {
+
+  static const int HEAD_VERSION = 2;   // added flock metadata
+  static const int COMPAT_VERSION = 1;
+
  public:
   struct ceph_mds_caps head;
   bufferlist snapbl;
@@ -69,7 +73,8 @@ class MClientCaps : public Message {
   void set_mtime(const utime_t &t) { t.encode_timeval(&head.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&head.atime); }
 
-  MClientCaps() : Message(CEPH_MSG_CLIENT_CAPS) {}
+  MClientCaps()
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) { }
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -78,8 +83,8 @@ class MClientCaps : public Message {
 	      int caps,
 	      int wanted,
 	      int dirty,
-	      int mseq) :
-    Message(CEPH_MSG_CLIENT_CAPS) {
+	      int mseq)
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -93,8 +98,8 @@ class MClientCaps : public Message {
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      uint64_t id, int mseq) :
-    Message(CEPH_MSG_CLIENT_CAPS) {
+	      uint64_t id, int mseq)
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -157,8 +162,9 @@ public:
 
     // conditionally include flock metadata
     if (features & CEPH_FEATURE_FLOCK) {
-      header.version = 2;
       ::encode(flockbl, payload);
+    } else {
+      header.version = 1;  // old
     }
   }
 };

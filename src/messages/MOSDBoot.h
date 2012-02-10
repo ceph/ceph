@@ -21,16 +21,21 @@
 #include "osd/osd_types.h"
 
 class MOSDBoot : public PaxosServiceMessage {
+
+  static const int HEAD_VERSION = 2;
+
  public:
   OSDSuperblock sb;
   entity_addr_t hb_addr;
   entity_addr_t cluster_addr;
 
-  MOSDBoot() : PaxosServiceMessage(MSG_OSD_BOOT, 0) { }
+  MOSDBoot() : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION) { }
   MOSDBoot(OSDSuperblock& s, const entity_addr_t& hb_addr_ref,
-           const entity_addr_t& cluster_addr_ref) :
-    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
-    sb(s), hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) { }
+           const entity_addr_t& cluster_addr_ref)
+    : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION),
+      sb(s),
+      hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) {
+  }
   
 private:
   ~MOSDBoot() { }
@@ -42,7 +47,6 @@ public:
   }
   
   void encode_payload(uint64_t features) {
-    header.version = 2;
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_addr, payload);
