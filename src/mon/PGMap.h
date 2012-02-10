@@ -96,6 +96,9 @@ public:
   void dump_pg_stats(Formatter *f) const;
   void dump_pool_stats(Formatter *f) const;
   void dump_osd_stats(Formatter *f) const;
+
+  void dump_pg_stats_plain(ostream& ss,
+			   const hash_map<pg_t, pg_stat_t>& pg_stats) const;
   void dump(ostream& ss) const;
 
   void state_summary(ostream& ss) const;

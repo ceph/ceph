@@ -415,17 +415,12 @@ void PGMap::dump_osd_stats(Formatter *f) const
   f->close_section();
 }
 
-
-void PGMap::dump(ostream& ss) const
+void PGMap::dump_pg_stats_plain(ostream& ss,
+				const hash_map<pg_t, pg_stat_t>& pg_stats) const
 {
-  ss << "version " << version << std::endl;
-  ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
-  ss << "last_pg_scan " << last_pg_scan << std::endl;
-  ss << "full_ratio " << full_ratio << std::endl;
-  ss << "nearfull_ratio " << nearfull_ratio << std::endl;
   ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tacting\tlast_scrub\tscrub_stamp" << std::endl;
-  for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
-       i != pg_stat.end(); ++i) {
+  for (hash_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
+       i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
     ss << i->first
        << "\t" << st.stats.sum.num_objects
@@ -445,6 +440,16 @@ void PGMap::dump(ostream& ss) const
        << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
        << std::endl;
   }
+}
+
+void PGMap::dump(ostream& ss) const
+{
+  ss << "version " << version << std::endl;
+  ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
+  ss << "last_pg_scan " << last_pg_scan << std::endl;
+  ss << "full_ratio " << full_ratio << std::endl;
+  ss << "nearfull_ratio " << nearfull_ratio << std::endl;
+  dump_pg_stats_plain(ss, pg_stat);
   for (hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
        p != pg_pool_sum.end();
        p++)
