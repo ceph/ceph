@@ -26,6 +26,7 @@ TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
 #include "osd/osd_types.h"
+TYPE(osd_reqid_t)
 TYPE(pg_t)
 TYPE(coll_t)
 TYPE(osd_stat_t)

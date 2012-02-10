@@ -34,6 +34,19 @@ void osd_reqid_t::decode(bufferlist::iterator &bl)
   ::decode(inc, bl);
 }
 
+void osd_reqid_t::dump(Formatter *f) const
+{
+  f->dump_stream("name") << name;
+  f->dump_int("inc", inc);
+  f->dump_unsigned("tid", tid);
+}
+
+void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
+{
+  o.push_back(new osd_reqid_t);
+  o.push_back(new osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678));
+}
+
 // -- osd_stat_t --
 void osd_stat_t::dump(Formatter *f) const
 {
