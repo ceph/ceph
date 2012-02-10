@@ -113,8 +113,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  __u8 v = 1;
-  ::encode(v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -122,12 +121,12 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode(num_snap_trimming, bl);
   ::encode(hb_in, bl);
   ::encode(hb_out, bl);
+  ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
@@ -135,8 +134,8 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   ::decode(num_snap_trimming, bl);
   ::decode(hb_in, bl);
   ::decode(hb_out, bl);
+  DECODE_FINISH(bl);
 }
-
 
 void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
 {
