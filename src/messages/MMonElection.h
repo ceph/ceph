@@ -46,7 +46,7 @@ public:
   
   MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION) { }
   MMonElection(int o, epoch_t e, MonMap *m) : 
-    Message(MSG_MON_ELECTION), 
+    Message(MSG_MON_ELECTION, HEAD_VERSION), 
     fsid(m->fsid), op(o), epoch(e) {
     m->encode(monmap_bl);
   }
