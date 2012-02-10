@@ -105,7 +105,6 @@ public:
 
 private:
   // recovery (phase 1)
-  version_t first_committed_any;
   version_t first_committed;
   version_t last_pn;
   version_t last_committed;
@@ -237,6 +236,11 @@ public:
 		   machine_id(mid), 
 		   machine_name(get_paxos_name(mid)),
 		   state(STATE_RECOVERING),
+		   first_committed(0),
+		   last_pn(0),
+		   last_committed(0),
+		   accepted_pn(0),
+		   accepted_pn_from(0),
 		   collect_timeout_event(0),
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
