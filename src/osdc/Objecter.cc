@@ -305,7 +305,7 @@ void Objecter::unregister_linger(uint64_t linger_id)
     LingerOp *info = iter->second;
     info->session_item.remove_myself();
     linger_ops.erase(iter);
-    delete info;
+    info->put();
     logger->set(l_osdc_linger_active, linger_ops.size());
   }
 }
@@ -616,6 +616,7 @@ void Objecter::C_Linger_Map_Latest::finish(int r)
     }
     objecter->unregister_linger(op->linger_id);
   }
+  op->put();
 }
 
 void Objecter::op_check_for_latest_map(Op *op)
@@ -627,6 +628,7 @@ void Objecter::op_check_for_latest_map(Op *op)
 
 void Objecter::linger_check_for_latest_map(LingerOp *op)
 {
+  op->get();
   check_latest_map_lingers[op->linger_id] = op;
   monc->is_latest_map("osdmap", osdmap->get_epoch(),
 		      new C_Linger_Map_Latest(this, op->linger_id));
@@ -646,6 +648,8 @@ void Objecter::linger_cancel_map_check(LingerOp *op)
   map<uint64_t, LingerOp*>::iterator iter =
     check_latest_map_lingers.find(op->linger_id);
   if (iter != check_latest_map_lingers.end()) {
+    LingerOp *op = iter->second;
+    op->put();
     check_latest_map_lingers.erase(iter);
   }
 }
