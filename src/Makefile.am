@@ -874,6 +874,7 @@ libcommon_files = \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
+	common/LogEntry.cc \
 	msg/Message.cc \
 	msg/msg_types.cc \
 	common/BackTrace.cc \

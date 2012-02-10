@@ -8,6 +8,11 @@ TYPE(filepath)
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
 
+#include "common/LogEntry.h"
+TYPE(LogEntryKey)
+TYPE(LogEntry)
+TYPE(LogSummary)
+
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE(entity_addr_t)
