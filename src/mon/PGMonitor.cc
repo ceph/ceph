@@ -840,9 +840,9 @@ void PGMonitor::send_pg_creates()
 	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
       msg[osd] = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
-    msg[osd]->mkpg[pgid].created = pg_map.pg_stat[pgid].created;
-    msg[osd]->mkpg[pgid].parent = pg_map.pg_stat[pgid].parent;
-    msg[osd]->mkpg[pgid].split_bits = pg_map.pg_stat[pgid].parent_split_bits;
+    msg[osd]->mkpg[pgid] = pg_create_t(pg_map.pg_stat[pgid].created,
+				       pg_map.pg_stat[pgid].parent,
+				       pg_map.pg_stat[pgid].parent_split_bits);
   }
 
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();

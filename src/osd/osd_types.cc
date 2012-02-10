@@ -1557,8 +1557,7 @@ void pg_create_t::dump(Formatter *f) const
 void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 {
   o.push_back(new pg_create_t);
-  o.push_back(new pg_create_t(1, 2));
-  o.back()->parent = pg_t(1, 2, 3);
+  o.push_back(new pg_create_t(1, pg_t(3, 4, -1), 2));
 }
 
 // -- OSDSuperblock --

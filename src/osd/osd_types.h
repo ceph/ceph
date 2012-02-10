@@ -1317,7 +1317,10 @@ struct pg_create_t {
   pg_t parent;       // split from parent (if != pg_t())
   __s32 split_bits;
 
-  pg_create_t(unsigned c=0, int s=0) : created(c), split_bits(s) {}
+  pg_create_t()
+    : created(0), split_bits(0) {}
+  pg_create_t(unsigned c, pg_t p, int s)
+    : created(c), parent(p), split_bits(s) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
