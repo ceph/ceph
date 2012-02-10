@@ -26,7 +26,7 @@
 #include "include/interval_set.h"
 #include "common/snap_types.h"
 #include "common/Formatter.h"
-
+#include "os/hobject.h"
 
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
@@ -38,8 +38,13 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES  CompatSet::Feature(5, "categories")
 
 
-/* osdreqid_t - caller name + incarnation# + tid to unique identify this request
- * use for metadata and osd ops.
+typedef hobject_t collection_list_handle_t;
+
+
+/**
+ * osd request identifier
+ *
+ * caller name + incarnation# + tid to unique identify this request.
  */
 struct osd_reqid_t {
   entity_name_t name; // who

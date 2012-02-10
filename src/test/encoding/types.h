@@ -54,6 +54,9 @@ TYPE(ScrubMap)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
+#include "os/hobject.h"
+TYPE(hobject_t)
+
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
 TYPE(PGMap)

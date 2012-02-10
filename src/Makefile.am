@@ -903,6 +903,7 @@ libcommon_files = \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
+	os/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -1389,6 +1390,7 @@ noinst_HEADERS = \
 	obsync/obsync\
 	obsync/boto_tool\
 	os/btrfs_ioctl.h\
+	os/hobject.h \
 	os/CollectionIndex.h\
         os/Fake.h\
         os/FileJournal.h\

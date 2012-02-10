@@ -348,8 +348,6 @@ static inline bool file_mode_is_readonly(int mode) {
 }
 
 
-typedef hobject_t collection_list_handle_t;
-
 // dentries
 #define MAX_DENTRY_LEN 255
 
