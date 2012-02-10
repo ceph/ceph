@@ -30,12 +30,7 @@ using namespace __gnu_cxx;
 #include "ceph_hash.h"
 #include "cmp.h"
 
-/* Maximum supported object name length for Ceph, in bytes.
- *
- * This comes directly out of the ext3/ext4/btrfs limits. We will issue a
- * nasty warning message in the (unlikely) event that you are not using one of
- * those filesystems, and your filesystem can't handle the full 255 characters.
- */
+/// Maximum supported object name length for Ceph, in bytes.
 #define MAX_CEPH_OBJECT_NAME_LEN 4096
 
 struct object_t {
@@ -112,76 +107,6 @@ struct file_object_t {
     return object_t(c_str());
   }
 };
-
-
-// a locator constrains the placement of an object.  mainly, which pool
-// does it go in.
-struct object_locator_t {
-  int64_t pool;
-  int32_t preferred;
-  string key;
-
-  explicit object_locator_t() : pool(-1), preferred(-1) {}
-
-  explicit object_locator_t(int64_t po) : pool(po), preferred(-1) {}
-
-  explicit object_locator_t(int64_t po, int pre) : pool(po), preferred(pre) {}
-
-  int get_pool() const {
-    return pool;
-  }
-  int get_preferred() const {
-    return preferred;
-  }
-
-  void clear() {
-    pool = -1;
-    preferred = -1;
-    key = "";
-  }
-
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(pool, bl);
-    ::encode(preferred, bl);
-    ::encode(key, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
-    if (struct_v < 2) {
-      int32_t op;
-      ::decode(op, p);
-      pool = op;
-      int16_t pref;
-      ::decode(pref, p);
-      preferred = pref;
-    } else {
-      ::decode(pool, p);
-      ::decode(preferred, p);
-    }
-    ::decode(key, p);
-  }
-};
-WRITE_CLASS_ENCODER(object_locator_t)
-
-inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
-}
-inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
-  return !(l == r);
-}
-
-inline ostream& operator<<(ostream& out, const object_locator_t& loc)
-{
-  out << "@" << loc.pool;
-  if (loc.preferred >= 0)
-    out << "p" << loc.preferred;
-  if (loc.key.length())
-    out << ":" << loc.key;
-  return out;
-}
 
 
 // ---------------------------

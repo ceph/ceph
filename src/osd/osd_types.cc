@@ -47,6 +47,52 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
   o.push_back(new osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678));
 }
 
+// -- object_locator_t --
+
+void object_locator_t::encode(bufferlist& bl) const
+{
+  __u8 struct_v = 2;
+  ::encode(struct_v, bl);
+  ::encode(pool, bl);
+  ::encode(preferred, bl);
+  ::encode(key, bl);
+}
+
+void object_locator_t::decode(bufferlist::iterator& p)
+{
+  __u8 struct_v;
+  ::decode(struct_v, p);
+  if (struct_v < 2) {
+    int32_t op;
+    ::decode(op, p);
+    pool = op;
+    int16_t pref;
+    ::decode(pref, p);
+    preferred = pref;
+  } else {
+    ::decode(pool, p);
+    ::decode(preferred, p);
+  }
+  ::decode(key, p);
+}
+
+void object_locator_t::dump(Formatter *f) const
+{
+  f->dump_int("pool", pool);
+  f->dump_int("preferred", preferred);
+  f->dump_string("key", key);
+}
+
+void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
+{
+  o.push_back(new object_locator_t);
+  o.push_back(new object_locator_t(123));
+  o.push_back(new object_locator_t(123, 456));
+  o.push_back(new object_locator_t(1234, -1, "key"));
+  o.push_back(new object_locator_t(12, 789, "key2"));
+}
+
+
 // -- osd_stat_t --
 void osd_stat_t::dump(Formatter *f) const
 {
