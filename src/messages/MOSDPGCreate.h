@@ -17,6 +17,7 @@
 #define CEPH_MOSDPGCREATE_H
 
 #include "msg/Message.h"
+#include "osd/osd_types.h"
 
 /*
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
@@ -24,25 +25,7 @@
 
 struct MOSDPGCreate : public Message {
   version_t          epoch;
-  struct create_rec {
-    epoch_t created;   // epoch pg created
-    pg_t parent;       // split from parent (if != pg_t())
-    __s32 split_bits;
-
-    void encode(bufferlist &bl) const {
-      ::encode(created, bl);
-      ::encode(parent, bl);
-      ::encode(split_bits, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(created, bl);
-      ::decode(parent, bl);
-      ::decode(split_bits, bl);
-    }
-  };
-  WRITE_CLASS_ENCODER(create_rec)
-
-  map<pg_t,create_rec> mkpg;
+  map<pg_t,pg_create_t> mkpg;
 
   MOSDPGCreate() : Message(MSG_OSD_PG_CREATE) {}
   MOSDPGCreate(epoch_t e) :
@@ -66,7 +49,7 @@ public:
 
   void print(ostream& out) const {
     out << "osd pg create(";
-    for (map<pg_t,create_rec>::const_iterator i = mkpg.begin();
+    for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();
          ++i) {
       out << "pg" << i->first << "," << i->second.created << "; ";
@@ -74,7 +57,5 @@ public:
     out << ")";
   }
 };
-
-WRITE_CLASS_ENCODER(MOSDPGCreate::create_rec)
 
 #endif

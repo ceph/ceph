@@ -1531,6 +1531,36 @@ void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &
   missing.erase(m);
 }
 
+// -- pg_create_t --
+
+void pg_create_t::encode(bufferlist &bl) const
+{
+  ::encode(created, bl);
+  ::encode(parent, bl);
+  ::encode(split_bits, bl);
+}
+
+void pg_create_t::decode(bufferlist::iterator &bl)
+{
+  ::decode(created, bl);
+  ::decode(parent, bl);
+  ::decode(split_bits, bl);
+}
+
+void pg_create_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("created", created);
+  f->dump_stream("parent") << parent;
+  f->dump_int("split_bits", split_bits);
+}
+
+void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
+{
+  o.push_back(new pg_create_t);
+  o.push_back(new pg_create_t(1, 2));
+  o.back()->parent = pg_t(1, 2, 3);
+}
+
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const

@@ -4230,7 +4230,7 @@ void OSD::handle_pg_create(OpRequest *op)
 
   int num_created = 0;
 
-  for (map<pg_t,MOSDPGCreate::create_rec>::iterator p = m->mkpg.begin();
+  for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
        p++) {
     pg_t pgid = p->first;

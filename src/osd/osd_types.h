@@ -1309,6 +1309,23 @@ struct pg_ls_response_t {
 WRITE_CLASS_ENCODER(pg_ls_response_t)
 
 
+/**
+ * pg creation info
+ */
+struct pg_create_t {
+  epoch_t created;   // epoch pg created
+  pg_t parent;       // split from parent (if != pg_t())
+  __s32 split_bits;
+
+  pg_create_t(unsigned c=0, int s=0) : created(c), split_bits(s) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_create_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_create_t)
+
 // -----------------------------------------
 
 struct osd_peer_stat_t {
