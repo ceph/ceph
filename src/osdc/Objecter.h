@@ -636,7 +636,7 @@ public:
 
   // -- lingering ops --
 
-  struct LingerOp {
+  struct LingerOp : public RefCountedObject {
     uint64_t linger_id;
     object_t oid;
     object_locator_t oloc;
@@ -665,12 +665,19 @@ public:
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
     LingerOp(const LingerOp& o);
+  private:
+    ~LingerOp() {}
   };
 
   struct C_Linger_Ack : public Context {
     Objecter *objecter;
     LingerOp *info;
-    C_Linger_Ack(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
+    C_Linger_Ack(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+      info->get();
+    }
+    ~C_Linger_Ack() {
+      info->put();
+    }
     void finish(int r) {
       objecter->_linger_ack(info, r);
     }
@@ -679,7 +686,12 @@ public:
   struct C_Linger_Commit : public Context {
     Objecter *objecter;
     LingerOp *info;
-    C_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
+    C_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+      info->get();
+    }
+    ~C_Linger_Commit() {
+      info->put();
+    }
     void finish(int r) {
       objecter->_linger_commit(info, r);
     }
