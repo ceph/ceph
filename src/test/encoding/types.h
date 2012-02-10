@@ -1,3 +1,12 @@
+#include "include/CompatSet.h"
+TYPE(CompatSet)
+
+#include "include/filepath.h"
+TYPE(filepath)
+
+#include "common/snap_types.h"
+TYPE(SnapContext)
+TYPE(SnapRealmInfo)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
@@ -12,6 +21,8 @@ TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
 #include "osd/osd_types.h"
+TYPE(pg_t)
+TYPE(coll_t)
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
 TYPE(pool_snap_info_t)
@@ -30,10 +41,23 @@ TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
+TYPE(SnapSet)
+TYPE(ScrubMap::object)
+TYPE(ScrubMap)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
+#include "mon/PGMap.h"
+TYPE(PGMap::Incremental)
+TYPE(PGMap)
+
+#include "mon/MonMap.h"
+TYPE(MonMap)
+
+#include "mon/MonCaps.h"
+TYPE(MonCap)
+TYPE(MonCaps)
 
 // --- messages ---
 #include "messages/MAuth.h"

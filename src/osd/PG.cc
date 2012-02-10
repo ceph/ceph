@@ -1367,6 +1367,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     update_stats();
   }
 
+  // flush this all out (e.g., deletions from clean_up_local) to avoid
+  // subsequent races.
+  osr.flush();
+
   // waiters
   if (!is_replay()) {
     osd->requeue_ops(this, waiting_for_active);

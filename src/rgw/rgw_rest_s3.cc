@@ -17,7 +17,7 @@ using namespace ceph::crypto;
 void list_all_buckets_start(struct req_state *s)
 {
   s->formatter->open_array_section_in_ns("ListAllMyBucketsResult",
-			      "http://doc.s3.amazonaws.com/2006-03-01");
+			      "http://s3.amazonaws.com/doc/2006-03-01/");
 }
 
 void list_all_buckets_end(struct req_state *s)
@@ -117,14 +117,14 @@ void RGWListBuckets_REST_S3::send_response()
 
 int RGWListBucket_REST_S3::get_params()
 {
-  url_decode(s->args.get("prefix"), prefix);
-  url_decode(s->args.get("marker"), marker);
-  url_decode(s->args.get("max-keys"), max_keys);
+  prefix = s->args.get("prefix");
+  marker = s->args.get("marker");
+  max_keys = s->args.get("max-keys");
   ret = parse_max_keys();
   if (ret < 0) {
     return ret;
   }
-  url_decode(s->args.get("delimiter"), delimiter);
+  delimiter = s->args.get("delimiter");
   return 0;
 }
 
@@ -676,7 +676,7 @@ int RGWHandler_REST_S3::authorize()
   if (!s->http_auth || !(*s->http_auth)) {
     auth_id = s->args.get("AWSAccessKeyId");
     if (auth_id.size()) {
-      url_decode(s->args.get("Signature"), auth_sign);
+      auth_sign = s->args.get("Signature");
 
       string date = s->args.get("Expires");
       time_t exp = atoll(date.c_str());

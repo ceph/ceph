@@ -5620,7 +5620,10 @@ int ReplicatedPG::recover_backfill(int max)
       dout(20) << " removing peer " << pbi.begin << dendl;
       to_remove[pbi.begin] = pbi.objects.begin()->second;
       pbi.pop_front();
-      ops++;
+      // Don't increment ops here because deletions
+      // are cheap and not replied to unlike real recovery_ops,
+      // and we can't increment ops without requeueing ourself
+      // for recovery.
     } else if (pbi.begin == backfill_info.begin) {
       if (pbi.objects.begin()->second !=
 	  backfill_info.objects.begin()->second) {
@@ -5834,7 +5837,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     if (soid.snap == CEPH_SNAPDIR ||
 	soid.snap == CEPH_NOSNAP) {
       if (p->second.attrs.count(SS_ATTR) == 0) {
-	dout(0) << mode << " no '" << SS_ATTR << "' attr on " << soid << dendl;
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " no '" << SS_ATTR << "' attr";
 	errors++;
 	continue;
       }
@@ -5845,7 +5849,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != hobject_t()) {
-	osd->clog.error() << "Missing clone(s) for " << head << "\n";
+	osd->clog.error() << mode << " " << info.pgid << " " << head
+			  << " missing clones";
 	errors++;
       }
       
@@ -5876,7 +5881,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
-      dout(0) << mode << " no '" << OI_ATTR << "' attr on " << soid << dendl;
+      osd->clog.error() << mode << " " << info.pgid << " " << soid
+			<< " no '" << OI_ATTR << "' attr";
       errors++;
       continue;
     }
@@ -5885,9 +5891,9 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     object_info_t oi(bv);
 
     if (oi.size != p->second.size) {
-      derr << "on disk size (" << p->second.size
-	   << ") does not match object info size (" << oi.size
-	   << ") for " << soid << dendl;
+      osd->clog.error() << mode << " " << info.pgid << " " << soid
+			<< " on disk size (" << p->second.size
+			<< ") does not match object info size (" << oi.size << ")";
       ++errors;
     }
 
@@ -5901,7 +5907,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
     if (soid.snap == CEPH_NOSNAP) {
       if (!snapset.head_exists) {
-	dout(0) << mode << "  snapset.head_exists=false, but " << soid << " exists" << dendl;
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " snapset.head_exists=false, but object exists";
 	errors++;
 	continue;
       }

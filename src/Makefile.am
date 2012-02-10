@@ -109,7 +109,7 @@ osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.la
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -622,11 +622,6 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
-#unittest_interval_tree_SOURCES = test/TestIntervalTree.cc
-#unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
-#unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_PROGRAMS += unittest_interval_tree
-
 unittest_ipaddr_SOURCES = test/test_ipaddr.cc
 unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_ipaddr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -899,11 +894,13 @@ libcommon_files = \
 	common/armor.c \
 	common/xattr.c \
 	common/safe_io.c \
+	common/snap_types.cc \
 	common/str_list.cc \
 	common/errno.cc \
 	msg/SimpleMessenger.cc \
-	mon/MonMap.cc \
+	mon/MonCaps.cc \
 	mon/MonClient.cc \
+	mon/MonMap.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -961,8 +958,7 @@ libmon_la_SOURCES = \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
-	mon/MonitorStore.cc \
-	mon/MonCaps.cc
+	mon/MonitorStore.cc
 libmon_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libmon.la
 
@@ -1106,6 +1102,7 @@ noinst_HEADERS = \
 	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
+	common/snap_types.h\
         common/Clock.h\
         common/Cond.h\
         common/ConfUtils.h\
@@ -1174,7 +1171,6 @@ noinst_HEADERS = \
 	include/color.h\
 	include/compat.h\
 	include/crc32c.h\
-        include/cstring.h\
         include/encoding.h\
         include/err.h\
         include/error.h\
@@ -1189,7 +1185,6 @@ noinst_HEADERS = \
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
-        include/nstring.h\
         include/object.h\
         include/page.h\
         include/rangeset.h\
@@ -1198,7 +1193,6 @@ noinst_HEADERS = \
         include/statlite.h\
 	include/str_list.h\
         include/triple.h\
-        include/tstring.h\
         include/types.h\
         include/utime.h\
         include/dlist.h\

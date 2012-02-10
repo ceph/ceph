@@ -35,6 +35,50 @@ void osd_reqid_t::decode(bufferlist::iterator &bl)
 }
 
 // -- osd_stat_t --
+void osd_stat_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("kb", kb);
+  f->dump_unsigned("kb_used", kb_used);
+  f->dump_unsigned("kb_avail", kb_avail);
+  f->open_array_section("hb_in");
+  for (vector<int>::const_iterator p = hb_in.begin(); p != hb_in.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+  f->open_array_section("hb_out");
+  for (vector<int>::const_iterator p = hb_out.begin(); p != hb_out.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+  f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
+  f->dump_int("num_snap_trimming", num_snap_trimming);
+}
+
+void osd_stat_t::encode(bufferlist &bl) const
+{
+  __u8 v = 1;
+  ::encode(v, bl);
+  ::encode(kb, bl);
+  ::encode(kb_used, bl);
+  ::encode(kb_avail, bl);
+  ::encode(snap_trim_queue_len, bl);
+  ::encode(num_snap_trimming, bl);
+  ::encode(hb_in, bl);
+  ::encode(hb_out, bl);
+}
+
+void osd_stat_t::decode(bufferlist::iterator &bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(kb, bl);
+  ::decode(kb_used, bl);
+  ::decode(kb_avail, bl);
+  ::decode(snap_trim_queue_len, bl);
+  ::decode(num_snap_trimming, bl);
+  ::decode(hb_in, bl);
+  ::decode(hb_out, bl);
+}
+
+
 void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
 {
   o.push_back(new osd_stat_t);
@@ -76,6 +120,21 @@ bool pg_t::parse(const char *s)
   else
     m_preferred = -1;
   return true;
+}
+
+void pg_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("pool", m_pool);
+  f->dump_unsigned("seed", m_seed);
+  f->dump_int("preferred_osd", m_preferred);
+}
+
+void pg_t::generate_test_instances(list<pg_t*>& o)
+{
+  o.push_back(new pg_t);
+  o.push_back(new pg_t(1, 2, -1));
+  o.push_back(new pg_t(13123, 3, -1));
+  o.push_back(new pg_t(131223, 4, 23));
 }
 
 ostream& operator<<(ostream& out, const pg_t &pg)
@@ -174,6 +233,20 @@ void coll_t::decode(bufferlist::iterator& bl)
     throw std::domain_error(oss.str());
   }
   }
+}
+
+void coll_t::dump(Formatter *f) const
+{
+  f->dump_string("name", str);
+}
+
+void coll_t::generate_test_instances(list<coll_t*>& o)
+{
+  o.push_back(new coll_t);
+  o.push_back(new coll_t("meta"));
+  o.push_back(new coll_t("temp"));
+  o.push_back(new coll_t("foo"));
+  o.push_back(new coll_t("bar"));
 }
 
 // ---
@@ -1560,13 +1633,48 @@ void SnapSet::decode(bufferlist::iterator& bl)
   ::decode(clone_size, bl);
 }
 
+void SnapSet::dump(Formatter *f) const
+{
+  SnapContext sc(seq, snaps);
+  f->open_object_section("snap_context");
+  sc.dump(f);
+  f->close_section();
+  f->dump_int("head_exists", head_exists);
+  f->open_array_section("clones");
+  for (vector<snapid_t>::const_iterator p = clones.begin(); p != clones.end(); ++p) {
+    f->open_object_section("clone");
+    f->dump_unsigned("snap", *p);
+    f->dump_unsigned("size", clone_size.find(*p)->second);
+    f->dump_stream("overlap") << clone_overlap.find(*p)->second;
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void SnapSet::generate_test_instances(list<SnapSet*>& o)
+{
+  o.push_back(new SnapSet);
+  o.push_back(new SnapSet);
+  o.back()->head_exists = true;
+  o.back()->seq = 123;
+  o.back()->snaps.push_back(123);
+  o.back()->snaps.push_back(12);
+  o.push_back(new SnapSet);
+  o.back()->head_exists = true;
+  o.back()->seq = 123;
+  o.back()->snaps.push_back(123);
+  o.back()->snaps.push_back(12);
+  o.back()->clones.push_back(12);
+  o.back()->clone_size[12] = 12345;
+  o.back()->clone_overlap[12];
+}
+
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
   return out << cs.seq << "=" << cs.snaps << ":"
 	     << cs.clones
 	     << (cs.head_exists ? "+head":"");
 }
-
 
 // -- watch_info_t --
 
@@ -1798,6 +1906,90 @@ void ScrubMap::decode(bufferlist::iterator& bl)
   ::decode(incr_since, bl);
 }
 
+void ScrubMap::dump(Formatter *f) const
+{
+  f->dump_stream("valid_through") << valid_through;
+  f->dump_stream("incremental_since") << incr_since;
+  f->open_array_section("attrs");
+  for (map<string,bufferptr>::const_iterator p = attrs.begin(); p != attrs.end(); ++p) {
+    f->open_object_section("attr");
+    f->dump_string("name", p->first);
+    f->dump_int("length", p->second.length());
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("objects");
+  for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
+    f->open_object_section("object");
+    f->dump_string("name", p->first.oid.name);
+    f->dump_unsigned("hash", p->first.hash);
+    f->dump_string("key", p->first.get_key());
+    f->dump_int("snapid", p->first.snap);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
+{
+  o.push_back(new ScrubMap);
+  o.push_back(new ScrubMap);
+  o.back()->valid_through = eversion_t(1, 2);
+  o.back()->incr_since = eversion_t(3, 4);
+  o.back()->attrs["foo"] = buffer::copy("foo", 3);
+  o.back()->attrs["bar"] = buffer::copy("barval", 6);
+  list<object*> obj;
+  object::generate_test_instances(obj);
+  o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456)] = *obj.back();
+  obj.pop_back();
+  o.back()->objects[hobject_t(object_t("bar"), string(), 123, 456)] = *obj.back();
+}
+
+// -- ScrubMap::object --
+
+void ScrubMap::object::encode(bufferlist& bl) const
+{
+  __u8 struct_v = 1;
+  ::encode(struct_v, bl);
+  ::encode(size, bl);
+  ::encode(negative, bl);
+  ::encode(attrs, bl);
+}
+
+void ScrubMap::object::decode(bufferlist::iterator& bl)
+{
+  __u8 struct_v;
+  ::decode(struct_v, bl);
+  ::decode(size, bl);
+  ::decode(negative, bl);
+  ::decode(attrs, bl);
+}
+
+void ScrubMap::object::dump(Formatter *f) const
+{
+  f->dump_int("size", size);
+  f->dump_int("negative", negative);
+  f->open_array_section("attrs");
+  for (map<string,bufferptr>::const_iterator p = attrs.begin(); p != attrs.end(); ++p) {
+    f->open_object_section("attr");
+    f->dump_string("name", p->first);
+    f->dump_int("length", p->second.length());
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ScrubMap::object::generate_test_instances(list<object*>& o)
+{
+  o.push_back(new object);
+  o.push_back(new object);
+  o.back()->negative = true;
+  o.push_back(new object);
+  o.back()->size = 123;
+  o.back()->attrs["foo"] = buffer::copy("foo", 3);
+  o.back()->attrs["bar"] = buffer::copy("barval", 6);
+}
 
 // -- OSDOp --
 

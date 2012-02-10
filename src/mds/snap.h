@@ -18,6 +18,7 @@
 #include "mdstypes.h"
 #include "include/xlist.h"
 #include "include/elist.h"
+#include "common/snap_types.h"
 
 /*
  * generic snap descriptor.

@@ -24,6 +24,7 @@
 #include "include/utime.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
+#include "common/snap_types.h"
 #include "common/Formatter.h"
 
 
@@ -192,6 +193,8 @@ struct pg_t {
     ::decode(opg, bl);
     *this = opg;
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_t)
 
@@ -280,6 +283,9 @@ public:
   inline bool operator!=(const coll_t& rhs) const {
     return str != rhs.str;
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<coll_t*>& o);
 
 private:
   static std::string pg_and_snap_to_str(pg_t p, snapid_t s) {
@@ -407,47 +413,6 @@ struct osd_stat_t {
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
-  void dump(Formatter *f) const {
-    f->dump_unsigned("kb", kb);
-    f->dump_unsigned("kb_used", kb_used);
-    f->dump_unsigned("kb_avail", kb_avail);
-    f->open_array_section("hb_in");
-    for (vector<int>::const_iterator p = hb_in.begin(); p != hb_in.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->open_array_section("hb_out");
-    for (vector<int>::const_iterator p = hb_out.begin(); p != hb_out.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
-    f->dump_int("num_snap_trimming", num_snap_trimming);
-  }
-
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(kb, bl);
-    ::encode(kb_used, bl);
-    ::encode(kb_avail, bl);
-    ::encode(snap_trim_queue_len, bl);
-    ::encode(num_snap_trimming, bl);
-    ::encode(hb_in, bl);
-    ::encode(hb_out, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(kb, bl);
-    ::decode(kb_used, bl);
-    ::decode(kb_avail, bl);
-    ::decode(snap_trim_queue_len, bl);
-    ::decode(num_snap_trimming, bl);
-    ::decode(hb_in, bl);
-    ::decode(hb_out, bl);
-  }
-
-  static void generate_test_instances(std::list<osd_stat_t*>& o);
-  
   void add(const osd_stat_t& o) {
     kb += o.kb;
     kb_used += o.kb_used;
@@ -463,6 +428,10 @@ struct osd_stat_t {
     num_snap_trimming -= o.num_snap_trimming;
   }
 
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(std::list<osd_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_stat_t)
 
@@ -706,6 +675,11 @@ struct object_stat_sum_t {
     num_object_copies = nrep * num_objects;
   }
 
+  bool is_zero() const {
+    object_stat_sum_t zero;
+    return memcmp(this, &zero, sizeof(zero)) == 0;
+  }
+
   void add(const object_stat_sum_t& o);
   void sub(const object_stat_sum_t& o);
 
@@ -736,6 +710,10 @@ struct object_stat_collection_t {
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<object_stat_collection_t*>& o);
 
+  bool is_zero() const {
+    return (cat_sum.empty() && sum.is_zero());
+  }
+
   void clear() {
     sum.clear();
     cat_sum.clear();
@@ -758,8 +736,12 @@ struct object_stat_collection_t {
     sum.sub(o.sum);
     for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
 	 p != o.cat_sum.end();
-	 ++p)
-      cat_sum[p->first].sub(p->second);
+	 ++p) {
+      object_stat_sum_t& s = cat_sum[p->first];
+      s.sub(p->second);
+      if (s.is_zero())
+	cat_sum.erase(p->first);
+    }
   }
 };
 WRITE_CLASS_ENCODER(object_stat_collection_t)
@@ -836,6 +818,12 @@ struct pool_stat_t {
     stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+  }
+
+  bool is_zero() const {
+    return (stats.is_zero() &&
+	    log_size == 0 &&
+	    ondisk_log_size == 0);
   }
 
   void dump(Formatter *f) const;
@@ -1447,6 +1435,8 @@ struct SnapSet {
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SnapSet*>& o);  
 };
 WRITE_CLASS_ENCODER(SnapSet)
 
@@ -1554,22 +1544,12 @@ struct ScrubMap {
     bool negative;
     map<string,bufferptr> attrs;
 
-    object(): size(0),negative(0),attrs() {}
+    object(): size(0), negative(false) {}
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(size, bl);
-      ::encode(negative, bl);
-      ::encode(attrs, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(size, bl);
-      ::decode(negative, bl);
-      ::decode(attrs, bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<object*>& o);
   };
   WRITE_CLASS_ENCODER(object)
 
@@ -1583,6 +1563,8 @@ struct ScrubMap {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)

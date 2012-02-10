@@ -9,9 +9,9 @@
 
 int RGWListBuckets_REST_SWIFT::get_params()
 {
-  url_decode(s->args.get("marker"), marker);
+  marker = s->args.get("marker");
   string limit_str;
-  url_decode(s->args.get("limit"), limit_str);
+  limit_str = s->args.get("limit");
   limit = strtol(limit_str.c_str(), NULL, 10);
   if (limit > limit_max || limit < 0)
     return -ERR_PRECONDITION_FAILED;
@@ -65,9 +65,9 @@ done:
 
 int RGWListBucket_REST_SWIFT::get_params()
 {
-  url_decode(s->args.get("prefix"), prefix);
-  url_decode(s->args.get("marker"), marker);
-  url_decode(s->args.get("limit"), max_keys);
+  prefix = s->args.get("prefix");
+  marker = s->args.get("marker");
+  max_keys = s->args.get("limit");
   ret = parse_max_keys();
   if (ret < 0) {
     return ret;
@@ -75,11 +75,11 @@ int RGWListBucket_REST_SWIFT::get_params()
   if (max > default_max)
     return -ERR_PRECONDITION_FAILED;
 
-  url_decode(s->args.get("delimiter"), delimiter);
+  delimiter = s->args.get("delimiter");
 
   string path_args;
   if (s->args.exists("path")) { // should handle empty path
-    url_decode(s->args.get("path"), path_args);
+    path_args = s->args.get("path");
     if (!delimiter.empty() || !prefix.empty()) {
       return -EINVAL;
     }

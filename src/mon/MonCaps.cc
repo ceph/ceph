@@ -15,6 +15,7 @@
 #include <errno.h>
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "MonCaps.h"
 #include "mon_types.h"
 
@@ -53,13 +54,14 @@ bool MonCaps::get_next_token(string s, size_t& pos, string& token)
   return true;
 }
 
-bool MonCaps::is_rwx(string& token, rwx_t& cap_val)
+bool MonCaps::is_rwx(CephContext *cct, string& token, rwx_t& cap_val)
 {
   const char *t = token.c_str();
   int val = 0;
 
-  generic_dout(10) << "got token=" << token << dendl;
-
+  if (cct)
+    ldout(cct, 10) << "got token=" << token << dendl;
+  
   while (*t) {
     switch (*t) {
     case 'r':
@@ -76,7 +78,8 @@ bool MonCaps::is_rwx(string& token, rwx_t& cap_val)
     }
     t++;
   }
-  generic_dout(10) << "return val=" << val << dendl;
+  if (cct)
+    ldout(cct, 10) << "return val=" << val << dendl;
 
   if (val)
     cap_val = val;
@@ -103,15 +106,23 @@ int MonCaps::get_service_id(string& token)
   return -EINVAL;
 }
 
-bool MonCaps::parse(bufferlist::iterator& iter)
+bool MonCaps::parse(bufferlist::iterator& iter, CephContext *cct)
 {
   string s;
-
   try {
     ::decode(s, iter);
-    text = s;
+  } catch (const buffer::error &err) {
+    return false;
+  }
+  return parse(s, cct);
+}
 
-    generic_dout(10) << "decoded caps: " << s << dendl;
+bool MonCaps::parse(string s, CephContext *cct)
+{
+  text = s;
+  try {
+    if (cct)
+      ldout(cct, 10) << "decoded caps: " << s << dendl;
 
     size_t pos = 0;
     string token;
@@ -142,7 +153,7 @@ bool MonCaps::parse(bufferlist::iterator& iter)
 #define ASSERT_STATE(x) \
 do { \
   if (!(x)) { \
-       generic_dout(0) << "error parsing caps at pos=" << pos << " (" #x ")" << dendl; \
+    if (cct) ldout(cct, 0) << "error parsing caps at pos=" << pos << " (" #x ")" << dendl; \
   } \
 } while (0)
 
@@ -175,7 +186,7 @@ do { \
 	} else if (token.compare("uid") == 0) {
 	  ASSERT_STATE(op_allow || op_deny);
 	  any_cmd = true;
-	} else if (is_rwx(token, cap_val)) {
+	} else if (is_rwx(cct, token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
 	  ASSERT_STATE(got_eq);
@@ -188,7 +199,8 @@ do { \
 	      if (service >= 0) {
 		services_list.push_back(service);
 	      } else {
-		generic_dout(0) << "error parsing caps at pos=" << pos << ", unknown service_name: " << token << dendl;
+		if (cct)
+		  ldout(cct, 0) << "error parsing caps at pos=" << pos << ", unknown service_name: " << token << dendl;
 	      }
 	    } else { //must be a uid
 	      uid_list.push_back(strtoul(token.c_str(), NULL, 10));
@@ -233,10 +245,12 @@ do { \
     return false;
   }
 
-  generic_dout(10) << "default=" << (int)default_action << dendl;
-  map<int, MonCap>::iterator it;
-  for (it = services_map.begin(); it != services_map.end(); ++it) {
-    generic_dout(10) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
+  if (cct) {
+    ldout(cct, 10) << "default=" << (int)default_action << dendl;
+    map<int, MonCap>::iterator it;
+    for (it = services_map.begin(); it != services_map.end(); ++it) {
+      ldout(cct, 10) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
+    }
   }
 
   return true;
@@ -284,4 +298,109 @@ bool MonCaps::check_privileges(int service, int req_perms, uint64_t req_auid)
   if ((service_caps & req_perms) != req_perms)
     return false;
   return true;
+}
+
+// ----
+
+string rwx_to_string(rwx_t r)
+{
+  string s;
+  if (r & MON_CAP_R)
+    s += "r";
+  else
+    s += "-";
+  if (r & MON_CAP_W)
+    s += "w";
+  else
+    s += "-";
+  if (r & MON_CAP_X)
+    s += "x";
+  else
+    s += "-";
+  return s;
+}
+
+// ----
+
+void MonCap::dump(Formatter *f) const
+{
+  f->dump_string("allow", rwx_to_string(allow));
+  f->dump_string("deny", rwx_to_string(deny));
+}
+
+void MonCap::generate_test_instances(list<MonCap*>& o)
+{
+  o.push_back(new MonCap);
+  o.push_back(new MonCap(MON_CAP_R, MON_CAP_W));
+  o.push_back(new MonCap(MON_CAP_RW, MON_CAP_ALL));
+}
+
+// ----
+
+void MonCaps::encode(bufferlist& bl) const
+{
+  __u8 v = 2;
+  ::encode(v, bl);
+  ::encode(text, bl);
+  ::encode(default_action, bl);
+  ::encode(services_map, bl);
+  ::encode(pool_auid_map, bl);
+  ::encode(allow_all, bl);
+  ::encode(auid, bl);
+  ::encode(cmd_allow, bl);
+}
+
+void MonCaps::decode(bufferlist::iterator& bl)
+{
+  __u8 v;
+  ::decode(v, bl);
+  ::decode(text, bl);
+  ::decode(default_action, bl);
+  ::decode(services_map, bl);
+  ::decode(pool_auid_map, bl);
+  ::decode(allow_all, bl);
+  ::decode(auid, bl);
+  ::decode(cmd_allow, bl);
+}
+
+void MonCaps::dump(Formatter *f) const
+{
+  f->dump_string("text", text);
+  f->dump_string("default_action", rwx_to_string(default_action));
+  f->dump_int("allow_all", allow_all);
+  f->dump_unsigned("auid", auid);
+  f->open_object_section("services_map");
+  for (map<int,MonCap>::const_iterator p = services_map.begin(); p != services_map.end(); ++p) {
+    f->open_object_section("moncap");
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("pool_auid_map");
+  for (map<int,MonCap>::const_iterator p = pool_auid_map.begin(); p != pool_auid_map.end(); ++p) {
+    f->open_object_section("moncap");
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();   
+}
+
+void MonCaps::generate_test_instances(list<MonCaps*>& o)
+{
+  o.push_back(new MonCaps);
+
+  o.push_back(new MonCaps);
+  o.back()->parse("allow *", NULL);
+
+  o.push_back(new MonCaps);
+  o.back()->parse("allow rwx", NULL);
+
+  o.push_back(new MonCaps);
+  o.back()->parse("allow rx", NULL);
+
+  o.push_back(new MonCaps);
+  o.back()->parse("allow wx", NULL);
+
+  o.push_back(new MonCaps);
+  o.back()->parse("allow command foo; allow command bar *; allow command baz ...; allow command foo add * mon allow\\ rwx osd allow\\ *", NULL);
 }
