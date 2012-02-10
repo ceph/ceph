@@ -43,7 +43,8 @@ void Paxos::init()
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
   first_committed = mon->store->get_int(machine_name, "first_committed");
-  latest_stashed = mon->store->get_int(machine_name, "last_consumed");
+  bufferlist temp;
+  latest_stashed = get_stashed(temp);
   slurping = mon->store->get_int(machine_name, "slurping");
 
   dout(10) << "init" << dendl;
@@ -1043,7 +1044,6 @@ void Paxos::stash_latest(version_t v, bufferlist& bl)
   
   dout(10) << "stash_latest v" << v << " len " << bl.length() << dendl;
   mon->store->put_bl_ss(final, machine_name, "latest");
-  mon->store->put_int(v, machine_name, "last_consumed");
 
   latest_stashed = v;
 }
