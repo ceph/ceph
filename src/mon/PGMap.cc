@@ -421,7 +421,7 @@ void PGMap::dump(ostream& ss) const
   ss << "last_pg_scan " << last_pg_scan << std::endl;
   ss << "full_ratio " << full_ratio << std::endl;
   ss << "nearfull_ratio " << nearfull_ratio << std::endl;
-  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
+  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub\tscrub_stamp" << std::endl;
   for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
        i != pg_stat.end(); ++i) {
     const pg_stat_t &st(i->second);
