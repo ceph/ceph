@@ -235,11 +235,12 @@ void Monitor::init()
   }
 
   // init paxos
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->init();
-
-  for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
-    (*ps)->update_from_paxos();
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos[i]->init();
+    if (paxos[i]->is_consistent()) {
+      paxos_service[i]->update_from_paxos();
+    } // else we don't do anything; handle_probe_reply will detect it's slurping
+  }
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
@@ -499,7 +500,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	dout(0) << " peer has paxos machine " << p->first << " but i don't... weird" << dendl;
 	continue;  // weird!
       }
-      if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
+      if (pax->is_slurping()) {
+        dout(10) << " My paxos machine " << p->first
+                 << " is currently slurping, so that will continue. Peer has v "
+                 << p->second << dendl;
+        ok = false;
+      } else if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
 	dout(10) << " peer paxos machine " << p->first << " v " << p->second
 		 << " vs my v " << pax->get_version()
 		 << " (too far ahead)"
@@ -680,10 +686,7 @@ void Monitor::handle_probe_data(MMonProbe *m)
       store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
     }
 
-    pax->first_committed = m->oldest_version;
     pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
-
-    store->put_int(m->oldest_version, m->machine_name.c_str(), "first_committed");
     store->put_int(pax->last_committed, m->machine_name.c_str(),
 		   "last_committed");
   }
