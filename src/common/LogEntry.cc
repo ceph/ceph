@@ -33,20 +33,19 @@ void LogEntryKey::generate_test_instances(list<LogEntryKey*>& o)
 
 void LogEntry::encode(bufferlist& bl) const
 {
-  __u8 v = 1;
-  ::encode(v, bl);
+  ENCODE_START(2, 2, bl);
   __u16 t = type;
   ::encode(who, bl);
   ::encode(stamp, bl);
   ::encode(seq, bl);
   ::encode(t, bl);
   ::encode(msg, bl);
+  ENCODE_FINISH(bl);
 }
 
 void LogEntry::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   __u16 t;
   ::decode(who, bl);
   ::decode(stamp, bl);
@@ -54,6 +53,7 @@ void LogEntry::decode(bufferlist::iterator& bl)
   ::decode(t, bl);
   type = (clog_type)t;
   ::decode(msg, bl);
+  DECODE_FINISH(bl);
 }
 
 void LogEntry::dump(Formatter *f) const
@@ -75,18 +75,18 @@ void LogEntry::generate_test_instances(list<LogEntry*>& o)
 
 void LogSummary::encode(bufferlist& bl) const
 {
-  __u8 v = 1;
-  ::encode(v, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(version, bl);
   ::encode(tail, bl);
+  ENCODE_FINISH(bl);
 }
 
 void LogSummary::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(version, bl);
   ::decode(tail, bl);
+  DECODE_FINISH(bl);
 }
 
 void LogSummary::dump(Formatter *f) const
