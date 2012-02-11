@@ -1310,6 +1310,7 @@ public:
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void update_snap_collections(vector<pg_log_entry_t> &log_entries,
 			       ObjectStore::Transaction& t);
+  void filter_snapc(SnapContext& snapc);
   void adjust_local_snaps();
 
   void log_weirdness();

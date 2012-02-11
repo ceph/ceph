@@ -2262,6 +2262,36 @@ void PG::update_snap_collections(vector<pg_log_entry_t> &log_entries,
   }
 }
 
+/**
+ * filter trimming|trimmed snaps out of snapcontext
+ */
+void PG::filter_snapc(SnapContext& snapc)
+{
+  bool filtering = false;
+  vector<snapid_t> newsnaps;
+  for (vector<snapid_t>::iterator p = snapc.snaps.begin();
+       p != snapc.snaps.end();
+       ++p) {
+    if (snap_trimq.contains(*p) || info.purged_snaps.contains(*p)) {
+      if (!filtering) {
+	// start building a new vector with what we've seen so far
+	dout(10) << "filter_snapc filtering " << snapc << dendl;
+	newsnaps.insert(newsnaps.begin(), snapc.snaps.begin(), p);
+	filtering = true;
+      }
+      dout(20) << "filter_snapc  removing trimq|purged snap " << *p << dendl;
+    } else {
+      if (filtering)
+	newsnaps.push_back(*p);  // continue building new vector
+    }
+  }
+  if (filtering) {
+    snapc.snaps.swap(newsnaps);
+    dout(10) << "filter_snapc  result " << snapc << dendl;
+  }
+}
+
+
 void PG::adjust_local_snaps()
 {
   interval_set<snapid_t> to_remove;

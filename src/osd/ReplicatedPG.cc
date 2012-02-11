@@ -2427,6 +2427,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snapc.snaps = ctx->new_snapset.snaps;
     dout(10) << " using newer snapc " << snapc << dendl;
   }
+
+  if (ctx->obs->exists)
+    filter_snapc(snapc);
   
   if (ctx->obs->exists &&               // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
