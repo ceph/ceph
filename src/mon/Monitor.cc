@@ -778,6 +778,42 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
   return false;
 }
 
+void Monitor::_mon_status(ostream& ss)
+{
+  JSONFormatter jf(true);
+  jf.open_object_section("mon_status");
+  jf.dump_string("name", name);
+  jf.dump_int("rank", rank);
+  jf.dump_string("state", get_state_name());
+  jf.dump_int("election_epoch", get_epoch());
+
+  jf.open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+    jf.dump_int("mon", *p);
+  jf.close_section();
+
+  jf.open_array_section("outside_quorum");
+  for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+    jf.dump_string("mon", *p);
+  jf.close_section();
+
+  if (is_slurping()) {
+    jf.dump_stream("slurp_source") << slurp_source;
+    jf.open_object_section("slurp_version");
+    for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
+      jf.dump_int(p->first.c_str(), p->second);	  
+    jf.close_section();
+  }
+
+  jf.open_object_section("monmap");
+  monmap->dump(&jf);
+  jf.close_section();
+
+  jf.close_section();
+  
+  jf.flush(ss);
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
@@ -896,39 +932,8 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
-      JSONFormatter jf(true);
-      jf.open_object_section("mon_status");
-      jf.dump_string("name", name);
-      jf.dump_int("rank", rank);
-      jf.dump_string("state", get_state_name());
-      jf.dump_int("election_epoch", get_epoch());
-
-      jf.open_array_section("quorum");
-      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-	jf.dump_int("mon", *p);
-      jf.close_section();
-
-      jf.open_array_section("outside_quorum");
-      for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
-	jf.dump_string("mon", *p);
-      jf.close_section();
-
-      if (is_slurping()) {
-	jf.dump_stream("slurp_source") << slurp_source;
-	jf.open_object_section("slurp_version");
-	for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
-	  jf.dump_int(p->first.c_str(), p->second);	  
-	jf.close_section();
-      }
-
-      jf.open_object_section("monmap");
-      monmap->dump(&jf);
-      jf.close_section();
-
-      jf.close_section();
-
       stringstream ss;
-      jf.flush(ss);
+      _mon_status(ss);
       rs = ss.str();
       r = 0;
     }

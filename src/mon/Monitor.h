@@ -187,7 +187,8 @@ private:
   void probe_timeout(int r);
 
   void slurp();
-  
+
+ 
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
@@ -238,6 +239,7 @@ public:
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
+  void _mon_status(ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
