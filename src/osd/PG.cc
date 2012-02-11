@@ -1607,7 +1607,7 @@ void PG::purge_strays()
        p++) {
     if (get_osdmap()->is_up(*p)) {
       dout(10) << "sending PGRemove to osd." << *p << dendl;
-      osd->queue_for_removal(*p, info.pgid);
+      osd->queue_for_removal(get_osdmap()->get_epoch(), *p, info.pgid);
       stray_purged.insert(*p);
     } else {
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;

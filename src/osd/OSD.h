@@ -746,9 +746,9 @@ protected:
   Mutex remove_list_lock;
   map<epoch_t, map<int, vector<pg_t> > > remove_list;
 
-  void queue_for_removal(int osd, pg_t pgid) {
+  void queue_for_removal(epoch_t epoch, int osd, pg_t pgid) {
     remove_list_lock.Lock();
-    remove_list[osdmap->get_epoch()][osd].push_back(pgid);
+    remove_list[epoch][osd].push_back(pgid);
     remove_list_lock.Unlock();
   }
 
