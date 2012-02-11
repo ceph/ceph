@@ -764,8 +764,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   int ret = 0;
 
   s->fcgx = fcgx;
-  string script_name = s->env->get("SCRIPT_NAME");
-  url_decode(script_name, s->path_name);
+  s->path_name = s->env->get("SCRIPT_NAME");
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {

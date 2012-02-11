@@ -840,9 +840,9 @@ void PGMonitor::send_pg_creates()
 	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
       msg[osd] = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
-    msg[osd]->mkpg[pgid].created = pg_map.pg_stat[pgid].created;
-    msg[osd]->mkpg[pgid].parent = pg_map.pg_stat[pgid].parent;
-    msg[osd]->mkpg[pgid].split_bits = pg_map.pg_stat[pgid].parent_split_bits;
+    msg[osd]->mkpg[pgid] = pg_create_t(pg_map.pg_stat[pgid].created,
+				       pg_map.pg_stat[pgid].parent,
+				       pg_map.pg_stat[pgid].parent_split_bits);
   }
 
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();
@@ -877,7 +877,8 @@ bool PGMonitor::check_down_pgs()
       } else {
 	stat = &q->second;
       }
-      stat->state |= PG_STATE_STALE;	
+      stat->state |= PG_STATE_STALE;
+      stat->last_unstale = ceph_clock_now(g_ceph_context);
       ret = true;
     }
   }
@@ -1107,8 +1108,12 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     ss << "pg " << pgid << " already creating";
     goto out;
   }
-  pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
-  pending_inc.pg_stat_updates[pgid].created = epoch;
+  {
+    pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
+    s.state = PG_STATE_CREATING;
+    s.created = epoch;
+    s.last_change = ceph_clock_now(g_ceph_context);
+  }
   ss << "pg " << m->cmd[2] << " now creating, ok";
   getline(ss, rs);
   paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));

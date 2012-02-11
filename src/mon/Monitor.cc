@@ -48,6 +48,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
 
 #include "include/color.h"
 #include "include/ceph_fs.h"
@@ -108,6 +109,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   probe_timeout_event(NULL),
 
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
+  admin_hook(NULL),
   routed_request_tid(0)
 {
   rank = -1;
@@ -170,6 +172,30 @@ enum {
   l_mon_first = 456000,
   l_mon_last,
 };
+
+
+class AdminHook : public AdminSocketHook {
+  Monitor *mon;
+public:
+  AdminHook(Monitor *m) : mon(m) {}
+  bool call(std::string command, bufferlist& out) {
+    stringstream ss;
+    mon->do_admin_command(command, ss);
+    out.append(ss);
+    return true;
+  }
+};
+
+void Monitor::do_admin_command(string command, ostream& ss)
+{
+  Mutex::Locker l(lock);
+  if (command == "mon_status")
+    _mon_status(ss);
+  else if (command == "quorum_status")
+    _quorum_status(ss);
+  else
+    assert(0 == "bad AdminSocket command binding");
+}
 
 void Monitor::init()
 {
@@ -234,6 +260,15 @@ void Monitor::init()
     key_server.bootstrap_keyring(keyring);
   }
 
+  admin_hook = new AdminHook(this);
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  int r = admin_socket->register_command("mon_status", admin_hook,
+					 "show current monitor status");
+  assert(r == 0);
+  r = admin_socket->register_command("quorum_status", admin_hook,
+					 "show current quorum status");
+  assert(r == 0);
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&clog);
@@ -279,6 +314,14 @@ void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
   
+  if (admin_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("mon_status");
+    admin_socket->unregister_command("quorum_status");
+    delete admin_hook;
+    admin_hook = NULL;
+  }
+
   elector.shutdown();
 
   if (logger) {
@@ -778,6 +821,61 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
   return false;
 }
 
+void Monitor::_quorum_status(ostream& ss)
+{
+  JSONFormatter jf(true);
+  jf.open_object_section("quorum_status");
+  jf.dump_int("election_epoch", get_epoch());
+  
+  jf.open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+    jf.dump_int("mon", *p);
+  jf.close_section();
+
+  jf.open_object_section("monmap");
+  monmap->dump(&jf);
+  jf.close_section();
+
+  jf.close_section();
+  jf.flush(ss);
+}
+
+void Monitor::_mon_status(ostream& ss)
+{
+  JSONFormatter jf(true);
+  jf.open_object_section("mon_status");
+  jf.dump_string("name", name);
+  jf.dump_int("rank", rank);
+  jf.dump_string("state", get_state_name());
+  jf.dump_int("election_epoch", get_epoch());
+
+  jf.open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+    jf.dump_int("mon", *p);
+  jf.close_section();
+
+  jf.open_array_section("outside_quorum");
+  for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+    jf.dump_string("mon", *p);
+  jf.close_section();
+
+  if (is_slurping()) {
+    jf.dump_stream("slurp_source") << slurp_source;
+    jf.open_object_section("slurp_version");
+    for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
+      jf.dump_int(p->first.c_str(), p->second);	  
+    jf.close_section();
+  }
+
+  jf.open_object_section("monmap");
+  monmap->dump(&jf);
+  jf.close_section();
+
+  jf.close_section();
+  
+  jf.flush(ss);
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
@@ -867,68 +965,20 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "quorum_status") {
-
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
 	dout(10) << " waiting for qorum" << dendl;
 	waitfor_quorum.push_back(new C_RetryMessage(this, m));
 	return;
       }
-
-      JSONFormatter jf(true);
-      jf.open_object_section("quorum_status");
-      jf.dump_int("election_epoch", get_epoch());
-
-      jf.open_array_section("quorum");
-      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-	jf.dump_int("mon", *p);
-      jf.close_section();
-
-      jf.open_object_section("monmap");
-      monmap->dump(&jf);
-      jf.close_section();
-
-      jf.close_section();
-
       stringstream ss;
-      jf.flush(ss);
+      _quorum_status(ss);
       rs = ss.str();
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
-      JSONFormatter jf(true);
-      jf.open_object_section("mon_status");
-      jf.dump_string("name", name);
-      jf.dump_int("rank", rank);
-      jf.dump_string("state", get_state_name());
-      jf.dump_int("election_epoch", get_epoch());
-
-      jf.open_array_section("quorum");
-      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-	jf.dump_int("mon", *p);
-      jf.close_section();
-
-      jf.open_array_section("outside_quorum");
-      for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
-	jf.dump_string("mon", *p);
-      jf.close_section();
-
-      if (is_slurping()) {
-	jf.dump_stream("slurp_source") << slurp_source;
-	jf.open_object_section("slurp_version");
-	for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
-	  jf.dump_int(p->first.c_str(), p->second);	  
-	jf.close_section();
-      }
-
-      jf.open_object_section("monmap");
-      monmap->dump(&jf);
-      jf.close_section();
-
-      jf.close_section();
-
       stringstream ss;
-      jf.flush(ss);
+      _mon_status(ss);
       rs = ss.str();
       r = 0;
     }
@@ -1659,21 +1709,16 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   // create it
   int err = store->mkfs();
   if (err) {
-    dout(0) << TEXT_RED << "** ERROR: store->mkfs failed with error code "
-	    << err << ". Aborting." << TEXT_NORMAL << dendl;
-    exit(1);
+    derr << "store->mkfs failed with: " << cpp_strerror(err) << dendl;
+    return err;
   }
 
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
   int r = store->put_bl_ss(magicbl, "magic", 0);
-  if (r < 0) {
-    dout(0) << TEXT_RED << "** ERROR: initializing ceph-mon failed: couldn't "
-	    << "initialize the monitor state machine: " << cpp_strerror(r)
-	    << TEXT_NORMAL << dendl;
-    exit(1);
-  }
+  if (r < 0)
+    return r;
 
   bufferlist features;
   CompatSet mon_features = get_ceph_mon_feature_compat_set();
@@ -1686,8 +1731,18 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
-  if (osdmapbl.length())
+  if (osdmapbl.length()) {
+    // make sure it's a valid osdmap
+    try {
+      OSDMap om;
+      om.decode(osdmapbl);
+    }
+    catch (buffer::error& e) {
+      derr << "error decoding provided osdmap: " << e.what() << dendl;
+      return -EINVAL;
+    }
     store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
+  }
 
   KeyRing keyring;
   r = keyring.load(g_ceph_context, g_conf->keyring);

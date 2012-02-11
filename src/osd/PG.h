@@ -294,17 +294,17 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 2;
-      ::encode(struct_v, bl);
+      ENCODE_START(3, 3, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
       has_checksums = (struct_v >= 2);
       ::decode(tail, bl);
       ::decode(head, bl);
+      DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
       f->dump_unsigned("head", head);
@@ -398,22 +398,22 @@ public:
     Interval() : first(0), last(0), maybe_went_rw(false) {}
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
+      ENCODE_START(2, 2, bl);
       ::encode(first, bl);
       ::encode(last, bl);
       ::encode(up, bl);
       ::encode(acting, bl);
       ::encode(maybe_went_rw, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       ::decode(first, bl);
       ::decode(last, bl);
       ::decode(up, bl);
       ::decode(acting, bl);
       ::decode(maybe_went_rw, bl);
+      DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
       f->dump_unsigned("first", first);
@@ -469,7 +469,7 @@ public:
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
-  int         state;   // see bit defns above
+  unsigned    state;   // PG_STATE_*
 
 public:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
@@ -1310,6 +1310,7 @@ public:
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void update_snap_collections(vector<pg_log_entry_t> &log_entries,
 			       ObjectStore::Transaction& t);
+  void filter_snapc(SnapContext& snapc);
   void adjust_local_snaps();
 
   void log_weirdness();

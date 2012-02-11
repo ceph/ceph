@@ -21,6 +21,9 @@
 #include "include/ceph_features.h"
 
 class MMonPaxos : public Message {
+
+  static const int HEAD_VERSION = 1;
+
  public:
   // op types
   const static int OP_COLLECT =   1; // proposer: propose round
@@ -60,14 +63,15 @@ class MMonPaxos : public Message {
 
   map<version_t,bufferlist> values;
 
-  MMonPaxos() : Message(MSG_MON_PAXOS) {}
+  MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION) { }
   MMonPaxos(epoch_t e, int o, int mid, utime_t now) : 
-    Message(MSG_MON_PAXOS),
+    Message(MSG_MON_PAXOS, HEAD_VERSION),
     epoch(e),
     op(o), machine_id(mid),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
     sent_timestamp(now),
-    latest_version(0) { }
+    latest_version(0) {
+  }
 
 private:
   ~MMonPaxos() {}
@@ -87,8 +91,8 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    if (features & CEPH_FEATURE_MONCLOCKCHECK)
-      header.version = 1;
+    if ((features & CEPH_FEATURE_MONCLOCKCHECK) == 0)
+      header.version = 0;
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(machine_id, payload);

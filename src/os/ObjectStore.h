@@ -190,7 +190,9 @@ public:
     uint32_t get_data_offset() {
       if (largest_data_off_in_tbl) {
 	return largest_data_off_in_tbl +
-	  sizeof(__u8) +  // struct_v
+	  sizeof(__u8) +  // encode struct_v
+	  sizeof(__u8) +  // encode compat_v
+	  sizeof(__u32) + // encode len
 	  sizeof(ops) +
 	  sizeof(pad_unused_bytes) +
 	  sizeof(largest_data_len) +
@@ -485,35 +487,31 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 4;
-      ::encode(struct_v, bl);
+      ENCODE_START(5, 5, bl);
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
       ::encode(largest_data_off, bl);
       ::encode(largest_data_off_in_tbl, bl);
       ::encode(tbl, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      if (struct_v == 1) {
-	assert(0 == "dropped support for <= v0.19 transaction format");
-      } else {
-	if (struct_v < 4)
-	  sobject_encoding = true;
-	else
-	  sobject_encoding = false;
-	assert(struct_v <= 4);
-	::decode(ops, bl);
-	::decode(pad_unused_bytes, bl);
-	if (struct_v >= 3) {
-	  ::decode(largest_data_len, bl);
-	  ::decode(largest_data_off, bl);
-	  ::decode(largest_data_off_in_tbl, bl);
-	}
-	::decode(tbl, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+      DECODE_OLDEST(2);
+      if (struct_v < 4)
+	sobject_encoding = true;
+      else
+	sobject_encoding = false;
+      ::decode(ops, bl);
+      ::decode(pad_unused_bytes, bl);
+      if (struct_v >= 3) {
+	::decode(largest_data_len, bl);
+	::decode(largest_data_off, bl);
+	::decode(largest_data_off_in_tbl, bl);
       }
+      ::decode(tbl, bl);
+      DECODE_FINISH(bl);
     }
 
     void dump(ostream& out);

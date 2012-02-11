@@ -20,16 +20,19 @@
 
 
 class MOSDFailure : public PaxosServiceMessage {
+
+  static const int HEAD_VERSION = 2;
+
  public:
   uuid_d fsid;
   entity_inst_t target_osd;
   __u8 is_failed;
   epoch_t       epoch;
 
-  MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0) {}
-  MOSDFailure(const uuid_d &fs, entity_inst_t f, epoch_t e) : 
-    PaxosServiceMessage(MSG_OSD_FAILURE, e),
-    fsid(fs), target_osd(f), is_failed(true), epoch(e) {}
+  MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
+  MOSDFailure(const uuid_d &fs, entity_inst_t f, epoch_t e)
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+      fsid(fs), target_osd(f), is_failed(true), epoch(e) { }
 private:
   ~MOSDFailure() {}
 
@@ -46,10 +49,10 @@ public:
     ::decode(epoch, p);
     if (header.version >=2)
       ::decode(is_failed, p);
-    else is_failed = true;
+    else
+      is_failed = true;
   }
   void encode_payload(uint64_t features) {
-    header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(target_osd, payload);

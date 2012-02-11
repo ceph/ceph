@@ -30,9 +30,12 @@ WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 
 struct MMonSubscribe : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   map<string, ceph_mon_subscribe_item> what;
   
-  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE) {}
+  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION) { }
 private:
   ~MMonSubscribe() {}
 
@@ -70,9 +73,9 @@ public:
   }
   void encode_payload(uint64_t features) {
     if (features & CEPH_FEATURE_SUBSCRIBE2) {
-      header.version = 2;
       ::encode(what, payload);
     } else {
+      header.version = 0;
       map<string, ceph_mon_subscribe_item_old> oldwhat;
       for (map<string, ceph_mon_subscribe_item>::iterator q = what.begin();
 	   q != what.end();

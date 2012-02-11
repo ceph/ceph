@@ -757,7 +757,6 @@ void ReplicatedPG::do_op(OpRequest *op)
     delete ctx;
     put_object_context(obc);
     put_object_contexts(src_obc);
-    op->put();
     return;
   }
 
@@ -1050,7 +1049,8 @@ bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
 
   dout(10) << "get_obs_to_trim , purged_snaps " << info.purged_snaps << dendl;
 
-  if (snap_trimq.size() == 0) return false;
+  if (snap_trimq.size() == 0)
+    return false;
 
   snap_to_trim = snap_trimq.range_start();
   col_to_trim = coll_t(info.pgid, snap_to_trim);
@@ -2414,10 +2414,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   SnapContext& snapc = ctx->snapc;
-  /*
-  ObjectState& obs = ctx->new_obs;
-  object_info_t& oi = obs.oi;
-  */
   ObjectStore::Transaction t;
 
   // clone?
@@ -2431,6 +2427,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snapc.snaps = ctx->new_snapset.snaps;
     dout(10) << " using newer snapc " << snapc << dendl;
   }
+
+  if (ctx->obs->exists)
+    filter_snapc(snapc);
   
   if (ctx->obs->exists &&               // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
@@ -2684,6 +2683,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   bool head_existed = ctx->obs->exists;
 
+  // valid snap context?
+  if (!ctx->snapc.is_valid()) {
+    dout(10) << " invalid snapc " << ctx->snapc << dendl;
+    return -EINVAL;
+  }
+
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0)
@@ -2701,13 +2706,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
 
   // there was a modification!
-
-  // valid snap context?
-  if (!ctx->snapc.is_valid()) {
-    dout(10) << " invalid snapc " << ctx->snapc << dendl;
-    return -EINVAL;
-  }
-
   make_writeable(ctx);
 
   if (ctx->user_modify) {

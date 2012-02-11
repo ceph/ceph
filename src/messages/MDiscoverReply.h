@@ -66,6 +66,9 @@ using namespace std;
  */
 
 class MDiscoverReply : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   // info about original request
   inodeno_t base_ino;
   frag_t base_dir_frag;  
@@ -112,9 +115,9 @@ class MDiscoverReply : public Message {
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
   // cons
-  MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY) {}
+  MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
   MDiscoverReply(MDiscover *dis) :
-    Message(MSG_MDS_DISCOVERREPLY),
+    Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(dis->get_base_ino()),
     base_dir_frag(dis->get_base_dir_frag()),
     wanted_base_dir(dis->wants_base_dir()),
@@ -128,7 +131,7 @@ class MDiscoverReply : public Message {
     header.tid = dis->get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
-    Message(MSG_MDS_DISCOVERREPLY),
+    Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),
@@ -199,7 +202,6 @@ public:
       ::decode(wanted_ino, p);
   }
   void encode_payload(uint64_t features) {
-    header.version = 2;
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(wanted_base_dir, payload);

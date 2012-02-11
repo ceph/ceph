@@ -20,6 +20,10 @@
 #include "include/encoding.h"
 #include "msg/msg_types.h" // for entity_inst_t
 
+namespace ceph {
+  class Formatter;
+}
+
 typedef enum {
   CLOG_DEBUG = 0,
   CLOG_INFO = 1,
@@ -36,16 +40,10 @@ struct LogEntryKey {
   LogEntryKey() {}
   LogEntryKey(entity_inst_t w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
 
-  void encode(bufferlist& bl) const {
-    ::encode(who, bl);
-    ::encode(stamp, bl);
-    ::encode(seq, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(who, bl);
-    ::decode(stamp, bl);
-    ::decode(seq, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<LogEntryKey*>& o);
 };
 WRITE_CLASS_ENCODER(LogEntryKey)
 
@@ -62,27 +60,10 @@ struct LogEntry {
 
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
 
-  void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    __u16 t = type;
-    ::encode(who, bl);
-    ::encode(stamp, bl);
-    ::encode(seq, bl);
-    ::encode(t, bl);
-    ::encode(msg, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    __u16 t;
-    ::decode(who, bl);
-    ::decode(stamp, bl);
-    ::decode(seq, bl);
-    ::decode(t, bl);
-    type = (clog_type)t;
-    ::decode(msg, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<LogEntry*>& o);
 };
 WRITE_CLASS_ENCODER(LogEntry)
 
@@ -105,18 +86,10 @@ struct LogSummary {
     return false;
   }
 
-  void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(version, bl);
-    ::encode(tail, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(version, bl);
-    ::decode(tail, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<LogSummary*>& o);
 };
 WRITE_CLASS_ENCODER(LogSummary)
 

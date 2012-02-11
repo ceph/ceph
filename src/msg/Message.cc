@@ -153,6 +153,10 @@ void Message::encode(uint64_t features, bool datacrc)
   if (empty_payload()) {
     encode_payload(features);
 
+    // if the encoder didn't specify past compatibility, we assume it
+    // is incompatible.
+    if (header.compat_version == 0)
+      header.compat_version = header.version;
   }
   calc_front_crc();
   if (datacrc) {
@@ -599,6 +603,21 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
       if (cct->_conf->ms_die_on_bad_msg)
 	assert(0);
     }
+    return 0;
+  }
+
+  // m->header.version, if non-zero, should be populated with the
+  // newest version of the encoding the code supports.  If set, check
+  // it against compat_version.
+  if (m->get_header().version &&
+      m->get_header().version < header.compat_version) {
+    ldout(cct, 0) << "will not decode message of type " << type
+		  << " version " << header.version
+		  << " because compat_version " << header.compat_version
+		  << " > supported version " << m->get_header().version << dendl;
+    if (cct->_conf->ms_die_on_bad_msg)
+      assert(0);
+    m->put();
     return 0;
   }
   

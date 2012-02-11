@@ -1111,6 +1111,10 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
    * the map epoch could change before that happens! */
   pg->info.history.last_epoch_started = history.epoch_created - 1;
 
+  pg->info.stats.up = pg->up;
+  pg->info.stats.acting = pg->acting;
+  pg->info.stats.mapping_epoch = pg->info.history.same_interval_since;
+
   pg->write_info(t);
   pg->write_log(t);
   
@@ -4230,7 +4234,7 @@ void OSD::handle_pg_create(OpRequest *op)
 
   int num_created = 0;
 
-  for (map<pg_t,MOSDPGCreate::create_rec>::iterator p = m->mkpg.begin();
+  for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
        p++) {
     pg_t pgid = p->first;

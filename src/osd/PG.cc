@@ -1607,7 +1607,7 @@ void PG::purge_strays()
        p++) {
     if (get_osdmap()->is_up(*p)) {
       dout(10) << "sending PGRemove to osd." << *p << dendl;
-      osd->queue_for_removal(*p, info.pgid);
+      osd->queue_for_removal(get_osdmap()->get_epoch(), *p, info.pgid);
       stray_purged.insert(*p);
     } else {
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;
@@ -1637,16 +1637,26 @@ void PG::update_stats()
     info.stats.last_scrub = info.history.last_scrub;
     info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
     info.stats.last_epoch_clean = info.history.last_epoch_clean;
+
+    utime_t now = ceph_clock_now(g_ceph_context);
+    info.stats.last_fresh = now;
+    if (info.stats.state != state) {
+      info.stats.state = state;
+      info.stats.last_change = now;
+    }
+    if (info.stats.state & PG_STATE_CLEAN)
+      info.stats.last_clean = now;
+    if (info.stats.state & PG_STATE_ACTIVE)
+      info.stats.last_active = now;
+    info.stats.last_unstale = now;
+
+    info.stats.log_size = ondisklog.length();
+    info.stats.ondisk_log_size = ondisklog.length();
+    info.stats.log_start = log.tail;
+    info.stats.ondisk_log_start = log.tail;
+
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
-    pg_stats_stable.state = state;
-    pg_stats_stable.up = up;
-    pg_stats_stable.acting = acting;
-
-    pg_stats_stable.log_size = ondisklog.length();
-    pg_stats_stable.ondisk_log_size = ondisklog.length();
-    pg_stats_stable.log_start = log.tail;
-    pg_stats_stable.ondisk_log_start = log.tail;
 
     // calc copies, degraded
     int target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
@@ -2251,6 +2261,36 @@ void PG::update_snap_collections(vector<pg_log_entry_t> &log_entries,
     }
   }
 }
+
+/**
+ * filter trimming|trimmed snaps out of snapcontext
+ */
+void PG::filter_snapc(SnapContext& snapc)
+{
+  bool filtering = false;
+  vector<snapid_t> newsnaps;
+  for (vector<snapid_t>::iterator p = snapc.snaps.begin();
+       p != snapc.snaps.end();
+       ++p) {
+    if (snap_trimq.contains(*p) || info.purged_snaps.contains(*p)) {
+      if (!filtering) {
+	// start building a new vector with what we've seen so far
+	dout(10) << "filter_snapc filtering " << snapc << dendl;
+	newsnaps.insert(newsnaps.begin(), snapc.snaps.begin(), p);
+	filtering = true;
+      }
+      dout(20) << "filter_snapc  removing trimq|purged snap " << *p << dendl;
+    } else {
+      if (filtering)
+	newsnaps.push_back(*p);  // continue building new vector
+    }
+  }
+  if (filtering) {
+    snapc.snaps.swap(newsnaps);
+    dout(10) << "filter_snapc  result " << snapc << dendl;
+  }
+}
+
 
 void PG::adjust_local_snaps()
 {
@@ -3325,6 +3365,13 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   up = newup;
   acting = newacting;
   want_acting.clear();
+
+  if (info.stats.up != up ||
+      info.stats.acting != acting) {
+    info.stats.up = up;
+    info.stats.acting = acting;
+    info.stats.mapping_epoch = info.history.same_interval_since;
+  }
 
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);

@@ -80,6 +80,7 @@ class MonitorStore;
 class PaxosService;
 
 class PerfCounters;
+class AdminSocketHook;
 
 class MMonGetMap;
 class MMonGetVersion;
@@ -187,7 +188,8 @@ private:
   void probe_timeout(int r);
 
   void slurp();
-  
+
+ 
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
@@ -226,18 +228,20 @@ public:
 
   // -- sessions --
   MonSessionMap session_map;
+  AdminSocketHook *admin_hook;
 
   void check_subs();
   void check_sub(Subscription *sub);
 
   void send_latest_monmap(Connection *con);
-  
 
   // messages
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
+  void _mon_status(ostream& ss);
+  void _quorum_status(ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
@@ -331,6 +335,8 @@ public:
   void stop_cluster();
 
   int mkfs(bufferlist& osdmapbl);
+
+  void do_admin_command(std::string command, ostream& ss);
 
 private:
   // don't allow copying

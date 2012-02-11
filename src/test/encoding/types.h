@@ -8,6 +8,11 @@ TYPE(filepath)
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
 
+#include "common/LogEntry.h"
+TYPE(LogEntryKey)
+TYPE(LogEntry)
+TYPE(LogSummary)
+
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE(entity_addr_t)
@@ -21,6 +26,8 @@ TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
 #include "osd/osd_types.h"
+TYPE(osd_reqid_t)
+TYPE(object_locator_t)
 TYPE(pg_t)
 TYPE(coll_t)
 TYPE(osd_stat_t)
@@ -39,6 +46,7 @@ TYPE(pg_log_t)
 TYPE(pg_missing_t::item)
 TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
+TYPE(pg_create_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
 TYPE(SnapSet)
@@ -47,6 +55,9 @@ TYPE(ScrubMap)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
+
+#include "os/hobject.h"
+TYPE(hobject_t)
 
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)

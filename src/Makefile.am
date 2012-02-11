@@ -18,6 +18,7 @@ TESTS = $(check_PROGRAMS)
 
 check-local:
 	test/encoding/check-generated.sh
+	test/encoding/readable.sh ../ceph-object-corpus/archive
 
 EXTRALIBS = -luuid
 if FREEBSD
@@ -874,6 +875,7 @@ libcommon_files = \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
+	common/LogEntry.cc \
 	msg/Message.cc \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
@@ -901,6 +903,7 @@ libcommon_files = \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
+	os/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -1387,6 +1390,7 @@ noinst_HEADERS = \
 	obsync/obsync\
 	obsync/boto_tool\
 	os/btrfs_ioctl.h\
+	os/hobject.h \
 	os/CollectionIndex.h\
         os/Fake.h\
         os/FileJournal.h\

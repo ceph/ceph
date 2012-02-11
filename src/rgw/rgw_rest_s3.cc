@@ -155,7 +155,7 @@ void RGWListBucket_REST_S3::send_response()
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
-      s->formatter->dump_format("Key", iter->name.c_str());
+      s->formatter->dump_string("Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
       s->formatter->dump_int("Size", iter->size);

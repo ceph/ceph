@@ -26,7 +26,7 @@
 #include "include/interval_set.h"
 #include "common/snap_types.h"
 #include "common/Formatter.h"
-
+#include "os/hobject.h"
 
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
@@ -38,8 +38,13 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES  CompatSet::Feature(5, "categories")
 
 
-/* osdreqid_t - caller name + incarnation# + tid to unique identify this request
- * use for metadata and osd ops.
+typedef hobject_t collection_list_handle_t;
+
+
+/**
+ * osd request identifier
+ *
+ * caller name + incarnation# + tid to unique identify this request.
  */
 struct osd_reqid_t {
   entity_name_t name; // who
@@ -53,6 +58,8 @@ struct osd_reqid_t {
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_reqid_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_reqid_t)
 
@@ -85,6 +92,63 @@ namespace __gnu_cxx {
     }
   };
 }
+
+
+// -----
+
+// a locator constrains the placement of an object.  mainly, which pool
+// does it go in.
+struct object_locator_t {
+  int64_t pool;
+  int32_t preferred;
+  string key;
+
+  explicit object_locator_t()
+    : pool(-1), preferred(-1) {}
+  explicit object_locator_t(int64_t po)
+    : pool(po), preferred(-1) {}
+  explicit object_locator_t(int64_t po, int pre)
+    : pool(po), preferred(pre) {}
+  explicit object_locator_t(int64_t po, int pre, string s)
+    : pool(po), preferred(pre), key(s) {}
+
+  int get_pool() const {
+    return pool;
+  }
+  int get_preferred() const {
+    return preferred;
+  }
+
+  void clear() {
+    pool = -1;
+    preferred = -1;
+    key = "";
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<object_locator_t*>& o);
+};
+WRITE_CLASS_ENCODER(object_locator_t)
+
+inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
+  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
+}
+inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
+  return !(l == r);
+}
+
+inline ostream& operator<<(ostream& out, const object_locator_t& loc)
+{
+  out << "@" << loc.pool;
+  if (loc.preferred >= 0)
+    out << "p" << loc.preferred;
+  if (loc.key.length())
+    out << ":" << loc.key;
+  return out;
+}
+
 
 
 
@@ -753,6 +817,11 @@ struct pg_stat_t {
   eversion_t version;
   eversion_t reported;
   __u32 state;
+  utime_t last_fresh;   // last reported
+  utime_t last_change;  // new state != previous state
+  utime_t last_active;  // state & PG_STATE_ACTIVE
+  utime_t last_clean;   // state & PG_STATE_CLEAN
+  utime_t last_unstale; // (state & PG_STATE_STALE) == 0
 
   eversion_t log_start;         // (log_start,version]
   eversion_t ondisk_log_start;  // there may be more on disk
@@ -771,13 +840,14 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
 
   vector<int> up, acting;
-
+  epoch_t mapping_epoch;
 
   pg_stat_t()
     : state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0), 
-      log_size(0), ondisk_log_size(0)
+      log_size(0), ondisk_log_size(0),
+      mapping_epoch(0)
   { }
 
   void add(const pg_stat_t& o) {
@@ -1308,6 +1378,26 @@ struct pg_ls_response_t {
 
 WRITE_CLASS_ENCODER(pg_ls_response_t)
 
+
+/**
+ * pg creation info
+ */
+struct pg_create_t {
+  epoch_t created;   // epoch pg created
+  pg_t parent;       // split from parent (if != pg_t())
+  __s32 split_bits;
+
+  pg_create_t()
+    : created(0), split_bits(0) {}
+  pg_create_t(unsigned c, pg_t p, int s)
+    : created(c), parent(p), split_bits(s) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_create_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_create_t)
 
 // -----------------------------------------
 
