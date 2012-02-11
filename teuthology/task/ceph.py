@@ -559,8 +559,8 @@ def cluster(ctx, config):
     devs_to_clean = {}
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = {}
-        if config.get('btrfs'):
-            log.info('btrfs option selected, checkin for scrach devs')
+        if config.get('fs'):
+            log.info('fs option selected, checkin for scratch devs')
             devs = teuthology.get_scratch_devices(remote)
             log.info('found devs: %s' % (str(devs),))
             roles_to_devs = assign_devs(
@@ -578,27 +578,35 @@ def cluster(ctx, config):
                 )
             if roles_to_devs.get(id_):
                 dev = roles_to_devs[id_]
-                log.info('mkfs.btrfs on %s on %s' % (dev, remote))
-                remote.run(
-                    args=[
-                        'sudo',
-                        'apt-get', 'install', '-y', 'btrfs-tools'
-                        ]
-                    )
-                remote.run(
-                    args=[
-                        'sudo',
-                        'mkfs.btrfs',
-                        dev
-                        ]
-                    )
-                log.info('mount %s on %s' % (dev, remote))
+                fs = config.get('fs')
+                mkfs = ['mkfs.%s' % fs]
+                package = None
+                options = ['noatime']
+                if fs == 'btrfs':
+                    package = 'btrfs-tools'
+                    options.append('user_subvol_rm_allowed')
+                if fs == 'xfs':
+                    package = 'xfsprogs'
+                    mkfs.append('-f')
+                if fs == 'ext4' or fs == 'ext3':
+                    options.append('user_xattr')
+
+                log.info('%s on %s on %s' % (mkfs, dev, remote))
+                if package is not None:
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'apt-get', 'install', '-y', package
+                            ]
+                        )
+                remote.run(args=['sudo'] + mkfs + [dev])
+                log.info('mount %s on %s -o %s' % (dev, remote, options))
                 remote.run(
                     args=[
                         'sudo',
                         'mount',
-                        '-o',
-                        'user_subvol_rm_allowed',
+                        '-t', fs,
+                        '-o', ','.join(options),
                         dev,
                         os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
                         ]
@@ -869,10 +877,12 @@ def task(ctx, config):
         - ceph:
             coverage: true
 
-    To use btrfs on the osds, use::
+    To use btrfs, ext4, or xfs on the target's scratch disks, use::
+
         tasks:
         - ceph:
-            btrfs: true
+            fs: btrfs
+
     Note, this will cause the task to check the /scratch_devs file on each node
     for available devices.  If no such file is found, /dev/sdb will be used.
 
@@ -996,7 +1006,7 @@ def task(ctx, config):
         lambda: valgrind_post(ctx=ctx, config=config),
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {}),
-                btrfs=config.get('btrfs', False),
+                fs=config.get('fs', None),
                 log_whitelist=config.get('log-whitelist', []),
                 )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
