@@ -48,6 +48,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
 
 #include "include/color.h"
 #include "include/ceph_fs.h"
@@ -108,6 +109,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   probe_timeout_event(NULL),
 
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
+  admin_hook(NULL),
   routed_request_tid(0)
 {
   rank = -1;
@@ -170,6 +172,30 @@ enum {
   l_mon_first = 456000,
   l_mon_last,
 };
+
+
+class AdminHook : public AdminSocketHook {
+  Monitor *mon;
+public:
+  AdminHook(Monitor *m) : mon(m) {}
+  bool call(std::string command, bufferlist& out) {
+    stringstream ss;
+    mon->do_admin_command(command, ss);
+    out.append(ss);
+    return true;
+  }
+};
+
+void Monitor::do_admin_command(string command, ostream& ss)
+{
+  Mutex::Locker l(lock);
+  if (command == "mon_status")
+    _mon_status(ss);
+  else if (command == "quorum_status")
+    _quorum_status(ss);
+  else
+    assert(0 == "bad AdminSocket command binding");
+}
 
 void Monitor::init()
 {
@@ -234,6 +260,15 @@ void Monitor::init()
     key_server.bootstrap_keyring(keyring);
   }
 
+  admin_hook = new AdminHook(this);
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  int r = admin_socket->register_command("mon_status", admin_hook,
+					 "show current monitor status");
+  assert(r == 0);
+  r = admin_socket->register_command("quorum_status", admin_hook,
+					 "show current quorum status");
+  assert(r == 0);
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&clog);
@@ -279,6 +314,14 @@ void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
   
+  if (admin_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("mon_status");
+    admin_socket->unregister_command("quorum_status");
+    delete admin_hook;
+    admin_hook = NULL;
+  }
+
   elector.shutdown();
 
   if (logger) {
@@ -780,10 +823,6 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 
 void Monitor::_quorum_status(ostream& ss)
 {
-  if (!is_leader() && !is_peon()) {
-    return;
-  }
-
   JSONFormatter jf(true);
   jf.open_object_section("quorum_status");
   jf.dump_int("election_epoch", get_epoch());

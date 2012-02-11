@@ -80,6 +80,7 @@ class MonitorStore;
 class PaxosService;
 
 class PerfCounters;
+class AdminSocketHook;
 
 class MMonGetMap;
 class MMonGetVersion;
@@ -227,12 +228,12 @@ public:
 
   // -- sessions --
   MonSessionMap session_map;
+  AdminSocketHook *admin_hook;
 
   void check_subs();
   void check_sub(Subscription *sub);
 
   void send_latest_monmap(Connection *con);
-  
 
   // messages
   void handle_get_version(MMonGetVersion *m);
@@ -334,6 +335,8 @@ public:
   void stop_cluster();
 
   int mkfs(bufferlist& osdmapbl);
+
+  void do_admin_command(std::string command, ostream& ss);
 
 private:
   // don't allow copying
