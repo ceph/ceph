@@ -2680,6 +2680,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   bool head_existed = ctx->obs->exists;
 
+  // valid snap context?
+  if (!ctx->snapc.is_valid()) {
+    dout(10) << " invalid snapc " << ctx->snapc << dendl;
+    return -EINVAL;
+  }
+
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0)
@@ -2697,13 +2703,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
 
   // there was a modification!
-
-  // valid snap context?
-  if (!ctx->snapc.is_valid()) {
-    dout(10) << " invalid snapc " << ctx->snapc << dendl;
-    return -EINVAL;
-  }
-
   make_writeable(ctx);
 
   if (ctx->user_modify) {
