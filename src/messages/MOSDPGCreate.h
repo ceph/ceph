@@ -24,13 +24,17 @@
  */
 
 struct MOSDPGCreate : public Message {
+
+  const static int HEAD_VERSION = 2;
+
   version_t          epoch;
   map<pg_t,pg_create_t> mkpg;
 
-  MOSDPGCreate() : Message(MSG_OSD_PG_CREATE) {}
-  MOSDPGCreate(epoch_t e) :
-    Message(MSG_OSD_PG_CREATE),
-    epoch(e) { }
+  MOSDPGCreate()
+    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION) {}
+  MOSDPGCreate(epoch_t e)
+    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION),
+      epoch(e) { }
 private:
   ~MOSDPGCreate() {}
 
@@ -38,7 +42,6 @@ public:
   const char *get_type_name() const { return "pg_create"; }
 
   void encode_payload(uint64_t features) {
-    header.version = 2;
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
@@ -65,7 +68,7 @@ public:
   }
 
   void print(ostream& out) const {
-    out << "osd pg create(";
+    out << "osd_pg_create(";
     for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();
          ++i) {
