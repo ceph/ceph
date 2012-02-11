@@ -38,13 +38,30 @@ public:
   const char *get_type_name() const { return "pg_create"; }
 
   void encode_payload(uint64_t features) {
+    header.version = 2;
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(mkpg, p);
+    if (header.version >= 2) {
+      ::decode(mkpg, p);
+    } else {
+      __u32 n;
+      ::decode(n, p);
+      while (n--) {
+	pg_t pgid;
+	epoch_t created;   // epoch pg created
+	pg_t parent;       // split from parent (if != pg_t())
+	__s32 split_bits;
+	::decode(pgid, p);
+	::decode(created, p);
+	::decode(parent, p);
+	::decode(split_bits, p);
+	mkpg[pgid] = pg_create_t(created, parent, split_bits);
+      }
+    }
   }
 
   void print(ostream& out) const {

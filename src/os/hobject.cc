@@ -5,28 +5,28 @@
 
 void hobject_t::encode(bufferlist& bl) const
 {
-  __u8 version = 2;
-  ::encode(version, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(key, bl);
   ::encode(oid, bl);
   ::encode(snap, bl);
   ::encode(hash, bl);
   ::encode(max, bl);
+  ENCODE_FINISH(bl);
 }
 
 void hobject_t::decode(bufferlist::iterator& bl)
 {
-  __u8 version;
-  ::decode(version, bl);
-  if (version >= 1)
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 1)
     ::decode(key, bl);
   ::decode(oid, bl);
   ::decode(snap, bl);
   ::decode(hash, bl);
-  if (version >= 2)
+  if (struct_v >= 2)
     ::decode(max, bl);
   else
     max = false;
+  DECODE_FINISH(bl);
 }
 
 void hobject_t::dump(Formatter *f) const
