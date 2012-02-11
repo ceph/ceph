@@ -193,7 +193,11 @@ int main(int argc, const char **argv)
     // go
     MonitorStore store(g_conf->mon_data);
     Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
-    mon.mkfs(osdmapbl);
+    int r = mon.mkfs(osdmapbl);
+    if (r < 0) {
+      cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
     return 0;

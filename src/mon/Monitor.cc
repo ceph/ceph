@@ -1659,21 +1659,16 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   // create it
   int err = store->mkfs();
   if (err) {
-    dout(0) << TEXT_RED << "** ERROR: store->mkfs failed with error code "
-	    << err << ". Aborting." << TEXT_NORMAL << dendl;
-    exit(1);
+    derr << "store->mkfs failed with: " << cpp_strerror(err) << dendl;
+    return err;
   }
 
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
   int r = store->put_bl_ss(magicbl, "magic", 0);
-  if (r < 0) {
-    dout(0) << TEXT_RED << "** ERROR: initializing ceph-mon failed: couldn't "
-	    << "initialize the monitor state machine: " << cpp_strerror(r)
-	    << TEXT_NORMAL << dendl;
-    exit(1);
-  }
+  if (r < 0)
+    return r;
 
   bufferlist features;
   CompatSet mon_features = get_ceph_mon_feature_compat_set();
@@ -1686,8 +1681,18 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
-  if (osdmapbl.length())
+  if (osdmapbl.length()) {
+    // make sure it's a valid osdmap
+    try {
+      OSDMap om;
+      om.decode(osdmapbl);
+    }
+    catch (buffer::error& e) {
+      derr << "error decoding provided osdmap: " << e.what() << dendl;
+      return -EINVAL;
+    }
     store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
+  }
 
   KeyRing keyring;
   r = keyring.load(g_ceph_context, g_conf->keyring);
