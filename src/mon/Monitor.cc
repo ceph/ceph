@@ -778,6 +778,29 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
   return false;
 }
 
+void Monitor::_quorum_status(ostream& ss)
+{
+  if (!is_leader() && !is_peon()) {
+    return;
+  }
+
+  JSONFormatter jf(true);
+  jf.open_object_section("quorum_status");
+  jf.dump_int("election_epoch", get_epoch());
+  
+  jf.open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+    jf.dump_int("mon", *p);
+  jf.close_section();
+
+  jf.open_object_section("monmap");
+  monmap->dump(&jf);
+  jf.close_section();
+
+  jf.close_section();
+  jf.flush(ss);
+}
+
 void Monitor::_mon_status(ostream& ss)
 {
   JSONFormatter jf(true);
@@ -903,31 +926,14 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "quorum_status") {
-
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
 	dout(10) << " waiting for qorum" << dendl;
 	waitfor_quorum.push_back(new C_RetryMessage(this, m));
 	return;
       }
-
-      JSONFormatter jf(true);
-      jf.open_object_section("quorum_status");
-      jf.dump_int("election_epoch", get_epoch());
-
-      jf.open_array_section("quorum");
-      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-	jf.dump_int("mon", *p);
-      jf.close_section();
-
-      jf.open_object_section("monmap");
-      monmap->dump(&jf);
-      jf.close_section();
-
-      jf.close_section();
-
       stringstream ss;
-      jf.flush(ss);
+      _quorum_status(ss);
       rs = ss.str();
       r = 0;
     }

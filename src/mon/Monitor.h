@@ -240,6 +240,7 @@ public:
   void handle_mon_get_map(MMonGetMap *m);
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
   void _mon_status(ostream& ss);
+  void _quorum_status(ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
