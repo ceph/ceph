@@ -249,15 +249,42 @@ def get_scratch_devices(remote):
         file_data = get_file(remote, "/scratch_devs")
         devs = file_data.split()
     except:
-        devs = ['/dev/sdb']
+        devs = [
+            '/dev/sda',
+            '/dev/sdb',
+            '/dev/sdc',
+            '/dev/sdd',
+            '/dev/sde',
+            '/dev/sdf',
+            '/dev/sdg',
+            '/dev/sdh',
+            '/dev/sdi',
+            '/dev/sdj',
+            '/dev/sdk',
+            '/dev/sdl',
+            '/dev/sdm',
+            '/dev/sdn',
+            '/dev/sdo',
+            '/dev/sdp',
+            ]
 
     retval = []
     for dev in devs:
         try:
             remote.run(
                 args=[
+                    # node exists
                     'stat',
-                    dev
+                    dev,
+                    run.Raw('&&'),
+                    # readable
+                    'sudo', 'dd', 'if=%s' % dev, 'of=/dev/null', 'count=1',
+                    run.Raw('&&'),                   
+                    # not mounted
+                    run.Raw('!'),
+                    'mount',
+                    run.Raw('|'),
+                    'grep', '-q', dev,
                     ]
                 )
             retval.append(dev)
