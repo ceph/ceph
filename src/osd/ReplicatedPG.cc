@@ -1049,7 +1049,8 @@ bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
 
   dout(10) << "get_obs_to_trim , purged_snaps " << info.purged_snaps << dendl;
 
-  if (snap_trimq.size() == 0) return false;
+  if (snap_trimq.size() == 0)
+    return false;
 
   snap_to_trim = snap_trimq.range_start();
   col_to_trim = coll_t(info.pgid, snap_to_trim);
@@ -2413,10 +2414,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   SnapContext& snapc = ctx->snapc;
-  /*
-  ObjectState& obs = ctx->new_obs;
-  object_info_t& oi = obs.oi;
-  */
   ObjectStore::Transaction t;
 
   // clone?
