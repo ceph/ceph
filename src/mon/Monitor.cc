@@ -216,6 +216,15 @@ void Monitor::do_admin_command(string command, ostream& ss)
     assert(0 == "bad AdminSocket command binding");
 }
 
+void Monitor::handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
+
+  // FIXME
+  exit(1);
+}
+
 void Monitor::init()
 {
   lock.Lock();

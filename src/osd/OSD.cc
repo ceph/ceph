@@ -603,7 +603,7 @@ void OSD::handle_signal(int signum)
   derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
 
   // FIXME!
-  exit(0);
+  exit(1);
 }
 
 int OSD::pre_init()

@@ -39,8 +39,17 @@ using namespace std;
 #include "common/errno.h"
 
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 
 extern CompatSet get_ceph_mon_feature_compat_set();
+
+Monitor *mon = NULL;
+
+void handle_mon_signal(int signum)
+{
+  if (mon)
+    mon->handle_signal(signum);
+}
 
 void usage()
 {
@@ -377,12 +386,18 @@ int main(int argc, const char **argv)
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
   messenger->start();
+
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler(SIGINT, handle_mon_signal);
+  register_async_signal_handler(SIGTERM, handle_mon_signal);
 
   uint64_t supported =
     CEPH_FEATURE_UID |
