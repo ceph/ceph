@@ -5460,13 +5460,16 @@ int ReplicatedPG::recover_object_replicas(const hobject_t& soid, eversion_t v)
   dout(10) << " ondisk_read_lock for " << soid << dendl;
   obc->ondisk_read_lock();
   
-  start_recovery_op(soid);
-
   // who needs it?  
+  bool started = false;
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     if (peer_missing.count(peer) &&
 	peer_missing[peer].is_missing(soid)) {
+      if (!started) {
+	start_recovery_op(soid);
+	started = true;
+      }
       push_to_replica(obc, soid, peer);
     }
   }
