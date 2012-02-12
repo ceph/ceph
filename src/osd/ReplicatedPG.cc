@@ -137,6 +137,12 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 	peer_missing[peer].missing.count(soid))
       return true;
 
+    // If soid == backfill_pos, we may implicitly write to
+    // the largest snap of soid for make_writeable.
+    if (peer == backfill_target &&
+	backfill_pos == soid)
+      return true;
+
     // Object is degraded if after last_backfill AND
     // we have are backfilling it
     if (peer == backfill_target &&
@@ -5620,6 +5626,13 @@ int ReplicatedPG::recover_backfill(int max)
     if (pbi.begin < backfill_info.begin) {
       dout(20) << " removing peer " << pbi.begin << dendl;
       to_remove[pbi.begin] = pbi.objects.begin()->second;
+      // Object was degraded, but won't be recovered
+      if (waiting_for_degraded_object.count(pbi.begin)) {
+	osd->requeue_ops(
+	  this,
+	  waiting_for_degraded_object[pbi.begin]);
+	waiting_for_degraded_object.erase(pbi.begin);
+      }
       pbi.pop_front();
       // Don't increment ops here because deletions
       // are cheap and not replied to unlike real recovery_ops,
@@ -5636,6 +5649,13 @@ int ReplicatedPG::recover_backfill(int max)
       } else {
 	dout(20) << " keeping peer " << pbi.begin << " "
 		 << pbi.objects.begin()->second << dendl;
+	// Object was degraded, but won't be recovered
+	if (waiting_for_degraded_object.count(pbi.begin)) {
+	  osd->requeue_ops(
+	    this,
+	    waiting_for_degraded_object[pbi.begin]);
+	  waiting_for_degraded_object.erase(pbi.begin);
+	}
       }
       add_to_stat.insert(pbi.begin);
       backfill_info.pop_front();
