@@ -323,6 +323,9 @@ class MDS : public Dispatcher {
   MDS(const std::string &n, Messenger *m, MonClient *mc);
   ~MDS();
 
+  // handle a signal (e.g., SIGTERM)
+  void handle_signal(int signum);
+
   // who am i etc
   int get_nodeid() { return whoami; }
   MDSMap *get_mds_map() { return mdsmap; }

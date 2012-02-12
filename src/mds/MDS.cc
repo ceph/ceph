@@ -12,13 +12,14 @@
  * 
  */
 
-
+#include "global/signal_handler.h"
 
 #include "include/types.h"
 #include "common/entity_name.h"
 #include "common/Clock.h"
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
+
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
@@ -1511,7 +1512,14 @@ void MDS::stopping_done()
   request_state(MDSMap::STATE_STOPPED);
 }
 
-  
+void MDS::handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
+  mds_lock.Lock();
+  suicide();
+  mds_lock.Unlock();
+}
 
 void MDS::suicide()
 {
