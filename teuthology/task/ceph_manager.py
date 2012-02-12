@@ -100,7 +100,7 @@ class Thrasher(gevent.Greenlet):
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
         if len(self.out_osds) > minout:
-            actions.append((self.in_osd, 1.0,))
+            actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
             actions.append((self.revive_osd, 1.0,))
 
