@@ -579,8 +579,6 @@ void MDS::tick()
 void MDS::beacon_start()
 {
   beacon_send();         // send first beacon
-  
-  //reset_beacon_killer(); // schedule killer
 }
   
 
@@ -1542,7 +1540,7 @@ void MDS::suicide()
     tick_event = 0;
   }
   timer.cancel_all_events();
-  //timer.join();  // this will deadlock from beacon_kill -> suicide
+  //timer.join();
   
   // shut down cache
   mdcache->shutdown();
