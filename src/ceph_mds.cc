@@ -34,10 +34,12 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-#include "global/global_init.h"
-#include "global/signal_handler.h"
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
+
+#include "global/global_init.h"
+#include "global/signal_handler.h"
+#include "global/pidfile.h"
 
 #include "mon/MonClient.h"
 
@@ -293,6 +295,8 @@ int main(int argc, const char **argv)
   // called shutdown finishes what they were doing.
   mds->mds_lock.Lock();
   mds->mds_lock.Unlock();
+
+  pidfile_remove();
 
   // only delete if it was a clean shutdown (to aid memory leak
   // detection, etc.).  don't bother if it was a suicide.
