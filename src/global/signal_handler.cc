@@ -111,7 +111,6 @@ static void handle_fatal_signal(int signum)
 
 void install_standard_sighandlers(void)
 {
-  install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
   install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
@@ -120,8 +119,6 @@ void install_standard_sighandlers(void)
   install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGTERM, handle_shutdown_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGINT, handle_shutdown_signal, SA_RESETHAND | SA_NODEFER);
 }
 
 
