@@ -1053,6 +1053,8 @@ public:
   int init();
   int shutdown();
 
+  void handle_signal(int signum);
+
   void reply_op_error(OpRequest *op, int r);
   void reply_op_error(OpRequest *op, int r, eversion_t v);
   void handle_misdirected_op(PG *pg, OpRequest *op);

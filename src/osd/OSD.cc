@@ -597,6 +597,14 @@ OSD::~OSD()
 
 void cls_initialize(ClassHandler *ch);
 
+void OSD::handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
+
+  // FIXME!
+  exit(0);
+}
 
 int OSD::pre_init()
 {
