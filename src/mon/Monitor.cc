@@ -219,10 +219,10 @@ void Monitor::do_admin_command(string command, ostream& ss)
 void Monitor::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
-
-  // FIXME
-  exit(1);
+  derr << "*** Got Signal " << sys_siglist[signum] << " ***" << dendl;
+  lock.Lock();
+  shutdown();
+  lock.Unlock();
 }
 
 void Monitor::init()
