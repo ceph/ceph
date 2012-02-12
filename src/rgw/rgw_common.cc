@@ -300,7 +300,10 @@ int XMLArgs::parse()
        end = true;
        fpos = str.size(); 
     }
-    NameVal nv(str.substr(pos, fpos - pos));
+    string substr, nameval;
+    substr = str.substr(pos, fpos - pos);
+    url_decode(substr, nameval);
+    NameVal nv(nameval);
     int ret = nv.parse();
     if (ret >= 0) {
       val_map[nv.get_name()] = nv.get_val();

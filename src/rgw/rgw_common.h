@@ -516,12 +516,11 @@ struct req_state {
    bool content_started;
    int format;
    ceph::Formatter *formatter;
-   string path_name;
-   string path_name_url;
+   string decoded_uri;
    string request_uri;
+   string request_params;
    const char *host;
    const char *method;
-   string query_str;
    const char *length;
    uint64_t content_length;
    const char *content_type;
