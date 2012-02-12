@@ -73,20 +73,6 @@ static void reraise_fatal(int signum)
   exit(1);
 }
 
-static void handle_shutdown_signal(int signum)
-{
-  char buf[1024];
-  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx. Shutting down.\n",
-	    sys_siglist[signum], (unsigned long long)pthread_self());
-  dout_emergency(buf);
-  pidfile_remove();
-  if (signum == SIGTERM)
-    _exit(0);
-  else
-    reraise_fatal(signum);
-}
-
 static void handle_fatal_signal(int signum)
 {
   // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
