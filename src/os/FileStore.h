@@ -155,6 +155,9 @@ class FileStore : public JournalingObjectStore,
     void flush() {
       Mutex::Locker l(qlock);
 
+      while (g_conf->filestore_blackhole)
+	cond.Wait(qlock);  // wait forever
+
       // get max for journal _or_ op queues
       uint64_t seq = 0;
       if (!q.empty())

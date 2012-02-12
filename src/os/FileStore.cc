@@ -3257,6 +3257,16 @@ void FileStore::_flush_op_queue()
 void FileStore::flush()
 {
   dout(10) << "flush" << dendl;
+
+  if (g_conf->filestore_blackhole) {
+    // wait forever
+    Mutex lock("FileStore::flush::lock");
+    Cond cond;
+    lock.Lock();
+    while (true)
+      cond.Wait(lock);
+    assert(0);
+  }
  
   if (m_filestore_journal_writeahead) {
     if (journal)
