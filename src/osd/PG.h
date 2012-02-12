@@ -1370,7 +1370,11 @@ public:
   }
 
   void on_removal();
+
+
   // abstract bits
+  void do_request(OpRequest *op);
+
   virtual void do_op(OpRequest *op) = 0;
   virtual void do_sub_op(OpRequest *op) = 0;
   virtual void do_sub_op_reply(OpRequest *op) = 0;
