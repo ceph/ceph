@@ -5674,6 +5674,14 @@ int ReplicatedPG::recover_backfill(int max)
     push_backfill_object(i->first, i->second.first, i->second.second, backfill_target);
   }
 
+  dout(5) << "backfill_pos is " << backfill_pos << " and pinfo.last_backfill is "
+	  << pinfo.last_backfill << dendl;
+  for (set<hobject_t>::iterator i = backfills_in_flight.begin();
+       i != backfills_in_flight.end();
+       ++i) {
+    dout(20) << *i << " is still in flight" << dendl;
+  }
+
   hobject_t bound = backfills_in_flight.size() ?
     *(backfills_in_flight.begin()) : backfill_pos;
   if (bound > pinfo.last_backfill) {
