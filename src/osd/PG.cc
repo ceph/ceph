@@ -1367,9 +1367,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     update_stats();
   }
 
-  // flush this all out (e.g., deletions from clean_up_local) to avoid
-  // subsequent races.
-  osr.flush();
+  // we need to flush this all out before doing anything else..
+  need_flush = true;
 
   // waiters
   if (!is_replay()) {
@@ -1377,6 +1376,17 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
 
   on_activate();
+}
+
+void PG::do_pending_flush()
+{
+  assert(is_locked());
+  if (need_flush) {
+    dout(10) << "do_pending_flush doing pending flush" << dendl;
+    osr.flush();
+    need_flush = false;
+    dout(10) << "do_pending_flush done" << dendl;
+  }
 }
 
 void PG::do_request(OpRequest *op)
