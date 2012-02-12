@@ -93,6 +93,9 @@
 #include "common/safe_io.h"
 #include "common/HeartbeatMap.h"
 
+#include "global/signal_handler.h"
+#include "global/pidfile.h"
+
 #include "include/color.h"
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
@@ -600,10 +603,8 @@ void cls_initialize(ClassHandler *ch);
 void OSD::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
-
-  // FIXME!
-  exit(1);
+  derr << "*** Got signal " << sys_siglist[signum] << " ***" << dendl;
+  suicide(128 + signum);
 }
 
 int OSD::pre_init()
@@ -809,6 +810,24 @@ void OSD::create_logger()
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
+void OSD::suicide(int exitcode)
+{
+  derr << " pausing thread pools" << dendl;
+  op_tp.pause();
+  disk_tp.pause();
+  recovery_tp.pause();
+  command_tp.pause();
+
+  derr << " flushing io" << dendl;
+  store->sync_and_flush();
+
+  derr << " removing pid file" << dendl;
+  pidfile_remove();
+
+  derr << " exit" << dendl;
+  exit(exitcode);
+}
+
 int OSD::shutdown()
 {
   g_ceph_context->_conf->set_val("debug_osd", "100");
@@ -817,7 +836,7 @@ int OSD::shutdown()
   g_ceph_context->_conf->set_val("debug_ms", "100");
   g_ceph_context->_conf->apply_changes(NULL);
   
-  derr << "OSD::shutdown" << dendl;
+  derr << "shutdown" << dendl;
 
   state = STATE_STOPPING;
 
@@ -925,6 +944,7 @@ int OSD::shutdown()
   delete watch;
 
   clear_map_cache();
+
   return r;
 }
 
