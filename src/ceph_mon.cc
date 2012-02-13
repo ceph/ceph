@@ -396,7 +396,8 @@ int main(int argc, const char **argv)
 							       CEPH_FEATURE_PGID64));
   messenger->set_policy(entity_name_t::TYPE_OSD,
 			SimpleMessenger::Policy::stateless_server(supported,
-								  CEPH_FEATURE_PGID64));
+								  CEPH_FEATURE_PGID64 |
+								  CEPH_FEATURE_OSDENC));
   mon->init();
   messenger->wait();
 

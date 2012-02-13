@@ -341,7 +341,8 @@ int main(int argc, const char **argv)
   client_messenger->set_policy(entity_name_t::TYPE_MON,
                                SimpleMessenger::Policy::client(supported,
                                                                CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64));
+							       CEPH_FEATURE_PGID64 |
+							       CEPH_FEATURE_OSDENC));
   //try to poison pill any OSD connections on the wrong address
   client_messenger->set_policy(entity_name_t::TYPE_OSD,
 			       SimpleMessenger::Policy::stateless_server(0,0));
@@ -351,7 +352,8 @@ int main(int argc, const char **argv)
   cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
 				SimpleMessenger::Policy::lossless_peer(supported,
 								       CEPH_FEATURE_UID |
-								       CEPH_FEATURE_PGID64));
+								       CEPH_FEATURE_PGID64 |
+								       CEPH_FEATURE_OSDENC));
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				SimpleMessenger::Policy::stateless_server(0, 0));
 
