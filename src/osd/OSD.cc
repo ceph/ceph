@@ -5715,33 +5715,7 @@ void OSD::dequeue_op(PG *pg)
 
   op->mark_reached_pg();
 
-  switch (op->request->get_type()) {
-  case CEPH_MSG_OSD_OP:
-    if (op_is_discardable((MOSDOp*)op->request))
-      op->put();
-    else
-      pg->do_op(op); // do it now
-    break;
-
-  case MSG_OSD_SUBOP:
-    pg->do_sub_op(op);
-    break;
-    
-  case MSG_OSD_SUBOPREPLY:
-    pg->do_sub_op_reply(op);
-    break;
-
-  case MSG_OSD_PG_SCAN:
-    pg->do_scan(op);
-    break;
-
-  case MSG_OSD_PG_BACKFILL:
-    pg->do_backfill(op);
-    break;
-
-  default:
-    assert(0 == "bad message type in dequeue_op");
-  }
+  pg->do_request(op);
 
   // unlock and put pg
   pg->unlock();

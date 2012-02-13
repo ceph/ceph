@@ -1367,9 +1367,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     update_stats();
   }
 
-  // flush this all out (e.g., deletions from clean_up_local) to avoid
-  // subsequent races.
-  osr.flush();
+  // we need to flush this all out before doing anything else..
+  need_flush = true;
 
   // waiters
   if (!is_replay()) {
@@ -1377,6 +1376,51 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
 
   on_activate();
+}
+
+void PG::do_pending_flush()
+{
+  assert(is_locked());
+  if (need_flush) {
+    dout(10) << "do_pending_flush doing pending flush" << dendl;
+    osr.flush();
+    need_flush = false;
+    dout(10) << "do_pending_flush done" << dendl;
+  }
+}
+
+void PG::do_request(OpRequest *op)
+{
+  // do any pending flush
+  do_pending_flush();
+
+  switch (op->request->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    if (osd->op_is_discardable((MOSDOp*)op->request))
+      op->put();
+    else
+      do_op(op); // do it now
+    break;
+
+  case MSG_OSD_SUBOP:
+    do_sub_op(op);
+    break;
+
+  case MSG_OSD_SUBOPREPLY:
+    do_sub_op_reply(op);
+    break;
+
+  case MSG_OSD_PG_SCAN:
+    do_scan(op);
+    break;
+
+  case MSG_OSD_PG_BACKFILL:
+    do_backfill(op);
+    break;
+
+  default:
+    assert(0 == "bad message type in do_request");
+  }
 }
 
 

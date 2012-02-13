@@ -558,6 +558,7 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
+  bool need_flush;     // need to flush before any new activity
 
   epoch_t last_peering_reset;
 
@@ -1236,6 +1237,7 @@ public:
     role(0),
     state(0),
     need_up_thru(false),
+    need_flush(false),
     last_peering_reset(0),
     backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
@@ -1293,6 +1295,8 @@ public:
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
   // pg on-disk state
+  void do_pending_flush();
+
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
 
@@ -1370,7 +1374,11 @@ public:
   }
 
   void on_removal();
+
+
   // abstract bits
+  void do_request(OpRequest *op);
+
   virtual void do_op(OpRequest *op) = 0;
   virtual void do_sub_op(OpRequest *op) = 0;
   virtual void do_sub_op_reply(OpRequest *op) = 0;

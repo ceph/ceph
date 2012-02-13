@@ -5889,6 +5889,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       else {
 	curclone = snapset.clones.rbegin();
 	head = p->first;
+	dout(20) << "  snapset " << snapset << dendl;
       }
 
       // subtract off any clone overlap
@@ -5947,7 +5948,12 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       stat.num_object_clones++;
       
-      assert(soid.snap == *curclone);
+      if (soid.snap != *curclone) {
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " expected clone " << *curclone;
+	++errors;
+	assert(soid.snap == *curclone);
+      }
 
       assert(p->second.size == snapset.clone_size[*curclone]);
 
