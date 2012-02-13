@@ -610,7 +610,8 @@ struct RGWBucketEnt {
     ::encode(struct_v, bl);
     uint64_t s = size;
     __u32 mt = mtime;
-    ::encode(bucket.name, bl);
+    string empty_str;  // originally had the bucket name here, but we encode bucket later
+    ::encode(empty_str, bl);
     ::encode(s, bl);
     ::encode(mt, bl);
     ::encode(count, bl);
@@ -623,7 +624,8 @@ struct RGWBucketEnt {
     ::decode(struct_v, bl);
     __u32 mt;
     uint64_t s;
-    ::decode(bucket.name, bl);
+    string empty_str;  // backward compatibility
+    ::decode(empty_str, bl);
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
