@@ -1065,29 +1065,30 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   return pg;
 }
 
-PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
-                             pg_history_t history)
+PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created,
+			 int role, vector<int>& up, vector<int>& acting, pg_history_t history,
+			 ObjectStore::Transaction& t)
 {
   assert(osd_lock.is_locked());
-  dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
-  assert(whoami == acting[0]);
-  assert(pg_map.count(pgid) == 0);
+  dout(20) << "_create_lock_pg pgid " << pgid << dendl;
 
   PG *pg = _open_lock_pg(pgid, true);
 
   assert(!store->collection_exists(coll_t(pgid)));
   t.create_collection(coll_t(pgid));
 
-  /* This is weird, but all the peering code needs last_epoch_start
-   * to be less than same_interval_since. Make it so!
-   * This is easier to deal with if you remember that the PG, while
-   * now created in memory, still hasn't peered and started -- and
-   * the map epoch could change before that happens! */
-  history.last_epoch_started = history.epoch_created - 1;
+  if (newly_created) {
+    /* This is weird, but all the peering code needs last_epoch_start
+     * to be less than same_interval_since. Make it so!
+     * This is easier to deal with if you remember that the PG, while
+     * now created in memory, still hasn't peered and started -- and
+     * the map epoch could change before that happens! */
+    history.last_epoch_started = history.epoch_created - 1;
+  }
 
-  pg->init(0, acting, acting, history, &t);
+  pg->init(role, acting, acting, history, &t);
 
-  dout(7) << "_create_lock_new_pg " << *pg << dendl;
+  dout(7) << "_create_lock_pg " << *pg << dendl;
   return pg;
 }
 
@@ -1230,19 +1231,7 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& c
     // ok, create PG locally using provided Info and History
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
-    if (create) {
-      pg = _create_lock_new_pg(info.pgid, acting, **pt, history);
-    } else {
-      pg = _open_lock_pg(info.pgid);
-
-      // create collection
-      assert(!store->collection_exists(coll_t(info.pgid)));
-      (*pt)->create_collection(coll_t(info.pgid));
-
-      pg->init(role, up, acting, history, *pt);
-
-      pg->clear_primary_state();  // yep, notably, set hml=false
-    }
+    pg = _create_lock_pg(info.pgid, create, role, up, acting, history, **pt);
       
     created++;
     dout(10) << *pg << " is new" << dendl;
@@ -4025,7 +4014,9 @@ void OSD::kick_pg_split_queue()
       history.epoch_created = history.same_up_since =
           history.same_interval_since = history.same_primary_since =
           osdmap->get_epoch();
-      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t, history);
+      PG *pg = _create_lock_pg(*q, true,
+			       0, creating_pgs[*q].acting, creating_pgs[*q].acting, history,
+			       *t);
       children[*q] = pg;
     }
 
@@ -4269,7 +4260,9 @@ void OSD::handle_pg_create(OpRequest *op)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts(g_ceph_context);
 
-      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t, history);
+      PG *pg = _create_lock_pg(pgid, true,
+			       0, creating_pgs[pgid].acting, creating_pgs[pgid].acting, history,
+			       *t);
       creating_pgs.erase(pgid);
 
       wake_pg_waiters(pg->info.pgid);
