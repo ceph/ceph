@@ -209,11 +209,11 @@ void PGMonitor::create_initial()
     pg_map.nearfull_ratio /= 100.0;
 }
 
-bool PGMonitor::update_from_paxos()
+void PGMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == pg_map.version)
-    return true;
+    return;
   assert(paxosv >= pg_map.version);
 
   if (pg_map.version != paxos->get_stashed_version()) {
@@ -229,7 +229,8 @@ bool PGMonitor::update_from_paxos()
     catch (const std::exception &e) {
       dout(0) << "update_from_paxos: error parsing update: "
 	      << e.what() << dendl;
-      return false;
+      assert(0 == "update_from_paxos: error parsing update");
+      return;
     }
   } 
 
@@ -249,7 +250,8 @@ bool PGMonitor::update_from_paxos()
     catch (const std::exception &e) {
       dout(0) << "update_from_paxos: error parsing "
 	      << "incremental update: " << e.what() << dendl;
-      return false;
+      assert(0 == "update_from_paxos: error parsing incremental update");
+      return;
     }
 
     pg_map.apply_incremental(inc);
@@ -284,8 +286,6 @@ bool PGMonitor::update_from_paxos()
   send_pg_creates();
 
   update_logger();
-
-  return true;
 }
 
 void PGMonitor::handle_osd_timeouts()

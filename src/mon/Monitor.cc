@@ -146,6 +146,25 @@ Paxos *Monitor::get_paxos_by_name(const string& name)
   return NULL;
 }
 
+PaxosService *Monitor::get_paxos_service_by_name(const string& name)
+{
+  if (name == "mdsmap")
+    return paxos_service[PAXOS_MDSMAP];
+  if (name == "monmap")
+    return paxos_service[PAXOS_MONMAP];
+  if (name == "osdmap")
+    return paxos_service[PAXOS_OSDMAP];
+  if (name == "pgmap")
+    return paxos_service[PAXOS_PGMAP];
+  if (name == "logm")
+    return paxos_service[PAXOS_LOG];
+  if (name == "auth")
+    return paxos_service[PAXOS_AUTH];
+
+  assert(0 == "given name does not match known paxos service");
+  return NULL;
+}
+
 Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -242,11 +261,12 @@ void Monitor::init()
   }
 
   // init paxos
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->init();
-
-  for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
-    (*ps)->update_from_paxos();
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos[i]->init();
+    if (paxos[i]->is_consistent()) {
+      paxos_service[i]->update_from_paxos();
+    } // else we don't do anything; handle_probe_reply will detect it's slurping
+  }
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
@@ -523,7 +543,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	dout(0) << " peer has paxos machine " << p->first << " but i don't... weird" << dendl;
 	continue;  // weird!
       }
-      if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
+      if (pax->is_slurping()) {
+        dout(10) << " My paxos machine " << p->first
+                 << " is currently slurping, so that will continue. Peer has v "
+                 << p->second << dendl;
+        ok = false;
+      } else if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
 	dout(10) << " peer paxos machine " << p->first << " v " << p->second
 		 << " vs my v " << pax->get_version()
 		 << " (too far ahead)"
@@ -596,8 +621,12 @@ void Monitor::slurp()
       p++;
       continue;
     }
+
     dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
     if (p->second > pax->get_version()) {
+      if (!pax->is_slurping()) {
+        pax->start_slurping();
+      }
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -609,6 +638,9 @@ void Monitor::slurp()
     // latest?
     if (pax->get_first_committed() > 1 &&   // don't need it!
 	pax->get_stashed_version() < pax->get_first_committed()) {
+      if (!pax->is_slurping()) {
+        pax->start_slurping();
+      }
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -616,6 +648,12 @@ void Monitor::slurp()
       messenger->send_message(m, slurp_source);
       return;
     }
+
+    PaxosService *paxs = get_paxos_service_by_name(p->first);
+    assert(paxs);
+    paxs->update_from_paxos();
+
+    pax->end_slurping();
 
     slurp_versions.erase(p++);
   }
@@ -691,10 +729,7 @@ void Monitor::handle_probe_data(MMonProbe *m)
       store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
     }
 
-    pax->first_committed = m->oldest_version;
     pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
-
-    store->put_int(m->oldest_version, m->machine_name.c_str(), "first_committed");
     store->put_int(pax->last_committed, m->machine_name.c_str(),
 		   "last_committed");
   }
@@ -787,6 +822,7 @@ void Monitor::finish_election()
 {
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
+  finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
@@ -1298,6 +1334,8 @@ bool Monitor::_ms_dispatch(Message *m)
   EntityName entity_name;
   bool src_is_mon;
 
+  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+
   if (connection) {
     dout(20) << "have connection" << dendl;
     s = (MonSession *)connection->get_priv();
@@ -1308,6 +1346,37 @@ bool Monitor::_ms_dispatch(Message *m)
       s = NULL;
     }
     if (!s) {
+      if (!exited_quorum.is_zero()
+          && !src_is_mon) {
+        /**
+         * Wait list the new session until we're in the quorum, assuming it's
+         * sufficiently new.
+         * tick() will periodically send them back through so we can send
+         * the client elsewhere if we don't think we're getting back in.
+         *
+         * But we whitelist a few sorts of messages:
+         * 1) Monitors can talk to us at any time, of course.
+         * 2) auth messages. It's unlikely to go through much faster, but
+         * it's possible we've just lost our quorum status and we want to take...
+         * 3) command messages. We want to accept these under all possible
+         * circumstances.
+         */
+        utime_t too_old = ceph_clock_now(g_ceph_context);
+        too_old -= g_ceph_context->_conf->mon_lease;
+        if (m->get_recv_stamp() > too_old
+            && connection->is_connected()) {
+          dout(5) << "waitlisting message " << *m
+                  << " until we get in quorum" << dendl;
+          maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
+        } else {
+          dout(1) << "discarding message " << *m
+                  << " and sending client elsewhere; we are not in quorum"
+                  << dendl;
+          messenger->mark_down(connection);
+          m->put();
+        }
+        return true;
+      }
       dout(10) << "do not have session, making new one" << dendl;
       s = session_map.new_session(m->get_source_inst(), m->get_connection());
       m->get_connection()->set_priv(s->get());
@@ -1335,7 +1404,6 @@ bool Monitor::_ms_dispatch(Message *m)
       entity_name = s->auth_handler->get_entity_name();
     }
   }
-  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 
   if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
@@ -1680,21 +1748,18 @@ void Monitor::tick()
       messenger->mark_down(s->inst.addr);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
-      if (s->time_established < exited_quorum) {
-        if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
-          // boot the client Session because we've taken too long getting back in
-          dout(10) << " trimming session " << s->inst
-              << " because we've been out of quorum too long" << dendl;
-          messenger->mark_down(s->inst.addr);
-          remove_session(s);
-        }
-      } else if (s->time_established + g_conf->mon_lease < now) {
+      if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
+        // boot the client Session because we've taken too long getting back in
         dout(10) << " trimming session " << s->inst
-                 << " because we're still not in quorum" << dendl;
+            << " because we've been out of quorum too long" << dendl;
         messenger->mark_down(s->inst.addr);
         remove_session(s);
       }
     }
+  }
+
+  if (!maybe_wait_for_quorum.empty()) {
+    finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   }
 
   new_tick();

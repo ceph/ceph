@@ -109,13 +109,13 @@ void AuthMonitor::create_initial()
   pending_auth.push_back(inc);
 }
 
-bool AuthMonitor::update_from_paxos()
+void AuthMonitor::update_from_paxos()
 {
   dout(10) << "update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
   version_t keys_ver = mon->key_server.get_ver();
   if (paxosv == keys_ver)
-    return true;
+    return;
   assert(paxosv >= keys_ver);
 
   if (keys_ver != paxos->get_stashed_version()) {
@@ -190,8 +190,6 @@ bool AuthMonitor::update_from_paxos()
   if (mon->is_leader() &&
       paxosv > max)
     paxos->trim_to(paxosv - max);
-
-  return true;
 }
 
 void AuthMonitor::increase_max_global_id()

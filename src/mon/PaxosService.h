@@ -96,7 +96,7 @@ public:
    * it's newer than the current Monitor state.
    * Return true on success.
    */
-  virtual bool update_from_paxos() = 0;
+  virtual void update_from_paxos() = 0;
 
   /*
    * This function is only called on a leader. Create the pending state.

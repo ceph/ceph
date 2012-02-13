@@ -80,11 +80,11 @@ void MDSMonitor::create_initial()
 }
 
 
-bool MDSMonitor::update_from_paxos()
+void MDSMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == mdsmap.epoch)
-    return true;
+    return;
   assert(paxosv >= mdsmap.epoch);
 
   dout(10) << "update_from_paxos paxosv " << paxosv 
@@ -106,8 +106,6 @@ bool MDSMonitor::update_from_paxos()
 
   check_subs();
   update_logger();
-
-  return true;
 }
 
 void MDSMonitor::create_pending()
