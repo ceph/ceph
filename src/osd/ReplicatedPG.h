@@ -581,6 +581,7 @@ protected:
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			map<string, bufferptr> &attrs,
+			map<string, bufferlist> &omap_entries,
 			ObjectStore::Transaction *t);
   void submit_push_complete(ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);

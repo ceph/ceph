@@ -1651,7 +1651,10 @@ struct ObjectRecoveryProgress {
       data_complete(false), omap_complete(false) { }
 
   bool is_complete(const ObjectRecoveryInfo& info) const {
-    return data_recovered_to >= (info.copy_subset.empty() ? 0 : info.copy_subset.range_end());
+    return (data_recovered_to >= (
+      info.copy_subset.empty() ?
+      0 : info.copy_subset.range_end())) &&
+      omap_complete;
   }
 
   static void generate_test_instances(list<ObjectRecoveryProgress*>& o);
