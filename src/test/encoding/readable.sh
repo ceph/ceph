@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/dash -e
 
 dir=$1
 
@@ -32,13 +32,13 @@ do
 	    sawarversion=0
 	    for iv in `ls -v $dir/archive`
 	    do
-		if [ "$iv" == "$arversion" ]; then
+		if [ "$iv" = "$arversion" ]; then
 		    sawarversion=1
 		fi
 		if [ $sawarversion -eq 1 ] && [ -e "$dir/archive/$iv/forward_incompat/$type" ]; then
 		    incompat="$iv"
 		fi
-		if [ "$iv" == "$version" ]; then
+		if [ "$iv" = "$version" ]; then
 		    break
 		fi
 	    done
