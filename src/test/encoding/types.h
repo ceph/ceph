@@ -52,6 +52,7 @@ TYPE(object_info_t)
 TYPE(SnapSet)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
+TYPE(osd_peer_stat_t)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
