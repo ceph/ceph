@@ -2003,25 +2003,45 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
 // -- ObjectRecovery --
 void ObjectRecoveryProgress::encode(bufferlist &bl) const
 {
+  ENCODE_START(1, 1, bl);
   ::encode(first, bl);
   ::encode(data_complete, bl);
   ::encode(data_recovered_to, bl);
   ::encode(omap_recovered_to, bl);
   ::encode(omap_complete, bl);
+  ENCODE_FINISH(bl);
 }
 
 void ObjectRecoveryProgress::decode(bufferlist::iterator &bl)
 {
+  DECODE_START(1, bl);
   ::decode(first, bl);
   ::decode(data_complete, bl);
   ::decode(data_recovered_to, bl);
   ::decode(omap_recovered_to, bl);
   ::decode(omap_complete, bl);
+  DECODE_FINISH(bl);
 }
 
 ostream &operator<<(ostream &out, const ObjectRecoveryProgress &prog)
 {
   return prog.print(out);
+}
+
+void ObjectRecoveryProgress::generate_test_instances(
+  list<ObjectRecoveryProgress*>& o)
+{
+  o.push_back(new ObjectRecoveryProgress);
+  o.back()->first = false;
+  o.back()->data_complete = true;
+  o.back()->omap_complete = true;
+  o.back()->data_recovered_to = 100;
+
+  o.push_back(new ObjectRecoveryProgress);
+  o.back()->first = true;
+  o.back()->data_complete = false;
+  o.back()->omap_complete = false;
+  o.back()->data_recovered_to = 0;
 }
 
 ostream &ObjectRecoveryProgress::print(ostream &out) const
@@ -2035,10 +2055,18 @@ ostream &ObjectRecoveryProgress::print(ostream &out) const
 	     << ")";
 }
 
+void ObjectRecoveryProgress::dump(Formatter *f) const
+{
+  f->dump_int("first?", first);
+  f->dump_int("data_complete?", data_complete);
+  f->dump_unsigned("data_recovered_to", data_recovered_to);
+  f->dump_int("omap_complete?", omap_complete);
+  f->dump_string("omap_recovered_to", omap_recovered_to);
+}
+
 void ObjectRecoveryInfo::encode(bufferlist &bl) const
 {
-  __u8 v = 0;
-  ::encode(v, bl);
+  ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
@@ -2046,12 +2074,12 @@ void ObjectRecoveryInfo::encode(bufferlist &bl) const
   ::encode(ss, bl);
   ::encode(copy_subset, bl);
   ::encode(clone_subset, bl);
+  ENCODE_FINISH(bl);
 }
 
 void ObjectRecoveryInfo::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START(1, bl);
   ::decode(soid, bl);
   ::decode(version, bl);
   ::decode(size, bl);
@@ -2059,6 +2087,36 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl)
   ::decode(ss, bl);
   ::decode(copy_subset, bl);
   ::decode(clone_subset, bl);
+  DECODE_FINISH(bl);
+}
+
+void ObjectRecoveryInfo::generate_test_instances(
+  list<ObjectRecoveryInfo*>& o)
+{
+  o.push_back(new ObjectRecoveryInfo);
+  o.back()->soid = hobject_t(sobject_t("key", CEPH_NOSNAP));
+  o.back()->version = eversion_t(0,0);
+  o.back()->size = 100;
+}
+
+
+void ObjectRecoveryInfo::dump(Formatter *f) const
+{
+  f->dump_stream("object") << soid;
+  f->dump_stream("at_version") << version;
+  f->dump_stream("size") << size;
+  {
+    f->open_object_section("object_info");
+    oi.dump(f);
+    f->close_section();
+  }
+  {
+    f->open_object_section("snapset");
+    ss.dump(f);
+    f->close_section();
+  }
+  f->dump_stream("copy_subset") << copy_subset;
+  f->dump_stream("clone_subset") << clone_subset;
 }
 
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf)

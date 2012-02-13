@@ -50,6 +50,8 @@ TYPE(pg_create_t)
 TYPE(watch_info_t)
 TYPE(object_info_t)
 TYPE(SnapSet)
+TYPE(ObjectRecoveryInfo)
+TYPE(ObjectRecoveryProgress)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
 

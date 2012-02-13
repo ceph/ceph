@@ -1620,9 +1620,11 @@ struct ObjectRecoveryProgress {
   string omap_recovered_to;
   bool omap_complete;
 
+  static void generate_test_instances(list<ObjectRecoveryProgress*>& o);
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(ObjectRecoveryProgress)
 ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
@@ -1637,9 +1639,11 @@ struct ObjectRecoveryInfo {
   interval_set<uint64_t> copy_subset;
   map<hobject_t, interval_set<uint64_t> > clone_subset;
 
+  static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);

@@ -543,17 +543,43 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-
-
-  
-  // pull
-  struct pull_info_t {
-    eversion_t version;
-    int from;
-    bool need_size;
-    interval_set<uint64_t> data_subset, data_subset_pulling;
+  // push
+  struct PushInfo {
+    int in_progress;
+    ObjectRecoveryProgress recovery_progress;
+    ObjectRecoveryInfo recovery_info;
   };
-  map<hobject_t, pull_info_t> pulling;
+  map<hobject_t, map<int, PushInfo> > pushing;
+  // pull
+  struct PullInfo {
+    ObjectRecoveryProgress recovery_progress;
+    ObjectRecoveryInfo recovery_info;
+  };
+  map<hobject_t, PullInfo> pulling;
+
+  ObjectRecoveryInfo recalc_subsets(ObjectRecoveryInfo recovery_info);
+  static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
+			       const interval_set<uint64_t> &intervals_received,
+			       bufferlist data_received,
+			       interval_set<uint64_t> *intervals_usable,
+			       bufferlist *data_usable);
+  void handle_pull_response(OpRequest *op);
+  void handle_push(OpRequest *op);
+  int send_push(int peer,
+		ObjectRecoveryInfo recovery_info,
+		ObjectRecoveryProgress progress,
+		ObjectRecoveryProgress *out_progress = 0);
+  int send_pull(int peer,
+		ObjectRecoveryInfo recovery_info,
+		ObjectRecoveryProgress progress);
+  void submit_push_data(const ObjectRecoveryInfo &recovery_info,
+			bool first,
+			const interval_set<uint64_t> &intervals_included,
+			bufferlist data_included,
+			map<string, bufferptr> &attrs,
+			ObjectStore::Transaction *t);
+  void submit_push_complete(ObjectRecoveryInfo &recovery_info,
+			    ObjectStore::Transaction *t);
 
   /*
    * Backfill
@@ -578,15 +604,6 @@ protected:
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
 
-  // push
-  struct push_info_t {
-    uint64_t size;
-    eversion_t version;
-    interval_set<uint64_t> data_subset, data_subset_pushing;
-    map<hobject_t, interval_set<uint64_t> > clone_subsets;
-  };
-  map<hobject_t, map<int, push_info_t> > pushing;
-
   int recover_object_replicas(const hobject_t& soid, eversion_t v);
   void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
 			 pg_missing_t& missing,
@@ -598,15 +615,13 @@ protected:
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void push_to_replica(ObjectContext *obc, const hobject_t& oid, int dest);
-  void push_start(const hobject_t& oid, int dest);
-  void push_start(const hobject_t& soid, int peer,
-		  uint64_t size, eversion_t version,
+  void push_start(ObjectContext *obc,
+		  const hobject_t& oid, int dest);
+  void push_start(ObjectContext *obc,
+		  const hobject_t& soid, int peer,
+		  eversion_t version,
 		  interval_set<uint64_t> &data_subset,
 		  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  int send_push_op(const hobject_t& oid, eversion_t version, int dest,
-		   uint64_t size, bool first, bool complete,
-		   interval_set<uint64_t>& data_subset, 
-		   map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void send_push_op_blank(const hobject_t& soid, int peer);
 
   void finish_degraded_object(const hobject_t& oid);
@@ -614,8 +629,6 @@ protected:
   // Cancels/resets pulls from peer
   void check_recovery_op_pulls(const OSDMapRef map);
   int pull(const hobject_t& oid, eversion_t v);
-  void send_pull_op(const hobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
-
 
   // low level ops
 
