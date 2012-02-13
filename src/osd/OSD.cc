@@ -1100,25 +1100,14 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   assert(!store->collection_exists(coll_t(pgid)));
   t.create_collection(coll_t(pgid));
 
-  pg->set_role(0);
-  pg->acting.swap(acting);
-  pg->up = pg->acting;
-  pg->info.history = history;
   /* This is weird, but all the peering code needs last_epoch_start
    * to be less than same_interval_since. Make it so!
    * This is easier to deal with if you remember that the PG, while
    * now created in memory, still hasn't peered and started -- and
    * the map epoch could change before that happens! */
-  pg->info.history.last_epoch_started = history.epoch_created - 1;
+  history.last_epoch_started = history.epoch_created - 1;
 
-  pg->info.stats.up = pg->up;
-  pg->info.stats.acting = pg->acting;
-  pg->info.stats.mapping_epoch = pg->info.history.same_interval_since;
-
-  pg->write_info(t);
-  pg->write_log(t);
-  
-  reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+  pg->init(0, acting, acting, history, &t);
 
   dout(7) << "_create_lock_new_pg " << *pg << dendl;
   return pg;

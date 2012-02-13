@@ -1302,6 +1302,9 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
+  void init(int role, vector<int>& up, vector<int>& acting, pg_history_t& history,
+	    ObjectStore::Transaction *t);
+
   // pg on-disk state
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);

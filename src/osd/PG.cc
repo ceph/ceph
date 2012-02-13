@@ -1733,6 +1733,39 @@ void PG::clear_stats()
   osd->pg_stat_queue_dequeue(this);
 }
 
+/**
+ * initialize a newly instantiated pg
+ *
+ * Initialize PG state, as when a PG is initially created, or when it
+ * is first instantiated on the current node.
+ *
+ * @param role our role/rank
+ * @param newup up set
+ * @param newacting acting set
+ * @param history pg history
+ * @param t transaction to write out our new state in
+ */
+void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
+	      ObjectStore::Transaction *t)
+{
+  dout(10) << "init role " << role << " up " << up << " acting " << acting
+	   << " history " << history << dendl;
+
+  set_role(role);
+  acting = newacting;
+  up = newup;
+
+  info.history = history;
+
+  info.stats.up = up;
+  info.stats.acting = acting;
+  info.stats.mapping_epoch = info.history.same_interval_since;
+
+  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+
+  write_info(*t);
+  write_log(*t);
+}
 
 void PG::write_info(ObjectStore::Transaction& t)
 {
