@@ -398,7 +398,7 @@ private:
   double m_filestore_max_sync_interval;
   double m_filestore_min_sync_interval;
   bool m_filestore_update_collections;
-  bool m_journal_dio;
+  bool m_journal_dio, m_journal_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;
   int m_filestore_queue_max_ops;

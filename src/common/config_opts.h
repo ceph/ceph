@@ -328,6 +328,7 @@ OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_collections, OPT_BOOL, false)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(journal_dio, OPT_BOOL, true)
+OPTION(journal_aio, OPT_BOOL, true)
 OPTION(journal_block_align, OPT_BOOL, true)
 OPTION(journal_max_write_bytes, OPT_INT, 10 << 20)
 OPTION(journal_max_write_entries, OPT_INT, 100)
