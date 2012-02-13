@@ -304,7 +304,7 @@ enum {
 	CEPH_OSD_FLAG_READ =           0x0010,  /* op may read */
 	CEPH_OSD_FLAG_WRITE =          0x0020,  /* op may write */
 	CEPH_OSD_FLAG_ORDERSNAP =      0x0040,  /* EOLDSNAP if snapc is out of order */
-	CEPH_OSD_FLAG_PEERSTAT =       0x0080,  /* msg includes osd_peer_stat */
+	CEPH_OSD_FLAG_PEERSTAT_OLD =   0x0080,  /* DEPRECATED msg includes osd_peer_stat */
 	CEPH_OSD_FLAG_BALANCE_READS =  0x0100,
 	CEPH_OSD_FLAG_PARALLELEXEC =   0x0200,  /* execute op in parallel */
 	CEPH_OSD_FLAG_PGOP =           0x0400,  /* pg op, no object */

@@ -54,7 +54,6 @@ private:
   snapid_t snap_seq;
   vector<snapid_t> snaps;
 
-  osd_peer_stat_t peer_stat;
 public:
   int rmw_flags;
 
@@ -98,15 +97,6 @@ public:
   bool may_write() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_WRITE; }
   bool may_exec() { assert(rmw_flags); return rmw_flags & (CEPH_OSD_FLAG_EXEC | CEPH_OSD_FLAG_EXEC_PUBLIC); }
   bool require_exec_caps() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_EXEC; }
-
-  void set_peer_stat(const osd_peer_stat_t& st) {
-    peer_stat = st;
-    flags |= CEPH_OSD_FLAG_PEERSTAT;
-  }
-  const osd_peer_stat_t& get_peer_stat() {
-    assert(flags & CEPH_OSD_FLAG_PEERSTAT);
-    return peer_stat; 
-  }
 
   MOSDOp()
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION) { }
@@ -249,8 +239,6 @@ struct ceph_osd_request_head {
 
       ::encode_nohead(oid.name, payload);
       ::encode_nohead(snaps, payload);
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::encode(peer_stat, payload);
     } else {
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
@@ -270,9 +258,6 @@ struct ceph_osd_request_head {
       ::encode(snapid, payload);
       ::encode(snap_seq, payload);
       ::encode(snaps, payload);
-
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::encode(peer_stat, payload);
 
       ::encode(retry_attempt, payload);
     }
@@ -315,9 +300,6 @@ struct ceph_osd_request_head {
       decode_nohead(oid_len, oid.name, p);
       decode_nohead(num_snaps, snaps, p);
 
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::decode(peer_stat, p);
-
       // recalculate pgid hash value
       pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
 				oid.name.c_str(),
@@ -354,9 +336,6 @@ struct ceph_osd_request_head {
       ::decode(snapid, p);
       ::decode(snap_seq, p);
       ::decode(snaps, p);
-
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::decode(peer_stat, p);
 
       if (header.version >= 4)
 	::decode(retry_attempt, p);
