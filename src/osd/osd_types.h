@@ -1402,29 +1402,18 @@ WRITE_CLASS_ENCODER(pg_create_t)
 // -----------------------------------------
 
 struct osd_peer_stat_t {
-  struct ceph_timespec stamp;
-  float oprate;
-  float qlen;            // current
-  float recent_qlen;     // moving average
-  float read_latency;
-  float read_latency_mine;
-  float frac_rd_ops_shed_in;
-  float frac_rd_ops_shed_out;
-} __attribute__ ((packed));
+  utime_t stamp;
 
-WRITE_RAW_ENCODER(osd_peer_stat_t)
+  osd_peer_stat_t() { }
 
-inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
-  return out << "stat(" << stat.stamp
-	     << " oprate=" << stat.oprate
-    	     << " qlen=" << stat.qlen 
-    	     << " recent_qlen=" << stat.recent_qlen
-	     << " rdlat=" << stat.read_latency_mine << " / " << stat.read_latency
-	     << " fshedin=" << stat.frac_rd_ops_shed_in
-	     << ")";
-}
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_peer_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER(osd_peer_stat_t)
 
-
+ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
 
 
 // -----------------------------------------
