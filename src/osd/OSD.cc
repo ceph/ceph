@@ -1065,28 +1065,6 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   return pg;
 }
 
-
-PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
-{
-  assert(osd_lock.is_locked());
-  dout(10) << "_create_lock_pg " << pgid << dendl;
-
-  if (pg_map.count(pgid)) 
-    dout(0) << "_create_lock_pg on " << pgid << ", already have " << *pg_map[pgid] << dendl;
-
-  // open
-  PG *pg = _open_lock_pg(pgid);
-
-  // create collection
-  assert(!store->collection_exists(coll_t(pgid)));
-  t.create_collection(coll_t(pgid));
-
-  pg->write_info(t);
-  pg->write_log(t);
-
-  return pg;
-}
-
 PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
                              pg_history_t history)
 {
@@ -1255,15 +1233,15 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& c
     if (create) {
       pg = _create_lock_new_pg(info.pgid, acting, **pt, history);
     } else {
-      pg = _create_lock_pg(info.pgid, **pt);
-      pg->acting.swap(acting);
-      pg->up.swap(up);
-      pg->set_role(role);
-      pg->info.history = history;
-      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+      pg = _open_lock_pg(info.pgid);
+
+      // create collection
+      assert(!store->collection_exists(coll_t(info.pgid)));
+      (*pt)->create_collection(coll_t(info.pgid));
+
+      pg->init(role, up, acting, history, *pt);
+
       pg->clear_primary_state();  // yep, notably, set hml=false
-      pg->write_info(**pt);
-      pg->write_log(**pt);
     }
       
     created++;
