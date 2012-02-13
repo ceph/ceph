@@ -18,7 +18,7 @@ TESTS = $(check_PROGRAMS)
 
 check-local:
 	test/encoding/check-generated.sh
-	test/encoding/readable.sh ../ceph-object-corpus/archive
+	test/encoding/readable.sh ../ceph-object-corpus
 
 EXTRALIBS = -luuid
 if FREEBSD
