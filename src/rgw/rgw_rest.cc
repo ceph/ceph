@@ -445,13 +445,13 @@ static int init_entities_from_header(struct req_state *s)
   } else
     s->host_bucket = NULL;
 
-  const char *req_name = s->path_name.c_str();
+  const char *req_name = s->decoded_uri.c_str();
   const char *p;
 
   if (*req_name == '?') {
     p = req_name;
   } else {
-    p = s->query_str.c_str();
+    p = s->request_params.c_str();
   }
 
   s->args.set(p);
@@ -492,8 +492,8 @@ static int init_entities_from_header(struct req_state *s)
     /* verify that the request_uri conforms with what's expected */
     char buf[g_conf->rgw_swift_url_prefix.length() + 16];
     int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
-    if (s->path_name_url[0] != '/' ||
-        s->path_name_url.compare(0, blen, buf) !=  0) {
+    if (s->decoded_uri[0] != '/' ||
+        s->decoded_uri.compare(0, blen, buf) !=  0) {
       return -ENOENT;
     }
 
@@ -764,19 +764,15 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   int ret = 0;
 
   s->fcgx = fcgx;
-  s->path_name = s->env->get("SCRIPT_NAME");
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {
+    s->request_params = s->request_uri.substr(pos + 1);
     s->request_uri = s->request_uri.substr(0, pos);
   }
-  url_decode(s->request_uri, s->path_name_url);
-  if (s->path_name.empty())
-    s->path_name = s->path_name_url.c_str();
+  url_decode(s->request_uri, s->decoded_uri);
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
-  string query_string = s->env->get("QUERY_STRING");
-  url_decode(query_string, s->query_str);
   s->length = s->env->get("CONTENT_LENGTH");
   s->content_type = s->env->get("CONTENT_TYPE");
   s->prot_flags = 0;
