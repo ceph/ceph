@@ -1463,18 +1463,14 @@ void OSD::update_heartbeat_peers()
        i != pg_map.end();
        i++) {
     PG *pg = i->second;
-
-    // replicas (new and old) ping primary.
-    if (pg->get_role() == 0) {
-      assert(pg->acting[0] == whoami);
-      for (unsigned i=0; i<pg->acting.size(); i++)
-	_add_heartbeat_source(pg->acting[i], old_from, old_from_stamp, old_con);
-      for (unsigned i=0; i<pg->up.size(); i++)
-	_add_heartbeat_source(pg->up[i], old_from, old_from_stamp, old_con);
-      for (map<int,pg_info_t>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
-	if (osdmap->is_up(p->first))
-	  _add_heartbeat_source(p->first, old_from, old_from_stamp, old_con);
-    }
+    pg->heartbeat_peer_lock.Lock();
+    dout(20) << *pg << " heartbeat_peers " << pg->heartbeat_peers << dendl;
+    for (set<int>::iterator p = pg->heartbeat_peers.begin();
+	 p != pg->heartbeat_peers.end();
+	 ++p)
+      if (osdmap->is_up(*p))
+	_add_heartbeat_source(*p, old_from, old_from_stamp, old_con);
+    pg->heartbeat_peer_lock.Unlock();
   }
 
   for (map<int,epoch_t>::iterator p = old_from.begin();

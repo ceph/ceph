@@ -561,6 +561,13 @@ protected:
 
   epoch_t last_peering_reset;
 
+
+  /* heartbeat peers */
+public:
+  Mutex heartbeat_peer_lock;
+  set<int> heartbeat_peers;
+
+protected:
   /**
    * BackfillInterval
    *
@@ -739,6 +746,8 @@ public:
   virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
   void purge_strays();
+
+  void update_heartbeat_peers();
 
   Context *finish_sync_event;
 
@@ -1237,6 +1246,7 @@ public:
     state(0),
     need_up_thru(false),
     last_peering_reset(0),
+    heartbeat_peer_lock("PG::heartbeat_peer_lock"),
     backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
