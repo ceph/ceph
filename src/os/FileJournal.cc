@@ -1130,8 +1130,6 @@ void FileJournal::do_aio_write(bufferlist& bl)
 	   << (hbp.length() ? " + header":"")
 	   << dendl;
   
-  utime_t from = ceph_clock_now(g_ceph_context);
-
   // split?
   off64_t split = 0;
   if (pos + bl.length() > header.max_size) {
