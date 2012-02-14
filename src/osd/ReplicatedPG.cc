@@ -3972,7 +3972,6 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
 	  << dendl;
 
   ObjectRecoveryInfo recovery_info;
-  bool need_size = false;
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
   if (soid.snap && soid.snap < CEPH_NOSNAP) {
@@ -4015,7 +4014,6 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
   } else {
     // pulling head or unversioned object.
     // always pull the whole thing.
-    need_size = true;
     recovery_info.copy_subset.insert(0, (uint64_t)-1);
     recovery_info.size = ((uint64_t)-1);
   }
