@@ -248,6 +248,10 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
   }
   update_stats();
 
+  // was this a new info?  if so, update peers!
+  if (p == peer_info.end())
+    update_heartbeat_peers();
+
   return true;
 }
 
@@ -796,15 +800,21 @@ bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
 void PG::remove_down_peer_info(const OSDMapRef osdmap)
 {
   // Remove any downed osds from peer_info
+  bool removed = false;
   map<int,pg_info_t>::iterator p = peer_info.begin();
   while (p != peer_info.end()) {
     if (!osdmap->is_up(p->first)) {
       dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
       peer_missing.erase(p->first);
       peer_info.erase(p++);
+      removed = true;
     } else
       p++;
   }
+
+  // if we removed anyone, update peers (which include peer_info)
+  if (removed)
+    update_heartbeat_peers();
 }
 
 /*
@@ -1646,6 +1656,7 @@ void PG::purge_strays()
 {
   dout(10) << "purge_strays " << stray_set << dendl;
   
+  bool removed = false;
   for (set<int>::iterator p = stray_set.begin();
        p != stray_set.end();
        p++) {
@@ -1657,7 +1668,12 @@ void PG::purge_strays()
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;
     }
     peer_info.erase(*p);
+    removed = true;
   }
+
+  // if we removed anyone, update peers (which include peer_info)
+  if (removed)
+    update_heartbeat_peers();
 
   stray_set.clear();
 
@@ -1667,8 +1683,22 @@ void PG::purge_strays()
   peer_missing_requested.clear();
 }
 
-
-
+void PG::update_heartbeat_peers()
+{
+  assert(is_locked());
+  heartbeat_peer_lock.Lock();
+  heartbeat_peers.clear();
+  if (role == 0) {
+    for (unsigned i=0; i<acting.size(); i++)
+      heartbeat_peers.insert(acting[i]);
+    for (unsigned i=0; i<up.size(); i++)
+      heartbeat_peers.insert(up[i]);
+    for (map<int,pg_info_t>::iterator p = peer_info.begin(); p != peer_info.end(); ++p)
+      heartbeat_peers.insert(p->first);
+  }
+  dout(10) << "update_heartbeat_peers " << heartbeat_peers << dendl;
+  heartbeat_peer_lock.Unlock();
+}
 
 void PG::update_stats()
 {
@@ -1747,6 +1777,39 @@ void PG::clear_stats()
   osd->pg_stat_queue_dequeue(this);
 }
 
+/**
+ * initialize a newly instantiated pg
+ *
+ * Initialize PG state, as when a PG is initially created, or when it
+ * is first instantiated on the current node.
+ *
+ * @param role our role/rank
+ * @param newup up set
+ * @param newacting acting set
+ * @param history pg history
+ * @param t transaction to write out our new state in
+ */
+void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
+	      ObjectStore::Transaction *t)
+{
+  dout(10) << "init role " << role << " up " << up << " acting " << acting
+	   << " history " << history << dendl;
+
+  set_role(role);
+  acting = newacting;
+  up = newup;
+
+  info.history = history;
+
+  info.stats.up = up;
+  info.stats.acting = acting;
+  info.stats.mapping_epoch = info.history.same_interval_since;
+
+  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+
+  write_info(*t);
+  write_log(*t);
+}
 
 void PG::write_info(ObjectStore::Transaction& t)
 {
@@ -3672,6 +3735,7 @@ boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& no
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(notify.from, notify.info);
+  pg->update_heartbeat_peers();
   return transit< Primary >();
 }
 
@@ -3752,6 +3816,9 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg->info);
   }
+
+  pg->update_heartbeat_peers();
+
   return transit< Started >();
 }
 
@@ -3897,6 +3964,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   dout(10) << "Active: handling ActMap" << dendl;
   assert(pg->is_active());
   assert(pg->is_primary());
+
   pg->check_recovery_op_pulls(pg->get_osdmap());
 	
   if (g_conf->osd_check_for_log_corruption)

@@ -562,6 +562,13 @@ protected:
 
   epoch_t last_peering_reset;
 
+
+  /* heartbeat peers */
+public:
+  Mutex heartbeat_peer_lock;
+  set<int> heartbeat_peers;
+
+protected:
   /**
    * BackfillInterval
    *
@@ -740,6 +747,8 @@ public:
   virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
   void purge_strays();
+
+  void update_heartbeat_peers();
 
   Context *finish_sync_event;
 
@@ -1239,6 +1248,7 @@ public:
     need_up_thru(false),
     need_flush(false),
     last_peering_reset(0),
+    heartbeat_peer_lock("PG::heartbeat_peer_lock"),
     backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
@@ -1293,6 +1303,9 @@ public:
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
+
+  void init(int role, vector<int>& up, vector<int>& acting, pg_history_t& history,
+	    ObjectStore::Transaction *t);
 
   // pg on-disk state
   void do_pending_flush();
