@@ -167,7 +167,8 @@ struct SignalHandler : public Thread {
   }
 
   void signal_thread() {
-    write(pipefd[1], "\0", 1);
+    int r = write(pipefd[1], "\0", 1);
+    assert(r == 1);
   }
 
   void shutdown() {
@@ -229,7 +230,8 @@ struct SignalHandler : public Thread {
     // have the signal handler defined without the handlers entry also
     // being filled in.
     assert(handlers[signum]);
-    write(handlers[signum]->pipefd[1], " ", 1);
+    int r = write(handlers[signum]->pipefd[1], " ", 1);
+    assert(r == 1);
   }
 
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
