@@ -3994,7 +3994,7 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
     if (missing.is_missing(head)) {
       if (pulling.count(head)) {
 	dout(10) << " missing but already pulling snapdir " << head << dendl;
-	return false;
+	return PULL_NONE;
       } else {
 	int r = pull(head, missing.missing[head].need);
 	if (r != PULL_NONE)
