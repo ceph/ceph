@@ -4292,7 +4292,7 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   bufferlist data;
   m->claim_data(data);
   interval_set<uint64_t> data_included = m->data_included;
-  dout(10) << "handle_push "
+  dout(10) << "handle_pull_response"
 	   << m->recovery_info
 	   << m->recovery_progress
 	   << " data.size() is " << data.length()
@@ -4307,7 +4307,6 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   hobject_t &hoid = m->recovery_info.soid;
   assert((data_included.empty() && data.length() == 0) ||
 	 (!data_included.empty() && data.length() > 0));
-
 
   if (!pulling.count(hoid)) {
     return;
@@ -4335,8 +4334,7 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   bool first = pi.recovery_progress.first;
   pi.recovery_progress = m->recovery_progress;
 
-  dout(10) << "new recovery_info: "
-	   << pi.recovery_info
+  dout(10) << "new recovery_info " << pi.recovery_info
 	   << ", new progress " << pi.recovery_progress
 	   << dendl;
 
@@ -4358,9 +4356,7 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
     }
   }
 
-  bool complete = pi.recovery_progress.data_recovered_to >=
-    (pi.recovery_info.copy_subset.empty() ?
-     0 : pi.recovery_info.copy_subset.range_end());
+  bool complete = pi.is_complete();
 
   if (complete && !pi.recovery_progress.data_complete) {
     dout(0) << " uh oh, we reached EOF on peer before we got everything we wanted"
@@ -4532,10 +4528,8 @@ int ReplicatedPG::send_push(int peer,
   if (!subop->data_included.empty())
     new_progress.data_recovered_to = subop->data_included.range_end();
 
-  if (recovery_info.copy_subset.empty() ||
-      new_progress.data_recovered_to >= recovery_info.copy_subset.range_end())
+  if (new_progress.is_complete(recovery_info))
     new_progress.data_complete = true;
-
 
   osd->logger->inc(l_osd_push);
   osd->logger->inc(l_osd_push_outb, subop->ops[0].indata.length());
@@ -4764,6 +4758,16 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
   }
 }
 
+
+/**
+ * trim received data to remove what we don't want
+ *
+ * @param copy_subset intervals we want
+ * @param data_included intervals we got
+ * @param data_recieved data we got
+ * @param intervals_usable intervals we want to keep
+ * @param data_usable matching data we want to keep
+ */
 void ReplicatedPG::trim_pushed_data(
   const interval_set<uint64_t> &copy_subset,
   const interval_set<uint64_t> &intervals_received,

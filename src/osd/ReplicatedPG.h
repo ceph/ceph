@@ -545,15 +545,19 @@ protected:
 
   // push
   struct PushInfo {
-    int in_progress;
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
   };
   map<hobject_t, map<int, PushInfo> > pushing;
+
   // pull
   struct PullInfo {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
+
+    bool is_complete() const {
+      return recovery_progress.is_complete(recovery_info);
+    }
   };
   map<hobject_t, PullInfo> pulling;
 
