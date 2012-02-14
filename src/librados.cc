@@ -200,10 +200,10 @@ void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *p
   o->read(off, len, pbl, prval);
 }
 
-void librados::ObjectReadOperation::tmap_get(bufferlist *pbl)
+void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->tmap_get(pbl);
+  o->tmap_get(pbl, prval);
 }
 
 void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval)
@@ -2091,7 +2091,7 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   Mutex mylock("RadosClient::tmap_put::mylock");
   Cond cond;
   bool done;
-  int r;
+  int r = 0;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
@@ -2100,7 +2100,7 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   lock.Lock();
   ::ObjectOperation rd;
   prepare_assert_ops(&io, &rd);
-  rd.tmap_get(&bl);
+  rd.tmap_get(&bl, NULL);
   objecter->read(oid, io.oloc, rd, io.snap_seq, 0, 0, onack, &ver);
   lock.Unlock();
 

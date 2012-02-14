@@ -191,7 +191,7 @@ namespace librados
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
-    void tmap_get(bufferlist *pbl);
+    void tmap_get(bufferlist *pbl, int *prval);
   };
 
 
