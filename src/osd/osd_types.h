@@ -1612,13 +1612,44 @@ WRITE_CLASS_ENCODER(object_info_t)
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
 
+
+
 // Object recovery
+struct ObjectRecoveryInfo {
+  hobject_t soid;
+  eversion_t version;
+  uint64_t size;
+  object_info_t oi;
+  SnapSet ss;
+  interval_set<uint64_t> copy_subset;
+  map<hobject_t, interval_set<uint64_t> > clone_subset;
+
+  ObjectRecoveryInfo() : size(0) { }
+
+  static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
+
 struct ObjectRecoveryProgress {
   bool first;
   uint64_t data_recovered_to;
   bool data_complete;
   string omap_recovered_to;
   bool omap_complete;
+
+  ObjectRecoveryProgress()
+    : first(true),
+      data_recovered_to(0),
+      data_complete(false), omap_complete(false) { }
+
+  bool is_complete(const ObjectRecoveryInfo& info) const {
+    return data_recovered_to >= (info.copy_subset.empty() ? 0 : info.copy_subset.range_end());
+  }
 
   static void generate_test_instances(list<ObjectRecoveryProgress*>& o);
   void encode(bufferlist &bl) const;
@@ -1629,24 +1660,6 @@ struct ObjectRecoveryProgress {
 WRITE_CLASS_ENCODER(ObjectRecoveryProgress)
 ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
 
-
-struct ObjectRecoveryInfo {
-  hobject_t soid;
-  eversion_t version;
-  uint64_t size;
-  object_info_t oi;
-  SnapSet ss;
-  interval_set<uint64_t> copy_subset;
-  map<hobject_t, interval_set<uint64_t> > clone_subset;
-
-  static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  ostream &print(ostream &out) const;
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
-ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 /*
  * summarize pg contents for purposes of a scrub
