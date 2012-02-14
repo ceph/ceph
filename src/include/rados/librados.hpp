@@ -351,6 +351,7 @@ namespace librados
 
     int init(const char * const id);
     int init_with_context(CephContext *cct_);
+    CephContext *cct();
     int connect();
     void shutdown();
     int conf_read_file(const char * const path) const;

@@ -184,8 +184,6 @@ int rados_create(rados_t *cluster, const char * const id);
  *
  * Copies all configuration, as retrieved by the C++ API.
  *
- * @note BUG: Since CephContext isn't accessible from the C API, this function is useless
- *
  * @param cluster where to store the handle
  * @param cct_ the existing configuration to use
  * @returns 0 on success, negative error code on failure
@@ -371,6 +369,14 @@ int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
 /**
+ * Get CephContext for a rados cluster handle
+ *
+ * @param cluster cluster handle
+ * @returns CephContext for this cluster
+ */
+struct CephContext *rados_cct(rados_t cluster);
+
+/**
  * Create an io context
  *
  * The io context allows you to perform operations within a particular
@@ -398,6 +404,14 @@ int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *io
  * @param io the io context to dispose of
  */
 void rados_ioctx_destroy(rados_ioctx_t io);
+
+/**
+ * Get CephContext for a pool handle
+ *
+ * @param io pool handle
+ * @returns CephContext for this cluster
+ */
+struct CephContext *rados_ioctx_cct(rados_ioctx_t io);
 
 /**
  * Get pool usage statistics

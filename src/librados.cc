@@ -3199,6 +3199,11 @@ int librados::Rados::connect()
   return client->connect();
 }
 
+CephContext *librados::Rados::cct()
+{
+  return client->cct;
+}
+
 void librados::Rados::shutdown()
 {
   if (!client)
@@ -3439,6 +3444,12 @@ extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct)
   return 0;
 }
 
+extern "C" CephContext *rados_cct(rados_t cluster)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->cct;
+}
+
 extern "C" int rados_connect(rados_t cluster)
 {
   librados::RadosClient *client = (librados::RadosClient *)cluster;
@@ -3620,6 +3631,11 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   return 0;
 }
 
+extern "C" struct CephContext *rados_ioctx_cct(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->client->cct;
+}
 
 extern "C" void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
 {
