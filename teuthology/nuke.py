@@ -69,6 +69,7 @@ def shutdown_daemons(ctx, log):
                 'testrados',
                 'rados',
                 'apache2',
+                'testrados',
                 run.Raw('||'),
                 'true', # ignore errors from ceph binaries not being found
                 ],
