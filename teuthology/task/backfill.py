@@ -64,6 +64,11 @@ def task(ctx, config):
     manager.kill_osd(0)
     manager.mark_down_osd(0)
 
+    # wait for everything to peer and be happy...
+    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.wait_till_clean()
+
     # write some new data
     p = rados_start(mon, ['-p', 'data', 'bench', '30', 'write', '-b', '4096'])
 
