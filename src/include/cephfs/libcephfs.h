@@ -42,6 +42,18 @@ struct ceph_mount_info;
 struct ceph_dir_result;
 struct CephContext;
 
+/* setattr mask bits */
+#ifndef CEPH_SETATTR_MODE
+# define CEPH_SETATTR_MODE   1
+# define CEPH_SETATTR_UID    2
+# define CEPH_SETATTR_GID    4
+# define CEPH_SETATTR_MTIME  8
+# define CEPH_SETATTR_ATIME 16
+# define CEPH_SETATTR_SIZE  32
+# define CEPH_SETATTR_CTIME 64
+#endif
+
+
 const char *ceph_version(int *major, int *minor, int *patch);
 
 /* initialization */
