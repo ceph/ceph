@@ -3159,9 +3159,9 @@ int64_t librados::IoCtx::get_id()
   return io_ctx_impl->get_id();
 }
 
-CephContext *librados::IoCtx::cct()
+librados::config_t librados::IoCtx::cct()
 {
-  return io_ctx_impl->client->cct;
+  return (config_t)io_ctx_impl->client->cct;
 }
 
 librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
@@ -3189,9 +3189,9 @@ int librados::Rados::init(const char * const id)
   return rados_create((rados_t *)&client, id);
 }
 
-int librados::Rados::init_with_context(CephContext *cct_)
+int librados::Rados::init_with_context(config_t cct_)
 {
-  return rados_create_with_context((rados_t *)&client, cct_);
+  return rados_create_with_context((rados_t *)&client, (rados_config_t)cct_);
 }
 
 int librados::Rados::connect()
@@ -3199,9 +3199,9 @@ int librados::Rados::connect()
   return client->connect();
 }
 
-CephContext *librados::Rados::cct()
+librados::config_t librados::Rados::cct()
 {
-  return client->cct;
+  return (config_t)client->cct;
 }
 
 void librados::Rados::shutdown()

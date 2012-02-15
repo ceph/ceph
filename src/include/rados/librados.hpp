@@ -12,8 +12,6 @@
 
 #include "librados.h"
 
-class CephContext;
-
 namespace librados
 {
   using ceph::bufferlist;
@@ -29,6 +27,7 @@ namespace librados
   typedef void *list_ctx_t;
   typedef uint64_t snap_t;
   typedef uint64_t auid_t;
+  typedef void *config_t;
 
   struct cluster_stat_t {
     uint64_t kb, kb_used, kb_avail;
@@ -330,7 +329,7 @@ namespace librados
 
     int64_t get_id();
 
-    CephContext *cct();
+    config_t cct();
 
   private:
     /* You can only get IoCtx instances from Rados */
@@ -350,8 +349,8 @@ namespace librados
     ~Rados();
 
     int init(const char * const id);
-    int init_with_context(CephContext *cct_);
-    CephContext *cct();
+    int init_with_context(config_t cct_);
+    config_t cct();
     int connect();
     void shutdown();
     int conf_read_file(const char * const path) const;
