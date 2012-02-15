@@ -1541,9 +1541,15 @@ struct C_PG_FinishRecovery : public Context {
 void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
-  state_clear(PG_STATE_DEGRADED);
   state_clear(PG_STATE_BACKFILL);
-  state_set(PG_STATE_CLEAN);
+
+  // only clear DEGRADED (or mark CLEAN) if we have enough (or the
+  // desired number of) replicas.
+  if (acting.size() >= get_osdmap()->get_pg_size(info.pgid))
+    state_clear(PG_STATE_DEGRADED);
+  if (acting.size() == get_osdmap()->get_pg_size(info.pgid))
+    state_set(PG_STATE_CLEAN);
+
   assert(info.last_complete == info.last_update);
 
   // NOTE: this is actually a bit premature: we haven't purged the
