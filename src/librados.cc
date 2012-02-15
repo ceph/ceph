@@ -3437,17 +3437,18 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
  * already called global_init and want to use that particular configuration for
  * their cluster.
  */
-extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct)
+extern "C" int rados_create_with_context(rados_t *pcluster, rados_config_t cct_)
 {
+  CephContext *cct = (CephContext *)cct_;
   librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
   return 0;
 }
 
-extern "C" CephContext *rados_cct(rados_t cluster)
+extern "C" rados_config_t rados_cct(rados_t cluster)
 {
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  return client->cct;
+  return (rados_config_t)client->cct;
 }
 
 extern "C" int rados_connect(rados_t cluster)
@@ -3631,10 +3632,10 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   return 0;
 }
 
-extern "C" struct CephContext *rados_ioctx_cct(rados_ioctx_t io)
+extern "C" rados_config_t rados_ioctx_cct(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  return ctx->client->cct;
+  return (rados_config_t)ctx->client->cct;
 }
 
 extern "C" void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
