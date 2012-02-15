@@ -56,6 +56,7 @@ OPTION(debug_journaler, OPT_INT, 0)
 OPTION(debug_objectcacher, OPT_INT, 0)
 OPTION(debug_client, OPT_INT, 0)
 OPTION(debug_osd, OPT_INT, 0)
+OPTION(debug_objclass, OPT_INT, 0)
 OPTION(debug_filestore, OPT_INT, 1)
 OPTION(debug_journal, OPT_INT, 1)
 OPTION(debug_bdev, OPT_INT, 1)         // block device
