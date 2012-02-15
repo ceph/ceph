@@ -27,7 +27,8 @@ class ThreadPool {
   string lockname;
   Mutex _lock;
   Cond _cond;
-  bool _stop, _pause;
+  bool _stop;
+  int _pause;
   int _draining;
   Cond _wait_cond;
 
@@ -133,7 +134,7 @@ public:
     lockname(nm + "::lock"),
     _lock(lockname.c_str()),  // this should be safe due to declaration order
     _stop(false),
-    _pause(false),
+    _pause(0),
     _draining(0),
     last_work_queue(0),
     processing(0) {
@@ -146,9 +147,11 @@ public:
       delete *p;
   }
   
+  /// assign a work queue to this thread pool
   void add_work_queue(WorkQueue_* wq) {
     work_queues.push_back(wq);
   }
+  /// remove a work queue from this thread pool
   void remove_work_queue(WorkQueue_* wq) {
     unsigned i = 0;
     while (work_queues[i] != wq)
@@ -166,24 +169,35 @@ public:
     }
   }
 
-  void kick() {
-    _cond.Signal();
-  }
+  /// take thread pool lock
   void lock() {
     _lock.Lock();
   }
+  /// release thread pool lock
   void unlock() {
     _lock.Unlock();
   }
+
+  /// wait for a kick on this thread pool
   void wait(Cond &c) {
     c.Wait(_lock);
   }
+  /// wake up a waiter
+  void kick() {
+    _cond.Signal();
+  }
 
+  /// start thread pool thread
   void start();
+  /// stop thread pool thread
   void stop(bool clear_after=true);
+  /// pause thread pool (if it not already paused)
   void pause();
+  /// pause initiation of new work
   void pause_new();
+  /// resume work in thread pool.  must match each pause() call 1:1 to resume.
   void unpause();
+  /// wait for all work to complete
   void drain(WorkQueue_* wq = 0);
 };
 
