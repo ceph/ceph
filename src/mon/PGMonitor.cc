@@ -44,7 +44,7 @@
 #define DOUT_SUBSYS mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, pg_map)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, PGMap& pg_map) {
+static ostream& _prefix(std::ostream *_dout, const Monitor *mon, const PGMap& pg_map) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
 		<< ").pg v" << pg_map.version << " ";

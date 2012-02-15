@@ -145,7 +145,7 @@ public:
     default: return "???";
     }
   }
-  const char *get_state_name() {
+  const char *get_state_name() const {
     return get_state_name(state);
   }
 
