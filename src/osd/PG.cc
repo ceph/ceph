@@ -1171,9 +1171,10 @@ void PG::build_might_have_unfound()
 struct C_PG_ActivateCommitted : public Context {
   PG *pg;
   epoch_t epoch;
-  C_PG_ActivateCommitted(PG *p, epoch_t e) : pg(p), epoch(e) {}
+  entity_inst_t primary;
+  C_PG_ActivateCommitted(PG *p, epoch_t e, entity_inst_t pi) : pg(p), epoch(e), primary(pi) {}
   void finish(int r) {
-    pg->_activate_committed(epoch);
+    pg->_activate_committed(epoch, primary);
   }
 };
 
@@ -1230,7 +1231,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // find out when we commit
   get();   // for callback
-  tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_interval_since));
+  tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_interval_since,
+					    get_osdmap()->get_inst(acting[0])));
   
   // initialize snap_trimq
   if (is_primary()) {
@@ -1463,7 +1465,7 @@ void PG::replay_queued_ops()
   update_stats();
 }
 
-void PG::_activate_committed(epoch_t e)
+void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
 {
   lock();
   if (e < last_peering_reset) {
@@ -1477,9 +1479,7 @@ void PG::_activate_committed(epoch_t e)
       all_activated_and_committed();
   } else {
     dout(10) << "_activate_committed " << e << " telling primary" << dendl;
-    epoch_t cur_epoch = get_osdmap()->get_epoch();
-    entity_inst_t primary = get_osdmap()->get_cluster_inst(acting[0]);
-    MOSDPGInfo *m = new MOSDPGInfo(cur_epoch);
+    MOSDPGInfo *m = new MOSDPGInfo(e);
     pg_info_t i = info;
     i.history.last_epoch_started = e;
     m->pg_info.push_back(i);
