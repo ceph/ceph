@@ -819,8 +819,10 @@ void OSD::suicide(int exitcode)
   recovery_tp.pause();
   command_tp.pause();
 
-  derr << " flushing io" << dendl;
-  store->sync_and_flush();
+  if (!g_conf->filestore_blackhole) {
+    derr << " flushing io" << dendl;
+    store->sync_and_flush();
+  }
 
   derr << " removing pid file" << dendl;
   pidfile_remove();
