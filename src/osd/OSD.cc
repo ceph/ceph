@@ -1913,7 +1913,7 @@ void OSD::complete_notify(void *_notif, void *_obc)
 {
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+  dout(10) << "got the last reply from pending watchers, can send response now" << dendl;
   MWatchNotify *reply = notif->reply;
   client_messenger->send_message(reply, notif->session->con);
   notif->session->put();
@@ -1962,7 +1962,7 @@ void OSD::disconnect_session_watches(Session *session)
 
   for (map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
-    dout(0) << "obc=" << (void *)obc << dendl;
+    dout(10) << "obc=" << (void *)obc << dendl;
 
     ReplicatedPG *pg = static_cast<ReplicatedPG *>(lookup_lock_raw_pg(oiter->second));
     assert(pg);
@@ -1974,7 +1974,7 @@ void OSD::disconnect_session_watches(Session *session)
     map<entity_name_t, Session *>::iterator witer = obc->watchers.begin();
     while (1) {
       while (witer != obc->watchers.end() && witer->second == session) {
-        dout(0) << "removing watching session entity_name=" << session->entity_name
+        dout(10) << "removing watching session entity_name=" << session->entity_name
 		<< " from " << obc->obs.oi << dendl;
 	entity_name_t entity = witer->first;
 	watch_info_t& w = obc->obs.oi.watchers[entity];
@@ -2000,11 +2000,10 @@ void OSD::disconnect_session_watches(Session *session)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  dout(0) << "OSD::ms_handle_reset()" << dendl;
+  dout(1) << "OSD::ms_handle_reset()" << dendl;
   OSD::Session *session = (OSD::Session *)con->get_priv();
   if (!session)
     return false;
-  dout(0) << "OSD::ms_handle_reset() s=" << (void *)session << dendl;
   disconnect_session_watches(session);
   session->put();
   return true;
@@ -2014,7 +2013,7 @@ void OSD::handle_notify_timeout(void *_notif)
 {
   assert(watch_lock.is_locked());
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(0) << "OSD::handle_notify_timeout notif " << notif->id << dendl;
+  dout(10) << "OSD::handle_notify_timeout notif " << notif->id << dendl;
 
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
 

@@ -1318,17 +1318,17 @@ void ReplicatedPG::dump_watchers(ObjectContext *obc)
 {
   assert(osd->watch_lock.is_locked());
   
-  dout(0) << "dump_watchers " << obc->obs.oi.soid << " " << obc->obs.oi << dendl;
+  dout(10) << "dump_watchers " << obc->obs.oi.soid << " " << obc->obs.oi << dendl;
   for (map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.begin(); 
        iter != obc->watchers.end();
        ++iter)
-    dout(0) << " * obc->watcher: " << iter->first << " session=" << iter->second << dendl;
+    dout(10) << " * obc->watcher: " << iter->first << " session=" << iter->second << dendl;
   
   for (map<entity_name_t, watch_info_t>::iterator oi_iter = obc->obs.oi.watchers.begin();
        oi_iter != obc->obs.oi.watchers.end();
        oi_iter++) {
     watch_info_t& w = oi_iter->second;
-    dout(0) << " * oi->watcher: " << oi_iter->first << " cookie=" << w.cookie << dendl;
+    dout(10) << " * oi->watcher: " << oi_iter->first << " cookie=" << w.cookie << dendl;
   }
 }
 
