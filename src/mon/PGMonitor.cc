@@ -981,6 +981,9 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       jsf.flush(ds);
       rdata.append(ds);
     }
+    else if (m->cmd[1] == "dump_stuck") {
+      r = dump_stuck_pg_stats(ss, rdata, args);
+    }
     else if (m->cmd[1] == "dump_pools_json") {
       ss << "ok";
       r = 0;
@@ -1181,4 +1184,85 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
   }
 
   return ret;
+}
+
+int PGMonitor::dump_stuck_pg_stats(ostream& ss,
+				   bufferlist& rdata,
+				   vector<const char*>& args) const
+{
+  string format = "plain";
+  string val;
+  int threshold = 300;
+  int seconds;
+  ostringstream err;
+
+  if (args.size() < 2) {
+    ss << "Must specify inactive or unclean or stale.";
+    return -EINVAL;
+  }
+
+  PGMap::StuckPG stuck_type = PGMap::STUCK_NONE;
+  string type = args[1];
+  if (type == "inactive")
+    stuck_type = PGMap::STUCK_INACTIVE;
+  if (type == "unclean")
+    stuck_type = PGMap::STUCK_UNCLEAN;
+  if (type == "stale")
+    stuck_type = PGMap::STUCK_STALE;
+  if (stuck_type == PGMap::STUCK_NONE) {
+    ss << "Invalid stuck type '" << type
+       << "'. Valid types are: inactive, unclean, or stale";
+    return -EINVAL;
+  }
+
+  for (std::vector<const char*>::iterator i = args.begin() + 2;
+       i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val,
+				     "-f", "--format", (char*)NULL)) {
+      if (val != "json" && val != "plain") {
+	ss << "format must be json or plain";
+	return -EINVAL;
+      }
+      format = val;
+    } else if (ceph_argparse_withint(args, i, &seconds, &err,
+				     "-t", "--threshold", (char*)NULL)) {
+      if (!err.str().empty()) {
+	ss << err.str();
+	return -EINVAL;
+      }
+      threshold = seconds;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      stringstream ds;
+      ds << "Usage: ceph pg dump_stuck inactive|unclean|stale [options]" << std::endl
+	 << std::endl
+	 << "Get stats for pgs that have not been active, clean, or refreshed in some number of seconds." << std::endl
+	 << std::endl
+	 << "Options: " << std::endl
+	 << "  -h, --help                   display usage info" << std::endl
+	 << "  -f, --format [plain|json]    output format (default: plain)" << std::endl
+	 << "  -t, --threshold [seconds]    how many seconds 'stuck' is (default: 300)" << std::endl;
+      rdata.append(ds);
+      return 0;
+    } else {
+      ss << "invalid argument '" << *i << "'";
+      return -EINVAL;
+    }
+  }
+
+  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t cutoff = now - utime_t(threshold, 0);
+
+  stringstream ds;
+  if (format == "json") {
+    JSONFormatter jsf(true);
+    pg_map.dump_stuck(&jsf, stuck_type, cutoff);
+    jsf.flush(ds);
+  } else {
+    pg_map.dump_stuck_plain(ds, stuck_type, cutoff);
+  }
+  rdata.append(ds);
+  ss << "ok";
+  return 0;
 }

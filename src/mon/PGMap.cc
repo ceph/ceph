@@ -489,6 +489,60 @@ void PGMap::dump(ostream& ss) const
      << std::endl;
 }
 
+void PGMap::get_stuck_stats(PGMap::StuckPG type, utime_t cutoff,
+			    hash_map<pg_t, pg_stat_t>& stuck_pgs) const
+{
+  for (hash_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    utime_t val;
+    switch (type) {
+    case STUCK_INACTIVE:
+      if (i->second.state & PG_STATE_ACTIVE)
+	continue;
+      val = i->second.last_active;
+      break;
+    case STUCK_UNCLEAN:
+      if (i->second.state & PG_STATE_CLEAN)
+	continue;
+      val = i->second.last_clean;
+      break;
+    case STUCK_STALE:
+      val = i->second.last_fresh;
+      break;
+    default:
+      assert(0 == "invalid type");
+    }
+
+    if (val < cutoff) {
+      stuck_pgs[i->first] = i->second;
+    }
+  }
+}
+
+void PGMap::dump_stuck(Formatter *f, PGMap::StuckPG type, utime_t cutoff) const
+{
+  hash_map<pg_t, pg_stat_t> stuck_pg_stats;
+  get_stuck_stats(type, cutoff, stuck_pg_stats);
+  f->open_array_section("stuck_pg_stats");
+  for (hash_map<pg_t,pg_stat_t>::const_iterator i = stuck_pg_stats.begin();
+       i != stuck_pg_stats.end();
+       ++i) {
+    f->open_object_section("pg_stat");
+    f->dump_stream("pgid") << i->first;
+    i->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void PGMap::dump_stuck_plain(ostream& ss, PGMap::StuckPG type, utime_t cutoff) const
+{
+  hash_map<pg_t, pg_stat_t> stuck_pg_stats;
+  get_stuck_stats(type, cutoff, stuck_pg_stats);
+  dump_pg_stats_plain(ss, stuck_pg_stats);
+}
+
 void PGMap::state_summary(ostream& ss) const
 {
   for (hash_map<int,int>::const_iterator p = num_pg_by_state.begin();

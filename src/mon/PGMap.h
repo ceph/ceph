@@ -71,6 +71,13 @@ public:
   osd_stat_t osd_sum;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
+
+  enum StuckPG {
+    STUCK_INACTIVE,
+    STUCK_UNCLEAN,
+    STUCK_STALE,
+    STUCK_NONE
+  };
   
   PGMap()
     : version(0),
@@ -99,6 +106,11 @@ public:
 
   void dump_pg_stats_plain(ostream& ss,
 			   const hash_map<pg_t, pg_stat_t>& pg_stats) const;
+  void get_stuck_stats(StuckPG type, utime_t cutoff,
+		       hash_map<pg_t, pg_stat_t>& stuck_pgs) const;
+  void dump_stuck(Formatter *f, StuckPG type, utime_t cutoff) const;
+  void dump_stuck_plain(ostream& ss, StuckPG type, utime_t cutoff) const;
+
   void dump(ostream& ss) const;
 
   void state_summary(ostream& ss) const;
