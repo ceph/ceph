@@ -348,8 +348,8 @@ fi
 %ghost %dir %{_localstatedir}/run/ceph/
 %dir %{_sysconfdir}/ceph/
 /usr/sbin/rcceph
-%{_libdir}/rados-classes/libcls_rbd.so.*
-%{_libdir}/rados-classes/libcls_rgw.so.*
+%{_libdir}/rados-classes/libcls_rbd.so*
+%{_libdir}/rados-classes/libcls_rgw.so*
 
 #################################################################################
 %files fuse
@@ -377,8 +377,6 @@ fi
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
-%{_libdir}/rados-classes/libcls_rbd.so
-%{_libdir}/rados-classes/libcls_rgw.so
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
 %{_libdir}/librgw.so
