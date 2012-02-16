@@ -235,6 +235,13 @@ void RGWStatBucket_REST_SWIFT::send_response()
   dump_start(s);
 }
 
+int RGWCreateBucket_REST_SWIFT::get_params()
+{
+  policy.create_default(s->user.user_id, s->user.display_name);
+
+  return 0;
+}
+
 void RGWCreateBucket_REST_SWIFT::send_response()
 {
   if (!ret)
@@ -285,6 +292,9 @@ int RGWPutObj_REST_SWIFT::get_params()
       }
     }
   }
+
+  policy.create_default(s->user.user_id, s->user.display_name);
+
   return RGWPutObj_REST::get_params();
 }
 
@@ -326,6 +336,13 @@ void RGWDeleteObj_REST_SWIFT::send_response()
   dump_errno(s);
   end_header(s);
   flush_formatter_to_req_state(s, s->formatter);
+}
+
+int RGWCopyObj_REST_SWIFT::init_dest_policy()
+{
+  dest_policy.create_default(s->user.user_id, s->user.display_name);
+
+  return 0;
 }
 
 int RGWCopyObj_REST_SWIFT::get_params()

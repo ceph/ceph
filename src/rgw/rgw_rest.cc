@@ -528,13 +528,12 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      req = s->object_str;
+      s->object_str = req;
       s->object = strdup(s->object_str.c_str());
     }
 
     goto done;
   }
-
   if (!s->bucket_name) {
     s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());

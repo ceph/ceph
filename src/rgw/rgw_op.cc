@@ -254,7 +254,6 @@ static int read_acls(struct req_state *s, bool only_bucket, bool prefetch_data)
        return -ENOMEM;
   }
 
-
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
     ret = rgwstore->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info);

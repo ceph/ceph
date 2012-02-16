@@ -62,6 +62,7 @@ public:
   RGWCreateBucket_REST_SWIFT() {}
   ~RGWCreateBucket_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -104,6 +105,7 @@ public:
   RGWCopyObj_REST_SWIFT() {}
   ~RGWCopyObj_REST_SWIFT() {}
 
+  int init_dest_policy();
   int get_params();
   void send_response();
 };

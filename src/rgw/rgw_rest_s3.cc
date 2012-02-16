@@ -253,7 +253,7 @@ int RGWCopyObj_REST_S3::init_dest_policy()
 {
   RGWAccessControlPolicy_S3 s3policy;
 
-  /* build a polict for the target object */
+  /* build a policy for the target object */
   ret = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!ret)
      return -EINVAL;
