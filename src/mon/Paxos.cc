@@ -43,7 +43,9 @@ void Paxos::init()
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
   first_committed = mon->store->get_int(machine_name, "first_committed");
-  latest_stashed = mon->store->get_int(machine_name, "last_consumed");
+  bufferlist temp;
+  latest_stashed = get_stashed(temp);
+  slurping = mon->store->get_int(machine_name, "slurping");
 
   dout(10) << "init" << dendl;
 }
@@ -1042,7 +1044,6 @@ void Paxos::stash_latest(version_t v, bufferlist& bl)
   
   dout(10) << "stash_latest v" << v << " len " << bl.length() << dendl;
   mon->store->put_bl_ss(final, machine_name, "latest");
-  mon->store->put_int(v, machine_name, "last_consumed");
 
   latest_stashed = v;
 }
@@ -1062,4 +1063,38 @@ version_t Paxos::get_stashed(bufferlist& bl)
   latest_stashed = v;
   dout(10) << "get_stashed v" << latest_stashed << " len " << bl.length() << dendl;
   return latest_stashed;  
+}
+
+
+bool Paxos::is_consistent()
+{
+  bool consistent = true;
+  if (first_committed > latest_stashed)
+    consistent = false;
+  if (first_committed > last_committed)
+    consistent = false;
+  if (latest_stashed > last_committed)
+    consistent = false;
+  if (slurping != 0)
+    consistent = false;
+
+  assert(consistent || (slurping == 1));
+  return consistent;
+}
+
+void Paxos::start_slurping()
+{
+  if (slurping != 1) {
+    slurping = 1;
+    mon->store->put_int(1, machine_name, "slurping");
+  }
+}
+
+void Paxos::end_slurping()
+{
+  if (slurping == 1) {
+    slurping = 0;
+    mon->store->put_int(slurping, machine_name, "slurping");
+  }
+  assert(is_consistent());
 }

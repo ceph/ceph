@@ -86,11 +86,11 @@ void OSDMonitor::create_initial()
   newmap.encode(pending_inc.fullmap);
 }
 
-bool OSDMonitor::update_from_paxos()
+void OSDMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == osdmap.epoch)
-    return true;
+    return;
   assert(paxosv >= osdmap.epoch);
 
   dout(15) << "update_from_paxos paxos e " << paxosv 
@@ -146,8 +146,6 @@ bool OSDMonitor::update_from_paxos()
 
   share_map_with_random_osd();
   update_logger();
-
-  return true;
 }
 
 void OSDMonitor::on_active()

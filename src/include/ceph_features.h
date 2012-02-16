@@ -17,6 +17,7 @@
 #define CEPH_FEATURE_INCSUBOSDMAP   (1<<10)
 #define CEPH_FEATURE_PGPOOL3        (1<<11)
 #define CEPH_FEATURE_OSDREPLYMUX    (1<<12)
+#define CEPH_FEATURE_OSDENC         (1<<13)
 
 /*
  * Features supported.  Should be everything above.
@@ -34,6 +35,7 @@
 	 CEPH_FEATURE_PGID64 |		 \
 	 CEPH_FEATURE_INCSUBOSDMAP |	 \
 	 CEPH_FEATURE_PGPOOL3 |		 \
-	 CEPH_FEATURE_OSDREPLYMUX)
+	 CEPH_FEATURE_OSDREPLYMUX |	 \
+	 CEPH_FEATURE_OSDENC)
 
 #endif

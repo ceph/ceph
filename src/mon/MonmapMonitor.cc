@@ -47,12 +47,12 @@ void MonmapMonitor::create_initial()
   pending_map.epoch = 1;
 }
 
-bool MonmapMonitor::update_from_paxos()
+void MonmapMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv <= paxos->get_stashed_version() &&
       paxosv <= mon->monmap->get_epoch())
-    return true;
+    return;
 
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
@@ -86,7 +86,6 @@ bool MonmapMonitor::update_from_paxos()
 
   if (need_restart)
     mon->bootstrap();
-  return true;
 }
 
 void MonmapMonitor::create_pending()

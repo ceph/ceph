@@ -15,4 +15,6 @@ Removing MDSes
 
 .. topic:: Status as of 2011-09:
 
-   Shrinking the number of MDSes is not currently supported.
+   You can remove an MDS from the system by executing "ceph mds stop x",
+   where x is numerical ID of the MDS to shut down.
+   Beware: shrinking the number of MDSes is not well tested.

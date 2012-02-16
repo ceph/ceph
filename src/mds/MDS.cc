@@ -12,13 +12,14 @@
  * 
  */
 
-
+#include "global/signal_handler.h"
 
 #include "include/types.h"
 #include "common/entity_name.h"
 #include "common/Clock.h"
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
+
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
@@ -578,8 +579,6 @@ void MDS::tick()
 void MDS::beacon_start()
 {
   beacon_send();         // send first beacon
-  
-  //reset_beacon_killer(); // schedule killer
 }
   
 
@@ -1511,7 +1510,14 @@ void MDS::stopping_done()
   request_state(MDSMap::STATE_STOPPED);
 }
 
-  
+void MDS::handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
+  mds_lock.Lock();
+  suicide();
+  mds_lock.Unlock();
+}
 
 void MDS::suicide()
 {
@@ -1534,7 +1540,7 @@ void MDS::suicide()
     tick_event = 0;
   }
   timer.cancel_all_events();
-  //timer.join();  // this will deadlock from beacon_kill -> suicide
+  //timer.join();
   
   // shut down cache
   mdcache->shutdown();

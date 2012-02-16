@@ -9,6 +9,8 @@
 
 #include <iostream>
 
+#define DOUT_SUBSYS objclass
+
 int cls_log(const char *format, ...)
 {
    int size = 256, n;
@@ -20,7 +22,7 @@ int cls_log(const char *format, ...)
      va_end(ap);
 #define MAX_SIZE 8196
      if ((n > -1 && n < size) || size > MAX_SIZE) {
-       derr << buf << dendl;
+       dout(1) << buf << dendl;
        return n;
      }
      size *= 2;

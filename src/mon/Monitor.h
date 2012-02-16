@@ -172,6 +172,7 @@ private:
   map<string,version_t> slurp_versions;
 
   list<Context*> waitfor_quorum;
+  list<Context*> maybe_wait_for_quorum;
 
   Context *probe_timeout_event;  // for probing and slurping states
 
@@ -205,12 +206,13 @@ public:
 
   void update_logger();
 
-  // -- paxos --
+  // -- paxos -- These vector indices are matched
   vector<Paxos*> paxos;
   vector<PaxosService*> paxos_service;
 
   Paxos *add_paxos(int type);
   Paxos *get_paxos_by_name(const string& name);
+  PaxosService *get_paxos_service_by_name(const string& name);
 
   class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
@@ -331,6 +333,8 @@ public:
   void init();
   void shutdown();
   void tick();
+
+  void handle_signal(int sig);
 
   void stop_cluster();
 

@@ -640,6 +640,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   m_filestore_update_collections(g_conf->filestore_update_collections),
   m_journal_dio(g_conf->journal_dio),
+  m_journal_aio(g_conf->journal_aio),
   m_osd_rollback_to_cluster_snap(g_conf->osd_rollback_to_cluster_snap),
   m_osd_use_stale_snap(g_conf->osd_use_stale_snap),
   m_filestore_queue_max_ops(g_conf->filestore_queue_max_ops),
@@ -763,7 +764,8 @@ int FileStore::open_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(),
+			      m_journal_dio, m_journal_aio);
     if (journal)
       journal->logger = logger;
   }
@@ -2745,7 +2747,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   TEMP_FAILURE_RETRY(::close(o));
  out2:
   dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
-  return 0;
+  return r;
 }
 
 int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
@@ -3257,6 +3259,16 @@ void FileStore::_flush_op_queue()
 void FileStore::flush()
 {
   dout(10) << "flush" << dendl;
+
+  if (g_conf->filestore_blackhole) {
+    // wait forever
+    Mutex lock("FileStore::flush::lock");
+    Cond cond;
+    lock.Lock();
+    while (true)
+      cond.Wait(lock);
+    assert(0);
+  }
  
   if (m_filestore_journal_writeahead) {
     if (journal)

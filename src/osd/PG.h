@@ -558,9 +558,17 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
+  bool need_flush;     // need to flush before any new activity
 
   epoch_t last_peering_reset;
 
+
+  /* heartbeat peers */
+public:
+  Mutex heartbeat_peer_lock;
+  set<int> heartbeat_peers;
+
+protected:
   /**
    * BackfillInterval
    *
@@ -722,7 +730,7 @@ public:
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map< int, map<pg_t,pg_query_t> >& query_map,
 		map<int, MOSDPGInfo*> *activator_map=0);
-  void _activate_committed(epoch_t e);
+  void _activate_committed(epoch_t e, entity_inst_t& primary);
   void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
@@ -739,6 +747,8 @@ public:
   virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
   void purge_strays();
+
+  void update_heartbeat_peers();
 
   Context *finish_sync_event;
 
@@ -1236,7 +1246,9 @@ public:
     role(0),
     state(0),
     need_up_thru(false),
+    need_flush(false),
     last_peering_reset(0),
+    heartbeat_peer_lock("PG::heartbeat_peer_lock"),
     backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
@@ -1292,7 +1304,12 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
+  void init(int role, vector<int>& up, vector<int>& acting, pg_history_t& history,
+	    ObjectStore::Transaction *t);
+
   // pg on-disk state
+  void do_pending_flush();
+
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
 
@@ -1370,7 +1387,11 @@ public:
   }
 
   void on_removal();
+
+
   // abstract bits
+  void do_request(OpRequest *op);
+
   virtual void do_op(OpRequest *op) = 0;
   virtual void do_sub_op(OpRequest *op) = 0;
   virtual void do_sub_op_reply(OpRequest *op) = 0;

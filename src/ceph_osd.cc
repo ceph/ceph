@@ -34,14 +34,24 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-#include "global/global_init.h"
 #include "common/ceph_argparse.h"
+
+#include "global/global_init.h"
+#include "global/signal_handler.h"
 
 #include "include/color.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
 
 #include "perfglue/heap_profiler.h"
+
+OSD *osd = NULL;
+
+void handle_osd_signal(int signum)
+{
+  if (osd)
+    osd->handle_signal(signum);
+}
 
 void usage() 
 {
@@ -341,7 +351,8 @@ int main(int argc, const char **argv)
   client_messenger->set_policy(entity_name_t::TYPE_MON,
                                SimpleMessenger::Policy::client(supported,
                                                                CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64));
+							       CEPH_FEATURE_PGID64 |
+							       CEPH_FEATURE_OSDENC));
   //try to poison pill any OSD connections on the wrong address
   client_messenger->set_policy(entity_name_t::TYPE_OSD,
 			       SimpleMessenger::Policy::stateless_server(0,0));
@@ -351,7 +362,8 @@ int main(int argc, const char **argv)
   cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
 				SimpleMessenger::Policy::lossless_peer(supported,
 								       CEPH_FEATURE_UID |
-								       CEPH_FEATURE_PGID64));
+								       CEPH_FEATURE_PGID64 |
+								       CEPH_FEATURE_OSDENC));
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				SimpleMessenger::Policy::stateless_server(0, 0));
 
@@ -372,10 +384,10 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  OSD *osd = new OSD(whoami, cluster_messenger, client_messenger,
-		     messenger_hbin, messenger_hbout,
-		     &mc,
-		     g_conf->osd_data, g_conf->osd_journal);
+  osd = new OSD(whoami, cluster_messenger, client_messenger,
+		messenger_hbin, messenger_hbout,
+		&mc,
+		g_conf->osd_data, g_conf->osd_journal);
   err = osd->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
@@ -390,6 +402,12 @@ int main(int argc, const char **argv)
   messenger_hbin->start_with_nonce(getpid());
   messenger_hbout->start();
   cluster_messenger->start();
+
+  // install signal handlers
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
   // start osd
   err = osd->init();

@@ -90,11 +90,11 @@ void LogMonitor::create_initial()
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
 }
 
-bool LogMonitor::update_from_paxos()
+void LogMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == summary.version)
-    return true;
+    return;
   assert(paxosv >= summary.version);
 
   bufferlist blog;
@@ -172,8 +172,6 @@ bool LogMonitor::update_from_paxos()
   unsigned max = g_conf->mon_max_log_epochs;
   if (mon->is_leader() && paxosv > max)
     paxos->trim_to(paxosv - max);
-
-  return true;
 }
 
 void LogMonitor::create_pending()

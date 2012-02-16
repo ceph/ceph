@@ -1402,29 +1402,18 @@ WRITE_CLASS_ENCODER(pg_create_t)
 // -----------------------------------------
 
 struct osd_peer_stat_t {
-  struct ceph_timespec stamp;
-  float oprate;
-  float qlen;            // current
-  float recent_qlen;     // moving average
-  float read_latency;
-  float read_latency_mine;
-  float frac_rd_ops_shed_in;
-  float frac_rd_ops_shed_out;
-} __attribute__ ((packed));
+  utime_t stamp;
 
-WRITE_RAW_ENCODER(osd_peer_stat_t)
+  osd_peer_stat_t() { }
 
-inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
-  return out << "stat(" << stat.stamp
-	     << " oprate=" << stat.oprate
-    	     << " qlen=" << stat.qlen 
-    	     << " recent_qlen=" << stat.recent_qlen
-	     << " rdlat=" << stat.read_latency_mine << " / " << stat.read_latency
-	     << " fshedin=" << stat.frac_rd_ops_shed_in
-	     << ")";
-}
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_peer_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER(osd_peer_stat_t)
 
-
+ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
 
 
 // -----------------------------------------
@@ -1623,6 +1612,53 @@ WRITE_CLASS_ENCODER(object_info_t)
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
 
+
+
+// Object recovery
+struct ObjectRecoveryInfo {
+  hobject_t soid;
+  eversion_t version;
+  uint64_t size;
+  object_info_t oi;
+  SnapSet ss;
+  interval_set<uint64_t> copy_subset;
+  map<hobject_t, interval_set<uint64_t> > clone_subset;
+
+  ObjectRecoveryInfo() : size(0) { }
+
+  static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
+
+struct ObjectRecoveryProgress {
+  bool first;
+  uint64_t data_recovered_to;
+  bool data_complete;
+  string omap_recovered_to;
+  bool omap_complete;
+
+  ObjectRecoveryProgress()
+    : first(true),
+      data_recovered_to(0),
+      data_complete(false), omap_complete(false) { }
+
+  bool is_complete(const ObjectRecoveryInfo& info) const {
+    return data_recovered_to >= (info.copy_subset.empty() ? 0 : info.copy_subset.range_end());
+  }
+
+  static void generate_test_instances(list<ObjectRecoveryProgress*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryProgress)
+ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
 
 
 /*

@@ -34,9 +34,12 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-#include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
+
+#include "global/global_init.h"
+#include "global/signal_handler.h"
+#include "global/pidfile.h"
 
 #include "mon/MonClient.h"
 
@@ -121,6 +124,17 @@ static int parse_rank(const char *opt_name, const std::string &val)
     usage();
   }
   return ret;
+}
+
+
+
+MDS *mds = NULL;
+
+
+static void handle_mds_signal(int signum)
+{
+  if (mds)
+    mds->handle_signal(signum);
 }
 
 int main(int argc, const char **argv) 
@@ -254,8 +268,14 @@ int main(int argc, const char **argv)
 
   messenger->start();
 
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
+
   // start mds
-  MDS *mds = new MDS(g_conf->name.get_id().c_str(), messenger, &mc);
+  mds = new MDS(g_conf->name.get_id().c_str(), messenger, &mc);
 
   // in case we have to respawn...
   mds->orig_argc = argc;
@@ -268,10 +288,15 @@ int main(int argc, const char **argv)
 
   messenger->wait();
 
+  unregister_async_signal_handler(SIGINT, handle_mds_signal);
+  unregister_async_signal_handler(SIGTERM, handle_mds_signal);
+
   // yuck: grab the mds lock, so we can be sure that whoever in *mds
   // called shutdown finishes what they were doing.
   mds->mds_lock.Lock();
   mds->mds_lock.Unlock();
+
+  pidfile_remove();
 
   // only delete if it was a clean shutdown (to aid memory leak
   // detection, etc.).  don't bother if it was a suicide.

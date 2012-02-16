@@ -1351,8 +1351,8 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
   ObjectOperation rd;
-  rd.tmap_get();
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
+  rd.tmap_get(&fin->bl, NULL);
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl, const string& want_dn)

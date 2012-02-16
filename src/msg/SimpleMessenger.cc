@@ -405,6 +405,9 @@ int SimpleMessenger::shutdown()
     dispatch_queue.cond.Signal();
     dispatch_queue.lock.Unlock();
   }
+
+  mark_down_all();
+
   return 0;
 }
 
