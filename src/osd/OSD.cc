@@ -813,16 +813,19 @@ void OSD::create_logger()
 
 void OSD::suicide(int exitcode)
 {
+  if (g_conf->filestore_blackhole) {
+    derr << " filestore_blackhole=true, doing abbreviated shutdown" << dendl;
+    _exit(exitcode);
+  }
+
   derr << " pausing thread pools" << dendl;
   op_tp.pause();
   disk_tp.pause();
   recovery_tp.pause();
   command_tp.pause();
 
-  if (!g_conf->filestore_blackhole) {
-    derr << " flushing io" << dendl;
-    store->sync_and_flush();
-  }
+  derr << " flushing io" << dendl;
+  store->sync_and_flush();
 
   derr << " removing pid file" << dendl;
   pidfile_remove();
