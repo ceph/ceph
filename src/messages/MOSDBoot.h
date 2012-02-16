@@ -21,34 +21,38 @@
 #include "osd/osd_types.h"
 
 class MOSDBoot : public PaxosServiceMessage {
+
+  static const int HEAD_VERSION = 2;
+
  public:
   OSDSuperblock sb;
   entity_addr_t hb_addr;
   entity_addr_t cluster_addr;
 
-  MOSDBoot() : PaxosServiceMessage(MSG_OSD_BOOT, 0) { }
+  MOSDBoot() : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION) { }
   MOSDBoot(OSDSuperblock& s, const entity_addr_t& hb_addr_ref,
-           const entity_addr_t& cluster_addr_ref) :
-    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
-    sb(s), hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) { }
+           const entity_addr_t& cluster_addr_ref)
+    : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION),
+      sb(s),
+      hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) {
+  }
   
 private:
   ~MOSDBoot() { }
 
 public:
-  const char *get_type_name() { return "osd_boot"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_boot"; }
+  void print(ostream& out) const {
     out << "osd_boot(osd." << sb.whoami << " v" << version << ")";
   }
   
-  void encode_payload(CephContext *cct) {
-    header.version = 2;
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_addr, payload);
     ::encode(cluster_addr, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);

@@ -29,12 +29,12 @@ private:
   ~MMonMap() {}
 
 public:
-  const char *get_type_name() { return "mon_map"; }
+  const char *get_type_name() const { return "mon_map"; }
 
-  void encode_payload(CephContext *cct) { 
+  void encode_payload(uint64_t features) { 
     ::encode(monmapbl, payload);
   }
-  void decode_payload(CephContext *cct) { 
+  void decode_payload() { 
     bufferlist::iterator p = payload.begin();
     ::decode(monmapbl, p);
   }

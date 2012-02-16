@@ -37,8 +37,8 @@ public:
   int get_num_fwd() { return num_fwd; }
   bool must_resend() { return client_must_resend; }
 
-  const char *get_type_name() { return "client_request_forward"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "client_request_forward"; }
+  void print(ostream& o) const {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds
       << " num_fwd=" << num_fwd
@@ -46,13 +46,13 @@ public:
       << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dest_mds, payload);
     ::encode(num_fwd, payload);
     ::encode(client_must_resend, payload);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dest_mds, p);
     ::decode(num_fwd, p);

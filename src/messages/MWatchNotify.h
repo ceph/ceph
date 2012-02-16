@@ -34,7 +34,7 @@ private:
   ~MWatchNotify() {}
 
 public:
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     uint8_t msg_ver;
     bufferlist::iterator p = payload.begin();
     ::decode(msg_ver, p);
@@ -45,7 +45,7 @@ public:
     if (msg_ver >= 1)
       ::decode(bl, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     uint8_t msg_ver = 1;
     ::encode(msg_ver, payload);
     ::encode(opcode, payload);
@@ -55,8 +55,8 @@ public:
     ::encode(bl, payload);
   }
 
-  const char *get_type_name() { return "watch-notify"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "watch-notify"; }
+  void print(ostream& out) const {
     out << "watch-notify(c=" << cookie << " v=" << ver << " i=" << notify_id << " opcode=" << (int)opcode << ")";
   }
 };

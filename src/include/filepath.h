@@ -16,7 +16,6 @@
 #ifndef CEPH_FILEPATH_H
 #define CEPH_FILEPATH_H
 
-
 /*
  * BUG:  /a/b/c is equivalent to a/b/c in dentry-breakdown, but not string.
  *   -> should it be different?  how?  should this[0] be "", with depth 4?
@@ -31,6 +30,9 @@ using namespace std;
 
 #include "buffer.h"
 #include "encoding.h"
+
+#include "common/Formatter.h"
+
 
 class filepath {
   inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
@@ -194,6 +196,17 @@ class filepath {
     ::decode(ino, blp);
     ::decode(path, blp);
     encoded = true;
+  }
+  void dump(Formatter *f) const {
+    f->dump_unsigned("base_ino", ino);
+    f->dump_string("relative_path", path);
+  }
+  static void generate_test_instances(list<filepath*>& o) {
+    o.push_back(new filepath);
+    o.push_back(new filepath("/usr/bin", 0));
+    o.push_back(new filepath("/usr/sbin", 1));
+    o.push_back(new filepath("var/log", 1));
+    o.push_back(new filepath("foo/bar", 101));
   }
 };
 

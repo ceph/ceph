@@ -51,7 +51,7 @@ int main(int argc, const char **argv)
                 exit(1);
         }
 
-        fd = ceph_open(cmount, argv[2], O_CREAT|O_TRUNC, 0777); 
+        fd = ceph_open(cmount, argv[2], O_CREAT|O_TRUNC|O_RDWR, 0777); 
         if (fd < 0) {
                 fprintf(stderr, "ceph_open=%d\n", fd);
                 exit(1);

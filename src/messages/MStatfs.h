@@ -33,16 +33,16 @@ private:
   ~MStatfs() {}
 
 public:
-  const char *get_type_name() { return "statfs"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "statfs"; }
+  void print(ostream& out) const {
     out << "statfs(" << get_tid() << " v" << version << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

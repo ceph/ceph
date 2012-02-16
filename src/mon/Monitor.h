@@ -67,7 +67,7 @@ enum {
   l_cluster_num_object,
   l_cluster_num_object_degraded,
   l_cluster_num_object_unfound,
-  l_cluster_num_kb,
+  l_cluster_num_bytes,
   l_cluster_num_mds_up,
   l_cluster_num_mds_in,
   l_cluster_num_mds_failed,
@@ -80,6 +80,7 @@ class MonitorStore;
 class PaxosService;
 
 class PerfCounters;
+class AdminSocketHook;
 
 class MMonGetMap;
 class MMonGetVersion;
@@ -171,6 +172,7 @@ private:
   map<string,version_t> slurp_versions;
 
   list<Context*> waitfor_quorum;
+  list<Context*> maybe_wait_for_quorum;
 
   Context *probe_timeout_event;  // for probing and slurping states
 
@@ -187,7 +189,8 @@ private:
   void probe_timeout(int r);
 
   void slurp();
-  
+
+ 
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
@@ -203,12 +206,13 @@ public:
 
   void update_logger();
 
-  // -- paxos --
+  // -- paxos -- These vector indices are matched
   vector<Paxos*> paxos;
   vector<PaxosService*> paxos_service;
 
   Paxos *add_paxos(int type);
   Paxos *get_paxos_by_name(const string& name);
+  PaxosService *get_paxos_service_by_name(const string& name);
 
   class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
@@ -226,18 +230,20 @@ public:
 
   // -- sessions --
   MonSessionMap session_map;
+  AdminSocketHook *admin_hook;
 
   void check_subs();
   void check_sub(Subscription *sub);
 
   void send_latest_monmap(Connection *con);
-  
 
   // messages
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
+  void _mon_status(ostream& ss);
+  void _quorum_status(ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
@@ -328,9 +334,13 @@ public:
   void shutdown();
   void tick();
 
+  void handle_signal(int sig);
+
   void stop_cluster();
 
   int mkfs(bufferlist& osdmapbl);
+
+  void do_admin_command(std::string command, ostream& ss);
 
 private:
   // don't allow copying

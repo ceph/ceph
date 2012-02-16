@@ -29,18 +29,18 @@ private:
   ~MOSDAlive() {}
 
 public:
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(want, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(want, p);
   }
 
-  const char *get_type_name() { return "osd_alive"; }
-  void print(ostream &out) {
+  const char *get_type_name() const { return "osd_alive"; }
+  void print(ostream &out) const {
     out << "osd_alive(want up_thru " << want << " have " << version << ")";
   }
   

@@ -30,9 +30,9 @@ private:
   ~MMDSResolve() {}
 
 public:
-  const char *get_type_name() { return "mds_resolve"; }
+  const char *get_type_name() const { return "mds_resolve"; }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "mds_resolve(" << subtrees.size()
 	<< "+" << ambiguous_imports.size()
 	<< " subtrees +" << slave_requests.size() << " slave requests)";
@@ -53,12 +53,12 @@ public:
     slave_requests.push_back(reqid);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(subtrees, payload);
     ::encode(ambiguous_imports, payload);
     ::encode(slave_requests, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(subtrees, p);
     ::decode(ambiguous_imports, p);

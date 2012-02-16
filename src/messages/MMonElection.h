@@ -20,6 +20,9 @@
 #include "mon/MonMap.h"
 
 class MMonElection : public Message {
+
+  static const int HEAD_VERSION = 2;
+
 public:
   static const int OP_PROPOSE = 1;
   static const int OP_ACK     = 2;
@@ -41,9 +44,9 @@ public:
   bufferlist monmap_bl;
   set<int> quorum;
   
-  MMonElection() : Message(MSG_MON_ELECTION) {}
+  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION) { }
   MMonElection(int o, epoch_t e, MonMap *m) : 
-    Message(MSG_MON_ELECTION), 
+    Message(MSG_MON_ELECTION, HEAD_VERSION), 
     fsid(m->fsid), op(o), epoch(e) {
     m->encode(monmap_bl);
   }
@@ -51,20 +54,19 @@ private:
   ~MMonElection() {}
 
 public:  
-  const char *get_type_name() { return "election"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "election"; }
+  void print(ostream& out) const {
     out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }
   
-  void encode_payload(CephContext *cct) {
-    header.version = 2;
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(op, payload);
     ::encode(epoch, payload);
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version >= 2)
       ::decode(fsid, p);

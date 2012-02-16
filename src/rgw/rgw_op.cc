@@ -201,7 +201,7 @@ static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferli
 static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
 {
   string upload_id;
-  url_decode(s->args.get("uploadId"), upload_id);
+  upload_id = s->args.get("uploadId");
   string oid = object;
   rgw_obj obj;
 
@@ -585,14 +585,6 @@ void RGWDeleteBucket::execute()
       if (ret < 0) {
         dout(0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
       }
-
-      string oid;
-      rgw_obj obj(s->bucket, oid);
-      RGWIntentEvent intent = DEL_POOL;
-      int r = rgw_log_intent(s, obj, intent);
-      if (r < 0) {
-        dout(0) << "WARNING: failed to log intent for bucket removal bucket=" << s->bucket << dendl;
-      }
     }
   }
 
@@ -815,10 +807,10 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
 
   string oid = s->object_str;
   string upload_id;
-  url_decode(s->args.get("uploadId"), upload_id);
+  upload_id = s->args.get("uploadId");
   mp.init(oid, upload_id);
 
-  url_decode(s->args.get("partNumber"), part_num);
+  part_num = s->args.get("partNumber");
   if (part_num.empty()) {
     return -EINVAL;
   }
@@ -1561,7 +1553,7 @@ void RGWAbortMultipart::execute()
   string upload_id;
   string meta_oid;
   string prefix;
-  url_decode(s->args.get("uploadId"), upload_id);
+  upload_id = s->args.get("uploadId");
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
@@ -1643,13 +1635,13 @@ void RGWListBucketMultiparts::execute()
 
   if (s->prot_flags & RGW_REST_SWIFT) {
     string path_args;
-    url_decode(s->args.get("path"), path_args);
+    path_args = s->args.get("path");
     if (!path_args.empty()) {
       if (!delimiter.empty() || !prefix.empty()) {
         ret = -EINVAL;
         goto done;
       }
-      url_decode(path_args, prefix);
+      prefix = path_args;
       delimiter="/";
     }
   }

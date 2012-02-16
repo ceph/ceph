@@ -20,6 +20,7 @@
 #include "MClientRequest.h"
 
 #include "msg/Message.h"
+#include "include/ceph_features.h"
 
 #include <vector>
 using namespace std;
@@ -185,20 +186,20 @@ public:
   bufferlist snapbl;
 
  public:
-  int get_op() { return head.op; }
+  int get_op() const { return head.op; }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
-  epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
+  epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
-  int get_result() { return (__s32)(__u32)head.result; }
+  int get_result() const { return (__s32)(__u32)head.result; }
 
   void set_result(int r) { head.result = r; }
 
   void set_unsafe() { head.safe = 0; }
 
-  bool is_safe() { return head.safe; }
+  bool is_safe() const { return head.safe; }
 
-  MClientReply() {}
+  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&head, 0, sizeof(head));
@@ -211,8 +212,8 @@ private:
   ~MClientReply() {}
 
 public:
-  const char *get_type_name() { return "creply"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "creply"; }
+  void print(ostream& o) const {
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
     if (get_result() <= 0) {
@@ -229,7 +230,7 @@ public:
   }
 
   // serialization
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(trace_bl, p);
@@ -237,7 +238,7 @@ public:
     ::decode(snapbl, p);
     assert(p.end());
   }
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(extra_bl, payload);

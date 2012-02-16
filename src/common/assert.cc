@@ -16,6 +16,7 @@
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Clock.h"
 #include "include/assert.h"
 
 #include <errno.h>
@@ -49,12 +50,16 @@ namespace ceph {
       g_assert_context->dout_trylock(&dout_locker);
     }
 
+    ostringstream tss;
+    tss << ceph_clock_now(g_assert_context);
+
     char buf[8096];
     BackTrace *bt = new BackTrace(1);
     snprintf(buf, sizeof(buf),
-	     "%s: In function '%s', in thread '%llx'\n"
+	     "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED assert(%s)\n",
-	     file, func, (unsigned long long)pthread_self(), file, line, assertion);
+	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
+	     file, line, assertion);
     dout_emergency(buf);
 
     // TODO: get rid of this memory allocation.

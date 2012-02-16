@@ -16,6 +16,8 @@
 #ifndef CEPH_JOURNAL_H
 #define CEPH_JOURNAL_H
 
+#include <errno.h>
+
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "common/Finisher.h"
@@ -45,6 +47,8 @@ public:
 
   virtual void flush() = 0;
   virtual void throttle() = 0;
+
+  virtual int dump(ostream& out) { return -EOPNOTSUPP; }
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 

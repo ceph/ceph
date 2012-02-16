@@ -30,6 +30,10 @@
  */
 
 class MOSDOpReply : public Message {
+
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 2;
+
   object_t oid;
   pg_t pgid;
   vector<OSDOp> ops;
@@ -40,23 +44,33 @@ class MOSDOpReply : public Message {
   int32_t retry_attempt;
 
 public:
-  object_t get_oid() { return oid; }
-  pg_t     get_pg() { return pgid; }
-  int      get_flags() { return flags; }
+  object_t get_oid() const { return oid; }
+  pg_t     get_pg() const { return pgid; }
+  int      get_flags() const { return flags; }
 
-  bool     is_ondisk() { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
-  bool     is_onnvram() { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
+  bool     is_ondisk() const { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
+  bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
-  int get_result() { return result; }
+  int get_result() const { return result; }
   eversion_t get_version() { return reassert_version; }
   
-  bool may_read() { return flags & CEPH_OSD_FLAG_READ; }
-  bool may_write() { return flags & CEPH_OSD_FLAG_WRITE; }
+  bool may_read() const { return flags & CEPH_OSD_FLAG_READ; }
+  bool may_write() const { return flags & CEPH_OSD_FLAG_WRITE; }
 
   void set_result(int r) { result = r; }
   void set_version(eversion_t v) { reassert_version = v; }
 
   void add_flags(int f) { flags |= f; }
+
+  void claim_op_out_data(vector<OSDOp>& o) {
+    assert(ops.size() == o.size());
+    for (unsigned i = 0; i < o.size(); i++) {
+      ops[i].outdata.claim(o[i].outdata);
+    }
+  }
+  void claim_ops(vector<OSDOp>& o) {
+    o.swap(ops);
+  }
 
   /**
    * get retry attempt
@@ -76,8 +90,10 @@ public:
   */
 
 public:
-  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype) :
-    Message(CEPH_MSG_OSD_OPREPLY) {
+  MOSDOpReply()
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype)
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
     set_tid(req->get_tid());
     ops = req->ops;
     result = r;
@@ -88,14 +104,21 @@ public:
     osdmap_epoch = e;
     reassert_version = req->reassert_version;
     retry_attempt = req->get_retry_attempt();
+
+    // zero out ops payload_len
+    for (unsigned i = 0; i < ops.size(); i++)
+      ops[i].op.payload_len = 0;
   }
-  MOSDOpReply() {}
 private:
   ~MOSDOpReply() {}
 
 public:
-  virtual void encode_payload(CephContext *cct) {
-    if (!connection->has_feature(CEPH_FEATURE_PGID64)) {
+  virtual void encode_payload(uint64_t features) {
+
+    OSDOp::merge_osd_op_vector_out_data(ops, data);
+
+    if ((features & CEPH_FEATURE_PGID64) == 0) {
+      header.version = 1;
       ceph_osd_reply_head head;
       memset(&head, 0, sizeof(head));
       head.layout.ol_pgid = pgid.get_old_pg().v;
@@ -110,7 +133,6 @@ public:
       }
       ::encode_nohead(oid.name, payload);
     } else {
-      header.version = 3;
       ::encode(oid, payload);
       ::encode(pgid, payload);
       ::encode(flags, payload);
@@ -124,9 +146,12 @@ public:
 	::encode(ops[i].op, payload);
 
       ::encode(retry_attempt, payload);
+
+      for (unsigned i = 0; i < num_ops; i++)
+	::encode(ops[i].rval, payload);
     }
   }
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       ceph_osd_reply_head head;
@@ -160,12 +185,19 @@ public:
 	::decode(retry_attempt, p);
       else
 	retry_attempt = -1;
+
+      if (header.version >= 4) {
+	for (unsigned i = 0; i < num_ops; ++i)
+	  ::decode(ops[i].rval, p);
+
+	OSDOp::split_osd_op_vector_out_data(ops, data);
+      }
     }
   }
 
-  const char *get_type_name() { return "osd_op_reply"; }
+  const char *get_type_name() const { return "osd_op_reply"; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops;
     if (may_write()) {

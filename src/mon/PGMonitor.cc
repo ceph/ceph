@@ -63,8 +63,8 @@ public:
   }
   virtual void handle_conf_change(const md_config_t *conf,
 				  const std::set<std::string>& changed) {
-    mon->update_full_ratios(((float)conf->mon_osd_full_ratio) / 100,
-			    ((float)conf->mon_osd_nearfull_ratio) / 100);
+    mon->update_full_ratios(conf->mon_osd_full_ratio,
+			    conf->mon_osd_nearfull_ratio);
   }
 };
 
@@ -72,7 +72,8 @@ PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
   : PaxosService(mn, p),
     ratio_lock("PGMonitor::ratio_lock"),
     need_full_ratio_update(false),
-    need_nearfull_ratio_update(false)
+    need_nearfull_ratio_update(false),
+    need_check_down_pgs(false)
 {
   ratio_monitor = new RatioMonitor(this);
   g_conf->add_observer(ratio_monitor);
@@ -99,6 +100,7 @@ void PGMonitor::on_active()
 {
   if (mon->is_leader()) {
     check_osd_map(mon->osdmon()->osdmap.epoch);
+    need_check_down_pgs = true;
   }
 
   update_logger();
@@ -134,12 +136,18 @@ void PGMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_num_object, pg_map.pg_sum.stats.sum.num_objects);
   mon->cluster_logger->set(l_cluster_num_object_degraded, pg_map.pg_sum.stats.sum.num_objects_degraded);
   mon->cluster_logger->set(l_cluster_num_object_unfound, pg_map.pg_sum.stats.sum.num_objects_unfound);
-  mon->cluster_logger->set(l_cluster_num_kb, pg_map.pg_sum.stats.sum.num_kb);
+  mon->cluster_logger->set(l_cluster_num_bytes, pg_map.pg_sum.stats.sum.num_bytes);
 }
 
 void PGMonitor::update_full_ratios(float full_ratio, float nearfull_ratio)
 {
   Mutex::Locker l(ratio_lock);
+
+  if (full_ratio > 1.0)
+    full_ratio /= 100.0;
+  if (nearfull_ratio > 1.0)
+    nearfull_ratio /= 100.0;
+
   dout(10) << "update_full_ratios full " << full_ratio << " nearfull " << nearfull_ratio << dendl;
   if (full_ratio != 0) {
     new_full_ratio = full_ratio;
@@ -178,6 +186,10 @@ void PGMonitor::tick()
       }
     }
     ratio_lock.Unlock();
+    
+    if (need_check_down_pgs && check_down_pgs())
+      propose = true;
+    
     if (propose) {
       propose_pending();
     }
@@ -189,13 +201,19 @@ void PGMonitor::tick()
 void PGMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
+  pg_map.full_ratio = g_conf->mon_osd_full_ratio;
+  if (pg_map.full_ratio > 1.0)
+    pg_map.full_ratio /= 100.0;
+  pg_map.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+  if (pg_map.nearfull_ratio > 1.0)
+    pg_map.nearfull_ratio /= 100.0;
 }
 
-bool PGMonitor::update_from_paxos()
+void PGMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == pg_map.version)
-    return true;
+    return;
   assert(paxosv >= pg_map.version);
 
   if (pg_map.version != paxos->get_stashed_version()) {
@@ -211,7 +229,8 @@ bool PGMonitor::update_from_paxos()
     catch (const std::exception &e) {
       dout(0) << "update_from_paxos: error parsing update: "
 	      << e.what() << dendl;
-      return false;
+      assert(0 == "update_from_paxos: error parsing update");
+      return;
     }
   } 
 
@@ -231,7 +250,8 @@ bool PGMonitor::update_from_paxos()
     catch (const std::exception &e) {
       dout(0) << "update_from_paxos: error parsing "
 	      << "incremental update: " << e.what() << dendl;
-      return false;
+      assert(0 == "update_from_paxos: error parsing incremental update");
+      return;
     }
 
     pg_map.apply_incremental(inc);
@@ -266,8 +286,6 @@ bool PGMonitor::update_from_paxos()
   send_pg_creates();
 
   update_logger();
-
-  return true;
 }
 
 void PGMonitor::handle_osd_timeouts()
@@ -629,6 +647,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	pending_inc.osd_stat_rm.erase(p->first);
 	pending_inc.osd_stat_updates[p->first]; 
       }
+
+    // this is conservative: we want to know if any osds (maybe) got marked down.
+    for (map<int32_t,uint8_t>::iterator p = inc.new_state.begin();
+	 p != inc.new_state.end();
+	 ++p)
+      if (p->second & CEPH_OSD_UP)   // true if marked up OR down, but we're too lazy to check which
+	need_check_down_pgs = true;
   }
 
   bool propose = false;
@@ -639,6 +664,9 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
   // scan pg space?
   if (register_new_pgs())
+    propose = true;
+
+  if (need_check_down_pgs && check_down_pgs())
     propose = true;
   
   if (propose)
@@ -812,9 +840,9 @@ void PGMonitor::send_pg_creates()
 	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
       msg[osd] = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
-    msg[osd]->mkpg[pgid].created = pg_map.pg_stat[pgid].created;
-    msg[osd]->mkpg[pgid].parent = pg_map.pg_stat[pgid].parent;
-    msg[osd]->mkpg[pgid].split_bits = pg_map.pg_stat[pgid].parent_split_bits;
+    msg[osd]->mkpg[pgid] = pg_create_t(pg_map.pg_stat[pgid].created,
+				       pg_map.pg_stat[pgid].parent,
+				       pg_map.pg_stat[pgid].parent_split_bits);
   }
 
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();
@@ -825,6 +853,39 @@ void PGMonitor::send_pg_creates()
     last_sent_pg_create[p->first] = ceph_clock_now(g_ceph_context);
   }
 }
+
+bool PGMonitor::check_down_pgs()
+{
+  dout(10) << "check_down_pgs" << dendl;
+
+  OSDMap *osdmap = &mon->osdmon()->osdmap;
+  bool ret = false;
+
+  for (hash_map<pg_t,pg_stat_t>::iterator p = pg_map.pg_stat.begin();
+       p != pg_map.pg_stat.end();
+       ++p) {
+    if ((p->second.state & PG_STATE_STALE) == 0 &&
+	p->second.acting.size() &&
+	osdmap->is_down(p->second.acting[0])) {
+      dout(10) << " marking pg " << p->first << " stale with acting " << p->second.acting << dendl;
+
+      map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(p->first);
+      pg_stat_t *stat;
+      if (q == pending_inc.pg_stat_updates.end()) {
+	stat = &pending_inc.pg_stat_updates[p->first];
+	*stat = p->second;
+      } else {
+	stat = &q->second;
+      }
+      stat->state |= PG_STATE_STALE;
+      stat->last_unstale = ceph_clock_now(g_ceph_context);
+      ret = true;
+    }
+  }
+  need_check_down_pgs = false;
+  return ret;
+}
+
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
@@ -1047,8 +1108,12 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     ss << "pg " << pgid << " already creating";
     goto out;
   }
-  pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
-  pending_inc.pg_stat_updates[pgid].created = epoch;
+  {
+    pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
+    s.state = PG_STATE_CREATING;
+    s.created = epoch;
+    s.last_change = ceph_clock_now(g_ceph_context);
+  }
   ss << "pg " << m->cmd[2] << " now creating, ok";
   getline(ss, rs);
   paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1069,6 +1134,8 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
   hash_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
   hash_map<int,int>::const_iterator p_end = pg_map.num_pg_by_state.end();
   for (; p != p_end; ++p) {
+    if (p->first & PG_STATE_STALE)
+      note["stale"] += p->second;
     if (p->first & PG_STATE_DOWN)
       note["down"] += p->second;
     if (p->first & PG_STATE_DEGRADED)
@@ -1098,6 +1165,19 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
       ss << ", ";
     ret = HEALTH_WARN;
     ss << rss.str();
+  }
+
+  if (pg_map.nearfull_osds.size() > 0) {
+    if (ret != HEALTH_OK)
+      ss << ", ";
+    ss << pg_map.nearfull_osds.size() << " near full osd(s)";
+    ret = HEALTH_WARN;
+  }
+  if (pg_map.full_osds.size() > 0) {
+    if (ret != HEALTH_OK)
+      ss << ", ";
+    ss << pg_map.full_osds.size() << " full osd(s)";
+    ret = HEALTH_ERR;
   }
 
   return ret;

@@ -29,13 +29,13 @@ private:
   ~MAuth() {}
 
 public:
-  const char *get_type_name() { return "auth"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "auth"; }
+  void print(ostream& out) const {
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes"
 	<< " epoch " << monmap_epoch << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(protocol, p);
@@ -45,7 +45,7 @@ public:
     else
       monmap_epoch = 0;
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(protocol, payload);
     ::encode(auth_payload, payload);

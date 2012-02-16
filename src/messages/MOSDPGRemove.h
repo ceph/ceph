@@ -27,7 +27,7 @@ class MOSDPGRemove : public Message {
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGRemove() {}
+  MOSDPGRemove() : Message(MSG_OSD_PG_REMOVE) {}
   MOSDPGRemove(epoch_t e, vector<pg_t>& l) :
     Message(MSG_OSD_PG_REMOVE) {
     this->epoch = e;
@@ -37,20 +37,20 @@ private:
   ~MOSDPGRemove() {}
 
 public:  
-  const char *get_type_name() { return "PGrm"; }
+  const char *get_type_name() const { return "PGrm"; }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(pg_list, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_list, p);
   }
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "osd pg remove(" << "epoch " << epoch << "; ";
-    for (vector<pg_t>::iterator i = pg_list.begin();
+    for (vector<pg_t>::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       out << "pg" << *i << "; ";

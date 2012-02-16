@@ -46,23 +46,23 @@ private:
   }
 
 public:
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(tid, payload);
     ::encode(client, payload);
     ::encode(client_caps, payload);
-    encode_message(cct, msg, payload);
+    encode_message(msg, features, payload);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(client, p);
     ::decode(client_caps, p);
-    msg = (PaxosServiceMessage *)decode_message(cct, p);
+    msg = (PaxosServiceMessage *)decode_message(NULL, p);
   }
 
-  const char *get_type_name() { return "forward"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "forward"; }
+  void print(ostream& o) const {
     if (msg)
       o << "forward(" << *msg << ") to leader";
     else o << "forward(??? ) to leader";

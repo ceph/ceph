@@ -31,15 +31,15 @@ private:
   ~MExportCapsAck() {}
 
 public:
-  const char *get_type_name() { return "export_caps_ack"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "export_caps_ack"; }
+  void print(ostream& o) const {
     o << "export_caps_ack(" << ino << ")";
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(ino, payload);
   }
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
   }

@@ -56,6 +56,7 @@ OPTION(debug_journaler, OPT_INT, 0)
 OPTION(debug_objectcacher, OPT_INT, 0)
 OPTION(debug_client, OPT_INT, 0)
 OPTION(debug_osd, OPT_INT, 0)
+OPTION(debug_objclass, OPT_INT, 0)
 OPTION(debug_filestore, OPT_INT, 1)
 OPTION(debug_journal, OPT_INT, 1)
 OPTION(debug_bdev, OPT_INT, 1)         // block device
@@ -98,8 +99,8 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between 
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
-OPTION(mon_osd_full_ratio, OPT_INT, 95) // what % full makes an OSD "full"
-OPTION(mon_osd_nearfull_ratio, OPT_INT, 85) // what % full makes an OSD near full
+OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
+OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
@@ -254,6 +255,7 @@ OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_recovery_threads, OPT_INT, 1)
+OPTION(osd_recover_clone_overlap, OPT_BOOL, false)   // preserve clone_overlap during recovery/migration
 OPTION(osd_backfill_scan_min, OPT_INT, 64)
 OPTION(osd_backfill_scan_max, OPT_INT, 512)
 OPTION(osd_op_thread_timeout, OPT_INT, 30)
@@ -295,6 +297,7 @@ OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
 OPTION(osd_max_notify_timeout, OPT_U32, 30) // max notify timeout in seconds
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
 OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in the pg log when trimming it
+OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
@@ -324,7 +327,9 @@ OPTION(filestore_fiemap_threshold, OPT_INT, 4096)
 OPTION(filestore_merge_threshold, OPT_INT, 10)
 OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_collections, OPT_BOOL, false)
+OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(journal_dio, OPT_BOOL, true)
+OPTION(journal_aio, OPT_BOOL, false)
 OPTION(journal_block_align, OPT_BOOL, true)
 OPTION(journal_max_write_bytes, OPT_INT, 10 << 20)
 OPTION(journal_max_write_entries, OPT_INT, 100)

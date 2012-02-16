@@ -60,8 +60,8 @@ private:
   ~MMonProbe() {}
 
 public:  
-  const char *get_type_name() { return "mon_probe"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "mon_probe"; }
+  void print(ostream& out) const {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
@@ -72,7 +72,7 @@ public:
     out << ")";
   }
   
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(op, payload);
     ::encode(name, payload);
@@ -86,7 +86,7 @@ public:
     ::encode(latest_value, payload);
     ::encode(latest_version, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(op, p);

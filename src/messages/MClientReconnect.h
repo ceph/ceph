@@ -17,20 +17,24 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
+#include "include/ceph_features.h"
 
 
 class MClientReconnect : public Message {
+
+  const static int HEAD_VERSION = 2;
+
 public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
   vector<ceph_mds_snaprealm_reconnect> realms;
 
-  MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT) {}
+  MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION) { }
 private:
   ~MClientReconnect() {}
 
 public:
-  const char *get_type_name() { return "client_reconnect"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "client_reconnect"; }
+  void print(ostream& out) const {
     out << "client_reconnect("
 	<< caps.size() << " caps)";
   }
@@ -48,13 +52,13 @@ public:
     realms.push_back(r);
   }
 
-  void encode_payload(CephContext *cct) {
-    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
+  void encode_payload(uint64_t features) {
+    if (features & CEPH_FEATURE_FLOCK) {
       // new protocol
-      header.version = 2;
       ::encode(caps, data);
     } else {
       // compat crap
+      header.version = 1;
       map<inodeno_t, old_cap_reconnect_t> ocaps;
       for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); p++)
 	ocaps[p->first] = p->second;
@@ -62,7 +66,7 @@ public:
     }
     ::encode_nohead(realms, data);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = data.begin();
     if (header.version >= 2) {
       // new protocol

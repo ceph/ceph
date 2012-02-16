@@ -118,6 +118,7 @@ CephContext::CephContext(uint32_t module_type_)
     _service_thread(NULL),
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
+    _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
@@ -231,4 +232,7 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
   return _perf_counters_collection;
 }
 
-
+AdminSocket *CephContext::get_admin_socket()
+{
+  return _admin_socket;
+}

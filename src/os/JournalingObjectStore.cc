@@ -118,11 +118,14 @@ uint64_t JournalingObjectStore::_op_apply_start(uint64_t op)
 {
   assert(journal_lock.is_locked());
 
-  if (blocked) {
+  // if we ops are blocked, or there are already people (left) in
+  // line, get in line.
+  if (blocked || !ops_apply_blocked.empty()) {
     Cond cond;
     ops_apply_blocked.push_back(&cond);
     dout(10) << "op_apply_start " << op << " blocked (getting in back of line)" << dendl;
-    while (blocked && ops_apply_blocked.front() != &cond)
+    // sleep until we are not blocked AND we are at the front of line
+    while (blocked || ops_apply_blocked.front() != &cond)
       cond.Wait(journal_lock);
     dout(10) << "op_apply_start " << op << " woke (at front of line)" << dendl;
     ops_apply_blocked.pop_front();
@@ -130,19 +133,17 @@ uint64_t JournalingObjectStore::_op_apply_start(uint64_t op)
       dout(10) << "op_apply_start " << op << "  ...and kicking next in line" << dendl;
       ops_apply_blocked.front()->Signal();
     }
-  } else {
-    dout(10) << "op_apply_start " << op << dendl;
   }
-
+  dout(10) << "op_apply_start " << op << " open_ops " << open_ops << " -> " << (open_ops+1) << dendl;
+  assert(!blocked);
   open_ops++;
-
   return op;
 }
 
 void JournalingObjectStore::op_apply_finish(uint64_t op) 
 {
-  dout(10) << "op_apply_finish " << op << dendl;
   journal_lock.Lock();
+  dout(10) << "op_apply_finish " << op << " open_ops " << open_ops << " -> " << (open_ops-1) << dendl;
   if (--open_ops == 0)
     cond.Signal();
 
@@ -213,7 +214,9 @@ bool JournalingObjectStore::commit_start()
     dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
     cond.Wait(journal_lock);
   }
-  
+  dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
+  assert(open_ops == 0);
+
   if (applied_seq == committed_seq && !force_commit) {
     dout(10) << "commit_start nothing to do" << dendl;
     blocked = false;
@@ -294,7 +297,7 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
 	data_len = t->get_data_length();
 	data_align = (t->get_data_alignment() - tbl.length()) & ~CEPH_PAGE_MASK;
       }
-      t->encode(tbl);
+      ::encode(*t, tbl);
     }
     journal->submit_entry(op, tbl, data_align, onjournal);
   } else if (onjournal)

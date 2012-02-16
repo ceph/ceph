@@ -31,17 +31,17 @@ private:
   ~MExportCaps() {}
 
 public:
-  const char *get_type_name() { return "export_caps"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "export_caps"; }
+  void print(ostream& o) const {
     o << "export_caps(" << ino << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(ino, payload);
     ::encode(cap_bl, payload);
     ::encode(client_map, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(cap_bl, p);

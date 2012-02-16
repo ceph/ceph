@@ -60,7 +60,6 @@ public:
 
   CephToolCtx(CephContext *cct_, bool concise_) :
     cct(cct_),
-    mdsmap(cct_),
     mc(g_ceph_context),
     updates(EVERYTHING_UPDATE),
     log(&std::cout),

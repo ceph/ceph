@@ -80,6 +80,12 @@ int main(int argc, const char **argv)
 
     ObjectStore::Transaction ft;
     ft.create_collection(coll);
+    {
+      uint64_t x = 0;
+      bufferlist bl;
+      ::encode(x, bl);
+      ft.write(coll, oid, 0, bl.length(), bl);
+    }
     fs->apply_transaction(ft);
 
     uint64_t size = 4096;

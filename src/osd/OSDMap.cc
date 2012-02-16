@@ -16,7 +16,9 @@
 
 #include "common/config.h"
 #include "common/Formatter.h"
+#include "include/ceph_features.h"
 
+#include "common/code_environment.h"
 
 // ----------------------------------
 // osd_info_t
@@ -53,6 +55,18 @@ void osd_info_t::decode(bufferlist::iterator& bl)
   ::decode(up_thru, bl);
   ::decode(down_at, bl);
   ::decode(lost_at, bl);
+}
+
+void osd_info_t::generate_test_instances(list<osd_info_t*>& o)
+{
+  o.push_back(new osd_info_t);
+  o.push_back(new osd_info_t);
+  o.back()->last_clean_begin = 1;
+  o.back()->last_clean_end = 2;
+  o.back()->up_from = 30;
+  o.back()->up_thru = 40;
+  o.back()->down_at = 5;
+  o.back()->lost_at = 6;
 }
 
 ostream& operator<<(ostream& out, const osd_info_t& info)
@@ -551,8 +565,13 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
 void OSDMap::decode(bufferlist& bl)
 {
-  __u32 n, t;
   bufferlist::iterator p = bl.begin();
+  decode(p);
+}
+
+void OSDMap::decode(bufferlist::iterator& p)
+{
+  __u32 n, t;
   __u16 v;
   ::decode(v, p);
 
@@ -720,6 +739,18 @@ void OSDMap::dump(Formatter *f) const
     f->dump_stream(ss.str().c_str()) << p->second;
   }
   f->close_section();
+}
+
+void OSDMap::generate_test_instances(list<OSDMap*>& o)
+{
+  o.push_back(new OSDMap);
+
+  CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
+  o.push_back(new OSDMap);
+  uuid_d fsid;
+  o.back()->build_simple(cct, 1, fsid, 16, 7, 8, 9);
+  o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
+  delete cct;
 }
 
 string OSDMap::get_flag_string() const
@@ -977,6 +1008,8 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, p->second);
   }
+
+  crush.finalize();
 }
 
 void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
@@ -1125,6 +1158,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     crush.set_rule_name(rno, p->second);
   }
 
+  crush.finalize();
 }
 
 

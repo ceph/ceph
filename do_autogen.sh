@@ -10,6 +10,8 @@ do_autogen.sh: make a ceph build by running autogen, etc.
                                  level 1: -g
                                  level 3: -Wextra
                                  level 4: even more...
+-H                               --with-hadoop
+-e <path>                        dump encoded objects to <path>
 -P                               profiling build
 
 EOF
@@ -24,7 +26,7 @@ debug_level=0
 verbose=0
 profile=0
 HADOOP_FLAGS=
-while getopts  "d:hHPv" flag
+while getopts  "d:e:hHPv" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -37,6 +39,8 @@ do
     H) HADOOP_FLAGS="--with-hadoop";;
 
     v) verbose=1;;
+
+    e) encode_dump=$OPTARG;;
 
     *)
         echo
@@ -79,6 +83,11 @@ if [ "${debug_level}" -ge 2000 ]; then
     CFLAGS="${CFLAGS} -Wsign-promo -Wconversion -Waggregate-return -Wlong-long"
     CXXFLAGS="${CXXFLAGS} -Wold-style-cast"
 fi
+
+if [ -n "${encode_dump}" ]; then
+    CXXFLAGS="${CXXFLAGS} -DENCODE_DUMP=${encode_dump}"
+fi
+
 
 # Warning about unused parameters just leads to a lot of pointless spew when
 # using C++. It doesn't interact well with class inheritance.

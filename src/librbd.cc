@@ -15,6 +15,7 @@
 #include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/snap_types.h"
 #include "include/rbd/librbd.hpp"
 
 #include <errno.h>
@@ -576,13 +577,15 @@ int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id)
 int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint64_t *ver)
 {
   int r;
+  uint64_t off = 0;
 #define READ_SIZE 4096
   do {
     bufferlist bl;
-    r = io_ctx.read(md_oid, bl, READ_SIZE, 0);
+    r = io_ctx.read(md_oid, bl, READ_SIZE, off);
     if (r < 0)
       return r;
     header.claim_append(bl);
+    off += r;
    } while (r == READ_SIZE);
 
   if (memcmp(RBD_HEADER_TEXT, header.c_str(), sizeof(RBD_HEADER_TEXT))) {

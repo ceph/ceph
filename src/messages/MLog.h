@@ -34,20 +34,20 @@ private:
   ~MLog() {}
 
 public:
-  const char *get_type_name() { return "log"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "log"; }
+  void print(ostream& out) const {
     out << "log(";
     if (entries.size())
       out << entries.size() << " entries";
     out << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(entries, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

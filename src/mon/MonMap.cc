@@ -9,6 +9,64 @@
 
 using ceph::Formatter;
 
+void MonMap::encode(bufferlist& blist) const
+{
+  __u16 v = 2;
+  ::encode(v, blist);
+  ::encode_raw(fsid, blist);
+  ::encode(epoch, blist);
+  ::encode(mon_addr, blist);
+  ::encode(last_changed, blist);
+  ::encode(created, blist);
+}
+
+void MonMap::encode_v1(bufferlist& blist) const
+{
+  __u16 v = 1;
+  ::encode(v, blist);
+  ::encode_raw(fsid, blist);
+  ::encode(epoch, blist);
+  vector<entity_inst_t> mon_inst(mon_addr.size());
+  for (unsigned n = 0; n < mon_addr.size(); n++)
+    mon_inst[n] = get_inst(n);
+  ::encode(mon_inst, blist);
+  ::encode(last_changed, blist);
+  ::encode(created, blist);
+}
+
+void MonMap::decode(bufferlist::iterator &p)
+{
+  __u16 v;
+  ::decode(v, p);
+  ::decode_raw(fsid, p);
+  ::decode(epoch, p);
+  if (v == 1) {
+    vector<entity_inst_t> mon_inst;
+    ::decode(mon_inst, p);
+    for (unsigned i = 0; i < mon_inst.size(); i++) {
+      char n[2];
+      n[0] = '0' + i;
+      n[1] = 0;
+      string name = n;
+      mon_addr[name] = mon_inst[i].addr;
+    }
+  } else
+    ::decode(mon_addr, p);
+  ::decode(last_changed, p);
+  ::decode(created, p);
+  calc_ranks();
+}
+
+void MonMap::generate_test_instances(list<MonMap*>& o)
+{
+  o.push_back(new MonMap);
+  o.push_back(new MonMap);
+  o.back()->epoch = 1;
+  o.back()->last_changed = utime_t(123, 456);
+  o.back()->created = utime_t(789, 101112);
+  o.back()->add("one", entity_addr_t());
+}
+
 // read from/write to a file
 int MonMap::write(const char *fn) 
 {

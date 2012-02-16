@@ -103,18 +103,57 @@ WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
 
+#ifdef ENCODE_DUMP
+# include <stdio.h>
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <fcntl.h>
 
+# define ENCODE_STR(x) #x
+# define ENCODE_STRINGIFY(x) ENCODE_STR(x)
 
-#define WRITE_CLASS_ENCODER(cl) \
-  inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) { c.encode(bl); } \
+# define ENCODE_DUMP_PRE()			\
+  unsigned pre_off = bl.length()
+
+// NOTE: This is almost an exponential backoff, but because we count
+// bits we get a better sample of things we encode later on.
+# define ENCODE_DUMP_POST(cl)						\
+  do {									\
+    static int i = 0;							\
+    i++;								\
+    int bits = 0;							\
+    for (unsigned t = i; t; bits++)					\
+      t &= t - 1;							\
+    if (bits > 2)							\
+      break;								\
+    char fn[200];							\
+    snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x", #cl, getpid(), i++); \
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
+    if (fd >= 0) {							\
+      bufferlist sub;							\
+      sub.substr_of(bl, pre_off, bl.length() - pre_off);		\
+      sub.write_fd(fd);							\
+      ::close(fd);							\
+    }									\
+  } while (0)
+#else
+# define ENCODE_DUMP_PRE()
+# define ENCODE_DUMP_POST(cl)
+#endif
+
+#define WRITE_CLASS_ENCODER(cl)						\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) { \
+    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
-#define WRITE_CLASS_MEMBER_ENCODER(cl) \
-  inline void encode(const cl &c, bufferlist &bl) const { c.encode(bl); }	\
+#define WRITE_CLASS_MEMBER_ENCODER(cl)					\
+  inline void encode(const cl &c, bufferlist &bl) const {		\
+    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 #define WRITE_CLASS_ENCODER_FEATURES(cl)				\
-  inline void encode(const cl &c, bufferlist &bl, uint64_t features) { c.encode(bl, features); } \
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features) {	\
+    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
@@ -600,5 +639,121 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   }
 }
 
+
+/*
+ * guards
+ */
+
+/**
+ * start encoding block
+ *
+ * @param v current (code) version of the encoding
+ * @param compat oldest code version that can decode it
+ * @param bl bufferlist to encode to
+ */
+#define ENCODE_START(v, compat, bl)			     \
+  __u8 struct_v = v, struct_compat = compat;		     \
+  ::encode(struct_v, bl);				     \
+  ::encode(struct_compat, bl);				     \
+  __le32 struct_len = 0;				     \
+  unsigned struct_len_pos = bl.length();		     \
+  ::encode(struct_len, bl);				     \
+  do {
+
+/**
+ * finish encoding block
+ *
+ * @param bl bufferlist we were encoding to
+ */
+#define ENCODE_FINISH(bl)						\
+  } while (false);							\
+  struct_len = bl.length() - struct_len_pos - sizeof(struct_len);	\
+  bl.copy_in(struct_len_pos, 4, (char *)&struct_len);
+
+#define DECODE_ERR_VERSION(func, v)			\
+  "" #func " unknown encoding version > " #v
+
+#define DECODE_ERR_OLDVERSION(func, v)			\
+  "" #func " no longer understand old encoding version < " #v
+
+#define DECODE_ERR_PAST(func) \
+  "" #func " decode past end of struct encoding"
+
+/**
+ * check for very old encoding
+ *
+ * If the encoded data is older than oldestv, raise an exception.
+ *
+ * @param oldestv oldest version of the code we can successfully decode.
+ */
+#define DECODE_OLDEST(oldestv)						\
+  if (struct_v < oldestv)						\
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v)); 
+
+/**
+ * start a decoding block
+ *
+ * @param v current version of the encoding that the code supports/encodes
+ * @param bl bufferlist::iterator for the encoded data
+ */
+#define DECODE_START(v, bl)						\
+  __u8 struct_v, struct_compat;						\
+  ::decode(struct_v, bl);						\
+  ::decode(struct_compat, bl);						\
+  if (v < struct_compat)						\
+    throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
+  __u32 struct_len;							\
+  ::decode(struct_len, bl);						\
+  if (struct_len > bl.get_remaining())					\
+    throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+  unsigned struct_end = bl.get_off() + struct_len;			\
+  do {
+
+/**
+ * start a decoding block with legacy support for older encoding schemes
+ *
+ * The old encoding schemes has a __u8 struct_v only, or lacked either
+ * the compat version or length.  Skip those fields conditionally.
+ *
+ * Most of the time, v, compatv, and lenv will all match the version
+ * where the structure was switched over to the new macros.
+ *
+ * @param v current version of the encoding that the code supports/encodes
+ * @param compatv oldest version that includes a __u8 compat version field
+ * @param lenv oldest version that includes a __u32 length wrapper
+ * @param bl bufferlist::iterator containing the encoded data
+ */
+#define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
+  __u8 struct_v;							\
+  ::decode(struct_v, bl);						\
+  if (struct_v >= compatv) {						\
+    __u8 struct_compat;							\
+    ::decode(struct_compat, bl);					\
+    if (v < struct_compat)						\
+      throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
+  }									\
+  unsigned struct_end = 0;						\
+  if (struct_v >= lenv) {						\
+    __u32 struct_len;							\
+    ::decode(struct_len, bl);						\
+    if (struct_len > bl.get_remaining())				\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    struct_end = bl.get_off() + struct_len;				\
+  }									\
+  do {
+
+/**
+ * finish decode block
+ *
+ * @param bl bufferlist::iterator we were decoding from
+ */
+#define DECODE_FINISH(bl)						\
+  } while (false);							\
+  if (struct_end) {							\
+    if (bl.get_off() > struct_end)					\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    if (bl.get_off() < struct_end)					\
+      bl.advance(struct_end - bl.get_off());				\
+  }
 
 #endif

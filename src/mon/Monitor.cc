@@ -48,6 +48,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
 
 #include "include/color.h"
 #include "include/ceph_fs.h"
@@ -108,6 +109,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   probe_timeout_event(NULL),
 
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
+  admin_hook(NULL),
   routed_request_tid(0)
 {
   rank = -1;
@@ -144,6 +146,25 @@ Paxos *Monitor::get_paxos_by_name(const string& name)
   return NULL;
 }
 
+PaxosService *Monitor::get_paxos_service_by_name(const string& name)
+{
+  if (name == "mdsmap")
+    return paxos_service[PAXOS_MDSMAP];
+  if (name == "monmap")
+    return paxos_service[PAXOS_MONMAP];
+  if (name == "osdmap")
+    return paxos_service[PAXOS_OSDMAP];
+  if (name == "pgmap")
+    return paxos_service[PAXOS_PGMAP];
+  if (name == "logm")
+    return paxos_service[PAXOS_LOG];
+  if (name == "auth")
+    return paxos_service[PAXOS_AUTH];
+
+  assert(0 == "given name does not match known paxos service");
+  return NULL;
+}
+
 Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -170,6 +191,39 @@ enum {
   l_mon_first = 456000,
   l_mon_last,
 };
+
+
+class AdminHook : public AdminSocketHook {
+  Monitor *mon;
+public:
+  AdminHook(Monitor *m) : mon(m) {}
+  bool call(std::string command, bufferlist& out) {
+    stringstream ss;
+    mon->do_admin_command(command, ss);
+    out.append(ss);
+    return true;
+  }
+};
+
+void Monitor::do_admin_command(string command, ostream& ss)
+{
+  Mutex::Locker l(lock);
+  if (command == "mon_status")
+    _mon_status(ss);
+  else if (command == "quorum_status")
+    _quorum_status(ss);
+  else
+    assert(0 == "bad AdminSocket command binding");
+}
+
+void Monitor::handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got Signal " << sys_siglist[signum] << " ***" << dendl;
+  lock.Lock();
+  shutdown();
+  lock.Unlock();
+}
 
 void Monitor::init()
 {
@@ -207,7 +261,7 @@ void Monitor::init()
     pcb.add_u64(l_cluster_num_object, "num_object");
     pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded");
     pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound");
-    pcb.add_u64(l_cluster_num_kb, "num_kb");
+    pcb.add_u64(l_cluster_num_bytes, "num_bytes");
     pcb.add_u64(l_cluster_num_mds_up, "num_mds_up");
     pcb.add_u64(l_cluster_num_mds_in, "num_mds_in");
     pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed");
@@ -216,11 +270,12 @@ void Monitor::init()
   }
 
   // init paxos
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->init();
-
-  for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
-    (*ps)->update_from_paxos();
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos[i]->init();
+    if (paxos[i]->is_consistent()) {
+      paxos_service[i]->update_from_paxos();
+    } // else we don't do anything; handle_probe_reply will detect it's slurping
+  }
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
@@ -233,6 +288,15 @@ void Monitor::init()
     ::decode(keyring, p);
     key_server.bootstrap_keyring(keyring);
   }
+
+  admin_hook = new AdminHook(this);
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  int r = admin_socket->register_command("mon_status", admin_hook,
+					 "show current monitor status");
+  assert(r == 0);
+  r = admin_socket->register_command("quorum_status", admin_hook,
+					 "show current quorum status");
+  assert(r == 0);
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
@@ -279,6 +343,14 @@ void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
   
+  if (admin_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("mon_status");
+    admin_socket->unregister_command("quorum_status");
+    delete admin_hook;
+    admin_hook = NULL;
+  }
+
   elector.shutdown();
 
   if (logger) {
@@ -480,7 +552,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	dout(0) << " peer has paxos machine " << p->first << " but i don't... weird" << dendl;
 	continue;  // weird!
       }
-      if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
+      if (pax->is_slurping()) {
+        dout(10) << " My paxos machine " << p->first
+                 << " is currently slurping, so that will continue. Peer has v "
+                 << p->second << dendl;
+        ok = false;
+      } else if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
 	dout(10) << " peer paxos machine " << p->first << " v " << p->second
 		 << " vs my v " << pax->get_version()
 		 << " (too far ahead)"
@@ -553,8 +630,12 @@ void Monitor::slurp()
       p++;
       continue;
     }
+
     dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
     if (p->second > pax->get_version()) {
+      if (!pax->is_slurping()) {
+        pax->start_slurping();
+      }
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -566,6 +647,9 @@ void Monitor::slurp()
     // latest?
     if (pax->get_first_committed() > 1 &&   // don't need it!
 	pax->get_stashed_version() < pax->get_first_committed()) {
+      if (!pax->is_slurping()) {
+        pax->start_slurping();
+      }
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -573,6 +657,12 @@ void Monitor::slurp()
       messenger->send_message(m, slurp_source);
       return;
     }
+
+    PaxosService *paxs = get_paxos_service_by_name(p->first);
+    assert(paxs);
+    paxs->update_from_paxos();
+
+    pax->end_slurping();
 
     slurp_versions.erase(p++);
   }
@@ -648,10 +738,7 @@ void Monitor::handle_probe_data(MMonProbe *m)
       store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
     }
 
-    pax->first_committed = m->oldest_version;
     pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
-
-    store->put_int(m->oldest_version, m->machine_name.c_str(), "first_committed");
     store->put_int(pax->last_committed, m->machine_name.c_str(),
 		   "last_committed");
   }
@@ -744,6 +831,7 @@ void Monitor::finish_election()
 {
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
+  finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
@@ -776,6 +864,61 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
   }
 
   return false;
+}
+
+void Monitor::_quorum_status(ostream& ss)
+{
+  JSONFormatter jf(true);
+  jf.open_object_section("quorum_status");
+  jf.dump_int("election_epoch", get_epoch());
+  
+  jf.open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+    jf.dump_int("mon", *p);
+  jf.close_section();
+
+  jf.open_object_section("monmap");
+  monmap->dump(&jf);
+  jf.close_section();
+
+  jf.close_section();
+  jf.flush(ss);
+}
+
+void Monitor::_mon_status(ostream& ss)
+{
+  JSONFormatter jf(true);
+  jf.open_object_section("mon_status");
+  jf.dump_string("name", name);
+  jf.dump_int("rank", rank);
+  jf.dump_string("state", get_state_name());
+  jf.dump_int("election_epoch", get_epoch());
+
+  jf.open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+    jf.dump_int("mon", *p);
+  jf.close_section();
+
+  jf.open_array_section("outside_quorum");
+  for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+    jf.dump_string("mon", *p);
+  jf.close_section();
+
+  if (is_slurping()) {
+    jf.dump_stream("slurp_source") << slurp_source;
+    jf.open_object_section("slurp_version");
+    for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
+      jf.dump_int(p->first.c_str(), p->second);	  
+    jf.close_section();
+  }
+
+  jf.open_object_section("monmap");
+  monmap->dump(&jf);
+  jf.close_section();
+
+  jf.close_section();
+  
+  jf.flush(ss);
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -867,68 +1010,20 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "quorum_status") {
-
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
 	dout(10) << " waiting for qorum" << dendl;
 	waitfor_quorum.push_back(new C_RetryMessage(this, m));
 	return;
       }
-
-      JSONFormatter jf(true);
-      jf.open_object_section("quorum_status");
-      jf.dump_int("election_epoch", get_epoch());
-
-      jf.open_array_section("quorum");
-      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-	jf.dump_int("mon", *p);
-      jf.close_section();
-
-      jf.open_object_section("monmap");
-      monmap->dump(&jf);
-      jf.close_section();
-
-      jf.close_section();
-
       stringstream ss;
-      jf.flush(ss);
+      _quorum_status(ss);
       rs = ss.str();
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
-      JSONFormatter jf(true);
-      jf.open_object_section("mon_status");
-      jf.dump_string("name", name);
-      jf.dump_int("rank", rank);
-      jf.dump_string("state", get_state_name());
-      jf.dump_int("election_epoch", get_epoch());
-
-      jf.open_array_section("quorum");
-      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-	jf.dump_int("mon", *p);
-      jf.close_section();
-
-      jf.open_array_section("outside_quorum");
-      for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
-	jf.dump_string("mon", *p);
-      jf.close_section();
-
-      if (is_slurping()) {
-	jf.dump_stream("slurp_source") << slurp_source;
-	jf.open_object_section("slurp_version");
-	for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
-	  jf.dump_int(p->first.c_str(), p->second);	  
-	jf.close_section();
-      }
-
-      jf.open_object_section("monmap");
-      monmap->dump(&jf);
-      jf.close_section();
-
-      jf.close_section();
-
       stringstream ss;
-      jf.flush(ss);
+      _mon_status(ss);
       rs = ss.str();
       r = 0;
     }
@@ -1027,7 +1122,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client = req->get_source_inst();
-    encode_message(g_ceph_context, req, rr->request_bl);
+    encode_message(req, -1, rr->request_bl);   // for my use only; use all features
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
@@ -1093,13 +1188,13 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(g_ceph_context, m, bl);
+  encode_message(m, -1, bl);  // fixme: assume peers have all features we do.
 
   messenger->send_message(m, to);
 
   for (int i=0; i<(int)monmap->size(); i++) {
     if (i != rank)
-      messenger->send_message(new MRoute(cct, bl, to), monmap->get_inst(i));
+      messenger->send_message(new MRoute(bl, to), monmap->get_inst(i));
   }
 }
 
@@ -1248,6 +1343,8 @@ bool Monitor::_ms_dispatch(Message *m)
   EntityName entity_name;
   bool src_is_mon;
 
+  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+
   if (connection) {
     dout(20) << "have connection" << dendl;
     s = (MonSession *)connection->get_priv();
@@ -1258,6 +1355,37 @@ bool Monitor::_ms_dispatch(Message *m)
       s = NULL;
     }
     if (!s) {
+      if (!exited_quorum.is_zero()
+          && !src_is_mon) {
+        /**
+         * Wait list the new session until we're in the quorum, assuming it's
+         * sufficiently new.
+         * tick() will periodically send them back through so we can send
+         * the client elsewhere if we don't think we're getting back in.
+         *
+         * But we whitelist a few sorts of messages:
+         * 1) Monitors can talk to us at any time, of course.
+         * 2) auth messages. It's unlikely to go through much faster, but
+         * it's possible we've just lost our quorum status and we want to take...
+         * 3) command messages. We want to accept these under all possible
+         * circumstances.
+         */
+        utime_t too_old = ceph_clock_now(g_ceph_context);
+        too_old -= g_ceph_context->_conf->mon_lease;
+        if (m->get_recv_stamp() > too_old
+            && connection->is_connected()) {
+          dout(5) << "waitlisting message " << *m
+                  << " until we get in quorum" << dendl;
+          maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
+        } else {
+          dout(1) << "discarding message " << *m
+                  << " and sending client elsewhere; we are not in quorum"
+                  << dendl;
+          messenger->mark_down(connection);
+          m->put();
+        }
+        return true;
+      }
       dout(10) << "do not have session, making new one" << dendl;
       s = session_map.new_session(m->get_source_inst(), m->get_connection());
       m->get_connection()->set_priv(s->get());
@@ -1285,7 +1413,6 @@ bool Monitor::_ms_dispatch(Message *m)
       entity_name = s->auth_handler->get_entity_name();
     }
   }
-  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 
   if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
@@ -1630,21 +1757,18 @@ void Monitor::tick()
       messenger->mark_down(s->inst.addr);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
-      if (s->time_established < exited_quorum) {
-        if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
-          // boot the client Session because we've taken too long getting back in
-          dout(10) << " trimming session " << s->inst
-              << " because we've been out of quorum too long" << dendl;
-          messenger->mark_down(s->inst.addr);
-          remove_session(s);
-        }
-      } else if (s->time_established + g_conf->mon_lease < now) {
+      if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
+        // boot the client Session because we've taken too long getting back in
         dout(10) << " trimming session " << s->inst
-                 << " because we're still not in quorum" << dendl;
+            << " because we've been out of quorum too long" << dendl;
         messenger->mark_down(s->inst.addr);
         remove_session(s);
       }
     }
+  }
+
+  if (!maybe_wait_for_quorum.empty()) {
+    finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   }
 
   new_tick();
@@ -1659,21 +1783,16 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   // create it
   int err = store->mkfs();
   if (err) {
-    dout(0) << TEXT_RED << "** ERROR: store->mkfs failed with error code "
-	    << err << ". Aborting." << TEXT_NORMAL << dendl;
-    exit(1);
+    derr << "store->mkfs failed with: " << cpp_strerror(err) << dendl;
+    return err;
   }
 
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
   int r = store->put_bl_ss(magicbl, "magic", 0);
-  if (r < 0) {
-    dout(0) << TEXT_RED << "** ERROR: initializing ceph-mon failed: couldn't "
-	    << "initialize the monitor state machine: " << cpp_strerror(r)
-	    << TEXT_NORMAL << dendl;
-    exit(1);
-  }
+  if (r < 0)
+    return r;
 
   bufferlist features;
   CompatSet mon_features = get_ceph_mon_feature_compat_set();
@@ -1686,8 +1805,18 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
-  if (osdmapbl.length())
+  if (osdmapbl.length()) {
+    // make sure it's a valid osdmap
+    try {
+      OSDMap om;
+      om.decode(osdmapbl);
+    }
+    catch (buffer::error& e) {
+      derr << "error decoding provided osdmap: " << e.what() << dendl;
+      return -EINVAL;
+    }
     store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
+  }
 
   KeyRing keyring;
   r = keyring.load(g_ceph_context, g_conf->keyring);

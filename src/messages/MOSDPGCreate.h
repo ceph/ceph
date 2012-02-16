@@ -17,56 +17,59 @@
 #define CEPH_MOSDPGCREATE_H
 
 #include "msg/Message.h"
+#include "osd/osd_types.h"
 
 /*
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
 struct MOSDPGCreate : public Message {
+
+  const static int HEAD_VERSION = 2;
+
   version_t          epoch;
-  struct create_rec {
-    epoch_t created;   // epoch pg created
-    pg_t parent;       // split from parent (if != pg_t())
-    __s32 split_bits;
+  map<pg_t,pg_create_t> mkpg;
 
-    void encode(bufferlist &bl) const {
-      ::encode(created, bl);
-      ::encode(parent, bl);
-      ::encode(split_bits, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(created, bl);
-      ::decode(parent, bl);
-      ::decode(split_bits, bl);
-    }
-  };
-  WRITE_CLASS_ENCODER(create_rec)
-
-  map<pg_t,create_rec> mkpg;
-
-  MOSDPGCreate() {}
-  MOSDPGCreate(epoch_t e) :
-    Message(MSG_OSD_PG_CREATE),
-    epoch(e) { }
+  MOSDPGCreate()
+    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION) {}
+  MOSDPGCreate(epoch_t e)
+    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION),
+      epoch(e) { }
 private:
   ~MOSDPGCreate() {}
 
 public:  
-  const char *get_type_name() { return "pg_create"; }
+  const char *get_type_name() const { return "pg_create"; }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(mkpg, p);
+    if (header.version >= 2) {
+      ::decode(mkpg, p);
+    } else {
+      __u32 n;
+      ::decode(n, p);
+      while (n--) {
+	pg_t pgid;
+	epoch_t created;   // epoch pg created
+	pg_t parent;       // split from parent (if != pg_t())
+	__s32 split_bits;
+	::decode(pgid, p);
+	::decode(created, p);
+	::decode(parent, p);
+	::decode(split_bits, p);
+	mkpg[pgid] = pg_create_t(created, parent, split_bits);
+      }
+    }
   }
 
-  void print(ostream& out) {
-    out << "osd pg create(";
-    for (map<pg_t,create_rec>::iterator i = mkpg.begin();
+  void print(ostream& out) const {
+    out << "osd_pg_create(";
+    for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();
          ++i) {
       out << "pg" << i->first << "," << i->second.created << "; ";
@@ -74,7 +77,5 @@ public:
     out << ")";
   }
 };
-
-WRITE_CLASS_ENCODER(MOSDPGCreate::create_rec)
 
 #endif

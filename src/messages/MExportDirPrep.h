@@ -48,8 +48,8 @@ private:
   ~MExportDirPrep() {}
 
 public:
-  const char *get_type_name() { return "ExP"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExP"; }
+  void print(ostream& o) const {
     o << "export_prep(" << dirfrag << ")";
   }
 
@@ -63,7 +63,7 @@ public:
     bystanders.insert(who);
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(basedir, p);
@@ -72,7 +72,7 @@ public:
     ::decode(bystanders, p);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(basedir, payload);
     ::encode(bounds, payload);

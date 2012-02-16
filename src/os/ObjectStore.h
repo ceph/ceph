@@ -34,6 +34,10 @@
 using std::vector;
 using std::string;
 
+namespace ceph {
+  class Formatter;
+}
+
 /*
  * low-level interface to the local OSD file system
  */
@@ -148,7 +152,6 @@ public:
     uint64_t pad_unused_bytes;
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
-    bufferlist::iterator p;
     bool sobject_encoding;
 
   public:
@@ -187,7 +190,9 @@ public:
     uint32_t get_data_offset() {
       if (largest_data_off_in_tbl) {
 	return largest_data_off_in_tbl +
-	  sizeof(__u8) +  // struct_v
+	  sizeof(__u8) +  // encode struct_v
+	  sizeof(__u8) +  // encode compat_v
+	  sizeof(__u32) + // encode len
 	  sizeof(ops) +
 	  sizeof(pad_unused_bytes) +
 	  sizeof(largest_data_len) +
@@ -338,12 +343,6 @@ public:
       ::encode(oid, tbl);
       ops++;
     }
-    void setattr(coll_t cid, const hobject_t& oid, const char* name, const void* val, int len) {
-      string n(name);
-      bufferlist bl;
-      bl.append((char*)val, len);
-      setattr(cid, oid, n, tbl);
-    }
     void setattr(coll_t cid, const hobject_t& oid, const char* name, bufferlist& val) {
       string n(name);
       setattr(cid, oid, n, val);
@@ -431,11 +430,6 @@ public:
       ::encode(oid, tbl);
       ops++;
     }
-    void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
-      bufferlist bl;
-      bl.append((char*)val, len);
-      collection_setattr(cid, name, tbl);
-    }
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
       string n(name);
       collection_setattr(cid, n, val);
@@ -493,38 +487,36 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 4;
-      ::encode(struct_v, bl);
+      ENCODE_START(5, 5, bl);
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
       ::encode(largest_data_off, bl);
       ::encode(largest_data_off_in_tbl, bl);
       ::encode(tbl, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      if (struct_v == 1) {
-	assert(0 == "dropped support for <= v0.19 transaction format");
-      } else {
-	if (struct_v < 4)
-	  sobject_encoding = true;
-	else
-	  sobject_encoding = false;
-	assert(struct_v <= 4);
-	::decode(ops, bl);
-	::decode(pad_unused_bytes, bl);
-	if (struct_v >= 3) {
-	  ::decode(largest_data_len, bl);
-	  ::decode(largest_data_off, bl);
-	  ::decode(largest_data_off_in_tbl, bl);
-	}
-	::decode(tbl, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+      DECODE_OLDEST(2);
+      if (struct_v < 4)
+	sobject_encoding = true;
+      else
+	sobject_encoding = false;
+      ::decode(ops, bl);
+      ::decode(pad_unused_bytes, bl);
+      if (struct_v >= 3) {
+	::decode(largest_data_len, bl);
+	::decode(largest_data_off, bl);
+	::decode(largest_data_off_in_tbl, bl);
       }
+      ::decode(tbl, bl);
+      DECODE_FINISH(bl);
     }
 
     void dump(ostream& out);
+    void dump(ceph::Formatter *f);
+    static void generate_test_instances(list<Transaction*>& o);
   };
 
   struct C_DeleteTransaction : public Context {
@@ -673,6 +665,8 @@ public:
   virtual void sync() {}
   virtual void flush() {}
   virtual void sync_and_flush() {}
+
+  virtual int dump_journal(ostream& out) { return -EOPNOTSUPP; }
 
   virtual int snapshot(const string& name) { return -EOPNOTSUPP; }
     

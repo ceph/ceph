@@ -24,17 +24,17 @@ private:
   ~MMonGlobalID() {}
 
 public:
-  const char *get_type_name() { return "global_id"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "global_id"; }
+  void print(ostream& out) const {
     out << "global_id  (" << old_max_id << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(old_max_id, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(old_max_id, payload);
   }

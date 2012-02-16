@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.40], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.41], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 
@@ -294,10 +294,24 @@ AC_ARG_WITH([ocf],
             [with_ocf=no])
 AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 
+# use libaio?
+AC_ARG_WITH([libaio],
+            [AS_HELP_STRING([--without-libaio], [disable libaio use by journal])],
+            ,
+            [with_libaio=yes])
+AS_IF([test "x$with_libaio" != xno],
+	    [AC_CHECK_LIB([aio], [io_submit], [true], AC_MSG_FAILURE([libaio not found]))])
+AS_IF([test "x$with_libaio" != xno],
+	    [AC_CHECK_HEADER([libaio.h])])	
+AS_IF([test "$with_libaio" = "yes"],
+	    [AC_DEFINE([HAVE_LIBAIO], [1], [Defined if you don't have atomic_ops])])
+AM_CONDITIONAL(WITH_LIBAIO, [ test "$with_libaio" = "yes" ])
+
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
+
 
 # spirit?
 AC_LANG([C++])

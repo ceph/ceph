@@ -155,6 +155,9 @@ class FileStore : public JournalingObjectStore,
     void flush() {
       Mutex::Locker l(qlock);
 
+      while (g_conf->filestore_blackhole)
+	cond.Wait(qlock);  // wait forever
+
       // get max for journal _or_ op queues
       uint64_t seq = 0;
       if (!q.empty())
@@ -323,6 +326,8 @@ public:
   void flush();
   void sync_and_flush();
 
+  int dump_journal(ostream& out);
+
   uuid_d get_fsid() { return fsid; }
 
   int snapshot(const string& name);
@@ -393,7 +398,7 @@ private:
   double m_filestore_max_sync_interval;
   double m_filestore_min_sync_interval;
   bool m_filestore_update_collections;
-  bool m_journal_dio;
+  bool m_journal_dio, m_journal_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;
   int m_filestore_queue_max_ops;

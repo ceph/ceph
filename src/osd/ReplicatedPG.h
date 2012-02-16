@@ -18,6 +18,7 @@
 #include "PG.h"
 #include "OSD.h"
 #include "Watch.h"
+#include "OpRequest.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -132,7 +133,7 @@ public:
     }
     state_t state;
     int num_wr;
-    list<Message*> waiting;
+    list<OpRequest*> waiting;
     list<Cond*> waiting_cond;
     bool wake;
 
@@ -330,10 +331,9 @@ public:
    * Capture all object state associated with an in-progress read or write.
    */
   struct OpContext {
-    Message *op;
+    OpRequest *op;
     osd_reqid_t reqid;
     vector<OSDOp>& ops;
-    bufferlist outdata;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -360,7 +360,7 @@ public:
     eversion_t reply_version;    // the version that we report the client (depends on the op)
 
     ObjectStore::Transaction op_t, local_t;
-    vector<PG::Log::Entry> log;
+    vector<pg_log_entry_t> log;
 
     interval_set<uint64_t> modified_ranges;
     ObjectContext *obc;          // For ref counting purposes
@@ -378,7 +378,7 @@ public:
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
+    OpContext(OpRequest *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
@@ -543,17 +543,47 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-
-
-  
-  // pull
-  struct pull_info_t {
-    eversion_t version;
-    int from;
-    bool need_size;
-    interval_set<uint64_t> data_subset, data_subset_pulling;
+  // push
+  struct PushInfo {
+    ObjectRecoveryProgress recovery_progress;
+    ObjectRecoveryInfo recovery_info;
   };
-  map<hobject_t, pull_info_t> pulling;
+  map<hobject_t, map<int, PushInfo> > pushing;
+
+  // pull
+  struct PullInfo {
+    ObjectRecoveryProgress recovery_progress;
+    ObjectRecoveryInfo recovery_info;
+
+    bool is_complete() const {
+      return recovery_progress.is_complete(recovery_info);
+    }
+  };
+  map<hobject_t, PullInfo> pulling;
+
+  ObjectRecoveryInfo recalc_subsets(ObjectRecoveryInfo recovery_info);
+  static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
+			       const interval_set<uint64_t> &intervals_received,
+			       bufferlist data_received,
+			       interval_set<uint64_t> *intervals_usable,
+			       bufferlist *data_usable);
+  void handle_pull_response(OpRequest *op);
+  void handle_push(OpRequest *op);
+  int send_push(int peer,
+		ObjectRecoveryInfo recovery_info,
+		ObjectRecoveryProgress progress,
+		ObjectRecoveryProgress *out_progress = 0);
+  int send_pull(int peer,
+		ObjectRecoveryInfo recovery_info,
+		ObjectRecoveryProgress progress);
+  void submit_push_data(const ObjectRecoveryInfo &recovery_info,
+			bool first,
+			const interval_set<uint64_t> &intervals_included,
+			bufferlist data_included,
+			map<string, bufferptr> &attrs,
+			ObjectStore::Transaction *t);
+  void submit_push_complete(ObjectRecoveryInfo &recovery_info,
+			    ObjectStore::Transaction *t);
 
   /*
    * Backfill
@@ -578,35 +608,24 @@ protected:
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
 
-  // push
-  struct push_info_t {
-    uint64_t size;
-    eversion_t version;
-    interval_set<uint64_t> data_subset, data_subset_pushing;
-    map<hobject_t, interval_set<uint64_t> > clone_subsets;
-  };
-  map<hobject_t, map<int, push_info_t> > pushing;
-
   int recover_object_replicas(const hobject_t& soid, eversion_t v);
-  void calc_head_subsets(SnapSet& snapset, const hobject_t& head,
-			 Missing& missing,
+  void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
+			 pg_missing_t& missing,
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
 			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, Missing& missing,
+  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, pg_missing_t& missing,
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void push_to_replica(ObjectContext *obc, const hobject_t& oid, int dest);
-  void push_start(const hobject_t& oid, int dest);
-  void push_start(const hobject_t& soid, int peer,
-		  uint64_t size, eversion_t version,
+  void push_start(ObjectContext *obc,
+		  const hobject_t& oid, int dest);
+  void push_start(ObjectContext *obc,
+		  const hobject_t& soid, int peer,
+		  eversion_t version,
 		  interval_set<uint64_t> &data_subset,
 		  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  int send_push_op(const hobject_t& oid, eversion_t version, int dest,
-		   uint64_t size, bool first, bool complete,
-		   interval_set<uint64_t>& data_subset, 
-		   map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void send_push_op_blank(const hobject_t& soid, int peer);
 
   void finish_degraded_object(const hobject_t& oid);
@@ -614,8 +633,6 @@ protected:
   // Cancels/resets pulls from peer
   void check_recovery_op_pulls(const OSDMapRef map);
   int pull(const hobject_t& oid, eversion_t v);
-  void send_pull_op(const hobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
-
 
   // low level ops
 
@@ -639,7 +656,7 @@ protected:
   void _clear_recovery_state();
 
   void queue_for_recovery();
-  int start_recovery_ops(int max);
+  int start_recovery_ops(int max, RecoveryCtx *prctx);
   int recover_primary(int max);
   int recover_replicas(int max);
   int recover_backfill(int max);
@@ -665,7 +682,7 @@ protected:
 
   struct RepModify {
     ReplicatedPG *pg;
-    MOSDSubOp *op;
+    OpRequest *op;
     OpContext *ctx;
     bool applied, committed;
     int ackerosd;
@@ -711,22 +728,22 @@ protected:
 	(*p)->ondisk_write_unlock();
     }
   };
-  struct C_OSD_AppliedPushedObject : public Context {
+  struct C_OSD_AppliedRecoveredObject : public Context {
     ReplicatedPG *pg;
     ObjectStore::Transaction *t;
     ObjectContext *obc;
-    C_OSD_AppliedPushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
+    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
       pg(p), t(tt), obc(o) {}
     void finish(int r) {
-      pg->_applied_pushed_object(t, obc);
+      pg->_applied_recovered_object(t, obc);
     }
   };
   struct C_OSD_CommittedPushedObject : public Context {
     ReplicatedPG *pg;
-    MOSDSubOp *op;
+    OpRequest *op;
     epoch_t same_since;
     eversion_t last_complete;
-    C_OSD_CommittedPushedObject(ReplicatedPG *p, MOSDSubOp *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
+    C_OSD_CommittedPushedObject(ReplicatedPG *p, OpRequest *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
       if (op)
 	op->get();
       pg->get();
@@ -738,22 +755,22 @@ protected:
     }
   };
 
-  void sub_op_remove(MOSDSubOp *op);
+  void sub_op_remove(OpRequest *op);
 
-  void sub_op_modify(MOSDSubOp *op);
+  void sub_op_modify(OpRequest *op);
   void sub_op_modify_applied(RepModify *rm);
   void sub_op_modify_commit(RepModify *rm);
 
-  void sub_op_modify_reply(MOSDSubOpReply *reply);
-  void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
-  void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
+  void sub_op_modify_reply(OpRequest *op);
+  void _applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _committed_pushed_object(OpRequest *op, epoch_t same_since, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
-  void sub_op_push(MOSDSubOp *op);
-  void _failed_push(MOSDSubOp *op);
-  void sub_op_push_reply(MOSDSubOpReply *reply);
-  void sub_op_pull(MOSDSubOp *op);
+  void sub_op_push(OpRequest *op);
+  void _failed_push(OpRequest *op);
+  void sub_op_push_reply(OpRequest *op);
+  void sub_op_pull(OpRequest *op);
 
-  void log_subop_stats(MOSDSubOp *ctx, int tag_inb, int tag_lat);
+  void log_subop_stats(OpRequest *op, int tag_inb, int tag_lat);
 
 
   // -- scrub --
@@ -773,20 +790,19 @@ public:
   ~ReplicatedPG() {}
 
 
-  void do_op(MOSDOp *op);
+  void do_op(OpRequest *op);
   bool pg_op_must_wait(MOSDOp *op);
-  void do_pg_op(MOSDOp *op);
-  void do_sub_op(MOSDSubOp *op);
-  void do_sub_op_reply(MOSDSubOpReply *op);
-  void do_scan(MOSDPGScan *op);
-  void do_backfill(MOSDPGBackfill *op);
+  void do_pg_op(OpRequest *op);
+  void do_sub_op(OpRequest *op);
+  void do_sub_op_reply(OpRequest *op);
+  void do_scan(OpRequest *op);
+  void do_backfill(OpRequest *op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<hobject_t> &obs_to_trim);
   RepGather *trim_object(const hobject_t &coid, const snapid_t &sn);
   bool snap_trimmer();
-  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
-		 bufferlist& odata);
+  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
   void do_osd_op_effects(OpContext *ctx);
 private:
   struct NotTrimming;
@@ -860,11 +876,11 @@ public:
   bool same_for_rep_modify_since(epoch_t e);
 
   bool is_missing_object(const hobject_t& oid);
-  void wait_for_missing_object(const hobject_t& oid, Message *op);
-  void wait_for_all_missing(Message *op);
+  void wait_for_missing_object(const hobject_t& oid, OpRequest *op);
+  void wait_for_all_missing(OpRequest *op);
 
   bool is_degraded_object(const hobject_t& oid);
-  void wait_for_degraded_object(const hobject_t& oid, Message *op);
+  void wait_for_degraded_object(const hobject_t& oid, OpRequest *op);
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
@@ -904,7 +920,7 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
   if (repop.ctx->op)
-    out << " op=" << *(repop.ctx->op);
+    out << " op=" << *(repop.ctx->op->request);
   out << ")";
   return out;
 }

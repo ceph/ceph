@@ -40,12 +40,20 @@ void throttle()
     cond.Wait(lock);
   }
 }
+
+double total_ack = 0;
+double total_commit = 0;
+int total_num = 0;
+
 void pr(off_t off)
 {
   io &i = writes[off];
-  cout << off << "\t" 
+  if (false) cout << off << "\t" 
        << (i.ack - i.start) << "\t"
        << (i.commit - i.start) << std::endl;
+  total_num++;
+  total_ack += (i.ack - i.start);
+  total_commit += (i.commit - i.start);
   writes.erase(off);
   cond.Signal();
 }
@@ -140,6 +148,7 @@ int main(int argc, const char **argv)
   fs->apply_transaction(ft);
 
   utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t start = now;
   utime_t end = now;
   end += seconds;
   off_t pos = 0;
@@ -156,6 +165,8 @@ int main(int argc, const char **argv)
 
     throttle();
 
+    now = ceph_clock_now(g_ceph_context);
+
     // wait?
     /*
     utime_t next = start;
@@ -168,6 +179,11 @@ int main(int argc, const char **argv)
     }
     */
   }
+
+  cout << "total num " << total_num << std::endl;
+  cout << "avg ack\t" << (total_ack / (double)total_num) << std::endl;
+  cout << "avg commit\t" << (total_commit / (double)total_num) << std::endl;
+  cout << "tput\t" << prettybyte_t((double)(total_num * bytes) / (double)(end-start)) << "/sec" << std::endl;
 
   fs->umount();
 

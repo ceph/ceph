@@ -104,7 +104,7 @@ public:
       (head.op == CEPH_MDS_OP_CREATE);
   }
 
-  int get_flags() {
+  int get_flags() const {
     return head.flags;
   }
   bool is_replay() {
@@ -127,21 +127,21 @@ public:
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
   }
     
-  tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
-  int get_num_fwd() { return head.num_fwd; }
-  int get_retry_attempt() { return head.num_retry; }
-  int get_op() { return head.op; }
-  unsigned get_caller_uid() { return head.caller_uid; }
-  unsigned get_caller_gid() { return head.caller_gid; }
+  tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
+  int get_num_fwd() const { return head.num_fwd; }
+  int get_retry_attempt() const { return head.num_retry; }
+  int get_op() const { return head.op; }
+  unsigned get_caller_uid() const { return head.caller_uid; }
+  unsigned get_caller_gid() const { return head.caller_gid; }
 
-  const string& get_path() { return path.get_path(); }
-  filepath& get_filepath() { return path; }
-  const string& get_path2() { return path2.get_path(); }
-  filepath& get_filepath2() { return path2; }
+  const string& get_path() const { return path.get_path(); }
+  const filepath& get_filepath() const { return path; }
+  const string& get_path2() const { return path2.get_path(); }
+  const filepath& get_filepath2() const { return path2; }
 
   int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(path, p);
@@ -149,7 +149,7 @@ public:
     ::decode_nohead(head.num_releases, releases, p);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     head.num_releases = releases.size();
     ::encode(head, payload);
     ::encode(path, payload);
@@ -157,8 +157,8 @@ public:
     ::encode_nohead(releases, payload);
   }
 
-  const char *get_type_name() { return "creq"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "creq"; }
+  void print(ostream& out) const {
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());

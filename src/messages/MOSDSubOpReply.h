@@ -50,7 +50,7 @@ public:
 
   map<string,bufferptr> attrset;
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -69,7 +69,7 @@ public:
     ::decode(peer_stat, p);
     ::decode(attrset, p);
   }
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -119,14 +119,14 @@ public:
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(req->get_tid());
   }
-  MOSDSubOpReply() {}
+  MOSDSubOpReply() : Message(MSG_OSD_SUBOPREPLY) {}
 private:
   ~MOSDSubOpReply() {}
 
 public:
-  const char *get_type_name() { return "osd_op_reply"; }
+  const char *get_type_name() const { return "osd_op_reply"; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "osd_sub_op_reply(" << reqid
 	<< " " << pgid 
 	<< " " << poid << " " << ops;

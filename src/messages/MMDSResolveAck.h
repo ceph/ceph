@@ -30,8 +30,8 @@ private:
   ~MMDSResolveAck() {}
 
 public:
-  const char *get_type_name() { return "resolve_ack"; }
-  /*void print(ostream& out) {
+  const char *get_type_name() const { return "resolve_ack"; }
+  /*void print(ostream& out) const {
     out << "resolve_ack.size()
 	<< "+" << ambiguous_imap.size()
 	<< " imports +" << slave_requests.size() << " slave requests)";
@@ -45,11 +45,11 @@ public:
     abort.push_back(r);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(commit, payload);
     ::encode(abort, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(commit, p);
     ::decode(abort, p);

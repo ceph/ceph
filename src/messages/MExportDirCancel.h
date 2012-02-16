@@ -24,7 +24,7 @@ class MExportDirCancel : public Message {
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
 
-  MExportDirCancel() {}
+  MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df) : 
     Message(MSG_MDS_EXPORTDIRCANCEL),
 	dirfrag(df) { }
@@ -32,15 +32,15 @@ private:
   ~MExportDirCancel() {}
 
 public:
-  const char *get_type_name() { return "ExCancel"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "ExCancel"; }
+  void print(ostream& o) const {
     o << "export_cancel(" << dirfrag << ")";
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }

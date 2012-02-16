@@ -112,34 +112,24 @@ dir_result_t::dir_result_t(Inode *in)
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
+    tick_event(NULL),
+    monclient(mc), messenger(m), whoami(m->get_myname().num()),
+    initialized(false), mounted(false), unmounting(false),
+    local_osd(-1), local_osd_epoch(0),
+    unsafe_sync_write(0),
+    file_stripe_unit(0),
+    file_stripe_count(0),
+    object_size(0),
+    file_replication(0),
+    preferred_pg(-1),
     client_lock("Client::client_lock")
 {
-  // which client am i?
-  whoami = m->get_myname().num();
-
-  monclient = mc;
   monclient->set_messenger(m);
-  
-  tick_event = 0;
-
-  mounted = false;
-  unmounting = false;
 
   last_tid = 0;
   last_flush_seq = 0;
 
-  local_osd = -1;
-  local_osd_epoch = 0;
-
-  unsafe_sync_write = 0;
-
   cwd = NULL;
-
-  file_stripe_unit = 0;
-  file_stripe_count = 0;
-  object_size = 0;
-  file_replication = 0;
-  preferred_pg = -1;
 
   // 
   root = 0;
@@ -157,7 +147,7 @@ Client::Client(Messenger *m, MonClient *mc)
 
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
-  mdsmap = new MDSMap(m->cct);
+  mdsmap = new MDSMap;
   objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(cct, objecter, client_lock, 
@@ -272,6 +262,8 @@ void Client::dump_cache()
 int Client::init() 
 {
   Mutex::Locker lock(client_lock);
+  assert(!initialized);
+
   timer.init();
 
   objectcacher->start();
@@ -282,6 +274,8 @@ int Client::init()
   int r = monclient->init();
   if (r < 0)
     return r;
+
+  objecter->init();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);
@@ -297,6 +291,7 @@ int Client::init()
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
+  initialized = true;
   return r;
 }
 
@@ -307,6 +302,8 @@ void Client::shutdown()
   objectcacher->stop();  // outside of client_lock! this does a join.
 
   client_lock.Lock();
+  assert(initialized);
+  initialized = false;
   timer.shutdown();
   objecter->shutdown();
   client_lock.Unlock();
@@ -1463,6 +1460,11 @@ void Client::handle_client_reply(MClientReply *reply)
 bool Client::ms_dispatch(Message *m)
 {
   client_lock.Lock();
+  if (!initialized) {
+    ldout(cct, 10) << "inactive, discarding " << *m << dendl;
+    m->put();
+    return true;
+  }
 
   switch (m->get_type()) {
     // osd
@@ -1540,7 +1542,7 @@ void Client::handle_mds_map(MMDSMap* m)
   ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
 
   MDSMap *oldmap = mdsmap;
-  mdsmap = new MDSMap(cct);
+  mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
 
   // reset session
@@ -3216,8 +3218,6 @@ int Client::mount(const std::string &mount_root)
   whoami = monclient->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
 
-  objecter->init();
-
   mounted = true;
 
   tick(); // start tick
@@ -3375,8 +3375,6 @@ void Client::unmount()
   mounted = false;
 
   ldout(cct, 2) << "unmounted." << dendl;
-
-  objecter->shutdown();
 }
 
 
@@ -3396,7 +3394,7 @@ void Client::flush_cap_releases()
   for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
-    if (p->second->release) {
+    if (p->second->release && mdsmap->is_up(p->first)) {
       messenger->send_message(p->second->release, mdsmap->get_inst(p->first));
       p->second->release = 0;
     }
@@ -5262,6 +5260,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   assert(in->snapid == CEPH_NOSNAP);
 
+  // was Fh opened as writeable?
+  if ((f->mode & CEPH_FILE_MODE_WR) == 0)
+    return -EINVAL;
+
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
@@ -6908,7 +6910,8 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
-  assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+  assert(flags == 0 ||
+	 flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->add_global_op_flags(flags);
 }
 

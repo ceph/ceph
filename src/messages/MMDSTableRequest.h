@@ -26,7 +26,7 @@ class MMDSTableRequest : public Message {
   uint64_t reqid;
   bufferlist bl;
 
-  MMDSTableRequest() {}
+  MMDSTableRequest() : Message(MSG_MDS_TABLE_REQUEST) {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
     Message(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {
@@ -36,8 +36,8 @@ private:
   ~MMDSTableRequest() {}
 
 public:  
-  virtual const char *get_type_name() { return "mds_table_request"; }
-  void print(ostream& o) {
+  virtual const char *get_type_name() const { return "mds_table_request"; }
+  void print(ostream& o) const {
     o << "mds_table_request(" << get_mdstable_name(table)
       << " " << get_mdstableserver_opname(op);
     if (reqid) o << " " << reqid;
@@ -46,7 +46,7 @@ public:
     o << ")";
   }
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(table, p);
     ::decode(op, p);
@@ -54,7 +54,7 @@ public:
     ::decode(bl, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(table, payload);
     ::encode(op, payload);
     ::encode(reqid, payload);

@@ -254,8 +254,8 @@ int RGWGetObj_REST::get_params()
 int RGWPutObj_REST::verify_params()
 {
   if (s->length) {
-    size_t len = atoll(s->length);
-    if (len > RGW_MAX_PUT_SIZE) {
+    off_t len = atoll(s->length);
+    if (len > (off_t)RGW_MAX_PUT_SIZE) {
       return -ERR_TOO_LARGE;
     }
   }
@@ -376,8 +376,8 @@ int RGWListMultipart_REST::get_params()
 
 int RGWListBucketMultiparts_REST::get_params()
 {
-  url_decode(s->args.get("delimiter"), delimiter);
-  url_decode(s->args.get("prefix"), prefix);
+  delimiter = s->args.get("delimiter");
+  prefix = s->args.get("prefix");
   string str = s->args.get("max-parts");
   if (!str.empty())
     max_uploads = atoi(str.c_str());
@@ -436,7 +436,7 @@ static int init_entities_from_header(struct req_state *s)
 
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = h.substr(0, pos-1);
-      url_decode(encoded_bucket, s->bucket_name_str);
+      s->bucket_name_str = encoded_bucket;
       s->bucket_name = strdup(s->bucket_name_str.c_str());
       s->host_bucket = s->bucket_name;
     } else {
@@ -445,13 +445,13 @@ static int init_entities_from_header(struct req_state *s)
   } else
     s->host_bucket = NULL;
 
-  const char *req_name = s->path_name;
+  const char *req_name = s->decoded_uri.c_str();
   const char *p;
 
   if (*req_name == '?') {
     p = req_name;
   } else {
-    p = s->query;
+    p = s->request_params.c_str();
   }
 
   s->args.set(p);
@@ -492,8 +492,8 @@ static int init_entities_from_header(struct req_state *s)
     /* verify that the request_uri conforms with what's expected */
     char buf[g_conf->rgw_swift_url_prefix.length() + 16];
     int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
-    if (s->path_name_url[0] != '/' ||
-        s->path_name_url.compare(0, blen, buf) !=  0) {
+    if (s->decoded_uri[0] != '/' ||
+        s->decoded_uri.compare(0, blen, buf) !=  0) {
       return -ENOENT;
     }
 
@@ -528,7 +528,7 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      s->object_str = req;
+      req = s->object_str;
       s->object = strdup(s->object_str.c_str());
     }
 
@@ -764,16 +764,15 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   int ret = 0;
 
   s->fcgx = fcgx;
-  s->path_name = s->env->get("SCRIPT_NAME");
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {
+    s->request_params = s->request_uri.substr(pos + 1);
     s->request_uri = s->request_uri.substr(0, pos);
   }
-  url_decode(s->request_uri, s->path_name_url);
+  url_decode(s->request_uri, s->decoded_uri);
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
-  s->query = s->env->get("QUERY_STRING");
   s->length = s->env->get("CONTENT_LENGTH");
   s->content_type = s->env->get("CONTENT_TYPE");
   s->prot_flags = 0;

@@ -22,6 +22,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "include/ceph_features.h"
 
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"
@@ -38,8 +39,17 @@ using namespace std;
 #include "common/errno.h"
 
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 
 extern CompatSet get_ceph_mon_feature_compat_set();
+
+Monitor *mon = NULL;
+
+void handle_mon_signal(int signum)
+{
+  if (mon)
+    mon->handle_signal(signum);
+}
 
 void usage()
 {
@@ -192,7 +202,11 @@ int main(int argc, const char **argv)
     // go
     MonitorStore store(g_conf->mon_data);
     Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
-    mon.mkfs(osdmapbl);
+    int r = mon.mkfs(osdmapbl);
+    if (r < 0) {
+      cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
     return 0;
@@ -372,12 +386,18 @@ int main(int argc, const char **argv)
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
   messenger->start();
+
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
   uint64_t supported =
     CEPH_FEATURE_UID |
@@ -391,7 +411,8 @@ int main(int argc, const char **argv)
 							       CEPH_FEATURE_PGID64));
   messenger->set_policy(entity_name_t::TYPE_OSD,
 			SimpleMessenger::Policy::stateless_server(supported,
-								  CEPH_FEATURE_PGID64));
+								  CEPH_FEATURE_PGID64 |
+								  CEPH_FEATURE_OSDENC));
   mon->init();
   messenger->wait();
 

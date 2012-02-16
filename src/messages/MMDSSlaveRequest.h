@@ -127,7 +127,7 @@ private:
   ~MMDSSlaveRequest() {}
 
 public:
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(reqid, payload);
     ::encode(attempt, payload);
     ::encode(op, payload);
@@ -143,7 +143,7 @@ public:
     ::encode(srci_replica, payload);
     ::encode(stray, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(reqid, p);
     ::decode(attempt, p);
@@ -161,8 +161,8 @@ public:
     ::decode(stray, p);
   }
 
-  const char *get_type_name() { return "slave_request"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "slave_request"; }
+  void print(ostream& out) const {
     out << "slave_request(" << reqid
 	<< "." << attempt
 	<< " " << get_opname(op) 

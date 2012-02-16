@@ -93,6 +93,7 @@ struct osd_info_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<osd_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 
@@ -398,6 +399,7 @@ private:
 public:
   void encode(bufferlist& bl, uint64_t features=-1) const;
   void decode(bufferlist& bl);
+  void decode(bufferlist::iterator& p);
 
 
   /****   mapping facilities   ****/
@@ -670,8 +672,9 @@ public:
   string get_flag_string() const;
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
-
+  static void generate_test_instances(list<OSDMap*>& o);
 };
+WRITE_CLASS_ENCODER(OSDMap)
 
 typedef std::tr1::shared_ptr<const OSDMap> OSDMapRef;
 

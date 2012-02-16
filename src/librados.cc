@@ -29,7 +29,6 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
 #include "osd/OSDMap.h"
-#include "osd/PGLS.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -189,28 +188,34 @@ void librados::ObjectOperation::exec(const char *cls, const char *method, buffer
   o->call(cls, method, inbl);
 }
 
-void librados::ObjectReadOperation::stat()
+void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->add_op(CEPH_OSD_OP_STAT);
+  o->stat(psize, pmtime, prval);
 }
 
-void librados::ObjectReadOperation::read(size_t off, uint64_t len)
+void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->read(off, len);
+  o->read(off, len, pbl, prval);
 }
 
-void librados::ObjectReadOperation::getxattr(const char *name)
+void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->getxattr(name);
+  o->tmap_get(pbl, prval);
 }
 
-void librados::ObjectReadOperation::getxattrs()
+void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->getxattrs();
+  o->getxattr(name, pbl, prval);
+}
+
+void librados::ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->getxattrs(pattrs, prval);
 }
 
 void librados::ObjectWriteOperation::create(bool exclusive)
@@ -632,6 +637,7 @@ public:
   int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime);
   int operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
   int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c);
+  int aio_operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
     AioCompletionImpl *c;
@@ -935,6 +941,11 @@ int librados::RadosClient::connect()
   if (!messenger)
     goto out;
 
+  // require OSDREPLYMUX feature.  this means we will fail to talk to
+  // old servers.  this is necessary because otherwise we won't know
+  // how to decompose the reply data into its consituent pieces.
+  messenger->set_default_policy(SimpleMessenger::Policy::client(0, CEPH_FEATURE_OSDREPLYMUX));
+
   ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
   messenger->register_entity(entity_name_t::CLIENT(-1));
@@ -1030,8 +1041,16 @@ librados::RadosClient::~RadosClient()
 
 bool librados::RadosClient::ms_dispatch(Message *m)
 {
+  bool ret;
+
   lock.Lock();
-  bool ret = _dispatch(m);
+  if (state == DISCONNECTED) {
+    ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
+    m->put();
+    ret = true;
+  } else {
+  ret = _dispatch(m);
+  }
   lock.Unlock();
   return ret;
 }
@@ -1774,6 +1793,21 @@ int librados::RadosClient::operate_read(IoCtxImpl& io, const object_t& oid,
   return r;
 }
 
+int librados::RadosClient::aio_operate_read(IoCtxImpl& io, const object_t &oid,
+					    ::ObjectOperation *o,
+					    AioCompletionImpl *c, bufferlist *pbl)
+{
+  Context *onack = new C_aio_Ack(c);
+
+  c->pbl = pbl;
+
+  Mutex::Locker l(lock);
+  objecter->read(oid, io.oloc,
+		 *o, io.snap_seq, pbl, 0,
+		 onack, 0);
+  return 0;
+}
+
 int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
 				       ::ObjectOperation *o, AioCompletionImpl *c)
 {
@@ -2057,7 +2091,7 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   Mutex mylock("RadosClient::tmap_put::mylock");
   Cond cond;
   bool done;
-  int r;
+  int r = 0;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
@@ -2066,8 +2100,8 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   lock.Lock();
   ::ObjectOperation rd;
   prepare_assert_ops(&io, &rd);
-  rd.tmap_get();
-  objecter->read(oid, io.oloc, rd, io.snap_seq, &bl, 0, onack, &ver);
+  rd.tmap_get(&bl, NULL);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, 0, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2434,6 +2468,8 @@ void librados::RadosClient::watch_notify(MWatchNotify *m)
     return;
 
   wc->notify(this, m);
+
+  m->put();
 }
 
 int librados::RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
@@ -2485,7 +2521,7 @@ int librados::RadosClient::_notify_ack(IoCtxImpl& io, const object_t& oid,
   ::ObjectOperation rd;
   prepare_assert_ops(&io, &rd);
   rd.notify_ack(notify_id, ver);
-  objecter->read(oid, io.oloc, rd, io.snap_seq, NULL, 0, 0, 0);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, (bufferlist*)NULL, 0, 0, 0);
 
   return 0;
 }
@@ -2927,12 +2963,17 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
   return io_ctx_impl->client->operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
   return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc);
 }
 
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectReadOperation *o, bufferlist *pbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->aio_operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc, pbl);
+}
 
 void librados::IoCtx::snap_set_read(snap_t seq)
 {
@@ -3310,7 +3351,7 @@ int librados::Rados::get_pool_stats(std::list<string>& v, string& category,
       }
       
       pool_stat_t& pv = c[cur_category];
-      pv.num_kb = sum->num_kb;
+      pv.num_kb = SHIFT_ROUND_UP(sum->num_bytes, 10);
       pv.num_bytes = sum->num_bytes;
       pv.num_objects = sum->num_objects;
       pv.num_object_clones = sum->num_object_clones;
@@ -3564,7 +3605,7 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
     return err;
 
   ::pool_stat_t& r = rawresult[io_ctx_impl->pool_name];
-  stats->num_kb = r.stats.sum.num_kb;
+  stats->num_kb = SHIFT_ROUND_UP(r.stats.sum.num_bytes, 10);
   stats->num_bytes = r.stats.sum.num_bytes;
   stats->num_objects = r.stats.sum.num_objects;
   stats->num_object_clones = r.stats.sum.num_object_clones;

@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
+#include "include/ceph_features.h"
 
 /*
  * OSD op
@@ -30,6 +31,10 @@
 class OSD;
 
 class MOSDOp : public Message {
+
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 3;
+
 private:
   uint32_t client_inc;
   __u32 osdmap_epoch;
@@ -49,7 +54,6 @@ private:
   snapid_t snap_seq;
   vector<snapid_t> snaps;
 
-  osd_peer_stat_t peer_stat;
 public:
   int rmw_flags;
 
@@ -59,13 +63,18 @@ public:
   snapid_t get_snapid() { return snapid; }
   void set_snapid(snapid_t s) { snapid = s; }
   // writ
-  snapid_t get_snap_seq() { return snap_seq; }
-  vector<snapid_t> &get_snaps() { return snaps; }
+  snapid_t get_snap_seq() const { return snap_seq; }
+  const vector<snapid_t> &get_snaps() const { return snaps; }
+  void set_snaps(const vector<snapid_t>& i) {
+    snaps = i;
+  }
   void set_snap_seq(snapid_t s) { snap_seq = s; }
 
-  osd_reqid_t get_reqid() { return osd_reqid_t(get_orig_source(),
-					       client_inc,
-					       header.tid); }
+  osd_reqid_t get_reqid() const {
+    return osd_reqid_t(get_orig_source(),
+		       client_inc,
+		       header.tid);
+  }
   int get_client_inc() { return client_inc; }
   tid_t get_client_tid() { return header.tid; }
   
@@ -89,26 +98,18 @@ public:
   bool may_exec() { assert(rmw_flags); return rmw_flags & (CEPH_OSD_FLAG_EXEC | CEPH_OSD_FLAG_EXEC_PUBLIC); }
   bool require_exec_caps() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_EXEC; }
 
-  void set_peer_stat(const osd_peer_stat_t& st) {
-    peer_stat = st;
-    flags |= CEPH_OSD_FLAG_PEERSTAT;
-  }
-  const osd_peer_stat_t& get_peer_stat() {
-    assert(flags & CEPH_OSD_FLAG_PEERSTAT);
-    return peer_stat; 
-  }
-
+  MOSDOp()
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDOp(int inc, long tid,
          object_t& _oid, object_locator_t& _oloc, pg_t _pgid, epoch_t _osdmap_epoch,
-	 int _flags) :
-    Message(CEPH_MSG_OSD_OP),
-    client_inc(inc),
-    osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-    oid(_oid), oloc(_oloc), pgid(_pgid),
-    rmw_flags(flags) {
+	 int _flags)
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+      client_inc(inc),
+      osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
+      oid(_oid), oloc(_oloc), pgid(_pgid),
+      rmw_flags(flags) {
     set_tid(tid);
   }
-  MOSDOp() : rmw_flags(0) {}
 private:
   ~MOSDOp() {}
 
@@ -183,19 +184,11 @@ public:
   }
 
   // marshalling
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
 
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	::encode(ops[i].soid, data);
-      }
-      if (ops[i].data.length()) {
-	ops[i].op.payload_len = ops[i].data.length();
-	data.append(ops[i].data);
-      }
-    }
+    OSDOp::merge_osd_op_vector_in_data(ops, data);
 
-    if (!connection->has_feature(CEPH_FEATURE_OBJECTLOCATOR)) {
+    if ((features & CEPH_FEATURE_OBJECTLOCATOR) == 0) {
       // here is the old structure we are encoding to: //
 #if 0
 struct ceph_osd_request_head {
@@ -218,6 +211,7 @@ struct ceph_osd_request_head {
 	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 #endif
+      header.version = 1;
 
       ::encode(client_inc, payload);
 
@@ -245,10 +239,7 @@ struct ceph_osd_request_head {
 
       ::encode_nohead(oid.name, payload);
       ::encode_nohead(snaps, payload);
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::encode(peer_stat, payload);
     } else {
-      header.version = 4;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
@@ -268,14 +259,11 @@ struct ceph_osd_request_head {
       ::encode(snap_seq, payload);
       ::encode(snaps, payload);
 
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::encode(peer_stat, payload);
-
       ::encode(retry_attempt, payload);
     }
   }
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
 
     if (header.version < 2) {
@@ -311,9 +299,6 @@ struct ceph_osd_request_head {
 
       decode_nohead(oid_len, oid.name, p);
       decode_nohead(num_snaps, snaps, p);
-
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::decode(peer_stat, p);
 
       // recalculate pgid hash value
       pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
@@ -352,29 +337,18 @@ struct ceph_osd_request_head {
       ::decode(snap_seq, p);
       ::decode(snaps, p);
 
-      if (flags & CEPH_OSD_FLAG_PEERSTAT)
-	::decode(peer_stat, p);
-
       if (header.version >= 4)
 	::decode(retry_attempt, p);
       else
 	retry_attempt = -1;
     }
 
-    bufferlist::iterator datap = data.begin();
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	::decode(ops[i].soid, datap);
-      }
-      if (ops[i].op.payload_len) {
-	datap.copy(ops[i].op.payload_len, ops[i].data);
-      }
-    }
+    OSDOp::split_osd_op_vector_in_data(ops, data);
   }
 
 
-  const char *get_type_name() { return "osd_op"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_op"; }
+  void print(ostream& out) const {
     out << "osd_op(" << get_reqid();
     out << " " << oid;
 

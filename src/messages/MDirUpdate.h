@@ -27,18 +27,18 @@ class MDirUpdate : public Message {
   filepath path;
 
  public:
-  int get_source_mds() { return from_mds; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  int get_dir_rep() { return dir_rep; }
-  set<int>& get_dir_rep_by() { return dir_rep_by; } 
-  bool should_discover() { return discover > 0; }
-  filepath& get_path() { return path; }
+  int get_source_mds() const { return from_mds; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  int get_dir_rep() const { return dir_rep; }
+  const set<int>& get_dir_rep_by() const { return dir_rep_by; } 
+  bool should_discover() const { return discover > 0; }
+  const filepath& get_path() const { return path; }
 
   void tried_discover() {
     if (discover) discover--;
   }
 
-  MDirUpdate() {}
+  MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
   MDirUpdate(int f, 
 	     dirfrag_t dirfrag,
              int dir_rep,
@@ -57,12 +57,12 @@ private:
   ~MDirUpdate() {}
 
 public:
-  const char *get_type_name() { return "dir_update"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "dir_update"; }
+  void print(ostream& out) const {
     out << "dir_update(" << get_dirfrag() << ")";
   }
 
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(from_mds, p);
     ::decode(dirfrag, p);
@@ -72,7 +72,7 @@ public:
     ::decode(path, p);
   }
 
-  virtual void encode_payload(CephContext *cct) {
+  virtual void encode_payload(uint64_t features) {
     ::encode(from_mds, payload);
     ::encode(dirfrag, payload);
     ::encode(dir_rep, payload);

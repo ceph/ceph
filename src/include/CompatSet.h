@@ -165,6 +165,15 @@ struct CompatSet {
     incompat.dump(f);
     f->close_section();
   }
+
+  static void generate_test_instances(list<CompatSet*>& o) {
+    o.push_back(new CompatSet);
+    o.push_back(new CompatSet);
+    o.back()->compat.insert(Feature(1, "one"));
+    o.back()->compat.insert(Feature(2, "two"));
+    o.back()->ro_compat.insert(Feature(4, "four"));
+    o.back()->incompat.insert(Feature(3, "three"));
+  }
 };
 WRITE_CLASS_ENCODER(CompatSet)
 

@@ -63,6 +63,11 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
   m.metadata_pg_pool = metadata_pool;
   m.cas_pg_pool = -1;
   m.compat = get_mdsmap_compat_set();
+
+  m.session_timeout = g_conf->mds_session_timeout;
+  m.session_autoclose = g_conf->mds_session_autoclose;
+  m.max_file_size = g_conf->mds_max_file_size;
+
   print_map(m);
 }
 
@@ -75,11 +80,11 @@ void MDSMonitor::create_initial()
 }
 
 
-bool MDSMonitor::update_from_paxos()
+void MDSMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == mdsmap.epoch)
-    return true;
+    return;
   assert(paxosv >= mdsmap.epoch);
 
   dout(10) << "update_from_paxos paxosv " << paxosv 
@@ -101,8 +106,6 @@ bool MDSMonitor::update_from_paxos()
 
   check_subs();
   update_logger();
-
-  return true;
 }
 
 void MDSMonitor::create_pending()
@@ -531,7 +534,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	  p = 0;
 	  r = -ENOENT;
 	} else {
-	  p = new MDSMap(g_ceph_context);
+	  p = new MDSMap;
 	  p->decode(b);
 	}
       }
@@ -567,7 +570,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	if (!b.length()) {
 	  r = -ENOENT;
 	} else {
-	  MDSMap mm(g_ceph_context);
+	  MDSMap mm;
 	  mm.decode(b);
 	  mm.encode(rdata);
 	  ss << "got mdsmap epoch " << mm.get_epoch();
@@ -738,7 +741,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
     else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
-      MDSMap map(g_ceph_context);
+      MDSMap map;
       map.decode(m->get_data());
       epoch_t e = atoi(m->cmd[2].c_str());
       //if (ceph_fsid_compare(&map.get_fsid(), &mon->monmap->fsid) == 0) {
@@ -845,7 +848,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       if (r == 0)
 	ss << "removed data pool " << poolid << " from mdsmap";
     } else if (m->cmd[1] == "newfs" && m->cmd.size() == 4) {
-      MDSMap newmap(g_ceph_context);
+      MDSMap newmap;
       int metadata = atoi(m->cmd[2].c_str());
       int data = atoi(m->cmd[3].c_str());
       pending_mdsmap = newmap;

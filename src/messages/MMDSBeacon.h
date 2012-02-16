@@ -24,6 +24,9 @@
 #include <uuid/uuid.h>
 
 class MMDSBeacon : public PaxosServiceMessage {
+
+  static const int HEAD_VERSION = 2;
+
   uuid_d fsid;
   uint64_t global_id;
   string name;
@@ -36,11 +39,12 @@ class MMDSBeacon : public PaxosServiceMessage {
   CompatSet compat;
 
  public:
-  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
+  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION) { }
   MMDSBeacon(const uuid_d &f, uint64_t g, string& n, epoch_t les, int st, version_t se) : 
-    PaxosServiceMessage(MSG_MDS_BEACON, les), 
+    PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION), 
     fsid(f), global_id(g), name(n), state(st), seq(se),
-    standby_for_rank(-1) { }
+    standby_for_rank(-1) {
+  }
 private:
   ~MMDSBeacon() {}
 
@@ -51,7 +55,7 @@ public:
   epoch_t get_last_epoch_seen() { return version; }
   int get_state() { return state; }
   version_t get_seq() { return seq; }
-  const char *get_type_name() { return "mdsbeacon"; }
+  const char *get_type_name() const { return "mdsbeacon"; }
   int get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
 
@@ -62,13 +66,12 @@ public:
   void set_standby_for_name(string& n) { standby_for_name = n; }
   void set_standby_for_name(const char* c) { standby_for_name.assign(c); }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "mdsbeacon(" << global_id << "/" << name << " " << ceph_mds_state_name(state) 
 	<< " seq " << seq << " v" << version << ")";
   }
 
-  void encode_payload(CephContext *cct) {
-    header.version = 2;
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(global_id, payload);
@@ -79,7 +82,7 @@ public:
     ::encode(standby_for_name, payload);
     ::encode(compat, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

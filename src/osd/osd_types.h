@@ -24,8 +24,9 @@
 #include "include/utime.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
+#include "common/snap_types.h"
 #include "common/Formatter.h"
-
+#include "os/hobject.h"
 
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
@@ -37,13 +38,19 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES  CompatSet::Feature(5, "categories")
 
 
-/* osdreqid_t - caller name + incarnation# + tid to unique identify this request
- * use for metadata and osd ops.
+typedef hobject_t collection_list_handle_t;
+
+
+/**
+ * osd request identifier
+ *
+ * caller name + incarnation# + tid to unique identify this request.
  */
 struct osd_reqid_t {
   entity_name_t name; // who
   tid_t         tid;
   int32_t       inc;  // incarnation
+
   osd_reqid_t()
     : tid(0), inc(0) {}
   osd_reqid_t(const entity_name_t& a, int i, tid_t t)
@@ -51,6 +58,8 @@ struct osd_reqid_t {
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_reqid_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_reqid_t)
 
@@ -83,6 +92,63 @@ namespace __gnu_cxx {
     }
   };
 }
+
+
+// -----
+
+// a locator constrains the placement of an object.  mainly, which pool
+// does it go in.
+struct object_locator_t {
+  int64_t pool;
+  int32_t preferred;
+  string key;
+
+  explicit object_locator_t()
+    : pool(-1), preferred(-1) {}
+  explicit object_locator_t(int64_t po)
+    : pool(po), preferred(-1) {}
+  explicit object_locator_t(int64_t po, int pre)
+    : pool(po), preferred(pre) {}
+  explicit object_locator_t(int64_t po, int pre, string s)
+    : pool(po), preferred(pre), key(s) {}
+
+  int get_pool() const {
+    return pool;
+  }
+  int get_preferred() const {
+    return preferred;
+  }
+
+  void clear() {
+    pool = -1;
+    preferred = -1;
+    key = "";
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<object_locator_t*>& o);
+};
+WRITE_CLASS_ENCODER(object_locator_t)
+
+inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
+  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
+}
+inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
+  return !(l == r);
+}
+
+inline ostream& operator<<(ostream& out, const object_locator_t& loc)
+{
+  out << "@" << loc.pool;
+  if (loc.preferred >= 0)
+    out << "p" << loc.preferred;
+  if (loc.key.length())
+    out << ":" << loc.key;
+  return out;
+}
+
 
 
 
@@ -191,6 +257,8 @@ struct pg_t {
     ::decode(opg, bl);
     *this = opg;
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_t)
 
@@ -279,6 +347,9 @@ public:
   inline bool operator!=(const coll_t& rhs) const {
     return str != rhs.str;
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<coll_t*>& o);
 
 private:
   static std::string pg_and_snap_to_str(pg_t p, snapid_t s) {
@@ -406,45 +477,6 @@ struct osd_stat_t {
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
-  void dump(Formatter *f) const {
-    f->dump_unsigned("kb", kb);
-    f->dump_unsigned("kb_used", kb_used);
-    f->dump_unsigned("kb_avail", kb_avail);
-    f->open_array_section("hb_in");
-    for (vector<int>::const_iterator p = hb_in.begin(); p != hb_in.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->open_array_section("hb_out");
-    for (vector<int>::const_iterator p = hb_out.begin(); p != hb_out.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
-    f->dump_int("num_snap_trimming", num_snap_trimming);
-  }
-
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(kb, bl);
-    ::encode(kb_used, bl);
-    ::encode(kb_avail, bl);
-    ::encode(snap_trim_queue_len, bl);
-    ::encode(num_snap_trimming, bl);
-    ::encode(hb_in, bl);
-    ::encode(hb_out, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(kb, bl);
-    ::decode(kb_used, bl);
-    ::decode(kb_avail, bl);
-    ::decode(snap_trim_queue_len, bl);
-    ::decode(num_snap_trimming, bl);
-    ::decode(hb_in, bl);
-    ::decode(hb_out, bl);
-  }
-  
   void add(const osd_stat_t& o) {
     kb += o.kb;
     kb_used += o.kb_used;
@@ -460,6 +492,10 @@ struct osd_stat_t {
     num_snap_trimming -= o.num_snap_trimming;
   }
 
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(std::list<osd_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_stat_t)
 
@@ -505,6 +541,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 //PG_STATE_SCANNING (1<<14) .. deprecated.
 #define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
+#define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
 
 std::string pg_state_string(int state);
 
@@ -522,6 +559,7 @@ struct pool_snap_info_t {
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<pool_snap_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pool_snap_info_t)
 
@@ -662,18 +700,21 @@ struct pg_pool_t {
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
+
+  static void generate_test_instances(list<pg_pool_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 
 ostream& operator<<(ostream& out, const pg_pool_t& p);
 
 
-/*
- * object_stat_sum_t - a summation of object stats
+/**
+ * a summation of object stats
+ *
+ * This is just a container for object stats; we don't know what for.
  */
 struct object_stat_sum_t {
   int64_t num_bytes;    // in bytes
-  int64_t num_kb;       // in KB
   int64_t num_objects;
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
@@ -684,7 +725,7 @@ struct object_stat_sum_t {
   int64_t num_wr, num_wr_kb;
 
   object_stat_sum_t()
-    : num_bytes(0), num_kb(0),
+    : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
@@ -698,84 +739,26 @@ struct object_stat_sum_t {
     num_object_copies = nrep * num_objects;
   }
 
-  void dump(Formatter *f) const {
-    f->dump_unsigned("num_bytes", num_bytes);
-    f->dump_unsigned("num_kb", num_kb);
-    f->dump_unsigned("num_objects", num_objects);
-    f->dump_unsigned("num_object_clones", num_object_clones);
-    f->dump_unsigned("num_object_copies", num_object_copies);
-    f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
-    f->dump_unsigned("num_objects_degraded", num_objects_degraded);
-    f->dump_unsigned("num_objects_unfound", num_objects_unfound);
-    f->dump_unsigned("num_read", num_rd);
-    f->dump_unsigned("num_read_kb", num_rd_kb);
-    f->dump_unsigned("num_write", num_wr);
-    f->dump_unsigned("num_write_kb", num_wr_kb);
+  bool is_zero() const {
+    object_stat_sum_t zero;
+    return memcmp(this, &zero, sizeof(zero)) == 0;
   }
-  void encode(bufferlist& bl) const {
-    __u8 v = 2;
-    ::encode(v, bl);
-    ::encode(num_bytes, bl);
-    ::encode(num_kb, bl);
-    ::encode(num_objects, bl);
-    ::encode(num_object_clones, bl);
-    ::encode(num_object_copies, bl);
-    ::encode(num_objects_missing_on_primary, bl);
-    ::encode(num_objects_degraded, bl);
-    ::encode(num_objects_unfound, bl);
-    ::encode(num_rd, bl);
-    ::encode(num_rd_kb, bl);
-    ::encode(num_wr, bl);
-    ::encode(num_wr_kb, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(num_bytes, bl);
-    ::decode(num_kb, bl);
-    ::decode(num_objects, bl);
-    ::decode(num_object_clones, bl);
-    ::decode(num_object_copies, bl);
-    ::decode(num_objects_missing_on_primary, bl);
-    ::decode(num_objects_degraded, bl);
-    if (v >= 2)
-      ::decode(num_objects_unfound, bl);
-    ::decode(num_rd, bl);
-    ::decode(num_rd_kb, bl);
-    ::decode(num_wr, bl);
-    ::decode(num_wr_kb, bl);
-  }
-  void add(const object_stat_sum_t& o) {
-    num_bytes += o.num_bytes;
-    num_kb += o.num_kb;
-    num_objects += o.num_objects;
-    num_object_clones += o.num_object_clones;
-    num_object_copies += o.num_object_copies;
-    num_objects_missing_on_primary += o.num_objects_missing_on_primary;
-    num_objects_degraded += o.num_objects_degraded;
-    num_rd += o.num_rd;
-    num_rd_kb += o.num_rd_kb;
-    num_wr += o.num_wr;
-    num_wr_kb += o.num_wr_kb;
-    num_objects_unfound += o.num_objects_unfound;
-  }
-  void sub(const object_stat_sum_t& o) {
-    num_bytes -= o.num_bytes;
-    num_kb -= o.num_kb;
-    num_objects -= o.num_objects;
-    num_object_clones -= o.num_object_clones;
-    num_object_copies -= o.num_object_copies;
-    num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
-    num_objects_degraded -= o.num_objects_degraded;
-    num_rd -= o.num_rd;
-    num_rd_kb -= o.num_rd_kb;
-    num_wr -= o.num_wr;
-    num_wr_kb -= o.num_wr_kb;
-    num_objects_unfound -= o.num_objects_unfound;
-  }
+
+  void add(const object_stat_sum_t& o);
+  void sub(const object_stat_sum_t& o);
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<object_stat_sum_t*>& o);
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
+/**
+ * a collection of object stat sums
+ *
+ * This is a collection of stat sums over different categories.
+ */
 struct object_stat_collection_t {
   object_stat_sum_t sum;
   map<string,object_stat_sum_t> cat_sum;
@@ -786,29 +769,13 @@ struct object_stat_collection_t {
       p->second.calc_copies(nrep);
   }
 
-  void dump(Formatter *f) const {
-    f->open_object_section("stat_sum");
-    sum.dump(f);
-    f->close_section();
-    f->open_object_section("stat_cat_sum");
-    for (map<string,object_stat_sum_t>::const_iterator p = cat_sum.begin(); p != cat_sum.end(); ++p) {
-      f->open_object_section(p->first.c_str());
-      p->second.dump(f);
-      f->close_section();
-    }
-    f->close_section();
-  }
-  void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(sum, bl);
-    ::encode(cat_sum, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(sum, bl);
-    ::decode(cat_sum, bl);
+  void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<object_stat_collection_t*>& o);
+
+  bool is_zero() const {
+    return (cat_sum.empty() && sum.is_zero());
   }
 
   void clear() {
@@ -833,8 +800,12 @@ struct object_stat_collection_t {
     sum.sub(o.sum);
     for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
 	 p != o.cat_sum.end();
-	 ++p)
-      cat_sum[p->first].sub(p->second);
+	 ++p) {
+      object_stat_sum_t& s = cat_sum[p->first];
+      s.sub(p->second);
+      if (s.is_zero())
+	cat_sum.erase(p->first);
+    }
   }
 };
 WRITE_CLASS_ENCODER(object_stat_collection_t)
@@ -846,6 +817,11 @@ struct pg_stat_t {
   eversion_t version;
   eversion_t reported;
   __u32 state;
+  utime_t last_fresh;   // last reported
+  utime_t last_change;  // new state != previous state
+  utime_t last_active;  // state & PG_STATE_ACTIVE
+  utime_t last_clean;   // state & PG_STATE_CLEAN
+  utime_t last_unstale; // (state & PG_STATE_STALE) == 0
 
   eversion_t log_start;         // (log_start,version]
   eversion_t ondisk_log_start;  // there may be more on disk
@@ -864,116 +840,15 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
 
   vector<int> up, acting;
+  epoch_t mapping_epoch;
 
-
-  pg_stat_t() : state(0),
-		created(0), parent_split_bits(0), 
-		log_size(0), ondisk_log_size(0)
+  pg_stat_t()
+    : state(0),
+      created(0), last_epoch_clean(0),
+      parent_split_bits(0), 
+      log_size(0), ondisk_log_size(0),
+      mapping_epoch(0)
   { }
-
-  void dump(Formatter *f) const {
-    f->dump_stream("version") << version;
-    f->dump_stream("reported") << reported;
-    f->dump_string("state", pg_state_string(state));
-    f->dump_stream("log_start") << log_start;
-    f->dump_stream("ondisk_log_start") << ondisk_log_start;
-    f->dump_unsigned("created", created);
-    f->dump_unsigned("last_epoch_clean", created);
-    f->dump_stream("parent") << parent;
-    f->dump_unsigned("parent_split_bits", parent_split_bits);
-    f->dump_stream("last_scrub") << last_scrub;
-    f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
-    f->dump_unsigned("log_size", log_size);
-    f->dump_unsigned("ondisk_log_size", ondisk_log_size);
-    stats.dump(f);
-    f->open_array_section("up");
-    for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-    f->open_array_section("acting");
-    for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
-      f->dump_int("osd", *p);
-    f->close_section();
-  }
-
-  void encode(bufferlist &bl) const {
-    __u8 v = 7;
-    ::encode(v, bl);
-
-    ::encode(version, bl);
-    ::encode(reported, bl);
-    ::encode(state, bl);
-    ::encode(log_start, bl);
-    ::encode(ondisk_log_start, bl);
-    ::encode(created, bl);
-    ::encode(last_epoch_clean, bl);
-    ::encode(parent, bl);
-    ::encode(parent_split_bits, bl);
-    ::encode(last_scrub, bl);
-    ::encode(last_scrub_stamp, bl);
-    ::encode(stats, bl);
-    ::encode(log_size, bl);
-    ::encode(ondisk_log_size, bl);
-    ::encode(up, bl);
-    ::encode(acting, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    if (v > 7)
-      throw buffer::malformed_input("unknown pg_stat_t encoding version > 4");
-
-    ::decode(version, bl);
-    ::decode(reported, bl);
-    ::decode(state, bl);
-    ::decode(log_start, bl);
-    ::decode(ondisk_log_start, bl);
-    ::decode(created, bl);
-    if (v >= 7)
-      ::decode(last_epoch_clean, bl);
-    else
-      last_epoch_clean = 0;
-    if (v < 6) {
-      old_pg_t opgid;
-      ::decode(opgid, bl);
-      parent = opgid;
-    } else {
-      ::decode(parent, bl);
-    }
-    ::decode(parent_split_bits, bl);
-    ::decode(last_scrub, bl);
-    ::decode(last_scrub_stamp, bl);
-    if (v <= 4) {
-      ::decode(stats.sum.num_bytes, bl);
-      ::decode(stats.sum.num_kb, bl);
-      ::decode(stats.sum.num_objects, bl);
-      ::decode(stats.sum.num_object_clones, bl);
-      ::decode(stats.sum.num_object_copies, bl);
-      ::decode(stats.sum.num_objects_missing_on_primary, bl);
-      ::decode(stats.sum.num_objects_degraded, bl);
-      ::decode(log_size, bl);
-      ::decode(ondisk_log_size, bl);
-      if (v >= 2) {
-	::decode(stats.sum.num_rd, bl);
-	::decode(stats.sum.num_rd_kb, bl);
-	::decode(stats.sum.num_wr, bl);
-	::decode(stats.sum.num_wr_kb, bl);
-      }
-      if (v >= 3) {
-	::decode(up, bl);
-      }
-      if (v == 4) {
-	::decode(stats.sum.num_objects_unfound, bl);  // sigh.
-      }
-      ::decode(acting, bl);
-    } else {
-      ::decode(stats, bl);
-      ::decode(log_size, bl);
-      ::decode(ondisk_log_size, bl);
-      ::decode(up, bl);
-      ::decode(acting, bl);
-    }
-  }
 
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
@@ -985,6 +860,11 @@ struct pg_stat_t {
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
   }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(list<pg_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 
@@ -999,47 +879,6 @@ struct pool_stat_t {
   pool_stat_t() : log_size(0), ondisk_log_size(0)
   { }
 
-  void dump(Formatter *f) const {
-    stats.dump(f);
-    f->dump_unsigned("log_size", log_size);
-    f->dump_unsigned("ondisk_log_size", ondisk_log_size);
-  }
-  void encode(bufferlist &bl) const {
-    __u8 v = 4;
-    ::encode(v, bl);
-    ::encode(stats, bl);
-    ::encode(log_size, bl);
-    ::encode(ondisk_log_size, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    if (v >= 4) {
-      ::decode(stats, bl);
-      ::decode(log_size, bl);
-      ::decode(ondisk_log_size, bl);
-    } else {
-      ::decode(stats.sum.num_bytes, bl);
-      ::decode(stats.sum.num_kb, bl);
-      ::decode(stats.sum.num_objects, bl);
-      ::decode(stats.sum.num_object_clones, bl);
-      ::decode(stats.sum.num_object_copies, bl);
-      ::decode(stats.sum.num_objects_missing_on_primary, bl);
-      ::decode(stats.sum.num_objects_degraded, bl);
-      ::decode(log_size, bl);
-      ::decode(ondisk_log_size, bl);
-      if (v >= 2) {
-	::decode(stats.sum.num_rd, bl);
-	::decode(stats.sum.num_rd_kb, bl);
-	::decode(stats.sum.num_wr, bl);
-	::decode(stats.sum.num_wr_kb, bl);
-      }
-      if (v >= 3) {
-	::decode(stats.sum.num_objects_unfound, bl);
-      }
-    }
-  }
-
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
@@ -1050,38 +889,531 @@ struct pool_stat_t {
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
   }
+
+  bool is_zero() const {
+    return (stats.is_zero() &&
+	    log_size == 0 &&
+	    ondisk_log_size == 0);
+  }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(list<pool_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pool_stat_t)
 
 
+/**
+ * pg_history_t - information about recent pg peering/mapping history
+ *
+ * This is aggressively shared between OSDs to bound the amount of past
+ * history they need to worry about.
+ */
+struct pg_history_t {
+  epoch_t epoch_created;       // epoch in which PG was created
+  epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
+  epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
+  epoch_t last_epoch_split;    // as parent
+  
+  epoch_t same_up_since;       // same acting set since
+  epoch_t same_interval_since;   // same acting AND up set since
+  epoch_t same_primary_since;  // same primary at least back through this epoch.
 
+  eversion_t last_scrub;
+  utime_t last_scrub_stamp;
 
+  pg_history_t()
+    : epoch_created(0),
+      last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
+      same_up_since(0), same_interval_since(0), same_primary_since(0) {}
+  
+  void merge(const pg_history_t &other) {
+    // Here, we only update the fields which cannot be calculated from the OSDmap.
+    if (epoch_created < other.epoch_created)
+      epoch_created = other.epoch_created;
+    if (last_epoch_started < other.last_epoch_started)
+      last_epoch_started = other.last_epoch_started;
+    if (last_epoch_clean < other.last_epoch_clean)
+      last_epoch_clean = other.last_epoch_clean;
+    if (last_epoch_split < other.last_epoch_started)
+      last_epoch_split = other.last_epoch_started;
+    if (other.last_scrub > last_scrub)
+      last_scrub = other.last_scrub;
+    if (other.last_scrub_stamp > last_scrub_stamp)
+      last_scrub_stamp = other.last_scrub_stamp;
+  }
 
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_history_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_history_t)
 
-struct osd_peer_stat_t {
-  struct ceph_timespec stamp;
-  float oprate;
-  float qlen;            // current
-  float recent_qlen;     // moving average
-  float read_latency;
-  float read_latency_mine;
-  float frac_rd_ops_shed_in;
-  float frac_rd_ops_shed_out;
-} __attribute__ ((packed));
-
-WRITE_RAW_ENCODER(osd_peer_stat_t)
-
-inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
-  return out << "stat(" << stat.stamp
-	     << " oprate=" << stat.oprate
-    	     << " qlen=" << stat.qlen 
-    	     << " recent_qlen=" << stat.recent_qlen
-	     << " rdlat=" << stat.read_latency_mine << " / " << stat.read_latency
-	     << " fshedin=" << stat.frac_rd_ops_shed_in
-	     << ")";
+inline ostream& operator<<(ostream& out, const pg_history_t& h) {
+  return out << "ec=" << h.epoch_created
+	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << " " << h.same_up_since << "/" << h.same_interval_since << "/" << h.same_primary_since;
 }
 
 
+/**
+ * pg_info_t - summary of PG statistics.
+ *
+ * some notes: 
+ *  - last_complete implies we have all objects that existed as of that
+ *    stamp, OR a newer object, OR have already applied a later delete.
+ *  - if last_complete >= log.bottom, then we know pg contents thru log.head.
+ *    otherwise, we have no idea what the pg is supposed to contain.
+ */
+struct pg_info_t {
+  pg_t pgid;
+  eversion_t last_update;    // last object version applied to store.
+  eversion_t last_complete;  // last version pg was complete through.
+  
+  eversion_t log_tail;     // oldest log entry.
+
+  hobject_t last_backfill;   // objects >= this and < last_complete may be missing
+
+  interval_set<snapid_t> purged_snaps;
+
+  pg_stat_t stats;
+
+  pg_history_t history;
+
+  pg_info_t()
+    : last_backfill(hobject_t::get_max())
+  { }
+  pg_info_t(pg_t p)
+    : pgid(p),
+      last_backfill(hobject_t::get_max())
+  { }
+  
+  bool is_empty() const { return last_update.version == 0; }
+  bool dne() const { return history.epoch_created == 0; }
+
+  bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_info_t)
+
+inline ostream& operator<<(ostream& out, const pg_info_t& pgi) 
+{
+  out << pgi.pgid << "(";
+  if (pgi.dne())
+    out << " DNE";
+  if (pgi.is_empty())
+    out << " empty";
+  else {
+    out << " v " << pgi.last_update;
+    if (pgi.last_complete != pgi.last_update)
+      out << " lc " << pgi.last_complete;
+    out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
+    if (pgi.is_incomplete())
+      out << " lb " << pgi.last_backfill;
+  }
+  //out << " c " << pgi.epoch_created;
+  out << " n=" << pgi.stats.stats.sum.num_objects;
+  out << " " << pgi.history
+      << ")";
+  return out;
+}
+
+
+/** 
+ * pg_query_t - used to ask a peer for information about a pg.
+ *
+ * note: if version=0, type=LOG, then we just provide our full log.
+ */
+struct pg_query_t {
+  enum {
+    INFO = 0,
+    LOG = 1,
+    MISSING = 4,
+    FULLLOG = 5,
+  };
+  const char *get_type_name() const {
+    switch (type) {
+    case INFO: return "info";
+    case LOG: return "log";
+    case MISSING: return "missing";
+    case FULLLOG: return "fulllog";
+    default: return "???";
+    }
+  }
+
+  __s32 type;
+  eversion_t since;
+  pg_history_t history;
+
+  pg_query_t() : type(-1) {}
+  pg_query_t(int t, const pg_history_t& h)
+    : type(t), history(h) {
+    assert(t != LOG);
+  }
+  pg_query_t(int t, eversion_t s, const pg_history_t& h)
+    : type(t), since(s), history(h) {
+    assert(t == LOG);
+  }
+  
+  void encode(bufferlist &bl) const {
+    ::encode(type, bl);
+    ::encode(since, bl);
+    history.encode(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(type, bl);
+    ::decode(since, bl);
+    history.decode(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_query_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_query_t)
+
+inline ostream& operator<<(ostream& out, const pg_query_t& q) {
+  out << "query(" << q.get_type_name() << " " << q.since;
+  if (q.type == pg_query_t::LOG)
+    out << " " << q.history;
+  out << ")";
+  return out;
+}
+
+
+/**
+ * pg_log_entry_t - single entry/event in pg log
+ *
+ */
+struct pg_log_entry_t {
+  enum {
+    MODIFY = 1,
+    CLONE = 2,
+    DELETE = 3,
+    BACKLOG = 4,  // event invented by generate_backlog [deprecated]
+    LOST_REVERT = 5, // lost new version, revert to an older version.
+    LOST_DELETE = 6, // lost new version, revert to no object (deleted).
+    LOST_MARK = 7,   // lost new version, now EIO
+  };
+  static const char *get_op_name(int op) {
+    switch (op) {
+    case MODIFY:
+      return "modify  ";
+    case CLONE:
+      return "clone   ";
+    case DELETE:
+      return "delete  ";
+    case BACKLOG:
+      return "backlog ";
+    case LOST_REVERT:
+      return "l_revert";
+    case LOST_DELETE:
+      return "l_delete";
+    case LOST_MARK:
+      return "l_mark  ";
+    default:
+      return "unknown ";
+    }
+  }
+  const char *get_op_name() const {
+    return get_op_name(op);
+  }
+
+  __s32      op;
+  hobject_t  soid;
+  eversion_t version, prior_version;
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  utime_t     mtime;  // this is the _user_ mtime, mind you
+  bufferlist snaps;   // only for clone entries
+  bool invalid_hash; // only when decoding sobject_t based entries
+
+  uint64_t offset;   // [soft state] my offset on disk
+      
+  pg_log_entry_t()
+    : op(0), invalid_hash(false), offset(0) {}
+  pg_log_entry_t(int _op, const hobject_t& _soid, 
+		 const eversion_t& v, const eversion_t& pv,
+		 const osd_reqid_t& rid, const utime_t& mt)
+    : op(_op), soid(_soid), version(v),
+      prior_version(pv),
+      reqid(rid), mtime(mt), invalid_hash(false), offset(0) {}
+      
+  bool is_clone() const { return op == CLONE; }
+  bool is_modify() const { return op == MODIFY; }
+  bool is_backlog() const { return op == BACKLOG; }
+  bool is_lost_revert() const { return op == LOST_REVERT; }
+  bool is_lost_delete() const { return op == LOST_DELETE; }
+  bool is_lost_mark() const { return op == LOST_MARK; }
+
+  bool is_update() const {
+    return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+  }
+  bool is_delete() const {
+    return op == DELETE || op == LOST_DELETE;
+  }
+      
+  bool reqid_is_indexed() const {
+    return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_entry_t*>& o);
+
+};
+WRITE_CLASS_ENCODER(pg_log_entry_t)
+
+ostream& operator<<(ostream& out, const pg_log_entry_t& e);
+
+
+
+/**
+ * pg_log_t - incremental log of recent pg changes.
+ *
+ *  serves as a recovery queue for recent changes.
+ */
+struct pg_log_t {
+  /*
+   *   head - newest entry (update|delete)
+   *   tail - entry previous to oldest (update|delete) for which we have
+   *          complete negative information.  
+   * i.e. we can infer pg contents for any store whose last_update >= tail.
+   */
+  eversion_t head;    // newest entry
+  eversion_t tail;    // version prior to oldest
+
+  list<pg_log_entry_t> log;  // the actual log.
+  
+  pg_log_t() {}
+
+  void clear() {
+    eversion_t z;
+    head = tail = z;
+    log.clear();
+  }
+
+  bool empty() const {
+    return log.empty();
+  }
+
+  bool null() const {
+    return head.version == 0 && head.epoch == 0;
+  }
+
+  size_t approx_size() const {
+    return head.version - tail.version;
+  }
+
+  list<pg_log_entry_t>::iterator find_entry(eversion_t v) {
+    int fromhead = head.version - v.version;
+    int fromtail = v.version - tail.version;
+    list<pg_log_entry_t>::iterator p;
+    if (fromhead < fromtail) {
+      p = log.end();
+      p--;
+      while (p->version > v)
+	p--;
+      return p;
+    } else {
+      p = log.begin();
+      while (p->version < v)
+	p++;
+      return p;
+    }      
+  }
+
+  /**
+   * copy entries from the tail of another pg_log_t
+   *
+   * @param other pg_log_t to copy from
+   * @param from copy entries after this version
+   */
+  void copy_after(const pg_log_t &other, eversion_t from);
+
+  /**
+   * copy a range of entries from another pg_log_t
+   *
+   * @param other pg_log_t to copy from
+   * @param from copy entries after this version
+   * @parem to up to and including this version
+   */
+  void copy_range(const pg_log_t &other, eversion_t from, eversion_t to);
+
+  /**
+   * copy up to N entries
+   *
+   * @param o source log
+   * @param max max number of entreis to copy
+   */
+  void copy_up_to(const pg_log_t &other, int max);
+
+  ostream& print(ostream& out) const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_log_t)
+
+inline ostream& operator<<(ostream& out, const pg_log_t& log) 
+{
+  out << "log(" << log.tail << "," << log.head << "]";
+  return out;
+}
+
+
+/**
+ * pg_missing_t - summary of missing objects.
+ *
+ *  kept in memory, as a supplement to pg_log_t
+ *  also used to pass missing info in messages.
+ */
+struct pg_missing_t {
+  struct item {
+    eversion_t need, have;
+    item() {}
+    item(eversion_t n) : need(n) {}  // have no old version
+    item(eversion_t n, eversion_t h) : need(n), have(h) {}
+
+    void encode(bufferlist& bl) const {
+      ::encode(need, bl);
+      ::encode(have, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(need, bl);
+      ::decode(have, bl);
+    }
+    void dump(Formatter *f) const {
+      f->dump_stream("need") << need;
+      f->dump_stream("have") << have;
+    }
+    static void generate_test_instances(list<item*>& o) {
+      o.push_back(new item);
+      o.push_back(new item);
+      o.back()->need = eversion_t(1, 2);
+      o.back()->have = eversion_t(1, 1);
+    }
+  }; 
+  WRITE_CLASS_ENCODER(item)
+
+  map<hobject_t, item> missing;         // oid -> (need v, have v)
+  map<version_t, hobject_t> rmissing;  // v -> oid
+
+  unsigned int num_missing() const;
+  bool have_missing() const;
+  void swap(pg_missing_t& o);
+  bool is_missing(const hobject_t& oid) const;
+  bool is_missing(const hobject_t& oid, eversion_t v) const;
+  eversion_t have_old(const hobject_t& oid) const;
+  void add_next_event(const pg_log_entry_t& e);
+  void revise_need(hobject_t oid, eversion_t need);
+  void add(const hobject_t& oid, eversion_t need, eversion_t have);
+  void rm(const hobject_t& oid, eversion_t v);
+  void rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+  void got(const hobject_t& oid, eversion_t v);
+  void got(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+
+  void clear() {
+    missing.clear();
+    rmissing.clear();
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_missing_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_missing_t::item)
+WRITE_CLASS_ENCODER(pg_missing_t)
+
+ostream& operator<<(ostream& out, const pg_missing_t::item& i);
+ostream& operator<<(ostream& out, const pg_missing_t& missing);
+
+/**
+ * pg list objects response format
+ *
+ */
+struct pg_ls_response_t {
+  collection_list_handle_t handle; 
+  list<pair<object_t, string> > entries;
+
+  void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(handle, bl);
+    ::encode(entries, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    assert(v == 1);
+    ::decode(handle, bl);
+    ::decode(entries, bl);
+  }
+  void dump(Formatter *f) const {
+    f->dump_stream("handle") << handle;
+    f->open_array_section("entries");
+    for (list<pair<object_t, string> >::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+      f->open_object_section("object");
+      f->dump_stream("object") << p->first;
+      f->dump_string("key", p->second);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pg_ls_response_t*>& o) {
+    o.push_back(new pg_ls_response_t);
+    o.push_back(new pg_ls_response_t);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2);
+    o.back()->entries.push_back(make_pair(object_t("one"), string()));
+    o.back()->entries.push_back(make_pair(object_t("two"), string("twokey")));
+  }
+};
+
+WRITE_CLASS_ENCODER(pg_ls_response_t)
+
+
+/**
+ * pg creation info
+ */
+struct pg_create_t {
+  epoch_t created;   // epoch pg created
+  pg_t parent;       // split from parent (if != pg_t())
+  __s32 split_bits;
+
+  pg_create_t()
+    : created(0), split_bits(0) {}
+  pg_create_t(unsigned c, pg_t p, int s)
+    : created(c), parent(p), split_bits(s) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_create_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_create_t)
+
+// -----------------------------------------
+
+struct osd_peer_stat_t {
+  utime_t stamp;
+
+  osd_peer_stat_t() { }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_peer_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER(osd_peer_stat_t)
+
+ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
 
 
 // -----------------------------------------
@@ -1137,6 +1469,8 @@ public:
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<OSDSuperblock*>& o);
 };
 WRITE_CLASS_ENCODER(OSDSuperblock)
 
@@ -1180,6 +1514,8 @@ struct SnapSet {
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SnapSet*>& o);  
 };
 WRITE_CLASS_ENCODER(SnapSet)
 
@@ -1194,8 +1530,12 @@ struct watch_info_t {
   uint64_t cookie;
   uint32_t timeout_seconds;
 
+  watch_info_t(uint64_t c=0, uint32_t t=0) : cookie(c), timeout_seconds(t) {}
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<watch_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(watch_info_t)
 
@@ -1251,6 +1591,13 @@ struct object_info_t {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<object_info_t*>& o);
+
+  explicit object_info_t()
+    : size(0), lost(false),
+      truncate_seq(0), truncate_size(0)
+  {}
 
   object_info_t(const hobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
@@ -1267,6 +1614,53 @@ ostream& operator<<(ostream& out, const object_info_t& oi);
 
 
 
+// Object recovery
+struct ObjectRecoveryInfo {
+  hobject_t soid;
+  eversion_t version;
+  uint64_t size;
+  object_info_t oi;
+  SnapSet ss;
+  interval_set<uint64_t> copy_subset;
+  map<hobject_t, interval_set<uint64_t> > clone_subset;
+
+  ObjectRecoveryInfo() : size(0) { }
+
+  static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
+
+struct ObjectRecoveryProgress {
+  bool first;
+  uint64_t data_recovered_to;
+  bool data_complete;
+  string omap_recovered_to;
+  bool omap_complete;
+
+  ObjectRecoveryProgress()
+    : first(true),
+      data_recovered_to(0),
+      data_complete(false), omap_complete(false) { }
+
+  bool is_complete(const ObjectRecoveryInfo& info) const {
+    return data_recovered_to >= (info.copy_subset.empty() ? 0 : info.copy_subset.range_end());
+  }
+
+  static void generate_test_instances(list<ObjectRecoveryProgress*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ObjectRecoveryProgress)
+ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
+
+
 /*
  * summarize pg contents for purposes of a scrub
  */
@@ -1276,22 +1670,12 @@ struct ScrubMap {
     bool negative;
     map<string,bufferptr> attrs;
 
-    object(): size(0),negative(0),attrs() {}
+    object(): size(0), negative(false) {}
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(size, bl);
-      ::encode(negative, bl);
-      ::encode(attrs, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(size, bl);
-      ::decode(negative, bl);
-      ::decode(attrs, bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<object*>& o);
   };
   WRITE_CLASS_ENCODER(object)
 
@@ -1305,6 +1689,8 @@ struct ScrubMap {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
@@ -1312,12 +1698,49 @@ WRITE_CLASS_ENCODER(ScrubMap)
 
 struct OSDOp {
   ceph_osd_op op;
-  bufferlist data;
   sobject_t soid;
 
-  OSDOp() {
+  bufferlist indata, outdata;
+  int32_t rval;
+
+  OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));
   }
+
+  /**
+   * split a bufferlist into constituent indata nembers of a vector of OSDOps
+   *
+   * @param ops [out] vector of OSDOps
+   * @param in  [in] combined data buffer
+   */
+  static void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
+
+  /**
+   * merge indata nembers of a vector of OSDOp into a single bufferlist
+   *
+   * Notably this also encodes certain other OSDOp data into the data
+   * buffer, including the sobject_t soid.
+   *
+   * @param ops [in] vector of OSDOps
+   * @param in  [out] combined data buffer
+   */
+  static void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out);
+
+  /**
+   * split a bufferlist into constituent outdata members of a vector of OSDOps
+   *
+   * @param ops [out] vector of OSDOps
+   * @param in  [in] combined data buffer
+   */
+  static void split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in);
+
+  /**
+   * merge outdata members of a vector of OSDOps into a single bufferlist
+   *
+   * @param ops [in] vector of OSDOps
+   * @param in  [out] combined data buffer
+   */
+  static void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out);
 };
 
 ostream& operator<<(ostream& out, const OSDOp& op);

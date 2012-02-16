@@ -23,23 +23,23 @@ class MExportDirAck : public Message {
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
   
-  MExportDirAck() {}
+  MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t i) :
     Message(MSG_MDS_EXPORTDIRACK), dirfrag(i) { }
 private:
   ~MExportDirAck() {}
 
 public:
-  const char *get_type_name() { return "ExAck"; }
-    void print(ostream& o) {
+  const char *get_type_name() const { return "ExAck"; }
+    void print(ostream& o) const {
     o << "export_ack(" << dirfrag << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
   }
 

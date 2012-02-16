@@ -16,6 +16,10 @@ check_PROGRAMS =
 # target by target
 TESTS = $(check_PROGRAMS)
 
+check-local:
+	test/encoding/check-generated.sh
+	test/encoding/readable.sh ../ceph-object-corpus
+
 EXTRALIBS = -luuid
 if FREEBSD
 EXTRALIBS += -lexecinfo
@@ -104,6 +108,10 @@ crushtool_LDADD = $(LIBGLOBAL_LDA)
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
+
+ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.la
+bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
@@ -614,11 +622,6 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
-#unittest_interval_tree_SOURCES = test/TestIntervalTree.cc
-#unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
-#unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_PROGRAMS += unittest_interval_tree
-
 unittest_ipaddr_SOURCES = test/test_ipaddr.cc
 unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_ipaddr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -688,6 +691,12 @@ test_store_LDFLAGS = ${AM_LDFLAGS}
 test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
 test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_store
+
+test_filejournal_SOURCES = test/test_filejournal.cc
+test_filejournal_LDFLAGS = ${AM_LDFLAGS}
+test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_filejournal_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_filejournal
 
 test_stress_watch_SOURCES = test/test_stress_watch.cc test/rados-api/test.cc
 test_stress_watch_LDFLAGS = ${AM_LDFLAGS}
@@ -821,6 +830,7 @@ ceph_ver.h: .git_version
 
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
+test/encoding/ceph_dencoder.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
@@ -864,6 +874,7 @@ libcommon_files = \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
+	common/LogEntry.cc \
 	msg/Message.cc \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
@@ -884,11 +895,14 @@ libcommon_files = \
 	common/armor.c \
 	common/xattr.c \
 	common/safe_io.c \
+	common/snap_types.cc \
 	common/str_list.cc \
 	common/errno.cc \
 	msg/SimpleMessenger.cc \
-	mon/MonMap.cc \
+	mon/MonCaps.cc \
 	mon/MonClient.cc \
+	mon/MonMap.cc \
+	os/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -946,8 +960,7 @@ libmon_la_SOURCES = \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
-	mon/MonitorStore.cc \
-	mon/MonCaps.cc
+	mon/MonitorStore.cc
 libmon_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libmon.la
 
@@ -991,6 +1004,9 @@ libos_la_SOURCES = \
 	os/FlatIndex.cc
 libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libos_la_LIBADD = libglobal.la
+if WITH_LIBAIO
+libos_la_LIBADD += -laio
+endif
 noinst_LTLIBRARIES += libos.la
 
 libosd_la_SOURCES = \
@@ -1088,6 +1104,7 @@ noinst_HEADERS = \
 	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
+	common/snap_types.h\
         common/Clock.h\
         common/Cond.h\
         common/ConfUtils.h\
@@ -1148,6 +1165,7 @@ noinst_HEADERS = \
         include/buffer.h\
         include/byteorder.h\
 	include/cephfs/libcephfs.h\
+	include/ceph_features.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
@@ -1155,7 +1173,6 @@ noinst_HEADERS = \
 	include/color.h\
 	include/compat.h\
 	include/crc32c.h\
-        include/cstring.h\
         include/encoding.h\
         include/err.h\
         include/error.h\
@@ -1170,7 +1187,6 @@ noinst_HEADERS = \
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
-        include/nstring.h\
         include/object.h\
         include/page.h\
         include/rangeset.h\
@@ -1179,7 +1195,6 @@ noinst_HEADERS = \
         include/statlite.h\
 	include/str_list.h\
         include/triple.h\
-        include/tstring.h\
         include/types.h\
         include/utime.h\
         include/dlist.h\
@@ -1377,6 +1392,7 @@ noinst_HEADERS = \
 	obsync/obsync\
 	obsync/boto_tool\
 	os/btrfs_ioctl.h\
+	os/hobject.h \
 	os/CollectionIndex.h\
         os/Fake.h\
         os/FileJournal.h\
@@ -1394,8 +1410,8 @@ noinst_HEADERS = \
         osd/OSDCaps.h\
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
+	osd/OpRequest.h\
         osd/PG.h\
-        osd/PGLS.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\
@@ -1436,6 +1452,7 @@ noinst_HEADERS = \
 	test/osd/TestOpStat.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
+	test/encoding/types.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \

@@ -19,6 +19,9 @@
 #include "msg/Message.h"
 
 class MOSDPGLog : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   epoch_t epoch;
   /// query_epoch is the epoch of the query being responded to, or
   /// the current epoch if this is not being sent in response to a
@@ -27,46 +30,46 @@ class MOSDPGLog : public Message {
   epoch_t query_epoch;
 
 public:
-  PG::Info info;
-  PG::Log log;
-  PG::Missing missing;
+  pg_info_t info;
+  pg_log_t log;
+  pg_missing_t missing;
 
   epoch_t get_epoch() { return epoch; }
   pg_t get_pgid() { return info.pgid; }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGLog() {}
-  MOSDPGLog(version_t mv, PG::Info& i) :
-    Message(MSG_OSD_PG_LOG),
-    epoch(mv), query_epoch(mv), info(i)  { }
-  MOSDPGLog(version_t mv, PG::Info& i, epoch_t query_epoch) :
-    Message(MSG_OSD_PG_LOG),
-    epoch(mv), query_epoch(query_epoch), info(i)  { }
+  MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION) { }
+  MOSDPGLog(version_t mv, pg_info_t& i)
+    : Message(MSG_OSD_PG_LOG, HEAD_VERSION),
+      epoch(mv), query_epoch(mv), info(i)  { }
+  MOSDPGLog(version_t mv, pg_info_t& i, epoch_t query_epoch)
+    : Message(MSG_OSD_PG_LOG, HEAD_VERSION),
+      epoch(mv), query_epoch(query_epoch), info(i)  { }
+
 private:
   ~MOSDPGLog() {}
 
 public:
-  const char *get_type_name() { return "PGlog"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "PGlog"; }
+  void print(ostream& out) const {
     out << "pg_log(" << info.pgid << " epoch " << epoch
 	<< " query_epoch " << query_epoch << ")";
   }
 
-  void encode_payload(CephContext *cct) {
-    header.version = 2;
+  void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(log, payload);
     ::encode(missing, payload);
     ::encode(query_epoch, payload);
   }
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(info, p);
     ::decode(log, p);
     ::decode(missing, p);
-    if (header.version > 1) {
+    if (header.version >= 2) {
       ::decode(query_epoch, p);
     }
   }

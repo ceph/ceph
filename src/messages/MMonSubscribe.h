@@ -16,6 +16,7 @@
 #define CEPH_MMONSUBSCRIBE_H
 
 #include "msg/Message.h"
+#include "include/ceph_features.h"
 
 /*
  * compatibility with old crap
@@ -29,9 +30,12 @@ WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 
 struct MMonSubscribe : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   map<string, ceph_mon_subscribe_item> what;
   
-  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE) {}
+  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION) { }
 private:
   ~MMonSubscribe() {}
 
@@ -41,12 +45,12 @@ public:
     what[w].flags = flags;
   }
 
-  const char *get_type_name() { return "mon_subscribe"; }
-  void print(ostream& o) {
+  const char *get_type_name() const { return "mon_subscribe"; }
+  void print(ostream& o) const {
     o << "mon_subscribe(" << what << ")";
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;
@@ -67,11 +71,11 @@ public:
       ::decode(what, p);
     }
   }
-  void encode_payload(CephContext *cct) {
-    if (get_connection()->has_feature(CEPH_FEATURE_SUBSCRIBE2)) {
-      header.version = 2;
+  void encode_payload(uint64_t features) {
+    if (features & CEPH_FEATURE_SUBSCRIBE2) {
       ::encode(what, payload);
     } else {
+      header.version = 0;
       map<string, ceph_mon_subscribe_item_old> oldwhat;
       for (map<string, ceph_mon_subscribe_item>::iterator q = what.begin();
 	   q != what.end();

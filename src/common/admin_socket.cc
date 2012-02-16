@@ -302,8 +302,8 @@ bool AdminSocket::do_accept()
       ldout(m_cct, 0) << "AdminSocket: request '" << c << "' to " << p->second << " failed" << dendl;
       out.append("failed");
     } else {
-      ldout(m_cct, 0) << "AdminSocket: request '" << c << "' to " << p->second
-		      << " returned " << out.length() << " bytes" << dendl;
+      ldout(m_cct, 20) << "AdminSocket: request '" << c << "' to " << p->second
+		       << " returned " << out.length() << " bytes" << dendl;
     }
     uint32_t len = htonl(out.length());
     int ret = safe_write(connection_fd, &len, sizeof(len));

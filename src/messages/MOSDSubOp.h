@@ -24,6 +24,10 @@
  */
 
 class MOSDSubOp : public Message {
+
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 1;
+
 public:
   epoch_t map_epoch;
   
@@ -67,7 +71,16 @@ public:
 
   bool first, complete;
 
-  virtual void decode_payload(CephContext *cct) {
+  interval_set<uint64_t> data_included;
+  ObjectRecoveryInfo recovery_info;
+
+  // reflects result of current push
+  ObjectRecoveryProgress recovery_progress;
+
+  // reflects progress before current push
+  ObjectRecoveryProgress current_progress;
+
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -80,7 +93,7 @@ public:
     unsigned off = 0;
     for (unsigned i = 0; i < num_ops; i++) {
       ::decode(ops[i].op, p);
-      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
+      ops[i].indata.substr_of(data, off, ops[i].op.payload_len);
       off += ops[i].op.payload_len;
     }
     ::decode(mtime, p);
@@ -97,6 +110,7 @@ public:
     ::decode(pg_trim_to, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
+
     ::decode(data_subset, p);
     ::decode(clone_subsets, p);
     
@@ -106,11 +120,15 @@ public:
     }
     if (header.version >= 3)
       ::decode(oloc, p);
+    if (header.version >= 4) {
+      ::decode(data_included, p);
+      ::decode(recovery_info, p);
+      ::decode(recovery_progress, p);
+      ::decode(current_progress, p);
+    }
   }
 
-  virtual void encode_payload(CephContext *cct) {
-    header.version = 3;
-
+  virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -119,9 +137,9 @@ public:
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].op.payload_len = ops[i].data.length();
+      ops[i].op.payload_len = ops[i].indata.length();
       ::encode(ops[i].op, payload);
-      data.append(ops[i].data);
+      data.append(ops[i].indata);
     }
     ::encode(mtime, payload);
     ::encode(noop, payload);
@@ -146,32 +164,35 @@ public:
     ::encode(first, payload);
     ::encode(complete, payload);
     ::encode(oloc, payload);
+    ::encode(data_included, payload);
+    ::encode(recovery_info, payload);
+    ::encode(recovery_progress, payload);
+    ::encode(current_progress, payload);
   }
 
-
+  MOSDSubOp()
+    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDSubOp(osd_reqid_t r, pg_t p, const hobject_t& po, bool noop_, int aw,
-	    epoch_t mape, tid_t rtid, eversion_t v) :
-    Message(MSG_OSD_SUBOP),
-    map_epoch(mape),
-    reqid(r),
-    pgid(p),
-    poid(po),
-    acks_wanted(aw),
-    noop(noop_),   
-    old_exists(false), old_size(0),
-    version(v),
-    first(false), complete(false)
-  {
+	    epoch_t mape, tid_t rtid, eversion_t v)
+    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(mape),
+      reqid(r),
+      pgid(p),
+      poid(po),
+      acks_wanted(aw),
+      noop(noop_),   
+      old_exists(false), old_size(0),
+      version(v),
+      first(false), complete(false) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
-  MOSDSubOp() {}
 private:
   ~MOSDSubOp() {}
 
 public:
-  const char *get_type_name() { return "osd_sub_op"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "osd_sub_op"; }
+  void print(ostream& out) const {
     out << "osd_sub_op(" << reqid
 	<< " " << pgid
 	<< " " << poid

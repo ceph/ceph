@@ -104,13 +104,11 @@ void ThreadPool::stop(bool clear_after)
   ldout(cct,15) << "stopped" << dendl;
 }
 
-
 void ThreadPool::pause()
 {
   ldout(cct,10) << "pause" << dendl;
   _lock.Lock();
-  assert(!_pause);
-  _pause = true;
+  _pause++;
   while (processing)
     _wait_cond.Wait(_lock);
   _lock.Unlock();
@@ -121,8 +119,7 @@ void ThreadPool::pause_new()
 {
   ldout(cct,10) << "pause_new" << dendl;
   _lock.Lock();
-  assert(!_pause);
-  _pause = true;
+  _pause++;
   _lock.Unlock();
 }
 
@@ -130,8 +127,8 @@ void ThreadPool::unpause()
 {
   ldout(cct,10) << "unpause" << dendl;
   _lock.Lock();
-  assert(_pause);
-  _pause = false;
+  assert(_pause > 0);
+  _pause--;
   _cond.Signal();
   _lock.Unlock();
 }

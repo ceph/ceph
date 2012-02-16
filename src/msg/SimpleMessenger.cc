@@ -405,6 +405,9 @@ int SimpleMessenger::shutdown()
     dispatch_queue.cond.Signal();
     dispatch_queue.lock.Unlock();
   }
+
+  mark_down_all();
+
   return 0;
 }
 
@@ -1752,7 +1755,7 @@ void SimpleMessenger::Pipe::writer()
 	m->set_connection(connection_state->get());
 
 	// encode and copy out of *m
-	m->encode(msgr->cct);
+	m->encode(connection_state->get_features(), !msgr->cct->_conf->ms_nocrc);
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
@@ -1868,6 +1871,8 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   unsigned data_len, data_off;
   int aborted;
   Message *message;
+  utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  bool waited_on_throttle = false;
 
   uint64_t message_size = header.front_len + header.middle_len + header.data_len;
   if (message_size) {
@@ -1875,7 +1880,7 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
       ldout(msgr->cct,10) << "reader wants " << message_size << " from policy throttler "
 	       << policy.throttler->get_current() << "/"
 	       << policy.throttler->get_max() << dendl;
-      policy.throttler->get(message_size);
+      waited_on_throttle = policy.throttler->get(message_size);
     }
 
     // throttle total bytes waiting for dispatch.  do this _after_ the
@@ -1885,7 +1890,12 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
     ldout(msgr->cct,10) << "reader wants " << message_size << " from dispatch throttler "
 	     << msgr->dispatch_throttler.get_current() << "/"
 	     << msgr->dispatch_throttler.get_max() << dendl;
-    msgr->dispatch_throttler.get(message_size);
+    waited_on_throttle |= msgr->dispatch_throttler.get(message_size);
+  }
+
+  utime_t throttle_wait;
+  if (waited_on_throttle) {
+    throttle_wait = ceph_clock_now(msgr->cct) - recv_stamp;
   }
 
   // read front
@@ -1992,6 +2002,9 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   // store reservation size in message, so we don't get confused
   // by messages entering the dispatch queue through other paths.
   message->set_dispatch_throttle_size(message_size);
+
+  message->set_recv_stamp(recv_stamp);
+  message->set_throttle_wait(throttle_wait);
 
   *pm = message;
   return 0;

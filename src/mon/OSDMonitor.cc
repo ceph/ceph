@@ -86,11 +86,11 @@ void OSDMonitor::create_initial()
   newmap.encode(pending_inc.fullmap);
 }
 
-bool OSDMonitor::update_from_paxos()
+void OSDMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
   if (paxosv == osdmap.epoch)
-    return true;
+    return;
   assert(paxosv >= osdmap.epoch);
 
   dout(15) << "update_from_paxos paxos e " << paxosv 
@@ -146,8 +146,6 @@ bool OSDMonitor::update_from_paxos()
 
   share_map_with_random_osd();
   update_logger();
-
-  return true;
 }
 
 void OSDMonitor::on_active()
@@ -1687,6 +1685,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "osd." << osd << " does not exist";
 	} else if (osdmap.is_down(osd)) {
 	  ss << "osd." << osd << " is already down";
+	  err = 0;
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_UP;
 	  if (any)
@@ -1710,6 +1709,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "osd." << osd << " does not exist";
 	} else if (osdmap.is_out(osd)) {
 	  ss << "osd." << osd << " is already out";
+	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
 	  if (any)
@@ -1731,6 +1731,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (osdmap.is_in(osd)) {
 	  ss << "osd." << osd << " is already in";
+	  err = 0;
 	} else if (!osdmap.exists(osd)) {
 	  ss << "osd." << osd << " does not exist";
 	} else {

@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "mds/MDSMap.h"
+#include "include/ceph_features.h"
 
 #include <uuid/uuid.h>
 
@@ -66,24 +67,24 @@ private:
   ~MMDSMap() {}
 
 public:
-  const char *get_type_name() { return "mdsmap"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "mdsmap"; }
+  void print(ostream& out) const {
     out << "mdsmap(e " << epoch << ")";
   }
 
   // marshalling
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(epoch, p);
     ::decode(encoded, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(epoch, payload);
-    if (connection && !connection->has_feature(CEPH_FEATURE_PGID64)) {
+    if ((features & CEPH_FEATURE_PGID64) == 0) {
       // reencode for old clients.
-      MDSMap m(cct);
+      MDSMap m;
       m.decode(encoded);
       encoded.clear();
       m.encode_client_old(encoded);

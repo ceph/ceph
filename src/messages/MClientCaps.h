@@ -16,9 +16,14 @@
 #define CEPH_MCLIENTCAPS_H
 
 #include "msg/Message.h"
+#include "include/ceph_features.h"
 
 
 class MClientCaps : public Message {
+
+  static const int HEAD_VERSION = 2;   // added flock metadata
+  static const int COMPAT_VERSION = 1;
+
  public:
   struct ceph_mds_caps head;
   bufferlist snapbl;
@@ -68,7 +73,8 @@ class MClientCaps : public Message {
   void set_mtime(const utime_t &t) { t.encode_timeval(&head.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&head.atime); }
 
-  MClientCaps() {}
+  MClientCaps()
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) { }
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -77,8 +83,8 @@ class MClientCaps : public Message {
 	      int caps,
 	      int wanted,
 	      int dirty,
-	      int mseq) :
-    Message(CEPH_MSG_CLIENT_CAPS) {
+	      int mseq)
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -92,8 +98,8 @@ class MClientCaps : public Message {
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      uint64_t id, int mseq) :
-    Message(CEPH_MSG_CLIENT_CAPS) {
+	      uint64_t id, int mseq)
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -105,8 +111,8 @@ private:
   ~MClientCaps() {}
 
 public:
-  const char *get_type_name() { return "Cfcap";}
-  void print(ostream& out) {
+  const char *get_type_name() const { return "Cfcap";}
+  void print(ostream& out) const {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
@@ -133,7 +139,7 @@ public:
     out << ")";
   }
   
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.snap_trace_len, snapbl, p);
@@ -146,7 +152,7 @@ public:
     if (header.version >= 2)
       ::decode(flockbl, p);
   }
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
     ::encode(head, payload);
@@ -155,9 +161,10 @@ public:
     middle = xattrbl;
 
     // conditionally include flock metadata
-    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
-      header.version = 2;
+    if (features & CEPH_FEATURE_FLOCK) {
       ::encode(flockbl, payload);
+    } else {
+      header.version = 1;  // old
     }
   }
 };

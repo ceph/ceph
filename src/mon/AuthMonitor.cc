@@ -109,13 +109,13 @@ void AuthMonitor::create_initial()
   pending_auth.push_back(inc);
 }
 
-bool AuthMonitor::update_from_paxos()
+void AuthMonitor::update_from_paxos()
 {
   dout(10) << "update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
   version_t keys_ver = mon->key_server.get_ver();
   if (paxosv == keys_ver)
-    return true;
+    return;
   assert(paxosv >= keys_ver);
 
   if (keys_ver != paxos->get_stashed_version()) {
@@ -186,7 +186,10 @@ bool AuthMonitor::update_from_paxos()
   ::encode(mon->key_server, bl);
   paxos->stash_latest(paxosv, bl);
 
-  return true;
+  unsigned max = g_conf->paxos_max_join_drift * 2;
+  if (mon->is_leader() &&
+      paxosv > max)
+    paxos->trim_to(paxosv - max);
 }
 
 void AuthMonitor::increase_max_global_id()
@@ -395,7 +398,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     }
     if (caps_info.caps.length()) {
       bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter);
+      s->caps.parse(iter, NULL);
       s->caps.set_auid(auid);
     }
   } catch (const buffer::error &err) {

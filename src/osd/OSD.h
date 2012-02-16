@@ -120,6 +120,8 @@ class ReplicatedPG;
 
 class AuthAuthorizeHandlerRegistry;
 
+class OpRequest;
+
 extern const coll_t meta_coll;
 
 class OSD : public Dispatcher {
@@ -160,6 +162,7 @@ protected:
   void create_logger();
   void tick();
   void _dispatch(Message *m);
+  void dispatch_op(OpRequest *op);
 
 public:
   ClassHandler  *class_handler;
@@ -304,20 +307,20 @@ private:
   void update_osd_stat();
   
   // -- waiters --
-  list<class Message*> finished;
+  list<OpRequest*> finished;
   Mutex finished_lock;
   
-  void take_waiters(list<class Message*>& ls) {
+  void take_waiters(list<class OpRequest*>& ls) {
     finished_lock.Lock();
     finished.splice(finished.end(), ls);
     finished_lock.Unlock();
   }
-  void take_waiter(Message *o) {
+  void take_waiter(OpRequest *op) {
     finished_lock.Lock();
-    finished.push_back(o);
+    finished.push_back(op);
     finished_lock.Unlock();
   }
-  void push_waiters(list<class Message*>& ls) {
+  void push_waiters(list<OpRequest*>& ls) {
     assert(osd_lock.is_locked());   // currently, at least.  be careful if we change this (see #743)
     finished_lock.Lock();
     finished.splice(finished.begin(), ls);
@@ -325,6 +328,17 @@ private:
   }
   void do_waiters();
   
+  // -- op tracking --
+  xlist<OpRequest*> ops_in_flight;
+  /** This is an inner lock that is taken by the following three
+   * functions without regard for what locks the callers hold. It
+   * protects the xlist, but not the OpRequests. */
+  Mutex ops_in_flight_lock;
+  void register_inflight_op(xlist<OpRequest*>::item *i);
+  void check_ops_in_flight();
+  void unregister_inflight_op(xlist<OpRequest*>::item *i);
+  friend struct OpRequest;
+
   // -- op queue --
   deque<PG*> op_queue;
   int op_queue_len;
@@ -350,8 +364,8 @@ private:
     }
   } op_wq;
 
-  void enqueue_op(PG *pg, Message *op);
-  void requeue_ops(PG *pg, list<Message*>& ls);
+  void enqueue_op(PG *pg, OpRequest *op);
+  void requeue_ops(PG *pg, list<OpRequest*>& ls);
   void dequeue_op(PG *pg);
   static void static_dequeueop(OSD *o, PG *pg) {
     o->dequeue_op(pg);
@@ -368,7 +382,7 @@ private:
   OSDMapRef       osdmap;
   utime_t         had_map_since;
   RWLock          map_lock;
-  list<Message*>  waiting_for_osdmap;
+  list<OpRequest*>  waiting_for_osdmap;
 
   Mutex peer_map_epoch_lock;
   map<int, epoch_t> peer_map_epoch;
@@ -381,7 +395,7 @@ private:
 			   Session *session = 0);
   void _share_map_outgoing(const entity_inst_t& inst);
 
-  void wait_for_new_map(Message *m);
+  void wait_for_new_map(OpRequest *op);
   void handle_osd_map(class MOSDMap *m);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
@@ -420,7 +434,7 @@ protected:
   // -- placement groups --
   map<int, PGPool*> pool_map;
   hash_map<pg_t, PG*> pg_map;
-  map<pg_t, list<Message*> > waiting_for_pg;
+  map<pg_t, list<OpRequest*> > waiting_for_pg;
   PGRecoveryStats pg_recovery_stats;
 
   PGPool *_get_pool(int id);
@@ -429,20 +443,19 @@ protected:
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
-  PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
-  PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
-                            PG::Info::History history);
-  //void  _remove_unlock_pg(PG *pg);         // remove from store and memory
+  PG   *_create_lock_pg(pg_t pgid, bool newly_created,
+			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
+			ObjectStore::Transaction& t);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 
-  PG *get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& pcreated, bool primary,
+  PG *get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& pcreated, bool primary,
 		       ObjectStore::Transaction **pt,
 		       C_Contexts **pfin);
   
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
-  void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
+  void project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 			  vector<int>& lastup, vector<int>& lastacting);
 
   void wake_pg_waiters(pg_t pgid) {
@@ -452,7 +465,7 @@ protected:
     }
   }
   void wake_all_pg_waiters() {
-    for (map<pg_t, list<Message*> >::iterator p = waiting_for_pg.begin();
+    for (map<pg_t, list<OpRequest*> >::iterator p = waiting_for_pg.begin();
 	 p != waiting_for_pg.end();
 	 p++)
       take_waiters(p->second);
@@ -462,7 +475,7 @@ protected:
 
   // -- pg creation --
   struct create_pg_info {
-    PG::Info::History history;
+    pg_history_t history;
     vector<int> acting;
     set<int> prior;
     pg_t parent;
@@ -472,7 +485,7 @@ protected:
   map<pg_t, set<pg_t> > pg_split_ready;  // children ready to be split to, by parent
 
   bool can_create_pg(pg_t pgid);
-  void handle_pg_create(class MOSDPGCreate *m);
+  void handle_pg_create(OpRequest *op);
 
   void kick_pg_split_queue();
   void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
@@ -579,32 +592,31 @@ protected:
 
 
   // -- generic pg peering --
-  void do_notifies(map< int, vector<PG::Info> >& notify_list,
+  void do_notifies(map< int, vector<pg_info_t> >& notify_list,
 		   epoch_t query_epoch);
-  void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
+  void do_queries(map< int, map<pg_t,pg_query_t> >& query_map);
   void do_infos(map<int, MOSDPGInfo*>& info_map);
-  void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
+  void repeer(PG *pg, map< int, map<pg_t,pg_query_t> >& query_map);
 
   bool require_mon_peer(Message *m);
-  bool require_osd_peer(Message *m);
+  bool require_osd_peer(OpRequest *op);
 
-  bool require_current_map(Message *m, epoch_t v);
-  bool require_same_or_newer_map(Message *m, epoch_t e);
+  bool require_same_or_newer_map(OpRequest *op, epoch_t e);
 
-  void handle_pg_query(class MOSDPGQuery *m);
-  void handle_pg_missing(class MOSDPGMissing *m);
-  void handle_pg_notify(class MOSDPGNotify *m);
-  void handle_pg_log(class MOSDPGLog *m);
-  void handle_pg_info(class MOSDPGInfo *m);
-  void handle_pg_trim(class MOSDPGTrim *m);
+  void handle_pg_query(OpRequest *op);
+  void handle_pg_missing(OpRequest *op);
+  void handle_pg_notify(OpRequest *op);
+  void handle_pg_log(OpRequest *op);
+  void handle_pg_info(OpRequest *op);
+  void handle_pg_trim(OpRequest *op);
 
-  void handle_pg_scan(class MOSDPGScan *m);
-  bool scan_is_queueable(PG *pg, MOSDPGScan *m);
+  void handle_pg_scan(OpRequest *op);
+  bool scan_is_queueable(PG *pg, OpRequest *op);
 
-  void handle_pg_backfill(class MOSDPGBackfill *m);
-  bool backfill_is_queueable(PG *pg, MOSDPGBackfill *m);
+  void handle_pg_backfill(OpRequest *op);
+  bool backfill_is_queueable(PG *pg, OpRequest *op);
 
-  void handle_pg_remove(class MOSDPGRemove *m);
+  void handle_pg_remove(OpRequest *op);
   void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
 
@@ -733,9 +745,9 @@ protected:
   Mutex remove_list_lock;
   map<epoch_t, map<int, vector<pg_t> > > remove_list;
 
-  void queue_for_removal(int osd, pg_t pgid) {
+  void queue_for_removal(epoch_t epoch, int osd, pg_t pgid) {
     remove_list_lock.Lock();
-    remove_list[osdmap->get_epoch()][osd].push_back(pgid);
+    remove_list[epoch][osd].push_back(pgid);
     remove_list_lock.Unlock();
   }
 
@@ -1011,6 +1023,7 @@ protected:
 		  uuid_d fsid, int whoami);
   static int mkjournal(const std::string &dev, const std::string &jdev);
   static int flushjournal(const std::string &dev, const std::string &jdev);
+  static int dump_journal(const std::string &dev, const std::string &jdev, ostream& out);
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();
@@ -1038,18 +1051,22 @@ public:
   // startup/shutdown
   int pre_init();
   int init();
+
+  void suicide(int exitcode);
   int shutdown();
 
-  void reply_op_error(MOSDOp *op, int r);
-  void reply_op_error(MOSDOp *op, int r, eversion_t v);
-  void handle_misdirected_op(PG *pg, MOSDOp *op);
+  void handle_signal(int signum);
+
+  void reply_op_error(OpRequest *op, int r);
+  void reply_op_error(OpRequest *op, int r, eversion_t v);
+  void handle_misdirected_op(PG *pg, OpRequest *op);
 
   void handle_rep_scrub(MOSDRepScrub *m);
   void handle_scrub(class MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
-  void handle_op(class MOSDOp *m);
-  void handle_sub_op(class MOSDSubOp *m);
-  void handle_sub_op_reply(class MOSDSubOpReply *m);
+  void handle_op(OpRequest *op);
+  void handle_sub_op(OpRequest *op);
+  void handle_sub_op_reply(OpRequest *op);
 
 private:
   /// check if we can throw out op from a disconnected client
@@ -1057,9 +1074,9 @@ private:
   /// check if op has sufficient caps
   bool op_has_sufficient_caps(PG *pg, class MOSDOp *m);
   /// check if op should be (re)queued for processing
-  bool op_is_queueable(PG *pg, class MOSDOp *m);
+  bool op_is_queueable(PG *pg, OpRequest *op);
   /// check if subop should be (re)queued for processing
-  bool subop_is_queueable(PG *pg, class MOSDSubOp *m);
+  bool subop_is_queueable(PG *pg, OpRequest *op);
 
 public:
   void force_remount();
@@ -1085,6 +1102,5 @@ public:
 extern const CompatSet::Feature ceph_osd_feature_compat[];
 extern const CompatSet::Feature ceph_osd_feature_ro_compat[];
 extern const CompatSet::Feature ceph_osd_feature_incompat[];
-
 
 #endif

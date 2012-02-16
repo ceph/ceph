@@ -268,7 +268,7 @@ for name in $what; do
 		[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
 		echo Mounting Btrfs on $host:$btrfs_path
-		do_root_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
+		do_root_cmd "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
 	    echo Starting Ceph $name on $host...
 	    get_conf pre_start_eval "" "pre start eval"

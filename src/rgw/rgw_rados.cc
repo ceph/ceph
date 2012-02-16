@@ -391,7 +391,9 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         }
       }
 
-      result.push_back(eiter->second);
+      RGWObjEnt ent = eiter->second;
+      ent.name = obj;
+      result.push_back(ent);
       count++;
     }
   } while (truncated && count < max);
@@ -917,6 +919,16 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
 
   rgw_obj obj(rgw_root_bucket, bucket.name);
   r = delete_obj(NULL, obj, true);
+  if (r < 0)
+    return r;
+
+  ObjectWriteOperation op;
+  op.remove();
+  string oid = dir_oid_prefix;
+  oid.append(marker);
+  librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+  r = list_ctx.aio_operate(oid, completion, &op);
+  completion->release();
   if (r < 0)
     return r;
 
@@ -1694,9 +1706,9 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   }
 
   dout(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
-  op.read(ofs, len);
+  op.read(ofs, len, &bl, NULL);
 
-  r = state->io_ctx.operate(oid, &op, &bl);
+  r = state->io_ctx.operate(oid, &op, NULL);
   dout(20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r == -ECANCELED) {
@@ -1755,9 +1767,9 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   if (r < 0)
     return r;
 
-  op.read(ofs, size);
+  op.read(ofs, size, &bl, NULL);
 
-  r = io_ctx.operate(oid, &op, &bl);
+  r = io_ctx.operate(oid, &op, NULL);
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
@@ -1780,45 +1792,21 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   io_ctx.locator_set_key(key);
 
+  map<string, bufferlist> attrset;
+  uint64_t size = 0;
+  time_t mtime = 0;
+
   ObjectReadOperation op;
-  op.getxattrs();
-  op.stat();
+  op.getxattrs(&attrset, NULL);
+  op.stat(&size, &mtime, NULL);
   if (first_chunk) {
-    op.read(0, RGW_MAX_CHUNK_SIZE);
+    op.read(0, RGW_MAX_CHUNK_SIZE, first_chunk, NULL);
   }
   bufferlist outbl;
   r = io_ctx.operate(oid, &op, &outbl);
   if (r < 0)
     return r;
 
-  map<string, bufferlist> attrset;
-  bufferlist::iterator oiter = outbl.begin();
-  try {
-    ::decode(attrset, oiter);
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
-    return -EIO;
-  }
-
-  map<string, bufferlist>::iterator aiter;
-  for (aiter = attrset.begin(); aiter != attrset.end(); ++aiter) {
-    dout(20) << "RGWRados::obj_stat: attr=" << aiter->first << dendl;
-  }
-
-  uint64_t size = 0;
-  time_t mtime = 0;
-  try {
-    ::decode(size, oiter);
-    utime_t ut;
-    ::decode(ut, oiter);
-    mtime = ut.sec();
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
-    return -EIO;
-  }
-  if (first_chunk) {
-    oiter.copy_all(*first_chunk);
-  }
   if (psize)
     *psize = size;
   if (pmtime)
@@ -2388,7 +2376,7 @@ public:
 
 enum IntentFlags { // bitmask
   I_DEL_OBJ = 1,
-  I_DEL_POOL = 2,
+  I_DEL_DIR = 2,
 };
 
 
@@ -2439,7 +2427,7 @@ int RGWRados::remove_temp_objects(string date, string time)
     }
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
+      process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_DIR, true);
     }
   } while (is_truncated);
 
@@ -2452,7 +2440,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   cout << "processing intent log " << oid << std::endl;
   rgw_obj obj(bucket, oid);
 
-  int chunk = 1024 * 1024;
+  unsigned chunk = 1024 * 1024;
   off_t pos = 0;
   bool eof = false;
   bool complete = true;
@@ -2511,15 +2499,22 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
       }
       break;
-    case DEL_POOL:
-      if (!flags & I_DEL_POOL) {
+    case DEL_DIR:
+      if (!flags & I_DEL_DIR) {
         complete = false;
         break;
-      }
-      r = delete_bucket(entry.obj.bucket);
-      if (r < 0 && r != -ENOENT) {
-        cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
-        complete = false;
+      } else {
+        librados::IoCtx io_ctx;
+        int r = open_bucket_ctx(entry.obj.bucket, io_ctx);
+        if (r < 0)
+          return r;
+        string oid = dir_oid_prefix;
+        oid.append(entry.obj.bucket.marker);
+        r = io_ctx.remove(oid);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
+          complete = false;
+        }
       }
       break;
     default:

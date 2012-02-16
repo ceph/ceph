@@ -15,6 +15,8 @@
 #ifndef CEPH_MCACHEEXPIRE_H
 #define CEPH_MCACHEEXPIRE_H
 
+#include "mds/mdstypes.h"
+
 class MCacheExpire : public Message {
   __s32 from;
 
@@ -45,7 +47,7 @@ public:
 
   int get_from() { return from; }
 
-  MCacheExpire() {}
+  MCacheExpire() : Message(MSG_MDS_CACHEEXPIRE) {}
   MCacheExpire(int f) : 
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }
@@ -53,7 +55,7 @@ private:
   ~MCacheExpire() {}
 
 public:
-  virtual const char *get_type_name() { return "cache_expire";}
+  virtual const char *get_type_name() const { return "cache_expire";}
   
   void add_inode(dirfrag_t r, vinodeno_t vino, int nonce) {
     realms[r].inodes[vino] = nonce;
@@ -69,13 +71,13 @@ public:
     realms[df] = r;
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(from, p);
     ::decode(realms, p);
   }
     
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     ::encode(from, payload);
     ::encode(realms, payload);
   }

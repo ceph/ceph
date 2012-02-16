@@ -10,10 +10,12 @@ class PaxosServiceMessage : public Message {
   __s16 session_mon;
   uint64_t session_mon_tid;
   
- PaxosServiceMessage() : Message(MSG_PAXOS),
-			 version(0), session_mon(-1), session_mon_tid(0) { }
-  PaxosServiceMessage(int type, version_t v) : Message(type),
-					       version(v), session_mon(-1), session_mon_tid(0) { }
+  PaxosServiceMessage()
+    : Message(MSG_PAXOS),
+      version(0), session_mon(-1), session_mon_tid(0) { }
+  PaxosServiceMessage(int type, version_t v, int enc_version=1, int compat_enc_version=0)
+    : Message(type, enc_version, compat_enc_version),
+      version(v), session_mon(-1), session_mon_tid(0) { }
  protected:
   ~PaxosServiceMessage() {}
 
@@ -30,12 +32,12 @@ class PaxosServiceMessage : public Message {
     ::decode(session_mon_tid, p);
   }
 
-  void encode_payload(CephContext *cct) {
+  void encode_payload(uint64_t features) {
     assert(0);
     paxos_encode();
   }
 
-  void decode_payload(CephContext *cct) {
+  void decode_payload() {
     assert(0);
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
@@ -56,7 +58,7 @@ class PaxosServiceMessage : public Message {
     return session;
   }
   
-  const char *get_type_name() { return "PaxosServiceMessage"; }
+  const char *get_type_name() const { return "PaxosServiceMessage"; }
 };
 
 #endif

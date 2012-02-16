@@ -165,8 +165,8 @@ extern int gen_rand_alphanumeric(char *dest, int size);
 extern int gen_rand_alphanumeric_upper(char *dest, int size);
 
 enum RGWIntentEvent {
-  DEL_OBJ,
-  DEL_POOL,
+  DEL_OBJ = 0,
+  DEL_DIR = 1,
 };
 
 enum RGWObjCategory {
@@ -516,12 +516,11 @@ struct req_state {
    bool content_started;
    int format;
    ceph::Formatter *formatter;
-   const char *path_name;
-   string path_name_url;
+   string decoded_uri;
    string request_uri;
+   string request_params;
    const char *host;
    const char *method;
-   const char *query;
    const char *length;
    uint64_t content_length;
    const char *content_type;
@@ -611,7 +610,8 @@ struct RGWBucketEnt {
     ::encode(struct_v, bl);
     uint64_t s = size;
     __u32 mt = mtime;
-    ::encode(bucket.name, bl);
+    string empty_str;  // originally had the bucket name here, but we encode bucket later
+    ::encode(empty_str, bl);
     ::encode(s, bl);
     ::encode(mt, bl);
     ::encode(count, bl);
@@ -624,7 +624,8 @@ struct RGWBucketEnt {
     ::decode(struct_v, bl);
     __u32 mt;
     uint64_t s;
-    ::decode(bucket.name, bl);
+    string empty_str;  // backward compatibility
+    ::decode(empty_str, bl);
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
@@ -735,7 +736,7 @@ public:
         object = o;
         return;
       }
-      object = "__";
+      object = "_";
       object.append(o);
     } else {
       object = "_";

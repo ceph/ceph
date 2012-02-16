@@ -23,7 +23,6 @@
 #include <string>
 using namespace std;
 
-#define max(a,b)  ((a)>(b) ? (a):(b))
 
 
 /**
@@ -67,6 +66,9 @@ using namespace std;
  */
 
 class MDiscoverReply : public Message {
+
+  static const int HEAD_VERSION = 2;
+
   // info about original request
   inodeno_t base_ino;
   frag_t base_dir_frag;  
@@ -113,9 +115,9 @@ class MDiscoverReply : public Message {
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
   // cons
-  MDiscoverReply() {}
+  MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
   MDiscoverReply(MDiscover *dis) :
-    Message(MSG_MDS_DISCOVERREPLY),
+    Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(dis->get_base_ino()),
     base_dir_frag(dis->get_base_dir_frag()),
     wanted_base_dir(dis->wants_base_dir()),
@@ -129,7 +131,7 @@ class MDiscoverReply : public Message {
     header.tid = dis->get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
-    Message(MSG_MDS_DISCOVERREPLY),
+    Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),
@@ -146,8 +148,8 @@ private:
   ~MDiscoverReply() {}
 
 public:
-  const char *get_type_name() { return "discover_reply"; }
-  void print(ostream& out) {
+  const char *get_type_name() const { return "discover_reply"; }
+  void print(ostream& out) const {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
   
@@ -180,7 +182,7 @@ public:
 
 
   // ...
-  virtual void decode_payload(CephContext *cct) {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -199,8 +201,7 @@ public:
     if (header.version >= 2)
       ::decode(wanted_ino, p);
   }
-  void encode_payload(CephContext *cct) {
-    header.version = 2;
+  void encode_payload(uint64_t features) {
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(wanted_base_dir, payload);
