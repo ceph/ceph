@@ -5523,8 +5523,8 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_t::item>::const_iterator p = m.missing.find(soid);
-      started += recover_object_replicas(soid, p->second.need);
+      map<hobject_t,pg_missing_t::item>::const_iterator r = m.missing.find(soid);
+      started += recover_object_replicas(soid, r->second.need);
     }
   }
 
