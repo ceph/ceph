@@ -1155,6 +1155,7 @@ void MDBalancer::dump_pop_map()
 {
   return; // this is dumb
 
+/*
 
   char fn[32];
   snprintf(fn, sizeof(fn), "popdump.%d.mds%d", beat_epoch, mds->get_nodeid());
@@ -1174,10 +1175,9 @@ void MDBalancer::dump_pop_map()
     iq.pop_front();
 
     // pop stats
-    /*for (int a=0; a<MDS_NPOP; a++)
-      for (int b=0; b<META_NPOP; b++)
-	myfile << in->popularity[a].pop[b].get(now) << "\t";
-    */
+    //for (int a=0; a<MDS_NPOP; a++)
+    //  for (int b=0; b<META_NPOP; b++)
+    //    myfile << in->popularity[a].pop[b].get(now) << "\t";
 
     // recurse, depth-first.
     if (in->is_dir()) {
@@ -1214,6 +1214,7 @@ void MDBalancer::dump_pop_map()
   }
 
   myfile.close();
+*/
 }
 
 
