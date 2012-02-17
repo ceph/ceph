@@ -542,6 +542,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
 #define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
+#define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
 
 std::string pg_state_string(int state);
 

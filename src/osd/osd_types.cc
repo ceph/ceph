@@ -332,6 +332,8 @@ std::string pg_state_string(int state)
     oss << "splitting+";
   if (state & PG_STATE_DEGRADED)
     oss << "degraded+";
+  if (state & PG_STATE_REMAPPED)
+    oss << "remapped+";
   if (state & PG_STATE_SCRUBBING)
     oss << "scrubbing+";
   if (state & PG_STATE_SCRUBQ)

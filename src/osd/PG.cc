@@ -3479,6 +3479,11 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     info.stats.mapping_epoch = info.history.same_interval_since;
   }
 
+  if (up != acting)
+    state_set(PG_STATE_REMAPPED);
+  else
+    state_clear(PG_STATE_REMAPPED);
+
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
 
