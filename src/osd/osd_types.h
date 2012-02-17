@@ -538,7 +538,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
-//PG_STATE_SCANNING (1<<14) .. deprecated.
+#define PG_STATE_RECOVERING   (1<<14) // pg is recovering/migrating objects
 #define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
 #define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.

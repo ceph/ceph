@@ -1373,6 +1373,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       finish_recovery(t, tfin);
     else {
       dout(10) << "activate not all replicas are uptodate, queueing recovery" << dendl;
+      state_set(PG_STATE_RECOVERING);
       osd->queue_for_recovery(this);
     }
 
@@ -1542,6 +1543,7 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
   state_clear(PG_STATE_BACKFILL);
+  state_clear(PG_STATE_RECOVERING);
 
   // only clear DEGRADED (or mark CLEAN) if we have enough (or the
   // desired number of) replicas.
