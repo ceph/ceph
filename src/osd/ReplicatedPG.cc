@@ -2890,7 +2890,8 @@ void ReplicatedPG::op_applied(RepGather *repop)
   int whoami = osd->get_nodeid();
 
   if (!repop->aborted) {
-    assert(repop->waitfor_ack.count(whoami));
+    assert(repop->waitfor_ack.count(whoami) ||
+	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk
     repop->waitfor_ack.erase(whoami);
   }
   
@@ -2937,9 +2938,15 @@ void ReplicatedPG::op_commit(RepGather *repop)
     dout(10) << "op_commit " << *repop << " -- already marked ondisk" << dendl;
   } else {
     dout(10) << "op_commit " << *repop << dendl;
-    repop->waitfor_disk.erase(osd->get_nodeid());
-    //repop->waitfor_nvram.erase(osd->get_nodeid());
+    int whoami = osd->get_nodeid();
 
+    repop->waitfor_disk.erase(whoami);
+
+    // remove from ack waitfor list too.  sub_op_modify_commit()
+    // behaves the same in that the COMMIT implies and ACK and there
+    // is no separate reply sent.
+    repop->waitfor_ack.erase(whoami);
+    
     last_update_ondisk = repop->v;
     if (waiting_for_ondisk.count(repop->v)) {
       osd->requeue_ops(this, waiting_for_ondisk[repop->v]);
