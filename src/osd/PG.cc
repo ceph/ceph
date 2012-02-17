@@ -4243,6 +4243,8 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   if (pg->need_up_thru)
     pg->osd->queue_want_up_thru(pg->info.history.same_interval_since);
 
+  pg->update_stats();
+
   get_infos();
 }
 
