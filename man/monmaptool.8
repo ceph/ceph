@@ -1,4 +1,4 @@
-.TH "MONMAPTOOL" "8" "September 22, 2011" "dev" "Ceph"
+.TH "MONMAPTOOL" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 monmaptool \- ceph monitor cluster map manipulation tool
 .
@@ -76,6 +76,11 @@ will add a monitor with the specified ip:port to the map.
 .TP
 .B \-\-rm name
 will remove the monitor with the specified ip:port from the map.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-fsid uuid
+will set the fsid to the given uuid.  If not specified with \-\-create, a random fsid will be generated.
 .UNINDENT
 .SH EXAMPLE
 .sp

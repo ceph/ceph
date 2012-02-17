@@ -110,7 +110,7 @@ Example
 
 To create a new keyring containing a key for client.foo::
 
-        ceph-authtool -c -n client.foo --gen-key keyring
+        ceph-authtool -C -n client.foo --gen-key keyring
 
 To associate some capabilities with the key (namely, the ability to
 mount a Ceph filesystem)::
