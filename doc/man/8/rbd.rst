@@ -154,7 +154,11 @@ To delete an rbd image (be careful!)::
 
 To create a new snapshot::
 
-       rbd create mypool/myimage@mysnap
+       rbd snap create mypool/myimage@mysnap
+
+To delete a snapshot::
+
+       rbd snap rm mypool/myimage@mysnap
 
 To map an image via the kernel with cephx enabled::
 
