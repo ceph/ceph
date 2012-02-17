@@ -246,7 +246,6 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
       purge_strays();
     }
   }
-  update_stats();
 
   // was this a new info?  if so, update peers!
   if (p == peer_info.end())
