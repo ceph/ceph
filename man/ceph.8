@@ -1,4 +1,4 @@
-.TH "CEPH" "8" "September 22, 2011" "dev" "Ceph"
+.TH "CEPH" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 ceph \- ceph file system control utility
 .
@@ -47,13 +47,11 @@ To start in interactive mode, no arguments are necessary. Control\-d or
 \(aqquit\(aq will exit.
 .SS Watch mode
 .sp
-To watch cluster state changes in real time, starting in \-w (watch)
-mode will print updates to stdout as they occur. For example, to keep
-an eye on cluster state, run:
+Watch mode shows cluster state changes as they occur. For example:
 .sp
 .nf
 .ft C
-ceph \-C ceph.conf \-w
+ceph \-w
 .ft P
 .fi
 .SS Command line mode
