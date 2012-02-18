@@ -508,7 +508,9 @@ void PGMap::get_stuck_stats(PGMap::StuckPG type, utime_t cutoff,
       val = i->second.last_clean;
       break;
     case STUCK_STALE:
-      val = i->second.last_fresh;
+      if ((i->second.state & PG_STATE_STALE) == 0)
+	continue;
+      val = i->second.last_unstale;
       break;
     default:
       assert(0 == "invalid type");
