@@ -1522,10 +1522,7 @@ void MDS::handle_signal(int signum)
 void MDS::suicide()
 {
   assert(mds_lock.is_locked());
-  if (want_state == MDSMap::STATE_STOPPED)
-    state = want_state;
-  else
-    state = CEPH_MDS_STATE_DNE; // whatever.
+  state = CEPH_MDS_STATE_DNE; // whatever.
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
@@ -1774,6 +1771,12 @@ bool MDS::is_stale_message(Message *m)
  * it has not put the message. */
 bool MDS::_dispatch(Message *m)
 {
+  if (state == CEPH_MDS_STATE_DNE) {
+    dout(0) << " stopping, discarding " << *m << dendl;
+    m->put();
+    return true;
+  }
+
   if (is_stale_message(m)) {
     m->put();
     return true;
