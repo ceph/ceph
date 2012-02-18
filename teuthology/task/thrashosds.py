@@ -82,4 +82,4 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.do_join()
-        manager.wait_till_clean(config.get('timeout', 360))
+        manager.wait_for_recovery(config.get('timeout', 360))

@@ -45,7 +45,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_clean()
 
     # something that is always there
     dummyfile = '/etc/fstab'
@@ -60,7 +60,7 @@ def task(ctx, config):
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_recovery()
 
     # create old objects
     for f in range(1, 10):
@@ -135,7 +135,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.2', 'debug', 'kick_recovery_wq', '5')
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_recovery()
 
     # verify result
     for f in range(1, 10):
@@ -149,4 +149,4 @@ def task(ctx, config):
     # see if osd.1 can cope
     manager.revive_osd(1)
     manager.wait_till_osd_is_up(1)
-    manager.wait_till_clean()
+    manager.wait_for_clean()

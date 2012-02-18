@@ -50,7 +50,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_clean()
 
     # write some data
     p = rados_start(mon, ['-p', 'data', 'bench', '15', 'write', '-b', '4096'])
@@ -67,7 +67,7 @@ def task(ctx, config):
     # wait for everything to peer and be happy...
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_recovery()
 
     # write some new data
     p = rados_start(mon, ['-p', 'data', 'bench', '30', 'write', '-b', '4096'])
@@ -87,12 +87,12 @@ def task(ctx, config):
     # cluster must recover
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_recovery()
 
     # re-add osd.0
     manager.revive_osd(0)
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.wait_till_clean()
+    manager.wait_for_clean()
 
 

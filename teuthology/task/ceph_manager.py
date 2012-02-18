@@ -8,7 +8,7 @@ import json
 class Thrasher(gevent.Greenlet):
     def __init__(self, manager, config, logger=None):
         self.ceph_manager = manager
-        self.ceph_manager.wait_till_clean()
+        self.ceph_manager.wait_for_clean()
         osd_status = self.ceph_manager.get_osd_status()
         self.in_osds = osd_status['in']
         self.live_osds = osd_status['live']
@@ -124,7 +124,7 @@ class Thrasher(gevent.Greenlet):
             if random.uniform(0,1) < (float(delay) / cleanint):
                 while len(self.dead_osds) > maxdead:
                     self.revive_osd()
-                self.ceph_manager.wait_till_clean(
+                self.ceph_manager.wait_for_recovery(
                     timeout=self.config.get('timeout')
                     )
             self.choose_action()()
@@ -226,6 +226,14 @@ class CephManager:
                 num += 1
         return num
 
+    def get_num_active_recovered(self):
+        pgs = self.get_pg_stats()
+        num = 0
+        for pg in pgs:
+            if pg['state'].count('active') and not pg['state'].count('recovering'):
+                num += 1
+        return num
+
     def get_num_active(self):
         pgs = self.get_pg_stats()
         num = 0
@@ -237,8 +245,11 @@ class CephManager:
     def is_clean(self):
         return self.get_num_active_clean() == self.get_num_pgs()
 
-    def wait_till_clean(self, timeout=None):
-        self.log("waiting till clean")
+    def is_recovered(self):
+        return self.get_num_active_recovered() == self.get_num_pgs()
+
+    def wait_for_clean(self, timeout=None):
+        self.log("waiting for clean")
         start = time.time()
         num_active_clean = self.get_num_active_clean()
         while not self.is_clean():
@@ -251,6 +262,21 @@ class CephManager:
                 num_active_clean = cur_active_clean
             time.sleep(3)
         self.log("clean!")
+
+    def wait_for_recovery(self, timeout=None):
+        self.log("waiting for recovery to complete")
+        start = time.time()
+        num_active_recovered = self.get_num_active_recovered()
+        while not self.is_recovered():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to recover before timeout expired'
+            cur_active_recovered = self.get_num_active_recovered()
+            if cur_active_recovered != num_active_recovered:
+                start = time.time()
+                num_active_recovered = cur_active_recovered
+            time.sleep(3)
+        self.log("recovered!")
 
     def osd_is_up(self, osd):
         osds = self.get_osd_dump()
