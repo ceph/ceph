@@ -253,6 +253,28 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
 {
+  if (cmd.size() && cmd[0] == "query") {
+    JSONFormatter jsf(true);
+    jsf.open_object_section("pg");
+    jsf.dump_string("state", pg_state_string(get_state()));
+    jsf.open_array_section("up");
+    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
+      jsf.dump_unsigned("osd", *p);
+    jsf.close_section();
+    jsf.open_array_section("acting");
+    for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
+      jsf.dump_unsigned("osd", *p);
+    jsf.close_section();
+    jsf.open_object_section("info");
+    info.dump(&jsf);
+    jsf.close_section();
+    jsf.close_section();
+    stringstream dss;
+    jsf.flush(dss);
+    data.append(dss);
+    return 0;
+  }
+
   ss << "unknown command " << cmd;
   return -EINVAL;
 }
