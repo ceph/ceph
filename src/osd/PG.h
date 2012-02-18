@@ -674,7 +674,7 @@ public:
     return false;
   }
   
-  bool is_all_uptodate() const;
+  bool needs_recovery() const;
 
   void generate_past_intervals();
   void trim_past_intervals();

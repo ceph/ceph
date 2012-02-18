@@ -246,7 +246,6 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
       purge_strays();
     }
   }
-  update_stats();
 
   // was this a new info?  if so, update peers!
   if (p == peer_info.end())
@@ -636,21 +635,15 @@ ostream& PG::IndexedLog::print(ostream& out) const
 
 
 /******* PG ***********/
-bool PG::is_all_uptodate() const
+bool PG::needs_recovery() const
 {
   assert(is_primary());
 
-  bool uptodate = true;
-
-  if (up != acting) {
-    dout(10) << __func__ << ": the set of UP osds is not the same as the "
-	     << "set of ACTING osds." << dendl;
-    uptodate = false;
-  }
+  bool ret = false;
 
   if (missing.num_missing()) {
-    dout(10) << __func__ << ": primary has " << missing.num_missing() << dendl;
-    uptodate = false;
+    dout(10) << __func__ << " primary has " << missing.num_missing() << dendl;
+    ret = true;
   }
 
   vector<int>::const_iterator end = acting.end();
@@ -661,24 +654,24 @@ bool PG::is_all_uptodate() const
     int peer = *a;
     map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
-      dout(10) << __func__ << ": osd." << peer << " don't have missing set" << dendl;
-      uptodate = false;
+      dout(10) << __func__ << " osd." << peer << " don't have missing set" << dendl;
+      ret = true;
       continue;
     }
     if (pm->second.num_missing()) {
-      dout(10) << __func__ << ": osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
-      uptodate = false;
+      dout(10) << __func__ << " osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
+      ret = true;
     }
     map<int,pg_info_t>::const_iterator pi = peer_info.find(peer);
     if (pi->second.last_backfill != hobject_t::get_max()) {
-      dout(10) << __func__ << ": osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
-      uptodate = false;
+      dout(10) << __func__ << " osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
+      ret = true;
     }
   }
 
-  if (uptodate)
-    dout(10) << __func__ << ": everyone is uptodate" << dendl;
-  return uptodate;
+  if (!ret)
+    dout(10) << __func__ << " is recovered" << dendl;
+  return ret;
 }
 
 void PG::generate_past_intervals()
@@ -1369,10 +1362,11 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       state_set(PG_STATE_DEGRADED);
 
     // all clean?
-    if (is_all_uptodate()) 
+    if (!needs_recovery()) {
       finish_recovery(t, tfin);
-    else {
+    } else {
       dout(10) << "activate not all replicas are uptodate, queueing recovery" << dendl;
+      state_set(PG_STATE_RECOVERING);
       osd->queue_for_recovery(this);
     }
 
@@ -1542,11 +1536,9 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
   state_clear(PG_STATE_BACKFILL);
+  state_clear(PG_STATE_RECOVERING);
 
-  // only clear DEGRADED (or mark CLEAN) if we have enough (or the
-  // desired number of) replicas.
-  if (acting.size() >= get_osdmap()->get_pg_size(info.pgid))
-    state_clear(PG_STATE_DEGRADED);
+  // only mark CLEAN if we have the desired number of replicas.
   if (acting.size() == get_osdmap()->get_pg_size(info.pgid))
     state_set(PG_STATE_CLEAN);
 
@@ -3486,6 +3478,11 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     info.stats.mapping_epoch = info.history.same_interval_since;
   }
 
+  if (up != acting)
+    state_set(PG_STATE_REMAPPED);
+  else
+    state_clear(PG_STATE_REMAPPED);
+
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
 
@@ -3993,12 +3990,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
     pg->queue_snap_trim();
   }
 
-  if (pg->is_all_uptodate()) {
-    dout(10) << "Active: all up to date, going clean" << dendl;
-    pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
-			*context< RecoveryMachine >().get_context_list());
-  }
-
   return forward_event();
 }
 
@@ -4066,6 +4057,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
   int newest_update_osd;
 
+  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_RECOVERING);
+
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
@@ -4073,15 +4067,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
     return discard_event();
   }
 
-  if (pg->is_all_uptodate()) {
-    dout(10) << "recovery complete" << dendl;
-    pg->log.reset_recovery_pointers();
-    pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
-			*context< RecoveryMachine >().get_context_list());
-  } else {
-    dout(10) << "recovery not yet complete: some osds not up to date" << dendl;
-  }
-
+  assert(!pg->needs_recovery());
+  pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
+		      *context< RecoveryMachine >().get_context_list());
   return discard_event();
 }
 
@@ -4254,6 +4242,8 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
 
   if (pg->need_up_thru)
     pg->osd->queue_want_up_thru(pg->info.history.same_interval_since);
+
+  pg->update_stats();
 
   get_infos();
 }

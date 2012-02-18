@@ -55,6 +55,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     return err;
   }
 
+  journal_lock.Lock();
+
   replaying = true;
 
   int count = 0;
@@ -81,7 +83,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     }
 
     open_ops++;
+    journal_lock.Unlock();
     int r = do_transactions(tls, seq);
+    journal_lock.Lock();
     open_ops--;
     cond.Signal();
 
@@ -98,6 +102,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   }
 
   replaying = false;
+
+  journal_lock.Unlock();
 
   // done reading, make writeable.
   journal->make_writeable();
