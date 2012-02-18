@@ -250,6 +250,15 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 
 // ==========================================================
+
+int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
+{
+  ss << "unknown command " << cmd;
+  return -EINVAL;
+}
+
+// ==========================================================
+
 bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
 {
   if (missing.missing.empty())
@@ -6258,4 +6267,5 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   post_event(SnapTrim());
   return transit< NotTrimming >();
 }
+
 

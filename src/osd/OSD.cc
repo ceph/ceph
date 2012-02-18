@@ -2358,6 +2358,28 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     shutdown();
   }
 
+  else if (cmd[0] == "pg") {
+    pg_t pgid;
+
+    if (cmd.size() < 2) {
+      ss << "no pgid specified";
+      r = -EINVAL;
+    } else if (!pgid.parse(cmd[1].c_str())) {
+      ss << "couldn't parse pgid '" << cmd[1] << "'";
+      r = -EINVAL;
+    } else {
+      PG *pg = _lookup_lock_pg(pgid);
+      if (!pg) {
+	ss << "i don't have pgid " << pgid;
+	r = -ENOENT;
+      } else {
+	cmd.erase(cmd.begin(), cmd.begin() + 2);
+	r = pg->do_command(cmd, ss, odata);
+      }
+      pg->unlock();
+    }
+  }
+
   else if (cmd[0] == "bench") {
     uint64_t count = 1 << 30;  // 1gb
     uint64_t bsize = 4 << 20;
