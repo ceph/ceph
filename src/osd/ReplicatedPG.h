@@ -415,7 +415,7 @@ public:
 
     tid_t rep_tid;
 
-    bool applying, applied, aborted;
+    bool applying, applied, aborted, done;
 
     set<int>  waitfor_ack;
     //set<int>  waitfor_nvram;
@@ -437,7 +437,7 @@ public:
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      applying(false), applied(false), aborted(false),
+      applying(false), applied(false), aborted(false), done(false),
       sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
