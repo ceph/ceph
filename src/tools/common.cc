@@ -54,8 +54,10 @@ static Tokenizer *tok;
 
 // sync command
 bool pending_tell;  // is tell, vs monitor command
+bool pending_tell_pgid;
 uint64_t pending_tid = 0;
 EntityName pending_target;
+pg_t pending_target_pgid;
 vector<string> pending_cmd;
 bufferlist pending_bl;
 bool reply;
@@ -305,7 +307,7 @@ static void handle_ack(CephToolCtx *ctx, MCommandReply *ack)
 
 static void send_command(CephToolCtx *ctx)
 {
-  if (!pending_tell) {
+  if (!pending_tell && !pending_tell_pgid) {
     version_t last_seen_version = 0;
     MMonCommand *m = new MMonCommand(ctx->mc.monmap.fsid, last_seen_version);
     m->cmd = pending_cmd;
@@ -325,15 +327,36 @@ static void send_command(CephToolCtx *ctx)
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
   m->set_tid(++pending_tid);
-  
-  if (pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
+
+  if (pending_tell_pgid || pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
     if (!osdmap) {
       ctx->mc.sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
       ctx->mc.renew_subs();
       while (!osdmap)
 	cmd_cond.Wait(ctx->lock);
     }
+  }
 
+  if (pending_tell_pgid) {
+    // pick target osd
+    vector<int> osds;
+    int r = osdmap->pg_to_acting_osds(pending_target_pgid, osds);
+    if (r < 0) {
+      reply_rs = "error mapping pgid to an osd";
+      reply_rc = -EINVAL;
+      reply = true;
+      return;
+    }
+    if (r == 0) {
+      reply_rs = "pgid currently maps to no osd";
+      reply_rc = -ENOENT;
+      reply = true;
+      return;
+    }
+    pending_target.set_name(entity_name_t::OSD(osds[0]));
+  }
+
+  if (pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
     const char *start = pending_target.get_id().c_str();
     char *end;
     int n = strtoll(start, &end, 10);
@@ -347,6 +370,10 @@ static void send_command(CephToolCtx *ctx)
       reply_rc = -ESRCH;
       reply = true;
     } else {
+
+      if (!ctx->concise)
+	*ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
+
       messenger->send_message(m, osdmap->get_inst(n));
     }
     return;
@@ -425,6 +452,7 @@ int do_command(CephToolCtx *ctx,
   pending_cmd = cmd;
   pending_bl = bl;
   pending_tell = false;
+  pending_tell_pgid = false;
   reply = false;
   
   if (cmd.size() > 0 && cmd[0] == "tell") {
@@ -438,6 +466,17 @@ int do_command(CephToolCtx *ctx,
     }
     pending_cmd.erase(pending_cmd.begin(), pending_cmd.begin() + 2);
     pending_tell = true;
+  }
+  if (cmd.size() > 0 && cmd[0] == "pg") {
+    if (cmd.size() == 1) {
+      cerr << "no pgid specified" << std::endl;
+      return -EINVAL;
+    }
+    if (!pending_target_pgid.parse(cmd[1].c_str())) {
+      cerr << "'" << cmd[1] << "' not a valid pgid" << std::endl;
+      return -EINVAL;
+    }
+    pending_tell_pgid = true;
   }
 
   send_command(ctx);

@@ -21,6 +21,7 @@
 
 #include "include/encoding.h"
 #include "include/buffer.h"
+#include "msg/msg_types.h"
 
 /* Represents a Ceph entity name.
  *
@@ -51,6 +52,7 @@ struct EntityName
   void set_type(uint32_t type_);
   int set_type(const char *type);
   void set_id(const std::string &id_);
+  void set_name(entity_name_t n);
 
   const char* get_type_str() const;
   bool is_admin() const;
