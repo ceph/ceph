@@ -222,7 +222,7 @@ class CephManager:
         pgs = self.get_pg_stats()
         num = 0
         for pg in pgs:
-            if pg['state'].startswith('active+clean'):
+            if pg['state'].count('active') and pg['state'].count('clean') and not pg['state'].count('stale'):
                 num += 1
         return num
 
@@ -230,7 +230,7 @@ class CephManager:
         pgs = self.get_pg_stats()
         num = 0
         for pg in pgs:
-            if pg['state'].count('active') and not pg['state'].count('recovering'):
+            if pg['state'].count('active') and not pg['state'].count('recovering') and not pg['state'].count('stale'):
                 num += 1
         return num
 
@@ -238,7 +238,7 @@ class CephManager:
         pgs = self.get_pg_stats()
         num = 0
         for pg in pgs:
-            if pg['state'].startswith('active'):
+            if pg['state'].count('active') and not pg['state'].count('stale'):
                 num += 1
         return num
 
