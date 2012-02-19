@@ -1790,7 +1790,7 @@ void PG::clear_stats()
 void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
 	      ObjectStore::Transaction *t)
 {
-  dout(10) << "init role " << role << " up " << up << " acting " << acting
+  dout(10) << "init role " << role << " up " << newup << " acting " << newacting
 	   << " history " << history << dendl;
 
   set_role(role);

@@ -1120,7 +1120,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created,
     history.last_epoch_started = history.epoch_created - 1;
   }
 
-  pg->init(role, acting, acting, history, &t);
+  pg->init(role, up, acting, history, &t);
 
   dout(7) << "_create_lock_pg " << *pg << dendl;
   return pg;
