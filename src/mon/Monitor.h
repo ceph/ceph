@@ -130,7 +130,8 @@ private:
     STATE_SLURPING,
     STATE_ELECTING,
     STATE_LEADER,
-    STATE_PEON
+    STATE_PEON,
+    STATE_SHUTDOWN
   };
   int state;
 

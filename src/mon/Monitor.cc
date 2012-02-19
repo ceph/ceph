@@ -343,6 +343,8 @@ void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
   
+  state = STATE_SHUTDOWN;
+
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("mon_status");
@@ -1336,6 +1338,9 @@ bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
 
+  if (state == STATE_SHUTDOWN)
+    return false;
+
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
   bool reuse_caps = false;
@@ -1644,6 +1649,9 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
+  if (state == STATE_SHUTDOWN)
+    return false;
+
   // ignore lossless monitor sessions
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
@@ -1835,6 +1843,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 {
   dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
 
+  if (state == STATE_SHUTDOWN)
+    return false;
+
   // we only connect to other monitors; every else connects to us.
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
@@ -1894,6 +1905,9 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
 	   << " " << ceph_entity_type_name(peer_type)
 	   << " protocol " << protocol << dendl;
+
+  if (state == STATE_SHUTDOWN)
+    return false;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
       auth_supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
