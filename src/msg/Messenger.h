@@ -26,6 +26,7 @@ using namespace std;
 #include "common/Cond.h"
 #include "include/Context.h"
 #include "include/types.h"
+#include "include/ceph_features.h"
 
 #include <errno.h>
 #include <sstream>
@@ -35,6 +36,39 @@ class Timer;
 
 
 class Messenger {
+public:
+  struct Policy {
+    bool lossy;
+    bool server;
+    Throttle *throttler;
+
+    uint64_t features_supported;
+    uint64_t features_required;
+
+    Policy()
+      : lossy(false), server(false), throttler(NULL),
+	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
+	features_required(0) {}
+    Policy(bool l, bool s, uint64_t sup, uint64_t req)
+      : lossy(l), server(s), throttler(NULL),
+	features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
+	features_required(req) {}
+
+    static Policy stateful_server(uint64_t sup, uint64_t req) {
+      return Policy(false, true, sup, req);
+    }
+    static Policy stateless_server(uint64_t sup, uint64_t req) {
+      return Policy(true, true, sup, req);
+    }
+    static Policy lossless_peer(uint64_t sup, uint64_t req) {
+      return Policy(false, false, sup, req);
+    }
+    static Policy client(uint64_t sup, uint64_t req) {
+      return Policy(false, false, sup, req);
+    }
+  };
+
+
 private:
   list<Dispatcher*> dispatchers;
 

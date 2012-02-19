@@ -404,15 +404,15 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64;
-  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+  messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   messenger->set_policy(entity_name_t::TYPE_MON,
-			SimpleMessenger::Policy::lossless_peer(supported,
-							       CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64));
+			Messenger::Policy::lossless_peer(supported,
+							 CEPH_FEATURE_UID |
+							 CEPH_FEATURE_PGID64));
   messenger->set_policy(entity_name_t::TYPE_OSD,
-			SimpleMessenger::Policy::stateless_server(supported,
-								  CEPH_FEATURE_PGID64 |
-								  CEPH_FEATURE_OSDENC));
+			Messenger::Policy::stateless_server(supported,
+							    CEPH_FEATURE_PGID64 |
+							    CEPH_FEATURE_OSDENC));
   mon->init();
   messenger->wait();
 

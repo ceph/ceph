@@ -344,28 +344,28 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_PGID64;
 
-  client_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+  client_messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			       SimpleMessenger::Policy::stateless_server(supported, 0));
+			       Messenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
   client_messenger->set_policy(entity_name_t::TYPE_MON,
-                               SimpleMessenger::Policy::client(supported,
-                                                               CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_OSDENC));
+                               Messenger::Policy::client(supported,
+							 CEPH_FEATURE_UID |
+							 CEPH_FEATURE_PGID64 |
+							 CEPH_FEATURE_OSDENC));
   //try to poison pill any OSD connections on the wrong address
   client_messenger->set_policy(entity_name_t::TYPE_OSD,
-			       SimpleMessenger::Policy::stateless_server(0,0));
-
-  cluster_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(0, 0));
-  cluster_messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client(0,0));
+			       Messenger::Policy::stateless_server(0,0));
+  
+  cluster_messenger->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+  cluster_messenger->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::client(0,0));
   cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
-				SimpleMessenger::Policy::lossless_peer(supported,
-								       CEPH_FEATURE_UID |
-								       CEPH_FEATURE_PGID64 |
-								       CEPH_FEATURE_OSDENC));
+				Messenger::Policy::lossless_peer(supported,
+								 CEPH_FEATURE_UID |
+								 CEPH_FEATURE_PGID64 |
+								 CEPH_FEATURE_OSDENC));
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
-				SimpleMessenger::Policy::stateless_server(0, 0));
+				Messenger::Policy::stateless_server(0, 0));
 
   // Set up crypto, daemonize, etc.
   // Leave stderr open in case we need to report errors.

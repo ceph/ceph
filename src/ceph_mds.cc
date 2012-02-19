@@ -245,16 +245,16 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_PGID64;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
-  messenger->set_default_policy(SimpleMessenger::Policy::client(supported, required));
+  messenger->set_default_policy(Messenger::Policy::client(supported, required));
   messenger->set_policy(entity_name_t::TYPE_MON,
-			SimpleMessenger::Policy::client(supported,
-							CEPH_FEATURE_UID |
-							CEPH_FEATURE_PGID64));
+			Messenger::Policy::client(supported,
+						  CEPH_FEATURE_UID |
+						  CEPH_FEATURE_PGID64));
   messenger->set_policy(entity_name_t::TYPE_MDS,
-			SimpleMessenger::Policy::lossless_peer(supported,
-							       CEPH_FEATURE_UID));
+			Messenger::Policy::lossless_peer(supported,
+							 CEPH_FEATURE_UID));
   messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			SimpleMessenger::Policy::stateful_server(supported, 0));
+			Messenger::Policy::stateful_server(supported, 0));
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
     global_init_daemonize(g_ceph_context, 0);
