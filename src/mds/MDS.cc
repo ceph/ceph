@@ -1589,8 +1589,15 @@ void MDS::respawn()
 
 bool MDS::ms_dispatch(Message *m)
 {
+  bool ret;
   mds_lock.Lock();
-  bool ret = _dispatch(m);
+  if (state == CEPH_MDS_STATE_DNE) {
+    dout(10) << " stopping, discarding " << *m << dendl;
+    m->put();
+    ret = true;
+  } else {
+    ret = _dispatch(m);
+  }
   mds_lock.Unlock();
   return ret;
 }
@@ -1771,12 +1778,6 @@ bool MDS::is_stale_message(Message *m)
  * it has not put the message. */
 bool MDS::_dispatch(Message *m)
 {
-  if (state == CEPH_MDS_STATE_DNE) {
-    dout(0) << " stopping, discarding " << *m << dendl;
-    m->put();
-    return true;
-  }
-
   if (is_stale_message(m)) {
     m->put();
     return true;
@@ -1959,6 +1960,8 @@ void MDS::ms_handle_connect(Connection *con)
 {
   Mutex::Locker l(mds_lock);
   dout(0) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  if (state == CEPH_MDS_STATE_DNE)
+    return;
   objecter->ms_handle_connect(con);
 }
 
@@ -1966,6 +1969,9 @@ bool MDS::ms_handle_reset(Connection *con)
 {
   Mutex::Locker l(mds_lock);
   dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
+  if (state == CEPH_MDS_STATE_DNE)
+    return false;
+
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     objecter->ms_handle_reset(con);
   } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
@@ -1988,6 +1994,8 @@ void MDS::ms_handle_remote_reset(Connection *con)
 {
   Mutex::Locker l(mds_lock);
   dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
+  if (state == CEPH_MDS_STATE_DNE)
+    return;
   objecter->ms_handle_remote_reset(con);
 }
 
@@ -1996,6 +2004,8 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 			       bool& is_valid)
 {
   Mutex::Locker l(mds_lock);
+  if (state == CEPH_MDS_STATE_DNE)
+    return false;
 
   AuthAuthorizeHandler *authorize_handler =
     authorize_handler_registry->get_handler(protocol);
