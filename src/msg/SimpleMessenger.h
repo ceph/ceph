@@ -52,9 +52,6 @@ using namespace __gnu_cxx;
  */
 
 class SimpleMessenger : public Messenger {
-public:
-  void sigint();
-
 private:
   class Pipe;
 
@@ -73,8 +70,6 @@ private:
     int rebind(int avoid_port);
     int start();
   } accepter;
-
-  void sigint(int r);
 
   // pipe
   class Pipe : public RefCountedObject {
