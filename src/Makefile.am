@@ -860,7 +860,8 @@ crush_files = \
 	crush/crush.c \
 	crush/hash.c \
 	crush/CrushWrapper.cc \
-	crush/CrushCompiler.cc
+	crush/CrushCompiler.cc \
+	crush/CrushTester.cc
 
 # this list ommits the ceph_ver.c file
 libcommon_files = \
@@ -1146,6 +1147,7 @@ noinst_HEADERS = \
 	common/strtol.h\
 	common/static_assert.h\
 	crush/CrushCompiler.h\
+	crush/CrushTester.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

@@ -28,6 +28,7 @@
 #include "global/global_init.h"
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
+#include "crush/CrushTester.h"
 
 #include <fstream>
 
@@ -108,16 +109,17 @@ int main(int argc, const char **argv)
   int build = 0;
   int num_osds =0;
   vector<layer_t> layers;
-  int num_rep = 2;
-  int min_x = 0, max_x = 10000-1;
-  int min_rule = 0, max_rule = 1000;
-  int force = -1;
-  map<int, int> device_weight;
+
+  CrushWrapper crush;
+
+  CrushTester tester(crush, cerr, 1);
 
   vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
   global_init(empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
+
+  int x;
 
   std::string val;
   std::ostringstream err;
@@ -134,6 +136,7 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
+      tester.set_verbosity(2);
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
@@ -176,48 +179,54 @@ int main(int argc, const char **argv)
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &num_rep, &err, "--num_rep", (char*)NULL)) {
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--num_rep", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &max_x, &err, "--max_x", (char*)NULL)) {
+      tester.set_num_rep(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--max_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &min_x, &err, "--min_x", (char*)NULL)) {
+      tester.set_max_x(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--min_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &min_x, &err, "--x", (char*)NULL)) {
+      tester.set_min_x(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-      max_x = min_x;
-    } else if (ceph_argparse_withint(args, i, &force, &err, "--force", (char*)NULL)) {
+      tester.set_x(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--force", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &max_rule, &err, "--max_rule", (char*)NULL)) {
+      tester.set_force(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--max_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &min_rule, &err, "--min_rule", (char*)NULL)) {
+      tester.set_max_rule(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--min_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &min_rule, &err, "--rule", (char*)NULL)) {
+      tester.set_min_rule(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-      max_rule = min_rule;
+      tester.set_rule(x);
     } else if (ceph_argparse_withint(args, i, &tmp, &err, "--weight", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -228,12 +237,7 @@ int main(int argc, const char **argv)
 	usage();
       float f = atof(*i);
       i = args.erase(i);
-      int w = (int)(f * 0x10000);
-      if (w < 0)
-	w = 0;
-      if (w > 0x10000)
-	w = 0x10000;
-      device_weight[dev] = w;
+      tester.set_device_weight(dev, f);
     }
     else {
       ++i;
@@ -272,7 +276,6 @@ int main(int argc, const char **argv)
   if (dinfn) cout << "dinfn " << dinfn << std::endl;
   */
 
-  CrushWrapper crush;
   bool modified = false;
 
   if (!infn.empty()) {
@@ -498,38 +501,9 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
-
-    // all osds in
-    vector<__u32> weight;
-    for (int o = 0; o < crush.get_max_devices(); o++)
-      if (device_weight.count(o))
-	weight.push_back(device_weight[o]);
-      else
-	weight.push_back(0x10000);
-    cout << "devices weights (hex): " << hex << weight << dec << std::endl;
-
-    for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
-      if (!crush.rule_exists(r)) {
-	cout << "rule " << r << " dne" << std::endl;
-	continue;
-      }
-      cout << "rule " << r << " (" << crush.get_rule_name(r) << "), x = " << min_x << ".." << max_x << std::endl;
-      vector<int> per(crush.get_max_devices());
-      map<int,int> sizes;
-      for (int x = min_x; x <= max_x; x++) {
-	vector<int> out;
-	crush.do_rule(r, x, out, num_rep, force, weight);
-	if (verbose)
-	  cout << "rule " << r << " x " << x << " " << out << std::endl;
-	for (unsigned i = 0; i < out.size(); i++)
-	  per[out[i]]++;
-	sizes[out.size()]++;
-      }
-      for (unsigned i = 0; i < per.size(); i++)
-	cout << " device " << i << ":\t" << per[i] << std::endl;
-      for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); p++)
-	cout << " result size " << p->first << "x:\t" << p->second << std::endl;
-    }
+    int r = tester.test();
+    if (r < 0)
+      exit(1);
   }
 
   return 0;
