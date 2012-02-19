@@ -1338,8 +1338,10 @@ bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
 
-  if (state == STATE_SHUTDOWN)
-    return false;
+  if (state == STATE_SHUTDOWN) {
+    m->put();
+    return true;
+  }
 
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
