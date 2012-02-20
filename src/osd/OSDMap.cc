@@ -261,6 +261,140 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
     ::decode(cluster_snapshot, p);
 }
 
+void OSDMap::Incremental::dump(Formatter *f) const
+{
+  f->dump_int("epoch", epoch);
+  f->dump_stream("fsid") << fsid;
+  f->dump_stream("modified") << modified;
+  f->dump_int("new_pool_max", new_pool_max);
+  f->dump_int("new_flags", new_flags);
+
+  if (fullmap.length()) {
+    f->open_object_section("full_map");
+    // fIXME
+    f->close_section();
+  }
+  if (crush.length()) {
+    f->open_object_section("crush");
+    // fixme
+    f->close_section();
+  }
+
+  f->dump_int("new_max_osd", new_max_osd);
+
+  f->open_array_section("new_pools");
+  for (map<int64_t,pg_pool_t>::const_iterator p = new_pools.begin(); p != new_pools.end(); ++p) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p->first);
+    f->dump_string("name", new_pool_names.find(p->first)->second);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("old_pools");
+  for (set<int64_t>::const_iterator p = old_pools.begin(); p != old_pools.end(); ++p)
+    f->dump_int("pool", *p);
+  f->close_section();
+
+  f->open_array_section("new_up_osds");
+  for (map<int32_t,entity_addr_t>::const_iterator p = new_up_client.begin(); p != new_up_client.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    f->dump_stream("public_addr") << p->second;
+    f->dump_stream("cluster_addr") << new_up_internal.find(p->first)->second;
+    f->dump_stream("heartbeat_addr") << new_hb_up.find(p->first)->second;
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("new_weight");
+  for (map<int32_t,uint32_t>::const_iterator p = new_weight.begin(); p != new_weight.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    f->dump_int("weight", p->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("osd_state_xor");
+  for (map<int32_t,uint8_t>::const_iterator p = new_state.begin(); p != new_state.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    set<string> st;
+    calc_state_set(new_state.find(p->first)->second, st);
+    f->open_array_section("state_xor");
+    for (set<string>::iterator p = st.begin(); p != st.end(); ++p)
+      f->dump_string("state", *p);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("new_pg_temp");
+  for (map<pg_t,vector<int> >::const_iterator p = new_pg_temp.begin();
+       p != new_pg_temp.end();
+       p++) {
+    f->open_object_section("pg");
+    f->dump_stream("pgid") << p->first;
+    f->open_array_section("osds");
+    for (vector<int>::const_iterator q = p->second.begin(); q != p->second.end(); ++q)
+      f->dump_int("osd", *q);
+    f->close_section();
+    f->close_section();    
+  }
+  f->close_section();
+
+  f->open_array_section("new_up_thru");
+  for (map<int32_t,uint32_t>::const_iterator p = new_up_thru.begin(); p != new_up_thru.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    f->dump_int("up_thru", p->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("new_lost");
+  for (map<int32_t,uint32_t>::const_iterator p = new_lost.begin(); p != new_lost.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    f->dump_int("epoch_lost", p->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("new_last_clean_interval");
+  for (map<int32_t,pair<epoch_t,epoch_t> >::const_iterator p = new_last_clean_interval.begin();
+       p != new_last_clean_interval.end();
+       ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    f->dump_int("first", p->second.first);
+    f->dump_int("last", p->second.second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("new_blacklist");
+  for (map<entity_addr_t,utime_t>::const_iterator p = new_blacklist.begin();
+       p != new_blacklist.end();
+       p++) {
+    stringstream ss;
+    ss << p->first;
+    f->dump_stream(ss.str().c_str()) << p->second;
+  }
+  f->close_section();
+  f->open_array_section("old_blacklist");
+  for (vector<entity_addr_t>::const_iterator p = old_blacklist.begin(); p != old_blacklist.end(); ++p)
+    f->dump_stream("addr") << *p;
+  f->close_section();
+
+  if (cluster_snapshot.size())
+    f->dump_string("cluster_snapshot", cluster_snapshot);
+}
+
+void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
+{
+  o.push_back(new Incremental);
+}
 
 // ----------------------------------
 // OSDMap

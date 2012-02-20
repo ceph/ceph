@@ -140,6 +140,8 @@ public:
     void encode_client_old(bufferlist& bl) const;
     void encode(bufferlist& bl, uint64_t features=-1) const;
     void decode(bufferlist::iterator &p);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<Incremental*>& o);
 
     Incremental(epoch_t e=0) :
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1) {
@@ -259,6 +261,15 @@ private:
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
+  static void calc_state_set(int state, set<string>& st) {
+    unsigned t = state;
+    for (unsigned s = 1; t; s <<= 1) {
+      if (t & s) {
+	t &= ~s;
+	st.insert(ceph_osd_state_name(s));
+      }
+    }
+  }
   int get_state(int o) const {
     assert(o < max_osd);
     return osd_state[o];
@@ -266,12 +277,7 @@ private:
   int get_state(int o, set<string>& st) const {
     assert(o < max_osd);
     unsigned t = osd_state[o];
-    for (unsigned s = 1; t; s <<= 1) {
-      if (t & s) {
-	t &= ~s;
-	st.insert(ceph_osd_state_name(s));
-      }
-    } 
+    calc_state_set(t, st);
     return osd_state[o];
   }
   void set_state(int o, unsigned s) {
@@ -675,6 +681,7 @@ public:
   static void generate_test_instances(list<OSDMap*>& o);
 };
 WRITE_CLASS_ENCODER(OSDMap)
+WRITE_CLASS_ENCODER(OSDMap::Incremental)
 
 typedef std::tr1::shared_ptr<const OSDMap> OSDMapRef;
 
