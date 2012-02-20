@@ -91,6 +91,7 @@ def task(ctx, config):
             '--osd-recovery-delay-start', '1000'
             ])
     manager.revive_osd(0)
+    manager.mark_in_osd(0)
     manager.wait_till_osd_is_up(0)
 
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
@@ -105,6 +106,7 @@ def task(ctx, config):
 
     # bring up osd.2 so that things would otherwise, in theory, recovery fully
     manager.revive_osd(2)
+    manager.mark_in_osd(2)
     manager.wait_till_osd_is_up(2)
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
@@ -148,5 +150,6 @@ def task(ctx, config):
 
     # see if osd.1 can cope
     manager.revive_osd(1)
+    manager.mark_in_osd(1)
     manager.wait_till_osd_is_up(1)
     manager.wait_for_clean()
