@@ -295,7 +295,8 @@ def results():
             g = yaml.safe_load_all(f)
             for new in g:
                 summary.update(new)
-        desc = '{test}: {desc}'.format(
+        desc = '{test}: ({duration}s) {desc}'.format(
+            duration=int(summary['duration']),
             desc=summary['description'],
             test=j,
             )
