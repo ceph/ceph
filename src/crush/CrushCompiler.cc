@@ -592,7 +592,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
 { 
   find_used_bucket_ids(i);
 
-  int r;
+  int r = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     switch (p->value.id().to_long()) {
     case crush_grammar::_device: 
