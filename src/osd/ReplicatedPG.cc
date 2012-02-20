@@ -3534,12 +3534,12 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
   dout(10) << "add_object_context_to_pg_stat " << oi.soid << dendl;
   object_stat_sum_t stat;
 
+  stat.num_bytes += oi.size;
+
   if (oi.soid.snap != CEPH_SNAPDIR)
     stat.num_objects++;
 
-  stat.num_bytes += oi.size;
-
-  if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP) {
+  if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP && oi.soid.snap != CEPH_SNAPDIR) {
     stat.num_object_clones++;
 
     if (!obc->ssc)
