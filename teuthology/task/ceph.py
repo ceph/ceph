@@ -771,8 +771,14 @@ def run_daemon(ctx, config, type_):
 
             extra_args = None
 
-            if config.get('valgrind') and (config.get('valgrind').get(name, None) is not None):
-                valgrind_args = config.get('valgrind').get(name)
+            valgrind_args = None
+            if config.get('valgrind'):
+                v = config.get('valgrind')
+                if v.get(type_, None) is not None:
+                    valgrind_args = v.get(type_)
+                if v.get(name, None) is not None:
+                    valgrind_args = v.get(name)
+            if valgrind_args is not None:
                 if not isinstance(valgrind_args, list):
                     valgrind_args = [valgrind_args]
                 log.debug('running %s under valgrind with args %s' % (name, valgrind_args))
