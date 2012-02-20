@@ -680,8 +680,8 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
 };
-WRITE_CLASS_ENCODER(OSDMap)
-WRITE_CLASS_ENCODER(OSDMap::Incremental)
+WRITE_CLASS_ENCODER_FEATURES(OSDMap)
+WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
 typedef std::tr1::shared_ptr<const OSDMap> OSDMapRef;
 
