@@ -243,6 +243,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
     ::decode(new_pg_temp, p);
   }
 
+  // decode short map, too.
+  if (v == 5 && p.end())
+    return;
+
   // extended
   __u16 ev = 0;
   if (v >= 5)
