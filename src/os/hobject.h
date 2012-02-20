@@ -88,19 +88,6 @@ public:
     return oid.name;
   }
 
-  /**
-   * back up hobject_t to beginning of hash bucket, if i am partway through one.
-   */
-  void back_up_to_bounding_key() {
-    if (key.length()) {
-      oid.clear();
-    } else {
-      key = oid.name;
-      oid.clear();
-    }
-    snap = 0;
-  }
-
   void swap(hobject_t &o) {
     hobject_t temp(o);
     o.oid = oid;
