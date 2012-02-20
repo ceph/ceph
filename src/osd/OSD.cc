@@ -1762,11 +1762,11 @@ void OSD::tick()
   // periodically kick recovery work queue
   recovery_tp.kick();
   
-  map_lock.get_read();
-
   if (scrub_should_schedule()) {
     sched_scrub();
   }
+
+  map_lock.get_read();
 
   heartbeat_lock.Lock();
   heartbeat_check();
