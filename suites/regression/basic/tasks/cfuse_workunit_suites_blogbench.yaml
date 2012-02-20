@@ -1,6 +1,6 @@
 tasks:
 - ceph:
-- cfuse:
+- ceph-fuse:
 - workunit:
     all:
       - suites/blogbench.sh

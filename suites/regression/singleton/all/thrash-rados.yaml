@@ -15,7 +15,7 @@ tasks:
     op_delay: 30
     clean_interval: 120
     chance_down: .5
-- cfuse:
+- ceph-fuse:
 - workunit:
     all:
     - rados/load-gen-mix-small.sh

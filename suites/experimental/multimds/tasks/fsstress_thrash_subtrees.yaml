@@ -6,7 +6,7 @@ tasks:
         mds debug subtrees: 1
         mds debug scatterstat: 1
         mds verify scatter: 1
-- cfuse:
+- ceph-fuse:
 - workunit:
     client.0:
       - suites/fsstress.sh

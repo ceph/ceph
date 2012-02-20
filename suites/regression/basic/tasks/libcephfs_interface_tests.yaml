@@ -1,6 +1,6 @@
 tasks:
 - ceph:
-- cfuse:
+- ceph-fuse:
 - workunit:
     client.0:
       - libcephfs/test.sh

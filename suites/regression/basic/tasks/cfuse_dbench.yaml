@@ -4,6 +4,6 @@ tasks:
       client:
         debug client: 20
         debug ms: 1
-- cfuse:
+- ceph-fuse:
 - autotest:
     all: [dbench]

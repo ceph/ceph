@@ -1,5 +1,5 @@
 tasks:
-- cfuse:
+- ceph-fuse:
 - workunit:
     all:
     - suites/bonnie.sh

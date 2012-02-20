@@ -1,5 +1,5 @@
 tasks:
 - ceph:
-- cfuse:
+- ceph-fuse:
 - workunit:
     all: [misc/trivial_sync.sh]

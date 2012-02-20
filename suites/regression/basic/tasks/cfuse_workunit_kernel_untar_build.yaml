@@ -1,6 +1,6 @@
 tasks:
 - ceph:
-- cfuse:
+- ceph-fuse:
 - workunit:
     all:
       - kernel_untar_build.sh
