@@ -961,13 +961,13 @@ def task(ctx, config):
         # local dir precludes any other flavors
         flavor = ['local']
     else:
-        if config.get('coverage'):
-            log.info('Recording coverage for this run.')
-            flavor.append('gcov')
+        if config.get('valgrind'):
+            log.info('Using notcmalloc flavor and running some daemons under valgrind')
+            flavor.append('notcmalloc')
         else:
-            if config.get('valgrind'):
-                log.info('Using notcmalloc flavor and running some daemons under valgrind')
-                flavor.append('notcmalloc')
+            if config.get('coverage'):
+                log.info('Recording coverage for this run.')
+                flavor.append('gcov')
 
     flavor = '-'.join(flavor)
     if flavor == '':
