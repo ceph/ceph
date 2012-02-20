@@ -4117,8 +4117,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
   for (vector<hobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     hobject_t poid = *p;
-    ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
-    pg_t pgid = osdmap->raw_pg_to_pg(pg_t(l.ol_pgid));
+    object_locator_t oloc(parentid.pool(), parentid.preferred());
+    if (poid.get_key().size())
+      oloc.key = poid.get_key();
+    pg_t rawpg = osdmap->object_locator_to_pg(poid.oid, oloc);
+    pg_t pgid = osdmap->raw_pg_to_pg(rawpg);
     if (pgid != parentid) {
       dout(20) << "  moving " << poid << " from " << parentid << " -> " << pgid << dendl;
       PG *child = children[pgid];
