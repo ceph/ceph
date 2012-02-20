@@ -21,14 +21,14 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
         - interactive:
 
-    Example that uses both ``kclient` and ``cfuse``::
+    Example that uses both ``kclient` and ``ceph-fuse``::
 
         tasks:
         - ceph:
-        - cfuse: [client.0]
+        - ceph-fuse: [client.0]
         - kclient: [client.1]
         - interactive:
 
@@ -36,14 +36,14 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
             client.0:
               valgrind: --tool=memcheck
         - interactive:
 
     """
     log.info('Mounting ceph-fuse clients...')
-    cfuse_daemons = {}
+    fuse_daemons = {}
 
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
@@ -116,17 +116,17 @@ def task(ctx, config):
 
         proc = remote.run(
             args=run_cmd,
-            logger=log.getChild('cfuse.{id}'.format(id=id_)),
+            logger=log.getChild('ceph-fuse.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False,
             )
-        cfuse_daemons[id_] = proc
+        fuse_daemons[id_] = proc
 
     for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
         teuthology.wait_until_fuse_mounted(
             remote=remote,
-            fuse=cfuse_daemons[id_],
+            fuse=fuse_daemons[id_],
             mountpoint=mnt,
             )
 
@@ -143,7 +143,7 @@ def task(ctx, config):
                     mnt,
                     ],
                 )
-        run.wait(cfuse_daemons.itervalues())
+        run.wait(fuse_daemons.itervalues())
 
         for id_, remote in clients:
             mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
