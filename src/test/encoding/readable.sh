@@ -1,4 +1,4 @@
-#!/bin/dash -e
+#!/bin/sh -e
 
 dir=$1
 
