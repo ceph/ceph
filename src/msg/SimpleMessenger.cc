@@ -1007,11 +1007,10 @@ int SimpleMessenger::Pipe::accept()
 
  shutting_down:
   msgr->lock.Unlock();
-  state = STATE_CLOSED;
   pipe_lock.Lock();
+  state = STATE_CLOSED;
   fault();
   pipe_lock.Unlock();
-  msgr->lock.Unlock();
   return -1;
 }
 
