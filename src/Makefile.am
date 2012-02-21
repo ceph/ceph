@@ -171,16 +171,6 @@ psim_SOURCES = psim.cc
 psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += psim
 
-test_addrs_SOURCES = test/test_addrs.cc
-test_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-test_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += test_addrs
-
-test_str_list_SOURCES = test/test_str_list.cc
-test_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-test_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += test_str_list
-
 test_mutate_SOURCES = test/test_mutate.cc
 test_mutate_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
@@ -487,6 +477,17 @@ unittest_encoding_LDADD = libcephfs.la $(PTHREAD_LIBS) -lm \
 unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
 check_PROGRAMS += unittest_encoding
+
+unittest_addrs_SOURCES = test/test_addrs.cc
+unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_addrs
+
+unittest_str_list_SOURCES = test/test_str_list.cc
+unittest_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_str_list
+
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
