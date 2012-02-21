@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import yaml
+import random
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -43,7 +44,7 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    s3tests_conf[section].setdefault('access_key', base64.b64encode(os.urandom(20)))
+    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
     s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
 
 @contextlib.contextmanager
