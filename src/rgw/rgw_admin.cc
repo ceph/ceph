@@ -430,6 +430,33 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
     cerr << "ERROR: this should be fixed manually!" << std::endl;
 }
 
+static bool char_is_unreserved_url(char c)
+{
+  if (isalnum(c))
+    return true;
+
+  switch (c) {
+  case '-':
+  case '.':
+  case '_':
+  case '~':
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool validate_access_key(string& key)
+{
+  const char *p = key.c_str();
+  while (*p) {
+    if (!char_is_unreserved_url(*p))
+      return false;
+    p++;
+  }
+  return true;
+}
+
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
@@ -810,6 +837,10 @@ int main(int argc, char **argv)
       access_key.append(subuser);
     }
     if ((!access_key.empty()) && (!secret_key.empty())) {
+      if (key_type == KEY_TYPE_S3 && !validate_access_key(access_key)) {
+        cerr << "access key contains illegal characters" << std::endl;
+        return 1;
+      }
       RGWAccessKey k;
       k.id = access_key;
       k.key = secret_key;
