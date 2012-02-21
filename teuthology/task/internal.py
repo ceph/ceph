@@ -120,6 +120,17 @@ def check_lock(ctx, config):
             owner=ctx.owner,
             )
 
+@contextlib.contextmanager
+def timer(ctx, config):
+    log.info('Starting timer...')
+    start = time.time()
+    try:
+        yield
+    finally:
+        duration = time.time() - start
+        log.info('Duration was %f seconds', duration)
+        ctx.summary['duration'] = duration
+
 def connect(ctx, config):
     log.info('Opening connections...')
     from ..orchestra import connection, remote
