@@ -22,6 +22,9 @@ TYPE(osd_info_t)
 TYPE(OSDMap)
 TYPE(OSDMap::Incremental)
 
+#include "crush/CrushWrapper.h"
+TYPE(CrushWrapper)
+
 #include "osd/PG.h"
 TYPE(PG::Interval)
 TYPE(PG::OndiskLog)

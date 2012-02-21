@@ -20,6 +20,7 @@
 #include "MonitorStore.h"
 
 #include "crush/CrushWrapper.h"
+#include "crush/CrushTester.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
@@ -1523,6 +1524,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	   << " > osdmap max_osd " << osdmap.get_max_osd();
 	goto out;
       }
+
+      // sanity check: test some inputs to make sure this map isn't totally broken
+      dout(10) << " testing map" << dendl;
+      stringstream ess;
+      CrushTester tester(crush, ess, 1);
+      tester.test();
+      dout(10) << " result " << ess.str() << dendl;
 
       pending_inc.crush = data;
       string rs = "set crush map";
