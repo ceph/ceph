@@ -24,6 +24,10 @@ extern "C" {
 
 #include <iostream> //for testing, remove
 
+namespace ceph {
+  class Formatter;
+}
+
 WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
 
 inline static void encode(const crush_rule_step &s, bufferlist &bl)
@@ -85,7 +89,7 @@ public:
   }
 
   // bucket types
-  int get_num_type_names() {
+  int get_num_type_names() const {
     return type_map.size();
   }
   int get_type_id(const char *s) {
@@ -145,9 +149,10 @@ public:
       return rule_name_rmap[name];
     return 0;  /* hrm */
   }
-  const char *get_rule_name(int t) {
-    if (rule_name_map.count(t))
-      return rule_name_map[t].c_str();
+  const char *get_rule_name(int t) const {
+    std::map<int,string>::const_iterator p = rule_name_map.find(t);
+    if (p != rule_name_map.end())
+      return p->second.c_str();
     return 0;
   }
   void set_rule_name(int i, const char *n) {
@@ -177,13 +182,13 @@ public:
 
   /*** rules ***/
 private:
-  crush_rule *get_rule(unsigned ruleno) {
+  crush_rule *get_rule(unsigned ruleno) const {
     if (!crush) return (crush_rule *)(-ENOENT);
     if (ruleno >= crush->max_rules)
       return 0;
     return crush->rules[ruleno];
   }
-  crush_rule_step *get_rule_step(unsigned ruleno, unsigned step) {
+  crush_rule_step *get_rule_step(unsigned ruleno, unsigned step) const {
     crush_rule *n = get_rule(ruleno);
     if (!n) return (crush_rule_step *)(-EINVAL);
     if (step >= n->len) return (crush_rule_step *)(-EINVAL);
@@ -192,53 +197,53 @@ private:
 
 public:
   /* accessors */
-  int get_max_rules() {
+  int get_max_rules() const {
     if (!crush) return 0;
     return crush->max_rules;
   }
-  bool rule_exists(unsigned ruleno) {
+  bool rule_exists(unsigned ruleno) const {
     if (!crush) return false;
     if (ruleno < crush->max_rules &&
 	crush->rules[ruleno] != NULL)
       return true;
     return false;
   }
-  int get_rule_len(unsigned ruleno) {
+  int get_rule_len(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
   }
-  int get_rule_mask_ruleset(unsigned ruleno) {
+  int get_rule_mask_ruleset(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
     return r->mask.ruleset;
   }
-  int get_rule_mask_type(unsigned ruleno) {
+  int get_rule_mask_type(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
     return r->mask.type;
   }
-  int get_rule_mask_min_size(unsigned ruleno) {
+  int get_rule_mask_min_size(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
     return r->mask.min_size;
   }
-  int get_rule_mask_max_size(unsigned ruleno) {
+  int get_rule_mask_max_size(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
     return r->mask.max_size;
   }
-  int get_rule_op(unsigned ruleno, unsigned step) {
+  int get_rule_op(unsigned ruleno, unsigned step) const {
     crush_rule_step *s = get_rule_step(ruleno, step);
     if (IS_ERR(s)) return PTR_ERR(s);
     return s->op;
   }
-  int get_rule_arg1(unsigned ruleno, unsigned step) {
+  int get_rule_arg1(unsigned ruleno, unsigned step) const {
     crush_rule_step *s = get_rule_step(ruleno, step);
     if (IS_ERR(s)) return PTR_ERR(s);
     return s->arg1;
   }
-  int get_rule_arg2(unsigned ruleno, unsigned step) {
+  int get_rule_arg2(unsigned ruleno, unsigned step) const {
     crush_rule_step *s = get_rule_step(ruleno, step);
     if (IS_ERR(s)) return PTR_ERR(s);
     return s->arg2;
@@ -414,6 +419,8 @@ public:
   void encode(bufferlist &bl, bool lean=false) const;
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<CrushWrapper*>& o);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
 

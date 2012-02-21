@@ -21,6 +21,9 @@ TYPE(entity_addr_t)
 TYPE(osd_info_t)
 TYPE(OSDMap)
 
+#include "crush/CrushWrapper.h"
+TYPE(CrushWrapper)
+
 #include "osd/PG.h"
 TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
