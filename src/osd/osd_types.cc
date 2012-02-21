@@ -1955,8 +1955,12 @@ void object_info_t::decode(bufferlist::iterator& bl)
 
 void object_info_t::dump(Formatter *f) const
 {
-  f->dump_stream("oid") << soid;
-  f->dump_stream("locator") << oloc;
+  f->open_object_section("oid");
+  soid.dump(f);
+  f->close_section();
+  f->open_object_section("locator");
+  oloc.dump(f);
+  f->close_section();
   f->dump_string("category", category);
   f->dump_stream("version") << version;
   f->dump_stream("prior_version") << prior_version;
