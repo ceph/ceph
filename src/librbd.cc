@@ -96,7 +96,7 @@ namespace librbd {
     int tx_rval;
 
     ImageCtx(std::string imgname, IoCtx& p)
-      : cct(p.cct()), snapid(CEPH_NOSNAP),
+      : cct((CephContext*)p.cct()), snapid(CEPH_NOSNAP),
 	name(imgname),
 	needs_refresh(true),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
@@ -515,7 +515,7 @@ int init_rbd_info(struct rbd_info *info)
 void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
 		ProgressContext& prog_ctx)
 {
-  CephContext *cct = io_ctx.cct();
+  CephContext *cct = (CephContext *)io_ctx.cct();
   uint64_t bsize = get_block_size(header);
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
@@ -589,7 +589,7 @@ int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint
    } while (r == READ_SIZE);
 
   if (memcmp(RBD_HEADER_TEXT, header.c_str(), sizeof(RBD_HEADER_TEXT))) {
-    CephContext *cct = io_ctx.cct();
+    CephContext *cct = (CephContext *)io_ctx.cct();
     lderr(cct) << "unrecognized header format" << dendl;
     return -ENXIO;
   }
@@ -682,7 +682,7 @@ int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
 
 int list(IoCtx& io_ctx, std::vector<std::string>& names)
 {
-  CephContext *cct = io_ctx.cct();
+  CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "list " << &io_ctx << dendl;
 
   bufferlist bl;
@@ -748,7 +748,7 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
 
 int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
 {
-  CephContext *cct = io_ctx.cct();
+  CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
 
   string md_oid = imgname;
@@ -795,7 +795,7 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
 
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 {
-  CephContext *cct = io_ctx.cct();
+  CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> " << dstname << dendl;
 
   string md_oid = srcname;
@@ -855,7 +855,7 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
 
 bool has_snaps(IoCtx& io_ctx, const std::string& md_oid)
 {
-  CephContext *cct(io_ctx.cct());
+  CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "has_snaps " << &io_ctx << " " << md_oid << dendl;
 
   bufferlist bl, bl2;
@@ -874,7 +874,7 @@ bool has_snaps(IoCtx& io_ctx, const std::string& md_oid)
 
 int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 {
-  CephContext *cct(io_ctx.cct());
+  CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
   string md_oid = imgname;
@@ -1212,7 +1212,7 @@ int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
 int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
 	 ProgressContext &prog_ctx)
 {
-  CephContext *cct = dest_md_ctx.cct();
+  CephContext *cct = (CephContext *)dest_md_ctx.cct();
   CopyProgressCtx cp(prog_ctx);
   uint64_t src_size = ictx.get_image_size();
   int64_t r;
@@ -1268,7 +1268,7 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
 
 int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name)
 {
-  CephContext *cct = io_ctx.cct();
+  CephContext *cct = (CephContext *)io_ctx.cct();
   string sn = snap_name ? snap_name : "NULL";
   ldout(cct, 20) << "open_image " << &io_ctx << " ictx =  " << ictx
 	   << " name =  " << name << " snap_name = " << (snap_name ? snap_name : "NULL") << dendl;
