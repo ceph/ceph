@@ -143,6 +143,12 @@ public:
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
+  bool is_acl_op() {
+    return s->args.exists("acl");
+  }
+  bool is_obj_update_op() {
+    return is_acl_op();
+  }
   RGWOp *get_retrieve_obj_op(bool get_data);
   RGWOp *get_retrieve_op(bool get_data);
   RGWOp *get_create_op();

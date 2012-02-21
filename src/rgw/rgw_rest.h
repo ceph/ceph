@@ -140,9 +140,8 @@ public:
 
 class RGWHandler_REST : public RGWHandler {
 protected:
-  bool is_acl_op() {
-    return s->args.exists("acl");
-  }
+  virtual bool is_acl_op() = 0;
+  virtual bool is_obj_update_op() = 0;
 
   virtual RGWOp *get_retrieve_obj_op(bool get_data) = 0;
   virtual RGWOp *get_retrieve_op(bool get_data) = 0;

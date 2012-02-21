@@ -845,7 +845,7 @@ int RGWHandler_REST::read_permissions(RGWOp *op_obj)
     break;
   case OP_PUT:
   case OP_POST:
-    if (is_acl_op()) {
+    if (is_obj_update_op()) {
       only_bucket = false;
       break;
     }

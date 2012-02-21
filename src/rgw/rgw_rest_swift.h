@@ -129,6 +129,12 @@ public:
 
 class RGWHandler_REST_SWIFT : public RGWHandler_REST {
 protected:
+  bool is_acl_op() {
+    return false; // for now
+  }
+  bool is_obj_update_op() {
+    return s->op == OP_POST;
+  }
 
   RGWOp *get_retrieve_obj_op(bool get_data);
   RGWOp *get_retrieve_op(bool get_data);
