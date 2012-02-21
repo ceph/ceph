@@ -472,11 +472,10 @@ int do_command(CephToolCtx *ctx,
       cerr << "no pgid specified" << std::endl;
       return -EINVAL;
     }
-    if (!pending_target_pgid.parse(cmd[1].c_str())) {
-      cerr << "'" << cmd[1] << "' not a valid pgid" << std::endl;
-      return -EINVAL;
+    if (pending_target_pgid.parse(cmd[1].c_str())) {
+      pending_tell_pgid = true;
     }
-    pending_tell_pgid = true;
+    // otherwise, send the request on to the monitor (e.g., 'pg dump').  sigh.
   }
 
   send_command(ctx);
