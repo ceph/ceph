@@ -54,9 +54,9 @@ void PG::lock(bool no_lockdep)
  * caller holds osd->map_lock, no need to take it to get a valid
  * osdmap reference.
  */
-void PG::lock_with_map_lock_held()
+void PG::lock_with_map_lock_held(bool no_lockdep)
 {
-  _lock.Lock();
+  _lock.Lock(no_lockdep);
   osdmap_ref = osd->osdmap;
 }
 

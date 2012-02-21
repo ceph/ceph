@@ -447,8 +447,8 @@ protected:
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
   PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
-  PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
-  PG   *_create_lock_pg(pg_t pgid, bool newly_created,
+  PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false, bool hold_map_lock=false);
+  PG   *_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
 			ObjectStore::Transaction& t);
 

@@ -1098,7 +1098,7 @@ void OSD::_put_pool(PGPool *p)
   }
 }
 
-PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
+PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check, bool hold_map_lock)
 {
   assert(osd_lock.is_locked());
 
@@ -1118,19 +1118,22 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   assert(pg_map.count(pgid) == 0);
   pg_map[pgid] = pg;
 
-  pg->lock(no_lockdep_check); // always lock.
+  if (hold_map_lock)
+    pg->lock_with_map_lock_held(no_lockdep_check);
+  else
+    pg->lock(no_lockdep_check);
   pg->get();  // because it's in pg_map
   return pg;
 }
 
-PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created,
+PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 			 int role, vector<int>& up, vector<int>& acting, pg_history_t history,
 			 ObjectStore::Transaction& t)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_pg pgid " << pgid << dendl;
 
-  PG *pg = _open_lock_pg(pgid, true);
+  PG *pg = _open_lock_pg(pgid, true, hold_map_lock);
 
   assert(!store->collection_exists(coll_t(pgid)));
   t.create_collection(coll_t(pgid));
@@ -1298,7 +1301,7 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& c
     // ok, create PG locally using provided Info and History
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
-    pg = _create_lock_pg(info.pgid, create, role, up, acting, history, **pt);
+    pg = _create_lock_pg(info.pgid, create, false, role, up, acting, history, **pt);
       
     created++;
     dout(10) << *pg << " is new" << dendl;
@@ -4059,8 +4062,8 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
     history.epoch_created = history.same_up_since =
       history.same_interval_since = history.same_primary_since =
       osdmap->get_epoch();
-    PG *pg = _create_lock_pg(*q, true,
-			     0, parent->up, parent->acting, history, t);
+    PG *pg = _create_lock_pg(*q, true, true,
+			     parent->get_role(), parent->up, parent->acting, history, t);
     children[*q] = pg;
     dout(10) << "  child " << *pg << dendl;
   }
@@ -4297,7 +4300,7 @@ void OSD::handle_pg_create(OpRequest *op)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts(g_ceph_context);
 
-      PG *pg = _create_lock_pg(pgid, true,
+      PG *pg = _create_lock_pg(pgid, true, false,
 			       0, creating_pgs[pgid].acting, creating_pgs[pgid].acting, history,
 			       *t);
       creating_pgs.erase(pgid);
