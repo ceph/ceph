@@ -22,7 +22,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 
   ObjectCacheInfo& src = iter->second.info;
   if ((src.flags & mask) != mask) {
-    dout(10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << dendl;
+    dout(10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << ")" << dendl;
     if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
@@ -64,8 +64,8 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 
   if (info.flags & CACHE_FLAG_META)
     target.meta = info.meta;
-  else
-    target.flags &= ~CACHE_FLAG_META; // any non-meta change should reset meta
+  else if (!(info.flags & CACHE_FLAG_APPEND_XATTRS))
+    target.flags &= ~CACHE_FLAG_META; // non-meta change should reset meta
 
   if (info.flags & CACHE_FLAG_XATTRS) {
     target.xattrs = info.xattrs;
