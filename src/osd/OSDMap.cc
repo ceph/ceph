@@ -275,12 +275,19 @@ void OSDMap::Incremental::dump(Formatter *f) const
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
-    // fIXME
+    OSDMap full;
+    bufferlist fbl = fullmap;  // kludge around constness.
+    bufferlist::iterator p = fbl.begin();
+    full.decode(p);
+    full.dump(f);
     f->close_section();
   }
   if (crush.length()) {
     f->open_object_section("crush");
     // fixme
+    //CrushWrapper c;
+    //c.decode(crush);
+    //c.dump(f);
     f->close_section();
   }
 
