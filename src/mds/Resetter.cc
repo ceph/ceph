@@ -83,6 +83,7 @@ void Resetter::reset()
   bool done;
   int r;
 
+  this->lock.Lock();
   lock.Lock();
   journaler->recover(new C_SafeCond(&lock, &cond, &done, &r));
   while (!done)
@@ -142,5 +143,6 @@ void Resetter::reset()
 
   cout << "done" << std::endl;
 
+  this->lock.Unlock();
   shutdown();
 }
