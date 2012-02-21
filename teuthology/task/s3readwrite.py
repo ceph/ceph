@@ -3,8 +3,9 @@ import base64
 import contextlib
 import logging
 import os
-import yaml
 import random
+import string
+import yaml
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
