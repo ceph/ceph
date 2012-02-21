@@ -284,10 +284,11 @@ void OSDMap::Incremental::dump(Formatter *f) const
   }
   if (crush.length()) {
     f->open_object_section("crush");
-    // fixme
-    //CrushWrapper c;
-    //c.decode(crush);
-    //c.dump(f);
+    CrushWrapper c;
+    bufferlist tbl = crush;  // kludge around constness.
+    bufferlist::iterator p = tbl.begin();
+    c.decode(p);
+    c.dump(f);
     f->close_section();
   }
 
