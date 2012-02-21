@@ -4,8 +4,8 @@ import base64
 import contextlib
 import logging
 import os
-import string
 import random
+import string
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
