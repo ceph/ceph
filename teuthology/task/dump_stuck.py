@@ -1,0 +1,97 @@
+import logging
+import time
+
+import ceph_manager
+from teuthology import misc as teuthology
+
+
+log = logging.getLogger(__name__)
+
+def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
+    inactive = manager.get_stuck_pgs('inactive', timeout)
+    assert len(inactive) == num_inactive
+    unclean = manager.get_stuck_pgs('unclean', timeout)
+    assert len(unclean) == num_unclean
+    stale = manager.get_stuck_pgs('stale', timeout)
+    assert len(stale) == num_stale
+
+def task(ctx, config):
+    """
+    Test the dump_stuck command.
+    """
+    assert config is None, \
+        'dump_stuck requires no configuration'
+    assert teuthology.num_instances_of_type(ctx.cluster, 'osd') == 2, \
+        'dump_stuck requires exactly 2 osds'
+
+    timeout = 60
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+
+    manager = ceph_manager.CephManager(
+        mon,
+        ctx=ctx,
+        logger=log.getChild('ceph_manager'),
+        )
+
+    manager.wait_for_clean(timeout)
+    check_stuck(
+        manager,
+        num_inactive=0,
+        num_unclean=0,
+        num_stale=0,
+        )
+    num_pgs = manager.get_num_pgs()
+
+    manager.mark_out_osd(0)
+    time.sleep(timeout)
+    manager.wait_for_recovery(timeout)
+
+    check_stuck(
+        manager,
+        num_inactive=0,
+        num_unclean=num_pgs,
+        num_stale=0,
+        )
+
+    manager.mark_in_osd(0)
+    manager.wait_for_clean(timeout)
+
+    check_stuck(
+        manager,
+        num_inactive=0,
+        num_unclean=0,
+        num_stale=0,
+        )
+
+    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'osd'):
+        manager.kill_osd(id_)
+        manager.mark_down_osd(id_)
+
+    starttime = time.time()
+    done = False
+    while not done:
+        try:
+            check_stuck(
+                manager,
+                num_inactive=0,
+                num_unclean=0,
+                num_stale=num_pgs,
+                )
+            done = True
+        except AssertionError:
+            # wait up to 15 minutes to become stale
+            if time.time() - starttime > 900:
+                raise
+
+    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'osd'):
+        manager.revive_osd(id_)
+        manager.mark_in_osd(id_)
+    manager.wait_for_clean(timeout)
+
+    check_stuck(
+        manager,
+        num_inactive=0,
+        num_unclean=0,
+        num_stale=0,
+        )

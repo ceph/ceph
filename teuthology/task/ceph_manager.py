@@ -207,6 +207,11 @@ class CephManager:
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['osds']
 
+    def get_stuck_pgs(self, type_, threshold):
+        out = self.raw_cluster_cmd('--', 'pg','dump_stuck', type_,
+                                   '--format=json', '-t', str(threshold))
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_num_unfound_objects(self):
         status = self.raw_cluster_status()
         self.log(status)
