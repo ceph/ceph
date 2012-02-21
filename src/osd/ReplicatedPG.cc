@@ -768,8 +768,23 @@ void ReplicatedPG::do_op(OpRequest *op)
 
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
-  ctx->reply->claim_op_out_data(ctx->ops);
-  ctx->reply->get_header().data_off = ctx->data_off;
+
+  // Write operations aren't allowed to return a data payload because
+  // we can't do so reliably. If the client has to resend the request
+  // and it has already been applied, we will return 0 with no
+  // payload.  Non-deterministic behavior is no good.  However, it is
+  // possible to construct an operation that does a read, does a guard
+  // check (e.g., CMPXATTR), and then a write.  Then we either succeed
+  // with the write, or return a CMPXATTR and the read value.
+  if (ctx->op_t.empty() && !ctx->modify) {
+    // read.
+    ctx->reply->claim_op_out_data(ctx->ops);
+    ctx->reply->get_header().data_off = ctx->data_off;
+  } else {
+    // write.  normalize the result code.
+    if (result > 0)
+      result = 0;
+  }
   ctx->reply->set_result(result);
 
   if (result >= 0)
