@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "PGMap.h"
 
@@ -38,7 +40,7 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
       pg_t pgid = opgid;
       ::decode(pg_stat_updates[pgid], bl);
     }
-      } else {
+  } else {
     ::decode(pg_stat_updates, bl);
   }
   ::decode(osd_stat_updates, bl);
@@ -413,17 +415,12 @@ void PGMap::dump_osd_stats(Formatter *f) const
   f->close_section();
 }
 
-
-void PGMap::dump(ostream& ss) const
+void PGMap::dump_pg_stats_plain(ostream& ss,
+				const hash_map<pg_t, pg_stat_t>& pg_stats) const
 {
-  ss << "version " << version << std::endl;
-  ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
-  ss << "last_pg_scan " << last_pg_scan << std::endl;
-  ss << "full_ratio " << full_ratio << std::endl;
-  ss << "nearfull_ratio " << nearfull_ratio << std::endl;
-  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
-  for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
-       i != pg_stat.end(); ++i) {
+  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tacting\tlast_scrub\tscrub_stamp" << std::endl;
+  for (hash_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
+       i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
     ss << i->first
        << "\t" << st.stats.sum.num_objects
@@ -435,6 +432,7 @@ void PGMap::dump(ostream& ss) const
        << "\t" << st.log_size
        << "\t" << st.ondisk_log_size
        << "\t" << pg_state_string(st.state)
+       << "\t" << st.last_change
        << "\t" << st.version
        << "\t" << st.reported
        << "\t" << st.up
@@ -442,6 +440,16 @@ void PGMap::dump(ostream& ss) const
        << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
        << std::endl;
   }
+}
+
+void PGMap::dump(ostream& ss) const
+{
+  ss << "version " << version << std::endl;
+  ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
+  ss << "last_pg_scan " << last_pg_scan << std::endl;
+  ss << "full_ratio " << full_ratio << std::endl;
+  ss << "nearfull_ratio " << nearfull_ratio << std::endl;
+  dump_pg_stats_plain(ss, pg_stat);
   for (hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
        p != pg_pool_sum.end();
        p++)
@@ -479,6 +487,62 @@ void PGMap::dump(ostream& ss) const
      << "\t" << osd_sum.kb_avail 
      << "\t" << osd_sum.kb
      << std::endl;
+}
+
+void PGMap::get_stuck_stats(PGMap::StuckPG type, utime_t cutoff,
+			    hash_map<pg_t, pg_stat_t>& stuck_pgs) const
+{
+  for (hash_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    utime_t val;
+    switch (type) {
+    case STUCK_INACTIVE:
+      if (i->second.state & PG_STATE_ACTIVE)
+	continue;
+      val = i->second.last_active;
+      break;
+    case STUCK_UNCLEAN:
+      if (i->second.state & PG_STATE_CLEAN)
+	continue;
+      val = i->second.last_clean;
+      break;
+    case STUCK_STALE:
+      if ((i->second.state & PG_STATE_STALE) == 0)
+	continue;
+      val = i->second.last_unstale;
+      break;
+    default:
+      assert(0 == "invalid type");
+    }
+
+    if (val < cutoff) {
+      stuck_pgs[i->first] = i->second;
+    }
+  }
+}
+
+void PGMap::dump_stuck(Formatter *f, PGMap::StuckPG type, utime_t cutoff) const
+{
+  hash_map<pg_t, pg_stat_t> stuck_pg_stats;
+  get_stuck_stats(type, cutoff, stuck_pg_stats);
+  f->open_array_section("stuck_pg_stats");
+  for (hash_map<pg_t,pg_stat_t>::const_iterator i = stuck_pg_stats.begin();
+       i != stuck_pg_stats.end();
+       ++i) {
+    f->open_object_section("pg_stat");
+    f->dump_stream("pgid") << i->first;
+    i->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void PGMap::dump_stuck_plain(ostream& ss, PGMap::StuckPG type, utime_t cutoff) const
+{
+  hash_map<pg_t, pg_stat_t> stuck_pg_stats;
+  get_stuck_stats(type, cutoff, stuck_pg_stats);
+  dump_pg_stats_plain(ss, stuck_pg_stats);
 }
 
 void PGMap::state_summary(ostream& ss) const
