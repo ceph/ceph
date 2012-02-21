@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def create_dirs(ctx, config):
     log.info('Creating apache directories...')
-    for client in config:
+    for client in config.iterkeys():
         ctx.cluster.only(client).run(
             args=[
                 'mkdir',
@@ -28,7 +28,7 @@ def create_dirs(ctx, config):
         yield
     finally:
         log.info('Cleaning up apache directories...')
-        for client in config:
+        for client in config.iterkeys():
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
@@ -46,10 +46,10 @@ def create_dirs(ctx, config):
 
 @contextlib.contextmanager
 def ship_config(ctx, config):
-    assert isinstance(config, list)
+    assert isinstance(config, dict)
     log.info('Shipping apache config and rgw.fcgi...')
     src = os.path.join(os.path.dirname(__file__), 'apache.conf')
-    for client in config:
+    for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         with file(src, 'rb') as f:
             teuthology.write_file(
@@ -77,7 +77,7 @@ exec /tmp/cephtest/binary/usr/local/bin/radosgw -f -c /tmp/cephtest/ceph.conf
         yield
     finally:
         log.info('Removing apache config...')
-        for client in config:
+        for client in config.iterkeys():
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
@@ -95,7 +95,7 @@ exec /tmp/cephtest/binary/usr/local/bin/radosgw -f -c /tmp/cephtest/ceph.conf
 def start_rgw(ctx, config):
     log.info('Starting rgw...')
     rgws = {}
-    for client in config:
+    for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
         proc = remote.run(
             args=[
@@ -134,7 +134,7 @@ def start_rgw(ctx, config):
 def start_apache(ctx, config):
     log.info('Starting apache...')
     apaches = {}
-    for client in config:
+    for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         proc = remote.run(
             args=[
@@ -180,16 +180,16 @@ def task(ctx, config):
         - ceph:
         - rgw: [client.0, client.3]
     """
-    assert config is None or isinstance(config, list), \
-        "task rgw only supports a list of clients for configuration"
     if config is None:
-        config = ['client.{id}'.format(id=id_)
-                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
+        config = dict(('client.{id}'.format(id=id_), None)
+                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))
+    elif isinstance(config, list):
+        config = dict((name, None) for name in config)
 
     for _, roles_for_host in ctx.cluster.remotes.iteritems():
         running_rgw = False
         for role in roles_for_host:
-            if role in config:
+            if role in config.iterkeys():
                 assert not running_rgw, "Only one client per host can run rgw."
                 running_rgw = True
 
