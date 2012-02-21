@@ -198,7 +198,7 @@ static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferli
   return ret;
 }
 
-static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
+static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
 {
   string upload_id;
   upload_id = s->args.get("uploadId");
@@ -226,8 +226,9 @@ static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessC
     ret = get_policy_from_attr(s->obj_ctx, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
-
-    if (!verify_permission(&bucket_policy, s->user.user_id, s->perm_mask, RGW_PERM_READ))
+    string& owner = bucket_policy.get_owner().get_id();
+    if (owner.compare(s->user.user_id) != 0 &&
+        !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;
     else
       ret = -ENOENT;
@@ -244,15 +245,12 @@ static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessC
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int read_acls(struct req_state *s, bool only_bucket, bool prefetch_data)
+static int build_policies(struct req_state *s, bool only_bucket, bool prefetch_data)
 {
   int ret = 0;
   string obj_str;
-  if (!s->acl) {
-     s->acl = new RGWAccessControlPolicy;
-     if (!s->acl)
-       return -ENOMEM;
-  }
+
+  s->bucket_acl = new RGWAccessControlPolicy;
 
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
@@ -263,20 +261,25 @@ static int read_acls(struct req_state *s, bool only_bucket, bool prefetch_data)
     }
     s->bucket = bucket_info.bucket;
     s->bucket_owner = bucket_info.owner;
+
+    string no_obj;
+    RGWAccessControlPolicy bucket_acl;
+    ret = read_policy(s, bucket_info, s->bucket_acl, s->bucket, no_obj);
   }
 
   /* we're passed only_bucket = true when we specifically need the bucket's
      acls, that happens on write operations */
   if (!only_bucket) {
+    s->object_acl = new RGWAccessControlPolicy;
+
     obj_str = s->object_str;
     rgw_obj obj(s->bucket, obj_str);
     rgwstore->set_atomic(s->obj_ctx, obj);
     if (prefetch_data) {
       rgwstore->set_prefetch_data(s->obj_ctx, obj);
     }
+    ret = read_policy(s, bucket_info, s->object_acl, s->bucket, obj_str);
   }
-
-  ret = read_acls(s, bucket_info, s->acl, s->bucket, obj_str);
 
   return ret;
 }
@@ -287,7 +290,7 @@ int RGWGetObj::verify_permission()
   rgwstore->set_atomic(s->obj_ctx, obj);
   rgwstore->set_prefetch_data(s->obj_ctx, obj);
 
-  if (!::verify_permission(s, RGW_PERM_READ))
+  if (!verify_object_permission(s, RGW_PERM_READ))
     return -EACCES;
 
   return 0;
@@ -438,7 +441,7 @@ void RGWStatAccount::execute()
 
 int RGWStatBucket::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ))
     return -EACCES;
 
   return 0;
@@ -468,7 +471,7 @@ void RGWStatBucket::execute()
 
 int RGWListBucket::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ))
     return -EACCES;
 
   return 0;
@@ -566,7 +569,7 @@ done:
 
 int RGWDeleteBucket::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -596,7 +599,7 @@ struct put_obj_aio_info {
 
 int RGWPutObj::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -990,7 +993,7 @@ done:
 
 int RGWPutObjMetadata::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_object_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -1035,7 +1038,7 @@ done:
 
 int RGWDeleteObj::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -1109,21 +1112,21 @@ int RGWCopyObj::verify_permission()
   dest_bucket = dest_bucket_info.bucket;
 
   /* check source object permissions */
-  ret = read_acls(s, src_bucket_info, &src_policy, src_bucket, src_object);
+  ret = read_policy(s, src_bucket_info, &src_policy, src_bucket, src_object);
   if (ret < 0)
     return ret;
 
-  if (!::verify_permission(&src_policy, s->user.user_id, s->perm_mask, RGW_PERM_READ))
+  if (!src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
     return -EACCES;
 
   RGWAccessControlPolicy dest_bucket_policy;
 
   /* check dest bucket permissions */
-  ret = read_acls(s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
+  ret = read_policy(s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
   if (ret < 0)
     return ret;
 
-  if (!::verify_permission(&dest_bucket_policy, s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
+  if (!dest_bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
     return -EACCES;
 
   ret = init_dest_policy();
@@ -1189,7 +1192,13 @@ done:
 
 int RGWGetACLs::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_READ_ACP))
+  bool perm;
+  if (s->object) {
+    perm = verify_object_permission(s, RGW_PERM_READ_ACP);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_READ_ACP);
+  }
+  if (!perm)
     return -EACCES;
 
   return 0;
@@ -1197,15 +1206,9 @@ int RGWGetACLs::verify_permission()
 
 void RGWGetACLs::execute()
 {
-  ret = read_acls(s, false, false);
-
-  if (ret < 0) {
-    send_response();
-    return;
-  }
-
   stringstream ss;
-  RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(s->acl);
+  RGWAccessControlPolicy *acl = (s->object ? s->object_acl : s->bucket_acl);
+  RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(acl);
   s3policy->to_xml(ss);
   acls = ss.str(); 
   send_response();
@@ -1215,7 +1218,13 @@ void RGWGetACLs::execute()
 
 int RGWPutACLs::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE_ACP))
+  bool perm;
+  if (s->object) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE_ACP);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  }
+  if (!perm)
     return -EACCES;
 
   return 0;
@@ -1241,17 +1250,8 @@ void RGWPutACLs::execute()
     goto done;
   }
 
-  if (!s->acl) {
-     s->acl = new RGWAccessControlPolicy_S3;
-     if (!s->acl) {
-       ret = -ENOMEM;
-       goto done;
-     }
-     owner.set_id(s->user.user_id);
-     owner.set_name(s->user.display_name);
-  } else {
-     owner = s->acl->get_owner();
-  }
+  owner.set_id(s->user.user_id);
+  owner.set_name(s->user.display_name);
 
   if (get_params() < 0)
     goto done;
@@ -1313,7 +1313,7 @@ done:
 
 int RGWInitMultipart::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -1409,7 +1409,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
 
 int RGWCompleteMultipart::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -1540,7 +1540,7 @@ done:
 
 int RGWAbortMultipart::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
     return -EACCES;
 
   return 0;
@@ -1590,7 +1590,7 @@ done:
 
 int RGWListMultipart::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_READ))
+  if (!verify_object_permission(s, RGW_PERM_READ))
     return -EACCES;
 
   return 0;
@@ -1617,7 +1617,7 @@ done:
 
 int RGWListBucketMultiparts::verify_permission()
 {
-  if (!::verify_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ))
     return -EACCES;
 
   return 0;
@@ -1678,7 +1678,7 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 
 int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
 {
-  int ret = read_acls(s, only_bucket, op->prefetch_data());
+  int ret = build_policies(s, only_bucket, op->prefetch_data());
 
   if (ret < 0) {
     dout(10) << "read_permissions on " << s->bucket << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;

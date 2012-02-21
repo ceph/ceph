@@ -85,12 +85,13 @@ is_err() const
 }
 
 
-req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
+req_state::req_state(struct RGWEnv *e) : os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
 {
   should_log = env->conf->should_log;
   content_started = false;
   format = 0;
-  acl = new RGWAccessControlPolicy;
+  bucket_acl = NULL;
+  object_acl = NULL;
   expect_cont = false;
 
   os_auth_token = NULL;
@@ -108,7 +109,8 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
 
 req_state::~req_state() {
   delete formatter;
-  delete acl;
+  delete bucket_acl;
+  delete object_acl;
   free(os_user);
   free(os_groups);
   free((void *)object);
@@ -340,22 +342,20 @@ string& XMLArgs::get(const char *name)
   return get(s);
 }
 
-bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm)
+bool verify_bucket_permission(struct req_state *s, int perm)
 {
-   if (!policy)
-     return false;
+  if (!s->bucket_acl)
+    return false;
 
-   int policy_perm = policy->get_perm(uid, perm);
-   int acl_perm = policy_perm & user_perm_mask;
-
-   dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
-
-   return (perm == acl_perm);
+  return s->bucket_acl->verify_permission(s->user.user_id, s->perm_mask, perm);
 }
 
-bool verify_permission(struct req_state *s, int perm)
+bool verify_object_permission(struct req_state *s, int perm)
 {
-  return verify_permission(s->acl, s->user.user_id, s->perm_mask, perm);
+  if (!s->object_acl)
+    return false;
+
+  return s->object_acl->verify_permission(s->user.user_id, s->perm_mask, perm);
 }
 
 static char hex_to_num(char c)

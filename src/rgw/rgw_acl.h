@@ -15,6 +15,8 @@ using namespace std;
 #define RGW_PERM_WRITE           0x02
 #define RGW_PERM_READ_ACP        0x04
 #define RGW_PERM_WRITE_ACP       0x08
+#define RGW_PERM_READ_OBJS       0x10
+#define RGW_PERM_WRITE_OBJS      0x20
 #define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
 #define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL
@@ -263,6 +265,7 @@ public:
 
   int get_perm(string& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
+  bool verify_permission(string& uid, int user_perm_mask, int perm);
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;

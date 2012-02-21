@@ -62,16 +62,12 @@ int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) 
 int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   int perm = acl.get_perm(id, perm_mask);
 
+  if (id.compare(owner.get_id()) == 0) {
+    perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
+  }
+
   if (perm == perm_mask)
     return perm;
-
-  if (perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP)) {
-    /* this is the owner, it has implicit permissions */
-    if (id.compare(owner.get_id()) == 0) {
-      perm |= RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP;
-      perm &= perm_mask;
-    }
-  }
 
   /* should we continue looking up? */
   if ((perm & perm_mask) != perm_mask) {
@@ -86,6 +82,16 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   dout(5) << "Getting permissions id=" << id << " owner=" << owner.get_id() << " perm=" << perm << dendl;
 
   return perm;
+}
+
+bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, int perm)
+{
+   int policy_perm = get_perm(uid, perm);
+   int acl_perm = policy_perm & user_perm_mask;
+
+   dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
+
+   return (perm == acl_perm);
 }
 
 

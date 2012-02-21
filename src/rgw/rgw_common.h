@@ -550,7 +550,8 @@ struct req_state {
    bool has_bad_meta;
 
    RGWUserInfo user; 
-   RGWAccessControlPolicy *acl;
+   RGWAccessControlPolicy *bucket_acl;
+   RGWAccessControlPolicy *object_acl;
 
    string canned_acl;
    const char *copy_source;
@@ -943,11 +944,10 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 
-/** Check if a user has a permission on that ACL */
-extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm);
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
-extern bool verify_permission(struct req_state *s, int perm);
+extern bool verify_bucket_permission(struct req_state *s, int perm);
+extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern bool url_decode(string& src_str, string& dest_str);
