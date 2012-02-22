@@ -97,14 +97,21 @@ def start_rgw(ctx, config):
     rgws = {}
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-        proc = remote.run(
-            args=[
+
+        client_config = config.get(client)
+        if client_config is None:
+            client_config = {}
+        log.info("rgw %s config is %s" % (client, client_config))
+ 
+        run_cmd=[
                 'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
                 '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 '/tmp/cephtest/archive/coverage',
                 '/tmp/cephtest/daemon-helper',
                 'term',
+            ]
+        run_cmd_tail=[
                 '/tmp/cephtest/binary/usr/local/bin/radosgw',
                 '-c', '/tmp/cephtest/ceph.conf',
                 '--log-file', '/tmp/cephtest/archive/log/rgw.log',
@@ -113,7 +120,30 @@ def start_rgw(ctx, config):
                 run.Raw('>'),
                 '/tmp/cephtest/archive/log/rgw.stdout',
                 run.Raw('2>&1'),
-                ],
+            ]
+        extra_args = None
+        if client_config.get('valgrind') is not None:
+            log.debug('Running {id} rgw under valgrind'.format(id=client))
+            val_path = '/tmp/cephtest/archive/log/valgrind'
+            remote.run(
+                args=[
+                    'mkdir', '-p', '--', val_path,
+                    ],
+                wait=True,
+                )
+            extra_args = [
+                'valgrind',
+                '--log-file={vdir}/{id}.log'.format(vdir=val_path,
+                                                    id=client),
+                client_config.get('valgrind')
+                ]
+
+        if extra_args is not None:
+            run_cmd.extend(extra_args)
+        run_cmd.extend(run_cmd_tail)
+
+        proc = remote.run(
+            args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
             wait=False,
@@ -179,6 +209,25 @@ def task(ctx, config):
         tasks:
         - ceph:
         - rgw: [client.0, client.3]
+
+    or
+
+        tasks:
+        - ceph:
+        - rgw:
+            client.0:
+            client.3:
+
+    To run radosgw through valgrind:
+
+        tasks:
+        - ceph:
+        - rgw:
+            client.0:
+              valgrind: [--tool=memcheck]
+            client.3:
+              valgrind: [--tool=memcheck]
+        
     """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
