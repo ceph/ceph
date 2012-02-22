@@ -274,29 +274,30 @@ def valgrind_post(ctx, config):
     try:
         yield
     finally:
-        if config.get('valgrind'):
-            lookup_procs = list()
-            val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(
-                val_dir=config.get('valgrind').get('logs', "valgrind"))
-            for remote in ctx.cluster.remotes.iterkeys():
-                #look at valgrind logs for each node
-                proc = remote.run(
-                    args=[
-                        'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
-                        'egrep', '-v', '-q', '(PossiblyLost|DefinitelyLost)'],
-                    wait = False,
-                    check_status=False
-                    )
-                lookup_procs.append((proc, remote))
+        vconfig = config.get('valgrind', {})
+        lookup_procs = list()
+        val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(
+            val_dir=vconfig.get('logs', "valgrind"))
+        log.info('Checking for errors in any valgrind logs...');
+        for remote in ctx.cluster.remotes.iterkeys():
+            #look at valgrind logs for each node
+            proc = remote.run(
+                args=[
+                    'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
+                    'egrep', '-v', '-q', '(PossiblyLost|DefinitelyLost)'],
+                wait = False,
+                check_status=False
+                )
+            lookup_procs.append((proc, remote))
 
-            valgrind_exception = None
-            for (proc, remote) in lookup_procs:
-                result = proc.exitstatus.get()
-                if result != 1:
-                    valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
+        valgrind_exception = None
+        for (proc, remote) in lookup_procs:
+            result = proc.exitstatus.get()
+            if result != 1:
+                valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
 
-            if valgrind_exception is not None:
-                raise valgrind_exception
+        if valgrind_exception is not None:
+            raise valgrind_exception
                 
 
 @contextlib.contextmanager
