@@ -82,6 +82,7 @@ def ceph_log(ctx, config):
             args=[
                 'install', '-d', '-m0755', '--',
                 '/tmp/cephtest/archive/log',
+                '/tmp/cephtest/archive/log/valgrind',
                 '/tmp/cephtest/archive/profiling-logger',
                 ],
             wait=False,
@@ -987,18 +988,6 @@ def task(ctx, config):
                 wait=False,
                 )
             )
-
-    if config.get('valgrind'):
-        val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-        run.wait(
-            ctx.cluster.run(
-                args=[
-                    'mkdir', '-p', val_path
-                    ],
-                wait=False,
-                )
-            )
-
 
     with contextutil.nested(
         lambda: ceph_log(ctx=ctx, config=None),
