@@ -481,3 +481,24 @@ def deep_merge(a, b):
                 a[k] = v
         return a
     return b
+
+def get_valgrind_args(name, v):
+    if v is None:
+        return None
+    if not isinstance(v, list):
+        v = [v]
+    val_path = '/tmp/cephtest/archive/log/valgrind'
+    if '--tool=memcheck' in v or '--tool=helgrind' in v:
+        extra_args = [
+            'valgrind', '--xml=yes',
+            '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
+            ]
+    else:
+        extra_args = [
+            'valgrind',
+            '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
+            ]
+    extra_args.extend(v)
+    log.debug('running %s under valgrind with args %s' % (name, extra_args))
+    return extra_args
+

@@ -121,22 +121,9 @@ def start_rgw(ctx, config):
                 '/tmp/cephtest/archive/log/rgw.stdout',
                 run.Raw('2>&1'),
             ]
-        extra_args = None
-        if client_config.get('valgrind') is not None:
-            log.debug('Running {id} rgw under valgrind'.format(id=client))
-            val_path = '/tmp/cephtest/archive/log/valgrind'
-            remote.run(
-                args=[
-                    'mkdir', '-p', '--', val_path,
-                    ],
-                wait=True,
-                )
-            extra_args = [
-                'valgrind',
-                '--log-file={vdir}/{id}.log'.format(vdir=val_path,
-                                                    id=client),
-                client_config.get('valgrind')
-                ]
+
+        extra_args = teuthology.get_valgrind_args(
+            client, client_config.get('valgrind', None))
 
         if extra_args is not None:
             run_cmd.extend(extra_args)

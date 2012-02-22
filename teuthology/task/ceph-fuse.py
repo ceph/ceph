@@ -91,23 +91,11 @@ def task(ctx, config):
             mnt,
             ]
 
-        extra_args = None
-        if client_config.get('valgrind') is not None:
-                log.debug('Running client.{id} under valgrind'.format(id=id_))
-                val_path = '/tmp/cephtest/archive/log/valgrind'
-                daemon_signal = 'term'
-                remote.run(
-                    args=[
-                        'mkdir', '-p', '--', val_path,
-                        ],
-                    wait=True,
-                    )
-                extra_args = [
-                    'valgrind',
-                    '--log-file={vdir}/client.{id}.log'.format(vdir=val_path,
-                                                               id=id_),
-                    client_config.get('valgrind')
-                    ]
+        extra_args = teuthology.get_valgrind_args(
+            'client.%s' % id_,
+            client_config.get('valgrind', None))
+        if extra_args is not None:
+            daemon_signal = 'term'
         
         run_cmd.append(daemon_signal)
         if extra_args is not None:

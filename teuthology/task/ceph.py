@@ -275,10 +275,8 @@ def valgrind_post(ctx, config):
     try:
         yield
     finally:
-        vconfig = config.get('valgrind', {})
         lookup_procs = list()
-        val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(
-            val_dir=vconfig.get('logs', "valgrind"))
+        val_path = '/tmp/cephtest/archive/log/valgrind'
         log.info('Checking for errors in any valgrind logs...');
         for remote in ctx.cluster.remotes.iterkeys():
             #look at valgrind logs for each node
@@ -771,8 +769,6 @@ def run_daemon(ctx, config, type_):
                 '-i', id_,
                 '-c', '/tmp/cephtest/ceph.conf']
 
-            extra_args = None
-
             valgrind_args = None
             if config.get('valgrind'):
                 v = config.get('valgrind')
@@ -780,18 +776,10 @@ def run_daemon(ctx, config, type_):
                     valgrind_args = v.get(type_)
                 if v.get(name, None) is not None:
                     valgrind_args = v.get(name)
-            if valgrind_args is not None:
-                if not isinstance(valgrind_args, list):
-                    valgrind_args = [valgrind_args]
-                log.debug('running %s under valgrind with args %s' % (name, valgrind_args))
-                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', 'valgrind'))
+
+            extra_args = teuthology.get_valgrind_args(name, valgrind_args)
+            if extra_args is not None:
                 proc_signal = 'term'
-                if '--tool=memcheck' in valgrind_args or \
-                        '--tool=helgrind' in valgrind_args:
-                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type_, id=id_)]
-                else:
-                    extra_args = ['valgrind', '--log-file={vdir}/{type}.{id}.log'.format(vdir=val_path, type=type_, id=id_)]
-                extra_args.extend(valgrind_args)
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
