@@ -1,0 +1,11 @@
+roles:
+- - mon.a
+  - mds.0
+  - osd.0
+- - osd.1
+tasks:
+- ceph:
+    conf:
+      mon:
+        mon_osd_report_timeout: 90
+- dump_stuck:
