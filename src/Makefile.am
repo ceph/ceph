@@ -775,7 +775,9 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
-	$(ceph_tool_gui_DATA)
+	$(ceph_tool_gui_DATA) \
+	$(srcdir)/test/encoding/readable.sh \
+	$(srcdir)/test/encoding/check-generated.sh
 
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
