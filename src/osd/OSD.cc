@@ -2353,11 +2353,6 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     osd_lock.Lock();
   }
 
-  else if (cmd[0] == "stop") {
-    ss << "got shutdown";
-    shutdown();
-  }
-
   else if (cmd[0] == "bench") {
     uint64_t count = 1 << 30;  // 1gb
     uint64_t bsize = 4 << 20;
