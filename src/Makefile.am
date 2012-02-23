@@ -335,6 +335,7 @@ my_libradosgw_src = \
 	rgw/librgw.cc \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
+	rgw/rgw_acl_swift.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
@@ -1426,6 +1427,7 @@ noinst_HEADERS = \
 	rgw/rgw_access.h\
 	rgw/rgw_acl.h\
 	rgw/rgw_acl_s3.h\
+	rgw/rgw_acl_swift.h\
 	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_cls_api.h\

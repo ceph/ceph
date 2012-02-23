@@ -199,8 +199,10 @@ void ACLGrant_S3::to_xml(ostream& out) {
          "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
-    out << "<ID>" << id << "</ID>" <<
-           "<DisplayName>" << name << "</DisplayName>";
+    out << "<ID>" << id << "</ID>";
+    if (name.size()) {
+      out << "<DisplayName>" << name << "</DisplayName>";
+    }
     break;
   case ACL_TYPE_EMAIL_USER:
     out << "<EmailAddress>" << email << "</EmailAddress>";

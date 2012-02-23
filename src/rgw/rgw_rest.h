@@ -67,11 +67,11 @@ public:
   int get_data(bufferlist& bl);
 };
 
-class RGWPutObjMetadata_REST : public RGWPutObjMetadata
+class RGWPutMetadata_REST : public RGWPutMetadata
 {
 public:
-  RGWPutObjMetadata_REST() {}
-  ~RGWPutObjMetadata_REST() {}
+  RGWPutMetadata_REST() {}
+  ~RGWPutMetadata_REST() {}
 };
 
 class RGWDeleteObj_REST : public RGWDeleteObj {

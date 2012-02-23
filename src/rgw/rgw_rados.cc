@@ -1307,6 +1307,73 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   return 0;
 }
 
+int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
+                        map<string, bufferlist>& attrs,
+                        map<string, bufferlist>* rmattrs)
+{
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  librados::IoCtx io_ctx;
+  string actual_obj = oid;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  rgw_bucket actual_bucket = bucket;
+
+  if (actual_obj.size() == 0) {
+    actual_obj = bucket.name;
+    actual_bucket = rgw_root_bucket;
+  }
+
+  int r = open_bucket_ctx(actual_bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  io_ctx.locator_set_key(key);
+
+  ObjectWriteOperation op;
+  RGWObjState *state = NULL;
+
+  r = append_atomic_test(rctx, obj, io_ctx, actual_obj, op, &state);
+  if (r < 0)
+    return r;
+
+  map<string, bufferlist>::iterator iter;
+  if (rmattrs) {
+    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+      const string& name = iter->first;
+      op.rmxattr(name.c_str());
+    }
+  }
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    const string& name = iter->first;
+    bufferlist& bl = iter->second;
+
+    if (!bl.length())
+      continue;
+
+    op.setxattr(name.c_str(), bl);
+  }
+
+  if (!op.size())
+    return 0;
+
+  r = io_ctx.operate(actual_obj, &op);
+
+  if (r == -ECANCELED) {
+    /* a race! object was replaced, we need to set attr on the original obj */
+    dout(0) << "NOTICE: RGWRados::set_obj_attrs: raced with another process, going to the shadow obj instead" << dendl;
+    string loc = obj.loc();
+    rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
+    r = set_attrs(NULL, shadow, attrs, rmattrs);
+  }
+
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 /**
  * Get data about an object out of RADOS and into memory.
  * bucket: name of the bucket the object is in.

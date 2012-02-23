@@ -264,6 +264,10 @@ public:
   /** Set an attr on an object. */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
 
+  virtual int set_attrs(void *ctx, rgw_obj& obj,
+                        map<string, bufferlist>& attrs,
+                        map<string, bufferlist>* rmattrs);
+
   /** Get data about an object out of RADOS and into memory. */
   virtual int prepare_get_obj(void *ctx, rgw_obj& obj,
             off_t *ofs, off_t *end,

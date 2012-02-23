@@ -21,6 +21,8 @@ using namespace std;
 struct req_state;
 class RGWHandler;
 
+void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
+
 /**
  * Provide the base class for all ops.
  */
@@ -306,15 +308,19 @@ public:
   virtual const char *name() { return "put_obj"; }
 };
 
-class RGWPutObjMetadata : public RGWOp {
+class RGWPutMetadata : public RGWOp {
 protected:
   int ret;
+  map<string, bufferlist> attrs;
+  bool has_policy;
+  RGWAccessControlPolicy policy;
 
 public:
-  RGWPutObjMetadata() {}
+  RGWPutMetadata() {}
 
   virtual void init(struct req_state *s, RGWHandler *h) {
     RGWOp::init(s, h);
+    has_policy = false;
     ret = 0;
   }
   int verify_permission();

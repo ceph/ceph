@@ -602,6 +602,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_GOOG"),
                                    STR_LEN_ENTRY("HTTP_X_DHO"),
                                    STR_LEN_ENTRY("HTTP_X_OBJECT"),
+                                   STR_LEN_ENTRY("HTTP_X_CONTAINER"),
                                    {NULL, 0} };
 
 static int init_auth_info(struct req_state *s)

@@ -83,10 +83,10 @@ public:
   void send_response();
 };
 
-class RGWPutObjMetadata_REST_SWIFT : public RGWPutObjMetadata_REST {
+class RGWPutMetadata_REST_SWIFT : public RGWPutMetadata_REST {
 public:
-  RGWPutObjMetadata_REST_SWIFT() {}
-  ~RGWPutObjMetadata_REST_SWIFT() {}
+  RGWPutMetadata_REST_SWIFT() {}
+  ~RGWPutMetadata_REST_SWIFT() {}
 
   int get_params();
   void send_response();

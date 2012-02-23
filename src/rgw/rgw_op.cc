@@ -137,7 +137,7 @@ static void format_xattr(std::string &xattr)
  * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
  *
  */
-static void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
+void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
   for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
@@ -980,7 +980,7 @@ void RGWPutObj::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = bl;
   }
 
-  get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s, attrs);
 
   ret = processor->complete(etag, attrs);
 done:
@@ -991,7 +991,7 @@ done:
   return;
 }
 
-int RGWPutObjMetadata::verify_permission()
+int RGWPutMetadata::verify_permission()
 {
   if (!verify_object_permission(s, RGW_PERM_WRITE))
     return -EACCES;
@@ -999,24 +999,26 @@ int RGWPutObjMetadata::verify_permission()
   return 0;
 }
 
-void RGWPutObjMetadata::execute()
+void RGWPutMetadata::execute()
 {
-  ret = -EINVAL;
-
   const char *meta_prefix = RGW_ATTR_META_PREFIX;
   int meta_prefix_len = sizeof(RGW_ATTR_META_PREFIX) - 1;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
-  get_request_metadata(s, attrs);
+  bufferlist bl;
 
   rgw_obj obj(s->bucket, s->object_str);
 
   rgwstore->set_atomic(s->obj_ctx, obj);
 
-  uint64_t obj_size;
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
+  rgw_get_request_metadata(s, attrs);
 
   /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(s, obj, orig_attrs, &obj_size);
+  ret = get_obj_attrs(s, obj, orig_attrs, NULL);
   if (ret < 0)
     goto done;
 
@@ -1030,7 +1032,11 @@ void RGWPutObjMetadata::execute()
     }
   }
 
-  ret = rgwstore->put_obj_meta(s->obj_ctx, obj, obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs, NULL);
+  if (has_policy) {
+    policy.encode(bl);
+    attrs[RGW_ATTR_ACL] = bl;
+  }
+  ret = rgwstore->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
 
 done:
   send_response();
@@ -1159,7 +1165,7 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
-  get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s, attrs);
 
   return 0;
 }
@@ -1341,7 +1347,7 @@ void RGWInitMultipart::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = bl;
   }
 
-  get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s, attrs);
 
   do {
     char buf[33];
