@@ -9,8 +9,8 @@
 
 using namespace std;
 
-#define SWIFT_PERM_READ  RGW_PERM_READ
-#define SWIFT_PERM_WRITE RGW_PERM_WRITE
+#define SWIFT_PERM_READ  RGW_PERM_READ_OBJS
+#define SWIFT_PERM_WRITE RGW_PERM_WRITE_OBJS
 
 static int parse_list(string& uid_list, vector<string>& uids)
 {

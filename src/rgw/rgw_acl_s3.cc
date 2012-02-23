@@ -195,6 +195,12 @@ bool ACLGrant_S3::xml_end(const char *el) {
 }
 
 void ACLGrant_S3::to_xml(ostream& out) {
+  ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
+
+  /* only show s3 compatible permissions */
+  if (!(perm.get_permissions() & RGW_PERM_ALL_S3))
+    return;
+
   out << "<Grant>" <<
          "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
   switch (type.get_type()) {
@@ -214,7 +220,6 @@ void ACLGrant_S3::to_xml(ostream& out) {
     break;
   }
   out << "</Grantee>";
-  ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
   perm.to_xml(out);
   out << "</Grant>";
 }

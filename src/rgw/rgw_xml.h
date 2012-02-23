@@ -11,17 +11,6 @@
 using namespace std;
 
 
-#define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
-#define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
-
-#define RGW_PERM_READ            0x01
-#define RGW_PERM_WRITE           0x02
-#define RGW_PERM_READ_ACP        0x04
-#define RGW_PERM_WRITE_ACP       0x08
-#define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
-                                  RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
-#define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL
-
 class XMLObj;
 
 class XMLObjIter {

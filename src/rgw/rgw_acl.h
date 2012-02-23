@@ -19,7 +19,7 @@ using namespace std;
 #define RGW_PERM_WRITE_OBJS      0x20
 #define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
-#define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL
+#define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
 
 enum ACLGranteeTypeEnum {
 /* numbers are encoded, should not change */
