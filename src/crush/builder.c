@@ -727,7 +727,7 @@ int crush_adjust_list_bucket_item_weight(struct crush_bucket_list *bucket, int i
 	if (i == bucket->h.size)
 		return 0;
 
-	diff = weight = bucket->item_weights[i];
+	diff = weight - bucket->item_weights[i];
 	bucket->item_weights[i] = weight;
 	bucket->h.weight += diff;
 
@@ -752,7 +752,7 @@ int crush_adjust_tree_bucket_item_weight(struct crush_bucket_tree *bucket, int i
 		return 0;
 	
 	node = crush_calc_tree_node(i);
-	diff = weight = bucket->node_weights[node];
+	diff = weight - bucket->node_weights[node];
 	bucket->node_weights[node] = weight;
 	bucket->h.weight += diff;
 
