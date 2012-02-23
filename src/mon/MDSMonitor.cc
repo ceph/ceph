@@ -718,17 +718,18 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if ((m->cmd[1] == "stop" || m->cmd[1] == "deactivate") && m->cmd.size() > 2) {
       int who = atoi(m->cmd[2].c_str());
-      if (!mdsmap.is_active(who)) {
+      if (!pending_mdsmap.is_active(who)) {
 	r = -EEXIST;
 	ss << "mds." << who << " not active (" 
-	   << ceph_mds_state_name(mdsmap.get_state(who)) << ")";
-      } else if ((mdsmap.get_root() == who ||
-		  mdsmap.get_tableserver() == who) &&
-		 mdsmap.get_num_in_mds() > 1) {
+	   << ceph_mds_state_name(pending_mdsmap.get_state(who)) << ")";
+      } else if ((pending_mdsmap.get_root() == who ||
+		  pending_mdsmap.get_tableserver() == who) &&
+		 pending_mdsmap.get_num_in_mds() > 1) {
 	r = -EBUSY;
-	ss << "can't tell the root (" << mdsmap.get_root() << ") or tableserver (" << mdsmap.get_tableserver()
+	ss << "can't tell the root (" << pending_mdsmap.get_root()
+	   << ") or tableserver (" << pending_mdsmap.get_tableserver()
 	   << " to deactivate unless it is the last mds in the cluster";
-      } else if (mdsmap.get_num_in_mds() <= mdsmap.get_max_mds()) {
+      } else if (pending_mdsmap.get_num_in_mds() <= pending_mdsmap.get_max_mds()) {
 	r = -EBUSY;
 	ss << "must decrease max_mds or else MDS will immediately reactivate";
       } else {
