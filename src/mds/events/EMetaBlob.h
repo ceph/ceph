@@ -69,7 +69,7 @@ public:
     bool dirty;
     struct default_file_layout *dir_layout;
     typedef map<snapid_t, old_inode_t> old_inodes_t;
-    old_inodes_t *old_inodes;
+    old_inodes_t old_inodes;
 
     bufferlist _enc;
 
@@ -83,7 +83,7 @@ public:
 	    old_inodes_t *oi = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
-      dir_layout(NULL), old_inodes(NULL), _enc(1024)
+      dir_layout(NULL), _enc(1024)
     {
       ::encode(d, _enc);
       ::encode(df, _enc);
@@ -105,12 +105,11 @@ public:
       if (oi)
 	::encode(*oi, _enc);
     }
-    fullbit(bufferlist::iterator &p) : dir_layout(NULL), old_inodes(NULL) {
+    fullbit(bufferlist::iterator &p) : dir_layout(NULL) {
       decode(p);
     }
-    fullbit() : dir_layout(NULL), old_inodes(NULL) {}
+    fullbit() : dir_layout(NULL) {}
     ~fullbit() {
-      delete old_inodes;
       delete dir_layout;
     }
 
@@ -148,8 +147,7 @@ public:
 	bool old_inodes_present;
 	::decode(old_inodes_present, bl);
 	if (old_inodes_present) {
-	  old_inodes = new old_inodes_t;
-	  ::decode(*old_inodes, bl);
+	  ::decode(old_inodes, bl);
 	}
       }
     }
