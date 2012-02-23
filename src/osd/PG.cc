@@ -1538,8 +1538,10 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
   state_clear(PG_STATE_BACKFILL);
   state_clear(PG_STATE_RECOVERING);
 
-  // only mark CLEAN if we have the desired number of replicas.
-  if (acting.size() == get_osdmap()->get_pg_size(info.pgid))
+  // only mark CLEAN if we have the desired number of replicas AND we
+  // are not remapped.
+  if (acting.size() == get_osdmap()->get_pg_size(info.pgid) &&
+      up == acting)
     state_set(PG_STATE_CLEAN);
 
   assert(info.last_complete == info.last_update);
