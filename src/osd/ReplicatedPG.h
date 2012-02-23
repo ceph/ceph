@@ -789,6 +789,7 @@ public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, const hobject_t& ioid);
   ~ReplicatedPG() {}
 
+  int do_command(vector<string>& cmd, ostream& ss, bufferlist& data);
 
   void do_op(OpRequest *op);
   bool pg_op_must_wait(MOSDOp *op);
