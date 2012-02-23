@@ -446,6 +446,16 @@ inline bool operator>=(bufferlist& l, bufferlist& r) {
     p++;
   }
 }
+
+inline bool operator==(bufferlist &l, bufferlist &r) {
+  if (l.length() != r.length())
+    return false;
+  for (unsigned p = 0; p < l.length(); p++) {
+    if (l[p] != r[p])
+      return false;
+  }
+  return true;
+}
 inline bool operator<(bufferlist& l, bufferlist& r) {
   return r > l;
 }
