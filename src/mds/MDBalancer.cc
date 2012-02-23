@@ -437,8 +437,6 @@ void MDBalancer::prep_rebalance(int beat)
     int whoami = mds->get_nodeid();
     rebalance_time = ceph_clock_now(g_ceph_context);
 
-    dump_pop_map();
-
     // reset
     my_targets.clear();
     imported.clear();
@@ -1149,98 +1147,3 @@ void MDBalancer::show_imports(bool external)
 {
   mds->mdcache->show_subtrees();
 }
-
-
-void MDBalancer::dump_pop_map()
-{
-  return; // this is dumb
-
-/*
-
-  char fn[32];
-  snprintf(fn, sizeof(fn), "popdump.%d.mds%d", beat_epoch, mds->get_nodeid());
-
-  dout(1) << "dump_pop_map to " << fn << dendl;
-
-  ofstream myfile;
-  myfile.open(fn);
-
-  list<CInode*> iq;
-  if (mds->mdcache->root)
-    iq.push_back(mds->mdcache->root);
-
-  utime_t now = ceph_clock_now(g_ceph_context);
-  while (!iq.empty()) {
-    CInode *in = iq.front();
-    iq.pop_front();
-
-    // pop stats
-    //for (int a=0; a<MDS_NPOP; a++)
-    //  for (int b=0; b<META_NPOP; b++)
-    //    myfile << in->popularity[a].pop[b].get(now) << "\t";
-
-    // recurse, depth-first.
-    if (in->is_dir()) {
-
-      list<CDir*> dirs;
-      in->get_dirfrags(dirs);
-      for (list<CDir*>::iterator p = dirs.begin();
-	   p != dirs.end();
-	   ++p) {
-	CDir *dir = *p;
-
-	myfile << (int)dir->pop_me.meta_load(now, mds->mdcache->decayrate) << "\t";
-	myfile << (int)dir->pop_nested.meta_load(now, mds->mdcache->decayrate) << "\t";
-	myfile << (int)dir->pop_auth_subtree.meta_load(now, mds->mdcache->decayrate) << "\t";
-	myfile << (int)dir->pop_auth_subtree_nested.meta_load(now, mds->mdcache->decayrate) << "\t";
-
-	// filename last
-	string p;
-	in->make_path_string(p);
-	myfile << "." << p;
-	if (dir->get_frag() != frag_t())
-	  myfile << "___" << (unsigned)dir->get_frag();
-	myfile << std::endl; //"/" << dir->get_frag() << dendl;
-
-	// add contents
-	for (CDir::map_t::iterator q = dir->items.begin();
-	     q != dir->items.end();
-	     q++)
-	  if (q->second->get_linkage()->is_primary())
-	    iq.push_front(q->second->get_linkage()->get_inode());
-      }
-    }
-
-  }
-
-  myfile.close();
-*/
-}
-
-
-
-/*  replicate?
-
-      float dir_pop = dir->get_popularity();
-
-      if (dir->is_auth()) {
-        if (!dir->is_rep() &&
-            dir_pop >= g_conf->mds_bal_replicate_threshold) {
-          // replicate
-          dout(5) << "replicating dir " << *in << " pop " << dir_pop << dendl;
-
-          dir->dir_rep = CDIR_REP_ALL;
-          mds->mdcache->send_dir_updates(dir);
-        }
-
-        if (dir->is_rep() &&
-            dir_pop < g_conf->mds_bal_unreplicate_threshold) {
-          // unreplicate
-          dout(5) << "unreplicating dir " << *in << " pop " << dir_pop << dendl;
-
-          dir->dir_rep = CDIR_REP_NONE;
-          mds->mdcache->send_dir_updates(dir);
-        }
-      }
-
-*/
