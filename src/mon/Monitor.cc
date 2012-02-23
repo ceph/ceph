@@ -220,9 +220,7 @@ void Monitor::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got Signal " << sys_siglist[signum] << " ***" << dendl;
-  lock.Lock();
   shutdown();
-  lock.Unlock();
 }
 
 void Monitor::init()
@@ -342,7 +340,8 @@ void Monitor::update_logger()
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
-  
+  lock.Lock();
+
   state = STATE_SHUTDOWN;
 
   if (admin_hook) {
@@ -373,8 +372,10 @@ void Monitor::shutdown()
 
   timer.shutdown();
 
-  // die.
-  messenger->shutdown();
+  // unlock before msgr shutdown...
+  lock.Unlock();
+
+  messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
 void Monitor::bootstrap()
