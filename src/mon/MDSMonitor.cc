@@ -716,7 +716,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   bufferlist rdata;
 
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "stop" && m->cmd.size() > 2) {
+    if ((m->cmd[1] == "stop" || m->cmd[1] == "deactivate") && m->cmd.size() > 2) {
       int who = atoi(m->cmd[2].c_str());
       if (!mdsmap.is_active(who)) {
 	r = -EEXIST;
@@ -727,14 +727,14 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 		 mdsmap.get_num_in_mds() > 1) {
 	r = -EBUSY;
 	ss << "can't tell the root (" << mdsmap.get_root() << ") or tableserver (" << mdsmap.get_tableserver()
-	   << " to stop unless it is the last mds in the cluster";
+	   << " to deactivate unless it is the last mds in the cluster";
       } else if (mdsmap.get_num_in_mds() <= mdsmap.get_max_mds()) {
 	r = -EBUSY;
-	ss << "must decrease max_mds or else MDS will rejoin after shutdown";
+	ss << "must decrease max_mds or else MDS will immediately reactivate";
       } else {
 	r = 0;
 	uint64_t gid = pending_mdsmap.up[who];
-	ss << "telling mds." << who << " " << pending_mdsmap.mds_info[gid].addr << " to stop";
+	ss << "telling mds." << who << " " << pending_mdsmap.mds_info[gid].addr << " to deactivate";
 	pending_mdsmap.mds_info[gid].state = MDSMap::STATE_STOPPING;
       }
     }
