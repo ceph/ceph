@@ -22,7 +22,7 @@
 
 class MOSDMap : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
 
  public:
   uuid_d fsid;
@@ -85,8 +85,13 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	(features & CEPH_FEATURE_PGPOOL3) == 0) {
-      header.version = 1;
+	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
+	(features & CEPH_FEATURE_OSDENC) == 0) {
+      if ((features & CEPH_FEATURE_PGID64) == 0 ||
+	  (features & CEPH_FEATURE_PGPOOL3) == 0)
+	header.version = 1;  // old old_client version
+      else
+	header.version = 2;  // old pg_pool_t
 
       // reencode maps using old format
       //
