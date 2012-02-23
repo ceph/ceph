@@ -2666,6 +2666,10 @@ void SimpleMessenger::wait()
     wait_cond.Wait(lock);
     ldout(cct,10) << "wait: woke up" << dendl;
   }
+
+  ldout(cct,10) << "wait: join dispatch thread" << dendl;
+  dispatch_thread.join();
+
   ldout(cct,10) << "wait: everything stopped" << dendl;
   lock.Unlock();
   
