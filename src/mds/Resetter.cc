@@ -37,6 +37,23 @@ bool Resetter::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
   return *authorizer != NULL;
 }
 
+bool Resetter::ms_dispatch(Message *m)
+{
+  Mutex::Locker l(lock);
+  switch (m->get_type()) {
+  case CEPH_MSG_OSD_OPREPLY:
+    objecter->handle_osd_op_reply((MOSDOpReply *)m);
+    break;
+  case CEPH_MSG_OSD_MAP:
+    objecter->handle_osd_map((MOSDMap*)m);
+    break;
+  default:
+    return false;
+  }
+  return true;
+}
+
+
 void Resetter::init(int rank) 
 {
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
@@ -69,30 +86,33 @@ void Resetter::init(int rank)
 
 void Resetter::shutdown()
 {
-  messenger->shutdown();
-  messenger->wait();
   lock.Lock();
   timer.shutdown();
   lock.Unlock();
+  messenger->shutdown();
+  messenger->wait();
 }
 
 void Resetter::reset()
 {
-  Mutex lock("Resetter::reset::lock");
+  Mutex mylock("Resetter::reset::lock");
   Cond cond;
   bool done;
   int r;
 
-  this->lock.Lock();
   lock.Lock();
-  journaler->recover(new C_SafeCond(&lock, &cond, &done, &r));
-  while (!done)
-    cond.Wait(lock);
+  journaler->recover(new C_SafeCond(&mylock, &cond, &done, &r));
   lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
   if (r != 0) {
     if (r == -ENOENT) {
       cerr << "journal does not exist on-disk. Did you set a bad rank?"
-          << std::endl;
+	   << std::endl;
       shutdown();
       return;
     } else {
@@ -102,6 +122,7 @@ void Resetter::reset()
     }
   }
 
+  lock.Lock();
   uint64_t old_start = journaler->get_read_pos();
   uint64_t old_end = journaler->get_write_pos();
   uint64_t old_len = old_end - old_start;
@@ -119,11 +140,15 @@ void Resetter::reset()
 
   {
     cout << "writing journal head" << std::endl;
-    journaler->write_head(new C_SafeCond(&lock, &cond, &done, &r));
-    lock.Lock();
-    while (!done)
-      cond.Wait(lock);
+    journaler->write_head(new C_SafeCond(&mylock, &cond, &done, &r));
     lock.Unlock();
+
+    mylock.Lock();
+    while (!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+    
+    lock.Lock();
     assert(r == 0);
   }
 
@@ -134,15 +159,17 @@ void Resetter::reset()
   
   cout << "writing EResetJournal entry" << std::endl;
   journaler->append_entry(bl);
-  journaler->flush(new C_SafeCond(&lock, &cond, &done,&r));
-  lock.Lock();
-  while (!done)
-    cond.Wait(lock);
+  journaler->flush(new C_SafeCond(&mylock, &cond, &done,&r));
+
   lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
   assert(r == 0);
 
   cout << "done" << std::endl;
-
-  this->lock.Unlock();
   shutdown();
 }
