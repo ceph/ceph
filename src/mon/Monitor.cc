@@ -978,11 +978,6 @@ void Monitor::handle_command(MMonCommand *m)
       reply_command(m, 0, rs, rdata, 0);
       return;
     }
-    if (m->cmd[0] == "stop") {
-      shutdown();
-      reply_command(m, 0, "stopping", 0);
-      return;
-    }
     if (m->cmd[0] == "stop_cluster") {
       stop_cluster();
       reply_command(m, 0, "initiating cluster shutdown", 0);
