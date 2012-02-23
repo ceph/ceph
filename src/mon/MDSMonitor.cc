@@ -728,6 +728,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	r = -EBUSY;
 	ss << "can't tell the root (" << mdsmap.get_root() << ") or tableserver (" << mdsmap.get_tableserver()
 	   << " to stop unless it is the last mds in the cluster";
+      } else if (mdsmap.get_num_in_mds() <= mdsmap.get_max_mds()) {
+	r = -EBUSY;
+	ss << "must decrease max_mds or else MDS will rejoin after shutdown";
       } else {
 	r = 0;
 	uint64_t gid = pending_mdsmap.up[who];
