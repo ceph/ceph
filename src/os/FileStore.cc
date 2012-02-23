@@ -2731,14 +2731,10 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     r = n;
     goto out;
   }
-  if (btrfs)
-    r = ::ioctl(n, BTRFS_IOC_CLONE, o);
-  else {
-    struct stat st;
-    ::fstat(o, &st);
-    dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " READ+WRITE" << dendl;
-    r = _do_clone_range(o, n, 0, st.st_size, 0);
-  }
+
+  struct stat st;
+  ::fstat(o, &st);
+  r = _do_clone_range(o, n, 0, st.st_size, 0);
   if (r < 0)
     r = -errno;
 
