@@ -5264,6 +5264,12 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
 
   assert(recovery_ops_active == 0);
 
+  int unfound = get_num_unfound();
+  if (unfound) {
+    dout(10) << " still have " << unfound << " unfound" << dendl;
+    return started;
+  }
+
   handle_recovery_complete(prctx);
 
   return 0;
