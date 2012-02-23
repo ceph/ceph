@@ -92,6 +92,7 @@
 #include "common/LogClient.h"
 #include "common/safe_io.h"
 #include "common/HeartbeatMap.h"
+#include "common/admin_socket.h"
 
 #include "global/signal_handler.h"
 #include "global/pidfile.h"
@@ -554,6 +555,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
   ops_in_flight_lock("OSD::ops_in_flight_lock"),
+  admin_ops_hook(NULL),
   op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   map_lock("OSD::map_lock"),
@@ -626,6 +628,18 @@ int OSD::pre_init()
   }
   return 0;
 }
+
+class OpsFlightSocketHook : public AdminSocketHook {
+  OSD *osd;
+public:
+  OpsFlightSocketHook(OSD *o) : osd(o) {}
+  bool call(std::string command, bufferlist& out) {
+    stringstream ss;
+    osd->dump_ops_in_flight(ss);
+    out.append(ss);
+    return true;
+  }
+};
 
 int OSD::init()
 {
@@ -745,6 +759,12 @@ int OSD::init()
   dout(0) << "started rotating keys" << dendl;
 #endif
 
+  admin_ops_hook = new OpsFlightSocketHook(this);
+  AdminSocket *admin_socket = cct->get_admin_socket();
+  r = admin_socket->register_command("dump_ops_in_flight", admin_ops_hook,
+                                         "show the ops currently in flight");
+  assert(r == 0);
+
   return 0;
 }
 
@@ -863,6 +883,10 @@ int OSD::shutdown()
   // finish ops
   op_wq.drain();
   dout(10) << "no ops" << dendl;
+
+  cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
+  delete admin_ops_hook;
+  admin_ops_hook = NULL;
 
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
@@ -1851,6 +1875,38 @@ void OSD::check_ops_in_flight()
     }
   }
   ops_in_flight_lock.Unlock();
+}
+
+void OSD::dump_ops_in_flight(ostream& ss)
+{
+  JSONFormatter jf(true);
+  Mutex::Locker locker(ops_in_flight_lock);
+  jf.open_object_section("ops_in_flight"); // overall dump
+  jf.dump_int("num_ops", ops_in_flight.size());
+  jf.open_array_section("ops"); // list of OpRequests
+  utime_t now = ceph_clock_now(g_ceph_context);
+  for (xlist<OpRequest*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
+    stringstream name;
+    Message *m = (*p)->request;
+    m->print(name);
+    jf.open_object_section("op");
+    jf.dump_string("description", name.str().c_str()); // this OpRequest
+    jf.dump_float("received_at", (*p)->received_time);
+    jf.dump_float("age", now - (*p)->received_time);
+    jf.dump_string("flag_point", (*p)->state_string());
+    if (m->get_orig_source().is_client()) {
+      jf.open_object_section("client_info");
+      stringstream client_name;
+      client_name << m->get_orig_source();
+      jf.dump_string("client", client_name.str());
+      jf.dump_int("tid", m->get_tid());
+      jf.close_section(); // client_info
+    }
+    jf.close_section(); // this OpRequest
+  }
+  jf.close_section(); // list of OpRequests
+  jf.close_section(); // overall dump
+  jf.flush(ss);
 }
 
 void OSD::register_inflight_op(xlist<OpRequest*>::item *i)
