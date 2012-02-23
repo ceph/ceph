@@ -462,12 +462,6 @@ private:
 
 
   /***** Messenger-required functions  **********/
-  void destroy() {
-    if (dispatch_thread.is_started())
-      dispatch_thread.join();
-    Messenger::destroy();
-  }
-
   entity_addr_t get_myaddr();
   void set_ip(entity_addr_t &addr);
 
