@@ -19,6 +19,7 @@ public:
 
   void add_grants(vector<string>& uids, int perm);
   bool create(string& id, string& name, string& read_list, string& write_list);
+  void to_str(string& read, string& write);
 };
 
 #endif

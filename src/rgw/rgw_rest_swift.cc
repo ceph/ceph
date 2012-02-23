@@ -192,6 +192,18 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
   CGI_PRINTF(s,"X-Container-Bytes-Used-Actual: %s\n", buf);
+
+  if (!s->object) {
+    RGWAccessControlPolicy_SWIFT *swift_policy = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
+    string read_acl, write_acl;
+    swift_policy->to_str(read_acl, write_acl);
+    if (read_acl.size()) {
+      CGI_PRINTF(s, "X-Container-Read: %s\r\n", read_acl.c_str());
+    }
+    if (write_acl.size()) {
+      CGI_PRINTF(s, "X-Container-Write: %s\r\n", write_acl.c_str());
+    }
+  }
 }
 
 static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
@@ -440,7 +452,7 @@ int RGWGetObj_REST_SWIFT::send_response(void *handle)
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-         CGI_PRINTF(s,"X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
+         CGI_PRINTF(s, "X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }

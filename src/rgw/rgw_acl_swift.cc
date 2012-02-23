@@ -9,6 +9,9 @@
 
 using namespace std;
 
+#define SWIFT_PERM_READ  RGW_PERM_READ
+#define SWIFT_PERM_WRITE RGW_PERM_WRITE
+
 static int parse_list(string& uid_list, vector<string>& uids)
 {
   char *s = strdup(uid_list.c_str());
@@ -58,7 +61,7 @@ bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read
       return false;
     }
 
-    add_grants(uids, RGW_PERM_READ);
+    add_grants(uids, SWIFT_PERM_READ);
   }
   if (write_list.size()) {
     vector<string> uids;
@@ -68,8 +71,28 @@ bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read
       return false;
     }
 
-    add_grants(uids, RGW_PERM_WRITE);
+    add_grants(uids, SWIFT_PERM_WRITE);
   }
   return true;
+}
+
+void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
+{
+  multimap<string, ACLGrant>& m = acl.get_grant_map();
+  multimap<string, ACLGrant>::iterator iter;
+
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    ACLGrant& grant = iter->second;
+    int perm = grant.get_permission().get_permissions();
+    if (perm & SWIFT_PERM_READ) {
+      if (!read.empty())
+        read.append(", ");
+      read.append(grant.get_id());
+    } else if (perm & SWIFT_PERM_WRITE) {
+      if (!write.empty())
+        write.append(", ");
+      write.append(grant.get_id());
+    }
+  }
 }
 
