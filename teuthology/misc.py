@@ -484,7 +484,7 @@ def deep_merge(a, b):
 
 def get_valgrind_args(name, v):
     if v is None:
-        return None
+        return []
     if not isinstance(v, list):
         v = [v]
     val_path = '/tmp/cephtest/archive/log/valgrind'
