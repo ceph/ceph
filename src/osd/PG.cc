@@ -3791,6 +3791,7 @@ boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->close_section();
   return discard_event();
 }
@@ -3839,6 +3840,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->close_section();
   return discard_event();
 }
@@ -3945,6 +3947,7 @@ boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
 
   q.f->open_array_section("probing_osds");
   for (set<int>::iterator p = prior_set->probe.begin(); p != prior_set->probe.end(); ++p)
@@ -4129,6 +4132,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->close_section();
   return forward_event();
 }
@@ -4203,6 +4207,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QuerySta
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->close_section();
   return forward_event();
 }
@@ -4430,6 +4435,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
   PG *pg = context< RecoveryMachine >().pg;
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
 
   q.f->open_array_section("requested_pf_info_from");
   for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p) {
@@ -4530,6 +4536,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->dump_int("newest_update_osd", newest_update_osd);
   q.f->close_section();
   return forward_event();
@@ -4594,6 +4601,7 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const Query
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->dump_string("comment", "waiting for pg acting set to change");
   q.f->close_section();
   return forward_event();
@@ -4711,6 +4719,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState&
   PG *pg = context< RecoveryMachine >().pg;
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
 
   q.f->open_array_section("peer_missing_requested");
   for (set<int>::iterator p = peer_missing_requested.begin(); p != peer_missing_requested.end(); ++p) {
@@ -4772,6 +4781,7 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState&
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
   q.f->dump_string("comment", "waiting for osdmap to reflect a new up_thru for this osd");
   q.f->close_section();
   return forward_event();
