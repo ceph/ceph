@@ -4399,6 +4399,17 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  q.ss << state_name << ":\n";
+  q.ss << " requested pg_info from " << peer_info_requested << "\n";
+  for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p)
+    if (pg->peer_info.count(*p))
+      q.ss << " got osd." << *p << " " << pg->peer_info[*p] << "\n";
+  return forward_event();
+}
+
 void PG::RecoveryState::GetInfo::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4477,6 +4488,13 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
   return transit< GetMissing >();
 }
 
+boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  q.ss << " getting log from osd." << newest_update_osd << "\n";
+  return forward_event();
+}
+
 void PG::RecoveryState::GetLog::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4530,6 +4548,13 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MNoti
 {
   dout(10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  q.ss << " waiting for pg acting set to change\n";
+  return forward_event();
 }
 
 void PG::RecoveryState::WaitActingChange::exit()
@@ -4639,6 +4664,17 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   return discard_event();
 };
 
+boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  q.ss << state_name << ":\n";
+  q.ss << " requested missing set from osds " << peer_missing_requested << "\n";
+  for (set<int>::iterator p = peer_missing_requested.begin(); p != peer_missing_requested.end(); ++p)
+    if (pg->peer_missing.count(*p))
+      q.ss << " got osd." << *p << " missing " << pg->peer_missing[*p].num_missing() << " objects\n";
+  return forward_event();
+}
+
 void PG::RecoveryState::GetMissing::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4676,6 +4712,13 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
   //pg->osd->queue_for_recovery(pg);
 
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  q.ss << " waiting for osdmap to reflect a new up_thru for this osd\n";
+  return forward_event();
 }
 
 void PG::RecoveryState::WaitUpThru::exit()

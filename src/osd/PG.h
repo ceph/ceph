@@ -1061,12 +1061,14 @@ public:
     struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
 			      NamedState {
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       WaitActingChange(my_context ctx);
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MLogRec&);
       boost::statechart::result react(const MInfoRec&);
@@ -1167,9 +1169,11 @@ public:
       void get_infos();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::transition< GotInfo, GetLog >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MNotifyRec& infoevt);
     };
 
@@ -1187,9 +1191,11 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< GotLog >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const GotLog&);
     };
@@ -1203,9 +1209,11 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::transition< NeedUpThru, WaitUpThru >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MLogRec& logevt);
     };
 
@@ -1214,9 +1222,11 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap& am);
       boost::statechart::result react(const MLogRec& logrec);
     };
