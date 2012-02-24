@@ -138,19 +138,17 @@ void Resetter::reset()
   journaler->set_trimmed_pos(new_start);
   journaler->set_writeable();
 
-  {
-    cout << "writing journal head" << std::endl;
-    journaler->write_head(new C_SafeCond(&mylock, &cond, &done, &r));
-    lock.Unlock();
+  cout << "writing journal head" << std::endl;
+  journaler->write_head(new C_SafeCond(&mylock, &cond, &done, &r));
+  lock.Unlock();
 
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
     
-    lock.Lock();
-    assert(r == 0);
-  }
+  lock.Lock();
+  assert(r == 0);
 
   LogEvent *le = new EResetJournal;
 
