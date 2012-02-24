@@ -274,6 +274,43 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
     data.append(dss);
     return 0;
   }
+  else if (cmd.size() > 1 &&
+	   cmd[0] == "mark_unfound_lost") {
+    if (cmd.size() > 2) {
+      ss << "too many arguments";
+      return -EINVAL;
+    }
+    if (cmd.size() == 1) {
+      ss << "too few arguments; must specify mode as 'revert' (mark and delete not yet implemented)";
+      return -EINVAL;
+    }
+    if (cmd[2] != "revert") {
+      ss << "mode must be 'revert'; mark and delete not yet implemented";
+      return -EINVAL;
+    }
+    int mode = pg_log_entry_t::LOST_REVERT;
+
+    if (!is_primary()) {
+      ss << "not primary";
+      return -EROFS;
+    }
+
+    int unfound = missing.num_missing() - missing_loc.size();
+    if (!unfound) {
+      ss << "pg has no unfound objects";
+      return -ENOENT;
+    }
+
+    if (!all_unfound_are_queried_or_lost(get_osdmap())) {
+      ss << "pg has " << unfound
+	 << " objects but we haven't probed all sources, not marking lost";
+      return -EINVAL;
+    }
+
+    ss << "pg has " << unfound << " objects unfound and apparently lost, marking";
+    mark_all_unfound_lost(mode);
+    return 0;
+  }
 
   ss << "unknown command " << cmd;
   return -EINVAL;
