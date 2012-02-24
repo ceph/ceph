@@ -86,12 +86,24 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
 
 bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, int perm)
 {
-   int policy_perm = get_perm(uid, perm);
-   int acl_perm = policy_perm & user_perm_mask;
+  int test_perm = perm;
+  if (perm & RGW_PERM_WRITE)
+    test_perm |= RGW_PERM_WRITE_OBJS;
 
-   dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
+  int policy_perm = get_perm(uid, test_perm);
 
-   return (perm == acl_perm);
+  /* the swift WRITE_OBJS perm is equivalent to the WRITE obj, just
+     convert those bits */
+  if (policy_perm & RGW_PERM_WRITE_OBJS) {
+    policy_perm |= RGW_PERM_WRITE;
+    policy_perm &= ~RGW_PERM_WRITE_OBJS;
+  }
+   
+  int acl_perm = policy_perm & user_perm_mask;
+
+  dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
+
+  return (perm == acl_perm);
 }
 
 

@@ -366,15 +366,17 @@ bool verify_object_permission(struct req_state *s, int perm)
     return false;
 
   int swift_perm = 0;
-  if (perm & (RGW_PERM_READ || RGW_PERM_READ_ACP))
+  if (perm & (RGW_PERM_READ | RGW_PERM_READ_ACP))
     swift_perm |= RGW_PERM_READ_OBJS;
-  if (perm & (RGW_PERM_WRITE || RGW_PERM_WRITE_ACP))
+  if (perm & RGW_PERM_WRITE)
     swift_perm |= RGW_PERM_WRITE_OBJS;
 
   if (!swift_perm)
     return false;
 
-  return s->bucket_acl->verify_permission(s->user.user_id, s->perm_mask, swift_perm);
+  /* we already verified the user mask above, so we pass swift_perm as the mask here,
+     otherwise the mask might not cover the swift permissions bits */
+  return s->bucket_acl->verify_permission(s->user.user_id, swift_perm, swift_perm);
 }
 
 static char hex_to_num(char c)
