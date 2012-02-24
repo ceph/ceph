@@ -103,8 +103,7 @@ void global_init(std::vector < const char* >& args,
   install_standard_sighandlers();
 
   if (g_lockdep) {
-    cout << TEXT_YELLOW << "*** lockdep is enabled (" << g_lockdep
-	 << ") ***" << TEXT_NORMAL << std::endl;
+    derr << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(cct);
   }
   register_assert_context(cct);
