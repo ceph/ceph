@@ -68,6 +68,7 @@ void usage()
 static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
+  common_init_finish(g_ceph_context);
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   int r = messenger->bind(g_conf->public_addr, getpid());
   if (r < 0)
