@@ -197,6 +197,26 @@ class CephManager:
                 "\d* pgs:",
                 status).group(0).split()[0])
 
+    def list_pg_missing(self, pgid):
+        r = None
+        offset = {}
+        while True:
+            out = self.raw_cluster_cmd('--', 'pg',pgid,'list_missing',
+                                       json.dumps(offset))
+            j = json.loads('\n'.join(out.split('\n')[1:]))
+            if r is None:
+                r = j
+            else:
+                r['objects'].extend(j['objects'])
+            if not 'more' in j:
+                break
+            if j['more'] == 0:
+                break
+            offset = j['objects'][-1]['oid']
+        if 'more' in r:
+            del r['more']
+        return r
+
     def get_pg_stats(self):
         out = self.raw_cluster_cmd('--', 'pg','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
