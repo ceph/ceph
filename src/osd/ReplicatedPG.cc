@@ -288,7 +288,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
       ss << "too few arguments; must specify mode as 'revert' (mark and delete not yet implemented)";
       return -EINVAL;
     }
-    if (cmd[2] != "revert") {
+    if (cmd[1] != "revert") {
       ss << "mode must be 'revert'; mark and delete not yet implemented";
       return -EINVAL;
     }
