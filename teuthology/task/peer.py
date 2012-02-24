@@ -48,9 +48,6 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
     manager.wait_for_clean()
 
-    # something that is always there
-    dummyfile = '/etc/fstab'
-
     # take on osd down
     manager.kill_osd(2)
     manager.mark_down_osd(2)
