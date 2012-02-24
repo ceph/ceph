@@ -41,6 +41,9 @@
 #include "common/config.h"
 #include "include/compat.h"
 
+#include "json_spirit/json_spirit_value.h"
+#include "json_spirit/json_spirit_reader.h"
+
 #define DOUT_SUBSYS osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
 #undef dout_prefix
@@ -251,7 +254,8 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 // ==========================================================
 
-int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
+int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
+			     bufferlist& idata, bufferlist& odata)
 {
   if (cmd.size() && cmd[0] == "query") {
     JSONFormatter jsf(true);
@@ -271,7 +275,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
     jsf.close_section();
     stringstream dss;
     jsf.flush(dss);
-    data.append(dss);
+    odata.append(dss);
     return 0;
   }
   else if (cmd.size() > 1 &&
@@ -311,6 +315,63 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
     mark_all_unfound_lost(mode);
     return 0;
   }
+  else if (cmd.size() >= 1 && cmd[0] == "list_missing") {
+    JSONFormatter jf(true);
+    hobject_t offset;
+    if (cmd.size() > 1) {
+      json_spirit::Value v;
+      try {
+	if (!json_spirit::read(cmd[1], v))
+	  throw std::runtime_error("bad json");
+	offset.decode(v);
+      } catch (std::runtime_error& e) {
+	ss << "error parsing offset: " << e.what();
+	return -EINVAL;
+      }
+    }
+    jf.open_object_section("missing");
+    {
+      jf.open_object_section("offset");
+      offset.dump(&jf);
+      jf.close_section();
+    }
+    jf.dump_int("num_missing", missing.num_missing());
+    jf.dump_int("num_unfound", get_num_unfound());
+    map<hobject_t,pg_missing_t::item>::iterator p = missing.missing.upper_bound(offset);
+    {
+      jf.open_array_section("objects");
+      int32_t num = 0;
+      set<int> empty;
+      bufferlist bl;
+      while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
+	jf.open_object_section("object");
+	{
+	  jf.open_object_section("oid");
+	  p->first.dump(&jf);
+	  jf.close_section();
+	}
+	p->second.dump(&jf);  // have, need keys
+	{
+	  jf.open_array_section("locations");
+	  map<hobject_t,set<int> >::iterator q = missing_loc.find(p->first);
+	  if (q != missing_loc.end())
+	    for (set<int>::iterator r = q->second.begin(); r != q->second.end(); ++r)
+	      jf.dump_int("osd", *r);
+	  jf.close_section();
+	}
+	jf.close_section();
+	++p;
+	num++;
+      }
+      jf.close_section();
+    }
+    jf.dump_int("more", p != missing.missing.end());
+    jf.close_section();
+    stringstream jss;
+    jf.flush(jss);
+    odata.append(jss);
+    return 0;
+  };
 
   ss << "unknown command " << cmd;
   return -EINVAL;

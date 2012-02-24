@@ -841,10 +841,17 @@ clean-local:
 	-rm *.so *.gcno *.gcda
 
 # libs
+
+libjson_spirit_la_SOURCES = \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp
+noinst_LTLIBRARIES += libjson_spirit.la
+
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libcommon_la_LDFLAGS = -lrt
+libcommon_la_LDFLAGS = -lrt libjson_spirit.la
 noinst_LTLIBRARIES += libcommon.la
 
 libglobal_la_SOURCES = \
