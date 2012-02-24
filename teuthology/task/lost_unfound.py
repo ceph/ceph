@@ -126,10 +126,8 @@ def task(ctx, config):
         if pg['stat_sum']['num_objects_unfound'] > 0:
             primary = 'osd.%d' % pg['acting'][0]
             log.info("reverting unfound in %s on %s", pg['pgid'], primary)
-            manager.raw_cluster_cmd(
-                'tell', primary,
-                'mark_unfound_lost', pg['pgid'], 'revert'
-                )
+            manager.raw_cluster_cmd('pg', pg['pgid'],
+                                    'mark_unfound_lost', 'revert')
         else:
             log.info("no unfound in %s", pg['pgid'])
 
