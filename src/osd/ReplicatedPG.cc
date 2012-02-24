@@ -340,7 +340,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     uint32_t num = 0;
     set<int> empty;
     bufferlist bl;
-    while (p != missing.missing.end() && num < 5) {
+    while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
       jf.open_object_section("object");
       jf.open_object_section("oid");
       p->first.dump(&jf);
