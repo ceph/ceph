@@ -251,7 +251,8 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 // ==========================================================
 
-int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
+int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
+			     bufferlist& idata, bufferlist& odata)
 {
   if (cmd.size() && cmd[0] == "query") {
     JSONFormatter jsf(true);
@@ -271,7 +272,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
     jsf.close_section();
     stringstream dss;
     jsf.flush(dss);
-    data.append(dss);
+    odata.append(dss);
     return 0;
   }
   else if (cmd.size() > 1 &&

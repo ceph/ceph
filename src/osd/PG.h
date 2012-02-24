@@ -1399,7 +1399,8 @@ public:
   virtual void do_backfill(OpRequest *op) = 0;
   virtual bool snap_trimmer() = 0;
 
-  virtual int do_command(vector<string>& cmd, ostream& ss, bufferlist& data) = 0;
+  virtual int do_command(vector<string>& cmd, ostream& ss,
+			 bufferlist& idata, bufferlist& odata) = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;
