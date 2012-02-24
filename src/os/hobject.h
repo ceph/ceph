@@ -17,6 +17,7 @@
 
 #include "include/object.h"
 #include "include/cmp.h"
+#include "json_spirit/json_spirit_value.h"
 
 typedef uint64_t filestore_hobject_key_t;
 
@@ -102,6 +103,7 @@ public:
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<hobject_t*>& o);
 };
