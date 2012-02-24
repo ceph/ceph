@@ -64,8 +64,7 @@ def task(ctx, config):
         log.info("Client client.%s config is %s" % (id_, client_config))
 
         daemon_signal = 'kill'
-        if client_config.get('coverage'):
-            log.info('Recording coverage for this run.')
+        if client_config.get('coverage') or client_config.get('valgrind') is not None:
             daemon_signal = 'term'
 
         remote.run(
@@ -81,6 +80,7 @@ def task(ctx, config):
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             '/tmp/cephtest/archive/coverage',
             '/tmp/cephtest/daemon-helper',
+            daemon_signal,
             ]
         run_cmd_tail=[
             '/tmp/cephtest/binary/usr/local/bin/ceph-fuse',
@@ -91,15 +91,14 @@ def task(ctx, config):
             mnt,
             ]
 
-        extra_args = teuthology.get_valgrind_args(
-            'client.%s' % id_,
-            client_config.get('valgrind', None))
-        if extra_args is not None:
-            daemon_signal = 'term'
-        
-        run_cmd.append(daemon_signal)
-        if extra_args is not None:
-            run_cmd.extend(extra_args)
+        if client_config.get('valgrind') is not None:
+            run_cmd.extend(
+                teuthology.get_valgrind_args(
+                    'client.{id}'.format(id=id_),
+                    client_config.get('valgrind'),
+                    )
+                )
+
         run_cmd.extend(run_cmd_tail)
 
         proc = remote.run(

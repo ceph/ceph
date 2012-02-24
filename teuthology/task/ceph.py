@@ -745,8 +745,7 @@ def run_daemon(ctx, config, type_):
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
     daemon_signal = 'kill'
-    if config.get('coverage'):
-        log.info('Recording coverage for this run.')
+    if config.get('coverage') or config.get('valgrind') is not None:
         daemon_signal = 'term'
 
     num_active = 0
@@ -757,33 +756,27 @@ def run_daemon(ctx, config, type_):
             if not id_.endswith('-s'):
                 num_active += 1
 
-            proc_signal = daemon_signal
-            run_cmd = ['/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/daemon-helper'
-                       ]
+            run_cmd = [
+                '/tmp/cephtest/enable-coredump',
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                coverage_dir,
+                '/tmp/cephtest/daemon-helper',
+                daemon_signal,
+                ]
             run_cmd_tail = [
                 '/tmp/cephtest/binary/usr/local/bin/ceph-%s' % type_,
                 '-f',
                 '-i', id_,
                 '-c', '/tmp/cephtest/ceph.conf']
 
-            valgrind_args = None
-            if config.get('valgrind'):
-                v = config.get('valgrind')
-                if v.get(type_, None) is not None:
-                    valgrind_args = v.get(type_)
-                if v.get(name, None) is not None:
-                    valgrind_args = v.get(name)
+            if config.get('valgrind') is not None:
+                valgrind_args = None
+                if type_ in config['valgrind']:
+                    valgrind_args = config['valgrind'][type_]
+                if name in config['valgrind']:
+                    valgrind_args = config['valgrind'][name]
+                run_cmd.extend(teuthology.get_valgrind_args(name, valgrind_args))
 
-            extra_args = teuthology.get_valgrind_args(name, valgrind_args)
-            if extra_args is not None:
-                proc_signal = 'term'
-
-            run_cmd.append(proc_signal)
-            if extra_args is not None:
-                run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
             ctx.daemons.add_daemon(remote, type_, id_,
                                    args=run_cmd,
