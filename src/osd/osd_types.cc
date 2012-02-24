@@ -591,6 +591,28 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
+  if ((features & CEPH_FEATURE_OSDENC) == 0) {
+    __u8 struct_v = 4;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+    ::encode(snaps, bl);
+    ::encode(removed_snaps, bl);
+    ::encode(auid, bl);
+    ::encode(flags, bl);
+    ::encode(crash_replay_interval, bl);
+    return;
+  }
+
   ENCODE_START(5, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
