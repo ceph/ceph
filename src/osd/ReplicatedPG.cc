@@ -272,6 +272,11 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
     stringstream dss;
     jsf.flush(dss);
     data.append(dss);
+
+    // query recovery state machine, too.
+    dss.clear();
+    recovery_state.handle_query_state(dss);
+    data.append(dss);
     return 0;
   }
   else if (cmd.size() > 1 &&

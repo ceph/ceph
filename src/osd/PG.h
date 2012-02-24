@@ -831,6 +831,11 @@ public:
       rctx = 0;
     }
 
+    struct QueryState : boost::statechart::event< QueryState > {
+      stringstream& ss;
+      QueryState(stringstream& s) : ss(s) {}
+    };
+
     struct MInfoRec : boost::statechart::event< MInfoRec > {
       int from;
       pg_info_t &info;
@@ -983,10 +988,12 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
     };
@@ -998,9 +1005,11 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
     };
 
@@ -1081,9 +1090,11 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::transition< Activate, Active >,
 	boost::statechart::custom_reaction< AdvMap >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap &advmap);
     };
 
@@ -1092,6 +1103,7 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MInfoRec >,
@@ -1099,6 +1111,7 @@ public:
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< RecoveryComplete >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -1112,11 +1125,13 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
+      boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const ActMap&);
@@ -1231,6 +1246,7 @@ public:
     void handle_recovery_complete(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
     void handle_loaded(RecoveryCtx *ctx);
+    void handle_query_state(stringstream& ss);
   } recovery_state;
 
 

@@ -3787,6 +3787,12 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  return discard_event();
+}
+
 void PG::RecoveryState::Started::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -3825,6 +3831,12 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
   pg->update_heartbeat_peers();
 
   return transit< Started >();
+}
+
+boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  return discard_event();
 }
 
 void PG::RecoveryState::Reset::exit()
@@ -3922,6 +3934,22 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   
   pg->adjust_need_up_thru(advmap.osdmap);
   
+  return forward_event();
+}
+
+boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  q.ss << " probing osds " << prior_set->probe << "\n";
+  if (prior_set->down.size()) 
+    q.ss << " would also like to query down osds " << prior_set->down << "\n";
+  if (prior_set->pg_down)
+    q.ss << " peering is blocked due to down osds\n";
+  for (map<int,epoch_t>::iterator p = prior_set->blocked_by.begin();
+       p != prior_set->blocked_by.end();
+       p++)
+    q.ss << "  starting osd." << p->first << " (last lost_at " << p->second
+	 << ") or marking it lost may let us proceed\n";
   return forward_event();
 }
 
@@ -4075,6 +4103,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  return forward_event();
+}
+
 void PG::RecoveryState::Active::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4139,6 +4173,12 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& 
   assert(query.query.type == pg_query_t::MISSING);
   pg->fulfill_log(query.from, query.query, query.query_epoch);
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QueryState& q)
+{
+  q.ss << state_name << ":\n";
+  return forward_event();
 }
 
 void PG::RecoveryState::ReplicaActive::exit()
@@ -4747,6 +4787,14 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
   machine.process_event(Initialize());
   end_handle();
 }
+
+void PG::RecoveryState::handle_query_state(stringstream &ss)
+{
+  dout(10) << "handle_query_state" << dendl;
+  QueryState q(ss);
+  machine.process_event(q);
+}
+
 
 /*---------------------------------------------------*/
 #undef dout_prefix
