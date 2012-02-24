@@ -101,7 +101,7 @@ def start_rgw(ctx, config):
         client_config = config.get(client)
         if client_config is None:
             client_config = {}
-        log.info("rgw %s config is %s" % (client, client_config))
+        log.info("rgw %s config is %s", client, client_config)
  
         run_cmd=[
                 'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
@@ -214,7 +214,7 @@ def task(ctx, config):
               valgrind: [--tool=memcheck]
             client.3:
               valgrind: [--tool=memcheck]
-        
+
     """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)

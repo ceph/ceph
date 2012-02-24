@@ -499,6 +499,5 @@ def get_valgrind_args(name, v):
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     extra_args.extend(v)
-    log.debug('running %s under valgrind with args %s' % (name, extra_args))
+    log.debug('running %s under valgrind with args %s', name, extra_args)
     return extra_args
-
