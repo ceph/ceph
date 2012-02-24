@@ -330,33 +330,41 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
       }
     }
     jf.open_object_section("missing");
-    jf.open_object_section("offset");
-    offset.dump(&jf);
-    jf.close_section();
+    {
+      jf.open_object_section("offset");
+      offset.dump(&jf);
+      jf.close_section();
+    }
     jf.dump_int("num_missing", missing.num_missing());
     jf.dump_int("num_unfound", get_num_unfound());
-    jf.open_array_section("objects");
     map<hobject_t,pg_missing_t::item>::iterator p = missing.missing.upper_bound(offset);
-    uint32_t num = 0;
-    set<int> empty;
-    bufferlist bl;
-    while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
-      jf.open_object_section("object");
-      jf.open_object_section("oid");
-      p->first.dump(&jf);
+    {
+      jf.open_array_section("objects");
+      int32_t num = 0;
+      set<int> empty;
+      bufferlist bl;
+      while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
+	jf.open_object_section("object");
+	{
+	  jf.open_object_section("oid");
+	  p->first.dump(&jf);
+	  jf.close_section();
+	}
+	p->second.dump(&jf);  // have, need keys
+	{
+	  jf.open_array_section("locations");
+	  map<hobject_t,set<int> >::iterator q = missing_loc.find(p->first);
+	  if (q != missing_loc.end())
+	    for (set<int>::iterator r = q->second.begin(); r != q->second.end(); ++r)
+	      jf.dump_int("osd", *r);
+	  jf.close_section();
+	}
+	jf.close_section();
+	++p;
+	num++;
+      }
       jf.close_section();
-      p->second.dump(&jf);  // have, need keys
-      jf.open_array_section("locations");
-      map<hobject_t,set<int> >::iterator q = missing_loc.find(p->first);
-      if (q != missing_loc.end())
-	for (set<int>::iterator r = q->second.begin(); r != q->second.end(); ++r)
-	  jf.dump_int("osd", *r);
-      jf.close_section();
-      jf.close_section();
-      ++p;
-      num++;
     }
-    jf.close_section();
     jf.dump_int("more", p != missing.missing.end());
     jf.close_section();
     stringstream jss;
