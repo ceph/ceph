@@ -122,11 +122,13 @@ def start_rgw(ctx, config):
                 run.Raw('2>&1'),
             ]
 
-        extra_args = teuthology.get_valgrind_args(
-            client, client_config.get('valgrind', None))
+        run_cmd.extend(
+            teuthology.get_valgrind_args(
+                client,
+                client_config.get('valgrind')
+                )
+            )
 
-        if extra_args is not None:
-            run_cmd.extend(extra_args)
         run_cmd.extend(run_cmd_tail)
 
         proc = remote.run(
