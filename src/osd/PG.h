@@ -832,8 +832,8 @@ public:
     }
 
     struct QueryState : boost::statechart::event< QueryState > {
-      stringstream& ss;
-      QueryState(stringstream& s) : ss(s) {}
+      Formatter *f;
+      QueryState(Formatter *f) : f(f) {}
     };
 
     struct MInfoRec : boost::statechart::event< MInfoRec > {
@@ -1256,7 +1256,7 @@ public:
     void handle_recovery_complete(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
     void handle_loaded(RecoveryCtx *ctx);
-    void handle_query_state(stringstream& ss);
+    void handle_query_state(Formatter *f);
   } recovery_state;
 
 

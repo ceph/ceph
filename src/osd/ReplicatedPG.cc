@@ -268,14 +268,14 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss, bufferlist& data)
     jsf.open_object_section("info");
     info.dump(&jsf);
     jsf.close_section();
+
+    jsf.open_array_section("recovery_state");
+    recovery_state.handle_query_state(&jsf);
+    jsf.close_section();
+
     jsf.close_section();
     stringstream dss;
     jsf.flush(dss);
-    data.append(dss);
-
-    // query recovery state machine, too.
-    dss.clear();
-    recovery_state.handle_query_state(dss);
     data.append(dss);
     return 0;
   }

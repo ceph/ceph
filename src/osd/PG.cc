@@ -3789,7 +3789,9 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
 
 boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->close_section();
   return discard_event();
 }
 
@@ -3835,7 +3837,9 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
 
 boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->close_section();
   return discard_event();
 }
 
@@ -3939,17 +3943,35 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
 
 boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
-  q.ss << " probing osds " << prior_set->probe << "\n";
-  if (prior_set->down.size()) 
-    q.ss << " would also like to query down osds " << prior_set->down << "\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+
+  q.f->open_array_section("probing_osds");
+  for (set<int>::iterator p = prior_set->probe.begin(); p != prior_set->probe.end(); ++p)
+    q.f->dump_int("osd", *p);
+  q.f->close_section();
+
   if (prior_set->pg_down)
-    q.ss << " peering is blocked due to down osds\n";
+    q.f->dump_string("blocked", "peering is blocked due to down osds");
+
+  q.f->open_array_section("down_osds_we_would_probe");
+  for (set<int>::iterator p = prior_set->down.begin(); p != prior_set->down.end(); ++p)
+    q.f->dump_int("osd", *p);
+  q.f->close_section();
+
+  q.f->open_array_section("peering_blocked_by");
   for (map<int,epoch_t>::iterator p = prior_set->blocked_by.begin();
        p != prior_set->blocked_by.end();
-       p++)
-    q.ss << "  starting osd." << p->first << " (last lost_at " << p->second
-	 << ") or marking it lost may let us proceed\n";
+       p++) {
+    q.f->open_object_section("osd");
+    q.f->dump_int("osd", p->first);
+    q.f->dump_int("current_lost_at", p->second);
+    q.f->dump_string("comment", "starting or marking this osd lost may let us proceed");
+    q.f->close_section();
+  }
+  q.f->close_section();
+
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4105,7 +4127,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
 boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4177,7 +4201,9 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& 
 
 boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4402,11 +4428,23 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  q.ss << state_name << ":\n";
-  q.ss << " requested pg_info from " << peer_info_requested << "\n";
-  for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p)
-    if (pg->peer_info.count(*p))
-      q.ss << " got osd." << *p << " " << pg->peer_info[*p] << "\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+
+  q.f->open_array_section("requested_pf_info_from");
+  for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p) {
+    q.f->open_object_section("osd");
+    q.f->dump_int("osd", *p);
+    if (pg->peer_info.count(*p)) {
+      q.f->open_object_section("got_info");
+      pg->peer_info[*p].dump(q.f);
+      q.f->close_section();
+    }
+    q.f->close_section();
+  }
+  q.f->close_section();
+
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4490,8 +4528,10 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
 
 boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
-  q.ss << " getting log from osd." << newest_update_osd << "\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_int("newest_update_osd", newest_update_osd);
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4552,8 +4592,10 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MNoti
 
 boost::statechart::result PG::RecoveryState::WaitActingChange::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
-  q.ss << " waiting for pg acting set to change\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_string("comment", "waiting for pg acting set to change");
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4667,11 +4709,23 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
 boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  q.ss << state_name << ":\n";
-  q.ss << " requested missing set from osds " << peer_missing_requested << "\n";
-  for (set<int>::iterator p = peer_missing_requested.begin(); p != peer_missing_requested.end(); ++p)
-    if (pg->peer_missing.count(*p))
-      q.ss << " got osd." << *p << " missing " << pg->peer_missing[*p].num_missing() << " objects\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+
+  q.f->open_array_section("peer_missing_requested");
+  for (set<int>::iterator p = peer_missing_requested.begin(); p != peer_missing_requested.end(); ++p) {
+    q.f->open_object_section("osd");
+    q.f->dump_int("osd", *p);
+    if (pg->peer_missing.count(*p)) {
+      q.f->open_object_section("got_missing");
+      pg->peer_missing[*p].dump(q.f);
+      q.f->close_section();
+    }
+    q.f->close_section();
+  }
+  q.f->close_section();
+
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4716,8 +4770,10 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
 
 boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState& q)
 {
-  q.ss << state_name << ":\n";
-  q.ss << " waiting for osdmap to reflect a new up_thru for this osd\n";
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_string("comment", "waiting for osdmap to reflect a new up_thru for this osd");
+  q.f->close_section();
   return forward_event();
 }
 
@@ -4831,10 +4887,10 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
   end_handle();
 }
 
-void PG::RecoveryState::handle_query_state(stringstream &ss)
+void PG::RecoveryState::handle_query_state(Formatter *f)
 {
   dout(10) << "handle_query_state" << dendl;
-  QueryState q(ss);
+  QueryState q(f);
   machine.process_event(q);
 }
 
