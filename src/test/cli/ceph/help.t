@@ -3,7 +3,6 @@
   usage: ceph [options] [commands]
   If no commands are specified, enter interactive mode.
   Commands:
-     stop              -- cleanly shut down file system
      (osd|pg|mds) stat -- get monitor subsystem status
      ...
   Options:
