@@ -419,7 +419,7 @@ struct rgw_bucket {
   std::string marker;
   uint64_t bucket_id;
 
-  rgw_bucket() {}
+  rgw_bucket() { bucket_id = 0; }
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     pool = n;
