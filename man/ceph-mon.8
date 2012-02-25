@@ -1,4 +1,4 @@
-.TH "CEPH-MON" "8" "September 22, 2011" "dev" "Ceph"
+.TH "CEPH-MON" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 ceph-mon \- ceph monitor daemon
 .
@@ -63,6 +63,36 @@ Debug mode: like \fB\-f\fP, but also send all log output to stderr.
 Use \fIceph.conf\fP configuration file instead of the default
 \fB/etc/ceph/ceph.conf\fP to determine monitor addresses during
 startup.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-mkfs
+Initialize the \fBmon data\fP directory with seed information to form
+and initial ceph file system or to join an existing monitor
+cluster.  Three pieces of information must be provided:
+.INDENT 7.0
+.IP \(bu 2
+The cluster fsid.  This can come from a monmap (\fB\-\-monmap <path>\fP) or
+explicitly via \fB\-\-fsid <uuid>\fP.
+.IP \(bu 2
+A list of monitors and their addresses.  This list of monitors
+can come from a monmap (\fB\-\-monmap <path>\fP), the \fBmon host\fP
+configuration value (in \fIceph.conf\fP or via \fB\-m
+host1,host2,...\(ga), or \(ga\(gamon addr\fP lines in \fIceph.conf\fP.  If this
+monitor is to be part of the initial monitor quorum for a new
+Ceph cluster, then it must be included in the initial list,
+matching either the name or address of a monitor in the list.
+When matching by address, either the \fBpublic addr\fP or \fBpublic
+subnet\fP options may be used.
+.IP \(bu 2
+The monitor secret key \fBmon.\fP.  This must be included in the
+keyring provided via \fB\-\-keyring <path>\fP.
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-keyring
+Specify a keyring for use with \fB\-\-mkfs\fP.
 .UNINDENT
 .SH AVAILABILITY
 .sp

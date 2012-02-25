@@ -11,6 +11,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
                                  level 3: -Wextra
                                  level 4: even more...
 -H                               --with-hadoop
+-T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
 -P                               profiling build
 
@@ -25,8 +26,8 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-HADOOP_FLAGS=
-while getopts  "d:e:hHPv" flag
+CONFIGURE_FLAGS=
+while getopts  "d:e:hHTPv" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -36,7 +37,9 @@ do
     h) usage
         exit 0;;
 
-    H) HADOOP_FLAGS="--with-hadoop";;
+    H) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-hadoop";;
+
+    T) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-tcmalloc";;
 
     v) verbose=1;;
 
@@ -108,5 +111,5 @@ export CXXFLAGS
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
 --with-gtk2=yes --with-debug $with_profiler --with-cryptopp --with-radosgw \
-$HADOOP_FLAGS \
+$CONFIGURE_FLAGS \
 || die "configure failed"

@@ -320,6 +320,8 @@ std::string pg_state_string(int state)
     oss << "active+";
   if (state & PG_STATE_CLEAN)
     oss << "clean+";
+  if (state & PG_STATE_RECOVERING)
+    oss << "recovering+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_REPLAY)
@@ -330,6 +332,8 @@ std::string pg_state_string(int state)
     oss << "splitting+";
   if (state & PG_STATE_DEGRADED)
     oss << "degraded+";
+  if (state & PG_STATE_REMAPPED)
+    oss << "remapped+";
   if (state & PG_STATE_SCRUBBING)
     oss << "scrubbing+";
   if (state & PG_STATE_SCRUBQ)
@@ -584,6 +588,28 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
     ::encode_nohead(snaps, bl);
     removed_snaps.encode_nohead(bl);
+    return;
+  }
+
+  if ((features & CEPH_FEATURE_OSDENC) == 0) {
+    __u8 struct_v = 4;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+    ::encode(snaps, bl);
+    ::encode(removed_snaps, bl);
+    ::encode(auid, bl);
+    ::encode(flags, bl);
+    ::encode(crash_replay_interval, bl);
     return;
   }
 
@@ -1951,8 +1977,12 @@ void object_info_t::decode(bufferlist::iterator& bl)
 
 void object_info_t::dump(Formatter *f) const
 {
-  f->dump_stream("oid") << soid;
-  f->dump_stream("locator") << oloc;
+  f->open_object_section("oid");
+  soid.dump(f);
+  f->close_section();
+  f->open_object_section("locator");
+  oloc.dump(f);
+  f->close_section();
   f->dump_string("category", category);
   f->dump_stream("version") << version;
   f->dump_stream("prior_version") << prior_version;

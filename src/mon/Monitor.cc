@@ -73,7 +73,7 @@
 #define DOUT_SUBSYS mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
+static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
 }
@@ -220,9 +220,7 @@ void Monitor::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got Signal " << sys_siglist[signum] << " ***" << dendl;
-  lock.Lock();
   shutdown();
-  lock.Unlock();
 }
 
 void Monitor::init()
@@ -342,7 +340,10 @@ void Monitor::update_logger()
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
-  
+  lock.Lock();
+
+  state = STATE_SHUTDOWN;
+
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("mon_status");
@@ -371,8 +372,10 @@ void Monitor::shutdown()
 
   timer.shutdown();
 
-  // die.
-  messenger->shutdown();
+  // unlock before msgr shutdown...
+  lock.Unlock();
+
+  messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
 void Monitor::bootstrap()
@@ -976,11 +979,6 @@ void Monitor::handle_command(MMonCommand *m)
       reply_command(m, 0, rs, rdata, 0);
       return;
     }
-    if (m->cmd[0] == "stop") {
-      shutdown();
-      reply_command(m, 0, "stopping", 0);
-      return;
-    }
     if (m->cmd[0] == "stop_cluster") {
       stop_cluster();
       reply_command(m, 0, "initiating cluster shutdown", 0);
@@ -1336,6 +1334,11 @@ bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
 
+  if (state == STATE_SHUTDOWN) {
+    m->put();
+    return true;
+  }
+
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
   bool reuse_caps = false;
@@ -1644,6 +1647,9 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
+  if (state == STATE_SHUTDOWN)
+    return false;
+
   // ignore lossless monitor sessions
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
@@ -1835,6 +1841,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 {
   dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
 
+  if (state == STATE_SHUTDOWN)
+    return false;
+
   // we only connect to other monitors; every else connects to us.
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
@@ -1894,6 +1903,9 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
 	   << " " << ceph_entity_type_name(peer_type)
 	   << " protocol " << protocol << dendl;
+
+  if (state == STATE_SHUTDOWN)
+    return false;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
       auth_supported.is_supported_auth(CEPH_AUTH_CEPHX)) {

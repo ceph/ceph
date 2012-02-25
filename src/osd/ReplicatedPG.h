@@ -415,7 +415,7 @@ public:
 
     tid_t rep_tid;
 
-    bool applying, applied, aborted;
+    bool applying, applied, aborted, done;
 
     set<int>  waitfor_ack;
     //set<int>  waitfor_nvram;
@@ -437,7 +437,7 @@ public:
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      applying(false), applied(false), aborted(false),
+      applying(false), applied(false), aborted(false), done(false),
       sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
@@ -789,6 +789,7 @@ public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, const hobject_t& ioid);
   ~ReplicatedPG() {}
 
+  int do_command(vector<string>& cmd, ostream& ss, bufferlist& idata, bufferlist& odata);
 
   void do_op(OpRequest *op);
   bool pg_op_must_wait(MOSDOp *op);

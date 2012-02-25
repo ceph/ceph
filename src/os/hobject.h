@@ -17,6 +17,7 @@
 
 #include "include/object.h"
 #include "include/cmp.h"
+#include "json_spirit/json_spirit_value.h"
 
 typedef uint64_t filestore_hobject_key_t;
 
@@ -88,19 +89,6 @@ public:
     return oid.name;
   }
 
-  /**
-   * back up hobject_t to beginning of hash bucket, if i am partway through one.
-   */
-  void back_up_to_bounding_key() {
-    if (key.length()) {
-      oid.clear();
-    } else {
-      key = oid.name;
-      oid.clear();
-    }
-    snap = 0;
-  }
-
   void swap(hobject_t &o) {
     hobject_t temp(o);
     o.oid = oid;
@@ -115,6 +103,7 @@ public:
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<hobject_t*>& o);
 };

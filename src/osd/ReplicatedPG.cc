@@ -41,6 +41,9 @@
 #include "common/config.h"
 #include "include/compat.h"
 
+#include "json_spirit/json_spirit_value.h"
+#include "json_spirit/json_spirit_reader.h"
+
 #define DOUT_SUBSYS osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
 #undef dout_prefix
@@ -250,6 +253,137 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 
 // ==========================================================
+
+int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
+			     bufferlist& idata, bufferlist& odata)
+{
+  if (cmd.size() && cmd[0] == "query") {
+    JSONFormatter jsf(true);
+    jsf.open_object_section("pg");
+    jsf.dump_string("state", pg_state_string(get_state()));
+    jsf.open_array_section("up");
+    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
+      jsf.dump_unsigned("osd", *p);
+    jsf.close_section();
+    jsf.open_array_section("acting");
+    for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
+      jsf.dump_unsigned("osd", *p);
+    jsf.close_section();
+    jsf.open_object_section("info");
+    info.dump(&jsf);
+    jsf.close_section();
+
+    jsf.open_array_section("recovery_state");
+    recovery_state.handle_query_state(&jsf);
+    jsf.close_section();
+
+    jsf.close_section();
+    stringstream dss;
+    jsf.flush(dss);
+    odata.append(dss);
+    return 0;
+  }
+  else if (cmd.size() > 1 &&
+	   cmd[0] == "mark_unfound_lost") {
+    if (cmd.size() > 2) {
+      ss << "too many arguments";
+      return -EINVAL;
+    }
+    if (cmd.size() == 1) {
+      ss << "too few arguments; must specify mode as 'revert' (mark and delete not yet implemented)";
+      return -EINVAL;
+    }
+    if (cmd[1] != "revert") {
+      ss << "mode must be 'revert'; mark and delete not yet implemented";
+      return -EINVAL;
+    }
+    int mode = pg_log_entry_t::LOST_REVERT;
+
+    if (!is_primary()) {
+      ss << "not primary";
+      return -EROFS;
+    }
+
+    int unfound = missing.num_missing() - missing_loc.size();
+    if (!unfound) {
+      ss << "pg has no unfound objects";
+      return -ENOENT;
+    }
+
+    if (!all_unfound_are_queried_or_lost(get_osdmap())) {
+      ss << "pg has " << unfound
+	 << " objects but we haven't probed all sources, not marking lost";
+      return -EINVAL;
+    }
+
+    ss << "pg has " << unfound << " objects unfound and apparently lost, marking";
+    mark_all_unfound_lost(mode);
+    return 0;
+  }
+  else if (cmd.size() >= 1 && cmd[0] == "list_missing") {
+    JSONFormatter jf(true);
+    hobject_t offset;
+    if (cmd.size() > 1) {
+      json_spirit::Value v;
+      try {
+	if (!json_spirit::read(cmd[1], v))
+	  throw std::runtime_error("bad json");
+	offset.decode(v);
+      } catch (std::runtime_error& e) {
+	ss << "error parsing offset: " << e.what();
+	return -EINVAL;
+      }
+    }
+    jf.open_object_section("missing");
+    {
+      jf.open_object_section("offset");
+      offset.dump(&jf);
+      jf.close_section();
+    }
+    jf.dump_int("num_missing", missing.num_missing());
+    jf.dump_int("num_unfound", get_num_unfound());
+    map<hobject_t,pg_missing_t::item>::iterator p = missing.missing.upper_bound(offset);
+    {
+      jf.open_array_section("objects");
+      int32_t num = 0;
+      set<int> empty;
+      bufferlist bl;
+      while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
+	jf.open_object_section("object");
+	{
+	  jf.open_object_section("oid");
+	  p->first.dump(&jf);
+	  jf.close_section();
+	}
+	p->second.dump(&jf);  // have, need keys
+	{
+	  jf.open_array_section("locations");
+	  map<hobject_t,set<int> >::iterator q = missing_loc.find(p->first);
+	  if (q != missing_loc.end())
+	    for (set<int>::iterator r = q->second.begin(); r != q->second.end(); ++r)
+	      jf.dump_int("osd", *r);
+	  jf.close_section();
+	}
+	jf.close_section();
+	++p;
+	num++;
+      }
+      jf.close_section();
+    }
+    jf.dump_int("more", p != missing.missing.end());
+    jf.close_section();
+    stringstream jss;
+    jf.flush(jss);
+    odata.append(jss);
+    return 0;
+  };
+
+  ss << "unknown command " << cmd;
+  return -EINVAL;
+}
+
+// ==========================================================
+
 bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
 {
   if (missing.missing.empty())
@@ -768,8 +902,23 @@ void ReplicatedPG::do_op(OpRequest *op)
 
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
-  ctx->reply->claim_op_out_data(ctx->ops);
-  ctx->reply->get_header().data_off = ctx->data_off;
+
+  // Write operations aren't allowed to return a data payload because
+  // we can't do so reliably. If the client has to resend the request
+  // and it has already been applied, we will return 0 with no
+  // payload.  Non-deterministic behavior is no good.  However, it is
+  // possible to construct an operation that does a read, does a guard
+  // check (e.g., CMPXATTR), and then a write.  Then we either succeed
+  // with the write, or return a CMPXATTR and the read value.
+  if (ctx->op_t.empty() && !ctx->modify) {
+    // read.
+    ctx->reply->claim_op_out_data(ctx->ops);
+    ctx->reply->get_header().data_off = ctx->data_off;
+  } else {
+    // write.  normalize the result code.
+    if (result > 0)
+      result = 0;
+  }
   ctx->reply->set_result(result);
 
   if (result >= 0)
@@ -2890,7 +3039,8 @@ void ReplicatedPG::op_applied(RepGather *repop)
   int whoami = osd->get_nodeid();
 
   if (!repop->aborted) {
-    assert(repop->waitfor_ack.count(whoami));
+    assert(repop->waitfor_ack.count(whoami) ||
+	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk
     repop->waitfor_ack.erase(whoami);
   }
   
@@ -2937,9 +3087,15 @@ void ReplicatedPG::op_commit(RepGather *repop)
     dout(10) << "op_commit " << *repop << " -- already marked ondisk" << dendl;
   } else {
     dout(10) << "op_commit " << *repop << dendl;
-    repop->waitfor_disk.erase(osd->get_nodeid());
-    //repop->waitfor_nvram.erase(osd->get_nodeid());
+    int whoami = osd->get_nodeid();
 
+    repop->waitfor_disk.erase(whoami);
+
+    // remove from ack waitfor list too.  sub_op_modify_commit()
+    // behaves the same in that the COMMIT implies and ACK and there
+    // is no separate reply sent.
+    repop->waitfor_ack.erase(whoami);
+    
     last_update_ondisk = repop->v;
     if (waiting_for_ondisk.count(repop->v)) {
       osd->requeue_ops(this, waiting_for_ondisk[repop->v]);
@@ -2965,10 +3121,16 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (m)
     dout(10) << "eval_repop " << *repop
 	     << " wants=" << (m->wants_ack() ? "a":"") << (m->wants_ondisk() ? "d":"")
+	     << (repop->done ? " DONE" : "")
 	     << dendl;
   else
-    dout(10) << "eval_repop " << *repop << " (no op)" << dendl;
- 
+    dout(10) << "eval_repop " << *repop << " (no op)"
+	     << (repop->done ? " DONE" : "")
+	     << dendl;
+
+  if (repop->done)
+    return;
+
   // apply?
   if (!repop->applied && !repop->applying &&
       ((mode.is_delayed_mode() &&
@@ -3028,6 +3190,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
   // done.
   if (repop->waitfor_ack.empty() && repop->waitfor_disk.empty()) {
+    repop->done = true;
+
     calc_min_last_complete_ondisk();
 
     // kick snap_trimmer if necessary
@@ -3519,12 +3683,12 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
   dout(10) << "add_object_context_to_pg_stat " << oi.soid << dendl;
   object_stat_sum_t stat;
 
+  stat.num_bytes += oi.size;
+
   if (oi.soid.snap != CEPH_SNAPDIR)
     stat.num_objects++;
 
-  stat.num_bytes += oi.size;
-
-  if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP) {
+  if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP && oi.soid.snap != CEPH_SNAPDIR) {
     stat.num_object_clones++;
 
     if (!obc->ssc)
@@ -5234,6 +5398,12 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
 
   assert(recovery_ops_active == 0);
 
+  int unfound = get_num_unfound();
+  if (unfound) {
+    dout(10) << " still have " << unfound << " unfound" << dendl;
+    return started;
+  }
+
   handle_recovery_complete(prctx);
 
   return 0;
@@ -5512,8 +5682,8 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_t::item>::const_iterator p = m.missing.find(soid);
-      started += recover_object_replicas(soid, p->second.need);
+      map<hobject_t,pg_missing_t::item>::const_iterator r = m.missing.find(soid);
+      started += recover_object_replicas(soid, r->second.need);
     }
   }
 
@@ -6243,4 +6413,5 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   post_event(SnapTrim());
   return transit< NotTrimming >();
 }
+
 

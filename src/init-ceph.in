@@ -171,13 +171,6 @@ for name in $what; do
     num=$id
     name="$type.$id"
 
-    get_conf auto_start "" "auto start"
-    if [ -z "$@" ] || [ "$@" = "mds" ]; then
-	if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
-	    continue
-	fi
-    fi
-
     check_host || continue
 
     get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
@@ -188,17 +181,19 @@ for name in $what; do
     [ -n "$log_dir" ] && do_cmd "mkdir -p $log_dir"
     [ -n "$log_sym_dir" ] && do_cmd "mkdir -p $log_sym_dir"
 
-    # start, and already running?  (do this check early to avoid unnecessary work!)
+    binary="$BINDIR/ceph-$type"
     if [ "$command" = "start" ]; then
+        get_conf auto_start "" "auto start"
+        if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
+            echo "Skipping Ceph $name on $host... auto start is disabled"
+            continue
+        fi
+
 	if daemon_is_running $name ceph-$type $id $pid_file; then
 	    echo "Starting Ceph $name on $host...already running"
 	    continue
 	fi
-    fi
 
-    # binary?
-    binary="$BINDIR/ceph-$type"
-    if [ "$command" = "start" ]; then
 	get_conf copy_executable_to "" "copy executable to"
 	if [ -n "$copy_executable_to" ]; then
 	    scp $binary "$host:$copy_executable_to"

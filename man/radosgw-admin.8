@@ -1,4 +1,4 @@
-.TH "RADOSGW-ADMIN" "8" "September 22, 2011" "dev" "Ceph"
+.TH "RADOSGW-ADMIN" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 radosgw-admin \- rados REST gateway user administration utility
 .
@@ -32,12 +32,12 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBradosgw-admin\fP \fIcommand\fP [ \fIoptions\fP \fI...\fP ]
+\fBradosgw\-admin\fP \fIcommand\fP [ \fIoptions\fP \fI...\fP ]
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBradosgw-admin\fP is a RADOS gateway user administration utility. It
+\fBradosgw\-admin\fP is a RADOS gateway user administration utility. It
 allows creating and modifying users.
 .SH COMMANDS
 .sp
@@ -137,7 +137,7 @@ Generate a new user:
 .sp
 .nf
 .ft C
-$ radosgw-admin user gen \-\-display\-name="johnny rotten" \-\-email=johnny@rotten.com
+$ radosgw\-admin user gen \-\-display\-name="johnny rotten" \-\-email=johnny@rotten.com
 User ID: CHBQFRTG26I8DGJDGQLW
 Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
 Display Name: johnny rotten
@@ -148,7 +148,7 @@ Remove a user:
 .sp
 .nf
 .ft C
-$ radosgw-admin user rm \-\-uid=CHBQFRTG26I8DGJDGQLW
+$ radosgw\-admin user rm \-\-uid=CHBQFRTG26I8DGJDGQLW
 .ft P
 .fi
 .sp
@@ -156,7 +156,7 @@ Remove a bucket:
 .sp
 .nf
 .ft C
-$ radosgw-admin bucket unlink \-\-bucket=foo
+$ radosgw\-admin bucket unlink \-\-bucket=foo
 .ft P
 .fi
 .sp
@@ -164,12 +164,12 @@ Show the logs of a bucket from April 1st 2011:
 .sp
 .nf
 .ft C
-$ radosgw-admin log show \-\-bucket=foo \-\-date=2011=04\-01
+$ radosgw\-admin log show \-\-bucket=foo \-\-date=2011=04\-01
 .ft P
 .fi
 .SH AVAILABILITY
 .sp
-\fBradosgw-admin\fP is part of the Ceph distributed file system.  Please
+\fBradosgw\-admin\fP is part of the Ceph distributed file system.  Please
 refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
 information.
 .SH SEE ALSO

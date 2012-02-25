@@ -1,4 +1,4 @@
-.TH "RBD" "8" "September 22, 2011" "dev" "Ceph"
+.TH "RBD" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -194,7 +194,15 @@ To create a new snapshot:
 .sp
 .nf
 .ft C
-rbd create mypool/myimage@mysnap
+rbd snap create mypool/myimage@mysnap
+.ft P
+.fi
+.sp
+To delete a snapshot:
+.sp
+.nf
+.ft C
+rbd snap rm mypool/myimage@mysnap
 .ft P
 .fi
 .sp

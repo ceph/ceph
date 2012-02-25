@@ -416,6 +416,7 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
   } else if (in->inode.is_symlink()) {
     in->symlink = symlink;
   }
+  in->old_inodes = old_inodes;
 }
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg)

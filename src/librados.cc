@@ -944,7 +944,7 @@ int librados::RadosClient::connect()
   // require OSDREPLYMUX feature.  this means we will fail to talk to
   // old servers.  this is necessary because otherwise we won't know
   // how to decompose the reply data into its consituent pieces.
-  messenger->set_default_policy(SimpleMessenger::Policy::client(0, CEPH_FEATURE_OSDREPLYMUX));
+  messenger->set_default_policy(Messenger::Policy::client(0, CEPH_FEATURE_OSDREPLYMUX));
 
   ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
@@ -3159,9 +3159,9 @@ int64_t librados::IoCtx::get_id()
   return io_ctx_impl->get_id();
 }
 
-CephContext *librados::IoCtx::cct()
+librados::config_t librados::IoCtx::cct()
 {
-  return io_ctx_impl->client->cct;
+  return (config_t)io_ctx_impl->client->cct;
 }
 
 librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
@@ -3189,14 +3189,19 @@ int librados::Rados::init(const char * const id)
   return rados_create((rados_t *)&client, id);
 }
 
-int librados::Rados::init_with_context(CephContext *cct_)
+int librados::Rados::init_with_context(config_t cct_)
 {
-  return rados_create_with_context((rados_t *)&client, cct_);
+  return rados_create_with_context((rados_t *)&client, (rados_config_t)cct_);
 }
 
 int librados::Rados::connect()
 {
   return client->connect();
+}
+
+librados::config_t librados::Rados::cct()
+{
+  return (config_t)client->cct;
 }
 
 void librados::Rados::shutdown()
@@ -3432,11 +3437,18 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
  * already called global_init and want to use that particular configuration for
  * their cluster.
  */
-extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct)
+extern "C" int rados_create_with_context(rados_t *pcluster, rados_config_t cct_)
 {
+  CephContext *cct = (CephContext *)cct_;
   librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
   return 0;
+}
+
+extern "C" rados_config_t rados_cct(rados_t cluster)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return (rados_config_t)client->cct;
 }
 
 extern "C" int rados_connect(rados_t cluster)
@@ -3620,6 +3632,11 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   return 0;
 }
 
+extern "C" rados_config_t rados_ioctx_cct(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return (rados_config_t)ctx->client->cct;
+}
 
 extern "C" void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
 {

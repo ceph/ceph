@@ -42,8 +42,7 @@ static void usage()
   cout << "usage: ceph [options] [commands]\n";
   cout << "If no commands are specified, enter interactive mode.\n";
   cout << "Commands:\n";
-  cout << "   stop              -- cleanly shut down file system\n"
-       << "   (osd|pg|mds) stat -- get monitor subsystem status\n"
+  cout << "   (osd|pg|mds) stat -- get monitor subsystem status\n"
        << "   ...\n";
   cout << "Options:\n";
   cout << "   -i infile\n"

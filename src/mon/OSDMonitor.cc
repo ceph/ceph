@@ -20,6 +20,7 @@
 #include "MonitorStore.h"
 
 #include "crush/CrushWrapper.h"
+#include "crush/CrushTester.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
@@ -307,7 +308,7 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 
   // encode
   assert(paxos->get_version() + 1 == pending_inc.epoch);
-  pending_inc.encode(bl);
+  ::encode(pending_inc, bl, -1);
 }
 
 
@@ -1524,6 +1525,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
 
+      // sanity check: test some inputs to make sure this map isn't totally broken
+      dout(10) << " testing map" << dendl;
+      stringstream ess;
+      CrushTester tester(crush, ess, 1);
+      tester.test();
+      dout(10) << " result " << ess.str() << dendl;
+
       pending_inc.crush = data;
       string rs = "set crush map";
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -2032,6 +2040,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	      return true;
 	    } else if (m->cmd[4] == "pg_num") {
+	      if (true) {
+		// ** DISABLE THIS FOR NOW **
+		ss << "pg_num adjustment currently disabled (broken implementation)";
+		// ** DISABLE THIS FOR NOW **
+	      } else
 	      if (n <= p->get_pg_num()) {
 		ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
 	      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {

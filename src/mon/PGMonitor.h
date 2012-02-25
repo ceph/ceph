@@ -112,6 +112,15 @@ private:
    */
   bool check_down_pgs();
 
+  /**
+   * Dump stats from pgs stuck in specified states.
+   *
+   * @return 0 on success, negative error code on failure
+   */
+  int dump_stuck_pg_stats(ostream& ss,
+			  bufferlist& rdata,
+			  vector<const char*>& args) const;
+
 public:
   PGMonitor(Monitor *mn, Paxos *p);
   virtual ~PGMonitor();

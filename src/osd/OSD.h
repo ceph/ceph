@@ -121,6 +121,7 @@ class ReplicatedPG;
 class AuthAuthorizeHandlerRegistry;
 
 class OpRequest;
+class OpsFlightSocketHook;
 
 extern const coll_t meta_coll;
 
@@ -337,7 +338,10 @@ private:
   void register_inflight_op(xlist<OpRequest*>::item *i);
   void check_ops_in_flight();
   void unregister_inflight_op(xlist<OpRequest*>::item *i);
+  void dump_ops_in_flight(ostream& ss);
   friend struct OpRequest;
+  friend class OpsFlightSocketHook;
+  OpsFlightSocketHook *admin_ops_hook;
 
   // -- op queue --
   deque<PG*> op_queue;

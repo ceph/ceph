@@ -108,6 +108,11 @@ Create a cluster snapshot. ::
 
 Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
 
+        $ ceph pg <pgid> mark_unfound_lost revert
+
+Revert "lost" objects to their prior state, either a previous version
+or delete them if they were just created. ::
+
 	$ ceph osd create [<id>]
 
 Create a new OSD. If no ID is given, a new ID is automatically selected

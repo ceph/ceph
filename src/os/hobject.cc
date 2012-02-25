@@ -29,6 +29,25 @@ void hobject_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
+void hobject_t::decode(json_spirit::Value& v)
+{
+  using namespace json_spirit;
+  Object& o = v.get_obj();
+  for (Object::size_type i=0; i<o.size(); i++) {
+    Pair& p = o[i];
+    if (p.name_ == "oid")
+      oid.name = p.value_.get_str();
+    else if (p.name_ == "key")
+      key = p.value_.get_str();
+    else if (p.name_ == "snapid")
+      snap = p.value_.get_uint64();
+    else if (p.name_ == "hash")
+      hash = p.value_.get_int();
+    else if (p.name_ == "max")
+      max = p.value_.get_int();
+  }
+}
+
 void hobject_t::dump(Formatter *f) const
 {
   f->dump_string("oid", oid.name);

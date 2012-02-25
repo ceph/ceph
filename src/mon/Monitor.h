@@ -130,7 +130,8 @@ private:
     STATE_SLURPING,
     STATE_ELECTING,
     STATE_LEADER,
-    STATE_PEON
+    STATE_PEON,
+    STATE_SHUTDOWN
   };
   int state;
 
@@ -145,7 +146,7 @@ public:
     default: return "???";
     }
   }
-  const char *get_state_name() {
+  const char *get_state_name() const {
     return get_state_name(state);
   }
 

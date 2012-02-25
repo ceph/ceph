@@ -92,6 +92,8 @@ void global_init(std::vector < const char* >& args,
   // Expand metavariables. Invoke configuration observers.
   conf->apply_changes(NULL);
 
+  g_lockdep = cct->_conf->lockdep;
+
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(cct, &parse_errors);
 
@@ -101,8 +103,7 @@ void global_init(std::vector < const char* >& args,
   install_standard_sighandlers();
 
   if (g_lockdep) {
-    cout << TEXT_YELLOW << "*** lockdep is enabled (" << g_lockdep
-	 << ") ***" << TEXT_NORMAL << std::endl;
+    dout(1) << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(cct);
   }
   register_assert_context(cct);

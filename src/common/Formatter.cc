@@ -272,6 +272,7 @@ void XMLFormatter::open_array_section_in_ns(const char *name, const char *ns)
 void XMLFormatter::close_section()
 {
   assert(!m_sections.empty());
+  finish_pending_string();
 
   print_spaces(false);
   m_ss << "</" << m_sections.back() << ">";

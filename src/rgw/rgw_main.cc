@@ -48,6 +48,7 @@ using namespace std;
 
 static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
+static sighandler_t sighandler_term;
 
 
 #define SOCKET_BACKLOG 20
@@ -380,6 +381,8 @@ int main(int argc, const char **argv)
   sighandler_alrm = signal(SIGALRM, godown_alarm);
   
   FCGX_Init();
+
+  sighandler_term = signal(SIGTERM, godown_alarm);
   
   RGWStoreManager store_manager;
   
