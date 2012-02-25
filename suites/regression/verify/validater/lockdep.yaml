@@ -1,4 +1,5 @@
 overrides:
   ceph:
     conf:
-      lockdep: true
+      global:
+        lockdep: true
