@@ -68,6 +68,11 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
 
+    manager.wait_for_active_or_down()
+
+    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+
     # look for down pgs
     num_down_pgs = 0
     pgs = manager.get_pg_stats()

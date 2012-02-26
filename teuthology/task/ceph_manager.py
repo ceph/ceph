@@ -267,11 +267,23 @@ class CephManager:
                 num += 1
         return num
 
+    def get_num_active_down(self):
+        pgs = self.get_pg_stats()
+        num = 0
+        for pg in pgs:
+            if (pg['state'].count('active') and not pg['state'].count('stale')) or \
+                    (pg['state'].count('down') and not pg['state'].count('stale')):
+                num += 1
+        return num
+
     def is_clean(self):
         return self.get_num_active_clean() == self.get_num_pgs()
 
     def is_recovered(self):
         return self.get_num_active_recovered() == self.get_num_pgs()
+
+    def is_active_or_down(self):
+        return self.get_num_active_down() == self.get_num_pgs()
 
     def wait_for_clean(self, timeout=None):
         self.log("waiting for clean")
@@ -302,6 +314,21 @@ class CephManager:
                 num_active_recovered = cur_active_recovered
             time.sleep(3)
         self.log("recovered!")
+
+    def wait_for_active_or_down(self, timeout=None):
+        self.log("waiting for peering to complete or become blocked")
+        start = time.time()
+        num_active_down = self.get_num_active_down()
+        while not self.is_active_or_down():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to recover before timeout expired'
+            cur_active_down = self.get_num_active_down()
+            if cur_active_down != num_active_down:
+                start = time.time()
+                num_active_down = cur_active_down
+            time.sleep(3)
+        self.log("active or down!")
 
     def osd_is_up(self, osd):
         osds = self.get_osd_dump()
