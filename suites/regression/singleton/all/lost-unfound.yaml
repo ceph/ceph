@@ -10,5 +10,5 @@ tasks:
 - ceph:
     log-whitelist:
     - objects unfound and apparently lost
-- peer:
 - lost_unfound:
+- peer:
