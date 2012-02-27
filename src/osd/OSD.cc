@@ -3646,14 +3646,17 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   // do splits?
   for (map<int64_t,int>::iterator p = pool_resize.begin(); p != pool_resize.end(); p++) {
     dout(10) << " processing pool " << p->first << " resize" << dendl;
-    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-	 it != pg_map.end();
-	 it++) {
-      pg_t pgid = it->first;
-      PG *pg = it->second;
-      set<pg_t> children;
-      if (pgid.is_split(p->second, pg->pool->info.pg_num, children)) {
-	do_split(pg, children, t, tfin);
+    clog.error() << "ignoring pool " << p->first << " resize; not fully implemented\n";
+    if (false) {
+      for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	   it != pg_map.end();
+	   it++) {
+	pg_t pgid = it->first;
+	PG *pg = it->second;
+	set<pg_t> children;
+	if (pgid.is_split(p->second, pg->pool->info.pg_num, children)) {
+	  do_split(pg, children, t, tfin);
+	}
       }
     }
   }
