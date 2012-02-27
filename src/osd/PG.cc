@@ -1225,7 +1225,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   // find out when we commit
   get();   // for callback
   tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_interval_since,
-					    get_osdmap()->get_inst(acting[0])));
+					    get_osdmap()->get_cluster_inst(acting[0])));
   
   // initialize snap_trimq
   if (is_primary()) {
