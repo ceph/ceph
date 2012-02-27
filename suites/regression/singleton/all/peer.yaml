@@ -1,0 +1,13 @@
+roles:
+- - mon.0
+  - mds.a
+  - osd.0
+- - mon.1
+  - osd.1
+- - mon.2
+  - osd.2
+tasks:
+- ceph:
+    log-whitelist:
+    - objects unfound and apparently lost
+- peer:
