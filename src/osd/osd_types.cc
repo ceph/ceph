@@ -180,12 +180,13 @@ bool pg_t::parse(const char *s)
   return true;
 }
 
-bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t>& children) const
+bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
 {
   assert(m_seed < old_pg_num);
   if (new_pg_num <= old_pg_num)
     return false;
 
+  bool split = false;
   if (true) {
     int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
     int old_mask = (1 << old_bits) - 1;
@@ -197,8 +198,11 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t>& childre
 	continue;
       if (s >= new_pg_num)
 	break;
-      if ((unsigned)ceph_stable_mod(s, old_pg_num, old_mask) == m_seed)
-	children.insert(pg_t(s, m_pool, m_preferred));
+      if ((unsigned)ceph_stable_mod(s, old_pg_num, old_mask) == m_seed) {
+	split = true;
+	if (children)
+	  children->insert(pg_t(s, m_pool, m_preferred));
+      }
     }
   }
   if (false) {
@@ -207,11 +211,13 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t>& childre
     int old_mask = (1 << old_bits) - 1;
     for (unsigned x = old_pg_num; x < new_pg_num; ++x) {
       unsigned o = ceph_stable_mod(x, old_pg_num, old_mask);
-      if (o == m_seed)
-	children.insert(pg_t(x, m_pool, m_preferred));
+      if (o == m_seed) {
+	split = true;
+	children->insert(pg_t(x, m_pool, m_preferred));
+      }
     }
   }
-  return !children.empty();
+  return split;
 }
 
 void pg_t::dump(Formatter *f) const

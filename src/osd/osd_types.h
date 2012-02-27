@@ -238,7 +238,7 @@ struct pg_t {
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
 
-  bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t>& children) const;
+  bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;

@@ -30,6 +30,8 @@ TEST(pg_t, split)
   ASSERT_TRUE(!b);
 
   s.clear();
+  b = pgid.is_split(2, 4, NULL);
+  ASSERT_TRUE(b);
   b = pgid.is_split(2, 4, s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
@@ -50,6 +52,8 @@ TEST(pg_t, split)
   ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
 
   s.clear();
+  b = pgid.is_split(6, 8, NULL);
+  ASSERT_TRUE(!b);
   b = pgid.is_split(6, 8, s);
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());

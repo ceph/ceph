@@ -3654,7 +3654,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
 	pg_t pgid = it->first;
 	PG *pg = it->second;
 	set<pg_t> children;
-	if (pgid.is_split(p->second, pg->pool->info.pg_num, children)) {
+	if (pgid.is_split(p->second, pg->pool->info.pg_num, &children)) {
 	  do_split(pg, children, t, tfin);
 	}
       }
