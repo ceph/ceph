@@ -81,10 +81,64 @@ consistent hashing; you can think of it as::
 	       result.append(chosen)
 	   return result
 
+User-visible PG States
+======================
 
-PG status refreshes only when pg mapping changes
-================================================
+.. todo:: diagram of states and how they can overlap
 
-The pg status currently doesn't get refreshed when the actual pg
-mapping doesn't change, and e.g. a pool size change of 2->1 won't do
-that. It will refresh if you restart the OSDs, though.
+*creating*
+  the PG is still being created
+
+*active*
+  requests to the PG will be processed
+
+*clean*
+  all objects in the PG are replicated the correct number of times
+
+*down*
+  a replica with necessary data is down, so the pg is offline
+
+*replay*
+  the PG is waiting for clients to replay operations after an OSD crashed
+
+*splitting*
+  the PG is being split into multiple PGs (not functional as of 2012-02)
+
+*scrubbing*
+  the PG is being checked for inconsistencies
+
+*degraded*
+  some objects in the PG are not replicated enough times yet
+
+*inconsistent*
+  replicas of the PG are not consistent (e.g. objects are
+  the wrong size, objects are missing from one replica *after* recovery
+  finished, etc.)
+
+*peering*
+  the PG is undergoing the :doc:`/dev/peering` process
+
+*repair*
+  the PG is being checked and any inconsistencies found will be repaired (if possible)
+
+*recovering*
+  objects are being migrated/synchronized with replicas
+
+*backfill*
+  a special case of recovery, in which the entire contents of
+  the PG are scanned and synchronized, instead of inferring what
+  needs to be transferred from the PG logs of recent operations
+
+*incomplete*
+  a pg is missing a necessary period of history from its
+  log.  If you see this state, report a bug, and try to start any
+  failed OSDs that may contain the needed information.
+
+*stale*
+  the PG is in an unknown state - the monitors have not received
+  an update for it since the PG mapping changed.
+
+*remapped*
+  the PG is temporarily mapped to a different set of OSDs from what
+  CRUSH specified
+
