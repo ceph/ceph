@@ -446,6 +446,7 @@ protected:
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
+  PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
   PG   *_create_lock_pg(pg_t pgid, bool newly_created,
 			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
@@ -760,7 +761,6 @@ protected:
   list< pair<pg_t, utime_t > > replay_queue;
   
   void check_replay_queue();
-  void activate_pg(pg_t pgid, utime_t activate_at);
 
 
   // -- snap trimming --

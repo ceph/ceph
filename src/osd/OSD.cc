@@ -1166,6 +1166,15 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
   return pg;
 }
 
+PG *OSD::_lookup_lock_pg_with_map_lock_held(pg_t pgid)
+{
+  assert(osd_lock.is_locked());
+  assert(pg_map.count(pgid));
+  PG *pg = pg_map[pgid];
+  pg->lock_with_map_lock_held();
+  return pg;
+}
+
 PG *OSD::lookup_lock_raw_pg(pg_t pgid)
 {
   Mutex::Locker l(osd_lock);
@@ -5019,8 +5028,13 @@ void OSD::_remove_pg(PG *pg)
 // =========================================================
 // RECOVERY
 
+/*
+ * caller holds osd_lock
+ */
 void OSD::check_replay_queue()
 {
+  assert(osd_lock.is_locked());
+
   utime_t now = ceph_clock_now(g_ceph_context);
   list< pair<pg_t,utime_t> > pgids;
   replay_queue_lock.Lock();
@@ -5031,29 +5045,21 @@ void OSD::check_replay_queue()
   }
   replay_queue_lock.Unlock();
 
-  for (list< pair<pg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); p++)
-    activate_pg(p->first, p->second);
-}
-
-/*
- * NOTE: this is called from SafeTimer, so caller holds osd_lock
- */
-void OSD::activate_pg(pg_t pgid, utime_t activate_at)
-{
-  assert(osd_lock.is_locked());
-
-  if (pg_map.count(pgid)) {
-    PG *pg = _lookup_lock_pg(pgid);
-    dout(10) << "activate_pg " << *pg << dendl;
-    if (pg->is_active() &&
-	pg->is_replay() &&
-	pg->get_role() == 0 &&
-	pg->replay_until == activate_at) {
-      pg->replay_queued_ops();
+  for (list< pair<pg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); p++) {
+    pg_t pgid = p->first;
+    if (pg_map.count(pgid)) {
+      PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
+      dout(10) << "check_replay_queue " << *pg << dendl;
+      if (pg->is_active() &&
+	  pg->is_replay() &&
+	  pg->get_role() == 0 &&
+	  pg->replay_until == p->second) {
+	pg->replay_queued_ops();
+      }
+      pg->unlock();
+    } else {
+      dout(10) << "check_replay_queue pgid " << pgid << " (not found)" << dendl;
     }
-    pg->unlock();
-  } else {
-    dout(10) << "activate_pg pgid " << pgid << " (not found)" << dendl;
   }
   
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
