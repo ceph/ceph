@@ -238,6 +238,8 @@ struct pg_t {
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
 
+  bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
+
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
@@ -659,7 +661,7 @@ struct pg_pool_t {
   unsigned get_lpg_num_mask() const { return lpg_num_mask; }
   unsigned get_lpgp_num_mask() const { return lpgp_num_mask; }
 
-  int calc_bits_of(int t);
+  static int calc_bits_of(int t);
   void calc_pg_masks();
 
   /*

@@ -356,7 +356,7 @@ public:
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
    * *_with_map_lock_held assume that the map_lock is already held */
-  void lock_with_map_lock_held();
+  void lock_with_map_lock_held(bool no_lockdep = false);
 
   void assert_locked() {
     assert(_lock.is_locked());
