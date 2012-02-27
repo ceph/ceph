@@ -12,6 +12,8 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
+RUN_DIR=/run/ceph
+
 # if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -173,7 +175,7 @@ for name in $what; do
 
     check_host || continue
 
-    get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
+    get_conf pid_file "$RUN_DIR/$type.$id.pid" "pid file"
     [ -n "$pid_file" ] && do_cmd "mkdir -p "`dirname $pid_file`
 
     get_conf log_dir "" "log dir"
@@ -266,6 +268,7 @@ for name in $what; do
 		do_root_cmd "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
 	    echo Starting Ceph $name on $host...
+	    mkdir -p $RUN_DIR
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"
