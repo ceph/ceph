@@ -11,4 +11,3 @@ tasks:
     log-whitelist:
     - objects unfound and apparently lost
 - lost_unfound:
-- peer:
