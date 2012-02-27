@@ -12,7 +12,7 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
-RUN_DIR=/run/ceph
+RUN_DIR=/var/run/ceph
 
 # if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
