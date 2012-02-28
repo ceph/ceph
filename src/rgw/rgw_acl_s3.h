@@ -44,6 +44,7 @@ public:
   bool xml_start(const char *el, const char **attr);
 
   static ACLGroupTypeEnum uri_to_group(string& uri);
+  static bool group_to_uri(ACLGroupTypeEnum group, string& uri);
 };
 
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj

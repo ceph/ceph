@@ -24,16 +24,21 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
     acl_group_map[grant->get_group()] |= perm.get_permissions();
     break;
   default:
-    acl_user_map[grant->get_id()] |= perm.get_permissions();
+    {
+      string id;
+      if (!grant->get_id(id)) {
+        dout(0) << "ERROR: grant->get_id() failed" << dendl;
+      }
+      acl_user_map[id] |= perm.get_permissions();
+    }
   }
 }
 
 void RGWAccessControlList::add_grant(ACLGrant *grant)
 {
-  string id = grant->get_id();
-  if (id.size() > 0) {
-    grant_map.insert(pair<string, ACLGrant>(id, *grant));
-  }
+  string id;
+  grant->get_id(id); // not that this will return false for groups, but that's ok, we won't search groups
+  grant_map.insert(pair<string, ACLGrant>(id, *grant));
   _add_grant(grant);
 }
 
@@ -116,7 +121,7 @@ bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, 
 }
 
 
-ACLGroupTypeEnum ACLGrant::uri_to_group()
+ACLGroupTypeEnum ACLGrant::uri_to_group(string& uri)
 {
   // this is required for backward compatibility
   return ACLGrant_S3::uri_to_group(uri);

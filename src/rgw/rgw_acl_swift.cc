@@ -12,6 +12,8 @@ using namespace std;
 #define SWIFT_PERM_READ  RGW_PERM_READ_OBJS
 #define SWIFT_PERM_WRITE RGW_PERM_WRITE_OBJS
 
+#define SWIFT_GROUP_ALL_USERS ".r:*"
+
 static int parse_list(string& uid_list, vector<string>& uids)
 {
   char *s = strdup(uid_list.c_str());
@@ -30,6 +32,26 @@ static int parse_list(string& uid_list, vector<string>& uids)
   return 0;
 }
 
+static bool uid_is_public(string& uid)
+{
+  if (uid[0] != '.' || uid[1] != 'r')
+    return false;
+
+  int pos = uid.find(':');
+  if (pos < 0 || pos == (int)uid.size())
+    return false;
+
+  string sub = uid.substr(0, pos);
+  string after = uid.substr(pos + 1);
+
+  if (after.compare("*") != 0)
+    return false;
+
+  return sub.compare(".r") == 0 ||
+         sub.compare(".referer") == 0 ||
+         sub.compare(".referrer") == 0;
+}
+
 void RGWAccessControlPolicy_SWIFT::add_grants(vector<string>& uids, int perm)
 {
   vector<string>::iterator iter;
@@ -37,7 +59,10 @@ void RGWAccessControlPolicy_SWIFT::add_grants(vector<string>& uids, int perm)
     ACLGrant grant;
     RGWUserInfo grant_user;
     string& uid = *iter;
-    if (rgw_get_user_info_by_uid(uid, grant_user) < 0) {
+    if (uid_is_public(uid)) {
+      grant.set_group(ACL_GROUP_ALL_USERS, perm);
+      acl.add_grant(&grant);
+    } else if (rgw_get_user_info_by_uid(uid, grant_user) < 0) {
       dout(10) << "grant user does not exist:" << uid << dendl;
       /* skipping silently */
     } else {
@@ -84,14 +109,20 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
   for (iter = m.begin(); iter != m.end(); ++iter) {
     ACLGrant& grant = iter->second;
     int perm = grant.get_permission().get_permissions();
+    string id;
+    if (!grant.get_id(id)) {
+      if (grant.get_group() != ACL_GROUP_ALL_USERS)
+        continue;
+      id = SWIFT_GROUP_ALL_USERS;
+    }
     if (perm & SWIFT_PERM_READ) {
       if (!read.empty())
         read.append(", ");
-      read.append(grant.get_id());
+      read.append(id);
     } else if (perm & SWIFT_PERM_WRITE) {
       if (!write.empty())
         write.append(", ");
-      write.append(grant.get_id());
+      write.append(id);
     }
   }
 }

@@ -96,7 +96,6 @@ class ACLGrant
 protected:
   ACLGranteeType type;
   string id;
-  string uri;
   string email;
   ACLPermission permission;
   string name;
@@ -108,14 +107,16 @@ public:
 
   /* there's an assumption here that email/uri/id encodings are
      different and there can't be any overlap */
-  string& get_id() {
+  bool get_id(string& _id) {
     switch(type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
-      return email;
+      _id = email;
+      return true;
     case ACL_TYPE_GROUP:
-      return uri;
+      return false;
     default:
-      return id;
+      _id = id;
+      return true;
     }
   }
   ACLGranteeType& get_type() { return type; }
@@ -127,6 +128,7 @@ public:
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(id, bl);
+    string uri;
     ::encode(uri, bl);
     ::encode(email, bl);
     ::encode(permission, bl);
@@ -139,6 +141,7 @@ public:
     ::decode(struct_v, bl);
     ::decode(type, bl);
     ::decode(id, bl);
+    string uri;
     ::decode(uri, bl);
     ::decode(email, bl);
     ::decode(permission, bl);
@@ -148,11 +151,11 @@ public:
       ::decode(g, bl);
       group = (ACLGroupTypeEnum)g;
     } else {
-      group = uri_to_group();
+      group = uri_to_group(uri);
     }
   }
 
-  ACLGroupTypeEnum uri_to_group();
+  ACLGroupTypeEnum uri_to_group(string& uri);
   
   void set_canon(string& _id, string& _name, int perm) {
     type.set(ACL_TYPE_CANON_USER);
@@ -160,9 +163,8 @@ public:
     name = _name;
     permission.set_permissions(perm);
   }
-  void set_group(string& _uri, ACLGroupTypeEnum _group, int perm) {
+  void set_group(ACLGroupTypeEnum _group, int perm) {
     type.set(ACL_TYPE_GROUP);
-    uri = _uri;
     group = _group;
     permission.set_permissions(perm);
   }

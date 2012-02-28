@@ -144,6 +144,7 @@ bool ACLGrant_S3::xml_end(const char *el) {
   ACLEmail_S3 *acl_email;
   ACLPermission_S3 *acl_permission;
   ACLDisplayName_S3 *acl_name;
+  string uri;
 
   acl_grantee = (ACLGrantee_S3 *)find_first("Grantee");
   if (!acl_grantee)
@@ -161,7 +162,6 @@ bool ACLGrant_S3::xml_end(const char *el) {
 
   id.clear();
   name.clear();
-  uri.clear();
   email.clear();
 
   switch (type.get_type()) {
@@ -201,6 +201,8 @@ void ACLGrant_S3::to_xml(ostream& out) {
   if (!(perm.get_permissions() & RGW_PERM_ALL_S3))
     return;
 
+  string uri;
+
   out << "<Grant>" <<
          "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
   switch (type.get_type()) {
@@ -214,7 +216,11 @@ void ACLGrant_S3::to_xml(ostream& out) {
     out << "<EmailAddress>" << email << "</EmailAddress>";
     break;
   case ACL_TYPE_GROUP:
-     out << "<URI>" << uri << "</URI>";
+    if (!group_to_uri(group, uri)) {
+      dout(0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
+      break;
+    }
+    out << "<URI>" << uri << "</URI>";
     break;
   default:
     break;
@@ -222,6 +228,20 @@ void ACLGrant_S3::to_xml(ostream& out) {
   out << "</Grantee>";
   perm.to_xml(out);
   out << "</Grant>";
+}
+
+bool ACLGrant_S3::group_to_uri(ACLGroupTypeEnum group, string& uri)
+{
+  switch (group) {
+  case ACL_GROUP_ALL_USERS:
+    uri = rgw_uri_all_users;
+    return true;
+  case ACL_GROUP_AUTHENTICATED_USERS:
+    uri = rgw_uri_auth_users;
+    return true;
+  default:
+    return false;
+  }
 }
 
 ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
@@ -260,15 +280,15 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
 
   ACLGrant group_grant;
   if (canned_acl.compare("public-read") == 0) {
-    group_grant.set_group(rgw_uri_all_users, ACL_GROUP_ALL_USERS, RGW_PERM_READ);
+    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
   } else if (canned_acl.compare("public-read-write") == 0) {
-    group_grant.set_group(rgw_uri_all_users, ACL_GROUP_ALL_USERS, RGW_PERM_READ);
+    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
-    group_grant.set_group(rgw_uri_all_users, ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
+    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
     add_grant(&group_grant);
   } else if (canned_acl.compare("authenticated-read") == 0) {
-    group_grant.set_group(rgw_uri_auth_users, ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
+    group_grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
   } else {
     return false;
@@ -328,7 +348,11 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
     switch (type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
       {
-        string email = src_grant.get_id();
+        string email;
+        if (!src_grant.get_id(email)) {
+          dout(0) << "ERROR: src_grant.get_id() failed" << dendl;
+          return -EINVAL;
+        }
         dout(10) << "grant user email=" << email << dendl;
         if (rgw_get_user_info_by_email(email, grant_user) < 0) {
           dout(10) << "grant user email not found or other error" << dendl;
@@ -338,8 +362,12 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
       }
     case ACL_TYPE_CANON_USER:
       {
-        if (type.get_type() == ACL_TYPE_CANON_USER)
-          uid = src_grant.get_id();
+        if (type.get_type() == ACL_TYPE_CANON_USER) {
+          if (!src_grant.get_id(uid)) {
+            dout(0) << "ERROR: src_grant.get_id() failed" << dendl;
+            return -EINVAL;
+          }
+        }
     
         if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(uid, grant_user) < 0) {
           dout(10) << "grant user does not exist:" << uid << dendl;
@@ -348,20 +376,21 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
           ACLPermission& perm = src_grant.get_permission();
           new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
           grant_ok = true;
-          dout(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << dendl;
+          string new_id;
+          new_grant.get_id(new_id);
+          dout(10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
         }
       }
       break;
     case ACL_TYPE_GROUP:
       {
-        string group = src_grant.get_id();
-        if (group.compare(RGW_URI_ALL_USERS) == 0 ||
-            group.compare(RGW_URI_AUTH_USERS) == 0) {
+        string uri;
+        if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
           new_grant = src_grant;
           grant_ok = true;
-          dout(10) << "new grant: " << new_grant.get_id() << dendl;
+          dout(10) << "new grant: " << uri << dendl;
         } else {
-          dout(10) << "grant group does not exist:" << group << dendl;
+          dout(10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
           return -EINVAL;
         }
       }
