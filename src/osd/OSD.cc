@@ -672,8 +672,6 @@ int OSD::init()
   }
 
   class_handler = new ClassHandler();
-  if (!class_handler)
-    return -ENOMEM;
   cls_initialize(class_handler);
 
   // load up "current" osdmap
