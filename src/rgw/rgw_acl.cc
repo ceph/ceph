@@ -92,11 +92,6 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
 bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, int perm)
 {
   int test_perm = perm;
-  if (perm & RGW_PERM_WRITE)
-    test_perm |= RGW_PERM_WRITE_OBJS;
-
-  if (perm & RGW_PERM_READ)
-    test_perm |= RGW_PERM_READ_OBJS;
 
   int policy_perm = get_perm(uid, test_perm);
 
@@ -105,12 +100,10 @@ bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, 
      buckets, so the swift READ permission on bucket will allow listing
      the bucket content */
   if (policy_perm & RGW_PERM_WRITE_OBJS) {
-    policy_perm |= RGW_PERM_WRITE;
-    policy_perm &= ~RGW_PERM_WRITE_OBJS;
+    policy_perm |= (RGW_PERM_WRITE | RGW_PERM_WRITE_ACP);
   }
   if (policy_perm & RGW_PERM_READ_OBJS) {
-    policy_perm |= RGW_PERM_READ;
-    policy_perm &= ~RGW_PERM_READ_OBJS;
+    policy_perm |= (RGW_PERM_READ | RGW_PERM_READ_ACP);
   }
    
   int acl_perm = policy_perm & user_perm_mask;
