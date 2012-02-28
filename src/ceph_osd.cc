@@ -390,7 +390,7 @@ int main(int argc, const char **argv)
 		g_conf->osd_data, g_conf->osd_journal);
   err = osd->pre_init();
   if (err < 0) {
-    derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
+    derr << TEXT_RED << " ** ERROR: osd pre_init failed: " << cpp_strerror(-err)
 	 << TEXT_NORMAL << dendl;
     return 1;
   }
@@ -412,7 +412,7 @@ int main(int argc, const char **argv)
   // start osd
   err = osd->init();
   if (err < 0) {
-    derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
+    derr << TEXT_RED << " ** ERROR: osd init failed: " << cpp_strerror(-err)
          << TEXT_NORMAL << dendl;
     return 1;
   }
