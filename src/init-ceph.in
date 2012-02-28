@@ -187,8 +187,10 @@ for name in $what; do
     if [ "$command" = "start" ]; then
         get_conf auto_start "" "auto start"
         if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
-            echo "Skipping Ceph $name on $host... auto start is disabled"
-            continue
+            if [ -z "$@" ]; then
+                echo "Skipping Ceph $name on $host... auto start is disabled"
+                continue
+            fi
         fi
 
 	if daemon_is_running $name ceph-$type $id $pid_file; then
