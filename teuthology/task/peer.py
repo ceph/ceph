@@ -79,8 +79,8 @@ def task(ctx, config):
     for pg in pgs:
         out = manager.raw_cluster_cmd('pg', pg['pgid'], 'query')
         j = json.loads('\n'.join(out.split('\n')[1:]))
-        log.info("json is %s" % j)
-        assert j['state'] == pg['state']
+        log.info("pg is %s, query json is %s", pg, j)
+        assert j['state'].replace('+scrubbing','') == pg['state'].replace('+scrubbing','')
 
         if pg['state'].count('down'):
             num_down_pgs += 1
