@@ -842,16 +842,10 @@ clean-local:
 
 # libs
 
-libjson_spirit_la_SOURCES = \
-	json_spirit/json_spirit_reader.cpp \
-	json_spirit/json_spirit_writer.cpp \
-	json_spirit/json_spirit_value.cpp
-noinst_LTLIBRARIES += libjson_spirit.la
-
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libcommon_la_LDFLAGS = -lrt libjson_spirit.la
+libcommon_la_LDFLAGS = -lrt
 noinst_LTLIBRARIES += libcommon.la
 
 libglobal_la_SOURCES = \
@@ -911,6 +905,9 @@ libcommon_files = \
 	common/snap_types.cc \
 	common/str_list.cc \
 	common/errno.cc \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp \
 	msg/SimpleMessenger.cc \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
