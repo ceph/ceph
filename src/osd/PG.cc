@@ -54,9 +54,9 @@ void PG::lock(bool no_lockdep)
  * caller holds osd->map_lock, no need to take it to get a valid
  * osdmap reference.
  */
-void PG::lock_with_map_lock_held()
+void PG::lock_with_map_lock_held(bool no_lockdep)
 {
-  _lock.Lock();
+  _lock.Lock(no_lockdep);
   osdmap_ref = osd->osdmap;
 }
 
@@ -246,7 +246,6 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
       purge_strays();
     }
   }
-  update_stats();
 
   // was this a new info?  if so, update peers!
   if (p == peer_info.end())
@@ -636,21 +635,15 @@ ostream& PG::IndexedLog::print(ostream& out) const
 
 
 /******* PG ***********/
-bool PG::is_all_uptodate() const
+bool PG::needs_recovery() const
 {
   assert(is_primary());
 
-  bool uptodate = true;
-
-  if (up != acting) {
-    dout(10) << __func__ << ": the set of UP osds is not the same as the "
-	     << "set of ACTING osds." << dendl;
-    uptodate = false;
-  }
+  bool ret = false;
 
   if (missing.num_missing()) {
-    dout(10) << __func__ << ": primary has " << missing.num_missing() << dendl;
-    uptodate = false;
+    dout(10) << __func__ << " primary has " << missing.num_missing() << dendl;
+    ret = true;
   }
 
   vector<int>::const_iterator end = acting.end();
@@ -661,24 +654,24 @@ bool PG::is_all_uptodate() const
     int peer = *a;
     map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
-      dout(10) << __func__ << ": osd." << peer << " don't have missing set" << dendl;
-      uptodate = false;
+      dout(10) << __func__ << " osd." << peer << " don't have missing set" << dendl;
+      ret = true;
       continue;
     }
     if (pm->second.num_missing()) {
-      dout(10) << __func__ << ": osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
-      uptodate = false;
+      dout(10) << __func__ << " osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
+      ret = true;
     }
     map<int,pg_info_t>::const_iterator pi = peer_info.find(peer);
     if (pi->second.last_backfill != hobject_t::get_max()) {
-      dout(10) << __func__ << ": osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
-      uptodate = false;
+      dout(10) << __func__ << " osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
+      ret = true;
     }
   }
 
-  if (uptodate)
-    dout(10) << __func__ << ": everyone is uptodate" << dendl;
-  return uptodate;
+  if (!ret)
+    dout(10) << __func__ << " is recovered" << dendl;
+  return ret;
 }
 
 void PG::generate_past_intervals()
@@ -1369,10 +1362,11 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       state_set(PG_STATE_DEGRADED);
 
     // all clean?
-    if (is_all_uptodate()) 
+    if (!needs_recovery()) {
       finish_recovery(t, tfin);
-    else {
+    } else {
       dout(10) << "activate not all replicas are uptodate, queueing recovery" << dendl;
+      state_set(PG_STATE_RECOVERING);
       osd->queue_for_recovery(this);
     }
 
@@ -1542,12 +1536,12 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
   state_clear(PG_STATE_BACKFILL);
+  state_clear(PG_STATE_RECOVERING);
 
-  // only clear DEGRADED (or mark CLEAN) if we have enough (or the
-  // desired number of) replicas.
-  if (acting.size() >= get_osdmap()->get_pg_size(info.pgid))
-    state_clear(PG_STATE_DEGRADED);
-  if (acting.size() == get_osdmap()->get_pg_size(info.pgid))
+  // only mark CLEAN if we have the desired number of replicas AND we
+  // are not remapped.
+  if (acting.size() == get_osdmap()->get_pg_size(info.pgid) &&
+      up == acting)
     state_set(PG_STATE_CLEAN);
 
   assert(info.last_complete == info.last_update);
@@ -1798,7 +1792,7 @@ void PG::clear_stats()
 void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
 	      ObjectStore::Transaction *t)
 {
-  dout(10) << "init role " << role << " up " << up << " acting " << acting
+  dout(10) << "init role " << role << " up " << newup << " acting " << newacting
 	   << " history " << history << dendl;
 
   set_role(role);
@@ -3486,6 +3480,11 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     info.stats.mapping_epoch = info.history.same_interval_since;
   }
 
+  if (up != acting)
+    state_set(PG_STATE_REMAPPED);
+  else
+    state_clear(PG_STATE_REMAPPED);
+
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
 
@@ -3788,6 +3787,15 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->close_section();
+  return discard_event();
+}
+
 void PG::RecoveryState::Started::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -3826,6 +3834,15 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
   pg->update_heartbeat_peers();
 
   return transit< Started >();
+}
+
+boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->close_section();
+  return discard_event();
 }
 
 void PG::RecoveryState::Reset::exit()
@@ -3926,6 +3943,41 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   return forward_event();
 }
 
+boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+
+  q.f->open_array_section("probing_osds");
+  for (set<int>::iterator p = prior_set->probe.begin(); p != prior_set->probe.end(); ++p)
+    q.f->dump_int("osd", *p);
+  q.f->close_section();
+
+  if (prior_set->pg_down)
+    q.f->dump_string("blocked", "peering is blocked due to down osds");
+
+  q.f->open_array_section("down_osds_we_would_probe");
+  for (set<int>::iterator p = prior_set->down.begin(); p != prior_set->down.end(); ++p)
+    q.f->dump_int("osd", *p);
+  q.f->close_section();
+
+  q.f->open_array_section("peering_blocked_by");
+  for (map<int,epoch_t>::iterator p = prior_set->blocked_by.begin();
+       p != prior_set->blocked_by.end();
+       p++) {
+    q.f->open_object_section("osd");
+    q.f->dump_int("osd", p->first);
+    q.f->dump_int("current_lost_at", p->second);
+    q.f->dump_string("comment", "starting or marking this osd lost may let us proceed");
+    q.f->close_section();
+  }
+  q.f->close_section();
+
+  q.f->close_section();
+  return forward_event();
+}
+
 void PG::RecoveryState::Peering::exit()
 {
   dout(10) << "Leaving Peering" << dendl;
@@ -3991,12 +4043,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->is_clean()) {
     dout(10) << "Active: queuing snap trim" << dendl;
     pg->queue_snap_trim();
-  }
-
-  if (pg->is_all_uptodate()) {
-    dout(10) << "Active: all up to date, going clean" << dendl;
-    pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
-			*context< RecoveryMachine >().get_context_list());
   }
 
   return forward_event();
@@ -4066,6 +4112,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
   int newest_update_osd;
 
+  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_RECOVERING);
+
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
@@ -4073,16 +4122,19 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
     return discard_event();
   }
 
-  if (pg->is_all_uptodate()) {
-    dout(10) << "recovery complete" << dendl;
-    pg->log.reset_recovery_pointers();
-    pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
-			*context< RecoveryMachine >().get_context_list());
-  } else {
-    dout(10) << "recovery not yet complete: some osds not up to date" << dendl;
-  }
-
+  assert(!pg->needs_recovery());
+  pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
+		      *context< RecoveryMachine >().get_context_list());
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->close_section();
+  return forward_event();
 }
 
 void PG::RecoveryState::Active::exit()
@@ -4149,6 +4201,15 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& 
   assert(query.query.type == pg_query_t::MISSING);
   pg->fulfill_log(query.from, query.query, query.query_epoch);
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->close_section();
+  return forward_event();
 }
 
 void PG::RecoveryState::ReplicaActive::exit()
@@ -4254,6 +4315,8 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
 
   if (pg->need_up_thru)
     pg->osd->queue_want_up_thru(pg->info.history.same_interval_since);
+
+  pg->update_stats();
 
   get_infos();
 }
@@ -4367,6 +4430,30 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+
+  q.f->open_array_section("requested_pf_info_from");
+  for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p) {
+    q.f->open_object_section("osd");
+    q.f->dump_int("osd", *p);
+    if (pg->peer_info.count(*p)) {
+      q.f->open_object_section("got_info");
+      pg->peer_info[*p].dump(q.f);
+      q.f->close_section();
+    }
+    q.f->close_section();
+  }
+  q.f->close_section();
+
+  q.f->close_section();
+  return forward_event();
+}
+
 void PG::RecoveryState::GetInfo::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4445,6 +4532,16 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
   return transit< GetMissing >();
 }
 
+boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->dump_int("newest_update_osd", newest_update_osd);
+  q.f->close_section();
+  return forward_event();
+}
+
 void PG::RecoveryState::GetLog::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4498,6 +4595,16 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MNoti
 {
   dout(10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->dump_string("comment", "waiting for pg acting set to change");
+  q.f->close_section();
+  return forward_event();
 }
 
 void PG::RecoveryState::WaitActingChange::exit()
@@ -4607,6 +4714,30 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   return discard_event();
 };
 
+boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+
+  q.f->open_array_section("peer_missing_requested");
+  for (set<int>::iterator p = peer_missing_requested.begin(); p != peer_missing_requested.end(); ++p) {
+    q.f->open_object_section("osd");
+    q.f->dump_int("osd", *p);
+    if (pg->peer_missing.count(*p)) {
+      q.f->open_object_section("got_missing");
+      pg->peer_missing[*p].dump(q.f);
+      q.f->close_section();
+    }
+    q.f->close_section();
+  }
+  q.f->close_section();
+
+  q.f->close_section();
+  return forward_event();
+}
+
 void PG::RecoveryState::GetMissing::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -4644,6 +4775,16 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
   //pg->osd->queue_for_recovery(pg);
 
   return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->dump_string("comment", "waiting for osdmap to reflect a new up_thru for this osd");
+  q.f->close_section();
+  return forward_event();
 }
 
 void PG::RecoveryState::WaitUpThru::exit()
@@ -4755,6 +4896,14 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
   machine.process_event(Initialize());
   end_handle();
 }
+
+void PG::RecoveryState::handle_query_state(Formatter *f)
+{
+  dout(10) << "handle_query_state" << dendl;
+  QueryState q(f);
+  machine.process_event(q);
+}
+
 
 /*---------------------------------------------------*/
 #undef dout_prefix
@@ -4912,13 +5061,13 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
     }
 
     // did a down osd in cur get (re)marked as lost?
-    map<int,epoch_t>::const_iterator p = blocked_by.find(o);
-    if (p != blocked_by.end()) {
+    map<int,epoch_t>::const_iterator r = blocked_by.find(o);
+    if (r != blocked_by.end()) {
       if (!osdmap->exists(o)) {
 	dout(10) << "affected_by_map osd." << o << " no longer exists" << dendl;
 	return true;
       }
-      if (osdmap->get_info(o).lost_at != p->second) {
+      if (osdmap->get_info(o).lost_at != r->second) {
 	dout(10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
 	return true;
       }

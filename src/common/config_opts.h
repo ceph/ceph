@@ -23,6 +23,7 @@ OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
 OPTION(daemonize, OPT_BOOL, false)
+OPTION(lockdep, OPT_BOOL, false)
 OPTION(admin_socket, OPT_STR, "")
 OPTION(log_file, OPT_STR, "")
 OPTION(log_sym_dir, OPT_STR, "")
@@ -298,6 +299,7 @@ OPTION(osd_max_notify_timeout, OPT_U32, 30) // max notify timeout in seconds
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
 OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in the pg log when trimming it
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
+OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds

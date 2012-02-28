@@ -50,8 +50,6 @@ enum {
 /** @endcond */
 /** @} */
 
-struct CephContext;
-
 /**
  * @typedef rados_t
  *
@@ -62,6 +60,19 @@ struct CephContext;
  * different cluster handles.
  */
 typedef void *rados_t;
+
+/**
+ * @tyepdef rados_config_t
+ *
+ * A handle for the ceph configuration context for the rados_t cluster
+ * instance.  This can be used to share configuration context/state
+ * (e.g., logging configuration) between librados instance.
+ *
+ * @warning The config context does not have independent reference
+ * counting.  As such, a rados_config_t handle retrieved from a given
+ * rados_t is only valid as long as that rados_t.
+ */
+typedef void *rados_config_t;
 
 /**
  * @typedef rados_ioctx_t
@@ -182,15 +193,13 @@ int rados_create(rados_t *cluster, const char * const id);
 /**
  * Initialize a cluster handle from an existing configuration.
  *
- * Copies all configuration, as retrieved by the C++ API.
- *
- * @note BUG: Since CephContext isn't accessible from the C API, this function is useless
+ * Share configuration state with another rados_t instance.
  *
  * @param cluster where to store the handle
  * @param cct_ the existing configuration to use
  * @returns 0 on success, negative error code on failure
  */
-int rados_create_with_context(rados_t *cluster, struct CephContext *cct_);
+int rados_create_with_context(rados_t *cluster, rados_config_t cct);
 
 /**
  * Connect to the cluster.
@@ -371,6 +380,16 @@ int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
 /**
+ * Get a configuration handle for a rados cluster handle
+ *
+ * This handle is valid only as long as the cluster handle is valid.
+ *
+ * @param cluster cluster handle
+ * @returns config handle for this cluster
+ */
+rados_config_t rados_cct(rados_t cluster);
+
+/**
  * Create an io context
  *
  * The io context allows you to perform operations within a particular
@@ -398,6 +417,14 @@ int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *io
  * @param io the io context to dispose of
  */
 void rados_ioctx_destroy(rados_ioctx_t io);
+
+/**
+ * Get configuration hadnle for a pool handle
+ *
+ * @param io pool handle
+ * @returns rados_config_t for this cluster
+ */
+rados_config_t rados_ioctx_cct(rados_ioctx_t io);
 
 /**
  * Get pool usage statistics

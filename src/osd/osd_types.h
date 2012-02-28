@@ -238,6 +238,8 @@ struct pg_t {
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
 
+  bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
+
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
@@ -538,10 +540,11 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
-//PG_STATE_SCANNING (1<<14) .. deprecated.
+#define PG_STATE_RECOVERING   (1<<14) // pg is recovering/migrating objects
 #define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
 #define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
+#define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
 
 std::string pg_state_string(int state);
 
@@ -658,7 +661,7 @@ struct pg_pool_t {
   unsigned get_lpg_num_mask() const { return lpg_num_mask; }
   unsigned get_lpgp_num_mask() const { return lpgp_num_mask; }
 
-  int calc_bits_of(int t);
+  static int calc_bits_of(int t);
   void calc_pg_masks();
 
   /*

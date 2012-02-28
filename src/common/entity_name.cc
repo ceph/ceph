@@ -108,6 +108,13 @@ set_id(const std::string &id_)
   set(type, id_);
 }
 
+void EntityName::set_name(entity_name_t n)
+{
+  char s[40];
+  sprintf(s, "%lld", (long long)n.num());
+  set(n.type(), s);
+}
+
 const char* EntityName::
 get_type_str() const
 {

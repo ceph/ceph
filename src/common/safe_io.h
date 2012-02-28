@@ -16,6 +16,7 @@
 #define CEPH_SAFE_IO
 
 #include "common/compiler_extensions.h"
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {

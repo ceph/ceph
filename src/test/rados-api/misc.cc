@@ -197,7 +197,7 @@ TEST(LibRadosMisc, Operate1PP) {
     o2.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
     o2.rmxattr("key1");
   }
-  ASSERT_EQ(1, ioctx.operate("foo", &o2));
+  ASSERT_EQ(0, ioctx.operate("foo", &o2));
   ObjectWriteOperation o3;
   {
     bufferlist bl;

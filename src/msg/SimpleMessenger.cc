@@ -729,6 +729,8 @@ int SimpleMessenger::Pipe::accept()
 	     << dendl;
     
     msgr->lock.Lock();
+    if (msgr->dispatch_queue.stop)
+      goto shutting_down;
 
     // note peer's type, flags
     set_peer_type(connect.host_type);
@@ -766,6 +768,9 @@ int SimpleMessenger::Pipe::accept()
       goto reply;
     }
     msgr->lock.Lock();
+    if (msgr->dispatch_queue.stop)
+      goto shutting_down;
+
     
     // existing?
     if (msgr->rank_pipe.count(peer_addr)) {
@@ -946,6 +951,8 @@ int SimpleMessenger::Pipe::accept()
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
 
   // ok!
+  if (msgr->dispatch_queue.stop)
+    goto shutting_down;
   register_pipe();
   msgr->lock.Unlock();
 
@@ -985,14 +992,24 @@ int SimpleMessenger::Pipe::accept()
 
  fail_unlocked:
   pipe_lock.Lock();
-  bool queued = is_queued();
-  if (queued)
-    state = STATE_CONNECTING;
-  else
-    state = STATE_CLOSED;
+  {
+    bool queued = is_queued();
+    if (queued && state != STATE_CLOSED)
+      state = STATE_CONNECTING;
+    else
+      state = STATE_CLOSED;
+    fault();
+    if (queued)
+      start_writer();
+  }
+  pipe_lock.Unlock();
+  return -1;
+
+ shutting_down:
+  msgr->lock.Unlock();
+  pipe_lock.Lock();
+  state = STATE_CLOSED;
   fault();
-  if (queued)
-    start_writer();
   pipe_lock.Unlock();
   return -1;
 }
@@ -2649,6 +2666,10 @@ void SimpleMessenger::wait()
     wait_cond.Wait(lock);
     ldout(cct,10) << "wait: woke up" << dendl;
   }
+
+  ldout(cct,10) << "wait: join dispatch thread" << dendl;
+  dispatch_thread.join();
+
   ldout(cct,10) << "wait: everything stopped" << dendl;
   lock.Unlock();
   

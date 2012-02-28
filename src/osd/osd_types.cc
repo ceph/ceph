@@ -180,6 +180,46 @@ bool pg_t::parse(const char *s)
   return true;
 }
 
+bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
+{
+  assert(m_seed < old_pg_num);
+  if (new_pg_num <= old_pg_num)
+    return false;
+
+  bool split = false;
+  if (true) {
+    int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+    int old_mask = (1 << old_bits) - 1;
+    for (int n = 1; ; n++) {
+      int next_bit = (n << (old_bits-1));
+      unsigned s = next_bit | m_seed;
+
+      if (s < old_pg_num || s == m_seed)
+	continue;
+      if (s >= new_pg_num)
+	break;
+      if ((unsigned)ceph_stable_mod(s, old_pg_num, old_mask) == m_seed) {
+	split = true;
+	if (children)
+	  children->insert(pg_t(s, m_pool, m_preferred));
+      }
+    }
+  }
+  if (false) {
+    // brute force
+    int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+    int old_mask = (1 << old_bits) - 1;
+    for (unsigned x = old_pg_num; x < new_pg_num; ++x) {
+      unsigned o = ceph_stable_mod(x, old_pg_num, old_mask);
+      if (o == m_seed) {
+	split = true;
+	children->insert(pg_t(x, m_pool, m_preferred));
+      }
+    }
+  }
+  return split;
+}
+
 void pg_t::dump(Formatter *f) const
 {
   f->dump_unsigned("pool", m_pool);
@@ -320,6 +360,8 @@ std::string pg_state_string(int state)
     oss << "active+";
   if (state & PG_STATE_CLEAN)
     oss << "clean+";
+  if (state & PG_STATE_RECOVERING)
+    oss << "recovering+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_REPLAY)
@@ -330,6 +372,8 @@ std::string pg_state_string(int state)
     oss << "splitting+";
   if (state & PG_STATE_DEGRADED)
     oss << "degraded+";
+  if (state & PG_STATE_REMAPPED)
+    oss << "remapped+";
   if (state & PG_STATE_SCRUBBING)
     oss << "scrubbing+";
   if (state & PG_STATE_SCRUBQ)
@@ -584,6 +628,28 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
     ::encode_nohead(snaps, bl);
     removed_snaps.encode_nohead(bl);
+    return;
+  }
+
+  if ((features & CEPH_FEATURE_OSDENC) == 0) {
+    __u8 struct_v = 4;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+    ::encode(snaps, bl);
+    ::encode(removed_snaps, bl);
+    ::encode(auid, bl);
+    ::encode(flags, bl);
+    ::encode(crash_replay_interval, bl);
     return;
   }
 
@@ -1951,8 +2017,12 @@ void object_info_t::decode(bufferlist::iterator& bl)
 
 void object_info_t::dump(Formatter *f) const
 {
-  f->dump_stream("oid") << soid;
-  f->dump_stream("locator") << oloc;
+  f->open_object_section("oid");
+  soid.dump(f);
+  f->close_section();
+  f->open_object_section("locator");
+  oloc.dump(f);
+  f->close_section();
   f->dump_string("category", category);
   f->dump_stream("version") << version;
   f->dump_stream("prior_version") << prior_version;

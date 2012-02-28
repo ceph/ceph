@@ -1,4 +1,4 @@
-.TH "RADOSGW" "8" "September 22, 2011" "dev" "Ceph"
+.TH "RADOSGW" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 radosgw \- rados REST gateway
 .
@@ -61,11 +61,11 @@ Specify a unix domain socket path.
 .UNINDENT
 .SH CONFIGURATION
 .sp
-Currently it's the easiest to use the RADOS Gateway with Apache and mod_fastcgi
+Currently it\(aqs the easiest to use the RADOS Gateway with Apache and mod_fastcgi:
 .sp
 .nf
 .ft C
-FastCgiExternalServer /var/www/s3gw.fcgi -socket /tmp/radosgw.sock
+FastCgiExternalServer /var/www/s3gw.fcgi \-socket /tmp/radosgw.sock
 
 <VirtualHost *:80>
   ServerName rgw.example1.com
@@ -93,17 +93,18 @@ FastCgiExternalServer /var/www/s3gw.fcgi -socket /tmp/radosgw.sock
 .ft P
 .fi
 .sp
-And the corresponding radosgw script (/var/www/s3gw.fgci):
+And the corresponding radosgw script (/var/www/s3gw.fcgi):
 .sp
 .nf
 .ft C
 #!/bin/sh
-exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
+exec /usr/bin/radosgw \-c /etc/ceph/ceph.conf \-n client.radosgw.gateway
 .ft P
 .fi
 .sp
-The radosgw daemon is a standalone process which needs a configuration section in the ceph.conf
-The section name should start with 'client.radosgw.' as specified in /etc/init.d/radosgw
+The radosgw daemon is a standalone process which needs a configuration
+section in the ceph.conf The section name should start with
+\(aqclient.radosgw.\(aq as specified in /etc/init.d/radosgw:
 .sp
 .nf
 .ft C
@@ -114,24 +115,25 @@ The section name should start with 'client.radosgw.' as specified in /etc/init.d
 .ft P
 .fi
 .sp
-You will also have to generate a key for the radosgw to use for authentication with the cluster
+You will also have to generate a key for the radosgw to use for
+authentication with the cluster:
 .sp
 .nf
 .ft C
-ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
-ceph-authtool -n client.radosgw.gateway --cap mon 'allow r' --cap osd 'allow rwx' --cap mds 'allow' /etc/ceph/keyring.radosgw.gateway
+ceph\-authtool \-C \-n client.radosgw.gateway \-\-gen\-key /etc/ceph/keyring.radosgw.gateway
+ceph\-authtool \-n client.radosgw.gateway \-\-cap mon \(aqallow r\(aq \-\-cap osd \(aqallow rwx\(aq \-\-cap mds \(aqallow\(aq /etc/ceph/keyring.radosgw.gateway
 .ft P
 .fi
 .sp
-And add the key to the auth entries
+And add the key to the auth entries:
 .sp
 .nf
 .ft C
-ceph auth add client.radosgw.gateway --in-file=keyring.radosgw.gateway
+ceph auth add client.radosgw.gateway \-\-in\-file=keyring.radosgw.gateway
 .ft P
 .fi
 .sp
-Now you can start Apache and the radosgw daemon
+Now you can start Apache and the radosgw daemon:
 .sp
 .nf
 .ft C

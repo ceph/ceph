@@ -171,16 +171,6 @@ psim_SOURCES = psim.cc
 psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += psim
 
-test_addrs_SOURCES = test/test_addrs.cc
-test_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-test_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += test_addrs
-
-test_str_list_SOURCES = test/test_str_list.cc
-test_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-test_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += test_str_list
-
 test_mutate_SOURCES = test/test_mutate.cc
 test_mutate_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
@@ -488,6 +478,17 @@ unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
 check_PROGRAMS += unittest_encoding
 
+unittest_addrs_SOURCES = test/test_addrs.cc
+unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_addrs
+
+unittest_str_list_SOURCES = test/test_str_list.cc
+unittest_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_str_list
+
+
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_base64_LDADD = libcephfs.la -lm ${UNITTEST_LDADD}
@@ -499,6 +500,11 @@ unittest_ceph_argparse_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_ceph_argparse_LDADD = libglobal.la ${UNITTEST_LDADD}
 unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_argparse
+
+unittest_osd_types_SOURCES = test/test_osd_types.cc libcommon.la
+unittest_osd_types_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_osd_types_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_osd_types
 
 unittest_gather_SOURCES = test/gather.cc
 unittest_gather_LDADD = ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
@@ -774,7 +780,9 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
-	$(ceph_tool_gui_DATA)
+	$(ceph_tool_gui_DATA) \
+	$(srcdir)/test/encoding/readable.sh \
+	$(srcdir)/test/encoding/check-generated.sh
 
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
@@ -838,10 +846,17 @@ clean-local:
 	-rm *.so *.gcno *.gcda
 
 # libs
+
+libjson_spirit_la_SOURCES = \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp
+noinst_LTLIBRARIES += libjson_spirit.la
+
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libcommon_la_LDFLAGS = -lrt
+libcommon_la_LDFLAGS = -lrt libjson_spirit.la
 noinst_LTLIBRARIES += libcommon.la
 
 libglobal_la_SOURCES = \
@@ -859,7 +874,9 @@ crush_files = \
 	crush/mapper.c \
 	crush/crush.c \
 	crush/hash.c \
-	crush/CrushWrapper.cc
+	crush/CrushWrapper.cc \
+	crush/CrushCompiler.cc \
+	crush/CrushTester.cc
 
 # this list ommits the ceph_ver.c file
 libcommon_files = \
@@ -1144,6 +1161,8 @@ noinst_HEADERS = \
 	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
+	crush/CrushCompiler.h\
+	crush/CrushTester.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

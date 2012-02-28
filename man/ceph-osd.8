@@ -1,4 +1,4 @@
-.TH "CEPH-OSD" "8" "September 22, 2011" "dev" "Ceph"
+.TH "CEPH-OSD" "8" "February 17, 2012" "dev" "Ceph"
 .SH NAME
 ceph-osd \- ceph object storage daemon
 .
@@ -96,6 +96,24 @@ Flush the journal to permanent store. This runs in the foreground
 so you know when it\(aqs completed. This can be useful if you want to
 resize the journal or need to otherwise destroy it: this guarantees
 you won\(aqt lose data.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-get\-cluster\-fsid
+Print the cluster fsid (uuid) and exit.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-get\-osd\-fsid
+Print the OSD\(aqs fsid and exit.  The OSD\(aqs uuid is generated at
+\-\-mkfs time and is thus unique to a particular instantiation of
+this OSD.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-get\-journal\-fsid
+Print the journal\(aqs uuid.  The journal fsid is set to match the OSD
+fsid at \-\-mkfs time.
 .UNINDENT
 .INDENT 0.0
 .TP

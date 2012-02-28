@@ -20,6 +20,10 @@ TYPE(entity_addr_t)
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
 TYPE(OSDMap)
+TYPE(OSDMap::Incremental)
+
+#include "crush/CrushWrapper.h"
+TYPE(CrushWrapper)
 
 #include "osd/PG.h"
 TYPE(PG::Interval)
