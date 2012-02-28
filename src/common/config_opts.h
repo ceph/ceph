@@ -100,6 +100,7 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between 
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
+OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
