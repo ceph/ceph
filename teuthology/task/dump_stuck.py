@@ -32,6 +32,11 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
 def task(ctx, config):
     """
     Test the dump_stuck command.
+
+    The ceph configuration should include::
+
+        mon_osd_report_timeout = 90
+        mon_pg_stuck_threshold = 10
     """
     assert config is None, \
         'dump_stuck requires no configuration'
