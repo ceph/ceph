@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS = ocf
-DIST_SUBDIRS = gtest ocf
+DIST_SUBDIRS = gtest ocf leveldb
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
@@ -1018,7 +1018,7 @@ libos_la_SOURCES = \
 	os/IndexManager.cc \
 	os/FlatIndex.cc
 libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libos_la_LIBADD = libglobal.la
+libos_la_LIBADD = libglobal.la leveldb/libleveldb.a
 if WITH_LIBAIO
 libos_la_LIBADD += -laio
 endif

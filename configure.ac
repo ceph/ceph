@@ -11,6 +11,7 @@ AC_PREREQ(2.59)
 AC_INIT([ceph], [0.42.2], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
+AC_CONFIG_SUBDIRS([src/leveldb])
 
 # Environment
 AC_CANONICAL_HOST
