@@ -67,7 +67,11 @@ case "$1" in
 	    start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
 	done
         ;;
-    restart|reload|force-reload)
+    reload)
+	echo "Reloading $name..."
+	start-stop-daemon --signal HUP -x $RADOSGW --oknodo
+	;;
+    restart|force-reload)
         $0 stop
         $0 start
         ;;
