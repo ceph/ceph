@@ -4432,7 +4432,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
 
-  q.f->open_array_section("requested_pf_info_from");
+  q.f->open_array_section("requested_info_from");
   for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p) {
     q.f->open_object_section("osd");
     q.f->dump_int("osd", *p);
