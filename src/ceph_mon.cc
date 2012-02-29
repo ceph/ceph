@@ -416,6 +416,10 @@ int main(int argc, const char **argv)
   mon->init();
   messenger->wait();
 
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_mon_signal);
+  unregister_async_signal_handler(SIGTERM, handle_mon_signal);
+
   store.umount();
   delete mon;
   messenger->destroy();
