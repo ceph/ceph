@@ -668,7 +668,7 @@ int OSD::init()
     derr << "OSD::init() : unable to read osd superblock" << dendl;
     store->umount();
     delete store;
-    return -1;
+    return -EINVAL;
   }
 
   class_handler = new ClassHandler();
@@ -678,7 +678,7 @@ int OSD::init()
   assert_warn(!osdmap);
   if (osdmap) {
     derr << "OSD::init: unable to read current osdmap" << dendl;
-    return -1;
+    return -EINVAL;
   }
   osdmap = get_map(superblock.current_epoch);
 
