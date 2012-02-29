@@ -19,6 +19,7 @@
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -380,6 +381,9 @@ int main(int argc, const char **argv)
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
   
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+
   FCGX_Init();
 
   sighandler_term = signal(SIGTERM, godown_alarm);
@@ -403,6 +407,8 @@ int main(int argc, const char **argv)
   process.run();
 
   rgw_perf_stop(g_ceph_context);
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
 
   return 0;
 }

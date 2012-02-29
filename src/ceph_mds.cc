@@ -289,6 +289,7 @@ int main(int argc, const char **argv)
 
   messenger->wait();
 
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mds_signal);
   unregister_async_signal_handler(SIGTERM, handle_mds_signal);
 
