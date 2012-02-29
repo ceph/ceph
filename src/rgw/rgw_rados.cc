@@ -1006,6 +1006,8 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
 
   RGWObjState *state;
   r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
+  if (r == -ECANCELED)
+    return 0;
   if (r < 0)
     return r;
 
@@ -1043,9 +1045,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
 int RGWRados::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 {
   int r;
-  do {
-    r = delete_obj_impl(ctx, obj, sync);
-  } while (r == -ECANCELED);
+
+  r = delete_obj_impl(ctx, obj, sync);
+  if (r == -ECANCELED)
+    r = 0;
+
   return r;
 }
 
@@ -1244,9 +1248,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   }
 
   int r;
-  do {
-    r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
-  } while (r == -ECANCELED);
+  r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
 
   return r;
 }
@@ -1587,6 +1589,8 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   }
   RGWObjState *state;
   r = prepare_atomic_for_write(rctx, dst_obj, io_ctx, dst_oid, op, &state);
+  if (r == -ECANCELED)
+    return 0;
   if (r < 0)
     return r;
 
@@ -1665,9 +1669,11 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         pair<string, bufferlist> *xattr_cond)
 {
   int r;
-  do {
-    r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
-  } while (ctx && r == -ECANCELED);
+
+  r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
+  if (r == -ECANCELED)
+    r = 0;
+
   return r;
 }
 
