@@ -2835,13 +2835,17 @@ void SimpleMessenger::mark_disposable(Connection *con)
 
 void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
+  // be careful here: multiple threads may block here, and readers of
+  // ms_addr do NOT hold any lock.
   lock.Lock();
-  int port = ms_addr.get_port();
-  ms_addr.addr = peer_addr_for_me.addr;
-  ms_addr.set_port(port);
-  ldout(cct,1) << "learned my addr " << ms_addr << dendl;
-  need_addr = false;
-  init_local_pipe();
+  if (need_addr) {
+    entity_addr_t t = peer_addr_for_me;
+    t.set_port(ms_addr.get_port());
+    ms_addr.addr = t.addr;
+    ldout(cct,1) << "learned my addr " << ms_addr << dendl;
+    need_addr = false;
+    init_local_pipe();
+  }
   lock.Unlock();
 }
 
