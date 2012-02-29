@@ -3784,6 +3784,7 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
     post_event(advmap);
     return transit< Reset >();
   }
+  pg->remove_down_peer_info(advmap.osdmap);
   return discard_event();
 }
 
@@ -3815,6 +3816,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
+  pg->remove_down_peer_info(advmap.osdmap);
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
@@ -3900,13 +3902,6 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   pg->update_stats();
   return discard_event();
-}
-
-boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap) 
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->remove_down_peer_info(advmap.osdmap);
-  return forward_event();
 }
 
 void PG::RecoveryState::Primary::exit()

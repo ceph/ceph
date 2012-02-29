@@ -1049,12 +1049,10 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< NeedActingChange, WaitActingChange >,
 	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);
-      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MNotifyRec&);
     };
 
