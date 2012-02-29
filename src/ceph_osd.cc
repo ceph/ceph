@@ -422,6 +422,10 @@ int main(int argc, const char **argv)
   messenger_hbout->wait();
   cluster_messenger->wait();
 
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_osd_signal);
+  unregister_async_signal_handler(SIGTERM, handle_osd_signal);
+
   // done
   delete osd;
   client_messenger->destroy();
