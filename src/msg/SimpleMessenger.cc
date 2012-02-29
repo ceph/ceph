@@ -836,6 +836,13 @@ int SimpleMessenger::Pipe::accept()
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
+	  if (!(existing->state == STATE_CONNECTING ||
+		existing->state == STATE_STANDBY ||
+		existing->state == STATE_WAIT))
+	    lderr(msgr->cct) << "accept race bad state, would replace, existing=" << existing->state
+			     << " " << existing << ".cseq=" << existing->connect_seq
+			     << " == " << connect.connect_seq
+			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
 		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
@@ -845,6 +852,12 @@ int SimpleMessenger::Pipe::accept()
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > msgr->ms_addr);
+	  if (!(existing->state == STATE_CONNECTING ||
+		existing->state == STATE_OPEN))
+	    lderr(msgr->cct) << "accept race bad state, would send wait, existing=" << existing->state
+			     << " " << existing << ".cseq=" << existing->connect_seq
+			     << " == " << connect.connect_seq
+			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
 		 existing->state == STATE_OPEN); // this will win
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
