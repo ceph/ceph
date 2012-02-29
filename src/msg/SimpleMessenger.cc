@@ -602,9 +602,7 @@ void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
   
  halt:
   // don't want to put local-delivery signals
-  // this magic number should be larger than
-  // the size of the D_CONNECT et al enum
-  if (m>(void *)5) {
+  if (m>(void *)DispatchQueue::D_NUM_CODES) {
     msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
   }
@@ -1425,18 +1423,27 @@ void SimpleMessenger::Pipe::discard_queue()
   q.qlen.sub(in_qlen);
 
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
+    if (*p < (void *) DispatchQueue::D_NUM_CODES) {
+      continue; // skip non-Message dispatch codes
+    }
     ldout(msgr->cct,20) << "  discard " << *p << dendl;
     (*p)->put();
   }
   sent.clear();
   for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
+        continue; // skip non-Message dispatch codes
+      }
       ldout(msgr->cct,20) << "  discard " << *r << dendl;
       (*r)->put();
     }
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
+        continue; // skip non-Message dispatch codes
+      }
       msgr->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
       ldout(msgr->cct,20) << "  discard " << *r << dendl;
       (*r)->put();
@@ -2710,6 +2717,10 @@ void SimpleMessenger::wait()
       reaper_cond.Wait(lock);
       reaper();
     }
+
+    dispatch_queue.local_pipe->pipe_lock.Lock();
+    dispatch_queue.local_pipe->discard_queue();
+    dispatch_queue.local_pipe->pipe_lock.Unlock();
   }
   lock.Unlock();
 

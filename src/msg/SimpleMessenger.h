@@ -326,7 +326,7 @@ private:
     map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
     atomic_t qlen;
     
-    enum { D_CONNECT, D_BAD_REMOTE_RESET, D_BAD_RESET };
+    enum { D_CONNECT = 0, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
     list<Connection*> connect_q;
     list<Connection*> remote_reset_q;
     list<Connection*> reset_q;
@@ -362,7 +362,7 @@ private:
       lock.Unlock();
       local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
     }
-    
+
     DispatchQueue() :
       lock("SimpleMessenger::DispatchQeueu::lock"), 
       stop(false),
