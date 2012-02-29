@@ -3087,7 +3087,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 				      ss)) {
 	    cur_inconsistent.insert(j->first);
 	    errorstream << info.pgid << " osd." << acting[j->first]
-			<< ": soid " << *k << ss.str() << std::endl;
+			<< ": soid " << *k << " " << ss.str() << std::endl;
 	  }
 	}
       } else {
