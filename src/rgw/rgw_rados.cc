@@ -1006,8 +1006,6 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
 
   RGWObjState *state;
   r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
-  if (r == -ECANCELED)
-    return 0;
   if (r < 0)
     return r;
 
@@ -1589,8 +1587,6 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   }
   RGWObjState *state;
   r = prepare_atomic_for_write(rctx, dst_obj, io_ctx, dst_oid, op, &state);
-  if (r == -ECANCELED)
-    return 0;
   if (r < 0)
     return r;
 
