@@ -645,7 +645,7 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
 int RGWPutObjProcessor_Plain::complete(string& etag, map<string, bufferlist>& attrs)
 {
   int r = rgwstore->put_obj_meta(s->obj_ctx, obj, data.length(), NULL, attrs,
-                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &data);
+                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &data, NULL);
   return r;
 }
 
@@ -662,7 +662,7 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 
 protected:
   rgw_obj obj;
-  rgw_obj shadow_obj;
+  uint64_t obj_len;
 
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle);
@@ -675,9 +675,12 @@ protected:
 
 int RGWPutObjProcessor_Aio::handle_data(bufferlist& bl, off_t ofs, void **phandle)
 {
+  if ((uint64_t)ofs + bl.length() > obj_len)
+    obj_len = ofs + bl.length();
+
   // For the first call pass -1 as the offset to
   // do a write_full.
-  int r = rgwstore->aio_put_obj_data(s->obj_ctx, shadow_obj,
+  int r = rgwstore->aio_put_obj_data(NULL, obj,
                                      bl,
                                      ((ofs != 0) ? ofs : -1),
                                      false, phandle);
@@ -747,6 +750,7 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
   bufferlist first_chunk;
+  rgw_obj head_obj;
 protected:
   int prepare(struct req_state *s);
   int complete(string& etag, map<string, bufferlist>& attrs);
@@ -772,23 +776,30 @@ int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
   RGWPutObjProcessor::prepare(s);
 
   string oid = s->object_str;
-  obj.init(s->bucket, s->object_str);
+  head_obj.init(s->bucket, s->object_str);
 
-  shadow_obj.set_ns(shadow_ns);
+  obj.set_ns(shadow_ns);
 
   char buf[33];
   gen_rand_alphanumeric(buf, sizeof(buf) - 1);
   oid.append("_");
   oid.append(buf);
-  shadow_obj.init(s->bucket, oid);
+  obj.init(s->bucket, oid);
 
   return 0;
 }
 
 int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, first_chunk.length(), NULL, attrs,
-                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &first_chunk);
+  RGWObjManifest manifest;
+  manifest.objs[0] = head_obj;
+  if (obj_len > RGW_MAX_CHUNK_SIZE)
+    manifest.objs[RGW_MAX_CHUNK_SIZE] = obj;
+
+  rgwstore->set_atomic(s->obj_ctx, head_obj);
+
+  int r = rgwstore->put_obj_meta(s->obj_ctx, head_obj, obj_len, NULL, attrs,
+                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &first_chunk, &manifest);
 
   return r;
 }
@@ -827,7 +838,7 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
 
 int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL);
+  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -1359,7 +1370,7 @@ void RGWInitMultipart::execute()
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL);
+    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL, NULL);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1508,7 +1519,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, NULL);
   if (ret < 0)
     goto done;
   

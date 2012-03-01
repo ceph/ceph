@@ -18,13 +18,15 @@ struct RGWObjState {
   uint64_t size;
   time_t mtime;
   bufferlist obj_tag;
+  RGWObjManifest manifest;
+  bool has_manifest;
   string shadow_obj;
   bool has_data;
   bufferlist data;
   bool prefetch_data;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), prefetch_data(false) {}
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), has_manifest(false), prefetch_data(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -86,6 +88,7 @@ struct RGWRadosCtx {
     return 0;
   }
 };
+
   
 class RGWRados  : public RGWAccess
 {
@@ -144,6 +147,7 @@ class RGWRados  : public RGWAccess
                  bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
   int delete_obj_impl(void *ctx, rgw_obj& src_obj, bool sync);
+  int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, bool exclusive);
@@ -196,7 +200,8 @@ public:
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-              map<std::string, bufferlist>* rmattrs, const bufferlist *data);
+              map<std::string, bufferlist>* rmattrs, const bufferlist *data,
+              RGWObjManifest *manifest);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,

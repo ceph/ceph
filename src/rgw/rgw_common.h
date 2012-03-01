@@ -55,6 +55,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 #define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
+#define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
@@ -843,6 +844,11 @@ public:
       ::decode(bucket, bl);
   }
 
+  bool operator==(const rgw_obj& o) const {
+    return (object.compare(o.object) == 0) &&
+           (bucket.name.compare(o.bucket.name) == 0) &&
+           (ns.compare(o.ns) == 0);
+  }
   bool operator<(const rgw_obj& o) const {
     int r = bucket.name.compare(o.bucket.name);
     if (r == 0) {

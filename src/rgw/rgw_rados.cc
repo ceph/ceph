@@ -642,20 +642,31 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int aui
 int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                   map<string, bufferlist>* rmattrs,
-                  const bufferlist *data)
+                  const bufferlist *data,
+                  RGWObjManifest *manifest)
 {
   rgw_bucket bucket;
   std::string oid, key;
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   librados::IoCtx io_ctx;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
 
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
 
+
   io_ctx.locator_set_key(key);
 
   ObjectWriteOperation op;
+
+  RGWObjState *state = NULL;
+
+  if (!exclusive) {
+    r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
+    if (r < 0)
+      return r;
+  }
 
   op.create(exclusive);
 
@@ -676,6 +687,12 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
       const string& name = iter->first;
       op.rmxattr(name.c_str());
     }
+  }
+
+  if (manifest) {
+    bufferlist bl;
+    ::encode(*manifest, bl);
+    op.setxattr(RGW_ATTR_MANIFEST, bl);
   }
 
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
@@ -710,9 +727,17 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
 
   uint64_t epoch = io_ctx.get_last_version();
 
+  r = complete_atomic_overwrite(rctx, state, obj);
+  if (r < 0) {
+    dout(0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
+  }
+
   utime_t ut = ceph_clock_now(g_ceph_context);
   r = complete_update_index(bucket, obj.object, tag, epoch, size,
                             ut, etag, content_type, &acl_bl, category);
+  if (r < 0)
+    return r;
+
 
   if (mtime) {
     r = io_ctx.stat(oid, NULL, mtime);
@@ -983,6 +1008,24 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
   return 0;
 }
 
+int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj)
+{
+  if (!state || !state->has_manifest)
+    return 0;
+
+  map<uint64_t, rgw_obj>::iterator iter;
+  for (iter = state->manifest.objs.begin(); iter != state->manifest.objs.end(); ++iter) {
+    rgw_obj& mobj = iter->second;
+    if (mobj == obj)
+      continue;
+    int ret = rctx->notify_intent(mobj, DEL_OBJ);
+    if (ret < 0) {
+      dout(0) << "WARNING: failed to log intent ret=" << ret << dendl;
+    }
+  }
+  return 0;
+}
+
 /**
  * Delete an object.
  * bucket: name of the bucket storing the object
@@ -1018,10 +1061,18 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
     if (r < 0)
       return r;
     r = io_ctx.operate(oid, &op);
+    bool removed = (r >= 0);
 
     if ((r >= 0 || r == -ENOENT) && bucket.marker.size()) {
       uint64_t epoch = io_ctx.get_last_version();
       r = complete_update_index_del(bucket, obj.object, tag, epoch);
+    }
+    if (removed) {
+      int ret = complete_atomic_overwrite(rctx, state, obj);
+      if (ret < 0) {
+        dout(0) << "ERROR: complete_atomic_removal returned ret=" << ret << dendl;
+      }
+      /* other than that, no need to propagate error */
     }
   } else {
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
@@ -1079,6 +1130,21 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     s->shadow_obj[bl.length()] = '\0';
   }
   s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
+  bufferlist manifest_bl = s->attrset[RGW_ATTR_MANIFEST];
+  if (manifest_bl.length()) {
+    bufferlist::iterator miter = manifest_bl.begin();
+    try {
+      ::decode(s->manifest, miter);
+      s->has_manifest = true;
+    } catch (buffer::error& err) {
+      dout(20) << "ERROR: couldn't decode manifest" << dendl;
+      return -EIO;
+    }
+    map<uint64_t, rgw_obj>::iterator mi;
+    for (mi = s->manifest.objs.begin(); mi != s->manifest.objs.end(); ++mi) {
+      dout(0) << "manifest: ofs=" << mi->first << " obj=" << mi->second << dendl;
+    }
+  }
   if (s->obj_tag.length())
     dout(20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
   else
@@ -1168,7 +1234,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
 
   RGWObjState *state = *pstate;
 
-  bool need_guard = (state->obj_tag.length() != 0);
+  bool need_guard = state->has_manifest || (state->obj_tag.length() != 0);
 
   if (!state->is_atomic) {
     dout(20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
@@ -1179,9 +1245,11 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       state->shadow_obj.size() == 0) {
     dout(10) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
     // FIXME: need to test object does not exist
+  } else if (state->has_manifest) {
+    dout(10) << "obj contains manifest" << dendl;
   } else if (state->size <= RGW_MAX_CHUNK_SIZE) {
     dout(10) << "not cloning object, object size (" << state->size << ")" << " <= chunk size" << dendl;
-  }else {
+  } else {
     dout(10) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
     rgw_obj dest_obj(obj.bucket, state->shadow_obj);
     dest_obj.set_ns(shadow_ns);
