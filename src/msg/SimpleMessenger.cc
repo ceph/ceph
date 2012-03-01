@@ -2468,38 +2468,6 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
 }
 
-
-
-/* register_entity 
- */
-bool SimpleMessenger::register_entity(entity_name_t name)
-{
-  ldout(cct,10) << "register_entity " << name << dendl;
-  lock.Lock();
-  
-  if (!destination_stopped) { //already have a working entity set
-    lock.Unlock();
-    return false;
-  }
-
-  // set it up
-  Messenger::set_myname(name);
-  // now i know my type.
-  if (my_type >= 0)
-    assert(my_type == name.type());
-  else
-    my_type = name.type();
-
-  destination_stopped = false;
-
-  ldout(cct,10) << "register_entity " << name << " at " << get_myaddr() << dendl;
-
-  msgr->init_local_pipe();
-
-  lock.Unlock();
-  return true;
-}
-
 void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
 { 
   lock.Lock();

@@ -937,7 +937,7 @@ int librados::RadosClient::connect()
     goto out;
 
   err = -ENOMEM;
-  messenger = new SimpleMessenger(cct);
+  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1));
   if (!messenger)
     goto out;
 
@@ -948,7 +948,6 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
-  messenger->register_entity(entity_name_t::CLIENT(-1));
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;

@@ -65,7 +65,6 @@ void Resetter::init(int rank)
 
   objecter->set_client_incarnation(0);
 
-  messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(this);
   messenger->start_with_nonce(getpid());
 

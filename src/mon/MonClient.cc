@@ -223,8 +223,7 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   SimpleMessenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = new SimpleMessenger(cct);
-    smessenger->register_entity(entity_name_t::CLIENT(-1));
+    messenger = smessenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1));
     messenger->add_dispatcher_head(this);
     smessenger->start_with_nonce(getpid());
     temp_msgr = true; 

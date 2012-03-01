@@ -300,10 +300,10 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
@@ -331,11 +331,6 @@ int main(int argc, const char **argv)
        << " " << ((g_conf->osd_journal.empty()) ?
 		    "(no journal)" : g_conf->osd_journal)
        << std::endl;
-
-  client_messenger->register_entity(entity_name_t::OSD(whoami));
-  cluster_messenger->register_entity(entity_name_t::OSD(whoami));
-  messenger_hbin->register_entity(entity_name_t::OSD(whoami));
-  messenger_hbout->register_entity(entity_name_t::OSD(whoami));
 
   Throttle client_throttler(g_conf->osd_client_message_size_cap);
 

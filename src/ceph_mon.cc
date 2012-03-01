@@ -366,10 +366,10 @@ int main(int argc, const char **argv)
   }
 
   // bind
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
-  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
-
   int rank = monmap.get_rank(g_conf->name.get_id());
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
+                                                   entity_name_t::MON(rank));
+  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
 
   global_print_banner();
 
@@ -384,7 +384,6 @@ int main(int argc, const char **argv)
     return 1;
 
   // start monitor
-  messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 

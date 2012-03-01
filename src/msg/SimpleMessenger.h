@@ -507,12 +507,12 @@ private:
   int get_proto_version(int peer_type, bool connect);
 
 public:
-  SimpleMessenger(CephContext *cct) :
-    Messenger(cct, entity_name_t()),
+  SimpleMessenger(CephContext *cct, entity_name_t name) :
+    Messenger(cct, name),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    destination_stopped(true), my_type(-1),
+    destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
     dispatch_thread(this), msgr(this),
@@ -521,6 +521,7 @@ public:
   {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
+    init_local_pipe();
   }
   ~SimpleMessenger() {
     delete dispatch_queue.local_pipe;
@@ -554,8 +555,6 @@ public:
   AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
 			 bool& isvalid);
-
-  bool register_entity(entity_name_t addr);
 
   void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
   void submit_message(Message *m, Pipe *pipe);

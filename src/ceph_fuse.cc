@@ -90,8 +90,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     return -1;
 
   // start up network
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
-  messenger->register_entity(entity_name_t::CLIENT());
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context, entity_name_t::CLIENT());
   Client *client = new Client(messenger, &mc);
   if (filer_flags) {
     client->set_filer_flags(filer_flags);
