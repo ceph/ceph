@@ -212,6 +212,41 @@ void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, 
   o->getxattr(name, pbl, prval);
 }
 
+void librados::ObjectReadOperation::omap_get_vals(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_vals(start_after, max_return, out_vals, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_keys(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::set<std::string> *out_keys,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_keys(start_after, max_return, out_keys, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_header(bl, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals_by_key(
+  const std::set<std::string> &keys,
+  std::map<std::string, bufferlist> *map,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_vals_by_key(keys, map, prval);
+}
+
 void librados::ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -301,6 +336,33 @@ void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->clone_range(src_oid, src_off, len, dst_off);
+}
+
+void librados::ObjectWriteOperation::omap_set(
+  const map<string, bufferlist> &map)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_set(map);
+}
+
+void librados::ObjectWriteOperation::omap_set_header(const bufferlist &bl)
+{
+  bufferlist c = bl;
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_set_header(c);
+}
+
+void librados::ObjectWriteOperation::omap_clear()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_clear();
+}
+
+void librados::ObjectWriteOperation::omap_rm_keys(
+  const std::set<std::string> &to_rm)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_rm_keys(to_rm);
 }
 
 librados::WatchCtx::
