@@ -17,72 +17,100 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "include/Context.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 
-struct librados::PoolAsyncCompletionImpl {
-  Mutex lock;
-  Cond cond;
-  int ref, rval;
-  bool released;
-  bool done;
+namespace librados {
+  struct PoolAsyncCompletionImpl {
+    Mutex lock;
+    Cond cond;
+    int ref, rval;
+    bool released;
+    bool done;
 
-  rados_callback_t callback;
-  void *callback_arg;
+    rados_callback_t callback;
+    void *callback_arg;
 
-  PoolAsyncCompletionImpl() : lock("PoolAsyncCompletionImpl lock"),
-			ref(1), rval(0), released(false), done(false),
-			callback(0), callback_arg(0) {}
+    PoolAsyncCompletionImpl() : lock("PoolAsyncCompletionImpl lock"),
+				ref(1), rval(0), released(false), done(false),
+				callback(0), callback_arg(0) {}
 
-  int set_callback(void *cb_arg, rados_callback_t cb) {
-    lock.Lock();
-    callback = cb;
-    callback_arg = cb_arg;
-    lock.Unlock();
-    return 0;
-  }
-  int wait() {
-    lock.Lock();
-    while (!done)
-      cond.Wait(lock);
-    lock.Unlock();
-    return 0;
-  }
-  int is_complete() {
-    lock.Lock();
-    int r = done;
-    lock.Unlock();
-    return r;
-  }
-  int get_return_value() {
-    lock.Lock();
-    int r = rval;
-    lock.Unlock();
-    return r;
-  }
-  void get() {
-    lock.Lock();
-    assert(ref > 0);
-    ref++;
-    lock.Unlock();
-  }
-  void release() {
-    lock.Lock();
-    assert(!released);
-    released = true;
-    put_unlock();
-  }
-  void put() {
-    lock.Lock();
-    put_unlock();
-  }
-  void put_unlock() {
-    assert(ref > 0);
-    int n = --ref;
-    lock.Unlock();
-    if (!n)
-      delete this;
-  }
-};
+    int set_callback(void *cb_arg, rados_callback_t cb) {
+      lock.Lock();
+      callback = cb;
+      callback_arg = cb_arg;
+      lock.Unlock();
+      return 0;
+    }
+    int wait() {
+      lock.Lock();
+      while (!done)
+	cond.Wait(lock);
+      lock.Unlock();
+      return 0;
+    }
+    int is_complete() {
+      lock.Lock();
+      int r = done;
+      lock.Unlock();
+      return r;
+    }
+    int get_return_value() {
+      lock.Lock();
+      int r = rval;
+      lock.Unlock();
+      return r;
+    }
+    void get() {
+      lock.Lock();
+      assert(ref > 0);
+      ref++;
+      lock.Unlock();
+    }
+    void release() {
+      lock.Lock();
+      assert(!released);
+      released = true;
+      put_unlock();
+    }
+    void put() {
+      lock.Lock();
+      put_unlock();
+    }
+    void put_unlock() {
+      assert(ref > 0);
+      int n = --ref;
+      lock.Unlock();
+      if (!n)
+	delete this;
+    }
+  };
 
+  class C_PoolAsync_Safe : public Context {
+    PoolAsyncCompletionImpl *c;
+
+  public:
+    C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
+      c->get();
+    }
+  
+    void finish(int r) {
+      c->lock.Lock();
+      c->rval = r;
+      c->done = true;
+      c->cond.Signal();
+
+      if (c->callback) {
+	rados_callback_t cb = c->callback;
+	void *cb_arg = c->callback_arg;
+	c->lock.Unlock();
+	cb(c, cb_arg);
+	c->lock.Lock();
+      }
+
+      c->put_unlock();
+    }
+  };
+}
 #endif
