@@ -25,6 +25,7 @@ using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
 static string tmp_ns = "tmp";
+static string shadow_ns = "shadow";
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
@@ -661,6 +662,7 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 
 protected:
   rgw_obj obj;
+  rgw_obj shadow_obj;
 
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle);
@@ -675,9 +677,9 @@ int RGWPutObjProcessor_Aio::handle_data(bufferlist& bl, off_t ofs, void **phandl
 {
   // For the first call pass -1 as the offset to
   // do a write_full.
-  int r = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
+  int r = rgwstore->aio_put_obj_data(s->obj_ctx, shadow_obj,
                                      bl,
-                                     ((ofs == 0) ? -1 : ofs),
+                                     ((ofs != 0) ? ofs : -1),
                                      false, phandle);
 
   return r;
@@ -744,19 +746,23 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
-  bool remove_temp_obj;
+  bufferlist first_chunk;
 protected:
   int prepare(struct req_state *s);
   int complete(string& etag, map<string, bufferlist>& attrs);
 
 public:
-  ~RGWPutObjProcessor_Atomic();
-  RGWPutObjProcessor_Atomic() : remove_temp_obj(false) {}
+  ~RGWPutObjProcessor_Atomic() {}
+  RGWPutObjProcessor_Atomic() {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
-    int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
-    if (r >= 0) {
-      remove_temp_obj = true;
+    if (!ofs) {
+      first_chunk.claim(bl);
+      *phandle = NULL;
+      return 0;
     }
+    assert (ofs >= RGW_MAX_CHUNK_SIZE);
+    int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
+
     return r;
   }
 };
@@ -766,29 +772,25 @@ int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
   RGWPutObjProcessor::prepare(s);
 
   string oid = s->object_str;
-  obj.set_ns(tmp_ns);
+  obj.init(s->bucket, s->object_str);
+
+  shadow_obj.set_ns(shadow_ns);
 
   char buf[33];
   gen_rand_alphanumeric(buf, sizeof(buf) - 1);
   oid.append("_");
   oid.append(buf);
-  obj.init(s->bucket, oid, s->object_str);
+  shadow_obj.init(s->bucket, oid);
 
   return 0;
 }
 
 int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  rgw_obj dst_obj(s->bucket, s->object_str);
-  rgwstore->set_atomic(s->obj_ctx, dst_obj);
-  int r = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN);
+  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, first_chunk.length(), NULL, attrs,
+                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &first_chunk);
 
   return r;
-}
-RGWPutObjProcessor_Atomic::~RGWPutObjProcessor_Atomic()
-{
-  if (remove_temp_obj)
-    rgwstore->delete_obj(NULL, obj, NULL);
 }
 
 class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
@@ -874,7 +876,6 @@ void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
 
 void RGWPutObj::execute()
 {
-  rgw_obj obj;
   RGWPutObjProcessor *processor = NULL;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -931,6 +932,7 @@ void RGWPutObj::execute()
       break;
 
     void *handle;
+
     ret = processor->handle_data(data, ofs, &handle);
     if (ret < 0)
       goto done;
@@ -943,9 +945,6 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
-
-  // was this really needed? processor->complete() will synch
-  // drain_pending(pending);
 
   if (!chunked_upload && (uint64_t)ofs != s->content_length) {
     ret = -ERR_REQUEST_TIMEOUT;
