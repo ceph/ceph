@@ -24,24 +24,43 @@ struct RGWCloneRangeInfo {
   uint64_t len;
 };
 
-struct RGWObjManifest
-{
-  map<uint64_t, rgw_obj> objs;
+struct RGWObjManifestPart {
+  rgw_obj loc;
   uint64_t size;
-
-  RGWObjManifest() : size(0) {}
 
   void encode(bufferlist& bl) const {
      __u32 ver = 1;
     ::encode(ver, bl);
+    ::encode(loc, bl);
     ::encode(size, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+     ::decode(ver, bl);
+     ::decode(loc, bl);
+     ::decode(size, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWObjManifestPart);
+
+struct RGWObjManifest {
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t obj_size;
+
+  RGWObjManifest() : obj_size(0) {}
+
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+    ::encode(ver, bl);
+    ::encode(obj_size, bl);
     ::encode(objs, bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
      ::decode(ver, bl);
-     ::decode(size, bl);
+     ::decode(obj_size, bl);
      ::decode(objs, bl);
   }
 };
