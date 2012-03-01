@@ -182,7 +182,29 @@ protected:
     return false;
   }
 
+  // setup
+  /**
+   * Perform any resource allocation, thread startup, etc
+   * that is required before attempting to connect to other
+   * Messengers or transmit messages.
+   *
+   * @return 0 on success; -errno on failure.
+   */
+  virtual int start() = 0;
+
   // shutdown
+  /**
+   * Block until the Messenger has finished shutting down (according
+   * to the shutdown() function).
+   * It is valid to call this after calling shutdown(), but it must
+   * be called before deleting the Messenger.
+   */
+  virtual void wait() = 0;
+  /**
+   * Initiate a shutdown of the Messenger.
+   *
+   * @return 0 on success, -errno otherwise.
+   */
   virtual int shutdown() = 0;
   virtual void suicide() = 0;
 

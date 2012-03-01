@@ -530,11 +530,11 @@ public:
 
   int bind(entity_addr_t bind_addr, int64_t nonce);
   int start_with_nonce(uint64_t nonce);  // if we didn't bind
-  int start() {                 // if we did
+  virtual int start() {                 // if we did
     assert(did_bind);
     return start_with_nonce(0);
   }
-  void wait();
+  virtual void wait();
 
   void set_cluster_protocol(int p) {
     cluster_protocol = p;
