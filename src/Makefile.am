@@ -1227,6 +1227,16 @@ noinst_HEADERS = \
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
 	logrotate.conf\
+	json_spirit/json_spirit.h\
+	json_spirit/json_spirit_error_position.h\
+	json_spirit/json_spirit_reader.h\
+	json_spirit/json_spirit_reader_template.h\
+	json_spirit/json_spirit_stream_reader.h\
+	json_spirit/json_spirit_utils.h\
+	json_spirit/json_spirit_value.h\
+	json_spirit/json_spirit_writer.h\
+	json_spirit/json_spirit_writer_options.h\
+	json_spirit/json_spirit_writer_template.h\
 	mds/inode_backtrace.h\
 	mds/flock.h\
 	mds/locks.c\
