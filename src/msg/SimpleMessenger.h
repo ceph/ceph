@@ -385,7 +385,6 @@ private:
  public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
-  bool started;
   bool did_bind;
   Throttle dispatch_throttler;
 
@@ -512,7 +511,7 @@ public:
   SimpleMessenger(CephContext *cct, entity_name_t name) :
     Messenger(cct, name),
     accepter(this),
-    lock("SimpleMessenger::lock"), started(false), did_bind(false),
+    lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
     nonce(0), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),

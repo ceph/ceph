@@ -75,13 +75,16 @@ private:
 protected:
   entity_name_t _my_name;
   int default_send_priority;
+  /// set to true once the Messenger has started, and set to false on shutdown
+  bool started;
 
   atomic_t nref;
 
  public:
   CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
-    : default_send_priority(CEPH_MSG_PRIO_DEFAULT), nref(1), cct(cct_)
+    : default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
+      nref(1), cct(cct_)
   {
     _my_name = w;
   }
@@ -187,10 +190,11 @@ protected:
    * Perform any resource allocation, thread startup, etc
    * that is required before attempting to connect to other
    * Messengers or transmit messages.
+   * Once this function completes, started shall be set to true.
    *
    * @return 0 on success; -errno on failure.
    */
-  virtual int start() = 0;
+  virtual int start() { started = true; return 0; }
 
   // shutdown
   /**
@@ -205,7 +209,7 @@ protected:
    *
    * @return 0 on success, -errno otherwise.
    */
-  virtual int shutdown() = 0;
+  virtual int shutdown() { started = false; return 0; }
   virtual void suicide() = 0;
 
   // send message
