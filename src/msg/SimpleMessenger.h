@@ -52,6 +52,93 @@ using namespace __gnu_cxx;
  */
 
 class SimpleMessenger : public Messenger {
+public:
+  /** @defgroup Accessors
+   * @{
+   */
+  /**
+   * Set the IP this Messenger should currently be using.
+   * This function should probably be removed in favor of making bind()
+   * more intelligent in the case where it actually does set an address
+   * to bind to.
+   */
+  void set_ip(entity_addr_t& addr);
+  /**
+   * Retrieve the address as a reference. This function should be removed
+   * in favor of Messenger::get_myaddr().
+   */
+  const entity_addr_t &get_ms_addr() { return ms_addr; }
+  /**
+   * Retrieve the Messenger's address.
+   *
+   * @return A copy of he address this Messenger currently
+   * believes to be its own.
+   */
+  virtual entity_addr_t get_myaddr();
+  /**
+   * Retrieve the Connection for an endpoint.
+   *
+   * @param dest The endpoint you want to get a Connection for.
+   * @return The requested Connection, as a pointer whose reference you own.
+   */
+  virtual Connection *get_connection(const entity_inst_t& dest);
+  /** @} Accessors */
+
+  /**
+   * @defgroup Configuration functions
+   * @{
+   */
+  /**
+   * Set a policy which is applied to all peers who do not have a type-specific
+   * Policy.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The Policy to apply.
+   */
+  void set_default_policy(Policy p) {
+    assert(!started && !did_bind);
+    default_policy = p;
+  }
+  /**
+   * Set a policy which is applied to all peers of the given type.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this policy applies to.
+   * @param p The policy to apply.
+   */
+  void set_policy(int type, Policy p) {
+    assert(!started && !did_bind);
+    policy_map[type] = p;
+  }
+  /**
+   * Set a Throttler which is applied to all Messages from the given
+   * type of peer.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this Throttler will apply to.
+   * @param t The Throttler to apply. SimpleMessenger does not take
+   * ownership of this pointer, but you must not destroy it before
+   * you destroy SimpleMessenger.
+   */
+  void set_policy_throttler(int type, Throttle *t) {
+    assert (!started && !did_bind);
+    get_policy(type).throttler = t;
+  }
+  /**
+   * Set the cluster protocol in use by this daemon.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  void set_cluster_protocol(int p) {
+    assert(!started && !did_bind);
+    cluster_protocol = p;
+  }
+  /** @} Configuration functions */
 private:
   class Pipe;
 
@@ -412,45 +499,6 @@ private:
     else
       return default_policy;
   }
-  /**
-   * Set a policy which is applied to all peers who do not have a type-specific
-   * Policy.
-   * This is an init-time function and must be called *before* calling
-   * start() or bind().
-   *
-   * @param p The Policy to apply.
-   */
-  void set_default_policy(Policy p) {
-    assert(!started && !did_bind);
-    default_policy = p;
-  }
-  /**
-   * Set a policy which is applied to all peers of the given type.
-   * This is an init-time function and must be called *before* calling
-   * start() or bind().
-   *
-   * @param type The peer type this policy applies to.
-   * @param p The policy to apply.
-   */
-  void set_policy(int type, Policy p) {
-    assert(!started && !did_bind);
-    policy_map[type] = p;
-  }
-  /**
-   * Set a Throttler which is applied to all Messages from the given
-   * type of peer.
-   * This is an init-time function and must be called *before* calling
-   * start() or bind().
-   *
-   * @param type The peer type this Throttler will apply to.
-   * @param t The Throttler to apply. SimpleMessenger does not take
-   * ownership of this pointer, but you must not destroy it before
-   * you destroy SimpleMessenger.
-   */
-  void set_policy_throttler(int type, Throttle *t) {
-    assert (!started && !did_bind);
-    get_policy(type).throttler = t;
-  }
 
   // --- pipes ---
   set<Pipe*>      pipes;
@@ -461,14 +509,11 @@ private:
       
   Pipe *connect_rank(const entity_addr_t& addr, int type);
 
-  const entity_addr_t &get_ms_addr() { return ms_addr; }
-
-  void mark_down(const entity_addr_t& addr);
-  void mark_down(Connection *con);
-  void mark_down_on_empty(Connection *con);
-  void mark_disposable(Connection *con);
-
-  void mark_down_all();
+  virtual void mark_down(const entity_addr_t& addr);
+  virtual void mark_down(Connection *con);
+  virtual void mark_down_on_empty(Connection *con);
+  virtual void mark_disposable(Connection *con);
+  virtual void mark_down_all();
 
   // reaper
   class ReaperThread : public Thread {
@@ -490,22 +535,18 @@ private:
 
 
   /***** Messenger-required functions  **********/
-  entity_addr_t get_myaddr();
-  void set_ip(entity_addr_t &addr);
-
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
   }
 
-  void ready();
-  int shutdown();
-  void suicide();
+  virtual void ready();
+  virtual int shutdown();
+  virtual void suicide();
   void prepare_dest(const entity_inst_t& inst);
-  int send_message(Message *m, const entity_inst_t& dest);
-  int send_message(Message *m, Connection *con);
-  Connection *get_connection(const entity_inst_t& dest);
-  int lazy_send_message(Message *m, const entity_inst_t& dest);
-  int lazy_send_message(Message *m, Connection *con) {
+  virtual int send_message(Message *m, const entity_inst_t& dest);
+  virtual int send_message(Message *m, Connection *con);
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
+  virtual int lazy_send_message(Message *m, Connection *con) {
     return send_message(m, con);
   }
 
@@ -557,18 +598,6 @@ public:
   virtual int start();
   virtual void wait();
 
-  /**
-   * Set the cluster protocol in use by this daemon.
-   * This is an init-time function and must be called *before* calling
-   * start() or bind().
-   *
-   * @param p The cluster protocol to use. Defined externally.
-   */
-  void set_cluster_protocol(int p) {
-    assert(!started && !did_bind);
-    cluster_protocol = p;
-  }
-
   int write_pid_file(int pid);
 
   int rebind(int avoid_port);
@@ -587,8 +616,8 @@ public:
   void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
   void submit_message(Message *m, Pipe *pipe);
 		      
-  int send_keepalive(const entity_inst_t& addr);
-  int send_keepalive(Connection *con);
+  virtual int send_keepalive(const entity_inst_t& addr);
+  virtual int send_keepalive(Connection *con);
 
   void learned_addr(const entity_addr_t& peer_addr_for_me);
   void init_local_pipe();
