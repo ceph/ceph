@@ -710,6 +710,11 @@ public:
     set_obj(o);
     orig_key = key = o;
   }
+  void init_ns(rgw_bucket& b, std::string& o, std::string& n) {
+    bucket = b;
+    set_ns(n);
+    set_obj(o);
+  }
   int set_ns(const char *n) {
     if (!n)
       return -EINVAL;

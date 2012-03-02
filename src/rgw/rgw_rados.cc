@@ -1966,6 +1966,8 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   if (r < 0)
     return r;
 
+  io_ctx.locator_set_key(key);
+
   map<string, bufferlist> attrset;
   uint64_t size = 0;
   time_t mtime = 0;

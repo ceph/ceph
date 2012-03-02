@@ -24,7 +24,6 @@ using namespace std;
 using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
-static string tmp_ns = "tmp";
 static string shadow_ns = "shadow";
 
 class MultipartMetaFilter : public RGWAccessListFilter {
@@ -841,8 +840,7 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
   }
   oid = mp.get_part(part_num);
 
-  obj.set_ns(mp_ns);
-  obj.init(s->bucket, oid, s->object_str);
+  obj.init(s->bucket, oid, s->object_str, mp_ns);
   return 0;
 }
 
@@ -865,6 +863,7 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
   string multipart_meta_obj = mp.get_meta();
 
   rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
+dout(0) << __FILE__ << ":" << __LINE__ << ": meta_obj=" << meta_obj << dendl;
 
   r = rgwstore->tmap_set(meta_obj, p, bl);
 
@@ -1460,8 +1459,7 @@ void RGWCompleteMultipart::execute()
   rgw_obj meta_obj;
   rgw_obj target_obj;
   RGWMPObj mp;
-  vector<RGWCloneRangeInfo> ranges;
-
+  RGWObjManifest manifest;
 
   ret = get_params();
   if (ret < 0)
@@ -1538,26 +1536,25 @@ void RGWCompleteMultipart::execute()
     string oid = mp.get_part(obj_iter->second.num);
     rgw_obj src_obj(s->bucket, oid, s->object_str, mp_ns);
 
-    RGWCloneRangeInfo range;
-    range.src = src_obj;
-    range.src_ofs = 0;
-    range.dst_ofs = ofs;
-    range.len = obj_iter->second.size;
-    ranges.push_back(range);
+    RGWObjManifestPart& part = manifest.objs[ofs];
 
-    ofs += obj_iter->second.size;
+    part.loc = src_obj;
+    part.loc_ofs = 0;
+    part.size = obj_iter->second.size;
+
+    ofs += part.size;
   }
-  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, RGW_OBJ_CATEGORY_MAIN, NULL, true, false);
+
+  manifest.obj_size = ofs;
+
+  rgwstore->set_atomic(s->obj_ctx, target_obj);
+
+  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, ofs, NULL, attrs,
+                               RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, &manifest);
   if (ret < 0)
     goto done;
 
-  // now erase all parts
-  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj obj(s->bucket, oid, s->object_str, mp_ns);
-    rgwstore->delete_obj(s->obj_ctx, obj);
-  }
-  // and also remove the metadata obj
+  // remove the upload obj
   meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
   rgwstore->delete_obj(s->obj_ctx, meta_obj);
 
