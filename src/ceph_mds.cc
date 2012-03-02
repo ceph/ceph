@@ -236,10 +236,6 @@ int main(int argc, const char **argv)
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
   messenger->set_nonce(getpid());
 
-  int r = messenger->bind(g_conf->public_addr);
-  if (r < 0)
-    exit(1);
-
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;
   uint64_t supported =
@@ -259,6 +255,10 @@ int main(int argc, const char **argv)
 							 CEPH_FEATURE_UID));
   messenger->set_policy(entity_name_t::TYPE_CLIENT,
 			Messenger::Policy::stateful_server(supported, 0));
+
+  int r = messenger->bind(g_conf->public_addr);
+  if (r < 0)
+    exit(1);
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
     global_init_daemonize(g_ceph_context, 0);

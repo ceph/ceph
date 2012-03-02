@@ -73,6 +73,7 @@ private:
   list<Dispatcher*> dispatchers;
 
 protected:
+  /// the "name" of the local daemon. eg client.99
   entity_name_t _my_name;
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
@@ -106,21 +107,51 @@ protected:
   virtual void set_ip(entity_addr_t &addr) = 0;
   entity_inst_t get_myinst() { return entity_inst_t(get_myname(), get_myaddr()); }
   
+  /**
+   * Set the name of the local entity. The name is reported to others and
+   * can be changed while the system is running, but doing so at incorrect
+   * times may have bad results.
+   *
+   * @param m The name to set.
+   */
   void set_myname(const entity_name_t m) { _my_name = m; }
 
-  void set_default_send_priority(int p) { default_send_priority = p; }
+  /**
+   * Set the default send priority
+   * This is an init-time function and must be called *before* calling
+   * start().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  void set_default_send_priority(int p) {
+    assert(!started);
+    default_send_priority = p;
+  }
   int get_default_send_priority() { return default_send_priority; }
   
   // hrmpf.
   virtual int get_dispatch_queue_len() { return 0; };
 
-  // setup
+  /**
+   * Add a new Dispatcher to the front of the list. If you add
+   * a Dispatcher which is already included, it will get a duplicate
+   * entry. This will reduce efficiency but not break anything.
+   *
+   * @param d The Dispatcher to insert into the list.
+   */
   void add_dispatcher_head(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_front(d);
     if (first)
       ready();
   }
+  /**
+   * Add a new Dispatcher to the end of the list. If you add
+   * a Dispatcher which is already included, it will get a duplicate
+   * entry. This will reduce efficiency but not break anything.
+   *
+   * @param d The Dispatcher to insert into the list.
+   */
   void add_dispatcher_tail(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_back(d);

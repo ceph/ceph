@@ -312,21 +312,6 @@ int main(int argc, const char **argv)
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  r = client_messenger->bind(g_conf->public_addr);
-  if (r < 0)
-    exit(1);
-  r = cluster_messenger->bind(g_conf->cluster_addr);
-  if (r < 0)
-    exit(1);
-
-  // hb should bind to same ip as cluster_addr (if specified)
-  entity_addr_t hb_addr = g_conf->cluster_addr;
-  if (!hb_addr.is_blank_ip())
-    hb_addr.set_port(0);
-  r = messenger_hbout->bind(hb_addr);
-  if (r < 0)
-    exit(1);
-
   global_print_banner();
 
   cout << "starting osd." << whoami
@@ -365,6 +350,21 @@ int main(int argc, const char **argv)
 								 CEPH_FEATURE_OSDENC));
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				Messenger::Policy::stateless_server(0, 0));
+
+  r = client_messenger->bind(g_conf->public_addr);
+  if (r < 0)
+    exit(1);
+  r = cluster_messenger->bind(g_conf->cluster_addr);
+  if (r < 0)
+    exit(1);
+
+  // hb should bind to same ip as cluster_addr (if specified)
+  entity_addr_t hb_addr = g_conf->cluster_addr;
+  if (!hb_addr.is_blank_ip())
+    hb_addr.set_port(0);
+  r = messenger_hbout->bind(hb_addr);
+  if (r < 0)
+    exit(1);
 
   // Set up crypto, daemonize, etc.
   // Leave stderr open in case we need to report errors.
