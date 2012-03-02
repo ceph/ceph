@@ -529,7 +529,7 @@ public:
     delete dispatch_queue.local_pipe;
   }
 
-  int bind(entity_addr_t bind_addr, int64_t nonce);
+  int bind(entity_addr_t bind_addr);
   virtual int start();
   virtual void wait();
 

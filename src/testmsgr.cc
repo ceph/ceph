@@ -98,7 +98,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   g_ceph_context->_conf->apply_changes(NULL);
   SimpleMessenger *rank = new SimpleMessenger(g_ceph_context,
                                               entity_name_t::MON(whoami));
-  int err = rank->bind(g_ceph_context->_conf->public_addr, getpid());
+  rank->set_nonce(getpid());
+  int err = rank->bind(g_ceph_context->_conf->public_addr);
   if (err < 0)
     return 1;
 

@@ -301,18 +301,21 @@ int main(int argc, const char **argv)
   }
 
   SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  client_messenger->set_nonce(getpid());
   SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  cluster_messenger->set_nonce(getpid());
   SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context,entity_name_t::OSD(whoami));
+  messenger_hbin->set_nonce(getpid());
   SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  messenger_hbout->set_nonce(getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  messenger_hbin->set_nonce(getpid());
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  r = client_messenger->bind(g_conf->public_addr, getpid());
+  r = client_messenger->bind(g_conf->public_addr);
   if (r < 0)
     exit(1);
-  r = cluster_messenger->bind(g_conf->cluster_addr, getpid());
+  r = cluster_messenger->bind(g_conf->cluster_addr);
   if (r < 0)
     exit(1);
 
@@ -320,7 +323,7 @@ int main(int argc, const char **argv)
   entity_addr_t hb_addr = g_conf->cluster_addr;
   if (!hb_addr.is_blank_ip())
     hb_addr.set_port(0);
-  r = messenger_hbout->bind(hb_addr, getpid());
+  r = messenger_hbout->bind(hb_addr);
   if (r < 0)
     exit(1);
 

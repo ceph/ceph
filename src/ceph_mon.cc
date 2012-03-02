@@ -379,7 +379,7 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << std::endl;
 
-  err = messenger->bind(ipaddr, 0);
+  err = messenger->bind(ipaddr);
   if (err < 0)
     return 1;
 

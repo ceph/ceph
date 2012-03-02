@@ -2380,7 +2380,7 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
 
 
 
-int SimpleMessenger::bind(entity_addr_t bind_addr, int64_t nonce)
+int SimpleMessenger::bind(entity_addr_t bind_addr)
 {
   lock.Lock();
   if (started) {

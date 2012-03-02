@@ -71,8 +71,8 @@ static int do_cmds_special_action(const std::string &action,
   common_init_finish(g_ceph_context);
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
                                                    entity_name_t::CLIENT());
-  int r = messenger->bind(g_conf->public_addr, getpid());
   messenger->set_nonce(getpid());
+  int r = messenger->bind(g_conf->public_addr);
   if (r < 0)
     return r;
   MonClient mc(g_ceph_context);
@@ -234,8 +234,9 @@ int main(int argc, const char **argv)
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
                                                    entity_name_t::MDS(-1));
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
+  messenger->set_nonce(getpid());
 
-  int r = messenger->bind(g_conf->public_addr, getpid());
+  int r = messenger->bind(g_conf->public_addr);
   if (r < 0)
     exit(1);
 
