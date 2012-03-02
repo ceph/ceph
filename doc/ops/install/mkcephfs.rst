@@ -42,7 +42,7 @@ operating system.
 
 Run these commands on all nodes::
 
-	wget -q -O- https://raw.github.com/NewDreamNetwork/ceph/master/keys/release.asc \
+	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/release.asc \
 	| sudo apt-key add -
 
 	sudo tee /etc/apt/sources.list.d/ceph.list <<EOF

@@ -12,7 +12,7 @@ distributions (`distro list`_):
 
 .. |ceph.git| replace::
    ``ceph.git`` repository
-.. _`ceph.git`: https://github.com/NewDreamNetwork/ceph
+.. _`ceph.git`: https://github.com/ceph/ceph
 
 .. _`arch list`: http://ceph.newdream.net/debian-snapshot-amd64/master/dists/natty/main/
 .. _`distro list`: http://ceph.newdream.net/debian-snapshot-amd64/master/dists/
@@ -38,7 +38,7 @@ code you want to run, e.g. ``master``, ``stable`` or ``v0.34`` (`branch list`_ [
 
 Run these commands on all nodes::
 
-	wget -q -O- https://raw.github.com/NewDreamNetwork/ceph/master/keys/autobuild.asc \
+	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc \
 	| sudo apt-key add -
 
 	sudo tee /etc/apt/sources.list.d/ceph.list <<EOF

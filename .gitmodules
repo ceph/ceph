@@ -3,4 +3,4 @@
 	url = git://ceph.newdream.net/git/ceph-object-corpus.git
 [submodule "src/leveldb"]
 	path = src/leveldb
-	url = git://github.com/NewDreamNetwork/leveldb.git
+	url = git://github.com/ceph/leveldb.git
