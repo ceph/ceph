@@ -698,7 +698,7 @@ int ceph_tool_common_shutdown(CephToolCtx *ctx)
   ctx->timer.shutdown();
   ctx->lock.Unlock();
 
-  messenger->destroy();
+  delete messenger;
   tok_end(tok);
   
   return 0;

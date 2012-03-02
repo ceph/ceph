@@ -476,9 +476,7 @@ private:
   public:
     ReaperThread(SimpleMessenger *m) : msgr(m) {}
     void *entry() {
-      msgr->get();
       msgr->reaper_entry();
-      msgr->put();
       return 0;
     }
   } reaper_thread;
@@ -519,9 +517,7 @@ private:
   public:
     DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
     void *entry() {
-      msgr->get();
       msgr->dispatch_entry();
-      msgr->put();
       return 0;
     }
   } dispatch_thread;
@@ -553,7 +549,7 @@ public:
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
     init_local_pipe();
   }
-  ~SimpleMessenger() {
+  virtual ~SimpleMessenger() {
     delete dispatch_queue.local_pipe;
   }
 

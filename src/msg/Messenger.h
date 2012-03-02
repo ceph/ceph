@@ -79,26 +79,17 @@ protected:
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
 
-  atomic_t nref;
-
  public:
   CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
     : default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
-      nref(1), cct(cct_)
+      cct(cct_)
   {
     _my_name = w;
   }
+  virtual ~Messenger() {}
 
-  void get() {
-    nref.inc();
-  }
-  void put() {
-    if (nref.dec() == 0)
-      delete this;
-  }
   virtual void destroy() {
-    put();
   }
 
   // accessors
@@ -263,12 +254,6 @@ protected:
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
   virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
-
-protected:
-  //destruction should be handled via destroy()
-  virtual ~Messenger() {
-    assert(nref.read() == 0);
-  }
 };
 
 

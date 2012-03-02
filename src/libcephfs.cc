@@ -118,7 +118,7 @@ public:
     }
     if (messenger) {
       messenger->wait();
-      messenger->destroy();
+      delete messenger;
       messenger = NULL;
     }
     if (monclient) {

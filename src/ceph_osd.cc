@@ -431,10 +431,10 @@ int main(int argc, const char **argv)
 
   // done
   delete osd;
-  client_messenger->destroy();
-  messenger_hbin->destroy();
-  messenger_hbout->destroy();
-  cluster_messenger->destroy();
+  delete client_messenger;
+  delete messenger_hbin;
+  delete messenger_hbout;
+  delete cluster_messenger;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

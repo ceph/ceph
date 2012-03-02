@@ -102,7 +102,7 @@ int main(int argc, const char **argv, char *envp[])
     // wait for messenger to finish
     delete mclients[i];
     messengers[i]->wait();
-    messengers[i]->destroy();
+    delete messengers[i];
   }
   return 0;
 }

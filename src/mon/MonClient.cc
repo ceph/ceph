@@ -258,7 +258,7 @@ int MonClient::get_monmap_privately()
     messenger->shutdown();
     if (smessenger)
       smessenger->wait();
-    messenger->destroy();
+    delete messenger;
     messenger = 0;
     monc_lock.Lock();
   }

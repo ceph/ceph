@@ -1028,7 +1028,7 @@ void librados::RadosClient::shutdown()
 librados::RadosClient::~RadosClient()
 {
   if (messenger)
-    messenger->destroy();
+    delete messenger;
   if (objecter)
     delete objecter;
   common_destroy_context(cct);
