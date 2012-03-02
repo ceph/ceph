@@ -113,7 +113,7 @@ def _run_tests(ctx, role, tests):
             '-q',
             '-O-',
             # TODO make branch/tag/sha1 used configurable
-            'https://github.com/NewDreamNetwork/ceph/tarball/HEAD',
+            'https://github.com/ceph/ceph/tarball/HEAD',
             run.Raw('|'),
             'tar',
             '-C', srcdir,
