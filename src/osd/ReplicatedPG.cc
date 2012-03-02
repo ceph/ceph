@@ -4352,6 +4352,7 @@ void ReplicatedPG::submit_push_data(
   bool first,
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
+  bufferlist omap_header,
   map<string, bufferptr> &attrs,
   map<string, bufferlist> &omap_entries,
   ObjectStore::Transaction *t)
@@ -4359,6 +4360,7 @@ void ReplicatedPG::submit_push_data(
   if (first) {
     t->remove(coll_t::TEMP_COLL, recovery_info.soid);
     t->touch(coll_t::TEMP_COLL, recovery_info.soid);
+    t->omap_setheader(coll_t::TEMP_COLL, recovery_info.soid, omap_header);
   }
   uint64_t off = 0;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
@@ -4529,7 +4531,9 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
   submit_push_data(pi.recovery_info, first,
-		   data_included, data, m->attrset,
+		   data_included, data,
+		   m->omap_header,
+		   m->attrset,
 		   m->omap_entries,
 		   t);
 
@@ -4600,6 +4604,7 @@ void ReplicatedPG::handle_push(OpRequest *op)
 		   first,
 		   m->data_included,
 		   data,
+		   m->omap_header,
 		   m->attrset,
 		   m->omap_entries,
 		   t);
@@ -4647,6 +4652,7 @@ int ReplicatedPG::send_push(int peer,
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
 
   if (progress.first) {
+    osd->store->omap_get_header(coll, recovery_info.soid, &subop->omap_header);
     osd->store->getattrs(coll, recovery_info.soid, subop->attrset);
 
     // Debug

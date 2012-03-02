@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -81,6 +81,7 @@ public:
   ObjectRecoveryProgress current_progress;
 
   map<string,bufferlist> omap_entries;
+  bufferlist omap_header;
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -130,6 +131,8 @@ public:
     }
     if (header.version >= 5)
       ::decode(omap_entries, p);
+    if (header.version >= 6)
+      ::decode(omap_header, p);
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -173,6 +176,7 @@ public:
     ::encode(recovery_progress, payload);
     ::encode(current_progress, payload);
     ::encode(omap_entries, payload);
+    ::encode(omap_header, payload);
   }
 
   MOSDSubOp()
