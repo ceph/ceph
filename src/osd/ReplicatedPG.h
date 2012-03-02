@@ -871,6 +871,9 @@ private:
     boost::statechart::result react(const SnapTrim&);
   };
 
+  int _get_tmap(OpContext *ctx, map<string, bufferlist> *out,
+		bufferlist *header);
+  int _copy_up_tmap(OpContext *ctx);
   int _delete_head(OpContext *ctx);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:

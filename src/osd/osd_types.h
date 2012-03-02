@@ -1582,6 +1582,7 @@ struct object_info_t {
 
 
   map<entity_name_t, watch_info_t> watchers;
+  bool uses_tmap;
 
   void copy_user_bits(const object_info_t& other);
 
@@ -1599,12 +1600,12 @@ struct object_info_t {
 
   explicit object_info_t()
     : size(0), lost(false),
-      truncate_seq(0), truncate_size(0)
+      truncate_seq(0), truncate_size(0), uses_tmap(false)
   {}
 
   object_info_t(const hobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
-      lost(false), truncate_seq(0), truncate_size(0) {}
+      lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
 
   object_info_t(bufferlist& bl) {
     decode(bl);
