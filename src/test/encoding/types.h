@@ -77,6 +77,10 @@ TYPE(MonMap)
 TYPE(MonCap)
 TYPE(MonCaps)
 
+#include "os/DBObjectMap.h"
+TYPE(DBObjectMap::_Header)
+TYPE(DBObjectMap::State)
+
 // --- messages ---
 #include "messages/MAuth.h"
 MESSAGE(MAuth)

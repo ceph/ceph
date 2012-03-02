@@ -287,6 +287,63 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_OMAP_CLEAR:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	f->open_object_section("omap_clear");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+	f->close_section();
+      }
+      break;
+
+    case Transaction::OP_OMAP_SETKEYS:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	map<string, bufferlist> aset;
+	i.get_attrset(aset);
+	f->open_object_section("omap_setkeys");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+	f->open_object_section("attr_lens");
+	for (map<string, bufferlist>::iterator p = aset.begin();
+	     p != aset.end();
+	     ++p)
+	  f->dump_unsigned(p->first.c_str(), p->second.length());
+	f->close_section();
+	f->close_section();
+      }
+      break;
+
+    case Transaction::OP_OMAP_RMKEYS:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	set<string> keys;
+	i.get_keyset(keys);
+	f->open_object_section("omap_rmkeys");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+	f->close_section();
+      }
+      break;
+
+    case Transaction::OP_OMAP_SETHEADER:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	bufferlist bl;
+	i.get_bl(bl);
+	f->open_object_section("omap_setheader");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+	f->dump_stream("header_length") << bl.length();
+	f->close_section();
+      }
+      break;
+
     default:
       f->open_object_section("unknown");
       f->dump_unsigned("opcode", op);
@@ -492,6 +549,40 @@ void ObjectStore::Transaction::dump(ostream& out)
 	coll_t cid(i.get_cid());
 	coll_t ncid(i.get_cid());
 	out << op_num << ": coll_rename " << cid << " -> " << ncid << "\n";
+      }
+      break;
+    case Transaction::OP_OMAP_CLEAR:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	out << op_num << ": tmap_clear " << cid << "   " << oid << "\n";
+      }
+      break;
+    case Transaction::OP_OMAP_SETKEYS:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	map<string, bufferlist> aset;
+	i.get_attrset(aset);
+	out << op_num << ": tmap_setkeys " << cid << "   " << oid << "\n";
+      }
+      break;
+    case Transaction::OP_OMAP_RMKEYS:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	set<string> keys;
+	i.get_keyset(keys);
+	out << op_num << ": tmap_rmkeys " << cid << "   " << oid << "\n";
+      }
+      break;
+    case Transaction::OP_OMAP_SETHEADER:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	bufferlist bl;
+	i.get_bl(bl);
+	out << op_num << ": tmap_setheader" << cid << "   " << oid << "\n";
       }
       break;
 

@@ -81,13 +81,16 @@ protected:
 
 private:
   string lfn_attribute;
+  coll_t collection;
 
 public:
   /// Constructor
   LFNIndex(
+    coll_t collection,
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version)
-    : base_path(base_path), index_version(index_version) {
+    : base_path(base_path), index_version(index_version),
+      collection(collection) {
     if (index_version == HASH_INDEX_TAG) {
       lfn_attribute = LFN_ATTR;
     } else {
@@ -96,6 +99,8 @@ public:
       lfn_attribute = LFN_ATTR + string(buf);
     }
   }
+
+  coll_t coll() const { return collection; }
 
   /// Virtual destructor
   virtual ~LFNIndex() {}

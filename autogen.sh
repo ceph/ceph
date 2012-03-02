@@ -19,4 +19,5 @@ autoconf
 autoheader
 automake -a --add-missing -Wall
 ( cd src/gtest && autoreconf -fvi; )
+( cd src/leveldb && autoreconf -fvi; )
 exit

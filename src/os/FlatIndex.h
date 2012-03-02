@@ -31,11 +31,15 @@
 class FlatIndex : public CollectionIndex {
   std::tr1::weak_ptr<CollectionIndex> self_ref;
   string base_path;
+  coll_t collection;
 public:
-  FlatIndex(string base_path) : base_path(base_path) {}
+  FlatIndex(coll_t collection, string base_path) : base_path(base_path),
+						   collection(collection) {}
 
   /// @see CollectionIndex
   uint32_t collection_version() { return FLAT_INDEX_TAG; }
+
+  coll_t coll() const { return collection; }
 
   /// @see CollectionIndex
   void set_ref(std::tr1::shared_ptr<CollectionIndex> ref);

@@ -447,7 +447,7 @@ TEST_F(StoreTest, Synthetic) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 100000; ++i) {
+  for (int i = 0; i < 1000; ++i) {
     if (!(i % 10)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
@@ -538,6 +538,102 @@ TEST_F(StoreTest, HashCollisionTest) {
     ASSERT_EQ(r, 0);
   }
   ObjectStore::Transaction t;
+  t.remove_collection(cid);
+  store->apply_transaction(t);
+}
+
+TEST_F(StoreTest, OMapTest) {
+  coll_t cid("blah");
+  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferlist> attrs;
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.omap_clear(cid, hoid);
+    map<string, bufferlist> start_set;
+    t.omap_setkeys(cid, hoid, start_set);
+    store->apply_transaction(t);
+  }
+
+  for (int i = 0; i < 100; i++) {
+    if (!(i%5)) {
+      std::cout << "On iteration " << i << std::endl;
+    }
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    map<string, bufferlist> cur_attrs;
+    r = store->omap_get(cid, hoid, &bl, &cur_attrs);
+    ASSERT_EQ(r, 0);
+    for (map<string, bufferlist>::iterator j = attrs.begin();
+	 j != attrs.end();
+	 ++j) {
+      bool correct = cur_attrs.count(j->first) && string(cur_attrs[j->first].c_str()) == string(j->second.c_str());
+      if (!correct) {
+	std::cout << j->first << " is present in cur_attrs " << cur_attrs.count(j->first) << " times " << std::endl;
+	if (cur_attrs.count(j->first) > 0) {
+	  std::cout << j->second.c_str() << " : " << cur_attrs[j->first].c_str() << std::endl;
+	}
+      }
+      ASSERT_EQ(correct, true);
+    }
+    ASSERT_EQ(attrs.size(), cur_attrs.size());
+
+    char buf[100];
+    snprintf(buf, sizeof(buf), "%d", i);
+    bl.clear();
+    bufferptr bp(buf, strlen(buf) + 1);
+    bl.append(bp);
+    map<string, bufferlist> to_add;
+    to_add.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    t.omap_setkeys(cid, hoid, to_add);
+    store->apply_transaction(t);
+  }
+
+  int i = 0;
+  while (attrs.size()) {
+    if (!(i%5)) {
+      std::cout << "removal: On iteration " << i << std::endl;
+    }
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    map<string, bufferlist> cur_attrs;
+    r = store->omap_get(cid, hoid, &bl, &cur_attrs);
+    ASSERT_EQ(r, 0);
+    for (map<string, bufferlist>::iterator j = attrs.begin();
+	 j != attrs.end();
+	 ++j) {
+      bool correct = cur_attrs.count(j->first) && string(cur_attrs[j->first].c_str()) == string(j->second.c_str());
+      if (!correct) {
+	std::cout << j->first << " is present in cur_attrs " << cur_attrs.count(j->first) << " times " << std::endl;
+	if (cur_attrs.count(j->first) > 0) {
+	  std::cout << j->second.c_str() << " : " << cur_attrs[j->first].c_str() << std::endl;
+	}
+      }
+      ASSERT_EQ(correct, true);
+    }
+
+    string to_remove = attrs.begin()->first;
+    set<string> keys_to_remove;
+    keys_to_remove.insert(to_remove);
+    t.omap_rmkeys(cid, hoid, keys_to_remove);
+    store->apply_transaction(t);
+
+    attrs.erase(to_remove);
+
+    ++i;
+  }
+
+  ObjectStore::Transaction t;
+  t.remove(cid, hoid);
   t.remove_collection(cid);
   store->apply_transaction(t);
 }

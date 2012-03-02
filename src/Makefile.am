@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf
-DIST_SUBDIRS = gtest ocf
+SUBDIRS = ocf leveldb
+DIST_SUBDIRS = gtest ocf leveldb
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
@@ -43,12 +43,13 @@ bin_PROGRAMS += ceph-mon
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA)
+ceph_osd_LDADD = libosd.la libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 if LINUX
 ceph_osd_LDADD += -ldl
 endif
 bin_PROGRAMS += ceph-osd
-ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
+ceph_osd_CXXFLAGS = ${AM_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
 
 # mds
 ceph_mds_SOURCES = ceph_mds.cc
@@ -183,15 +184,15 @@ test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.la $(LIBGLOBAL_LDA)
+dupstore_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.la $(LIBGLOBAL_LDA)
+streamtest_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 test_filestore_idempotent_SOURCES = test/test_filestore_idempotent.cc
-test_filestore_idempotent_LDADD = libos.la $(LIBGLOBAL_LDA)
+test_filestore_idempotent_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
+test_trans_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testrados_SOURCES = test/osd/TestRados.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
@@ -695,8 +696,9 @@ bin_DEBUGPROGRAMS += test_libcephfs_readdir
 
 test_store_SOURCES = test/store_test.cc
 test_store_LDFLAGS = ${AM_LDFLAGS}
-test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
-test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_store
 
 test_filejournal_SOURCES = test/test_filejournal.cc
@@ -710,6 +712,21 @@ test_stress_watch_LDFLAGS = ${AM_LDFLAGS}
 test_stress_watch_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_stress_watch_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_stress_watch
+
+test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
+test_object_map_LDFLAGS = ${AM_LDFLAGS}
+test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
+bin_DEBUGPROGRAMS += test_object_map
+
+test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc os/LevelDBStore.cc
+test_keyvaluedb_atomicity_LDFLAGS = ${AM_LDFLAGS}
+test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
+bin_DEBUGPROGRAMS += test_keyvaluedb_atomicity
+
 
 # shell scripts
 editpaths = sed \
@@ -1016,8 +1033,11 @@ libos_la_SOURCES = \
 	os/LFNIndex.cc \
 	os/HashIndex.cc \
 	os/IndexManager.cc \
-	os/FlatIndex.cc
-libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+	os/FlatIndex.cc \
+	os/DBObjectMap.cc \
+	os/LevelDBStore.cc
+libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
 libos_la_LIBADD = libglobal.la
 if WITH_LIBAIO
 libos_la_LIBADD += -laio
@@ -1489,7 +1509,11 @@ noinst_HEADERS = \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
 	test/rados-api/test.h \
-	test/unit.h
+	test/unit.h \
+	os/ObjectMap.h \
+	os/DBObjectMap.h \
+	os/KeyValueDB.h \
+	os/LevelDBStore.h
 
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage

@@ -302,6 +302,7 @@ OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in th
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(filestore, OPT_BOOL, false)
+OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
 OPTION(filestore_fake_attrs, OPT_BOOL, false)
