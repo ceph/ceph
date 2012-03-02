@@ -667,7 +667,7 @@ protected:
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle);
 
-  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS) {}
+  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio() {
     drain_pending();
   }
@@ -725,9 +725,11 @@ int RGWPutObjProcessor_Aio::drain_pending()
 
 int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 {
-  struct put_obj_aio_info info;
-  info.handle = handle;
-  pending.push_back(info);
+  if (handle) {
+    struct put_obj_aio_info info;
+    info.handle = handle;
+    pending.push_back(info);
+  }
   size_t orig_size = pending.size();
   while (pending_has_completed()) {
     int r = wait_pending_front();
@@ -799,6 +801,8 @@ int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& a
     manifest.objs[RGW_MAX_CHUNK_SIZE].loc = obj;
     manifest.objs[RGW_MAX_CHUNK_SIZE].size = obj_len - head_chunk_len;
   }
+
+  manifest.obj_size = obj_len;
 
   rgwstore->set_atomic(s->obj_ctx, head_obj);
 
@@ -947,12 +951,13 @@ void RGWPutObj::execute()
       break;
 
     void *handle;
+    const unsigned char *data_ptr = (const unsigned char *)data.c_str();
 
     ret = processor->handle_data(data, ofs, &handle);
     if (ret < 0)
       goto done;
 
-    hash.Update((unsigned char *)data.c_str(), len);
+    hash.Update(data_ptr, len);
 
     ret = processor->throttle_data(handle);
     if (ret < 0)

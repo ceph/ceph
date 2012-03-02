@@ -1136,10 +1136,12 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     try {
       ::decode(s->manifest, miter);
       s->has_manifest = true;
+      s->size = s->manifest.obj_size;
     } catch (buffer::error& err) {
       dout(20) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
+    dout(0) << "manifest: total_size = " << s->manifest.obj_size << dendl;
     map<uint64_t, RGWObjManifestPart>::iterator mi;
     for (mi = s->manifest.objs.begin(); mi != s->manifest.objs.end(); ++mi) {
       dout(0) << "manifest: ofs=" << mi->first << " loc=" << mi->second.loc << dendl;
@@ -1818,10 +1820,23 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   uint64_t len;
   bufferlist bl;
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *new_ctx = NULL;
   bool reading_from_head = true;
+  ObjectReadOperation op;
 
   GetObjState *state = *(GetObjState **)handle;
   RGWObjState *astate = NULL;
+
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+
+  if (!rctx) {
+    new_ctx = new RGWRadosCtx();
+    rctx = new_ctx;
+  }
+
+  int r = get_obj_state(rctx, obj, state->io_ctx, oid, &astate);
+  if (r < 0)
+    goto done_ret;
 
   if (end < 0)
     len = 0;
@@ -1829,31 +1844,31 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     len = end - ofs + 1;
 
   if (astate->has_manifest) {
-    map<uint64_t, RGWObjManifestPart>::iterator iter = astate->manifest.objs.lower_bound(ofs);
-    if (iter != astate->manifest.objs.end()) {
-      RGWObjManifestPart& part = iter->second;
-      uint64_t part_ofs = iter->first;
-      read_obj = part.loc;
-      len = part.size - (ofs - part_ofs);
-    }
+    map<uint64_t, RGWObjManifestPart>::iterator iter = astate->manifest.objs.upper_bound(ofs);
+    if (iter != astate->manifest.objs.begin())
+      --iter;
+
+    RGWObjManifestPart& part = iter->second;
+    uint64_t part_ofs = iter->first;
+    read_obj = part.loc;
+    len = min(len, part.size - (ofs - part_ofs));
     reading_from_head = (read_obj == obj);
+
+    if (!reading_from_head)
+      get_obj_bucket_and_oid_key(read_obj, bucket, oid, key);
   }
 
   if (len > RGW_MAX_CHUNK_SIZE)
     len = RGW_MAX_CHUNK_SIZE;
 
-  get_obj_bucket_and_oid_key(read_obj, bucket, oid, key);
 
   state->io_ctx.locator_set_key(key);
 
-  ObjectReadOperation op;
-
-  int r = 0;
   if (reading_from_head) {
     /* only when reading from the head object do we need to do the atomic test */
     r = append_atomic_test(rctx, read_obj, state->io_ctx, oid, op, &astate);
     if (r < 0)
-      return r;
+      goto done_ret;
   }
 
   if (!ofs && astate && astate->data.length() >= len) {
@@ -1873,7 +1888,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     string loc = obj.loc();
     rgw_obj shadow(bucket, astate->shadow_obj, loc, shadow_ns);
     r = get_obj(NULL, handle, shadow, data, ofs, end);
-    return r;
+    goto done_ret;
   }
 
 done:
@@ -1889,6 +1904,9 @@ done:
     delete state;
     *handle = NULL;
   }
+
+done_ret:
+  delete new_ctx;
 
   return r;
 }
