@@ -215,7 +215,7 @@ static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAcces
     oid = mp.get_meta();
     obj.set_ns(mp_ns);
   }
-  obj.init(bucket, oid, object);
+  obj.init(bucket, oid);
   int ret = get_policy_from_attr(s->obj_ctx, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
@@ -840,7 +840,7 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
   }
   oid = mp.get_part(part_num);
 
-  obj.init(s->bucket, oid, s->object_str, mp_ns);
+  obj.init_ns(s->bucket, oid, mp_ns);
   return 0;
 }
 
@@ -862,8 +862,8 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
 
   string multipart_meta_obj = mp.get_meta();
 
-  rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
-dout(0) << __FILE__ << ":" << __LINE__ << ": meta_obj=" << meta_obj << dendl;
+  rgw_obj meta_obj;
+  meta_obj.init_ns(s->bucket, multipart_meta_obj, mp_ns);
 
   r = rgwstore->tmap_set(meta_obj, p, bl);
 
@@ -1378,7 +1378,7 @@ void RGWInitMultipart::execute()
     RGWMPObj mp(s->object_str, upload_id);
     tmp_obj_name = mp.get_meta();
 
-    obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
+    obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
     ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL, NULL);
   } while (ret == -EEXIST);
@@ -1393,7 +1393,8 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
-  rgw_obj obj(s->bucket, meta_oid, s->object_str, mp_ns);
+  rgw_obj obj;
+  obj.init_ns(s->bucket, meta_oid, mp_ns);
 
   int ret = get_obj_attrs(s, obj, attrs, NULL);
   if (ret < 0)
@@ -1534,7 +1535,8 @@ void RGWCompleteMultipart::execute()
   
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj src_obj(s->bucket, oid, s->object_str, mp_ns);
+    rgw_obj src_obj;
+    src_obj.init_ns(s->bucket, oid, mp_ns);
 
     RGWObjManifestPart& part = manifest.objs[ofs];
 
@@ -1555,7 +1557,7 @@ void RGWCompleteMultipart::execute()
     goto done;
 
   // remove the upload obj
-  meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   rgwstore->delete_obj(s->obj_ctx, meta_obj);
 
 done:
@@ -1596,13 +1598,14 @@ void RGWAbortMultipart::execute()
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj obj(s->bucket, oid, s->object_str, mp_ns);
+    rgw_obj obj;
+    obj.init_ns(s->bucket, oid, mp_ns);
     ret = rgwstore->delete_obj(s->obj_ctx, obj);
     if (ret < 0 && ret != -ENOENT)
       goto done;
   }
   // and also remove the metadata obj
-  meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   ret = rgwstore->delete_obj(s->obj_ctx, meta_obj);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
