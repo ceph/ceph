@@ -1609,6 +1609,9 @@ int FileStore::mount()
     goto close_basedir_fd;
   }
 
+  char nosnapfn[200];
+  snprintf(nosnapfn, sizeof(nosnapfn), "%s/nosnap", current_fn.c_str());
+
   if (btrfs_stable_commits) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
@@ -1640,9 +1643,13 @@ int FileStore::mount()
 
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
-	
-	if (curr_seq && cp != curr_seq) {
-	  if (!m_osd_use_stale_snap) { 
+
+	// if current/ is marked as non-snapshotted, refuse to roll
+	// back (without clear direction) to avoid throwing out new
+	// data.
+	struct stat st;
+	if (::stat(nosnapfn, &st) == 0) {
+	  if (!m_osd_use_stale_snap) {
 	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
 	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
 	    derr << "Force rollback to snapshotted version with 'osd use stale snap = true'" << dendl;
@@ -1718,6 +1725,18 @@ int FileStore::mount()
 
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
+  if (!btrfs_stable_commits) {
+    // mark current/ as non-snapshotted so that we don't rollback away
+    // from it.
+    int r = ::creat(nosnapfn, 0644);
+    if (r < 0) {
+      derr << "FileStore::mount: failed to create current/nosnap" << dendl;
+      goto close_current_fd;
+    }
+  } else {
+    // clear nosnap marker, if present.
+    ::unlink(nosnapfn);
+  }
 
   {
     LevelDBStore *omap_store = new LevelDBStore(omap_dir);
