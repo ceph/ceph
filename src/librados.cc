@@ -938,11 +938,10 @@ int librados::RadosClient::connect()
 
   err = -ENOMEM;
   nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1));
+  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), nonce);
   if (!messenger)
     goto out;
 
-  messenger->set_nonce(nonce);
   // require OSDREPLYMUX feature.  this means we will fail to talk to
   // old servers.  this is necessary because otherwise we won't know
   // how to decompose the reply data into its consituent pieces.

@@ -300,14 +300,18 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
-  client_messenger->set_nonce(getpid());
-  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
-  cluster_messenger->set_nonce(getpid());
-  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context,entity_name_t::OSD(whoami));
-  messenger_hbin->set_nonce(getpid());
-  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
-  messenger_hbout->set_nonce(getpid());
+  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context,
+                                                          entity_name_t::OSD(whoami),
+                                                          getpid());
+  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context,
+                                                           entity_name_t::OSD(whoami),
+                                                           getpid());
+  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context,
+                                                        entity_name_t::OSD(whoami),
+                                                        getpid());
+  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context,
+                                                         entity_name_t::OSD(whoami),
+                                                         getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);

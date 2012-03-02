@@ -70,8 +70,8 @@ static int do_cmds_special_action(const std::string &action,
 {
   common_init_finish(g_ceph_context);
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
-                                                   entity_name_t::CLIENT());
-  messenger->set_nonce(getpid());
+                                                   entity_name_t::CLIENT(),
+                                                   getpid());
   int r = messenger->bind(g_conf->public_addr);
   if (r < 0)
     return r;
@@ -232,9 +232,9 @@ int main(int argc, const char **argv)
   global_print_banner();
 
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
-                                                   entity_name_t::MDS(-1));
+                                                   entity_name_t::MDS(-1),
+                                                   getpid());
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
-  messenger->set_nonce(getpid());
 
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;

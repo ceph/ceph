@@ -650,8 +650,8 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   tok = tok_init(NULL);
 
   // start up network
-  messenger = new SimpleMessenger(g_ceph_context, entity_name_t::CLIENT());
-  messenger->set_nonce(getpid());
+  messenger = new SimpleMessenger(g_ceph_context, entity_name_t::CLIENT(),
+                                  getpid());
   messenger->start();
   ctx->dispatcher = new Admin(ctx.get());
   messenger->add_dispatcher_head(ctx->dispatcher);

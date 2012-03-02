@@ -77,8 +77,7 @@ public:
       goto fail;
 
     //network connection
-    messenger = new SimpleMessenger(cct, entity_name_t::CLIENT());
-    messenger->set_nonce(msgr_nonce);
+    messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(), msgr_nonce);
 
     //at last the client
     ret = -1002;

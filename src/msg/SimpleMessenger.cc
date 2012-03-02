@@ -55,7 +55,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  * Accepter
  */
 
-int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
+int SimpleMessenger::Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
 {
   const md_config_t *conf = msgr->cct->_conf;
   // bind to a socket
@@ -154,7 +154,7 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
 
   if (msgr->ms_addr.get_port() == 0) {
     msgr->ms_addr = listen_addr;
-    msgr->ms_addr.nonce = nonce;
+    msgr->ms_addr.nonce = msgr->nonce;
   }
 
   msgr->init_local_pipe();
@@ -176,7 +176,7 @@ int SimpleMessenger::Accepter::rebind(int avoid_port)
   addr.set_port(0);
 
   ldout(msgr->cct,10) << " will try " << addr << dendl;
-  int r = bind(addr.get_nonce(), addr, old_port, avoid_port);
+  int r = bind(addr, old_port, avoid_port);
   if (r == 0)
     start();
   return r;
@@ -2392,7 +2392,7 @@ int SimpleMessenger::bind(entity_addr_t bind_addr)
   lock.Unlock();
 
   // bind to a socket
-  return accepter.bind(nonce, bind_addr);
+  return accepter.bind(bind_addr);
 }
 
 int SimpleMessenger::rebind(int avoid_port)

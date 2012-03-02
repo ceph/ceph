@@ -91,8 +91,8 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   // start up network
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
-                                                   entity_name_t::CLIENT());
-  messenger->set_nonce(getpid());
+                                                   entity_name_t::CLIENT(),
+                                                   getpid());
   Client *client = new Client(messenger, &mc);
   if (filer_flags) {
     client->set_filer_flags(filer_flags);

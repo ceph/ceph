@@ -66,7 +66,7 @@ private:
     
     void *entry();
     void stop();
-    int bind(uint64_t nonce, entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
+    int bind(entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
     int rebind(int avoid_port);
     int start();
   } accepter;
@@ -392,7 +392,6 @@ private:
   bool need_addr;
   entity_addr_t ms_addr;
   uint64_t nonce;
-  void set_nonce(uint64_t new_nonce) { nonce = new_nonce; }
   
   // local
   bool destination_stopped;
@@ -538,12 +537,12 @@ private:
   int get_proto_version(int peer_type, bool connect);
 
 public:
-  SimpleMessenger(CephContext *cct, entity_name_t name) :
+  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
     Messenger(cct, name),
     accepter(this),
     lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    nonce(0), destination_stopped(false), my_type(name.type()),
+    nonce(_nonce), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
     dispatch_thread(this), msgr(this),
