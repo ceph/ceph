@@ -963,7 +963,6 @@ int librados::RadosClient::connect()
   messenger->add_dispatcher_head(this);
 
   messenger->start();
-  messenger->add_dispatcher_head(this);
 
   ldout(cct, 1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
