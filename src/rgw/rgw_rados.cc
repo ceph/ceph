@@ -1817,6 +1817,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   rgw_bucket bucket;
   std::string oid, key;
   rgw_obj read_obj = obj;
+  uint64_t read_ofs = ofs;
   uint64_t len;
   bufferlist bl;
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
@@ -1852,6 +1853,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     uint64_t part_ofs = iter->first;
     read_obj = part.loc;
     len = min(len, part.size - (ofs - part_ofs));
+    read_ofs = part.loc_ofs + (ofs - part_ofs);
     reading_from_head = (read_obj == obj);
 
     if (!reading_from_head)
@@ -1876,8 +1878,8 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     goto done;
   }
 
-  dout(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
-  op.read(ofs, len, &bl, NULL);
+  dout(20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << len << dendl;
+  op.read(read_ofs, len, &bl, NULL);
 
   r = state->io_ctx.operate(oid, &op, NULL);
   dout(20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;

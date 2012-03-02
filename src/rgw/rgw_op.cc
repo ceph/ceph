@@ -796,9 +796,11 @@ int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& a
   uint64_t head_chunk_len = first_chunk.length();
   RGWObjManifest manifest;
   manifest.objs[0].loc = head_obj;
+  manifest.objs[0].loc_ofs = 0;
   manifest.objs[0].size = head_chunk_len;
   if (obj_len > RGW_MAX_CHUNK_SIZE) {
     manifest.objs[RGW_MAX_CHUNK_SIZE].loc = obj;
+    manifest.objs[RGW_MAX_CHUNK_SIZE].loc_ofs = RGW_MAX_CHUNK_SIZE;
     manifest.objs[RGW_MAX_CHUNK_SIZE].size = obj_len - head_chunk_len;
   }
 

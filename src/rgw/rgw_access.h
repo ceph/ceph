@@ -26,12 +26,16 @@ struct RGWCloneRangeInfo {
 
 struct RGWObjManifestPart {
   rgw_obj loc;
+  uint64_t loc_ofs;
   uint64_t size;
+
+  RGWObjManifestPart() : loc_ofs(0), size(0) {}
 
   void encode(bufferlist& bl) const {
      __u32 ver = 1;
     ::encode(ver, bl);
     ::encode(loc, bl);
+    ::encode(loc_ofs, bl);
     ::encode(size, bl);
   }
 
@@ -39,6 +43,7 @@ struct RGWObjManifestPart {
      __u32 ver;
      ::decode(ver, bl);
      ::decode(loc, bl);
+     ::decode(loc_ofs, bl);
      ::decode(size, bl);
   }
 };
