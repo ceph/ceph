@@ -302,10 +302,11 @@ int main(int argc, const char **argv)
 
   SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
   SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
-  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
+  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context,entity_name_t::OSD(whoami));
   SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(whoami));
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hbin->set_nonce(getpid());
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
   r = client_messenger->bind(g_conf->public_addr, getpid());
@@ -394,7 +395,7 @@ int main(int argc, const char **argv)
   global_init_shutdown_stderr(g_ceph_context);
 
   client_messenger->start();
-  messenger_hbin->start_with_nonce(getpid());
+  messenger_hbin->start();
   messenger_hbout->start();
   cluster_messenger->start();
 

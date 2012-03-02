@@ -224,8 +224,9 @@ int MonClient::get_monmap_privately()
   SimpleMessenger* smessenger = NULL;
   if (!messenger) {
     messenger = smessenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1));
+    smessenger->set_nonce(getpid());
     messenger->add_dispatcher_head(this);
-    smessenger->start_with_nonce(getpid());
+    smessenger->start();
     temp_msgr = true; 
   }
   

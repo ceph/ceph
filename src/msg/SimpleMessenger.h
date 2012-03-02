@@ -392,6 +392,8 @@ private:
   // where i listen
   bool need_addr;
   entity_addr_t ms_addr;
+  uint64_t nonce;
+  void set_nonce(uint64_t new_nonce) { nonce = new_nonce; }
   
   // local
   bool destination_stopped;
@@ -512,7 +514,7 @@ public:
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    destination_stopped(false), my_type(name.type()),
+    nonce(0), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
     dispatch_thread(this), msgr(this),
@@ -527,14 +529,8 @@ public:
     delete dispatch_queue.local_pipe;
   }
 
-  //void set_listen_addr(tcpaddr_t& a);
-
   int bind(entity_addr_t bind_addr, int64_t nonce);
-  int start_with_nonce(uint64_t nonce);  // if we didn't bind
-  virtual int start() {                 // if we did
-    assert(did_bind);
-    return start_with_nonce(0);
-  }
+  virtual int start();
   virtual void wait();
 
   void set_cluster_protocol(int p) {
