@@ -2405,30 +2405,115 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // OMAP Read ops
     case CEPH_OSD_OP_OMAPGETKEYS:
       {
+	string start_after;
+	uint64_t max_return;
+	::decode(start_after, bp);
+	::decode(max_return, bp);
+	set<string> out_set;
+	{
+	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
+	    coll, soid
+	    );
+	  assert(iter);
+	  iter->upper_bound(start_after);
+	  for (uint64_t i = 0;
+	       i < max_return && iter->valid();
+	       ++i, iter->next()) {
+	    out_set.insert(iter->key());
+	  }
+	}
+	::encode(out_set, osd_op.outdata);
       }
+      break;
     case CEPH_OSD_OP_OMAPGETVALS:
       {
+	string start_after;
+	uint64_t max_return;
+	::decode(start_after, bp);
+	::decode(max_return, bp);
+	map<string, bufferlist> out_set;
+	{
+	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
+	    coll, soid
+	    );
+	  assert(iter);
+	  iter->upper_bound(start_after);
+	  for (uint64_t i = 0;
+	       i < max_return && iter->valid();
+	       ++i, iter->next()) {
+	    dout(20) << "Found key " << iter->key() << dendl;
+	    out_set.insert(make_pair(iter->key(), iter->value()));
+	  }
+	}
+	::encode(out_set, osd_op.outdata);
       }
+      break;
     case CEPH_OSD_OP_OMAPGETHEADER:
       {
+	osd->store->omap_get_header(coll, soid, &osd_op.outdata);
       }
+      break;
     case CEPH_OSD_OP_OMAPGETVALSBYKEY:
       {
+	set<string> keys_to_get;
+	::decode(keys_to_get, bp);
+	map<string, bufferlist> out;
+	osd->store->omap_get_values(coll, soid, keys_to_get, &out);
+	::encode(out, osd_op.outdata);
       }
+      break;
 
       // OMAP Write ops
     case CEPH_OSD_OP_OMAPSETVALS:
       {
+	if (!obs.exists) {
+	  ctx->delta_stats.num_objects++;
+	  obs.exists = true;
+	}
+	t.touch(coll, soid);
+	map<string, bufferlist> to_set;
+	::decode(to_set, bp);
+	dout(20) << "setting vals: " << dendl;
+	for (map<string, bufferlist>::iterator i = to_set.begin();
+	     i != to_set.end();
+	     ++i) {
+	  dout(20) << "\t" << i->first << dendl;
+	}
+	t.omap_setkeys(coll, soid, to_set);
       }
+      break;
     case CEPH_OSD_OP_OMAPSETHEADER:
       {
+	if (!obs.exists) {
+	  ctx->delta_stats.num_objects++;
+	  obs.exists = true;
+	}
+	t.touch(coll, soid);
+	t.omap_setheader(coll, soid, osd_op.indata);
       }
+      break;
     case CEPH_OSD_OP_OMAPCLEAR:
       {
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	t.touch(coll, soid);
+	t.omap_clear(coll, soid);
       }
+      break;
     case CEPH_OSD_OP_OMAPRMKEYS:
       {
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	t.touch(coll, soid);
+	set<string> to_rm;
+	::decode(to_rm, bp);
+	t.omap_rmkeys(coll, soid, to_rm);
       }
+      break;
     default:
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)
