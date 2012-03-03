@@ -690,6 +690,11 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   }
 
   if (manifest) {
+    /* remove existing manifest attr */
+    iter = attrs.find(RGW_ATTR_MANIFEST);
+    if (iter != attrs.end())
+      attrs.erase(iter);
+
     bufferlist bl;
     ::encode(*manifest, bl);
     op.setxattr(RGW_ATTR_MANIFEST, bl);
@@ -849,14 +854,11 @@ int RGWRados::copy_obj(void *ctx,
   uint64_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
-  rgw_obj tmp_obj = dest_obj;
-  string tmp_oid;
+  rgw_obj shadow_obj = dest_obj;
+  string shadow_oid;
 
-  append_rand_alpha(dest_obj.object, tmp_oid, 32);
-  tmp_obj.set_obj(tmp_oid);
-  tmp_obj.set_key(dest_obj.object);
-
-  rgw_obj tmp_dest;
+  append_rand_alpha(dest_obj.object, shadow_oid, 32);
+  shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
 
   dout(5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
 
@@ -871,39 +873,65 @@ int RGWRados::copy_obj(void *ctx,
   if (ret < 0)
     return ret;
 
+  bufferlist first_chunk;
+  RGWObjManifest manifest;
+  RGWObjManifestPart *first_part;
+
   do {
     ret = get_obj(ctx, &handle, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
 
+    char *orig_data = data;
+
+    if (ofs < RGW_MAX_CHUNK_SIZE) {
+      off_t len = min(RGW_MAX_CHUNK_SIZE - ofs, (off_t)ret);
+      first_chunk.append(data, len);
+      ofs += len;
+      ret -= len;
+      data += len;
+    }
+
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(ctx, tmp_obj, data, ((ofs == 0) ? -1 : ofs), ret, false);
-    free(data);
+    r = 0;
+    if (ret > 0) {
+      r = put_obj_data(ctx, shadow_obj, data, ((ofs == 0) ? -1 : ofs), ret, false);
+    }
+    free(orig_data);
     if (r < 0)
       goto done_err;
 
     ofs += ret;
   } while (ofs <= end);
 
+  first_part = &manifest.objs[0];
+  first_part->loc = dest_obj;
+  first_part->loc_ofs = 0;
+  first_part->size = first_chunk.length();
+
+  if (ofs > RGW_MAX_CHUNK_SIZE) {
+    RGWObjManifestPart& tail = manifest.objs[RGW_MAX_CHUNK_SIZE];
+    tail.loc = shadow_obj;
+    tail.loc_ofs = RGW_MAX_CHUNK_SIZE;
+    tail.size = ofs - RGW_MAX_CHUNK_SIZE;
+  }
+  manifest.obj_size = ofs;
+
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     attrset[iter->first] = iter->second;
   }
   attrs = attrset;
 
-  ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, NULL, attrs, category);
+  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, false, NULL, &first_chunk, &manifest);
   if (mtime)
-    obj_stat(ctx, tmp_obj, NULL, mtime, NULL, NULL);
-
-  r = rgwstore->delete_obj(ctx, tmp_obj, false);
-  if (r < 0)
-    dout(0) << "ERROR: could not remove " << tmp_obj << dendl;
+    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
 
   finish_get_obj(&handle);
 
   return ret;
 done_err:
-  rgwstore->delete_obj(ctx, tmp_obj, false);
+  rgwstore->delete_obj(ctx, shadow_obj, false);
   finish_get_obj(&handle);
   return r;
 }
