@@ -596,8 +596,6 @@ public:
   virtual int start();
   virtual void wait();
 
-  int write_pid_file(int pid);
-
   int rebind(int avoid_port);
 
   __u32 get_global_seq(__u32 old=0) {
