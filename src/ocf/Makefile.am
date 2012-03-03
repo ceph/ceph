@@ -9,7 +9,7 @@ ocfdir = $(prefix)/lib/ocf
 # The ceph provider directory
 radir = $(ocfdir)/resource.d/$(PACKAGE_NAME)
 
-ra_SCRIPTS = ceph
+ra_SCRIPTS = ceph rbd
 
 install-data-hook:
 	$(LN_S) ceph $(DESTDIR)$(radir)/osd
