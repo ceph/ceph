@@ -358,14 +358,16 @@ void Journaler::write_head(Context *oncommit)
 
 void Journaler::_finish_write_head(int r, Header &wrote, Context *oncommit)
 {
-  if (r < 0)
+  if (r < 0) {
     lderr(cct) << "_finish_write_head got " << cpp_strerror(r) << dendl;
-  assert(r >= 0); // we can't really recover from write errors here
+    handle_write_error(r);
+    return;
+  }
   assert(!readonly);
   ldout(cct, 10) << "_finish_write_head " << wrote << dendl;
   last_committed = wrote;
   if (oncommit) {
-    oncommit->finish(0);
+    oncommit->finish(r);
     delete oncommit;
   }
 
@@ -389,9 +391,11 @@ public:
 void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
 {
   assert(!readonly);
-  if (r < 0)
+  if (r < 0) {
     lderr(cct) << "_finish_flush got " << cpp_strerror(r) << dendl;
-  assert(r >= 0);
+    handle_write_error(r);
+    return;
+  }
 
   assert(start >= safe_pos);
   assert(start < flush_pos);
@@ -412,10 +416,11 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
     safe_pos = *pending_safe.begin();
 
   ldout(cct, 10) << "_finish_flush safe from " << start
-	   << ", pending_safe " << pending_safe
-	   << ", (prezeroing/prezero)/write/flush/safe positions now "
-	   << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos
-	   << dendl;
+		 << ", pending_safe " << pending_safe
+		 << ", (prezeroing/prezero)/write/flush/safe positions now "
+		 << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos
+		 << "/" << flush_pos << "/" << safe_pos
+		 << dendl;
 
   // kick waiters <= safe_pos
   while (!waitfor_safe.empty()) {
@@ -664,8 +669,12 @@ void Journaler::_prezeroed(int r, uint64_t start, uint64_t len)
 	   << ", prezeroing/prezero was " << prezeroing_pos << "/" << prezero_pos
 	   << ", pending " << pending_zero
 	   << dendl;
-  if (r < 0 && r != -ENOENT)
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "_prezeroed got " << cpp_strerror(r) << dendl;
+    handle_write_error(r);
+    return;
+  }
+
   assert(r == 0 || r == -ENOENT);
 
   if (start == prezero_pos) {
@@ -722,7 +731,7 @@ void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
     if (on_readable) {
       Context *f = on_readable;
       on_readable = 0;
-      f->finish(0);
+      f->finish(r);
       delete f;
     }
     return;
@@ -1020,8 +1029,12 @@ void Journaler::_trim_finish(int r, uint64_t to)
 	   << ", trimmed/trimming/expire now "
 	   << to << "/" << trimming_pos << "/" << expire_pos
 	   << dendl;
-  if (r < 0 && r != -ENOENT)
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "_trim_finish got " << cpp_strerror(r) << dendl;
+    handle_write_error(r);
+    return;
+  }
+
   assert(r >= 0 || r == -ENOENT);
   
   assert(to <= trimming_pos);
@@ -1033,6 +1046,18 @@ void Journaler::_trim_finish(int r, uint64_t to)
 	 waitfor_trim.begin()->first <= trimmed_pos) {
     finish_contexts(cct, waitfor_trim.begin()->second, 0);
     waitfor_trim.erase(waitfor_trim.begin());
+  }
+}
+
+void Journaler::handle_write_error(int r)
+{
+  lderr(cct) << "handle_write_error " << cpp_strerror(r) << dendl;
+  if (on_write_error) {
+    on_write_error->finish(r);
+    delete on_write_error;
+    on_write_error = NULL;
+  } else {
+    assert(0 == "unhandled write error");
   }
 }
 
