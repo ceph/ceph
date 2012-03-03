@@ -57,17 +57,15 @@ public:
    * @{
    */
   /**
-   * Set the IP this Messenger should currently be using.
-   * This function should probably be removed in favor of making bind()
-   * more intelligent in the case where it actually does set an address
-   * to bind to.
+   * Set the IP this SimpleMessenger is using. This is useful if it's unset
+   * but another SimpleMessenger on the same interface has already learned its
+   * IP. Of course, this function does not change the port, since the
+   * SimpleMessenger always knows the correct setting for that.
+   * If the SimpleMesssenger's IP is already set, this function is a no-op.
+   *
+   * @param addr The IP address to set internally.
    */
   void set_ip(entity_addr_t& addr);
-  /**
-   * Retrieve the address as a reference. This function should be removed
-   * in favor of Messenger::get_myaddr().
-   */
-  const entity_addr_t &get_ms_addr() { return ms_addr; }
   /**
    * Retrieve the Messenger's address.
    *

@@ -319,7 +319,7 @@ int main(int argc, const char **argv)
   global_print_banner();
 
   cout << "starting osd." << whoami
-       << " at " << client_messenger->get_ms_addr()
+       << " at " << client_messenger->get_myaddr()
        << " osd_data " << g_conf->osd_data
        << " " << ((g_conf->osd_journal.empty()) ?
 		    "(no journal)" : g_conf->osd_journal)

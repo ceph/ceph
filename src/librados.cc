@@ -1016,7 +1016,7 @@ int librados::RadosClient::connect()
   // how to decompose the reply data into its consituent pieces.
   messenger->set_default_policy(Messenger::Policy::client(0, CEPH_FEATURE_OSDREPLYMUX));
 
-  ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
+  ldout(cct, 1) << "starting msgr at " << messenger->get_myaddr() << dendl;
 
   ldout(cct, 1) << "starting objecter" << dendl;
 

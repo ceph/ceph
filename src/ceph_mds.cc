@@ -236,7 +236,7 @@ int main(int argc, const char **argv)
                                                    getpid());
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
-  cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
+  cout << "starting " << g_conf->name << " at " << messenger->get_myaddr()
        << std::endl;
   uint64_t supported =
     CEPH_FEATURE_UID |
