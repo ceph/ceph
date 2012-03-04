@@ -851,9 +851,8 @@ int FileStore::wipe_subvol(const char *s)
 	 << cpp_strerror(err) << dendl;
     return -err;
   }
-  struct dirent *de;
-  char buf[PATH_MAX];
-  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
+  struct dirent sde, *de;
+  while (::readdir_r(dir, &sde, &de) == 0) {
     if (!de)
       break;
     if (strcmp(de->d_name, ".") == 0 ||
