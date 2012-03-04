@@ -173,8 +173,9 @@ class FileStore : public JournalingObjectStore,
       }
     }
 
-    OpSequencer() : qlock("FileStore::OpSequencer::qlock", false, false),
-		    apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
+    OpSequencer()
+      : qlock("FileStore::OpSequencer::qlock", false, false),
+	apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
     ~OpSequencer() {
       assert(q.empty());
     }
