@@ -657,7 +657,7 @@ int DBObjectMap::get_keys(const hobject_t &hoid,
 			  set<string> *keys)
 {
   Header header = lookup_map_header(path->coll(), hoid);
-  if (!header);
+  if (!header)
     return -ENOENT;
   ObjectMapIterator iter = get_iterator(hoid, path);
   for (; iter->valid(); iter->next()) {
