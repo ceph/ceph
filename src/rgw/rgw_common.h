@@ -714,6 +714,7 @@ public:
     bucket = b;
     set_ns(n);
     set_obj(o);
+    reset_key();
   }
   int set_ns(const char *n) {
     if (!n)
@@ -732,6 +733,11 @@ public:
   void set_key(string& k) {
     orig_key = k;
     key = k;
+  }
+
+  void reset_key() {
+    orig_key.clear();
+    key.clear();
   }
 
   void set_obj(string& o) {

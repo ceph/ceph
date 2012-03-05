@@ -213,9 +213,10 @@ static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAcces
   if (!oid.empty() && !upload_id.empty()) {
     RGWMPObj mp(oid, upload_id);
     oid = mp.get_meta();
-    obj.set_ns(mp_ns);
+    obj.init_ns(bucket, oid, mp_ns);
+  } else {
+    obj.init(bucket, oid);
   }
-  obj.init(bucket, oid);
   int ret = get_policy_from_attr(s->obj_ctx, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
@@ -779,13 +780,11 @@ int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
   string oid = s->object_str;
   head_obj.init(s->bucket, s->object_str);
 
-  obj.set_ns(shadow_ns);
-
   char buf[33];
   gen_rand_alphanumeric(buf, sizeof(buf) - 1);
   oid.append("_");
   oid.append(buf);
-  obj.init(s->bucket, oid);
+  obj.init_ns(s->bucket, oid, shadow_ns);
 
   return 0;
 }
