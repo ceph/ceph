@@ -4459,7 +4459,7 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   bufferlist data;
   m->claim_data(data);
   interval_set<uint64_t> data_included = m->data_included;
-  dout(10) << "handle_pull_response"
+  dout(10) << "handle_pull_response "
 	   << m->recovery_info
 	   << m->recovery_progress
 	   << " data.size() is " << data.length()
@@ -4524,13 +4524,6 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   }
 
   bool complete = pi.is_complete();
-
-  if (complete && !pi.recovery_progress.data_complete) {
-    dout(0) << " uh oh, we reached EOF on peer before we got everything we wanted"
-	    << dendl;
-    _failed_push(op);
-    return;
-  }
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   Context *onreadable = 0;
