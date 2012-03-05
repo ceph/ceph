@@ -176,6 +176,18 @@ void RGWListBucket_REST_S3::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+int RGWCreateBucket_REST_S3::get_params()
+{
+  RGWAccessControlPolicy_S3 s3policy;
+  int r = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (r < 0)
+    return r;
+
+  policy = s3policy;
+
+  return 0;
+}
+
 void RGWCreateBucket_REST_S3::send_response()
 {
   if (ret == -ERR_BUCKET_EXISTS)
@@ -199,8 +211,15 @@ void RGWDeleteBucket_REST_S3::send_response()
 
 int RGWPutObj_REST_S3::get_params()
 {
+  RGWAccessControlPolicy_S3 s3policy;
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
+
+  int r = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!r)
+     return -EINVAL;
+
+  policy = s3policy;
 
   return RGWPutObj_REST::get_params();
 }
@@ -228,6 +247,20 @@ void RGWDeleteObj_REST_S3::send_response()
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s);
+}
+
+int RGWCopyObj_REST_S3::init_dest_policy()
+{
+  RGWAccessControlPolicy_S3 s3policy;
+
+  /* build a policy for the target object */
+  ret = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!ret)
+     return -EINVAL;
+
+  dest_policy = s3policy;
+
+  return 0;
 }
 
 int RGWCopyObj_REST_S3::get_params()
@@ -284,6 +317,18 @@ void RGWGetACLs_REST_S3::send_response()
   CGI_PutStr(s, acls.c_str(), acls.size());
 }
 
+int RGWPutACLs_REST_S3::get_canned_policy(ACLOwner& owner, stringstream& ss)
+{
+  RGWAccessControlPolicy_S3 s3policy;
+  bool r = s3policy.create_canned(owner.get_id(), owner.get_display_name(), s->canned_acl);
+  if (!r)
+    return -EINVAL;
+
+  s3policy.to_xml(ss);
+
+  return 0;
+}
+
 void RGWPutACLs_REST_S3::send_response()
 {
   if (ret)
@@ -291,6 +336,18 @@ void RGWPutACLs_REST_S3::send_response()
   dump_errno(s);
   end_header(s, "application/xml");
   dump_start(s);
+}
+
+int RGWInitMultipart_REST_S3::get_params()
+{
+  RGWAccessControlPolicy_S3 s3policy;
+  ret = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!ret)
+     return -EINVAL;
+
+  policy = s3policy;
+
+  return RGWInitMultipart_REST::get_params();
 }
 
 void RGWInitMultipart_REST_S3::send_response()

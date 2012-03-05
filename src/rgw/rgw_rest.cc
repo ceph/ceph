@@ -528,13 +528,12 @@ static int init_entities_from_header(struct req_state *s)
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      req = s->object_str;
+      s->object_str = req;
       s->object = strdup(s->object_str.c_str());
     }
 
     goto done;
   }
-
   if (!s->bucket_name) {
     s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
@@ -603,6 +602,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_GOOG"),
                                    STR_LEN_ENTRY("HTTP_X_DHO"),
                                    STR_LEN_ENTRY("HTTP_X_OBJECT"),
+                                   STR_LEN_ENTRY("HTTP_X_CONTAINER"),
                                    {NULL, 0} };
 
 static int init_auth_info(struct req_state *s)
@@ -846,7 +846,7 @@ int RGWHandler_REST::read_permissions(RGWOp *op_obj)
     break;
   case OP_PUT:
   case OP_POST:
-    if (is_acl_op()) {
+    if (is_obj_update_op()) {
       only_bucket = false;
       break;
     }
@@ -892,7 +892,7 @@ RGWOp *RGWHandler_REST::get_op()
   }
 
   if (op) {
-    op->init(s);
+    op->init(s, this);
   }
   return op;
 }

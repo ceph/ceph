@@ -27,6 +27,9 @@ public:
   int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
   int read_permissions(RGWOp *op) { return 0; }
+
+  virtual RGWAccessControlPolicy *alloc_policy() { return NULL; }
+  virtual void free_policy(RGWAccessControlPolicy *policy) {}
 };
 
 #endif

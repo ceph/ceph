@@ -2,6 +2,7 @@
 #include "common/Formatter.h"
 #include "rgw_swift.h"
 #include "rgw_rest_swift.h"
+#include "rgw_acl_swift.h"
 
 #include <sstream>
 
@@ -191,6 +192,18 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
   CGI_PRINTF(s,"X-Container-Bytes-Used-Actual: %s\n", buf);
+
+  if (!s->object) {
+    RGWAccessControlPolicy_SWIFT *swift_policy = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
+    string read_acl, write_acl;
+    swift_policy->to_str(read_acl, write_acl);
+    if (read_acl.size()) {
+      CGI_PRINTF(s, "X-Container-Read: %s\r\n", read_acl.c_str());
+    }
+    if (write_acl.size()) {
+      CGI_PRINTF(s, "X-Container-Write: %s\r\n", write_acl.c_str());
+    }
+  }
 }
 
 static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
@@ -233,6 +246,13 @@ void RGWStatBucket_REST_SWIFT::send_response()
 
   end_header(s);
   dump_start(s);
+}
+
+int RGWCreateBucket_REST_SWIFT::get_params()
+{
+  policy.create_default(s->user.user_id, s->user.display_name);
+
+  return 0;
 }
 
 void RGWCreateBucket_REST_SWIFT::send_response()
@@ -285,6 +305,9 @@ int RGWPutObj_REST_SWIFT::get_params()
       }
     }
   }
+
+  policy.create_default(s->user.user_id, s->user.display_name);
+
   return RGWPutObj_REST::get_params();
 }
 
@@ -299,14 +322,38 @@ void RGWPutObj_REST_SWIFT::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
-int RGWPutObjMetadata_REST_SWIFT::get_params()
+int RGWPutMetadata_REST_SWIFT::get_params()
 {
   if (s->has_bad_meta)
     return -EINVAL;
+
+  if (!s->object) {
+    string read_list, write_list;
+
+    const char *read_attr = s->env->get("HTTP_X_CONTAINER_READ");
+    if (read_attr) {
+      read_list = read_attr;
+    }
+    const char *write_attr = s->env->get("HTTP_X_CONTAINER_WRITE");
+    if (write_attr) {
+      write_list = write_attr;
+    }
+
+    if (read_attr || write_attr) {
+      RGWAccessControlPolicy_SWIFT swift_policy;
+      int r = swift_policy.create(s->user.user_id, s->user.display_name, read_list, write_list);
+      if (r < 0)
+        return r;
+
+      policy = swift_policy;
+      has_policy = true;
+    }
+  }
+
   return 0;
 }
 
-void RGWPutObjMetadata_REST_SWIFT::send_response()
+void RGWPutMetadata_REST_SWIFT::send_response()
 {
   if (!ret)
     ret = STATUS_ACCEPTED;
@@ -326,6 +373,13 @@ void RGWDeleteObj_REST_SWIFT::send_response()
   dump_errno(s);
   end_header(s);
   flush_formatter_to_req_state(s, s->formatter);
+}
+
+int RGWCopyObj_REST_SWIFT::init_dest_policy()
+{
+  dest_policy.create_default(s->user.user_id, s->user.display_name);
+
+  return 0;
 }
 
 int RGWCopyObj_REST_SWIFT::get_params()
@@ -398,7 +452,7 @@ int RGWGetObj_REST_SWIFT::send_response(void *handle)
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-         CGI_PRINTF(s,"X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
+         CGI_PRINTF(s, "X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }
@@ -489,10 +543,7 @@ RGWOp *RGWHandler_REST_SWIFT::get_delete_op()
 
 RGWOp *RGWHandler_REST_SWIFT::get_post_op()
 {
-  if (s->object)
-    return new RGWPutObjMetadata_REST_SWIFT;
-
-  return NULL;
+  return new RGWPutMetadata_REST_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_SWIFT::get_copy_op()

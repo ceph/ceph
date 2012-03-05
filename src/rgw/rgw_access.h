@@ -228,6 +228,9 @@ public:
    */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl) = 0;
 
+  virtual int set_attrs(void *ctx, rgw_obj& obj,
+                        map<string, bufferlist>& attrs,
+                        map<string, bufferlist>* rmattrs) { return -ENOTSUP; }
  /**
   * stat an object
   */

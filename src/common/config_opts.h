@@ -358,6 +358,7 @@ OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not spe
 OPTION(rgw_dns_name, OPT_STR, "")
 OPTION(rgw_swift_url, OPT_STR, "")              // 
 OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  // 
+OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)

@@ -6,33 +6,45 @@
 #include <iostream>
 #include <include/types.h>
 
-#include <expat.h>
-
-#include "rgw_xml.h"
+#include "common/debug.h"
 
 using namespace std;
 
-
-#define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
-#define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
 
 #define RGW_PERM_READ            0x01
 #define RGW_PERM_WRITE           0x02
 #define RGW_PERM_READ_ACP        0x04
 #define RGW_PERM_WRITE_ACP       0x08
+#define RGW_PERM_READ_OBJS       0x10
+#define RGW_PERM_WRITE_OBJS      0x20
 #define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
-#define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL
+#define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
 
-class ACLPermission : public XMLObj
+enum ACLGranteeTypeEnum {
+/* numbers are encoded, should not change */
+  ACL_TYPE_CANON_USER = 0,
+  ACL_TYPE_EMAIL_USER = 1,
+  ACL_TYPE_GROUP      = 2,
+  ACL_TYPE_UNKNOWN    = 3,
+};
+
+enum ACLGroupTypeEnum {
+/* numbers are encoded should not change */
+  ACL_GROUP_NONE                = 0,
+  ACL_GROUP_ALL_USERS           = 1,
+  ACL_GROUP_AUTHENTICATED_USERS = 2,
+};
+
+class ACLPermission
 {
+protected:
   int flags;
 public:
-  ACLPermission();
-  ~ACLPermission();
-  bool xml_end(const char *el);
-  int get_permissions();
-  void set_permissions(int perm);
+  ACLPermission() : flags(0) {}
+  ~ACLPermission() {}
+  int get_permissions() { return flags; }
+  void set_permissions(int perm) { flags = perm; }
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -44,26 +56,20 @@ public:
     ::decode(struct_v, bl);
     ::decode(flags, bl);
   }
-  void to_xml(ostream& out);
 };
 WRITE_CLASS_ENCODER(ACLPermission)
 
-enum ACLGranteeTypeEnum {
-  ACL_TYPE_CANON_USER,
-  ACL_TYPE_EMAIL_USER,
-  ACL_TYPE_GROUP,
-  ACL_TYPE_UNKNOWN,
-};
 class ACLGranteeType
 {
+protected:
   __u32 type;
 public:
-  ACLGranteeType();
-  ~ACLGranteeType();
-  const char *to_string();
-  ACLGranteeTypeEnum get_type();
-  void set(ACLGranteeTypeEnum t);
-  void set(const char *s);
+  ACLGranteeType() : type(ACL_TYPE_UNKNOWN) {}
+  virtual ~ACLGranteeType() {}
+//  virtual const char *to_string() = 0;
+  ACLGranteeTypeEnum get_type() { return (ACLGranteeTypeEnum)type; }
+  void set(ACLGranteeTypeEnum t) { type = t; }
+//  virtual void set(const char *s) = 0;
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -77,164 +83,158 @@ public:
 };
 WRITE_CLASS_ENCODER(ACLGranteeType)
 
-class ACLGrantee : public XMLObj
+class ACLGrantee
 {
-  string type;
 public:
-  ACLGrantee();
-  ~ACLGrantee();
-
-  bool xml_start(const char *el, const char **attr);
-
-  string& get_type();
+  ACLGrantee() {}
+  ~ACLGrantee() {}
 };
 
 
-class ACLGrant : public XMLObj
+class ACLGrant
 {
+protected:
   ACLGranteeType type;
-
   string id;
-  string uri;
   string email;
   ACLPermission permission;
   string name;
-public:
-  ACLGrant();
-  ~ACLGrant();
+  ACLGroupTypeEnum group;
 
-  bool xml_end(const char *el);
+public:
+  ACLGrant() : group(ACL_GROUP_NONE) {}
+  virtual ~ACLGrant() {}
 
   /* there's an assumption here that email/uri/id encodings are
      different and there can't be any overlap */
-  string& get_id() {
+  bool get_id(string& _id) {
     switch(type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
-      return email;
+      _id = email;
+      return true;
     case ACL_TYPE_GROUP:
-      return uri;
+      return false;
     default:
-      return id;
+      _id = id;
+      return true;
     }
   }
   ACLGranteeType& get_type() { return type; }
   ACLPermission& get_permission() { return permission; }
+  ACLGroupTypeEnum get_group() { return group; }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(id, bl);
+    string uri;
     ::encode(uri, bl);
     ::encode(email, bl);
     ::encode(permission, bl);
     ::encode(name, bl);
+    __u32 g = (__u32)group;
+    ::encode(g, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(type, bl);
     ::decode(id, bl);
+    string uri;
     ::decode(uri, bl);
     ::decode(email, bl);
     ::decode(permission, bl);
     ::decode(name, bl);
-  }
-  void to_xml(ostream& out) {
-    out << "<Grant>" <<
-            "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << type.to_string() << "\">";
-    switch (type.get_type()) {
-    case ACL_TYPE_CANON_USER:
-      out << "<ID>" << id << "</ID>" <<
-             "<DisplayName>" << name << "</DisplayName>";
-      break;
-    case ACL_TYPE_EMAIL_USER:
-      out << "<EmailAddress>" << email << "</EmailAddress>";
-      break;
-    case ACL_TYPE_GROUP:
-       out << "<URI>" << uri << "</URI>";
-      break;
-    default:
-      break;
+    if (struct_v > 1) {
+      __u32 g;
+      ::decode(g, bl);
+      group = (ACLGroupTypeEnum)g;
+    } else {
+      group = uri_to_group(uri);
     }
-    out << "</Grantee>";
-    permission.to_xml(out);
-    out << "</Grant>";
   }
+
+  ACLGroupTypeEnum uri_to_group(string& uri);
+  
   void set_canon(string& _id, string& _name, int perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
     permission.set_permissions(perm);
   }
-  void set_group(string& _uri, int perm) {
+  void set_group(ACLGroupTypeEnum _group, int perm) {
     type.set(ACL_TYPE_GROUP);
-    uri = _uri;
+    group = _group;
     permission.set_permissions(perm);
   }
-  bool xml_start(const char *el, const char **attr);
 };
 WRITE_CLASS_ENCODER(ACLGrant)
 
-class RGWAccessControlList : public XMLObj
+class RGWAccessControlList
 {
+protected:
   map<string, int> acl_user_map;
+  map<uint32_t, int> acl_group_map;
   multimap<string, ACLGrant> grant_map;
-  bool user_map_initialized;
-
-  void init_user_map();
+  void _add_grant(ACLGrant *grant);
 public:
-  RGWAccessControlList();
-  ~RGWAccessControlList();
+  RGWAccessControlList() {}
 
-  bool xml_end(const char *el);
-  int get_perm(CephContext *cct, string& id, int perm_mask);
+  virtual ~RGWAccessControlList() {}
+
+  int get_perm(string& id, int perm_mask);
+  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
-    ::encode(user_map_initialized, bl);
+    bool maps_initialized = true;
+    ::encode(maps_initialized, bl);
     ::encode(acl_user_map, bl);
     ::encode(grant_map, bl);
+    ::encode(acl_group_map, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
-    ::decode(user_map_initialized, bl);
+    bool maps_initialized;
+    ::decode(maps_initialized, bl);
     ::decode(acl_user_map, bl);
     ::decode(grant_map, bl);
-  }
-  void to_xml(ostream& out) {
-    map<string, ACLGrant>::iterator iter;
-    out << "<AccessControlList>";
-    for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
-      ACLGrant& grant = iter->second;
-      grant.to_xml(out);
+    if (struct_v >= 2) {
+      ::decode(acl_group_map, bl);
+    } else if (!maps_initialized) {
+      multimap<string, ACLGrant>::iterator iter;
+      for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
+        ACLGrant& grant = iter->second;
+        _add_grant(&grant);
+      }
     }
-    out << "</AccessControlList>";
   }
   void add_grant(ACLGrant *grant);
 
+  multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
+
   void create_default(string id, string name) {
     acl_user_map.clear();
-    grant_map.clear();
+    acl_group_map.clear();
 
     ACLGrant grant;
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
   }
-  bool create_canned(string id, string name, string canned_acl);
 };
 WRITE_CLASS_ENCODER(RGWAccessControlList)
 
-class ACLOwner : public XMLObj
+class ACLOwner
 {
+protected:
   string id;
   string display_name;
 public:
-  ACLOwner();
-  ~ACLOwner();
+  ACLOwner() {}
+  ~ACLOwner() {}
 
-  bool xml_end(const char *el);
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -247,14 +247,6 @@ public:
     ::decode(id, bl);
     ::decode(display_name, bl);
   }
-  void to_xml(ostream& out) {
-    if (id.empty())
-      return;
-    out << "<Owner>" << "<ID>" << id << "</ID>";
-    if (!display_name.empty())
-      out << "<DisplayName>" << display_name << "</DisplayName>";
-    out << "</Owner>";
-  }
   void set_id(string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 
@@ -263,18 +255,19 @@ public:
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
-class RGWAccessControlPolicy : public XMLObj
+class RGWAccessControlPolicy
 {
+protected:
   RGWAccessControlList acl;
   ACLOwner owner;
 
 public:
-  RGWAccessControlPolicy();
-  ~RGWAccessControlPolicy();
+  RGWAccessControlPolicy() {}
+  virtual ~RGWAccessControlPolicy() {}
 
-  bool xml_end(const char *el);
-
-  int get_perm(CephContext *cct, string& id, int perm_mask);
+  int get_perm(string& id, int perm_mask);
+  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
+  bool verify_permission(string& uid, int user_perm_mask, int perm);
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -293,12 +286,6 @@ public:
     ::decode(struct_v, bl);
     ::decode(owner, bl);
   }
-  void to_xml(ostream& out) {
-    out << "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
-    owner.to_xml(out);
-    acl.to_xml(out);
-    out << "</AccessControlPolicy>";
-  }
 
   void set_owner(ACLOwner& o) { owner = o; }
   ACLOwner& get_owner() {
@@ -310,28 +297,12 @@ public:
     owner.set_id(id);
     owner.set_name(name);
   }
-  bool create_canned(string id, string name, string canned_acl) {
-    bool ret = acl.create_canned(id, name, canned_acl);
-    owner.set_id(id);
-    owner.set_name(name);
-    return ret;
-  }
-
   RGWAccessControlList& get_acl() {
     return acl;
   }
+
+  virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
-
-/**
- * Interfaces with the webserver's XML handling code
- * to parse it in a way that makes sense for the rgw.
- */
-class RGWACLXMLParser : public RGWXMLParser
-{
-  XMLObj *alloc_obj(const char *el);
-public:
-  RGWACLXMLParser() {}
-};
 
 #endif

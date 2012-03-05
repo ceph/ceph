@@ -85,12 +85,13 @@ is_err() const
 }
 
 
-req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
+req_state::req_state(struct RGWEnv *e) : os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
 {
   should_log = env->conf->should_log;
   content_started = false;
   format = 0;
-  acl = new RGWAccessControlPolicy;
+  bucket_acl = NULL;
+  object_acl = NULL;
   expect_cont = false;
 
   os_auth_token = NULL;
@@ -108,7 +109,8 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
 
 req_state::~req_state() {
   delete formatter;
-  delete acl;
+  delete bucket_acl;
+  delete object_acl;
   free(os_user);
   free(os_groups);
   free((void *)object);
@@ -340,22 +342,51 @@ string& XMLArgs::get(const char *name)
   return get(s);
 }
 
-bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm)
+bool verify_bucket_permission(struct req_state *s, int perm)
 {
-   if (!policy)
-     return false;
+  if (!s->bucket_acl)
+    return false;
 
-   int policy_perm = policy->get_perm(g_ceph_context, uid, perm);
-   int acl_perm = policy_perm & user_perm_mask;
+  if ((perm & (int)s->perm_mask) != perm)
+    return false;
 
-   dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
+  if (s->bucket_acl->verify_permission(s->user.user_id, perm, perm))
+    return true;
 
-   return (perm == acl_perm);
+  if (perm & (RGW_PERM_READ | RGW_PERM_READ_ACP))
+    perm |= RGW_PERM_READ_OBJS;
+  if (perm & RGW_PERM_WRITE)
+    perm |= RGW_PERM_WRITE_OBJS;
+
+  return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
-bool verify_permission(struct req_state *s, int perm)
+bool verify_object_permission(struct req_state *s, int perm)
 {
-  return verify_permission(s->acl, s->user.user_id, s->perm_mask, perm);
+  if (!s->object_acl)
+    return false;
+
+  bool ret = s->object_acl->verify_permission(s->user.user_id, s->perm_mask, perm);
+  if (ret)
+    return true;
+
+  if (!g_conf->rgw_enforce_swift_acls)
+    return ret;
+
+  if ((perm & (int)s->perm_mask) != perm)
+    return false;
+
+  int swift_perm = 0;
+  if (perm & (RGW_PERM_READ | RGW_PERM_READ_ACP))
+    swift_perm |= RGW_PERM_READ_OBJS;
+  if (perm & RGW_PERM_WRITE)
+    swift_perm |= RGW_PERM_WRITE_OBJS;
+
+  if (!swift_perm)
+    return false;
+  /* we already verified the user mask above, so we pass swift_perm as the mask here,
+     otherwise the mask might not cover the swift permissions bits */
+  return s->bucket_acl->verify_permission(s->user.user_id, swift_perm, swift_perm);
 }
 
 static char hex_to_num(char c)
