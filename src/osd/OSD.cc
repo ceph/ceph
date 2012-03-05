@@ -5549,8 +5549,11 @@ bool OSD::op_is_queueable(PG *pg, OpRequest *op)
 	      << " for " << *m << dendl;
       pg->replay_queue[m->get_version()] = op;
       op->mark_delayed();
-      return false;
+    } else {
+      dout(7) << *pg << " waiting until after replay for " << *m << dendl;
+      pg->waiting_for_active.push_back(op);
     }
+    return false;
   }
 
   return true;
