@@ -1151,7 +1151,35 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
       note["repair"] += p->second;
     if (p->first & PG_STATE_SPLITTING)
       note["splitting"] += p->second;
+    if (p->first & PG_STATE_RECOVERING)
+      note["recovering"] += p->second;
+    if (p->first & PG_STATE_INCOMPLETE)
+      note["incomplete"] += p->second;
+    if (p->first & PG_STATE_BACKFILL)
+      note["backfill"] += p->second;
   }
+
+  hash_map<pg_t, pg_stat_t> stuck_pgs;
+  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t cutoff = now - utime_t(g_conf->mon_pg_stuck_threshold, 0);
+
+  pg_map.get_stuck_stats(PGMap::STUCK_INACTIVE, cutoff, stuck_pgs);
+  if (!stuck_pgs.empty()) {
+    note["stuck inactive"] = stuck_pgs.size();
+  }
+  stuck_pgs.clear();
+
+  pg_map.get_stuck_stats(PGMap::STUCK_UNCLEAN, cutoff, stuck_pgs);
+  if (!stuck_pgs.empty()) {
+    note["stuck unclean"] = stuck_pgs.size();
+  }
+  stuck_pgs.clear();
+
+  pg_map.get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
+  if (!stuck_pgs.empty()) {
+    note["stuck stale"] = stuck_pgs.size();
+  }
+
   if (!note.empty()) {
     ret = HEALTH_WARN;
     for (map<string,int>::iterator p = note.begin(); p != note.end(); p++) {
@@ -1192,7 +1220,7 @@ int PGMonitor::dump_stuck_pg_stats(ostream& ss,
 {
   string format = "plain";
   string val;
-  int threshold = 300;
+  int threshold = g_conf->mon_pg_stuck_threshold;
   int seconds;
   ostringstream err;
 

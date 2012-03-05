@@ -258,6 +258,16 @@ public:
   void handle_probe_slurp(MMonProbe *m);
   void handle_probe_slurp_latest(MMonProbe *m);
   void handle_probe_data(MMonProbe *m);
+  /* Given an MMonProbe and associated Paxos machine, create a reply,
+   * fill it with the missing Paxos states and current commit pointers
+   *
+   * @param m The incoming MMonProbe. We use this to determine the range
+   * of paxos states to include in the reply.
+   * @param pax The Paxos state machine which m is associated with.
+   *
+   * @returns A new MMonProbe message, initialized as OP_DATA, and filled
+   * with the necessary Paxos states. */
+  MMonProbe *fill_probe_data(MMonProbe *m, Paxos *pax);
 
   // request routing
   struct RoutedRequest {

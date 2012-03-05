@@ -54,9 +54,9 @@ void PG::lock(bool no_lockdep)
  * caller holds osd->map_lock, no need to take it to get a valid
  * osdmap reference.
  */
-void PG::lock_with_map_lock_held()
+void PG::lock_with_map_lock_held(bool no_lockdep)
 {
-  _lock.Lock();
+  _lock.Lock(no_lockdep);
   osdmap_ref = osd->osdmap;
 }
 
@@ -1225,7 +1225,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   // find out when we commit
   get();   // for callback
   tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_interval_since,
-					    get_osdmap()->get_inst(acting[0])));
+					    get_osdmap()->get_cluster_inst(acting[0])));
   
   // initialize snap_trimq
   if (is_primary()) {
@@ -3087,7 +3087,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 				      ss)) {
 	    cur_inconsistent.insert(j->first);
 	    errorstream << info.pgid << " osd." << acting[j->first]
-			<< ": soid " << *k << ss.str() << std::endl;
+			<< ": soid " << *k << " " << ss.str() << std::endl;
 	  }
 	}
       } else {
@@ -3784,6 +3784,7 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
     post_event(advmap);
     return transit< Reset >();
   }
+  pg->remove_down_peer_info(advmap.osdmap);
   return discard_event();
 }
 
@@ -3815,6 +3816,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
+  pg->remove_down_peer_info(advmap.osdmap);
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
@@ -3900,13 +3902,6 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   pg->update_stats();
   return discard_event();
-}
-
-boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap) 
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->remove_down_peer_info(advmap.osdmap);
-  return forward_event();
 }
 
 void PG::RecoveryState::Primary::exit()
@@ -4437,7 +4432,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
 
-  q.f->open_array_section("requested_pf_info_from");
+  q.f->open_array_section("requested_info_from");
   for (set<int>::iterator p = peer_info_requested.begin(); p != peer_info_requested.end(); ++p) {
     q.f->open_object_section("osd");
     q.f->dump_int("osd", *p);

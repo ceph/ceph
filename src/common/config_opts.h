@@ -100,6 +100,7 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between 
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
+OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
@@ -301,6 +302,7 @@ OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in th
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(filestore, OPT_BOOL, false)
+OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
 OPTION(filestore_fake_attrs, OPT_BOOL, false)
@@ -356,6 +358,7 @@ OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not spe
 OPTION(rgw_dns_name, OPT_STR, "")
 OPTION(rgw_swift_url, OPT_STR, "")              // 
 OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  // 
+OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)

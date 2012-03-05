@@ -12,8 +12,8 @@ protected:
 public:
   RGWGetObj_REST() {}
 
-  virtual void init(struct req_state *s) {
-    RGWGetObj::init(s);
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWGetObj::init(s, h);
     sent_header = false;
   }
 
@@ -67,11 +67,11 @@ public:
   int get_data(bufferlist& bl);
 };
 
-class RGWPutObjMetadata_REST : public RGWPutObjMetadata
+class RGWPutMetadata_REST : public RGWPutMetadata
 {
 public:
-  RGWPutObjMetadata_REST() {}
-  ~RGWPutObjMetadata_REST() {}
+  RGWPutMetadata_REST() {}
+  ~RGWPutMetadata_REST() {}
 };
 
 class RGWDeleteObj_REST : public RGWDeleteObj {
@@ -105,7 +105,7 @@ public:
   RGWInitMultipart_REST() {}
   ~RGWInitMultipart_REST() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWCompleteMultipart_REST : public RGWCompleteMultipart {
@@ -140,9 +140,8 @@ public:
 
 class RGWHandler_REST : public RGWHandler {
 protected:
-  bool is_acl_op() {
-    return s->args.exists("acl");
-  }
+  virtual bool is_acl_op() = 0;
+  virtual bool is_obj_update_op() = 0;
 
   virtual RGWOp *get_retrieve_obj_op(bool get_data) = 0;
   virtual RGWOp *get_retrieve_op(bool get_data) = 0;

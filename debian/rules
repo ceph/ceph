@@ -42,11 +42,13 @@ ifeq ($(shell grep -c -E '^Build-Depends:(.*,)?[[:space:]]*libgoogle-perftools-d
   extraopts += --without-tcmalloc
 endif
 
-
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
 	touch $@
+
+build-arch: build
+build-indep: build
 
 build: build-stamp
 build-stamp: configure-stamp  
@@ -54,8 +56,9 @@ build-stamp: configure-stamp
 
 	./autogen.sh
 	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
-		--sysconfdir=/etc $(extraopts) $(confflags)
+	  --sysconfdir=/etc $(extraopts) $(confflags)
 	$(MAKE)
+
 	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate

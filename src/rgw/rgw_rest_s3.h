@@ -3,6 +3,7 @@
 #define TIME_BUF_SIZE 128
 
 #include "rgw_op.h"
+#include "rgw_acl_s3.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -40,6 +41,7 @@ public:
   RGWCreateBucket_REST_S3() {}
   ~RGWCreateBucket_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -73,6 +75,7 @@ public:
   RGWCopyObj_REST_S3() {}
   ~RGWCopyObj_REST_S3() {}
 
+  int init_dest_policy();
   int get_params();
   void send_response();
 };
@@ -90,6 +93,7 @@ public:
   RGWPutACLs_REST_S3() {}
   ~RGWPutACLs_REST_S3() {}
 
+  int get_canned_policy(ACLOwner& owner, stringstream& ss);
   void send_response();
 };
 
@@ -99,6 +103,7 @@ public:
   RGWInitMultipart_REST_S3() {}
   ~RGWInitMultipart_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -138,6 +143,12 @@ public:
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
+  bool is_acl_op() {
+    return s->args.exists("acl");
+  }
+  bool is_obj_update_op() {
+    return is_acl_op();
+  }
   RGWOp *get_retrieve_obj_op(bool get_data);
   RGWOp *get_retrieve_op(bool get_data);
   RGWOp *get_create_op();

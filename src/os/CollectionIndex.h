@@ -21,7 +21,6 @@
 
 #include "osd/osd_types.h"
 #include "include/object.h"
-#include "ObjectStore.h"
 
 /**
  * CollectionIndex provides an interface for manipulating indexed colelctions
@@ -45,18 +44,34 @@ protected:
     string full_path;
     /// Ref to parent Index
     std::tr1::shared_ptr<CollectionIndex> parent_ref;
-    /// Constructor
+    /// coll_t for parent Index
+    coll_t parent_coll;
+
+    /// Normal Constructor
     Path(
       string path,                              ///< [in] Path to return.
       std::tr1::weak_ptr<CollectionIndex> ref)  ///< [in] weak_ptr to parent.
-      : full_path(path), parent_ref(ref) {}
+      : full_path(path), parent_ref(ref), parent_coll(parent_ref->coll()) {}
+
+    /// Debugging Constructor
+    Path(
+      string path,                              ///< [in] Path to return.
+      coll_t coll)                              ///< [in] collection
+      : full_path(path), parent_coll(coll) {}
       
     /// Getter for the stored path.
     const char *path() const { return full_path.c_str(); }
+
+    /// Getter for collection
+    coll_t coll() const { return parent_coll; }
   };
  public:
   /// Type of returned paths
   typedef std::tr1::shared_ptr<Path> IndexedPath;
+
+  static IndexedPath get_testing_path(string path, coll_t collection) {
+    return IndexedPath(new Path(path, collection));
+  }
 
   static const uint32_t FLAT_INDEX_TAG = 0;
   static const uint32_t HASH_INDEX_TAG = 1;
@@ -67,6 +82,11 @@ protected:
    * @return Collection version represented by the Index implementation
    */
   virtual uint32_t collection_version() = 0;
+
+  /**
+   * Returns the collection managed by this CollectionIndex
+   */
+  virtual coll_t coll() const = 0;
 
   /** 
    * For setting the internal weak_ptr to a shared_ptr to this.

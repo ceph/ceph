@@ -64,6 +64,8 @@
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 #include "HashIndex.h"
+#include "DBObjectMap.h"
+#include "LevelDBStore.h"
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
@@ -238,43 +240,62 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
   return 0;
 }
 
-int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode)
-{
-  Index index;
-  IndexedPath path;
-  int r, fd, exist;
-  r = get_index(cid, &index);
+int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
+			IndexedPath *path,
+			Index *index) {
+  Index index2;
+  IndexedPath path2;
+  if (!path)
+    path = &path2;
+  int fd, exist;
+  int r = 0;
+  if (!index) {
+    index = &index2;
+  }
+  if (!(*index)) {
+    r = get_index(cid, index);
+  }
   if (r < 0) {
     derr << "error getting collection index for " << cid
 	 << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
-  r = index->lookup(oid, &path, &exist);
+  r = (*index)->lookup(oid, path, &exist);
   if (r < 0) {
     derr << "could not find " << oid << " in index: "
 	 << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  r = ::open(path->path(), flags, mode);
+  r = ::open((*path)->path(), flags, mode);
   if (r < 0) {
     r = -errno;
-    derr << "error opening file " << path->path() << " with flags="
-	 << flags << " and mode=" << mode << ": " << cpp_strerror(-r) << dendl;
+    dout(10) << "error opening file " << (*path)->path() << " with flags="
+	     << flags << " and mode=" << mode << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
   fd = r;
 
   if ((flags & O_CREAT) && (!exist)) {
-    r = index->created(oid, path->path());
+    r = (*index)->created(oid, (*path)->path());
     if (r < 0) {
       TEMP_FAILURE_RETRY(::close(fd));
-      derr << "error creating " << oid << " (" << path->path()
+      derr << "error creating " << oid << " (" << (*path)->path()
 	   << ") in index: " << cpp_strerror(-r) << dendl;
       return r;
     }
   }
   return fd;
+}
+
+int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode, IndexedPath *path)
+{
+  return lfn_open(cid, oid, flags, mode, path, 0);
+}
+
+int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode)
+{
+  return lfn_open(cid, oid, flags, mode, 0, 0);
 }
 
 int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags)
@@ -322,6 +343,10 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
+  r = object_map->link_keys(o, path_old, o, path_new);
+  if (r < 0)
+    return r;
+
   r = index_new->created(o, path_new->path());
   if (r < 0)
     return r;
@@ -334,6 +359,16 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o)
   int r = get_index(cid, &index);
   if (r < 0)
     return r;
+  {
+    IndexedPath path;
+    int exist;
+    r = index->lookup(o, &path, &exist);
+    if (r < 0)
+      return r;
+    object_map->clear(o, path);
+    if (r < 0 && r != -ENOENT)
+      return r;
+  }
   return index->unlink(o);
 }
 
@@ -655,6 +690,10 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   ostringstream sss;
   sss << basedir << "/current/commit_op_seq";
   current_op_seq_fn = sss.str();
+
+  ostringstream omss;
+  omss << basedir << "/current/omap";
+  omap_dir = omss.str();
 
   // initialize logger
   PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
@@ -988,6 +1027,21 @@ int FileStore::mkfs()
     }
   }
 #endif
+
+  {
+    leveldb::Options options;
+    options.create_if_missing = true;
+    leveldb::DB *db;
+    leveldb::Status status = leveldb::DB::Open(options, omap_dir, &db);
+    if (status.ok()) {
+      delete db;
+      derr << "leveldb db created" << dendl;
+    } else {
+      derr << "Failed to create leveldb: " << status.ToString() << dendl;
+      ret = -1;
+      goto close_basedir_fd;
+    }
+  }
 
   // journal?
   ret = mkjournal();
@@ -1555,6 +1609,9 @@ int FileStore::mount()
     goto close_basedir_fd;
   }
 
+  char nosnapfn[200];
+  snprintf(nosnapfn, sizeof(nosnapfn), "%s/nosnap", current_fn.c_str());
+
   if (btrfs_stable_commits) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
@@ -1586,9 +1643,13 @@ int FileStore::mount()
 
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
-	
-	if (curr_seq && cp != curr_seq) {
-	  if (!m_osd_use_stale_snap) { 
+
+	// if current/ is marked as non-snapshotted, refuse to roll
+	// back (without clear direction) to avoid throwing out new
+	// data.
+	struct stat st;
+	if (::stat(nosnapfn, &st) == 0) {
+	  if (!m_osd_use_stale_snap) {
 	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
 	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
 	    derr << "Force rollback to snapshotted version with 'osd use stale snap = true'" << dendl;
@@ -1663,6 +1724,43 @@ int FileStore::mount()
   }
 
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
+
+  if (!btrfs_stable_commits) {
+    // mark current/ as non-snapshotted so that we don't rollback away
+    // from it.
+    int r = ::creat(nosnapfn, 0644);
+    if (r < 0) {
+      derr << "FileStore::mount: failed to create current/nosnap" << dendl;
+      goto close_current_fd;
+    }
+  } else {
+    // clear nosnap marker, if present.
+    ::unlink(nosnapfn);
+  }
+
+  {
+    LevelDBStore *omap_store = new LevelDBStore(omap_dir);
+    stringstream err;
+    if (omap_store->init(err)) {
+      derr << "Error initializing leveldb: " << err.str() << dendl;
+      ret = -1;
+      goto close_current_fd;
+    }
+    DBObjectMap *dbomap = new DBObjectMap(omap_store);
+    ret = dbomap->init();
+    if (ret < 0) {
+      derr << "Error initializing DBObjectMap: " << ret << dendl;
+      goto close_current_fd;
+    }
+    stringstream err2;
+
+    if (g_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
+      derr << err2.str() << dendl;;
+      ret = -EINVAL;
+      goto close_current_fd;
+    }
+    object_map.reset(dbomap);
+  }
 
   // journal
   open_journal();
@@ -1746,6 +1844,15 @@ int FileStore::mount()
     goto close_current_fd;
   }
 
+  {
+    stringstream err2;
+    if (!object_map->check(err2)) {
+      derr << err2.str() << dendl;;
+      ret = -EINVAL;
+      goto close_current_fd;
+    }
+  }
+
   journal_start();
 
   op_tp.start();
@@ -1815,6 +1922,7 @@ int FileStore::umount()
     TEMP_FAILURE_RETRY(::close(basedir_fd));
     basedir_fd = -1;
   }
+  object_map.reset();
 
   if (!m_filestore_dev.empty()) {
     dout(0) << "umounting" << dendl;
@@ -2421,6 +2529,41 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       }
       break;
 
+    case Transaction::OP_OMAP_CLEAR:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	r = _omap_clear(cid, oid);
+      }
+      break;
+    case Transaction::OP_OMAP_SETKEYS:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	map<string, bufferlist> aset;
+	i.get_attrset(aset);
+	r = _omap_setkeys(cid, oid, aset);
+      }
+      break;
+    case Transaction::OP_OMAP_RMKEYS:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	set<string> keys;
+	i.get_keyset(keys);
+	r = _omap_rmkeys(cid, oid, keys);
+      }
+      break;
+    case Transaction::OP_OMAP_SETHEADER:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	bufferlist bl;
+	i.get_bl(bl);
+	r = _omap_setheader(cid, oid, bl);
+      }
+      break;
+
     default:
       derr << "bad op " << op << dendl;
       assert(0);
@@ -2556,7 +2699,7 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
 
 
   struct fiemap *fiemap = NULL;
-  map<uint64_t, uint64_t> extmap;
+  map<uint64_t, uint64_t> exomap;
 
   dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
@@ -2603,7 +2746,7 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
 
       if (extent->fe_logical + extent->fe_length > offset + len)
         extent->fe_length = offset + len - extent->fe_logical;
-      extmap[extent->fe_logical] = extent->fe_length;
+      exomap[extent->fe_logical] = extent->fe_length;
       i++;
       extent++;
     }
@@ -2613,9 +2756,9 @@ done:
   if (fd >= 0)
     TEMP_FAILURE_RETRY(::close(fd));
   if (r >= 0)
-    ::encode(extmap, bl);
+    ::encode(exomap, bl);
 
-  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num extents=" << extmap.size() << dendl;
+  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num extents=" << exomap.size() << dendl;
   free(fiemap);
   return r;
 }
@@ -2720,13 +2863,16 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
 {
   dout(15) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
 
+
   int o, n, r;
-  o = lfn_open(cid, oldoid, O_RDONLY);
+  Index index;
+  IndexedPath from, to;
+  o = lfn_open(cid, oldoid, O_RDONLY, 0, &from, &index);
   if (o < 0) {
     r = o;
     goto out2;
   }
-  n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644, &to, &index);
   if (n < 0) {
     r = n;
     goto out;
@@ -2737,6 +2883,8 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   r = _do_clone_range(o, n, 0, st.st_size, 0);
   if (r < 0)
     r = -errno;
+  dout(20) << "objectmap_clone_keys" << dendl;
+  r = object_map->clone_keys(oldoid, from, newoid, to);
 
   TEMP_FAILURE_RETRY(::close(n));
  out:
@@ -3053,6 +3201,11 @@ void FileStore::sync_entry()
       int err = write_op_seq(op_fd, cp);
       if (err < 0) {
 	derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	assert(0);
+      }
+      stringstream errstream;
+      if (!object_map->check(errstream)) {
+	derr << errstream.str() << dendl;
 	assert(0);
       }
 
@@ -3825,6 +3978,74 @@ int FileStore::collection_list(coll_t c, vector<hobject_t>& ls)
   return index->collection_list(&ls);
 }
 
+int FileStore::omap_get(coll_t c, const hobject_t &hoid,
+			bufferlist *header,
+			map<string, bufferlist> *out)
+{
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(c, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->get(hoid, path, header, out);
+}
+
+int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
+			       bufferlist *bl)
+{
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(c, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->get_header(hoid, path, bl);
+}
+
+int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
+{
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(c, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->get_keys(hoid, path, keys);
+}
+
+int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
+			       const set<string> &keys,
+			       map<string, bufferlist> *out)
+{
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(c, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->get_values(hoid, path, keys, out);
+}
+
+int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
+			       const set<string> &keys,
+			       set<string> *out)
+{
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(c, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->check_keys(hoid, path, keys, out);
+}
+
+ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
+							  const hobject_t &hoid)
+{
+  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(c, hoid, &path);
+  if (r < 0)
+    return ObjectMap::ObjectMapIterator();
+  return object_map->get_iterator(hoid, path);
+}
+
 int FileStore::_create_collection(coll_t c) 
 {
   if (fake_collections) return collections.create_collection(c);
@@ -3873,6 +4094,45 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   dout(10) << "collection_remove " << c << "/" << o << " = " << r << dendl;
   return r;
 }
+
+
+int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(cid, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->clear(hoid, path);
+}
+int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
+			     const map<string, bufferlist> &aset) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(cid, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->set_keys(hoid, path, aset);
+}
+int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
+			   const set<string> &keys) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(cid, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->rm_keys(hoid, path, keys);
+}
+int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
+			       const bufferlist &bl)
+{
+  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  IndexedPath path;
+  int r = lfn_find(cid, hoid, &path);
+  if (r < 0)
+    return r;
+  return object_map->set_header(hoid, path, bl);
+}
+
 
 const char** FileStore::get_tracked_conf_keys() const
 {

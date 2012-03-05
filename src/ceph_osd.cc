@@ -390,7 +390,7 @@ int main(int argc, const char **argv)
 		g_conf->osd_data, g_conf->osd_journal);
   err = osd->pre_init();
   if (err < 0) {
-    derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
+    derr << TEXT_RED << " ** ERROR: osd pre_init failed: " << cpp_strerror(-err)
 	 << TEXT_NORMAL << dendl;
     return 1;
   }
@@ -412,7 +412,7 @@ int main(int argc, const char **argv)
   // start osd
   err = osd->init();
   if (err < 0) {
-    derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
+    derr << TEXT_RED << " ** ERROR: osd init failed: " << cpp_strerror(-err)
          << TEXT_NORMAL << dendl;
     return 1;
   }
@@ -421,6 +421,10 @@ int main(int argc, const char **argv)
   messenger_hbin->wait();
   messenger_hbout->wait();
   cluster_messenger->wait();
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_osd_signal);
+  unregister_async_signal_handler(SIGTERM, handle_osd_signal);
 
   // done
   delete osd;

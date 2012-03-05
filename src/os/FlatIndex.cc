@@ -21,6 +21,7 @@
 #include "CollectionIndex.h"
 #include "common/ceph_crypto.h"
 #include "osd/osd_types.h"
+#include <errno.h>
 
 using ceph::crypto::SHA1;
 

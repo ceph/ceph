@@ -14,7 +14,7 @@
 
 #include "include/types.h"
 #include "include/rados/librgw.h"
-#include "rgw/rgw_acl.h"
+#include "rgw/rgw_acl_s3.h"
 #include "rgw_acl.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
@@ -52,7 +52,7 @@ int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml)
     bl.append(bin, bin_len);
 
     // convert to RGWAccessControlPolicy
-    RGWAccessControlPolicy acl;
+    RGWAccessControlPolicy_S3 acl;
     bufferlist::iterator bli(bl.begin());
     acl.decode(bli);
 
@@ -85,15 +85,15 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
 {
   char *bin_ = NULL;
   try {
-    RGWACLXMLParser parser;
+    RGWACLXMLParser_S3 parser;
     if (!parser.init()) {
       return -1000;
     }
     if (!parser.parse(xml, strlen(xml), true)) {
       return -EINVAL;
     }
-    RGWAccessControlPolicy *policy =
-      (RGWAccessControlPolicy *)parser.find_first("AccessControlPolicy");
+    RGWAccessControlPolicy_S3 *policy =
+      (RGWAccessControlPolicy_S3 *)parser.find_first("AccessControlPolicy");
     if (!policy) {
       return -1001;
     }

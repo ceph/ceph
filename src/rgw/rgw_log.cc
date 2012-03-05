@@ -120,8 +120,8 @@ int rgw_log_op(struct req_state *s)
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
   entry.user = s->user.user_id;
-  if (s->acl)
-    entry.object_owner = s->acl->get_owner().get_id();
+  if (s->object_acl)
+    entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner;
 
   entry.time = s->time;

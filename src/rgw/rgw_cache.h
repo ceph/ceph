@@ -15,7 +15,7 @@ enum {
 #define CACHE_FLAG_DATA           0x1
 #define CACHE_FLAG_XATTRS         0x2
 #define CACHE_FLAG_META           0x4
-#define CACHE_FLAG_APPEND_XATTRS  0x8
+#define CACHE_FLAG_MODIFY_XATTRS  0x8
 
 struct ObjectMetaInfo {
   uint64_t size;
@@ -46,18 +46,20 @@ struct ObjectCacheInfo {
   uint32_t flags;
   bufferlist data;
   map<string, bufferlist> xattrs;
+  map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
 
   ObjectCacheInfo() : status(0), flags(0) {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(status, bl);
     ::encode(flags, bl);
     ::encode(data, bl);
     ::encode(xattrs, bl);
     ::encode(meta, bl);
+    ::encode(rm_xattrs, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
@@ -67,6 +69,8 @@ struct ObjectCacheInfo {
     ::decode(data, bl);
     ::decode(xattrs, bl);
     ::decode(meta, bl);
+    if (struct_v >= 2)
+      ::decode(rm_xattrs, bl);
   }
 };
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
@@ -175,6 +179,9 @@ public:
   RGWCache() {}
 
   int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
+  int set_attrs(void *ctx, rgw_obj& obj, 
+                map<string, bufferlist>& attrs,
+                map<string, bufferlist>* rmattrs);
   int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                    map<std::string, bufferlist>* rmattrs, const bufferlist *data);
@@ -262,9 +269,43 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
     cacheable = true;
     info.xattrs[attr_name] = bl;
     info.status = 0;
-    info.flags = CACHE_FLAG_APPEND_XATTRS;
+    info.flags = CACHE_FLAG_MODIFY_XATTRS;
   }
   int ret = T::set_attr(ctx, obj, attr_name, bl);
+  if (cacheable) {
+    string name = normal_name(bucket, oid);
+    if (ret >= 0) {
+      cache.put(name, info);
+      int r = distribute(obj, info, UPDATE_OBJ);
+      if (r < 0)
+        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+    } else {
+     cache.remove(name);
+    }
+  }
+
+  return ret;
+}
+
+template <class T>
+int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj, 
+                           map<string, bufferlist>& attrs,
+                           map<string, bufferlist>* rmattrs) 
+{
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  ObjectCacheInfo info;
+  bool cacheable = false;
+  if (bucket.name[0] == '.') {
+    cacheable = true;
+    info.xattrs = attrs;
+    if (rmattrs)
+      info.rm_xattrs = *rmattrs;
+    info.status = 0;
+    info.flags = CACHE_FLAG_MODIFY_XATTRS;
+  }
+  int ret = T::set_attrs(ctx, obj, attrs, rmattrs);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {

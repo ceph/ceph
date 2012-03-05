@@ -674,13 +674,8 @@ void Monitor::slurp()
   bootstrap();
 }
 
-void Monitor::handle_probe_slurp(MMonProbe *m)
+MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
 {
-  dout(10) << "handle_probe_slurp " << *m << dendl;
-
-  Paxos *pax = get_paxos_by_name(m->machine_name);
-  assert(pax);
-
   MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name);
   r->machine_name = m->machine_name;
   r->oldest_version = pax->get_first_committed();
@@ -691,16 +686,26 @@ void Monitor::handle_probe_slurp(MMonProbe *m)
   for (; v <= pax->get_version(); v++) {
     len += store->get_bl_sn(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
     for (list<string>::iterator p = pax->extra_state_dirs.begin();
-	 p != pax->extra_state_dirs.end();
-	 ++p) {
+         p != pax->extra_state_dirs.end();
+         ++p) {
       len += store->get_bl_sn(r->paxos_values[*p][v], p->c_str(), v);      
     }
     if (len >= g_conf->mon_slurp_bytes)
       break;
   }
 
+  return r;
+}
+
+void Monitor::handle_probe_slurp(MMonProbe *m)
+{
+  dout(10) << "handle_probe_slurp " << *m << dendl;
+
+  Paxos *pax = get_paxos_by_name(m->machine_name);
+  assert(pax);
+
+  MMonProbe *r = fill_probe_data(m, pax);
   messenger->send_message(r, m->get_connection());
-  
   m->put();
 }
 
@@ -711,14 +716,10 @@ void Monitor::handle_probe_slurp_latest(MMonProbe *m)
   Paxos *pax = get_paxos_by_name(m->machine_name);
   assert(pax);
 
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name);
-  r->machine_name = m->machine_name;
-  r->oldest_version = pax->get_first_committed();
-  r->newest_version = pax->get_version();
+  MMonProbe *r = fill_probe_data(m, pax);
   r->latest_version = pax->get_stashed(r->latest_value);
 
   messenger->send_message(r, m->get_connection());
-  
   m->put();
 }
 

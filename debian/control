@@ -2,16 +2,16 @@ Source: ceph
 Section: admin
 Priority: optional
 Homepage: http://ceph.newdream.net/
-Vcs-Git: git://github.com/NewDreamNetwork/ceph.git
-Vcs-Browser: https://github.com/NewDreamNetwork/ceph
+Vcs-Git: git://github.com/ceph/ceph.git
+Vcs-Browser: https://github.com/ceph/ceph
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
 Uploaders: Sage Weil <sage@newdream.net>
 Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, libfuse-dev, libboost-dev (>= 1.34), libedit-dev, libcrypto++-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev [i386 amd64], pkg-config, libgtkmm-2.4-dev, python, python-support, libcurl4-gnutls-dev, libkeyutils-dev, uuid-dev, libaio-dev
-Standards-Version: 3.9.1
+Standards-Version: 3.9.3
 
 Package: ceph
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, hdparm, binutils, ceph-common
+Depends: ${shlibs:Depends}, ${misc:Depends}, sdparm | hdparm, binutils, ceph-common
 Recommends: ceph-fuse, libcephfs1, librados2, librbd1, btrfs-tools
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide

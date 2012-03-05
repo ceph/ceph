@@ -4187,6 +4187,7 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
   recovery_info.version = v;
   ObjectRecoveryProgress progress;
   progress.data_complete = false;
+  progress.omap_complete = false;
   progress.data_recovered_to = 0;
   progress.first = true;
   assert(!pulling.count(soid));
@@ -4308,6 +4309,7 @@ void ReplicatedPG::push_start(
   pi.recovery_progress.first = true;
   pi.recovery_progress.data_recovered_to = 0;
   pi.recovery_progress.data_complete = 0;
+  pi.recovery_progress.omap_complete = 0;
 
   ObjectRecoveryProgress new_progress;
   send_push(peer, pi.recovery_info, pi.recovery_progress, &new_progress);
@@ -4351,6 +4353,7 @@ void ReplicatedPG::submit_push_data(
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
   map<string, bufferptr> &attrs,
+  map<string, bufferlist> &omap_entries,
   ObjectStore::Transaction *t)
 {
   if (first) {
@@ -4368,6 +4371,8 @@ void ReplicatedPG::submit_push_data(
     off += p.get_len();
   }
 
+  t->omap_setkeys(coll_t::TEMP_COLL, recovery_info.soid,
+		  omap_entries);
   t->setattrs(coll_t::TEMP_COLL, recovery_info.soid,
 	      attrs);
 }
@@ -4454,7 +4459,7 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   bufferlist data;
   m->claim_data(data);
   interval_set<uint64_t> data_included = m->data_included;
-  dout(10) << "handle_pull_response"
+  dout(10) << "handle_pull_response "
 	   << m->recovery_info
 	   << m->recovery_progress
 	   << " data.size() is " << data.length()
@@ -4520,18 +4525,12 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
 
   bool complete = pi.is_complete();
 
-  if (complete && !pi.recovery_progress.data_complete) {
-    dout(0) << " uh oh, we reached EOF on peer before we got everything we wanted"
-	    << dendl;
-    _failed_push(op);
-    return;
-  }
-
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
   submit_push_data(pi.recovery_info, first,
 		   data_included, data, m->attrset,
+		   m->omap_entries,
 		   t);
 
   if (complete) {
@@ -4592,7 +4591,8 @@ void ReplicatedPG::handle_push(OpRequest *op)
   bufferlist data;
   m->claim_data(data);
   bool first = m->current_progress.first;
-  bool complete = m->recovery_progress.data_complete;
+  bool complete = m->recovery_progress.data_complete &&
+    m->recovery_progress.omap_complete;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   Context *onreadable = new ObjectStore::C_DeleteTransaction(t);
   Context *onreadable_sync = 0;
@@ -4601,6 +4601,7 @@ void ReplicatedPG::handle_push(OpRequest *op)
 		   m->data_included,
 		   data,
 		   m->attrset,
+		   m->omap_entries,
 		   t);
   if (complete)
     submit_push_complete(m->recovery_info,
@@ -4666,10 +4667,28 @@ int ReplicatedPG::send_push(int peer,
     new_progress.first = false;
   }
 
+  uint64_t available = g_conf->osd_recovery_max_chunk;
+  if (!progress.omap_complete) {
+    ObjectMap::ObjectMapIterator iter =
+      osd->store->get_omap_iterator(coll,
+				    recovery_info.soid);
+    for (iter->upper_bound(progress.omap_recovered_to);
+	 iter->valid();
+	 iter->next()) {
+      if (available < (iter->key().size() + iter->value().length()))
+	break;
+      subop->omap_entries.insert(make_pair(iter->key(), iter->value()));
+      available -= (iter->key().size() + iter->value().length());
+    }
+    if (!iter->valid())
+      new_progress.omap_complete = true;
+    else
+      new_progress.omap_recovered_to = iter->key();
+  }
 
   subop->data_included.span_of(recovery_info.copy_subset,
 			       progress.data_recovered_to,
-			       g_conf->osd_recovery_max_chunk);
+			       available);
 
   for (interval_set<uint64_t>::iterator p = subop->data_included.begin();
        p != subop->data_included.end();
@@ -5401,6 +5420,13 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
   int unfound = get_num_unfound();
   if (unfound) {
     dout(10) << " still have " << unfound << " unfound" << dendl;
+    return started;
+  }
+
+  if (missing.num_missing() > 0) {
+    // this shouldn't happen!
+    osd->clog.error() << info.pgid << " recovery ending with " << missing.num_missing()
+		      << ": " << missing.missing << "\n";
     return started;
   }
 

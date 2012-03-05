@@ -62,6 +62,7 @@ public:
   RGWCreateBucket_REST_SWIFT() {}
   ~RGWCreateBucket_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -82,10 +83,10 @@ public:
   void send_response();
 };
 
-class RGWPutObjMetadata_REST_SWIFT : public RGWPutObjMetadata_REST {
+class RGWPutMetadata_REST_SWIFT : public RGWPutMetadata_REST {
 public:
-  RGWPutObjMetadata_REST_SWIFT() {}
-  ~RGWPutObjMetadata_REST_SWIFT() {}
+  RGWPutMetadata_REST_SWIFT() {}
+  ~RGWPutMetadata_REST_SWIFT() {}
 
   int get_params();
   void send_response();
@@ -104,6 +105,7 @@ public:
   RGWCopyObj_REST_SWIFT() {}
   ~RGWCopyObj_REST_SWIFT() {}
 
+  int init_dest_policy();
   int get_params();
   void send_response();
 };
@@ -127,6 +129,12 @@ public:
 
 class RGWHandler_REST_SWIFT : public RGWHandler_REST {
 protected:
+  bool is_acl_op() {
+    return false; // for now
+  }
+  bool is_obj_update_op() {
+    return s->op == OP_POST;
+  }
 
   RGWOp *get_retrieve_obj_op(bool get_data);
   RGWOp *get_retrieve_op(bool get_data);
@@ -141,6 +149,9 @@ public:
 
   int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
+
+  RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
+  void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
 #endif

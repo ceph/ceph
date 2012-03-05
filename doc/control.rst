@@ -54,6 +54,39 @@ Add auth keyring for an osd.  ::
 
 Show auth key OSD subsystem.
 
+PG subsystem
+------------
+::
+
+	$ ceph -- pg dump [--format <format>]
+
+Output the stats of all pgs. Valid formats are "plain" and "json",
+and plain is the default. ::
+
+	$ ceph -- pg dump_stuck inactive|unclean|stale [--format <format>] [-t|--threshold <seconds>]
+
+Output the stats of all PGs stuck in the specified state.
+
+``--format`` may be ``plain`` (default) or ``json``
+
+``--threshold`` defines how many seconds "stuck" is (default: 300)
+
+**Inactive** PGs cannot process reads or writes because they are waiting for an OSD
+with the most up-to-date data to come back.
+
+**Unclean** PGs contain objects that are not replicated the desired number
+of times. They should be recovering.
+
+**Stale** PGs are in an unknown state - the OSDs that host them have not
+reported to the monitor cluster in a while (configured by
+mon_osd_report_timeout). ::
+
+	$ ceph pg <pgid> mark_unfound_lost revert
+
+Revert "lost" objects to their prior state, either a previous version
+or delete them if they were just created. ::
+
+
 OSD subsystem
 -------------
 ::
@@ -107,11 +140,6 @@ Create a cluster snapshot. ::
 	$ ceph osd lost [--yes-i-really-mean-it]
 
 Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
-
-        $ ceph pg <pgid> mark_unfound_lost revert
-
-Revert "lost" objects to their prior state, either a previous version
-or delete them if they were just created. ::
 
 	$ ceph osd create [<id>]
 

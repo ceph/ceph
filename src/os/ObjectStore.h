@@ -20,6 +20,7 @@
 #include "include/buffer.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
+#include "ObjectMap.h"
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -147,6 +148,11 @@ public:
     static const int OP_RMATTRS =      28;  // cid, oid
     static const int OP_COLL_RENAME =       29;  // cid, newcid
 
+    static const int OP_OMAP_CLEAR = 31;   // cid
+    static const int OP_OMAP_SETKEYS = 32; // cid, attrset
+    static const int OP_OMAP_RMKEYS = 33;  // cid, keyset
+    static const int OP_OMAP_SETHEADER = 34; // cid, header
+
   private:
     uint64_t ops;
     uint64_t pad_unused_bytes;
@@ -269,12 +275,17 @@ public:
       void get_attrset(map<string,bufferptr>& aset) {
 	::decode(aset, p);
       }
+      void get_attrset(map<string,bufferlist>& aset) {
+	::decode(aset, p);
+      }
+      void get_keyset(set<string> &keys) {
+	::decode(keys, p);
+      }
     };
 
     iterator begin() {
       return iterator(this);
     }
-
     // -----------------------------
 
     void start_sync() {
@@ -469,6 +480,57 @@ public:
       ops++;
     }
 
+    /// Remove omap from hoid
+    void omap_clear(
+      coll_t cid,           ///< [in] Collection containing hoid
+      const hobject_t &hoid ///< [in] Object from which to remove omap
+      ) {
+      __u32 op = OP_OMAP_CLEAR;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(hoid, tbl);
+      ops++;
+    }
+    /// Set keys on hoid omap.  Replaces duplicate keys.
+    void omap_setkeys(
+      coll_t cid,                           ///< [in] Collection containing hoid
+      const hobject_t &hoid,                ///< [in] Object to update
+      const map<string, bufferlist> &attrset ///< [in] Replacement keys and values
+      ) {
+      __u32 op = OP_OMAP_SETKEYS;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(hoid, tbl);
+      ::encode(attrset, tbl);
+      ops++;
+    }
+    /// Remove keys from hoid omap
+    void omap_rmkeys(
+      coll_t cid,             ///< [in] Collection containing hoid
+      const hobject_t &hoid,  ///< [in] Object from which to remove the omap
+      const set<string> &keys ///< [in] Keys to clear
+      ) {
+      __u32 op = OP_OMAP_RMKEYS;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(hoid, tbl);
+      ::encode(keys, tbl);
+      ops++;
+    }
+
+    /// Set omap header
+    void omap_setheader(
+      coll_t cid,             ///< [in] Collection containing hoid
+      const hobject_t &hoid,  ///< [in] Object from which to remove the omap
+      const bufferlist &bl    ///< [in] Header value
+      ) {
+      __u32 op = OP_OMAP_SETHEADER;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(hoid, tbl);
+      ::encode(bl, tbl);
+      ops++;
+    }
 
     // etc.
     Transaction() :
@@ -632,7 +694,6 @@ public:
   virtual bool collection_empty(coll_t c) = 0;
   virtual int collection_list(coll_t c, vector<hobject_t>& o) = 0;
 
-
   /**
    * list partial contents of collection relative to a hash offset/position
    *
@@ -649,6 +710,58 @@ public:
 				      int min, int max, snapid_t snap, 
 				      vector<hobject_t> *ls, hobject_t *next) = 0;
 
+  /// OMAP
+  /// Get omap contents
+  virtual int omap_get(
+    coll_t c,                ///< [in] Collection containing hoid
+    const hobject_t &hoid,   ///< [in] Object containing omap
+    bufferlist *header,      ///< [out] omap header
+    map<string, bufferlist> *out /// < [out] Key to value map
+    ) = 0;
+
+  /// Get omap header
+  virtual int omap_get_header(
+    coll_t c,                ///< [in] Collection containing hoid
+    const hobject_t &hoid,   ///< [in] Object containing omap
+    bufferlist *header       ///< [out] omap header
+    ) = 0;
+
+  /// Get keys defined on hoid
+  virtual int omap_get_keys(
+    coll_t c,              ///< [in] Collection containing hoid
+    const hobject_t &hoid, ///< [in] Object containing omap
+    set<string> *keys      ///< [out] Keys defined on hoid
+    ) = 0;
+
+  /// Get key values
+  virtual int omap_get_values(
+    coll_t c,                    ///< [in] Collection containing hoid
+    const hobject_t &hoid,       ///< [in] Object containing omap
+    const set<string> &keys,     ///< [in] Keys to get
+    map<string, bufferlist> *out ///< [out] Returned keys and values
+    ) = 0;
+
+  /// Filters keys into out which are defined on hoid
+  virtual int omap_check_keys(
+    coll_t c,                ///< [in] Collection containing hoid
+    const hobject_t &hoid,   ///< [in] Object containing omap
+    const set<string> &keys, ///< [in] Keys to check
+    set<string> *out         ///< [out] Subset of keys defined on hoid
+    ) = 0;
+
+  /**
+   * Returns an object map iterator
+   *
+   * Warning!  The returned iterator is an implicit lock on filestore
+   * operations in c.  Do not use filestore methods on c while the returned
+   * iterator is live.  (Filling in a transaction is no problem).
+   *
+   * @return iterator, null on error
+   */
+  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
+    coll_t c,              ///< [in] collection
+    const hobject_t &hoid  ///< [in] object
+    ) = 0;
 
   /*
   virtual int _create_collection(coll_t c) = 0;

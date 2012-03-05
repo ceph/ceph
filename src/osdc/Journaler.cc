@@ -17,6 +17,7 @@
 #include "include/Context.h"
 #include "msg/Messenger.h"
 #include "osdc/Journaler.h"
+#include "common/errno.h"
 
 #define DOUT_SUBSYS journaler
 #undef dout_prefix
@@ -357,6 +358,8 @@ void Journaler::write_head(Context *oncommit)
 
 void Journaler::_finish_write_head(int r, Header &wrote, Context *oncommit)
 {
+  if (r < 0)
+    lderr(cct) << "_finish_write_head got " << cpp_strerror(r) << dendl;
   assert(r >= 0); // we can't really recover from write errors here
   assert(!readonly);
   ldout(cct, 10) << "_finish_write_head " << wrote << dendl;
@@ -386,7 +389,9 @@ public:
 void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
 {
   assert(!readonly);
-  assert(r>=0);
+  if (r < 0)
+    lderr(cct) << "_finish_flush got " << cpp_strerror(r) << dendl;
+  assert(r >= 0);
 
   assert(start >= safe_pos);
   assert(start < flush_pos);
@@ -659,6 +664,8 @@ void Journaler::_prezeroed(int r, uint64_t start, uint64_t len)
 	   << ", prezeroing/prezero was " << prezeroing_pos << "/" << prezero_pos
 	   << ", pending " << pending_zero
 	   << dendl;
+  if (r < 0 && r != -ENOENT)
+    lderr(cct) << "_prezeroed got " << cpp_strerror(r) << dendl;
   assert(r == 0 || r == -ENOENT);
 
   if (start == prezero_pos) {
@@ -1013,6 +1020,8 @@ void Journaler::_trim_finish(int r, uint64_t to)
 	   << ", trimmed/trimming/expire now "
 	   << to << "/" << trimming_pos << "/" << expire_pos
 	   << dendl;
+  if (r < 0 && r != -ENOENT)
+    lderr(cct) << "_trim_finish got " << cpp_strerror(r) << dendl;
   assert(r >= 0 || r == -ENOENT);
   
   assert(to <= trimming_pos);

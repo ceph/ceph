@@ -5,6 +5,7 @@
 *.co
 *.deb
 *.tar.gz
+*.tar.bz2
 *.dsc
 *.changes
 ./config.*

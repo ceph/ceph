@@ -1015,11 +1015,11 @@ void librados::RadosClient::shutdown()
     lock.Unlock();
     return;
   }
-  state = DISCONNECTED;
   monclient.shutdown();
-  if (objecter)
+  if (objecter && state == CONNECTED)
     objecter->shutdown();
-  timer.shutdown();
+  state = DISCONNECTED;
+  timer.shutdown();   // will drop+retake lock
   lock.Unlock();
   if (messenger) {
     messenger->shutdown();
@@ -1049,7 +1049,7 @@ bool librados::RadosClient::ms_dispatch(Message *m)
     m->put();
     ret = true;
   } else {
-  ret = _dispatch(m);
+    ret = _dispatch(m);
   }
   lock.Unlock();
   return ret;

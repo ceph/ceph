@@ -602,9 +602,7 @@ void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
   
  halt:
   // don't want to put local-delivery signals
-  // this magic number should be larger than
-  // the size of the D_CONNECT et al enum
-  if (m>(void *)5) {
+  if (m>(void *)DispatchQueue::D_NUM_CODES) {
     msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
   }
@@ -838,6 +836,13 @@ int SimpleMessenger::Pipe::accept()
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
+	  if (!(existing->state == STATE_CONNECTING ||
+		existing->state == STATE_STANDBY ||
+		existing->state == STATE_WAIT))
+	    lderr(msgr->cct) << "accept race bad state, would replace, existing=" << existing->state
+			     << " " << existing << ".cseq=" << existing->connect_seq
+			     << " == " << connect.connect_seq
+			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
 		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
@@ -847,6 +852,12 @@ int SimpleMessenger::Pipe::accept()
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > msgr->ms_addr);
+	  if (!(existing->state == STATE_CONNECTING ||
+		existing->state == STATE_OPEN))
+	    lderr(msgr->cct) << "accept race bad state, would send wait, existing=" << existing->state
+			     << " " << existing << ".cseq=" << existing->connect_seq
+			     << " == " << connect.connect_seq
+			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
 		 existing->state == STATE_OPEN); // this will win
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
@@ -1425,18 +1436,27 @@ void SimpleMessenger::Pipe::discard_queue()
   q.qlen.sub(in_qlen);
 
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
+    if (*p < (void *) DispatchQueue::D_NUM_CODES) {
+      continue; // skip non-Message dispatch codes
+    }
     ldout(msgr->cct,20) << "  discard " << *p << dendl;
     (*p)->put();
   }
   sent.clear();
   for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
+        continue; // skip non-Message dispatch codes
+      }
       ldout(msgr->cct,20) << "  discard " << *r << dendl;
       (*r)->put();
     }
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
+        continue; // skip non-Message dispatch codes
+      }
       msgr->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
       ldout(msgr->cct,20) << "  discard " << *r << dendl;
       (*r)->put();
@@ -2710,6 +2730,10 @@ void SimpleMessenger::wait()
       reaper_cond.Wait(lock);
       reaper();
     }
+
+    dispatch_queue.local_pipe->pipe_lock.Lock();
+    dispatch_queue.local_pipe->discard_queue();
+    dispatch_queue.local_pipe->pipe_lock.Unlock();
   }
   lock.Unlock();
 
@@ -2811,13 +2835,17 @@ void SimpleMessenger::mark_disposable(Connection *con)
 
 void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
+  // be careful here: multiple threads may block here, and readers of
+  // ms_addr do NOT hold any lock.
   lock.Lock();
-  int port = ms_addr.get_port();
-  ms_addr.addr = peer_addr_for_me.addr;
-  ms_addr.set_port(port);
-  ldout(cct,1) << "learned my addr " << ms_addr << dendl;
-  need_addr = false;
-  init_local_pipe();
+  if (need_addr) {
+    entity_addr_t t = peer_addr_for_me;
+    t.set_port(ms_addr.get_port());
+    ms_addr.addr = t.addr;
+    ldout(cct,1) << "learned my addr " << ms_addr << dendl;
+    need_addr = false;
+    init_local_pipe();
+  }
   lock.Unlock();
 }
 

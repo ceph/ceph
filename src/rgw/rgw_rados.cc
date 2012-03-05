@@ -1043,9 +1043,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
 int RGWRados::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 {
   int r;
-  do {
-    r = delete_obj_impl(ctx, obj, sync);
-  } while (r == -ECANCELED);
+
+  r = delete_obj_impl(ctx, obj, sync);
+  if (r == -ECANCELED)
+    r = 0;
+
   return r;
 }
 
@@ -1244,9 +1246,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   }
 
   int r;
-  do {
-    r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
-  } while (r == -ECANCELED);
+  r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
 
   return r;
 }
@@ -1299,6 +1299,73 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
     string loc = obj.loc();
     rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
     r = set_attr(NULL, shadow, name, bl);
+  }
+
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
+                        map<string, bufferlist>& attrs,
+                        map<string, bufferlist>* rmattrs)
+{
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  librados::IoCtx io_ctx;
+  string actual_obj = oid;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  rgw_bucket actual_bucket = bucket;
+
+  if (actual_obj.size() == 0) {
+    actual_obj = bucket.name;
+    actual_bucket = rgw_root_bucket;
+  }
+
+  int r = open_bucket_ctx(actual_bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  io_ctx.locator_set_key(key);
+
+  ObjectWriteOperation op;
+  RGWObjState *state = NULL;
+
+  r = append_atomic_test(rctx, obj, io_ctx, actual_obj, op, &state);
+  if (r < 0)
+    return r;
+
+  map<string, bufferlist>::iterator iter;
+  if (rmattrs) {
+    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+      const string& name = iter->first;
+      op.rmxattr(name.c_str());
+    }
+  }
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    const string& name = iter->first;
+    bufferlist& bl = iter->second;
+
+    if (!bl.length())
+      continue;
+
+    op.setxattr(name.c_str(), bl);
+  }
+
+  if (!op.size())
+    return 0;
+
+  r = io_ctx.operate(actual_obj, &op);
+
+  if (r == -ECANCELED) {
+    /* a race! object was replaced, we need to set attr on the original obj */
+    dout(0) << "NOTICE: RGWRados::set_obj_attrs: raced with another process, going to the shadow obj instead" << dendl;
+    string loc = obj.loc();
+    rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
+    r = set_attrs(NULL, shadow, attrs, rmattrs);
   }
 
   if (r < 0)
@@ -1665,9 +1732,11 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         pair<string, bufferlist> *xattr_cond)
 {
   int r;
-  do {
-    r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
-  } while (ctx && r == -ECANCELED);
+
+  r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
+  if (r == -ECANCELED)
+    r = 0;
+
   return r;
 }
 
@@ -2461,7 +2530,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
 	   << " " << cpp_strerror(-r) << std::endl;
         return -r;
       }
-      eof = (more.length() < chunk);
+      eof = (more.length() < (off_t)chunk);
       pos += more.length();
       bufferlist old;
       old.substr_of(bl, off, bl.length() - off);

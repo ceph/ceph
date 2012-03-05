@@ -404,7 +404,7 @@ private:
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   
-  void advance_map(ObjectStore::Transaction& t);
+  void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
   void activate_map(ObjectStore::Transaction& t, list<Context*>& tfin);
 
   // osd map cache (past osd maps)
@@ -446,8 +446,9 @@ protected:
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
-  PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
-  PG   *_create_lock_pg(pg_t pgid, bool newly_created,
+  PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
+  PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false, bool hold_map_lock=false);
+  PG   *_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
 			ObjectStore::Transaction& t);
 
@@ -486,12 +487,11 @@ protected:
     int split_bits;
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
-  map<pg_t, set<pg_t> > pg_split_ready;  // children ready to be split to, by parent
 
   bool can_create_pg(pg_t pgid);
   void handle_pg_create(OpRequest *op);
 
-  void kick_pg_split_queue();
+  void do_split(PG *parent, set<pg_t>& children, ObjectStore::Transaction &t, C_Contexts *tfin);
   void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
 
 
@@ -760,7 +760,6 @@ protected:
   list< pair<pg_t, utime_t > > replay_queue;
   
   void check_replay_queue();
-  void activate_pg(pg_t pgid, utime_t activate_at);
 
 
   // -- snap trimming --
