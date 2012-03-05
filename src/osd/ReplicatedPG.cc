@@ -5430,6 +5430,13 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
     return started;
   }
 
+  if (missing.num_missing() > 0) {
+    // this shouldn't happen!
+    osd->clog.error() << info.pgid << " recovery ending with " << missing.num_missing()
+		      << ": " << missing.missing << "\n";
+    return started;
+  }
+
   handle_recovery_complete(prctx);
 
   return 0;
