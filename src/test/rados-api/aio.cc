@@ -7,6 +7,7 @@
 #include <semaphore.h>
 #include <sstream>
 #include <string>
+#include <boost/scoped_ptr.hpp>
 
 using std::ostringstream;
 using namespace librados;
@@ -690,4 +691,130 @@ TEST(LibRadosAio, RoundTripWriteFullPP) {
   delete my_completion;
   delete my_completion2;
   delete my_completion3;
+}
+
+using std::string;
+using std::map;
+using std::set;
+
+TEST(LibRadosAio, OmapPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string header_str = "baz";
+  bufferptr bp(header_str.c_str(), header_str.size() + 1);
+  bufferlist header_to_set;
+  header_to_set.push_back(bp);
+  map<string, bufferlist> to_set;
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectWriteOperation op;
+    string val = "bar";
+    to_set["foo"] = header_to_set;
+    to_set["foo2"] = header_to_set;
+    to_set["foo3"] = header_to_set;
+    op.omap_set(to_set);
+
+    op.omap_set_header(header_to_set);
+
+    ioctx.aio_operate("test_obj", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectReadOperation op;
+
+    set<string> set_got;
+    map<string, bufferlist> map_got;
+
+    set<string> to_get;
+    map<string, bufferlist> got3;
+
+    bufferlist header;
+
+    op.omap_get_keys("", 1, &set_got, 0);
+    op.omap_get_vals("foo", 1, &map_got, 0);
+
+    to_get.insert("foo");
+    to_get.insert("foo3");
+    op.omap_get_vals_by_key(to_get, &got3, 0);
+
+    op.omap_get_header(&header, 0);
+
+    ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+
+    ASSERT_EQ(header.length(), header_to_set.length());
+    ASSERT_EQ(set_got.size(), (unsigned)1);
+    ASSERT_EQ(*set_got.begin(), "foo");
+    ASSERT_EQ(map_got.size(), (unsigned)1);
+    ASSERT_EQ(map_got.begin()->first, "foo2");
+    ASSERT_EQ(got3.size(), (unsigned)2);
+    ASSERT_EQ(got3.begin()->first, "foo");
+    ASSERT_EQ(got3.rbegin()->first, "foo3");
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectWriteOperation op;
+    set<string> to_remove;
+    to_remove.insert("foo2");
+    op.omap_rm_keys(to_remove);
+    ioctx.aio_operate("test_obj", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectReadOperation op;
+
+    set<string> set_got;
+    op.omap_get_keys("", -1, &set_got, 0);
+    ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    ASSERT_EQ(set_got.size(), (unsigned)2);
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectWriteOperation op;
+    op.omap_clear();
+    ioctx.aio_operate("test_obj", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectReadOperation op;
+
+    set<string> set_got;
+    op.omap_get_keys("", -1, &set_got, 0);
+    ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    ASSERT_EQ(set_got.size(), (unsigned)0);
+  }
+
+  ioctx.remove("test_obj");
 }
