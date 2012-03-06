@@ -56,6 +56,23 @@ daemons will allow the cluster to recover that PG (and, presumably,
 many others).
 
 
+Stuck PGs
+=========
+
+It is normal for PGs to enter states like "degraded" or "peering"
+following a failure.  Normally these states indicate the normal
+progression through the failure recovery process.  However, is a PG
+stays in one of these states for a long time this may be an indication
+of a larger problem.  For this reason, the monitor will warn when PGs
+get "stuck" in a non-optimal state.  Specifically, we check for:
+
+* ``inactive`` - the PG is has not ``active`` for too long (i.e., hasn't
+  been able to service read/write requests)
+* ``unclean`` - the PG has not been ``clean`` for too long (i.e.,
+  hasn't been able to completely recover from a previous failure
+* ``stale`` - the PG status hasn't been updated by a ``ceph-osd``,
+  indicating that all nodes storing this PG may be down
+
 
 PG down (peering failure)
 =========================
