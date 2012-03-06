@@ -114,11 +114,6 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
 
 void global_print_banner(void)
 {
-  cout << TEXT_YELLOW
-       << " ** WARNING: Ceph is still under development.  Any feedback can be directed  **"
-       << TEXT_NORMAL << "\n" << TEXT_YELLOW
-       << " **          at ceph-devel@vger.kernel.org or http://ceph.newdream.net/.     **"
-       << TEXT_NORMAL << std::endl;
   output_ceph_version();
 }
 
