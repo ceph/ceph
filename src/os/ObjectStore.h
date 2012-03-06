@@ -101,38 +101,40 @@ public:
    */
   class Transaction {
   public:
-    static const int OP_NOP =          0;
-    static const int OP_TOUCH =        9;   // cid, oid
-    static const int OP_WRITE =        10;  // cid, oid, offset, len, bl
-    static const int OP_ZERO =         11;  // cid, oid, offset, len
-    static const int OP_TRUNCATE =     12;  // cid, oid, len
-    static const int OP_REMOVE =       13;  // cid, oid
-    static const int OP_SETATTR =      14;  // cid, oid, attrname, bl
-    static const int OP_SETATTRS =     15;  // cid, oid, attrset
-    static const int OP_RMATTR =       16;  // cid, oid, attrname
-    static const int OP_CLONE =        17;  // cid, oid, newoid
-    static const int OP_CLONERANGE =   18;  // cid, oid, newoid, offset, len
-    static const int OP_CLONERANGE2 =  30;  // cid, oid, newoid, srcoff, len, dstoff
+    enum {
+      OP_NOP =          0,
+      OP_TOUCH =        9,   // cid, oid
+      OP_WRITE =        10,  // cid, oid, offset, len, bl
+      OP_ZERO =         11,  // cid, oid, offset, len
+      OP_TRUNCATE =     12,  // cid, oid, len
+      OP_REMOVE =       13,  // cid, oid
+      OP_SETATTR =      14,  // cid, oid, attrname, bl
+      OP_SETATTRS =     15,  // cid, oid, attrset
+      OP_RMATTR =       16,  // cid, oid, attrname
+      OP_CLONE =        17,  // cid, oid, newoid
+      OP_CLONERANGE =   18,  // cid, oid, newoid, offset, len
+      OP_CLONERANGE2 =  30,  // cid, oid, newoid, srcoff, len, dstoff
 
-    static const int OP_TRIMCACHE =    19;  // cid, oid, offset, len  **DEPRECATED**
+      OP_TRIMCACHE =    19,  // cid, oid, offset, len  **DEPRECATED**
 
-    static const int OP_MKCOLL =       20;  // cid
-    static const int OP_RMCOLL =       21;  // cid
-    static const int OP_COLL_ADD =     22;  // cid, oid
-    static const int OP_COLL_REMOVE =  23;  // cid, oid
-    static const int OP_COLL_SETATTR = 24;  // cid, attrname, bl
-    static const int OP_COLL_RMATTR =  25;  // cid, attrname
-    static const int OP_COLL_SETATTRS = 26;  // cid, attrset
+      OP_MKCOLL =       20,  // cid
+      OP_RMCOLL =       21,  // cid
+      OP_COLL_ADD =     22,  // cid, oldcid, oid
+      OP_COLL_REMOVE =  23,  // cid, oid
+      OP_COLL_SETATTR = 24,  // cid, attrname, bl
+      OP_COLL_RMATTR =  25,  // cid, attrname
+      OP_COLL_SETATTRS = 26,  // cid, attrset
 
-    static const int OP_STARTSYNC =    27;  // start a sync 
+      OP_STARTSYNC =    27,  // start a sync 
 
-    static const int OP_RMATTRS =      28;  // cid, oid
-    static const int OP_COLL_RENAME =       29;  // cid, newcid
+      OP_RMATTRS =      28,  // cid, oid
+      OP_COLL_RENAME =       29,  // cid, newcid
 
-    static const int OP_OMAP_CLEAR = 31;   // cid
-    static const int OP_OMAP_SETKEYS = 32; // cid, attrset
-    static const int OP_OMAP_RMKEYS = 33;  // cid, keyset
-    static const int OP_OMAP_SETHEADER = 34; // cid, header
+      OP_OMAP_CLEAR = 31,   // cid
+      OP_OMAP_SETKEYS = 32, // cid, attrset
+      OP_OMAP_RMKEYS = 33,  // cid, keyset
+      OP_OMAP_SETHEADER = 34, // cid, header
+    };
 
   private:
     uint64_t ops;
