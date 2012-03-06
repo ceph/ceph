@@ -291,12 +291,11 @@ public:
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
-  virtual bool supports_tmap() { return true; }
-  virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
-  virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
-  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
-  virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl);
-  virtual int tmap_del(rgw_obj& obj, std::string& key);
+  virtual bool supports_omap() { return true; }
+  virtual int omap_get(rgw_obj& obj, string& start_after, int max, bufferlist& header, std::map<string, bufferlist>& m);
+  virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
+  virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
+  virtual int omap_del(rgw_obj& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 

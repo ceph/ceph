@@ -236,13 +236,12 @@ public:
   */
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk) = 0;
 
-  virtual bool supports_tmap() { return false; }
+  virtual bool supports_omap() { return false; }
 
-  virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m) { return -ENOTSUP; }
-  virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
-  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m) { return -ENOTSUP; }
-  virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
-  virtual int tmap_del(rgw_obj& obj, std::string& key) { return -ENOTSUP; }
+  virtual int omap_get(rgw_obj& obj, string& start_after, int max, bufferlist& header, std::map<string, bufferlist>& m) { return -ENOTSUP; }
+  virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
+  virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m) { return -ENOTSUP; }
+  virtual int omap_del(rgw_obj& obj, std::string& key) { return -ENOTSUP; }
 
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m) { return -ENOTSUP; }
 
