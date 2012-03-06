@@ -1025,8 +1025,28 @@ int FileStore::mkfs()
 	   << cpp_strerror(ret) << dendl;
       goto close_basedir_fd;
     }
+    btrfs_stable_commits = true;
   }
 #endif
+
+  // write initial op_seq
+  {
+    uint64_t initial_seq;
+    int fd = read_op_seq(&initial_seq);
+    if (fd < 0) {
+      derr << "FileStore::mkfs: failed to create " << current_op_seq_fn << ": "
+	   << cpp_strerror(fd) << dendl;
+      goto close_basedir_fd;
+    }
+    int err = write_op_seq(fd, 1);
+    if (err < 0) {
+      TEMP_FAILURE_RETRY(::close(fd));  
+      derr << "FileStore::mkfs: failed to write to " << current_op_seq_fn << ": "
+	   << cpp_strerror(err) << dendl;
+      goto close_basedir_fd;
+    }
+    TEMP_FAILURE_RETRY(::close(fd));  
+  }
 
   {
     leveldb::Options options;
@@ -1043,6 +1063,28 @@ int FileStore::mkfs()
     }
   }
 
+  if (btrfs_stable_commits) {
+    // create snap_0 too
+    snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
+    volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
+    assert(volargs.fd >= 0);
+    if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
+      ret = -errno;
+      derr << "FileStore::mkfs: failed to create " << volargs.name << ": "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
+
+    if (::fchmod(volargs.fd, 0755)) {
+      TEMP_FAILURE_RETRY(::close(volargs.fd));
+      ret = -errno;
+      derr << "FileStore::mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
+    TEMP_FAILURE_RETRY(::close(volargs.fd));
+  }
+
   // journal?
   ret = mkjournal();
   if (ret)
@@ -1057,13 +1099,13 @@ int FileStore::mkfs()
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
-close_basedir_fd:
+ close_basedir_fd:
 #if defined(__linux__)
   TEMP_FAILURE_RETRY(::close(basedir_fd));
 #endif
-close_dir:
+ close_dir:
   ::closedir(dir);
-close_fsid_fd:
+ close_fsid_fd:
   if (fsid_fd != -1) {
     TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;
@@ -1455,7 +1497,7 @@ int FileStore::write_version_stamp()
   return 0;
 }
 
-int FileStore::read_op_seq(const char *fn, uint64_t *seq)
+int FileStore::read_op_seq(uint64_t *seq)
 {
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0)
@@ -1631,7 +1673,7 @@ int FileStore::mount()
 		 m_osd_rollback_to_cluster_snap.c_str());
       } else {
 	{
-	  int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+	  int fd = read_op_seq(&curr_seq);
 	  if (fd >= 0) {
 	    TEMP_FAILURE_RETRY(::close(fd));
 	  }
@@ -1717,7 +1759,7 @@ int FileStore::mount()
 
   assert(current_fd >= 0);
 
-  op_fd = read_op_seq(current_op_seq_fn.c_str(), &initial_op_seq);
+  op_fd = read_op_seq(&initial_op_seq);
   if (op_fd < 0) {
     derr << "FileStore::mount: read_op_seq failed" << dendl;
     goto close_current_fd;
