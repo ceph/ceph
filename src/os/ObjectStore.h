@@ -124,6 +124,7 @@ public:
       OP_COLL_SETATTR = 24,  // cid, attrname, bl
       OP_COLL_RMATTR =  25,  // cid, attrname
       OP_COLL_SETATTRS = 26,  // cid, attrset
+      OP_COLL_MOVE =    8,   // newcid, oldcid, oid
 
       OP_STARTSYNC =    27,  // start a sync 
 
@@ -415,6 +416,14 @@ public:
       ::encode(oid, tbl);
       ops++;
     }
+    void collection_move(coll_t cid, coll_t oldcid, const hobject_t& oid) {
+      __u32 op = OP_COLL_MOVE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ops++;
+    }
+
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
       string n(name);
       collection_setattr(cid, n, val);
