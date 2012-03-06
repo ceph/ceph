@@ -130,6 +130,20 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
     for remote, proc in nodes:
         proc.exitstatus.get()
 
+def remove_osd_mounts(ctx, log):
+    """
+    unmount any osd data mounts (scratch disks)
+    """
+    from .orchestra import run
+    ctx.cluster.run(
+        args=[
+            'grep', '/tmp/cephtest/data/', '/etc/mtab', run.Raw('|'),
+            'awk', '{print $2}', run.Raw('|'),
+            'xargs', 'sudo', 'umount', run.Raw(';'),
+            'true'
+            ],
+        )
+
 def reboot(ctx, remotes, log):
     import time
     nodes = {}
@@ -247,6 +261,9 @@ def nuke(ctx, log):
     log.info('Unmount ceph-fuse and killing daemons...')
     shutdown_daemons(ctx, log)
     log.info('All daemons killed.')
+
+    log.info('Unmount any osd data directories...')
+    remove_osd_mounts(ctx, log)
 
     log.info('Dealing with any kernel mounts...')
     kernel_mounts = find_kernel_mounts(ctx, log)
