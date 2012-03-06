@@ -1237,6 +1237,17 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
     ostringstream ss;
     ss << pg_map.nearfull_osds.size() << " near full osd(s)";
     summary.push_back(ss.str());
+    if (detail) {
+      for (set<int>::iterator p = pg_map.nearfull_osds.begin();
+	   p != pg_map.nearfull_osds.end();
+	   ++p) {
+	ostringstream ss;
+	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
+	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
+	ss << "osd." << *p << " is near full at " << ratio << "%";
+	detail->push_back(ss.str());
+      }
+    }
     if (ret > HEALTH_WARN)
       ret = HEALTH_WARN;
   }
@@ -1244,6 +1255,17 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
     ostringstream ss;
     ss << pg_map.full_osds.size() << " full osd(s)";
     summary.push_back(ss.str());
+    if (detail) {
+      for (set<int>::iterator p = pg_map.nearfull_osds.begin();
+	   p != pg_map.nearfull_osds.end();
+	   ++p) {
+	ostringstream ss;
+	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
+	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
+	ss << "osd." << *p << " is full at " << ratio << "%";
+	detail->push_back(ss.str());
+      }
+    }
     if (ret > HEALTH_ERR)
       ret = HEALTH_ERR;
   }
