@@ -79,25 +79,6 @@ public:
 
   Logger *logger;
 
-  class FragmentationStat {
-  public:
-    int total;
-    int num_extent;
-    int avg_extent;
-    map<int,int> extent_dist;          // powers of two
-    map<int,int> extent_dist_sum;          // powers of two
-
-    float avg_extent_per_object;
-    int avg_extent_jump;  // avg distance bweteen consecutive extents
-
-    int total_free;
-    int num_free_extent;
-    int avg_free_extent;
-    map<int,int> free_extent_dist;     // powers of two
-    map<int,int> free_extent_dist_sum;     // powers of two
-  };
-  
-
   struct Sequencer_impl {
     virtual void flush() = 0;
     virtual ~Sequencer_impl() {}
@@ -736,9 +717,6 @@ public:
 
   virtual int snapshot(const string& name) { return -EOPNOTSUPP; }
     
-  virtual void _fake_writes(bool b) {};
-  virtual void _get_frag_stat(FragmentationStat& st) {};
-
   virtual uuid_d get_fsid() = 0;
 };
 
