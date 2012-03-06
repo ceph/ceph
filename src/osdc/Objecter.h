@@ -267,11 +267,31 @@ struct ObjectOperation {
     out_bl[p] = pbl;
     out_rval[p] = prval;
   }
-  struct C_ObjectOperation_getxattrs : public Context {
+  struct C_ObjectOperation_decodevals : public Context {
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
     int *prval;
-    C_ObjectOperation_getxattrs(std::map<std::string,bufferlist> *pa, int *pr)
+    C_ObjectOperation_decodevals(std::map<std::string,bufferlist> *pa, int *pr)
+      : pattrs(pa), prval(pr) {}
+    void finish(int r) {
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	try {
+	  if (pattrs)
+	    ::decode(*pattrs, p);
+	}
+	catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
+	}
+      }
+    }
+  };
+  struct C_ObjectOperation_decodekeys : public Context {
+    bufferlist bl;
+    std::set<std::string> *pattrs;
+    int *prval;
+    C_ObjectOperation_decodekeys(std::set<std::string> *pa, int *pr)
       : pattrs(pa), prval(pr) {}
     void finish(int r) {
       if (r >= 0) {
@@ -291,7 +311,7 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_GETXATTRS);
     if (pattrs || prval) {
       unsigned p = ops.size() - 1;
-      C_ObjectOperation_getxattrs *h = new C_ObjectOperation_getxattrs(pattrs, prval);
+      C_ObjectOperation_decodevals *h = new C_ObjectOperation_decodevals(pattrs, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -338,6 +358,95 @@ struct ObjectOperation {
   }
   void tmap_get() {
     add_op(CEPH_OSD_OP_TMAPGET);
+  }
+
+  // objectmap
+  void omap_get_keys(const string &start_after,
+		     uint64_t max_to_get,
+		     std::set<std::string> *out_set,
+		     int *prval) {
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
+    bufferlist bl;
+    ::encode(start_after, bl);
+    ::encode(max_to_get, bl);
+    op.op.extent.offset = 0;
+    op.op.extent.length = bl.length();
+    op.indata.claim_append(bl);
+    if (prval || out_set) {
+      unsigned p = ops.size() - 1;
+      C_ObjectOperation_decodekeys *h =
+	new C_ObjectOperation_decodekeys(out_set, prval);
+      out_handler[p] = h;
+      out_bl[p] = &h->bl;
+      out_rval[p] = prval;
+    }
+  }
+
+  void omap_get_vals(const string &start_after,
+		     uint64_t max_to_get,
+		     std::map<std::string, bufferlist> *out_set,
+		     int *prval) {
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
+    bufferlist bl;
+    ::encode(start_after, bl);
+    ::encode(max_to_get, bl);
+    op.op.extent.offset = 0;
+    op.op.extent.length = bl.length();
+    op.indata.claim_append(bl);
+    if (prval || out_set) {
+      unsigned p = ops.size() - 1;
+      C_ObjectOperation_decodevals *h =
+	new C_ObjectOperation_decodevals(out_set, prval);
+      out_handler[p] = h;
+      out_bl[p] = &h->bl;
+      out_rval[p] = prval;
+    }
+  }
+
+  void omap_get_vals_by_key(const std::set<std::string> &to_get,
+			    std::map<std::string, bufferlist> *out_set,
+			    int *prval) {
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEY);
+    bufferlist bl;
+    ::encode(to_get, bl);
+    op.op.extent.offset = 0;
+    op.op.extent.length = bl.length();
+    op.indata.claim_append(bl);
+    if (prval || out_set) {
+      unsigned p = ops.size() - 1;
+      C_ObjectOperation_decodevals *h =
+	new C_ObjectOperation_decodevals(out_set, prval);
+      out_handler[p] = h;
+      out_bl[p] = &h->bl;
+      out_rval[p] = prval;
+    }
+  }
+
+  void omap_get_header(bufferlist *bl, int *prval) {
+    add_op(CEPH_OSD_OP_OMAPGETHEADER);
+    unsigned p = ops.size() - 1;
+    out_bl[p] = bl;
+    out_rval[p] = prval;
+  }
+
+  void omap_set(const map<string, bufferlist> &map) {
+    bufferlist bl;
+    ::encode(map, bl);
+    add_data(CEPH_OSD_OP_OMAPSETVALS, 0, bl.length(), bl);
+  }
+
+  void omap_set_header(bufferlist &bl) {
+    add_data(CEPH_OSD_OP_OMAPSETHEADER, 0, bl.length(), bl);
+  }
+
+  void omap_clear() {
+    add_op(CEPH_OSD_OP_OMAPCLEAR);
+  }
+
+  void omap_rm_keys(const std::set<std::string> &to_remove) {
+    bufferlist bl;
+    ::encode(to_remove, bl);
+    add_data(CEPH_OSD_OP_OMAPRMKEYS, 0, bl.length(), bl);
   }
 
   // object classes

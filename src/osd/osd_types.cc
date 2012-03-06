@@ -1931,6 +1931,7 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   truncate_size = other.truncate_size;
   lost = other.lost;
   category = other.category;
+  uses_tmap = other.uses_tmap;
 }
 
 ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid, 
@@ -1952,7 +1953,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
 
 void object_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(8, 8, bl);
+  ENCODE_START(9, 8, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
   ::encode(category, bl);
@@ -1970,12 +1971,13 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(lost, bl);
   ::encode(watchers, bl);
   ::encode(user_version, bl);
+  ::encode(uses_tmap, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 8, 8, bl);
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
     ::decode(obj, bl);
@@ -2012,6 +2014,10 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(watchers, bl);
     ::decode(user_version, bl);
   }
+  if (struct_v >= 9)
+    ::decode(uses_tmap, bl);
+  else
+    uses_tmap = true;
   DECODE_FINISH(bl);
 }
 

@@ -95,6 +95,10 @@ public:
 
   virtual uint64_t get_length(const ContDesc &in) = 0;
 
+  virtual uint64_t get_attr_length(const ContDesc &in) = 0;
+
+  virtual bufferlist gen_attribute(const ContDesc &in) = 0;
+
   virtual void get_ranges(const ContDesc &in, interval_set<uint64_t> &ranges) = 0;
 
   virtual iterator_impl *get_iterator_impl(const ContDesc &in) = 0;
@@ -147,11 +151,7 @@ public:
     virtual uint64_t get_pos() const { return pos; }
 
     iterator_impl &operator++() {
-      assert(!end());
       pos++;
-      if (end()) {
-	return *this;
-      }
       if (header_pos.end()) {
 	current = rand();
       } else {
@@ -207,22 +207,42 @@ public:
     return (rand() % length) + get_header_length(in);
   }
 
+  bufferlist gen_attribute(const ContDesc &in) {
+    bufferlist header;
+    write_header(in, header);
+    ContentsGenerator::iterator iter = get_iterator(in);
+    for (uint64_t to_write = get_attr_length(in); to_write > 0;
+	 --to_write) {
+      header.append(*iter);
+      ++iter;
+    }
+    return header;
+  }
+
+
+  uint64_t get_attr_length(const ContDesc &in) {
+    RandWrap rand(in.seqnum);
+    return (rand() % attr_length) + get_header_length(in);
+  }
+
   void write_header(const ContDesc &in, bufferlist &output);
 
   bool read_header(bufferlist::iterator &p, ContDesc &out);
   uint64_t length;
+  uint64_t attr_length;
   uint64_t min_stride_size;
   uint64_t max_stride_size;
-  VarLenGenerator(uint64_t length, uint64_t min_stride_size, uint64_t max_stride_size) :
-    length(length), min_stride_size(min_stride_size), max_stride_size(max_stride_size) {}
+  VarLenGenerator(uint64_t length, uint64_t min_stride_size, uint64_t max_stride_size, uint64_t attr_length = 2000) :
+    length(length), attr_length(attr_length),
+    min_stride_size(min_stride_size), max_stride_size(max_stride_size) {}
 };
 
 class ObjectDesc {
 public:
   ObjectDesc(ContentsGenerator *cont_gen) : 
-    layers(), cont_gen(cont_gen) {};
+    exists(false), tmap(false), layers(), cont_gen(cont_gen) {};
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen) : 
-    layers(), cont_gen(cont_gen) {
+    exists(false), tmap(false), layers(), cont_gen(cont_gen) {
     layers.push_front(init);
   };
 
@@ -249,7 +269,9 @@ public:
     }
 
     char operator*() {
-      if (cur_cont == obj.layers.end()) {
+      if (cur_cont == obj.layers.end() && pos < obj.tmap_contents.length()) {
+	return obj.tmap_contents[pos];
+      } else if (cur_cont == obj.layers.end()) {
 	return '\0';
       } else {
 	map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(*cur_cont);
@@ -259,7 +281,7 @@ public:
     }
 
     bool end() {
-      return pos == cont_gen->get_length(*obj.layers.begin());
+      return pos >= cont_gen->get_length(*obj.layers.begin());
     }
 
     void seek(uint64_t _pos) {
@@ -277,12 +299,21 @@ public:
   }
 
   bool deleted() {
-    return !layers.size(); // No layers indicates missing object
+    return !exists;
+  }
+
+  bool has_contents() {
+    return layers.size();
   }
 
   void update(const ContDesc &next);
   bool check(bufferlist &to_check);
   const ContDesc &most_recent();
+  map<string, ContDesc> attrs; // Both omap and xattrs
+  bufferlist header;
+  bool exists;
+  bool tmap;
+  bufferlist tmap_contents;
 private:
   list<ContDesc> layers;
   ContentsGenerator *cont_gen;

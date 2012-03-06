@@ -2229,6 +2229,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  assert(bp.end());
 	}
 
+	if (g_conf->osd_tmapput_sets_uses_tmap) {
+	  assert(g_conf->osd_auto_upgrade_tmap);
+	  oi.uses_tmap = true;
+	}
+
 	// write it
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
@@ -2402,7 +2407,206 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+      // OMAP Read ops
+    case CEPH_OSD_OP_OMAPGETKEYS:
+      {
+	string start_after;
+	uint64_t max_return;
+	::decode(start_after, bp);
+	::decode(max_return, bp);
+	set<string> out_set;
 
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  dout(20) << "CEPH_OSD_OP_OMAPGETKEYS: "
+		   << " Reading " << oi.soid << " omap from tmap" << dendl;
+	  map<string, bufferlist> vals;
+	  bufferlist header;
+	  int r = _get_tmap(ctx, &vals, &header);
+	  if (r == 0) {
+	    map<string, bufferlist>::iterator iter =
+	      vals.upper_bound(start_after);
+	    for (uint64_t i = 0;
+		 i < max_return && iter != vals.end();
+		 ++i, iter++) {
+	      out_set.insert(iter->first);
+	    }
+	    ::encode(out_set, osd_op.outdata);
+	    break;
+	  }
+	  dout(10) << "failed, reading from omap" << dendl;
+	  // No valid tmap, use omap
+	}
+
+	{
+	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
+	    coll, soid
+	    );
+	  assert(iter);
+	  iter->upper_bound(start_after);
+	  for (uint64_t i = 0;
+	       i < max_return && iter->valid();
+	       ++i, iter->next()) {
+	    out_set.insert(iter->key());
+	  }
+	}
+	::encode(out_set, osd_op.outdata);
+      }
+      break;
+    case CEPH_OSD_OP_OMAPGETVALS:
+      {
+	string start_after;
+	uint64_t max_return;
+	::decode(start_after, bp);
+	::decode(max_return, bp);
+	map<string, bufferlist> out_set;
+
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  dout(20) << "CEPH_OSD_OP_OMAPGETVALS: "
+		   << " Reading " << oi.soid << " omap from tmap" << dendl;
+	  map<string, bufferlist> vals;
+	  bufferlist header;
+	  int r = _get_tmap(ctx, &vals, &header);
+	  if (r == 0) {
+	    map<string, bufferlist>::iterator iter = vals.upper_bound(start_after);
+	    for (uint64_t i = 0;
+		 i < max_return && iter != vals.end();
+		 ++i, iter++) {
+	      out_set.insert(*iter);
+	    }
+	    ::encode(out_set, osd_op.outdata);
+	    break;
+	  }
+	  // No valid tmap, use omap
+	  dout(10) << "failed, reading from omap" << dendl;
+	}
+
+	{
+	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
+	    coll, soid
+	    );
+	  assert(iter);
+	  iter->upper_bound(start_after);
+	  for (uint64_t i = 0;
+	       i < max_return && iter->valid();
+	       ++i, iter->next()) {
+	    dout(20) << "Found key " << iter->key() << dendl;
+	    out_set.insert(make_pair(iter->key(), iter->value()));
+	  }
+	}
+	::encode(out_set, osd_op.outdata);
+      }
+      break;
+    case CEPH_OSD_OP_OMAPGETHEADER:
+      {
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  dout(20) << "CEPH_OSD_OP_OMAPGETHEADER: "
+		   << " Reading " << oi.soid << " omap from tmap" << dendl;
+	  map<string, bufferlist> vals;
+	  bufferlist header;
+	  int r = _get_tmap(ctx, &vals, &header);
+	  if (r == 0) {
+	    osd_op.outdata.claim(header);
+	    break;
+	  }
+	  // No valid tmap, fall through to omap
+	  dout(10) << "failed, reading from omap" << dendl;
+	}
+	osd->store->omap_get_header(coll, soid, &osd_op.outdata);
+      }
+      break;
+    case CEPH_OSD_OP_OMAPGETVALSBYKEY:
+      {
+	set<string> keys_to_get;
+	::decode(keys_to_get, bp);
+	map<string, bufferlist> out;
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  dout(20) << "CEPH_OSD_OP_OMAPGET: "
+		   << " Reading " << oi.soid << " omap from tmap" << dendl;
+	  map<string, bufferlist> vals;
+	  bufferlist header;
+	  int r = _get_tmap(ctx, &vals, &header);
+	  if (r == 0) {
+	    for (set<string>::iterator iter = keys_to_get.begin();
+		 iter != keys_to_get.end();
+		 iter++) {
+	      if (vals.count(*iter)) {
+		out.insert(*(vals.find(*iter)));
+	      }
+	    }
+	    ::encode(out, osd_op.outdata);
+	    break;
+	  }
+	  // No valid tmap, use omap
+	  dout(10) << "failed, reading from omap" << dendl;
+	}
+	osd->store->omap_get_values(coll, soid, keys_to_get, &out);
+	::encode(out, osd_op.outdata);
+      }
+      break;
+
+      // OMAP Write ops
+    case CEPH_OSD_OP_OMAPSETVALS:
+      {
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  _copy_up_tmap(ctx);
+	}
+	if (!obs.exists) {
+	  ctx->delta_stats.num_objects++;
+	  obs.exists = true;
+	}
+	t.touch(coll, soid);
+	map<string, bufferlist> to_set;
+	::decode(to_set, bp);
+	dout(20) << "setting vals: " << dendl;
+	for (map<string, bufferlist>::iterator i = to_set.begin();
+	     i != to_set.end();
+	     ++i) {
+	  dout(20) << "\t" << i->first << dendl;
+	}
+	t.omap_setkeys(coll, soid, to_set);
+      }
+      break;
+    case CEPH_OSD_OP_OMAPSETHEADER:
+      {
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  _copy_up_tmap(ctx);
+	}
+	if (!obs.exists) {
+	  ctx->delta_stats.num_objects++;
+	  obs.exists = true;
+	}
+	t.touch(coll, soid);
+	t.omap_setheader(coll, soid, osd_op.indata);
+      }
+      break;
+    case CEPH_OSD_OP_OMAPCLEAR:
+      {
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  _copy_up_tmap(ctx);
+	}
+	t.touch(coll, soid);
+	t.omap_clear(coll, soid);
+      }
+      break;
+    case CEPH_OSD_OP_OMAPRMKEYS:
+      {
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
+	  _copy_up_tmap(ctx);
+	}
+	t.touch(coll, soid);
+	set<string> to_rm;
+	::decode(to_rm, bp);
+	t.omap_rmkeys(coll, soid, to_rm);
+      }
+      break;
     default:
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)
@@ -2419,6 +2623,44 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
   }
   return result;
+}
+
+int ReplicatedPG::_get_tmap(OpContext *ctx,
+			    map<string, bufferlist> *out,
+			    bufferlist *header)
+{
+  vector<OSDOp> nops(1);
+  OSDOp &newop = nops[0];
+  newop.op.op = CEPH_OSD_OP_TMAPGET;
+  do_osd_ops(ctx, nops);
+  try {
+    bufferlist::iterator i = newop.outdata.begin();
+    ::decode(*header, i);
+    ::decode(*out, i);
+  } catch (...) {
+    dout(20) << "unsuccessful at decoding tmap for " << ctx->new_obs.oi.soid
+	     << dendl;
+    return -EINVAL;
+  }
+  dout(20) << "successful at decoding tmap for " << ctx->new_obs.oi.soid
+	   << dendl;
+  return 0;
+}
+
+int ReplicatedPG::_copy_up_tmap(OpContext *ctx)
+{
+  dout(20) << "copying up tmap for " << ctx->new_obs.oi.soid << dendl;
+  ctx->new_obs.oi.uses_tmap = false;
+  map<string, bufferlist> vals;
+  bufferlist header;
+  int r = _get_tmap(ctx, &vals, &header);
+  if (r < 0)
+    return 0;
+  ctx->op_t.omap_setkeys(coll, ctx->new_obs.oi.soid,
+			 vals);
+  ctx->op_t.omap_setheader(coll, ctx->new_obs.oi.soid,
+			   header);
+  return 0;
 }
 
 inline int ReplicatedPG::_delete_head(OpContext *ctx)
@@ -4352,6 +4594,7 @@ void ReplicatedPG::submit_push_data(
   bool first,
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
+  bufferlist omap_header,
   map<string, bufferptr> &attrs,
   map<string, bufferlist> &omap_entries,
   ObjectStore::Transaction *t)
@@ -4359,6 +4602,7 @@ void ReplicatedPG::submit_push_data(
   if (first) {
     t->remove(coll_t::TEMP_COLL, recovery_info.soid);
     t->touch(coll_t::TEMP_COLL, recovery_info.soid);
+    t->omap_setheader(coll_t::TEMP_COLL, recovery_info.soid, omap_header);
   }
   uint64_t off = 0;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
@@ -4529,7 +4773,9 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
   submit_push_data(pi.recovery_info, first,
-		   data_included, data, m->attrset,
+		   data_included, data,
+		   m->omap_header,
+		   m->attrset,
 		   m->omap_entries,
 		   t);
 
@@ -4600,6 +4846,7 @@ void ReplicatedPG::handle_push(OpRequest *op)
 		   first,
 		   m->data_included,
 		   data,
+		   m->omap_header,
 		   m->attrset,
 		   m->omap_entries,
 		   t);
@@ -4647,6 +4894,7 @@ int ReplicatedPG::send_push(int peer,
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
 
   if (progress.first) {
+    osd->store->omap_get_header(coll, recovery_info.soid, &subop->omap_header);
     osd->store->getattrs(coll, recovery_info.soid, subop->attrset);
 
     // Debug
