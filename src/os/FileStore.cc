@@ -1057,13 +1057,13 @@ int FileStore::mkfs()
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
-close_basedir_fd:
+ close_basedir_fd:
 #if defined(__linux__)
   TEMP_FAILURE_RETRY(::close(basedir_fd));
 #endif
-close_dir:
+ close_dir:
   ::closedir(dir);
-close_fsid_fd:
+ close_fsid_fd:
   if (fsid_fd != -1) {
     TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;
@@ -1455,7 +1455,7 @@ int FileStore::write_version_stamp()
   return 0;
 }
 
-int FileStore::read_op_seq(const char *fn, uint64_t *seq)
+int FileStore::read_op_seq(uint64_t *seq)
 {
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0)
@@ -1631,7 +1631,7 @@ int FileStore::mount()
 		 m_osd_rollback_to_cluster_snap.c_str());
       } else {
 	{
-	  int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+	  int fd = read_op_seq(&curr_seq);
 	  if (fd >= 0) {
 	    TEMP_FAILURE_RETRY(::close(fd));
 	  }
@@ -1717,7 +1717,7 @@ int FileStore::mount()
 
   assert(current_fd >= 0);
 
-  op_fd = read_op_seq(current_op_seq_fn.c_str(), &initial_op_seq);
+  op_fd = read_op_seq(&initial_op_seq);
   if (op_fd < 0) {
     derr << "FileStore::mount: read_op_seq failed" << dendl;
     goto close_current_fd;
