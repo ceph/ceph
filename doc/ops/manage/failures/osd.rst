@@ -235,3 +235,21 @@ it may confuse applications that expected the object to exist.
 
 
 
+Slow or unresponsive ceph-osd
+=============================
+
+If, for some reason, a ceph-osd is slow to respond to a request, it will
+generate log messages complaining about requests that are taking too
+long.  The warning threshold defaults to 30 seconds, and is configurable
+via the ``osd op complaint time`` option.  When this happens, the cluster
+log will receive messages like::
+
+  osd.0 192.168.106.220:6800/18813 312 : [WRN] old request osd_op(client.5099.0:790 fatty_26485_object789 [write 0~4096] 2.5e54f643) v4 received at 2012-03-06 15:42:56.054801 currently waiting for sub ops
+
+Possible causes include:
+
+ * bad disk (check ``dmesg`` output)
+ * kernel file system bug (check ``dmesg`` output)
+ * overloaded cluster (check system load, iostat, etc.)
+ * ceph-osd bug
+
