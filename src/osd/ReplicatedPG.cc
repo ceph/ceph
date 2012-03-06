@@ -4381,8 +4381,7 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					ObjectStore::Transaction *t)
 {
   remove_object_with_snap_hardlinks(*t, recovery_info.soid);
-  t->collection_add(coll, coll_t::TEMP_COLL, recovery_info.soid);
-  t->collection_remove(coll_t::TEMP_COLL, recovery_info.soid);
+  t->collection_move(coll, coll_t::TEMP_COLL, recovery_info.soid);
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
        p != recovery_info.clone_subset.end();
