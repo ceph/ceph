@@ -1216,6 +1216,8 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
 	    stuck_pgs.count(p->first) == 0) {
 	  ostringstream ss;
 	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
+	  if (p->second.stats.sum.num_objects_unfound)
+	    ss << ", " << p->second.stats.sum.num_objects_unfound << " unfound";
 	  detail->push_back(ss.str());
 	}
       }
