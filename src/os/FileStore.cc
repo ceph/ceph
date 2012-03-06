@@ -2340,11 +2340,11 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
       
     case Transaction::OP_TRIMCACHE:
       {
-	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	uint64_t off = i.get_length();
-	uint64_t len = i.get_length();
-	trim_from_cache(cid, oid, off, len);
+	i.get_cid();
+	i.get_oid();
+	i.get_length();
+	i.get_length();
+	// deprecated, no-op
       }
       break;
       

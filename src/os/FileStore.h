@@ -381,9 +381,6 @@ public:
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o);
   int _collection_remove(coll_t c, const hobject_t& o);
 
-  void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) {}
-  int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) { return -1; }
-
 private:
   // omap
   int _omap_clear(coll_t cid, const hobject_t &hoid);

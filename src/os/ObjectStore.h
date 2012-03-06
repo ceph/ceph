@@ -133,7 +133,7 @@ public:
     static const int OP_CLONERANGE =   18;  // cid, oid, newoid, offset, len
     static const int OP_CLONERANGE2 =  30;  // cid, oid, newoid, srcoff, len, dstoff
 
-    static const int OP_TRIMCACHE =    19;  // cid, oid, offset, len
+    static const int OP_TRIMCACHE =    19;  // cid, oid, offset, len  **DEPRECATED**
 
     static const int OP_MKCOLL =       20;  // cid
     static const int OP_RMCOLL =       21;  // cid
@@ -324,15 +324,6 @@ public:
     void zero(coll_t cid, const hobject_t& oid, uint64_t off, uint64_t len) {
       __u32 op = OP_ZERO;
       ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(off, tbl);
-      ::encode(len, tbl);
-      ops++;
-    }
-    void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t off, uint64_t len) {
-      __u32 op = OP_TRIMCACHE;
-       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
       ::encode(off, tbl);
@@ -640,9 +631,6 @@ public:
   virtual int stat(coll_t cid, const hobject_t& oid, struct stat *st) = 0;     // struct stat?
   virtual int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
   virtual int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
-
-  virtual void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) = 0; //{ }
-  virtual int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) = 0;  //{ return -1; }
 
   virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, void *value, size_t size) = 0;
   virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& value) = 0;
