@@ -267,9 +267,9 @@ namespace librados
      * @param out_vals [out] place key/value pairs found here on completion
      * @param prval [out] place error code in prval upon completion
      */
-    void omap_get_vals_by_key(const std::set<std::string> &keys,
-			      std::map<std::string, bufferlist> *map,
-			      int *prval);
+    void omap_get_vals_by_keys(const std::set<std::string> &keys,
+			       std::map<std::string, bufferlist> *map,
+			       int *prval);
   };
 
 
