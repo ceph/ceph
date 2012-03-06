@@ -281,6 +281,13 @@ void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist
   o->setxattr(name, v);
 }
 
+void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  bufferlist c = bl;
+  o->tmap_put(c);
+}
+
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
