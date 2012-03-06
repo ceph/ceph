@@ -82,7 +82,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_OMAPGETKEYS: return "omap-get-keys";
 	case CEPH_OSD_OP_OMAPGETVALS: return "omap-get-vals";
 	case CEPH_OSD_OP_OMAPGETHEADER: return "omap-get-header";
-	case CEPH_OSD_OP_OMAPGETVALSBYKEY: return "omap-get-vals-by-key";
+	case CEPH_OSD_OP_OMAPGETVALSBYKEYS: return "omap-get-vals-by-keys";
 	case CEPH_OSD_OP_OMAPSETVALS: return "omap-set-vals";
 	case CEPH_OSD_OP_OMAPSETHEADER: return "omap-set-header";
 	case CEPH_OSD_OP_OMAPCLEAR: return "omap-clear";

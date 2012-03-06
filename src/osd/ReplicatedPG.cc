@@ -2514,7 +2514,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	osd->store->omap_get_header(coll, soid, &osd_op.outdata);
       }
       break;
-    case CEPH_OSD_OP_OMAPGETVALSBYKEY:
+    case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       {
 	set<string> keys_to_get;
 	::decode(keys_to_get, bp);
