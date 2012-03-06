@@ -1025,8 +1025,28 @@ int FileStore::mkfs()
 	   << cpp_strerror(ret) << dendl;
       goto close_basedir_fd;
     }
+    btrfs_stable_commits = true;
   }
 #endif
+
+  // write initial op_seq
+  {
+    uint64_t initial_seq;
+    int fd = read_op_seq(&initial_seq);
+    if (fd < 0) {
+      derr << "FileStore::mkfs: failed to create " << current_op_seq_fn << ": "
+	   << cpp_strerror(fd) << dendl;
+      goto close_basedir_fd;
+    }
+    int err = write_op_seq(fd, 1);
+    if (err < 0) {
+      TEMP_FAILURE_RETRY(::close(fd));  
+      derr << "FileStore::mkfs: failed to write to " << current_op_seq_fn << ": "
+	   << cpp_strerror(err) << dendl;
+      goto close_basedir_fd;
+    }
+    TEMP_FAILURE_RETRY(::close(fd));  
+  }
 
   {
     leveldb::Options options;
@@ -1041,6 +1061,28 @@ int FileStore::mkfs()
       ret = -1;
       goto close_basedir_fd;
     }
+  }
+
+  if (btrfs_stable_commits) {
+    // create snap_0 too
+    snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
+    volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
+    assert(volargs.fd >= 0);
+    if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
+      ret = -errno;
+      derr << "FileStore::mkfs: failed to create " << volargs.name << ": "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
+
+    if (::fchmod(volargs.fd, 0755)) {
+      TEMP_FAILURE_RETRY(::close(volargs.fd));
+      ret = -errno;
+      derr << "FileStore::mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
+    TEMP_FAILURE_RETRY(::close(volargs.fd));
   }
 
   // journal?
