@@ -26,6 +26,30 @@ restarting, an error message should be present in its log file in
 ``/var/log/ceph``.
 
 
+Full cluster
+============
+
+If the cluster fills up, the monitor will prevent new data from being
+written.  The system puts ceph-osds in two categories: ``nearfull``
+and ``full`, which configurable threshholds for each (80% and 90% by
+default).  In both cases, full ceph-osds will be reported by ``ceph health``::
+
+ $ ceph health
+ HEALTH_WARN 1 nearfull osds
+ osd.2 is near full at 85%
+
+or
+
+ $ ceph health
+ HEALTH_ERR 1 nearfull osds, 1 full osds
+ osd.2 is near full at 85%
+ osd.3 is full at 97%
+
+The best way to deal with a full cluster is to add new ceph-osds,
+allowing the cluster to redistribute data to the newly available
+storage.
+
+
 Homeless placement groups (PGs)
 ===============================
 
