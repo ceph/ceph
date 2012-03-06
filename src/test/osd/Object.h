@@ -240,9 +240,9 @@ public:
 class ObjectDesc {
 public:
   ObjectDesc(ContentsGenerator *cont_gen) : 
-    exists(false), layers(), cont_gen(cont_gen) {};
+    exists(false), tmap(false), layers(), cont_gen(cont_gen) {};
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen) : 
-    exists(false), layers(), cont_gen(cont_gen) {
+    exists(false), tmap(false), layers(), cont_gen(cont_gen) {
     layers.push_front(init);
   };
 
@@ -269,7 +269,9 @@ public:
     }
 
     char operator*() {
-      if (cur_cont == obj.layers.end()) {
+      if (cur_cont == obj.layers.end() && pos < obj.tmap_contents.length()) {
+	return obj.tmap_contents[pos];
+      } else if (cur_cont == obj.layers.end()) {
 	return '\0';
       } else {
 	map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(*cur_cont);
@@ -310,6 +312,8 @@ public:
   map<string, ContDesc> attrs; // Both omap and xattrs
   bufferlist header;
   bool exists;
+  bool tmap;
+  bufferlist tmap_contents;
 private:
   list<ContDesc> layers;
   ContentsGenerator *cont_gen;

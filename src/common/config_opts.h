@@ -233,6 +233,9 @@ OPTION(mds_standby_replay, OPT_BOOL, false)
 // If true, uses tmap as initial value for omap on old objects
 OPTION(osd_auto_upgrade_tmap, OPT_BOOL, false)
 
+// If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
+OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
+
 OPTION(osd_data, OPT_STR, "")
 OPTION(osd_journal, OPT_STR, "")
 OPTION(osd_journal_size, OPT_INT, 0)         // in mb

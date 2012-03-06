@@ -2229,6 +2229,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  assert(bp.end());
 	}
 
+	if (g_conf->osd_tmapput_sets_uses_tmap) {
+	  assert(g_conf->osd_auto_upgrade_tmap);
+	  oi.uses_tmap = true;
+	}
+
 	// write it
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
