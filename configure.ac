@@ -409,6 +409,7 @@ AC_CONFIG_FILES([Makefile
 	src/Makefile
 	src/ocf/Makefile
 	src/ocf/ceph
+	src/ocf/rbd
 	man/Makefile
 	ceph.spec])
 AC_OUTPUT
