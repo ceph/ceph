@@ -343,6 +343,7 @@ public:
                           RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
+  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
   int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num,
                       map<string, RGWObjEnt>& m, bool *is_truncated,
                       string *last_entry = NULL);
@@ -353,6 +354,9 @@ public:
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
     return cls_obj_complete_del(bucket, tag, epoch, oid);
+  }
+  int complete_update_index_cancel(rgw_bucket& bucket, string& oid, string& tag) {
+    return cls_obj_complete_cancel(bucket, tag, oid);
   }
 
   /// clean up/process any temporary objects older than given date[/time]

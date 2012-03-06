@@ -722,26 +722,28 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
     return 0;
 
   string tag;
+  uint64_t epoch;
+  utime_t ut;
   r = prepare_update_index(NULL, bucket, obj, tag);
   if (r < 0)
     return r;
 
   r = io_ctx.operate(oid, &op);
   if (r < 0)
-    return r;
+    goto done_cancel;
 
-  uint64_t epoch = io_ctx.get_last_version();
+  epoch = io_ctx.get_last_version();
 
   r = complete_atomic_overwrite(rctx, state, obj);
   if (r < 0) {
     dout(0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
   }
 
-  utime_t ut = ceph_clock_now(g_ceph_context);
+  ut = ceph_clock_now(g_ceph_context);
   r = complete_update_index(bucket, obj.object, tag, epoch, size,
                             ut, etag, content_type, &acl_bl, category);
   if (r < 0)
-    return r;
+    goto done_cancel;
 
 
   if (mtime) {
@@ -751,6 +753,13 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   }
 
   return 0;
+
+done_cancel:
+  int ret = complete_update_index_cancel(bucket, obj.object, tag);
+  if (ret < 0) {
+    dout(0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
+  }
+  return r;
 }
 
 /**
@@ -1094,6 +1103,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
     if ((r >= 0 || r == -ENOENT) && bucket.marker.size()) {
       uint64_t epoch = io_ctx.get_last_version();
       r = complete_update_index_del(bucket, obj.object, tag, epoch);
+    } else {
+      int ret = complete_update_index_cancel(bucket, obj.object, tag);
+      if (ret < 0) {
+        dout(0) << "ERROR: complete_update_index_cancel returned ret=" << ret << dendl;
+      }
     }
     if (removed) {
       int ret = complete_atomic_overwrite(rctx, state, obj);
@@ -1812,9 +1826,16 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 done:
   atomic_write_finish(state, ret);
 
-  if (update_index && ret >= 0) {
-    ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
-                                ut, etag, content_type, &acl_bl, category);
+  if (update_index) {
+    if (ret >= 0) {
+      ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
+                                  ut, etag, content_type, &acl_bl, category);
+    } else {
+      int r = complete_update_index_cancel(bucket, dst_obj.object, tag);
+      if (r < 0) {
+        dout(0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
+      }
+    }
   }
 
   return ret;
@@ -2391,6 +2412,13 @@ int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epo
   RGWObjEnt ent;
   ent.name = name;
   return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, RGW_OBJ_CATEGORY_NONE);
+}
+
+int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name)
+{
+  RGWObjEnt ent;
+  ent.name = name;
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, 0, ent, RGW_OBJ_CATEGORY_NONE);
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
