@@ -4125,9 +4125,33 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
 boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 {
+  PG *pg = context< RecoveryMachine >().pg;
+
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
+
+  {
+    q.f->open_array_section("might_have_unfound");
+    for (set<int>::iterator p = pg->might_have_unfound.begin();
+	 p != pg->might_have_unfound.end();
+	 ++p) {
+      q.f->open_object_section("osd");
+      q.f->dump_int("osd", *p);
+      if (pg->peer_missing.count(*p)) {
+	q.f->dump_string("status", "already probed");
+      } else if (pg->peer_missing_requested.count(*p)) {
+	q.f->dump_string("status", "querying");
+      } else if (!pg->get_osdmap()->is_up(*p)) {
+	q.f->dump_string("status", "osd is down");
+      } else {
+	q.f->dump_string("status", "not queried");
+      }
+      q.f->close_section();
+    }
+    q.f->close_section();
+  }
+
   q.f->close_section();
   return forward_event();
 }
