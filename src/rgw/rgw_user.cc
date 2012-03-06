@@ -218,48 +218,22 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     get_buckets_obj(user_id, buckets_obj_id);
     bufferlist bl;
 #define LARGE_ENOUGH_LEN (4096 * 1024)
-    size_t len = LARGE_ENOUGH_LEN;
-    off_t ofs = 0;
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
-
-    do {
-      ret = rgwstore->read(NULL, obj, ofs, len, bl);
-      if (ret == -ENOENT) {
-        /* try to read the old format */
-        ret = rgw_read_buckets_from_attr(user_id, buckets);
-        if (!ret) {
-          store_buckets(user_id, buckets);
-          goto done;
-        }
-
-        ret = 0;
-        return 0;
-      }
-      if (ret < 0)
-        return ret;
-
-      if (bl.length() != len)
-        break;
-
-      bl.clear();
-      len *= 2;
-    } while (1);
-
-    bufferlist::iterator p = bl.begin();
     bufferlist header;
     map<string,bufferlist> m;
-    try {
-      ::decode(header, p);
-      ::decode(m, p);
-      for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
-        bufferlist::iterator iter = q->second.begin();
-        RGWBucketEnt bucket;
-        ::decode(bucket, iter);
-        buckets.add(bucket);
-      }
-    } catch (buffer::error& err) {
-      dout(0) << "ERROR: failed to decode bucket information, caught buffer::error" << dendl;
-      return -EIO;
+
+    ret = rgwstore->tmap_get(obj, header, m);
+    if (ret == -ENOENT)
+      ret = 0;
+
+    if (ret < 0)
+      return ret;
+
+    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+      bufferlist::iterator iter = q->second.begin();
+      RGWBucketEnt bucket;
+      ::decode(bucket, iter);
+      buckets.add(bucket);
     }
   } else {
     ret = rgw_read_buckets_from_attr(user_id, buckets);
