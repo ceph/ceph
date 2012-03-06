@@ -305,8 +305,6 @@ OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
-OPTION(filestore_fake_attrs, OPT_BOOL, false)
-OPTION(filestore_fake_collections, OPT_BOOL, false)
 OPTION(filestore_dev, OPT_STR, "")
 OPTION(filestore_btrfs_trans, OPT_BOOL, false)
 OPTION(filestore_btrfs_snap, OPT_BOOL, true)

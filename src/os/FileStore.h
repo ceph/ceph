@@ -27,8 +27,6 @@
 #include "IndexManager.h"
 #include "ObjectMap.h"
 
-#include "Fake.h"
-
 #include "include/uuid.h"
 
 #include <map>
@@ -39,8 +37,6 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-
-// fake attributes in memory, if we need to.
 
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
@@ -66,14 +62,6 @@ class FileStore : public JournalingObjectStore,
 
   int basedir_fd, current_fd;
   deque<uint64_t> snaps;
-
-  // fake attrs?
-  FakeAttrs attrs;
-  bool fake_attrs;
-
-  // fake collections?
-  FakeCollections collections;
-  bool fake_collections;
 
   // Indexed Collections
   IndexManager index_manager;
@@ -410,8 +398,6 @@ private:
   bool m_filestore_btrfs_clone_range;
   bool m_filestore_btrfs_snap;
   bool m_filestore_btrfs_trans;
-  bool m_filestore_fake_attrs;
-  bool m_filestore_fake_collections;
   float m_filestore_commit_timeout;
   bool m_filestore_fiemap;
   bool m_filestore_flusher;

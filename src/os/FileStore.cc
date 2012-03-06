@@ -641,8 +641,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   ioctl_fiemap(false),
   fsid_fd(-1), op_fd(-1),
   basedir_fd(-1), current_fd(-1),
-  attrs(this), fake_attrs(false),
-  collections(this), fake_collections(false),
   ondisk_finisher(g_ceph_context),
   lock("FileStore::lock"),
   force_sync(false), sync_epoch(0),
@@ -658,8 +656,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   m_filestore_btrfs_clone_range(g_conf->filestore_btrfs_clone_range),
   m_filestore_btrfs_snap (g_conf->filestore_btrfs_snap ),
   m_filestore_btrfs_trans(g_conf->filestore_btrfs_trans),
-  m_filestore_fake_attrs(g_conf->filestore_fake_attrs),
-  m_filestore_fake_collections(g_conf->filestore_fake_collections),
   m_filestore_commit_timeout(g_conf->filestore_commit_timeout),
   m_filestore_fiemap(g_conf->filestore_fiemap),
   m_filestore_flusher (g_conf->filestore_flusher ),
@@ -1169,32 +1165,20 @@ bool FileStore::test_mount_in_use()
 
 int FileStore::_detect_fs()
 {
-  // fake collections?
-  if (m_filestore_fake_collections) {
-    dout(0) << "faking collections (in memory)" << dendl;
-    fake_collections = true;
-  }
-
-  // xattrs?
-  if (m_filestore_fake_attrs) {
-    dout(0) << "faking xattrs (in memory)" << dendl;
-    fake_attrs = true;
-  } else {
-    char fn[PATH_MAX];
-    int x = rand();
-    int y = x+1;
-    snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-    int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
-    if (ret >= 0)
-      ret = do_getxattr(fn, "user.test", &y, sizeof(y));
-    if ((ret < 0) || (x != y)) {
-      derr << "Extended attributes don't appear to work. ";
-      if (ret)
-	*_dout << "Got error " + cpp_strerror(ret) + ". ";
-      *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
-	     << "file system with the 'user_xattr' option." << dendl;
-      return -ENOTSUP;
-    }
+  char fn[PATH_MAX];
+  int x = rand();
+  int y = x+1;
+  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
+  int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
+  if (ret >= 0)
+    ret = do_getxattr(fn, "user.test", &y, sizeof(y));
+  if ((ret < 0) || (x != y)) {
+    derr << "Extended attributes don't appear to work. ";
+    if (ret)
+      *_dout << "Got error " + cpp_strerror(ret) + ". ";
+    *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
+	   << "file system with the 'user_xattr' option." << dendl;
+    return -ENOTSUP;
   }
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
@@ -3622,8 +3606,6 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset, bool user_
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name,
 		       void *value, size_t size) 
 {
-  if (fake_attrs) return attrs.getattr(cid, oid, name, value, size);
-
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "' len " << size << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
@@ -3634,8 +3616,6 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name,
 
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)
 {
-  if (fake_attrs) return attrs.getattr(cid, oid, name, bp);
-
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
@@ -3646,8 +3626,6 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
 
 int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
 {
-  if (fake_attrs) return attrs.getattrs(cid, oid, aset);
-
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
   int r = _getattrs(cid, oid, aset, user_only);
   dout(10) << "getattrs " << cid << "/" << oid << " = " << r << dendl;
@@ -3657,8 +3635,6 @@ int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>&
 int FileStore::_setattr(coll_t cid, const hobject_t& oid, const char *name,
 			const void *value, size_t size) 
 {
-  if (fake_attrs) return attrs.setattr(cid, oid, name, value, size);
-
   dout(15) << "setattr " << cid << "/" << oid << " '" << name << "' len " << size << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
@@ -3669,8 +3645,6 @@ int FileStore::_setattr(coll_t cid, const hobject_t& oid, const char *name,
 
 int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.setattrs(cid, oid, aset);
-
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
   int r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
@@ -3697,8 +3671,6 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 
 int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name) 
 {
-  if (fake_attrs) return attrs.rmattr(cid, oid, name);
-
   dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
@@ -3709,8 +3681,6 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name)
 
 int FileStore::_rmattrs(coll_t cid, const hobject_t& oid) 
 {
-  //if (fake_attrs) return attrs.rmattrs(cid, oid);
-
   dout(15) << "rmattrs " << cid << "/" << oid << dendl;
 
   map<string,bufferptr> aset;
@@ -3735,8 +3705,6 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid)
 int FileStore::collection_getattr(coll_t c, const char *name,
 				  void *value, size_t size) 
 {
-  if (fake_attrs) return attrs.collection_getattr(c, name, value, size);
-
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_getattr " << fn << " '" << name << "' len " << size << dendl;
@@ -3749,8 +3717,6 @@ int FileStore::collection_getattr(coll_t c, const char *name,
 
 int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
 {
-  if (fake_attrs) return attrs.collection_getattr(c, name, bl);
-
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_getattr " << fn << " '" << name << "'" << dendl;
@@ -3766,8 +3732,6 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
 
 int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.collection_getattrs(cid, aset);
-
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
   dout(10) << "collection_getattrs " << fn << dendl;
@@ -3780,8 +3744,6 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
 int FileStore::_collection_setattr(coll_t c, const char *name,
 				  const void *value, size_t size) 
 {
-  if (fake_attrs) return attrs.collection_setattr(c, name, value, size);
-
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << dendl;
@@ -3794,8 +3756,6 @@ int FileStore::_collection_setattr(coll_t c, const char *name,
 
 int FileStore::_collection_rmattr(coll_t c, const char *name) 
 {
-  if (fake_attrs) return attrs.collection_rmattr(c, name);
-
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_rmattr " << fn << dendl;
@@ -3809,8 +3769,6 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
 
 int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.collection_setattrs(cid, aset);
-
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
   dout(15) << "collection_setattrs " << fn << dendl;
@@ -3859,8 +3817,6 @@ int FileStore::collection_version_current(coll_t c, uint32_t *version)
 
 int FileStore::list_collections(vector<coll_t>& ls) 
 {
-  if (fake_collections) return collections.list_collections(ls);
-
   dout(10) << "list_collections" << dendl;
 
   char fn[PATH_MAX];
@@ -3915,8 +3871,6 @@ int FileStore::list_collections(vector<coll_t>& ls)
 
 int FileStore::collection_stat(coll_t c, struct stat *st) 
 {
-  if (fake_collections) return collections.collection_stat(c, st);
-
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_stat " << fn << dendl;
@@ -3928,16 +3882,12 @@ int FileStore::collection_stat(coll_t c, struct stat *st)
 
 bool FileStore::collection_exists(coll_t c) 
 {
-  if (fake_collections) return collections.collection_exists(c);
-
   struct stat st;
   return collection_stat(c, &st) == 0;
 }
 
 bool FileStore::collection_empty(coll_t c) 
 {  
-  if (fake_collections) return collections.collection_empty(c);
-
   dout(15) << "collection_empty " << c << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -3955,7 +3905,6 @@ int FileStore::collection_list_partial(coll_t c, hobject_t start,
 				       int min, int max, snapid_t seq,
 				       vector<hobject_t> *ls, hobject_t *next)
 {
-  if (fake_collections) return -1;
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -3970,7 +3919,6 @@ int FileStore::collection_list_partial(coll_t c, hobject_t start,
 
 int FileStore::collection_list(coll_t c, vector<hobject_t>& ls) 
 {  
-  if (fake_collections) return collections.collection_list(c, ls);
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -4048,8 +3996,6 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
 
 int FileStore::_create_collection(coll_t c) 
 {
-  if (fake_collections) return collections.create_collection(c);
-  
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "create_collection " << fn << dendl;
@@ -4063,8 +4009,6 @@ int FileStore::_create_collection(coll_t c)
 
 int FileStore::_destroy_collection(coll_t c) 
 {
-  if (fake_collections) return collections.destroy_collection(c);
-
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "_destroy_collection " << fn << dendl;
@@ -4077,8 +4021,6 @@ int FileStore::_destroy_collection(coll_t c)
 
 int FileStore::_collection_add(coll_t c, coll_t cid, const hobject_t& o) 
 {
-  if (fake_collections) return collections.collection_add(c, o);
-
   dout(15) << "collection_add " << c << "/" << o << " " << cid << "/" << o << dendl;
   int r = lfn_link(cid, c, o);
   dout(10) << "collection_add " << c << "/" << o << " " << cid << "/" << o << " = " << r << dendl;
@@ -4087,8 +4029,6 @@ int FileStore::_collection_add(coll_t c, coll_t cid, const hobject_t& o)
 
 int FileStore::_collection_remove(coll_t c, const hobject_t& o) 
 {
-  if (fake_collections) return collections.collection_remove(c, o);
-
   dout(15) << "collection_remove " << c << "/" << o << dendl;
   int r = lfn_unlink(c, o);
   dout(10) << "collection_remove " << c << "/" << o << " = " << r << dendl;
