@@ -2481,6 +2481,15 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
        }
       break;
 
+    case Transaction::OP_COLL_MOVE:
+      {
+	coll_t ocid = i.get_cid();
+	coll_t ncid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	r = _collection_move(ocid, ncid, oid);
+      }
+      break;
+
     case Transaction::OP_COLL_SETATTR:
       {
 	coll_t cid = i.get_cid();
@@ -4035,6 +4044,15 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   return r;
 }
 
+int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o) 
+{
+  dout(15) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
+  int r = lfn_link(oldcid, c, o);
+  if (r == 0)
+    r = lfn_unlink(oldcid, o);
+  dout(10) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
+  return r;
+}
 
 int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
