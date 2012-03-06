@@ -641,19 +641,6 @@ public:
   virtual int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
   virtual int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
-  /*
-  virtual int _remove(coll_t cid, hobject_t oid) = 0;
-  virtual int _truncate(coll_t cid, hobject_t oid, uint64_t size) = 0;
-  virtual int _write(coll_t cid, hobject_t oid, uint64_t offset, size_t len, const bufferlist& bl) = 0;
-  virtual int _zero(coll_t cid, hobject_t oid, uint64_t offset, size_t len) {
-    // write zeros.. yuck!
-    bufferptr bp(len);
-    bufferlist bl;
-    bl.push_back(bp);
-    return _write(cid, oid, offset, len, bl);
-  }
-  */
-
   virtual void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) = 0; //{ }
   virtual int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) = 0;  //{ return -1; }
 
@@ -668,18 +655,7 @@ public:
   }
   virtual int getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) {return 0;};
 
-  /*
-  virtual int _setattr(coll_t cid, hobject_t oid, const char *name, const void *value, size_t size) = 0;
-  virtual int _setattr(coll_t cid, hobject_t oid, const char *name, const bufferptr &bp) {
-    return _setattr(cid, oid, name, bp.c_str(), bp.length());
-  }
-  virtual int _setattrs(coll_t cid, hobject_t oid, map<string,bufferptr>& aset) = 0;
-  virtual int _rmattr(coll_t cid, hobject_t oid, const char *name) {return 0;}
-  virtual int _clone(coll_t cid, hobject_t oid, hobject_t noid) {
-    return -1;
-  }
-  */
-    
+   
   // collections
   virtual int list_collections(vector<coll_t>& ls) = 0;
   virtual int collection_version_current(coll_t c, uint32_t *version) { 
@@ -762,17 +738,6 @@ public:
     coll_t c,              ///< [in] collection
     const hobject_t &hoid  ///< [in] object
     ) = 0;
-
-  /*
-  virtual int _create_collection(coll_t c) = 0;
-  virtual int _destroy_collection(coll_t c) = 0;
-  virtual int _collection_add(coll_t c, coll_t ocid, hobject_t o) = 0;
-  virtual int _collection_remove(coll_t c, hobject_t o) = 0;
-  virtual int _collection_setattr(coll_t cid, const char *name,
-                                 const void *value, size_t size) = 0;
-  virtual int _collection_rmattr(coll_t cid, const char *name) = 0;
-  virtual int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
-  */
 
   virtual void sync(Context *onsync) {}
   virtual void sync() {}
