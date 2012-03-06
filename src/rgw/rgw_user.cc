@@ -248,7 +248,6 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     }
   }
 
-done:
   list<string> buckets_list;
 
   if (need_stats) {
