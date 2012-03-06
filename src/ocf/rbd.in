@@ -159,8 +159,8 @@ rbd_monitor() {
     local rbd_dev
 
     if ! [ -d /sys/bus/rbd ]; then
-	ocf_log debug "rbd module is not loaded"
-	return $OCF_NOT_RUNNING
+        ocf_log debug "rbd module is not loaded"
+        return $OCF_NOT_RUNNING
     fi
 
     rbd_dev=`find_rbd_dev`
