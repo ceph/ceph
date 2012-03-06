@@ -180,7 +180,7 @@ MDS::~MDS() {
   }
   
   if (messenger)
-    messenger->destroy();
+    delete messenger;
 }
 
 void MDS::create_logger()

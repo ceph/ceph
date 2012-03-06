@@ -77,13 +77,7 @@ public:
       goto fail;
 
     //network connection
-    messenger = new SimpleMessenger(cct);
-    if (!messenger->register_entity(entity_name_t::CLIENT())) {
-      messenger->destroy();
-      messenger = NULL;
-      ret = -1001;
-      goto fail;
-    }
+    messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(), msgr_nonce);
 
     //at last the client
     ret = -1002;
@@ -92,7 +86,7 @@ public:
       goto fail;
 
     ret = -1003;
-    if (messenger->start_with_nonce(msgr_nonce) != 0)
+    if (messenger->start() != 0)
       goto fail;
 
     ret = client->init();
@@ -124,7 +118,7 @@ public:
     }
     if (messenger) {
       messenger->wait();
-      messenger->destroy();
+      delete messenger;
       messenger = NULL;
     }
     if (monclient) {

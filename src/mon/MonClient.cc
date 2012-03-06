@@ -223,10 +223,11 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   SimpleMessenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = new SimpleMessenger(cct);
-    smessenger->register_entity(entity_name_t::CLIENT(-1));
+    messenger = smessenger = new SimpleMessenger(cct,
+                                                 entity_name_t::CLIENT(-1),
+                                                 getpid());
     messenger->add_dispatcher_head(this);
-    smessenger->start_with_nonce(getpid());
+    smessenger->start();
     temp_msgr = true; 
   }
   
@@ -257,7 +258,7 @@ int MonClient::get_monmap_privately()
     messenger->shutdown();
     if (smessenger)
       smessenger->wait();
-    messenger->destroy();
+    delete messenger;
     messenger = 0;
     monc_lock.Lock();
   }

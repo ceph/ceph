@@ -937,7 +937,8 @@ int librados::RadosClient::connect()
     goto out;
 
   err = -ENOMEM;
-  messenger = new SimpleMessenger(cct);
+  nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
+  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), nonce);
   if (!messenger)
     goto out;
 
@@ -948,7 +949,6 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
-  messenger->register_entity(entity_name_t::CLIENT(-1));
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
@@ -961,10 +961,7 @@ int librados::RadosClient::connect()
 
   messenger->add_dispatcher_head(this);
 
-  nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-
-  messenger->start_with_nonce(nonce);
-  messenger->add_dispatcher_head(this);
+  messenger->start();
 
   ldout(cct, 1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
@@ -1031,7 +1028,7 @@ void librados::RadosClient::shutdown()
 librados::RadosClient::~RadosClient()
 {
   if (messenger)
-    messenger->destroy();
+    delete messenger;
   if (objecter)
     delete objecter;
   common_destroy_context(cct);
