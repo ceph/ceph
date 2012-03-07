@@ -2245,10 +2245,11 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
     return id;
   }
     
+  int trans_num = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
-       p++) {
-    r = _do_transaction(**p, op_seq);
+       p++, trans_num++) {
+    r = _do_transaction(**p, op_seq, trans_num);
     if (r < 0)
       break;
   }
@@ -2333,7 +2334,7 @@ void FileStore::_transaction_finish(int fd)
   TEMP_FAILURE_RETRY(::close(fd));
 }
 
-unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
+unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_num)
 {
   dout(10) << "_do_transaction on " << &t << dendl;
 

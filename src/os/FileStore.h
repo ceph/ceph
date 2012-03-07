@@ -293,7 +293,7 @@ public:
   unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
   int _transaction_start(uint64_t bytes, uint64_t ops);
   void _transaction_finish(int id);
-  unsigned _do_transaction(Transaction& t, uint64_t op_seq);
+  unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
