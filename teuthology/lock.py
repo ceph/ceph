@@ -106,13 +106,13 @@ Lock, unlock, or query lock status of machines.
         '--list',
         action='store_true',
         default=False,
-        help='Show lock info for machines owned by you, or only machines specified. Can be restricted by --owner and --status.',
+        help='Show lock info for machines owned by you, or only machines specified. Can be restricted by --owner, --status, and --locked.',
         )
     group.add_argument(
         '--list-targets',
         action='store_true',
         default=False,
-        help='Show lock info for all machines, or only machines specified, in targets: yaml format. Can be restricted by --owner and --status.',
+        help='Show lock info for all machines, or only machines specified, in targets: yaml format. Can be restricted by --owner, --status, and --locked.',
         )
     group.add_argument(
         '--lock',
@@ -165,6 +165,12 @@ Lock, unlock, or query lock status of machines.
         default=None,
         choices=['up', 'down'],
         help='whether a machine is usable for testing',
+        )
+    parser.add_argument(
+        '--locked',
+        default=None,
+        choices=['true', 'false'],
+        help='whether a machine is locked',
         )
     parser.add_argument(
         '-t', '--targets',
@@ -242,6 +248,9 @@ Lock, unlock, or query lock status of machines.
             if ctx.status is not None:
                 statuses = [status for status in statuses \
                                 if status['up'] == (ctx.status == 'up')]
+            if ctx.locked is not None:
+                statuses = [status for status in statuses \
+                                if status['locked'] == (ctx.locked == 'true')]
             if ctx.list:
                 print json.dumps(statuses, indent=4)
             else:
