@@ -715,7 +715,7 @@ TEST(LibRadosAio, OmapPP) {
     string val = "bar";
     to_set["foo"] = header_to_set;
     to_set["foo2"] = header_to_set;
-    to_set["foo3"] = header_to_set;
+    to_set["qfoo3"] = header_to_set;
     op.omap_set(to_set);
 
     op.omap_set_header(header_to_set);
@@ -737,16 +737,20 @@ TEST(LibRadosAio, OmapPP) {
     set<string> to_get;
     map<string, bufferlist> got3;
 
+    map<string, bufferlist> got4;
+
     bufferlist header;
 
     op.omap_get_keys("", 1, &set_got, 0);
     op.omap_get_vals("foo", 1, &map_got, 0);
 
     to_get.insert("foo");
-    to_get.insert("foo3");
+    to_get.insert("qfoo3");
     op.omap_get_vals_by_key(to_get, &got3, 0);
 
     op.omap_get_header(&header, 0);
+
+		op.omap_get_vals("foo2", "q", 1, &got4, 0);
 
     ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
     {
@@ -761,7 +765,9 @@ TEST(LibRadosAio, OmapPP) {
     ASSERT_EQ(map_got.begin()->first, "foo2");
     ASSERT_EQ(got3.size(), (unsigned)2);
     ASSERT_EQ(got3.begin()->first, "foo");
-    ASSERT_EQ(got3.rbegin()->first, "foo3");
+    ASSERT_EQ(got3.rbegin()->first, "qfoo3");
+    ASSERT_EQ(got4.size(), (unsigned)1);
+    ASSERT_EQ(got4.begin()->first, "qfoo3");
   }
 
   {

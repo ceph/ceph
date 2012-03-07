@@ -2456,8 +2456,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	string start_after;
 	uint64_t max_return;
+	string filter_prefix;
 	::decode(start_after, bp);
 	::decode(max_return, bp);
+	::decode(filter_prefix, bp);
 	map<string, bufferlist> out_set;
 
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
@@ -2468,8 +2470,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  int r = _get_tmap(ctx, &vals, &header);
 	  if (r == 0) {
 	    map<string, bufferlist>::iterator iter = vals.upper_bound(start_after);
+	    if (filter_prefix > start_after) iter = vals.lower_bound(filter_prefix);
 	    for (uint64_t i = 0;
-		 i < max_return && iter != vals.end();
+		 i < max_return && iter != vals.end() &&
+		   iter->first.substr(0, filter_prefix.size()) == filter_prefix;
 		 ++i, iter++) {
 	      out_set.insert(*iter);
 	    }
@@ -2486,8 +2490,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    );
 	  assert(iter);
 	  iter->upper_bound(start_after);
+	  if (filter_prefix >= start_after) iter->lower_bound(filter_prefix);
 	  for (uint64_t i = 0;
-	       i < max_return && iter->valid();
+	       i < max_return && iter->valid() &&
+		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
 	       ++i, iter->next()) {
 	    dout(20) << "Found key " << iter->key() << dendl;
 	    out_set.insert(make_pair(iter->key(), iter->value()));
