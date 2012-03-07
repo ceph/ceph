@@ -52,7 +52,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   try {
     ::decode(new_dir.header, header_iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode header\n");
+    CLS_LOG("ERROR: rgw_bucket_list(): failed to decode header\n");
     return -EINVAL;
   }
 
@@ -84,7 +84,6 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ret.is_truncated = (kiter != keys.end());
 
   ::encode(ret, *out);
-
   return 0;
 }
 
