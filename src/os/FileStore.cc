@@ -114,15 +114,16 @@ using ceph::crypto::SHA1;
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
 int do_getxattr(const char *fn, const char *name, void *val, size_t size);
+int do_fgetxattr(int fd, const char *name, void *val, size_t size);
 int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 int do_fsetxattr(int fd, const char *name, const void *val, size_t size);
 int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 int do_listxattr(const char *fn, char *names, size_t len);
 int do_removexattr(const char *fn, const char *name);
 
-static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
+static int sys_fgetxattr(int fd, const char *name, void *val, size_t size)
 {
-  int r = ::ceph_os_getxattr(fn, name, val, size);
+  int r = ::ceph_os_fgetxattr(fd, name, val, size);
   return (r < 0 ? -errno : r);
 }
 
@@ -439,7 +440,7 @@ done:
   return pos;
 }
 
-int do_getxattr_len(const char *fn, const char *name)
+int do_fgetxattr_len(int fd, const char *name)
 {
   int i = 0, total = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
@@ -447,7 +448,7 @@ int do_getxattr_len(const char *fn, const char *name)
 
   do {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = sys_getxattr(fn, raw_name, 0, 0);
+    r = sys_fgetxattr(fd, raw_name, 0, 0);
     if (!i && r < 0) {
       return r;
     }
@@ -462,6 +463,16 @@ int do_getxattr_len(const char *fn, const char *name)
 
 int do_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0)
+    return -errno;
+  int r = do_fgetxattr(fd, name, val, size);
+  TEMP_FAILURE_RETRY(::close(fd));
+  return r;
+}
+
+int do_fgetxattr(int fd, const char *name, void *val, size_t size)
+{
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
@@ -469,14 +480,14 @@ int do_getxattr(const char *fn, const char *name, void *val, size_t size)
   size_t chunk_size;
 
   if (!size)
-    return do_getxattr_len(fn, name);
+    return do_fgetxattr_len(fd, name);
 
   do {
     chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -494,7 +505,7 @@ int do_getxattr(const char *fn, const char *name, void *val, size_t size)
        exactly one block */
     if (chunk_size == ATTR_MAX_BLOCK_LEN) {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = sys_getxattr(fn, raw_name, 0, 0);
+      r = sys_fgetxattr(fd, raw_name, 0, 0);
       if (r > 0) { // there's another chunk.. the original buffer was too small
         ret = -ERANGE;
       }
