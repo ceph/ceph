@@ -1169,10 +1169,10 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
       dout(20) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
-    dout(0) << "manifest: total_size = " << s->manifest.obj_size << dendl;
+    dout(10) << "manifest: total_size = " << s->manifest.obj_size << dendl;
     map<uint64_t, RGWObjManifestPart>::iterator mi;
     for (mi = s->manifest.objs.begin(); mi != s->manifest.objs.end(); ++mi) {
-      dout(0) << "manifest: ofs=" << mi->first << " loc=" << mi->second.loc << dendl;
+      dout(10) << "manifest: ofs=" << mi->first << " loc=" << mi->second.loc << dendl;
     }
   }
   if (s->obj_tag.length())
@@ -1873,9 +1873,13 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     len = end - ofs + 1;
 
   if (astate->has_manifest) {
+    /* now get the relevant object part */
     map<uint64_t, RGWObjManifestPart>::iterator iter = astate->manifest.objs.upper_bound(ofs);
-    if (iter != astate->manifest.objs.begin())
+    /* we're now pointing at the next part (unless the first part starts at a higher ofs),
+       so retract to previous part */
+    if (iter != astate->manifest.objs.begin()) {
       --iter;
+    }
 
     RGWObjManifestPart& part = iter->second;
     uint64_t part_ofs = iter->first;
@@ -1884,8 +1888,9 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     read_ofs = part.loc_ofs + (ofs - part_ofs);
     reading_from_head = (read_obj == obj);
 
-    if (!reading_from_head)
+    if (!reading_from_head) {
       get_obj_bucket_and_oid_key(read_obj, bucket, oid, key);
+    }
   }
 
   if (len > RGW_MAX_CHUNK_SIZE)

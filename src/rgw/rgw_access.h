@@ -25,9 +25,9 @@ struct RGWCloneRangeInfo {
 };
 
 struct RGWObjManifestPart {
-  rgw_obj loc;
-  uint64_t loc_ofs;
-  uint64_t size;
+  rgw_obj loc;       /* the object where the data is located */
+  uint64_t loc_ofs;  /* the offset at that object where the data is located */
+  uint64_t size;     /* the part size */
 
   RGWObjManifestPart() : loc_ofs(0), size(0) {}
 
