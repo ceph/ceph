@@ -420,6 +420,7 @@ public:
       __u32 op = OP_COLL_MOVE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
+      ::encode(oldcid, tbl);
       ::encode(oid, tbl);
       ops++;
     }
