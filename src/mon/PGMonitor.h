@@ -136,7 +136,8 @@ public:
 
   void check_osd_map(epoch_t epoch);
 
-  enum health_status_t get_health(list<string>& summary, list<string> *detail) const;
+  void get_health(list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail) const;
 
 private:
   // no copying allowed

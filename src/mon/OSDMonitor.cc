@@ -1234,23 +1234,20 @@ void OSDMonitor::mark_all_down()
   propose_pending();
 }
 
-enum health_status_t OSDMonitor::get_health(list<string>& summary, list<string> *detail) const
+void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
+			    list<pair<health_status_t,string> > *detail) const
 {
-  enum health_status_t ret(HEALTH_OK);
-
   int num_osds = osdmap.get_num_osds();
   int num_up_osds = osdmap.get_num_up_osds();
   int num_in_osds = osdmap.get_num_in_osds();
 
   if (num_osds == 0) {
-    summary.push_back("no osds");
-    ret = HEALTH_ERR;
+    summary.push_back(make_pair(HEALTH_ERR, "no osds"));
   } else {
     if (num_up_osds < num_in_osds) {
       ostringstream ss;
       ss << (num_in_osds - num_up_osds) << "/" << num_in_osds << " in osds are down";
-      summary.push_back(ss.str());
-      ret = HEALTH_WARN;
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 
       if (detail) {
 	for (int i = 0; i < osdmap.get_max_osd(); i++) {
@@ -1259,13 +1256,12 @@ enum health_status_t OSDMonitor::get_health(list<string>& summary, list<string> 
 	    ostringstream ss;
 	    ss << "osd." << i << " is down since epoch " << info.down_at
 	       << ", last address " << osdmap.get_addr(i);
-	    detail->push_back(ss.str());
+	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	  }
 	}
       }
     }
   }
-  return ret;
 }
 
 bool OSDMonitor::preprocess_command(MMonCommand *m)

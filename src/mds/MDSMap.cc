@@ -206,10 +206,9 @@ void MDSMap::print_summary(ostream& out)
   //out << ", " << stopped.size() << " stopped";
 }
 
-enum health_status_t MDSMap::get_health(list<string>& summary, list<string> *detail) const
+void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
+			list<pair<health_status_t,string> > *detail) const
 {
-  health_status_t ret(HEALTH_OK);
-
   if (!failed.empty()) {
     std::ostringstream oss;
     oss << "mds rank"
@@ -217,14 +216,12 @@ enum health_status_t MDSMap::get_health(list<string>& summary, list<string> *det
 	<< failed
 	<< ((failed.size() > 1) ? " have":" has")
 	<< " failed";
-    if (ret > HEALTH_ERR)
-      ret = HEALTH_ERR;
-    summary.push_back(oss.str());
+    summary.push_back(make_pair(HEALTH_ERR, oss.str()));
     if (detail) {
       for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
 	std::ostringstream oss;
 	oss << "mds." << *p << " has failed";
-	detail->push_back(oss.str());
+	detail->push_back(make_pair(HEALTH_ERR, oss.str()));
       }
     }
   }
@@ -242,7 +239,7 @@ enum health_status_t MDSMap::get_health(list<string>& summary, list<string> *det
       if (detail) {
 	std::ostringstream oss;
 	oss << "mds." << mds_info.name << " at " << mds_info.addr << " is laggy/unresponsive";
-	detail->push_back(oss.str());
+	detail->push_back(make_pair(HEALTH_WARN, oss.str()));
       }
     }
   }
@@ -251,9 +248,6 @@ enum health_status_t MDSMap::get_health(list<string>& summary, list<string> *det
     oss << "mds " << laggy
 	<< ((laggy.size() > 1) ? " are":" is")
 	<< " laggy";
-    summary.push_back(oss.str());
-    if (ret > HEALTH_WARN)
-      ret = HEALTH_WARN;
+    summary.push_back(make_pair(HEALTH_WARN, oss.str()));
   }
-  return ret;
 }

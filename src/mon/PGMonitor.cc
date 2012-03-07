@@ -1129,10 +1129,9 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   return false;
 }
 
-enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *detail) const
+void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
+			   list<pair<health_status_t,string> > *detail) const
 {
-  enum health_status_t ret(HEALTH_OK);
-
   map<string,int> note;
   hash_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
   hash_map<int,int>::const_iterator p_end = pg_map.num_pg_by_state.end();
@@ -1187,17 +1186,15 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
       ostringstream ss;
       ss << "pg " << p->first << " is stuck " << pg_state_string(p->second.state)
 	 << ", last acting " << p->second.acting;
-      detail->push_back(ss.str());
+      detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
   }
 
   if (!note.empty()) {
-    if (ret > HEALTH_WARN)
-      ret = HEALTH_WARN;
     for (map<string,int>::iterator p = note.begin(); p != note.end(); p++) {
       ostringstream ss;
       ss << p->second << " pgs " << p->first;
-      summary.push_back(ss.str());
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
     if (detail) {
       for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_map.pg_stat.begin();
@@ -1218,7 +1215,7 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
 	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
 	  if (p->second.stats.sum.num_objects_unfound)
 	    ss << ", " << p->second.stats.sum.num_objects_unfound << " unfound";
-	  detail->push_back(ss.str());
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
     }
@@ -1227,16 +1224,15 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
   stringstream rss;
   pg_map.recovery_summary(rss);
   if (!rss.str().empty()) {
-    ret = HEALTH_WARN;
-    summary.push_back(rss.str());
+    summary.push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
     if (detail)
-      detail->push_back(rss.str());    
+      detail->push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
   }
   
   if (pg_map.nearfull_osds.size() > 0) {
     ostringstream ss;
     ss << pg_map.nearfull_osds.size() << " near full osd(s)";
-    summary.push_back(ss.str());
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     if (detail) {
       for (set<int>::iterator p = pg_map.nearfull_osds.begin();
 	   p != pg_map.nearfull_osds.end();
@@ -1245,16 +1241,14 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
 	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
 	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
 	ss << "osd." << *p << " is near full at " << ratio << "%";
-	detail->push_back(ss.str());
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
-    if (ret > HEALTH_WARN)
-      ret = HEALTH_WARN;
   }
   if (pg_map.full_osds.size() > 0) {
     ostringstream ss;
     ss << pg_map.full_osds.size() << " full osd(s)";
-    summary.push_back(ss.str());
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     if (detail) {
       for (set<int>::iterator p = pg_map.nearfull_osds.begin();
 	   p != pg_map.nearfull_osds.end();
@@ -1263,14 +1257,10 @@ enum health_status_t PGMonitor::get_health(list<string>& summary, list<string> *
 	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
 	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
 	ss << "osd." << *p << " is full at " << ratio << "%";
-	detail->push_back(ss.str());
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
-    if (ret > HEALTH_ERR)
-      ret = HEALTH_ERR;
   }
-
-  return ret;
 }
 
 int PGMonitor::dump_stuck_pg_stats(ostream& ss,

@@ -161,14 +161,11 @@ public:
   /**
    * get health information
    *
-   * @param summary list of summary strings
+   * @param summary list of summary strings and associated severity
    * @param detail optional list of detailed problem reports; may be NULL
-   * @return HEALTH_OK, HEALTH_WARN, or HEALTH_ERROR
    */
-  virtual enum health_status_t get_health(list<string>& summary,
-					  list<string> *detail) const {
-    return HEALTH_OK;
-  }
+  virtual void get_health(list<pair<health_status_t,string> >& summary,
+			  list<pair<health_status_t,string> > *detail) const { }
 
 };
 

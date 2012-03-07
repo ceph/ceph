@@ -1027,33 +1027,34 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "health") {
-      health_status_t overall = HEALTH_OK;
-      list<string> summary;
-      list<string> detail;
+      list<pair<health_status_t,string> > summary;
+      list<pair<health_status_t,string> > detail;
       for (vector<PaxosService*>::iterator p = paxos_service.begin();
 	   p != paxos_service.end();
 	   p++) {
 	PaxosService *s = *p;
 	ostringstream oss;
-	health_status_t ret = s->get_health(summary, (m->cmd.size() > 1) ? &detail : NULL);
-	if (ret < overall)
-	  overall = ret;
+	s->get_health(summary, (m->cmd.size() > 1) ? &detail : NULL);
       }
       
       stringstream ss;
-      ss << overall;
+      health_status_t overall = HEALTH_OK;
       if (!summary.empty()) {
 	ss << ' ';
 	while (!summary.empty()) {
-	  ss << summary.front();
+	  if (overall > summary.front().first)
+	    overall = summary.front().first;
+	  ss << summary.front().second;
 	  summary.pop_front();
 	  if (!summary.empty())
 	    ss << "; ";
 	}
       }
-      rs = ss.str();
+      stringstream fss;
+      fss << overall;
+      rs = fss.str() + ss.str();
       while (!detail.empty()) {
-	rdata.append(detail.front());
+	rdata.append(detail.front().second);
 	rdata.append('\n');
 	detail.pop_front();
       }
