@@ -116,6 +116,11 @@ class MonMap {
     return false;
   }
 
+  string get_name(unsigned n) const {
+    assert(n < rank_name.size());
+    return rank_name[n];
+  }
+
   int get_rank(const string& n) {
     for (unsigned i=0; i<rank_name.size(); i++)
       if (rank_name[i] == n)

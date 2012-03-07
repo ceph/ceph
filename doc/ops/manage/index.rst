@@ -6,7 +6,7 @@
 
    key
    grow/index
-   disk-failure
+   failures/index
    pool
    cephfs
 

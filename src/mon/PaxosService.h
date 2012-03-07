@@ -158,7 +158,14 @@ public:
 
   virtual void tick() {}
 
-  virtual enum health_status_t get_health(std::ostream& os) const { return HEALTH_OK; }
+  /**
+   * get health information
+   *
+   * @param summary list of summary strings and associated severity
+   * @param detail optional list of detailed problem reports; may be NULL
+   */
+  virtual void get_health(list<pair<health_status_t,string> >& summary,
+			  list<pair<health_status_t,string> > *detail) const { }
 
 };
 

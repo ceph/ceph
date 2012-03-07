@@ -163,7 +163,8 @@ private:
 
   void tick();  // check state, take actions
 
-  enum health_status_t get_health(std::ostream &ss) const;
+  void get_health(list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail) const;
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 

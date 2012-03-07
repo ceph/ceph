@@ -1129,11 +1129,10 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   return false;
 }
 
-enum health_status_t PGMonitor::get_health(std::ostream &ss) const
+void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
+			   list<pair<health_status_t,string> > *detail) const
 {
-  enum health_status_t ret(HEALTH_OK);
   map<string,int> note;
-
   hash_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
   hash_map<int,int>::const_iterator p_end = pg_map.num_pg_by_state.end();
   for (; p != p_end; ++p) {
@@ -1180,38 +1179,79 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
     note["stuck stale"] = stuck_pgs.size();
   }
 
+  if (detail) {
+    for (hash_map<pg_t,pg_stat_t>::iterator p = stuck_pgs.begin();
+	 p != stuck_pgs.end();
+	 ++p) {
+      ostringstream ss;
+      ss << "pg " << p->first << " is stuck " << pg_state_string(p->second.state)
+	 << ", last acting " << p->second.acting;
+      detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+
   if (!note.empty()) {
-    ret = HEALTH_WARN;
     for (map<string,int>::iterator p = note.begin(); p != note.end(); p++) {
-      if (p != note.begin())
-	ss << ", ";
+      ostringstream ss;
       ss << p->second << " pgs " << p->first;
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+    if (detail) {
+      for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_map.pg_stat.begin();
+	   p != pg_map.pg_stat.end();
+	   ++p) {
+	if (p->second.state & (PG_STATE_STALE |
+			       PG_STATE_DOWN |
+			       PG_STATE_DEGRADED |
+			       PG_STATE_INCONSISTENT |
+			       PG_STATE_PEERING |
+			       PG_STATE_REPAIR |
+			       PG_STATE_SPLITTING |
+			       PG_STATE_RECOVERING |
+			       PG_STATE_INCOMPLETE |
+			       PG_STATE_BACKFILL) &&
+	    stuck_pgs.count(p->first) == 0) {
+	  ostringstream ss;
+	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
+	  if (p->second.stats.sum.num_objects_unfound)
+	    ss << ", " << p->second.stats.sum.num_objects_unfound << " unfound";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
     }
   }
 
   stringstream rss;
   pg_map.recovery_summary(rss);
   if (!rss.str().empty()) {
-    if (ret != HEALTH_OK)
-      ss << ", ";
-    ret = HEALTH_WARN;
-    ss << rss.str();
+    summary.push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
+    if (detail)
+      detail->push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
   }
+  
+  check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
+  check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
+}
 
-  if (pg_map.nearfull_osds.size() > 0) {
-    if (ret != HEALTH_OK)
-      ss << ", ";
-    ss << pg_map.nearfull_osds.size() << " near full osd(s)";
-    ret = HEALTH_WARN;
+void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
+				      list<pair<health_status_t,string> > *detail,
+				      const set<int>& s, const char *desc,
+				      health_status_t sev) const
+{
+  if (s.size() > 0) {
+    ostringstream ss;
+    ss << s.size() << " " << desc << " osd(s)";
+    summary.push_back(make_pair(sev, ss.str()));
+    if (detail) {
+      for (set<int>::const_iterator p = s.begin(); p != s.end(); ++p) {
+	ostringstream ss;
+	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
+	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
+	ss << "osd." << *p << " is " << desc << " at " << ratio << "%";
+	detail->push_back(make_pair(sev, ss.str()));
+      }
+    }
   }
-  if (pg_map.full_osds.size() > 0) {
-    if (ret != HEALTH_OK)
-      ss << ", ";
-    ss << pg_map.full_osds.size() << " full osd(s)";
-    ret = HEALTH_ERR;
-  }
-
-  return ret;
 }
 
 int PGMonitor::dump_stuck_pg_stats(ostream& ss,

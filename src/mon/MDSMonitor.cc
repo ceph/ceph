@@ -491,9 +491,10 @@ void MDSMonitor::on_active()
   update_logger();
 }
 
-enum health_status_t MDSMonitor::get_health(ostream &oss) const
+void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
+			    list<pair<health_status_t, string> > *detail) const
 {
-  return mdsmap.get_health(oss);
+  mdsmap.get_health(summary, detail);
 }
 
 bool MDSMonitor::preprocess_command(MMonCommand *m)

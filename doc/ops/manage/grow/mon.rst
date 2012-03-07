@@ -2,6 +2,8 @@
  Resizing the monitor cluster
 ==============================
 
+.. _adding-mon:
+
 Adding a monitor
 ----------------
 
