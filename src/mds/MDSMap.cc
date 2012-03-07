@@ -206,40 +206,54 @@ void MDSMap::print_summary(ostream& out)
   //out << ", " << stopped.size() << " stopped";
 }
 
-enum health_status_t MDSMap::
-get_health(std::ostream &ss) const
+enum health_status_t MDSMap::get_health(list<string>& summary, list<string> *detail) const
 {
   health_status_t ret(HEALTH_OK);
-  std::ostringstream oss;
 
   if (!failed.empty()) {
-    oss << " There are failed MDSes: ";
-    string sep("");
-    for (set<int32_t>::const_iterator f = failed.begin();
-	 f != failed.end(); ++f) {
-      oss << sep << "rank " << *f;
-      sep = ", ";
-    }
-    oss << ".";
+    std::ostringstream oss;
+    oss << "mds rank"
+	<< ((failed.size() > 1) ? "s ":" ")
+	<< failed
+	<< ((failed.size() > 1) ? " have":" has")
+	<< " failed";
     if (ret > HEALTH_ERR)
       ret = HEALTH_ERR;
+    summary.push_back(oss.str());
+    if (detail) {
+      for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
+	std::ostringstream oss;
+	oss << "mds." << *p << " has failed";
+	detail->push_back(oss.str());
+      }
+    }
   }
 
   map<int32_t,uint64_t>::const_iterator u = up.begin();
   map<int32_t,uint64_t>::const_iterator u_end = up.end();
   map<uint64_t,mds_info_t>::const_iterator m_end = mds_info.end();
-  string prefix(" There are lagging MDSes: ");
+  set<string> laggy;
   for (; u != u_end; ++u) {
     map<uint64_t,mds_info_t>::const_iterator m = mds_info.find(u->second);
     assert(m != m_end);
     const mds_info_t &mds_info(m->second);
     if (mds_info.laggy()) {
-      oss << prefix << mds_info.name << "(rank " << mds_info.rank << ")" ;
-      prefix = ", ";
-      if (ret > HEALTH_WARN)
-	ret = HEALTH_WARN;
+      laggy.insert(mds_info.name);
+      if (detail) {
+	std::ostringstream oss;
+	oss << "mds." << mds_info.name << " at " << mds_info.addr << " is laggy/unresponsive";
+	detail->push_back(oss.str());
+      }
     }
   }
-  ss << oss.str();
+  if (laggy.size()) {
+    std::ostringstream oss;
+    oss << "mds " << laggy
+	<< ((laggy.size() > 1) ? " are":" is")
+	<< " laggy";
+    summary.push_back(oss.str());
+    if (ret > HEALTH_WARN)
+      ret = HEALTH_WARN;
+  }
   return ret;
 }

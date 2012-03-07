@@ -88,7 +88,7 @@ class MDSMonitor : public PaxosService {
   bool preprocess_offload_targets(MMDSLoadTargets *m);
   bool prepare_offload_targets(MMDSLoadTargets *m);
 
-  enum health_status_t get_health(std::ostream &ss) const;
+  enum health_status_t get_health(list<string>& summary, list<string> *detail) const;
   int fail_mds(std::ostream &ss, const std::string &arg);
   int cluster_fail(std::ostream &ss);
 

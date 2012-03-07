@@ -1234,7 +1234,7 @@ void OSDMonitor::mark_all_down()
   propose_pending();
 }
 
-enum health_status_t OSDMonitor::get_health(std::ostream &ss) const
+enum health_status_t OSDMonitor::get_health(list<string>& summary, list<string> *detail) const
 {
   enum health_status_t ret(HEALTH_OK);
 
@@ -1243,12 +1243,26 @@ enum health_status_t OSDMonitor::get_health(std::ostream &ss) const
   int num_in_osds = osdmap.get_num_in_osds();
 
   if (num_osds == 0) {
-    ss << "no osds";
+    summary.push_back("no osds");
     ret = HEALTH_ERR;
   } else {
     if (num_up_osds < num_in_osds) {
+      ostringstream ss;
       ss << (num_in_osds - num_up_osds) << "/" << num_in_osds << " in osds are down";
+      summary.push_back(ss.str());
       ret = HEALTH_WARN;
+
+      if (detail) {
+	for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	  if (osdmap.exists(i) && !osdmap.is_up(i)) {
+	    const osd_info_t& info = osdmap.get_info(i);
+	    ostringstream ss;
+	    ss << "osd." << i << " is down since epoch " << info.down_at
+	       << ", last address " << osdmap.get_addr(i);
+	    detail->push_back(ss.str());
+	  }
+	}
+      }
     }
   }
   return ret;

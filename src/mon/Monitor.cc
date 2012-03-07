@@ -1028,28 +1028,35 @@ void Monitor::handle_command(MMonCommand *m)
     }
     if (m->cmd[0] == "health") {
       health_status_t overall = HEALTH_OK;
-      string combined;
+      list<string> summary;
+      list<string> detail;
       for (vector<PaxosService*>::iterator p = paxos_service.begin();
 	   p != paxos_service.end();
 	   p++) {
 	PaxosService *s = *p;
 	ostringstream oss;
-	health_status_t ret = s->get_health(oss);
+	health_status_t ret = s->get_health(summary, (m->cmd.size() > 1) ? &detail : NULL);
 	if (ret < overall)
 	  overall = ret;
-	string cur = oss.str();
-	if (cur.length()) {
-	  if (combined.length())
-	    combined += "; ";
-	  combined += cur;
-	}
       }
       
       stringstream ss;
       ss << overall;
-      if (combined.length())
-	ss << " " << combined;
+      if (!summary.empty()) {
+	ss << ' ';
+	while (!summary.empty()) {
+	  ss << summary.front();
+	  summary.pop_front();
+	  if (!summary.empty())
+	    ss << "; ";
+	}
+      }
       rs = ss.str();
+      while (!detail.empty()) {
+	rdata.append(detail.front());
+	rdata.append('\n');
+	detail.pop_front();
+      }
       r = 0;
     }
     if (m->cmd[0] == "heap") {
