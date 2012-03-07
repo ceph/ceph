@@ -164,30 +164,7 @@ void Ager::age_empty(float pc) {
   }
 }
 
-void pfrag(uint64_t written, ObjectStore::FragmentationStat &st)
-{
-  cout << "#gb wr\ttotal\tn x\tavg x\tavg per\tavg j\tfree\tn fr\tavg fr\tnum<2\tsum<2\tnum<4\tsum<4\t..." 
-       << std::endl;
-  cout << written
-       << "\t" << st.total
-       << "\t" << st.num_extent
-       << "\t" << st.avg_extent
-       << "\t" << st.avg_extent_per_object
-       << "\t" << st.avg_extent_jump 
-       << "\t" << st.total_free
-       << "\t" << st.num_free_extent
-       << "\t" << st.avg_free_extent;
-    
-  int n = st.num_extent;
-  for (uint64_t i=1; i <= 30; i += 1) {
-    cout << "\t" << st.extent_dist[i];
-    cout << "\t" << st.extent_dist_sum[i];
-    //cout << "\ta " << (st.extent_dist[i] ? (st.extent_dist_sum[i] / st.extent_dist[i]):0);
-    n -= st.extent_dist[i];
-    if (n == 0) break;
-  }
-  cout << std::endl;
-}
+
 
 
 void Ager::age(int time,
@@ -197,7 +174,6 @@ void Ager::age(int time,
                float final_water,   // and end here ( <= low_water)
                int fake_size_mb) { 
 
-  store->_fake_writes(true);
   srand(0);
 
   utime_t start = ceph_clock_now(g_ceph_context);
@@ -244,8 +220,6 @@ void Ager::age(int time,
   for (int i=0; i<10; i++)
     age_objects[i].clear();
   
-  ObjectStore::FragmentationStat st;
-
   uint64_t wrote = 0;
 
   for (int c=1; c<=count; c++) {
@@ -273,9 +247,9 @@ void Ager::age(int time,
     //store->sync();
 
     // show frag state
-    store->_get_frag_stat(st);
+    /*store->_get_frag_stat(st);
     pfrag(wrote / (1024ULL*1024ULL) ,  // GB
-          st);
+    st);*/
 
     // dump freelist?
     /*
@@ -292,7 +266,6 @@ void Ager::age(int time,
   exit(0);   // hack
 
   // ok!
-  store->_fake_writes(false);
   store->sync();
   store->sync();
   generic_dout(1) << "age finished" << dendl;

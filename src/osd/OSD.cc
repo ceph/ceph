@@ -176,8 +176,7 @@ static int convert_collection(ObjectStore *store, coll_t cid)
   for (vector<hobject_t>::iterator obj = objects.begin();
        obj != objects.end();
        ++obj) {
-    t.collection_add(cid, temp, *obj);
-    t.collection_remove(temp, *obj);
+    t.collection_move(cid, temp, *obj);
   }
   for (map<string,bufferptr>::iterator i = aset.begin();
        i != aset.end();
@@ -4122,16 +4121,13 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       store->getattr(coll_t(parentid), poid, OI_ATTR, bv);
       object_info_t oi(bv);
 
-      t.collection_add(coll_t(pgid), coll_t(parentid), poid);
-      t.collection_remove(coll_t(parentid), poid);
+      t.collection_move(coll_t(pgid), coll_t(parentid), poid);
       if (oi.snaps.size()) {
 	snapid_t first = oi.snaps[0];
-	t.collection_add(coll_t(pgid, first), coll_t(parentid), poid);
-	t.collection_remove(coll_t(parentid, first), poid);
+	t.collection_move(coll_t(pgid, first), coll_t(parentid), poid);
 	if (oi.snaps.size() > 1) {
 	  snapid_t last = oi.snaps[oi.snaps.size()-1];
-	  t.collection_add(coll_t(pgid, last), coll_t(parentid), poid);
-	  t.collection_remove(coll_t(parentid, last), poid);
+	  t.collection_move(coll_t(pgid, last), coll_t(parentid), poid);
 	}
       }
 

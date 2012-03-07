@@ -1441,7 +1441,6 @@ noinst_HEADERS = \
 	os/btrfs_ioctl.h\
 	os/hobject.h \
 	os/CollectionIndex.h\
-        os/Fake.h\
         os/FileJournal.h\
         os/FileStore.h\
 	os/FlatIndex.h\
