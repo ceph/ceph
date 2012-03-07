@@ -1733,7 +1733,7 @@ void PG::update_stats()
     pg_stats_stable = info.stats;
 
     // calc copies, degraded
-    int target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
+    unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
     pg_stats_stable.stats.calc_copies(target);
     pg_stats_stable.stats.sum.num_objects_degraded = 0;
     if (!is_clean() && is_active()) {
@@ -1741,8 +1741,16 @@ void PG::update_stats()
       // the summation, not individual stat categories.
       uint64_t num_objects = pg_stats_stable.stats.sum.num_objects;
 
+      uint64_t degraded = 0;
+
+      // if the acting set is smaller than we want, add in those missing replicas
+      if (acting.size() < target)
+	degraded += (target - acting.size()) * num_objects;
+
+      // missing on primary
       pg_stats_stable.stats.sum.num_objects_missing_on_primary = missing.num_missing();
-      uint64_t degraded = missing.num_missing();
+      degraded += missing.num_missing();
+      
       for (unsigned i=1; i<acting.size(); i++) {
 	assert(peer_missing.count(acting[i]));
 
