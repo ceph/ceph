@@ -93,10 +93,10 @@ extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
-extern int cls_cxx_map_read_full(cls_method_context_t hctx, bufferlist* outbl);
+extern int cls_cxx_map_read_all_keys(cls_method_context_t hctx, std::map<string, bufferlist> *keys);
+extern int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_after, uint64_t max, std::map<string, bufferlist> *keys);
 extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
 extern int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl);
-extern int cls_cxx_map_write_full(cls_method_context_t hctx, bufferlist* in);
 extern int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, string key);

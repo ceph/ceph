@@ -243,119 +243,148 @@ int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-int cls_cxx_map_read_full(cls_method_context_t hctx, bufferlist* outbl)
+int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>* vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
   int ret;
-  ops[0].op.op = CEPH_OSD_OP_TMAPGET;
+
+  string start_after;
+  uint64_t max = (uint64_t)-1;
+  bufferlist inbl;
+
+  ::encode(start_after, op.indata);
+  ::encode(max, op.indata);
+
+  op.op.op = CEPH_OSD_OP_OMAPGETVALS;
+  
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
-  outbl->claim(ops[0].outdata);
-  return outbl->length();
+
+  bufferlist::iterator iter = op.outdata.begin();
+  try {
+    ::decode(*vals, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return vals->size();
+}
+
+int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj, uint64_t max, map<string, bufferlist>* vals)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  int ret;
+
+  string start_after;
+  bufferlist inbl;
+
+  ::encode(start_obj, op.indata);
+  ::encode(max, op.indata);
+
+  op.op.op = CEPH_OSD_OP_OMAPGETVALS;
+  
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
+  if (ret < 0)
+    return ret;
+
+  bufferlist::iterator iter = op.outdata.begin();
+  try {
+    ::decode(*vals, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return vals->size();
 }
 
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
   int ret;
-  ops[0].op.op = CEPH_OSD_OP_TMAPGET;
+  op.op.op = CEPH_OSD_OP_OMAPGETHEADER;
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
 
-  try {
-    //decode and return the header
-    bufferlist::iterator map_iter = ops[0].outdata.begin();
-    ::decode(*outbl, map_iter);
-  } catch (buffer::error& e) {
-    return -EINVAL;
-  }
+  outbl->claim(op.outdata);
+
   return 0;
 }
 int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
   int ret;
-  ops[0].op.op = CEPH_OSD_OP_TMAPGET;
+
+  set<string> k;
+  k.insert(key);
+  ::encode(k, op.indata);
+
+  op.op.op = CEPH_OSD_OP_OMAPGETVALSBYKEYS;
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
 
-  //find and return just the requested key!
-  bufferlist header;
-  string next_key;
-  bufferlist next_val;
-  __u32 nkeys;
-  bufferlist::iterator map_iter = ops[0].outdata.begin();
+  bufferlist::iterator iter = op.outdata.begin();
   try {
-    ::decode(header, map_iter);
-    ::decode(nkeys, map_iter);
-    while (nkeys) {
-      ::decode(next_key, map_iter);
-      ::decode(next_val, map_iter);
-      if (next_key == key) {
-        *outbl = next_val;
-        return 0;
-      }
-      if (next_key > key)
-        return -ENOENT;
-      --nkeys;
-    }
-  } catch (buffer::error& e) {
-    return -EINVAL;
-  }
-  return -ENOENT;
-}
+    map<string, bufferlist> m;
 
-int cls_cxx_map_write_full(cls_method_context_t hctx, bufferlist* inbl)
-{
-  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
-  vector<OSDOp> ops(1);
-  ops[0].op.op = CEPH_OSD_OP_TMAPPUT;
-  ops[0].indata = *inbl;
-  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+    ::decode(m, iter);
+    map<string, bufferlist>::iterator iter = m.begin();
+    if (iter == m.end())
+      return -ENOENT;
+
+    *outbl = iter->second;
+  } catch (buffer::error& e) {
+    return -EIO;
+  }
+  return 0;
 }
 
 int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl)
 {
-  bufferlist update_bl;
-  update_bl.append(CEPH_OSD_TMAP_SET);
-  ::encode(key, update_bl);
-  ::encode(*inbl, update_bl);
-  return cls_cxx_map_update(hctx, &update_bl);
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  bufferlist& update_bl = op.indata;
+  map<string, bufferlist> m;
+  m[key] = *inbl;
+  ::encode(m, update_bl);
+
+  op.op.op = CEPH_OSD_OP_OMAPSETVALS;
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
 int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
 {
-  ReplicatedPG::OpContext **pctx = static_cast<ReplicatedPG::OpContext **>(hctx);
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
-  bufferlist update_bl;
-  update_bl.append(CEPH_OSD_TMAP_HDR);
+  OSDOp& op = ops[0];
+  bufferlist& update_bl = op.indata;
   ::encode(*inbl, update_bl);
 
-  ops[0].op.op = CEPH_OSD_OP_TMAPUP;
-  ops[0].indata = update_bl;
+  op.op.op = CEPH_OSD_OP_OMAPSETHEADER;
 
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
 int cls_cxx_map_remove_key(cls_method_context_t hctx, string key)
 {
-  bufferlist update_bl;
-  update_bl.append(CEPH_OSD_TMAP_RM);
-  ::encode(key, update_bl);
-  return cls_cxx_map_update(hctx, &update_bl);
-}
-
-int cls_cxx_map_update(cls_method_context_t hctx, bufferlist* inbl)
-{
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
-  ops[0].op.op = CEPH_OSD_OP_TMAPUP;
-  ops[0].indata = *inbl;
+  OSDOp& op = ops[0];
+  bufferlist& update_bl = op.indata;
+  set<string> to_rm;
+  to_rm.insert(key);
+
+  ::encode(to_rm, update_bl);
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
+
