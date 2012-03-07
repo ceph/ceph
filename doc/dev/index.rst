@@ -16,6 +16,18 @@ You can start a development mode Ceph cluster, after compiling the source, with:
 .. todo:: vstart is woefully undocumented and full of sharp sticks to poke yourself with.
 
 
+.. _mailing-list:
+
+Mailing list
+============
+
+The official development email list is ``ceph-devel@vger.kernel.org``.  Subscribe by sending
+a message to ``majordomo@vger.kernel.org`` with the line::
+
+ subscribe ceph-devel
+
+in the body of the message.
+
 .. toctree::
    :glob:
 

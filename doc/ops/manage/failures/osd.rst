@@ -6,7 +6,8 @@ Single ceph-osd failure
 =======================
 
 When a ceph-osd process dies, the monitor will learn about the failure
-from its peers and report it via the ``ceph health`` command::
+from surviving ceph-osd daemons and report it via the ``ceph health``
+command::
 
  $ ceph health
  HEALTH_WARN 1/3 in osds are down
@@ -23,7 +24,14 @@ Under normal circumstances, simply restarting the ceph-osd daemon will
 allow it to rejoin the cluster and recover.  If there is a disk
 failure or other fault preventing ceph-osd from functioning or
 restarting, an error message should be present in its log file in
-``/var/log/ceph``.
+``/var/log/ceph``.  
+
+If the daemon stopped because of a heartbeat failure, the underlying
+kernel file system may unresponsive; check ``dmesg`` output for disk
+or other kernel errors.
+
+If the problem is a software error (failed assertion or other
+unexpected error), it should be reported to the :ref:`mailing-list`.
 
 
 Full cluster
@@ -31,14 +39,14 @@ Full cluster
 
 If the cluster fills up, the monitor will prevent new data from being
 written.  The system puts ceph-osds in two categories: ``nearfull``
-and ``full`, which configurable threshholds for each (80% and 90% by
+and ``full`, with configurable threshholds for each (80% and 90% by
 default).  In both cases, full ceph-osds will be reported by ``ceph health``::
 
  $ ceph health
  HEALTH_WARN 1 nearfull osds
  osd.2 is near full at 85%
 
-or
+or::
 
  $ ceph health
  HEALTH_ERR 1 nearfull osds, 1 full osds
@@ -85,18 +93,30 @@ Stuck PGs
 
 It is normal for PGs to enter states like "degraded" or "peering"
 following a failure.  Normally these states indicate the normal
-progression through the failure recovery process.  However, is a PG
+progression through the failure recovery process.  However, if a PG
 stays in one of these states for a long time this may be an indication
 of a larger problem.  For this reason, the monitor will warn when PGs
 get "stuck" in a non-optimal state.  Specifically, we check for:
 
-* ``inactive`` - the PG is has not ``active`` for too long (i.e., hasn't
+* ``inactive`` - the PG has not been ``active`` for too long (i.e., hasn't
   been able to service read/write requests)
 * ``unclean`` - the PG has not been ``clean`` for too long (i.e.,
   hasn't been able to completely recover from a previous failure
-* ``stale`` - the PG status hasn't been updated by a ``ceph-osd``,
+* ``stale`` - the PG status has not been updated by a ``ceph-osd``,
   indicating that all nodes storing this PG may be down
 
+You can explicitly list stuck PGs with one of::
+
+ $ ceph pg dump_stuck stale
+ $ ceph pg dump_stuck inactive
+ $ ceph pg dump_stuck unclean
+
+For stuck stale PGs, it is normally a matter of getting the right ceph-osd
+daemons running again.  For stuck inactive PGs, it is usually a peering problem
+(see :ref:`failures-osd-peering`).  For stuck unclean PGs, there is usually something
+preventing recovery from completing, like unfound objects (see :ref:`failures-osd-unfound`);
+
+.. _failures-osd-peering:
 
 PG down (peering failure)
 =========================
@@ -141,9 +161,9 @@ The ``recovery_state`` section tells us that peering is blocked due to
 down ceph-osd daemons, specifically osd.1.  In this case, we can start that ceph-osd
 and things will recover.
 
-Alternatively, is there is a catastrophic failure of osd.1 (e.g., disk
+Alternatively, if there is a catastrophic failure of osd.1 (e.g., disk
 failure), we can tell the cluster that it is "lost" and to cope as
-best it case.  Note that this is dangerous in that the cluster cannot
+best it can.  Note that this is dangerous in that the cluster cannot
 guarantee that the other copies of the data are consistent and up to
 date.  To instruct Ceph to continue anyway::
 
@@ -151,6 +171,8 @@ date.  To instruct Ceph to continue anyway::
 
 and recovery will proceed.
 
+
+.. _failures-osd-unfound:
 
 Unfound objects
 ===============

@@ -10,8 +10,7 @@ be checked with the ``ceph health`` command.  If all is well, you get::
  $ ceph health
  HEALTH_OK
 
-and a success error code.  If there are problems, you will see
-something like::
+If there are problems, you will see something like::
 
  $ ceph health
  HEALTH_WARN short summary of problem(s)

@@ -9,7 +9,7 @@ HTTP request errors
 Examining the access and error logs for the web server itself is
 probably the first step in identifying what is going on.  If there is
 a 500 error, that usually indicates a problem communicating with the
-radosgw daemon.  Ensure the daemon is running, it's socket path is
+radosgw daemon.  Ensure the daemon is running, its socket path is
 configured, and that the web server is looking for it in the proper
 location.
 
@@ -30,7 +30,7 @@ Blocked radosgw requests
 
 If some (or all) radosgw requests appear to be blocked, you can get
 some insight into the internal state of the ``radosgw`` daemon via
-it's admin socket.  By default, there will be a socket configured to
+its admin socket.  By default, there will be a socket configured to
 reside in ``/var/run/ceph``, and the daemon can be queried with::
 
  $ ceph --admin-daemon /var/run/ceph/client.rgw help
@@ -46,6 +46,6 @@ Of particular interest::
  ...
 
 will dump information about current in-progress requests with the
-RADOS cluster, which allow one to identify if a request is blocked
-by a non-responsive backend cluster.
+RADOS cluster.  This allows one to identify if any requests are blocked
+by a non-responsive ceph-osd.
 

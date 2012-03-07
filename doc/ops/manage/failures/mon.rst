@@ -4,13 +4,13 @@
 
 Any single ceph-mon failure should not take down the entire monitor
 cluster as long as a majority of the nodes are available.  If that
-is the case--the remainin nodes are able to form a quorum--the ``ceph
+is the case--the remaining nodes are able to form a quorum--the ``ceph
 health`` command will report any problems::
 
  $ ceph health
  HEALTH_WARN 1 mons down, quorum 0,2
 
-and
+and::
 
  $ ceph health detail
  HEALTH_WARN 1 mons down, quorum 0,2
@@ -18,7 +18,7 @@ and
 
 Generally speaking, simply restarting the affected node will repair things.
 
-If there are not enough monitors for form a quorum, the ``ceph``
+If there are not enough monitors to form a quorum, the ``ceph``
 command will block trying to reach the cluster.  In this situation,
 you need to get enough ``ceph-mon`` daemons running to form a quorum
 before doing anything else with the cluster.
