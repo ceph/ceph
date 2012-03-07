@@ -9,4 +9,4 @@ Adding new OSDs
 Removing OSDs
 =============
 
-See also :ref:`recover-osd`.
+See also :ref:`failures-osd`.

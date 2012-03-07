@@ -1,3 +1,5 @@
+.. _failures-osd:
+
 ==========================
  Recovering from failures
 ==========================
