@@ -553,7 +553,9 @@ public:
     return -ENOENT;
   }
 
-  const map<int64_t,pg_pool_t>& get_pools() { return pools; }
+  const map<int64_t,pg_pool_t>& get_pools() const {
+    return pools;
+  }
   const char *get_pool_name(int64_t p) const {
     map<int64_t, string>::const_iterator i = pool_name.find(p);
     if (i != pool_name.end())
