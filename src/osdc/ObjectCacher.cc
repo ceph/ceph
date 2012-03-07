@@ -213,7 +213,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
         cur += left;
         left -= left;
         assert(left == 0);
-        assert(cur == ex_it->offset + (loff_t)ex_it->length);
+        assert(cur == (loff_t)ex_it->offset + (loff_t)ex_it->length);
         break;  // no more.
       }
       
@@ -840,7 +840,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
       map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
       assert(bh_it->second->start() <= opos);
       uint64_t bhoff = opos - bh_it->second->start();
-      map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
+      map<uint64_t, uint64_t>::iterator f_it = ex_it->buffer_extents.begin();
       uint64_t foff = 0;
       while (1) {
         BufferHead *bh = bh_it->second;
@@ -875,7 +875,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
         if (f_it == ex_it->buffer_extents.end()) break;
       }
       assert(f_it == ex_it->buffer_extents.end());
-      assert(opos == ex_it->offset + (loff_t)ex_it->length);
+      assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
     }
   }
   
@@ -939,7 +939,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
     //  - the buffer frags need not be (and almost certainly aren't)
     // note: i assume striping is monotonic... no jumps backwards, ever!
     loff_t opos = ex_it->offset;
-    for (map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
+    for (map<uint64_t, uint64_t>::iterator f_it = ex_it->buffer_extents.begin();
          f_it != ex_it->buffer_extents.end();
          f_it++) {
       ldout(cct, 10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << dendl;

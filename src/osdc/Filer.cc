@@ -167,7 +167,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
       // aha, we found the end!
       // calc offset into buffer_extent to get distance from probe->from.
       uint64_t oleft = probe->known_size[p->oid] - p->offset;
-      for (map<__u32,__u32>::iterator i = p->buffer_extents.begin();
+      for (map<uint64_t, uint64_t>::iterator i = p->buffer_extents.begin();
 	   i != p->buffer_extents.end();
 	   i++) {
 	if (oleft <= (uint64_t)i->second) {

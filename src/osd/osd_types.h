@@ -1424,15 +1424,15 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
 class ObjectExtent {
  public:
   object_t    oid;       // object id
-  __u32      offset;    // in object
-  __u32      length;    // in object
+  uint64_t    offset;    // in object
+  uint64_t    length;    // in object
 
   object_locator_t oloc;   // object locator (pool etc)
 
-  map<__u32, __u32>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
+  map<uint64_t, uint64_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
   ObjectExtent() : offset(0), length(0) {}
-  ObjectExtent(object_t o, __u32 off=0, __u32 l=0) : oid(o), offset(off), length(l) { }
+  ObjectExtent(object_t o, uint64_t off=0, uint64_t l=0) : oid(o), offset(off), length(l) { }
 };
 
 inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
