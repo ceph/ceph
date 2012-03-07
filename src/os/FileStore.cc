@@ -2352,11 +2352,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
   bool idempotent = true;
 
   Transaction::iterator i = t.begin();
-
-  int op_num = 0;
+  
+  SequencerPosition spos(op_seq, trans_num, 0);
   while (i.have_op()) {
     int op = i.get_op();
-    op_num++;
     int r = 0;
     switch (op) {
     case Transaction::OP_NOP:
@@ -2656,7 +2655,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	}
 
 	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
-		<< " (op num " << op_num << ", counting from 1)" << dendl;
+		<< " (" << spos << ", or op " << spos.op << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
 	t.dump(*_dout);
@@ -2664,6 +2663,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	assert(0 == "unexpected error");
       }
     }
+
+    spos.op++;
   }
   if (!idempotent && !btrfs_stable_commits) {
     dout(10) << "performed non-idempotent operation and not using btrfs snaps, triggering a commit" << dendl;
