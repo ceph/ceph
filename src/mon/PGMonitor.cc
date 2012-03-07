@@ -1229,35 +1229,26 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       detail->push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
   }
   
-  if (pg_map.nearfull_osds.size() > 0) {
+  check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
+  check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
+}
+
+void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
+				      list<pair<health_status_t,string> > *detail,
+				      const set<int>& s, const char *desc,
+				      health_status_t sev) const
+{
+  if (s.size() > 0) {
     ostringstream ss;
-    ss << pg_map.nearfull_osds.size() << " near full osd(s)";
-    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    ss << s.size() << " " << desc << " osd(s)";
+    summary.push_back(make_pair(sev, ss.str()));
     if (detail) {
-      for (set<int>::iterator p = pg_map.nearfull_osds.begin();
-	   p != pg_map.nearfull_osds.end();
-	   ++p) {
+      for (set<int>::const_iterator p = s.begin(); p != s.end(); ++p) {
 	ostringstream ss;
 	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
 	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
-	ss << "osd." << *p << " is near full at " << ratio << "%";
-	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
-      }
-    }
-  }
-  if (pg_map.full_osds.size() > 0) {
-    ostringstream ss;
-    ss << pg_map.full_osds.size() << " full osd(s)";
-    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-    if (detail) {
-      for (set<int>::iterator p = pg_map.nearfull_osds.begin();
-	   p != pg_map.nearfull_osds.end();
-	   ++p) {
-	ostringstream ss;
-	const osd_stat_t& os = pg_map.osd_stat.find(*p)->second;
-	int ratio = (int)(((float)os.kb_used) / (float) os.kb * 100.0);
-	ss << "osd." << *p << " is full at " << ratio << "%";
-	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	ss << "osd." << *p << " is " << desc << " at " << ratio << "%";
+	detail->push_back(make_pair(sev, ss.str()));
       }
     }
   }
