@@ -229,6 +229,13 @@ OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_replay, OPT_BOOL, false)
+
+// If true, uses tmap as initial value for omap on old objects
+OPTION(osd_auto_upgrade_tmap, OPT_BOOL, false)
+
+// If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
+OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
+
 OPTION(osd_data, OPT_STR, "")
 OPTION(osd_journal, OPT_STR, "")
 OPTION(osd_journal_size, OPT_INT, 0)         // in mb
@@ -305,8 +312,6 @@ OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
-OPTION(filestore_fake_attrs, OPT_BOOL, false)
-OPTION(filestore_fake_collections, OPT_BOOL, false)
 OPTION(filestore_dev, OPT_STR, "")
 OPTION(filestore_btrfs_trans, OPT_BOOL, false)
 OPTION(filestore_btrfs_snap, OPT_BOOL, true)

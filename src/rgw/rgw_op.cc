@@ -843,7 +843,7 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
 
   rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
 
-  r = rgwstore->tmap_set(meta_obj, p, bl);
+  r = rgwstore->omap_set(meta_obj, p, bl);
 
   return r;
 }
@@ -1379,7 +1379,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
   if (ret < 0)
     return ret;
 
-  ret = rgwstore->tmap_get(obj, header, parts_map);
+  ret = rgwstore->omap_get_all(obj, header, parts_map);
   if (ret < 0)
     return ret;
 

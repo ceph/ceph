@@ -73,28 +73,23 @@ private:
   list<Dispatcher*> dispatchers;
 
 protected:
+  /// the "name" of the local daemon. eg client.99
   entity_name_t _my_name;
   int default_send_priority;
-
-  atomic_t nref;
+  /// set to true once the Messenger has started, and set to false on shutdown
+  bool started;
 
  public:
   CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
-    : default_send_priority(CEPH_MSG_PRIO_DEFAULT), nref(1), cct(cct_)
+    : default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
+      cct(cct_)
   {
     _my_name = w;
   }
+  virtual ~Messenger() {}
 
-  void get() {
-    nref.inc();
-  }
-  void put() {
-    if (nref.dec() == 0)
-      delete this;
-  }
   virtual void destroy() {
-    put();
   }
 
   // accessors
@@ -103,21 +98,51 @@ protected:
   virtual void set_ip(entity_addr_t &addr) = 0;
   entity_inst_t get_myinst() { return entity_inst_t(get_myname(), get_myaddr()); }
   
+  /**
+   * Set the name of the local entity. The name is reported to others and
+   * can be changed while the system is running, but doing so at incorrect
+   * times may have bad results.
+   *
+   * @param m The name to set.
+   */
   void set_myname(const entity_name_t m) { _my_name = m; }
 
-  void set_default_send_priority(int p) { default_send_priority = p; }
+  /**
+   * Set the default send priority
+   * This is an init-time function and must be called *before* calling
+   * start().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  void set_default_send_priority(int p) {
+    assert(!started);
+    default_send_priority = p;
+  }
   int get_default_send_priority() { return default_send_priority; }
   
   // hrmpf.
   virtual int get_dispatch_queue_len() { return 0; };
 
-  // setup
+  /**
+   * Add a new Dispatcher to the front of the list. If you add
+   * a Dispatcher which is already included, it will get a duplicate
+   * entry. This will reduce efficiency but not break anything.
+   *
+   * @param d The Dispatcher to insert into the list.
+   */
   void add_dispatcher_head(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_front(d);
     if (first)
       ready();
   }
+  /**
+   * Add a new Dispatcher to the end of the list. If you add
+   * a Dispatcher which is already included, it will get a duplicate
+   * entry. This will reduce efficiency but not break anything.
+   *
+   * @param d The Dispatcher to insert into the list.
+   */
   void add_dispatcher_tail(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_back(d);
@@ -182,8 +207,31 @@ protected:
     return false;
   }
 
+  // setup
+  /**
+   * Perform any resource allocation, thread startup, etc
+   * that is required before attempting to connect to other
+   * Messengers or transmit messages.
+   * Once this function completes, started shall be set to true.
+   *
+   * @return 0 on success; -errno on failure.
+   */
+  virtual int start() { started = true; return 0; }
+
   // shutdown
-  virtual int shutdown() = 0;
+  /**
+   * Block until the Messenger has finished shutting down (according
+   * to the shutdown() function).
+   * It is valid to call this after calling shutdown(), but it must
+   * be called before deleting the Messenger.
+   */
+  virtual void wait() = 0;
+  /**
+   * Initiate a shutdown of the Messenger.
+   *
+   * @return 0 on success, -errno otherwise.
+   */
+  virtual int shutdown() { started = false; return 0; }
   virtual void suicide() = 0;
 
   // send message
@@ -206,12 +254,6 @@ protected:
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
   virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
-
-protected:
-  //destruction should be handled via destroy()
-  virtual ~Messenger() {
-    assert(nref.read() == 0);
-  }
 };
 
 

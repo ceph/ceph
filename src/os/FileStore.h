@@ -27,8 +27,6 @@
 #include "IndexManager.h"
 #include "ObjectMap.h"
 
-#include "Fake.h"
-
 #include "include/uuid.h"
 
 #include <map>
@@ -39,8 +37,6 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-
-// fake attributes in memory, if we need to.
 
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
@@ -66,14 +62,6 @@ class FileStore : public JournalingObjectStore,
 
   int basedir_fd, current_fd;
   deque<uint64_t> snaps;
-
-  // fake attrs?
-  FakeAttrs attrs;
-  bool fake_attrs;
-
-  // fake collections?
-  FakeCollections collections;
-  bool fake_collections;
 
   // Indexed Collections
   IndexManager index_manager;
@@ -285,7 +273,7 @@ public:
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
-  int read_op_seq(const char *fn, uint64_t *seq);
+  int read_op_seq(uint64_t *seq);
   int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
@@ -392,9 +380,7 @@ public:
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o);
   int _collection_remove(coll_t c, const hobject_t& o);
-
-  void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) {}
-  int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) { return -1; }
+  int _collection_move(coll_t c, coll_t ocid, const hobject_t& o);
 
 private:
   // omap
@@ -410,8 +396,6 @@ private:
   bool m_filestore_btrfs_clone_range;
   bool m_filestore_btrfs_snap;
   bool m_filestore_btrfs_trans;
-  bool m_filestore_fake_attrs;
-  bool m_filestore_fake_collections;
   float m_filestore_commit_timeout;
   bool m_filestore_fiemap;
   bool m_filestore_flusher;

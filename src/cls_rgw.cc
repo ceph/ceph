@@ -30,56 +30,11 @@ static uint64_t get_rounded_size(uint64_t size)
   return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
 }
 
-static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir)
-{
-  bufferlist bl;
-
-  uint64_t size;
-  int rc = cls_cxx_stat(hctx, &size, NULL);
-  if (rc < 0)
-    return rc;
-
-  rc = cls_cxx_map_read_full(hctx, &bl);
-  if (rc < 0)
-    return rc;
-
-  try {
-    bufferlist::iterator iter = bl.begin();
-    bufferlist header_bl;
-    ::decode(header_bl, iter);
-    bufferlist::iterator header_iter = header_bl.begin();
-    ::decode(dir.header, header_iter);
-    __u32 nkeys = 0;
-    ::decode(nkeys, iter);
-    while (nkeys) {
-      string key;
-      bufferlist value;
-      ::decode(key, iter);
-      ::decode(value, iter);
-      bufferlist::iterator val_iter = value.begin();
-      ::decode(dir.m[key], val_iter);
-      --nkeys;
-    }
-  } catch (buffer::error& err) {
-    CLS_LOG("ERROR: read_bucket_dir(): failed to decode buffer\n");
-    return -EIO;
-  }
-
-  return 0;
-}
-
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist bl;
-  struct rgw_bucket_dir dir;
-  int rc = read_bucket_dir(hctx, dir);
-  if (rc < 0)
-    return rc;
-
   bufferlist::iterator iter = in->begin();
 
   struct rgw_cls_list_op op;
-
   try {
     ::decode(op, iter);
   } catch (buffer::error& err) {
@@ -89,18 +44,46 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   struct rgw_cls_list_ret ret;
   struct rgw_bucket_dir& new_dir = ret.dir;
-  new_dir.header = dir.header;
-  std::map<string, struct rgw_bucket_dir_entry>& m = new_dir.m;
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.upper_bound(op.start_obj);
-  uint32_t i;
-  for (i = 0; i != op.num_entries && miter != dir.m.end(); ++i, ++miter) {
-    m[miter->first] = miter->second;
+  bufferlist header_bl;
+  int rc = cls_cxx_map_read_header(hctx, &header_bl);
+  if (rc < 0)
+    return rc;
+  bufferlist::iterator header_iter = header_bl.begin();
+  try {
+    ::decode(new_dir.header, header_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG("ERROR: rgw_bucket_list(): failed to decode header\n");
+    return -EINVAL;
   }
 
-  ret.is_truncated = (miter != dir.m.end());
+  bufferlist bl;
+
+  map<string, bufferlist> keys;
+  rc = cls_cxx_map_read_keys(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
+  if (rc < 0)
+    return rc;
+
+  std::map<string, struct rgw_bucket_dir_entry>& m = new_dir.m;
+  std::map<string, bufferlist>::iterator kiter = keys.begin();
+  uint32_t i;
+
+  for (i = 0; i < op.num_entries && kiter != keys.end(); ++i, ++kiter) {
+    struct rgw_bucket_dir_entry entry;
+    bufferlist& entrybl = kiter->second;
+    bufferlist::iterator eiter = entrybl.begin();
+    try {
+      ::decode(entry, eiter);
+    } catch (buffer::error& err) {
+      CLS_LOG("ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
+      return -EINVAL;
+    }
+    
+    m[kiter->first] = entry;
+  }
+
+  ret.is_truncated = (kiter != keys.end());
 
   ::encode(ret, *out);
-
   return 0;
 }
 
@@ -109,23 +92,26 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   bufferlist bl;
   bufferlist::iterator iter;
 
-  uint64_t size;
-  int rc = cls_cxx_stat(hctx, &size, NULL);
-  if (rc < 0)
-    return rc;
-  if (size != 0) {
+  bufferlist header_bl;
+  int rc = cls_cxx_map_read_header(hctx, &header_bl);
+  if (rc < 0) {
+    switch (rc) {
+    case -ENODATA:
+    case -ENOENT:
+      break;
+    default:
+      return rc;
+    }
+  }
+
+  if (header_bl.length() != 0) {
     CLS_LOG("ERROR: index already initialized\n");
     return -EINVAL;
   }
 
   rgw_bucket_dir dir;
-  bufferlist map_bl;
-  bufferlist header_bl;
   ::encode(dir.header, header_bl);
-  ::encode(header_bl, map_bl);
-  __u32 num_keys = 0;
-  ::encode(num_keys, map_bl);
-  rc = cls_cxx_map_write_full(hctx, &map_bl);
+  rc = cls_cxx_map_write_header(hctx, &header_bl);
   return rc;
 }
 
@@ -197,7 +183,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (rc < 0)
     return rc;
   bufferlist::iterator header_iter = header_bl.begin();
-  ::decode(header, header_iter);
+  try {
+    ::decode(header, header_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode header\n");
+    return -EINVAL;
+  }
 
   bufferlist current_entry;
   struct rgw_bucket_dir_entry entry;
@@ -216,7 +207,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } else {
     bufferlist::iterator cur_iter = current_entry.begin();
     ::decode(entry, cur_iter);
-    CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld\n", entry.epoch);
+    CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld name=%s locator=%s\n", entry.epoch, entry.name.c_str(), entry.locator.c_str());
   }
 
   if (op.tag.size()) {
@@ -246,15 +237,16 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   case CLS_RGW_OP_DEL:
     if (ondisk) {
       if (!entry.pending_map.size()) {
-        op_bl.append(CEPH_OSD_TMAP_RM);
-        ::encode(op.name, op_bl);
+	int ret = cls_cxx_map_remove_key(hctx, op.name);
+	if (ret < 0)
+	  return ret;
       } else {
         entry.exists = false;
         bufferlist new_key_bl;
         ::encode(entry, new_key_bl);
-        op_bl.append(CEPH_OSD_TMAP_SET);
-        ::encode(op.name, op_bl);
-        ::encode(new_key_bl, op_bl);
+	int ret = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+	if (ret < 0)
+	  return ret;
       }
     } else {
       return -ENOENT;
@@ -273,20 +265,16 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       stats.total_size_rounded += get_rounded_size(meta.size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
-      op_bl.append(CEPH_OSD_TMAP_SET);
-      ::encode(op.name, op_bl);
-      ::encode(new_key_bl, op_bl);
+      int ret = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+      if (ret < 0)
+	return ret;
     }
     break;
   }
 
-  bufferlist update_bl;
   bufferlist new_header_bl;
   ::encode(header, new_header_bl);
-  update_bl.append(CEPH_OSD_TMAP_HDR);
-  ::encode(new_header_bl, update_bl);
-  update_bl.claim_append(op_bl);
-  return cls_cxx_map_update(hctx, &update_bl);
+  return cls_cxx_map_write_header(hctx, &new_header_bl);
 }
 
 int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -332,6 +320,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       }
     }
 
+    int ret = 0;
+
     if (cur_disk.pending_map.empty()) {
       struct rgw_bucket_category_stats& stats =
           header.stats[cur_disk.meta.category];
@@ -343,8 +333,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       }
       switch(op) {
       case CEPH_RGW_REMOVE:
-        op_bl.append(CEPH_OSD_TMAP_RM);
-        ::encode(cur_change.name, op_bl);
+	ret = cls_cxx_map_remove_key(hctx, cur_change.name);
+	if (ret < 0)
+	  return ret;
         break;
       case CEPH_RGW_UPDATE:
         stats.num_entries++;
@@ -352,8 +343,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
         bufferlist cur_state_bl;
         ::encode(cur_change, cur_state_bl);
-        op_bl.append(CEPH_OSD_TMAP_SET);
-        ::encode(cur_state_bl, op_bl);
+        ret = cls_cxx_map_write_key(hctx, cur_change.name, &cur_state_bl);
+        if (ret < 0)
+	  return ret;
         break;
       }
     }
@@ -363,11 +355,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   if (header_changed) {
     bufferlist new_header_bl;
     ::encode(header, new_header_bl);
-    update_bl.append(CEPH_OSD_TMAP_HDR);
-    ::encode(new_header_bl, update_bl);
+    return cls_cxx_map_write_header(hctx, &new_header_bl);
   }
-  update_bl.claim_append(op_bl);
-  return cls_cxx_map_update(hctx, &update_bl);
+  return 0;
 }
 
 void __cls_init()

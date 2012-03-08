@@ -598,7 +598,7 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 
   map<string, entity_addr_t>::const_iterator it = monmap.mon_addr.begin();
   ostringstream oss;
-  for (size_t i = 0; i < monmap.mon_addr.size(); ++i) {
+  for (size_t i = 0; i < monmap.mon_addr.size(); ++i, ++it) {
     oss << it->second.addr;
     if (i + 1 < monmap.mon_addr.size())
       oss << ",";

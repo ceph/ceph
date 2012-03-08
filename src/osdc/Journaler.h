@@ -197,6 +197,8 @@ private:
   // for wait_for_readable()
   Context    *on_readable;
 
+  Context    *on_write_error;
+
   void _finish_read(int r, uint64_t offset, bufferlist &bl); // read completion callback
   void _assimilate_prefetch();
   void _issue_read(uint64_t len);  // read some more
@@ -228,6 +230,15 @@ private:
     last_written = last_committed = h;
   }
 
+  /**
+   * handle a write error
+   *
+   * called when we get an objecter error on a write.
+   *
+   * @param r error code
+   */
+  void handle_write_error(int r);
+
 public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
     cct(obj->cct), last_written(mag), last_committed(mag),
@@ -239,7 +250,7 @@ public:
     waiting_for_zero(false),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0), prefetch_from(0),
-    on_readable(0),
+    on_readable(0), on_write_error(NULL),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
   }
@@ -320,6 +331,25 @@ public:
   
   void set_write_pos(int64_t p) { 
     prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = p;
+  }
+
+  /**
+   * set write error callback
+   *
+   * Set a callback/context to trigger if we get a write error from
+   * the objecter.  This may be from an explicit request (e.g., flush)
+   * or something async the journaler did on its own (e.g., journal
+   * header update).
+   *
+   * It is only used once; if the caller continues to use the
+   * Journaler and wants to hear about errors, it needs to reset the
+   * error_handler.
+   *
+   * @param c callback/context to trigger on error
+   */
+  void set_write_error_handler(Context *c) {
+    assert(!on_write_error);
+    on_write_error = c;
   }
 
   // trim

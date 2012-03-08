@@ -5,6 +5,7 @@
 #include <string>
 #include <list>
 #include <map>
+#include <set>
 #include <tr1/memory>
 #include <vector>
 #include <utility>
@@ -168,9 +169,36 @@ namespace librados
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
     void tmap_update(const bufferlist& cmdbl);
+    void tmap_put(const bufferlist& bl);
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len);
+
+    /**
+     * set keys and values according to map
+     *
+     * @param map [in] keys and values to set
+     */
+    void omap_set(const std::map<std::string, bufferlist> &map);
+
+    /**
+     * set header
+     *
+     * @param bl [in] header to set
+     */
+    void omap_set_header(const bufferlist &bl);
+
+    /**
+     * Clears omap contents
+     */
+    void omap_clear();
+
+    /**
+     * Clears keys in to_rm
+     *
+     * @param to_rm [in] keys to remove
+     */
+    void omap_rm_keys(const std::set<std::string> &to_rm);
 
     friend class IoCtx;
   };
@@ -191,6 +219,75 @@ namespace librados
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
     void tmap_get(bufferlist *pbl, int *prval);
+
+    /**
+     * omap_get_vals: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals(
+      const std::string &start_after,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      int *prval);
+
+    /**
+     * omap_get_vals: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @param filter_prefix [in] list only keys beginning with filter_prefix
+     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals(
+      const std::string &start_after,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      int *prval);
+
+
+    /**
+     * omap_get_keys: keys from the object omap
+     *
+     * Get up to max_return keys beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @parem max_return [in] list no more than max_return keys
+     * @param out_keys [out] place returned values in out_keys on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_keys(const std::string &start_after,
+                       uint64_t max_return,
+                       std::set<std::string> *out_keys,
+                       int *prval);
+
+    /**
+     * omap_get_header: get header from object omap
+     *
+     * @param header [out] place header here upon completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_header(bufferlist *header, int *prval);
+
+    /**
+     * get key/value paris for specified keys
+     *
+     * @param to_get [in] keys to get
+     * @param out_vals [out] place key/value pairs found here on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals_by_keys(const std::set<std::string> &keys,
+			       std::map<std::string, bufferlist> *map,
+			       int *prval);
   };
 
 
@@ -254,6 +351,32 @@ namespace librados
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
     int tmap_put(const std::string& oid, bufferlist& bl);
     int tmap_get(const std::string& oid, bufferlist& bl);
+
+    int omap_get_vals(const std::string& oid,
+                      const std::string& start_after,
+                      uint64_t max_return,
+                      std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals(const std::string& oid,
+                      const std::string& start_after,
+                      const std::string& filter_prefix,
+                      uint64_t max_return,
+                      std::map<std::string, bufferlist> *out_vals);
+    int omap_get_keys(const std::string& oid,
+                      const std::string& start_after,
+                      uint64_t max_return,
+                      std::set<std::string> *out_keys);
+    int omap_get_header(const std::string& oid,
+                        bufferlist *bl);
+    int omap_get_vals_by_keys(const std::string& oid,
+                              const std::set<std::string>& keys,
+                              std::map<std::string, bufferlist> *vals);
+    int omap_set(const std::string& oid,
+                 const map<string, bufferlist>& map);
+    int omap_set_header(const std::string& oid,
+                        const bufferlist& bl);
+    int omap_clear(const std::string& oid);
+    int omap_rm_keys(const std::string& oid,
+                     const std::set<std::string>& keys);
 
     void snap_set_read(snap_t seq);
     int selfmanaged_snap_set_write_ctx(snap_t seq, std::vector<snap_t>& snaps);

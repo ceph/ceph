@@ -84,6 +84,18 @@ void MDLog::init_journaler()
 			    logger, l_mdl_jlat,
 			    &mds->timer);
   assert(journaler->is_readonly());
+  journaler->set_write_error_handler(new C_MDL_WriteError(this));
+}
+
+void MDLog::handle_journaler_write_error(int r)
+{
+  if (r == -EBLACKLISTED) {
+    derr << "we have been blacklisted (fenced), respawning..." << dendl;
+    mds->respawn();
+  } else {
+    derr << "unhandled error " << cpp_strerror(r) << ", shutting down..." << dendl;
+    mds->suicide();
+  }
 }
 
 void MDLog::write_head(Context *c) 

@@ -385,7 +385,8 @@ public:
       return find_unused_for(mds, name);
   }
 
-  enum health_status_t get_health(std::ostream &ss) const;
+  void get_health(list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail) const;
 
   // mds states
   bool is_down(int m) { return up.count(m) == 0; }

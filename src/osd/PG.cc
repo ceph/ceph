@@ -1733,7 +1733,7 @@ void PG::update_stats()
     pg_stats_stable = info.stats;
 
     // calc copies, degraded
-    int target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
+    unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
     pg_stats_stable.stats.calc_copies(target);
     pg_stats_stable.stats.sum.num_objects_degraded = 0;
     if (!is_clean() && is_active()) {
@@ -1741,8 +1741,16 @@ void PG::update_stats()
       // the summation, not individual stat categories.
       uint64_t num_objects = pg_stats_stable.stats.sum.num_objects;
 
+      uint64_t degraded = 0;
+
+      // if the acting set is smaller than we want, add in those missing replicas
+      if (acting.size() < target)
+	degraded += (target - acting.size()) * num_objects;
+
+      // missing on primary
       pg_stats_stable.stats.sum.num_objects_missing_on_primary = missing.num_missing();
-      uint64_t degraded = missing.num_missing();
+      degraded += missing.num_missing();
+      
       for (unsigned i=1; i<acting.size(); i++) {
 	assert(peer_missing.count(acting[i]));
 
@@ -2286,8 +2294,7 @@ void PG::read_state(ObjectStore *store)
     ObjectStore::Transaction t;
     coll_t cr_log_coll(cr_log_coll_name);
     t.create_collection(cr_log_coll);
-    t.collection_add(cr_log_coll, coll_t::META_COLL, log_oid);
-    t.collection_remove(coll_t::META_COLL, log_oid);
+    t.collection_move(cr_log_coll, coll_t::META_COLL, log_oid);
     t.touch(coll_t::META_COLL, log_oid);
     write_info(t);
     store->apply_transaction(t);
@@ -4125,9 +4132,33 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
 boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 {
+  PG *pg = context< RecoveryMachine >().pg;
+
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
+
+  {
+    q.f->open_array_section("might_have_unfound");
+    for (set<int>::iterator p = pg->might_have_unfound.begin();
+	 p != pg->might_have_unfound.end();
+	 ++p) {
+      q.f->open_object_section("osd");
+      q.f->dump_int("osd", *p);
+      if (pg->peer_missing.count(*p)) {
+	q.f->dump_string("status", "already probed");
+      } else if (pg->peer_missing_requested.count(*p)) {
+	q.f->dump_string("status", "querying");
+      } else if (!pg->get_osdmap()->is_up(*p)) {
+	q.f->dump_string("status", "osd is down");
+      } else {
+	q.f->dump_string("status", "not queried");
+      }
+      q.f->close_section();
+    }
+    q.f->close_section();
+  }
+
   q.f->close_section();
   return forward_event();
 }

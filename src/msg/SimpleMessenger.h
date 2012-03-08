@@ -52,6 +52,91 @@ using namespace __gnu_cxx;
  */
 
 class SimpleMessenger : public Messenger {
+public:
+  /** @defgroup Accessors
+   * @{
+   */
+  /**
+   * Set the IP this SimpleMessenger is using. This is useful if it's unset
+   * but another SimpleMessenger on the same interface has already learned its
+   * IP. Of course, this function does not change the port, since the
+   * SimpleMessenger always knows the correct setting for that.
+   * If the SimpleMesssenger's IP is already set, this function is a no-op.
+   *
+   * @param addr The IP address to set internally.
+   */
+  void set_ip(entity_addr_t& addr);
+  /**
+   * Retrieve the Messenger's address.
+   *
+   * @return A copy of he address this Messenger currently
+   * believes to be its own.
+   */
+  virtual entity_addr_t get_myaddr();
+  /**
+   * Retrieve the Connection for an endpoint.
+   *
+   * @param dest The endpoint you want to get a Connection for.
+   * @return The requested Connection, as a pointer whose reference you own.
+   */
+  virtual Connection *get_connection(const entity_inst_t& dest);
+  /** @} Accessors */
+
+  /**
+   * @defgroup Configuration functions
+   * @{
+   */
+  /**
+   * Set a policy which is applied to all peers who do not have a type-specific
+   * Policy.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The Policy to apply.
+   */
+  void set_default_policy(Policy p) {
+    assert(!started && !did_bind);
+    default_policy = p;
+  }
+  /**
+   * Set a policy which is applied to all peers of the given type.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this policy applies to.
+   * @param p The policy to apply.
+   */
+  void set_policy(int type, Policy p) {
+    assert(!started && !did_bind);
+    policy_map[type] = p;
+  }
+  /**
+   * Set a Throttler which is applied to all Messages from the given
+   * type of peer.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this Throttler will apply to.
+   * @param t The Throttler to apply. SimpleMessenger does not take
+   * ownership of this pointer, but you must not destroy it before
+   * you destroy SimpleMessenger.
+   */
+  void set_policy_throttler(int type, Throttle *t) {
+    assert (!started && !did_bind);
+    get_policy(type).throttler = t;
+  }
+  /**
+   * Set the cluster protocol in use by this daemon.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  void set_cluster_protocol(int p) {
+    assert(!started && !did_bind);
+    cluster_protocol = p;
+  }
+  /** @} Configuration functions */
 private:
   class Pipe;
 
@@ -66,7 +151,7 @@ private:
     
     void *entry();
     void stop();
-    int bind(uint64_t nonce, entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
+    int bind(entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
     int rebind(int avoid_port);
     int start();
   } accepter;
@@ -385,13 +470,13 @@ private:
  public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
-  bool started;
   bool did_bind;
   Throttle dispatch_throttler;
 
   // where i listen
   bool need_addr;
   entity_addr_t ms_addr;
+  uint64_t nonce;
   
   // local
   bool destination_stopped;
@@ -412,15 +497,6 @@ private:
     else
       return default_policy;
   }
-  void set_default_policy(Policy p) {
-    default_policy = p;
-  }
-  void set_policy(int type, Policy p) {
-    policy_map[type] = p;
-  }
-  void set_policy_throttler(int type, Throttle *t) {
-    get_policy(type).throttler = t;
-  }
 
   // --- pipes ---
   set<Pipe*>      pipes;
@@ -431,14 +507,11 @@ private:
       
   Pipe *connect_rank(const entity_addr_t& addr, int type);
 
-  const entity_addr_t &get_ms_addr() { return ms_addr; }
-
-  void mark_down(const entity_addr_t& addr);
-  void mark_down(Connection *con);
-  void mark_down_on_empty(Connection *con);
-  void mark_disposable(Connection *con);
-
-  void mark_down_all();
+  virtual void mark_down(const entity_addr_t& addr);
+  virtual void mark_down(Connection *con);
+  virtual void mark_down_on_empty(Connection *con);
+  virtual void mark_disposable(Connection *con);
+  virtual void mark_down_all();
 
   // reaper
   class ReaperThread : public Thread {
@@ -446,9 +519,7 @@ private:
   public:
     ReaperThread(SimpleMessenger *m) : msgr(m) {}
     void *entry() {
-      msgr->get();
       msgr->reaper_entry();
-      msgr->put();
       return 0;
     }
   } reaper_thread;
@@ -462,22 +533,18 @@ private:
 
 
   /***** Messenger-required functions  **********/
-  entity_addr_t get_myaddr();
-  void set_ip(entity_addr_t &addr);
-
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
   }
 
-  void ready();
-  int shutdown();
-  void suicide();
+  virtual void ready();
+  virtual int shutdown();
+  virtual void suicide();
   void prepare_dest(const entity_inst_t& inst);
-  int send_message(Message *m, const entity_inst_t& dest);
-  int send_message(Message *m, Connection *con);
-  Connection *get_connection(const entity_inst_t& dest);
-  int lazy_send_message(Message *m, const entity_inst_t& dest);
-  int lazy_send_message(Message *m, Connection *con) {
+  virtual int send_message(Message *m, const entity_inst_t& dest);
+  virtual int send_message(Message *m, Connection *con);
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
+  virtual int lazy_send_message(Message *m, Connection *con) {
     return send_message(m, con);
   }
 
@@ -489,9 +556,7 @@ private:
   public:
     DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
     void *entry() {
-      msgr->get();
       msgr->dispatch_entry();
-      msgr->put();
       return 0;
     }
   } dispatch_thread;
@@ -507,12 +572,12 @@ private:
   int get_proto_version(int peer_type, bool connect);
 
 public:
-  SimpleMessenger(CephContext *cct) :
-    Messenger(cct, entity_name_t()),
+  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
+    Messenger(cct, name),
     accepter(this),
-    lock("SimpleMessenger::lock"), started(false), did_bind(false),
+    lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    destination_stopped(true), my_type(-1),
+    nonce(_nonce), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
     dispatch_thread(this), msgr(this),
@@ -521,26 +586,15 @@ public:
   {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
+    init_local_pipe();
   }
-  ~SimpleMessenger() {
+  virtual ~SimpleMessenger() {
     delete dispatch_queue.local_pipe;
   }
 
-  //void set_listen_addr(tcpaddr_t& a);
-
-  int bind(entity_addr_t bind_addr, int64_t nonce);
-  int start_with_nonce(uint64_t nonce);  // if we didn't bind
-  int start() {                 // if we did
-    assert(did_bind);
-    return start_with_nonce(0);
-  }
-  void wait();
-
-  void set_cluster_protocol(int p) {
-    cluster_protocol = p;
-  }
-
-  int write_pid_file(int pid);
+  int bind(entity_addr_t bind_addr);
+  virtual int start();
+  virtual void wait();
 
   int rebind(int avoid_port);
 
@@ -555,13 +609,11 @@ public:
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
 			 bool& isvalid);
 
-  bool register_entity(entity_name_t addr);
-
   void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
   void submit_message(Message *m, Pipe *pipe);
 		      
-  int send_keepalive(const entity_inst_t& addr);
-  int send_keepalive(Connection *con);
+  virtual int send_keepalive(const entity_inst_t& addr);
+  virtual int send_keepalive(Connection *con);
 
   void learned_addr(const entity_addr_t& peer_addr_for_me);
   void init_local_pipe();

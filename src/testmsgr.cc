@@ -96,13 +96,14 @@ int main(int argc, const char **argv, const char *envp[]) {
   std::string sss(ss.str());
   g_ceph_context->_conf->set_val("public_addr", sss.c_str());
   g_ceph_context->_conf->apply_changes(NULL);
-  SimpleMessenger *rank = new SimpleMessenger(g_ceph_context);
-  int err = rank->bind(g_ceph_context->_conf->public_addr, getpid());
+  SimpleMessenger *rank = new SimpleMessenger(g_ceph_context,
+                                              entity_name_t::MON(whoami),
+                                              getpid());
+  int err = rank->bind(g_ceph_context->_conf->public_addr);
   if (err < 0)
     return 1;
 
   // start monitor
-  rank->register_entity(entity_name_t::MON(whoami));
   messenger = rank;
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   messenger->add_dispatcher_head(&dispatcher);

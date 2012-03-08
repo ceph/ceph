@@ -55,7 +55,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  * Accepter
  */
 
-int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
+int SimpleMessenger::Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
 {
   const md_config_t *conf = msgr->cct->_conf;
   // bind to a socket
@@ -154,7 +154,7 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
 
   if (msgr->ms_addr.get_port() == 0) {
     msgr->ms_addr = listen_addr;
-    msgr->ms_addr.nonce = nonce;
+    msgr->ms_addr.nonce = msgr->nonce;
   }
 
   msgr->init_local_pipe();
@@ -176,7 +176,7 @@ int SimpleMessenger::Accepter::rebind(int avoid_port)
   addr.set_port(0);
 
   ldout(msgr->cct,10) << " will try " << addr << dendl;
-  int r = bind(addr.get_nonce(), addr, old_port, avoid_port);
+  int r = bind(addr, old_port, avoid_port);
   if (r == 0)
     start();
   return r;
@@ -2380,7 +2380,7 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
 
 
 
-int SimpleMessenger::bind(entity_addr_t bind_addr, int64_t nonce)
+int SimpleMessenger::bind(entity_addr_t bind_addr)
 {
   lock.Lock();
   if (started) {
@@ -2392,7 +2392,7 @@ int SimpleMessenger::bind(entity_addr_t bind_addr, int64_t nonce)
   lock.Unlock();
 
   // bind to a socket
-  return accepter.bind(nonce, bind_addr);
+  return accepter.bind(bind_addr);
 }
 
 int SimpleMessenger::rebind(int avoid_port)
@@ -2402,13 +2402,13 @@ int SimpleMessenger::rebind(int avoid_port)
   return accepter.rebind(avoid_port);
 }
 
-int SimpleMessenger::start_with_nonce(uint64_t nonce)
+int SimpleMessenger::start()
 {
   lock.Lock();
   ldout(cct,1) << "messenger.start" << dendl;
 
   // register at least one entity, first!
-  assert(my_type >= 0); 
+  assert(my_type >= 0);
 
   assert(!started);
   started = true;
@@ -2466,38 +2466,6 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 					bool& isvalid)
 {
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
-}
-
-
-
-/* register_entity 
- */
-bool SimpleMessenger::register_entity(entity_name_t name)
-{
-  ldout(cct,10) << "register_entity " << name << dendl;
-  lock.Lock();
-  
-  if (!destination_stopped) { //already have a working entity set
-    lock.Unlock();
-    return false;
-  }
-
-  // set it up
-  Messenger::set_myname(name);
-  // now i know my type.
-  if (my_type >= 0)
-    assert(my_type == name.type());
-  else
-    my_type = name.type();
-
-  destination_stopped = false;
-
-  ldout(cct,10) << "register_entity " << name << " at " << get_myaddr() << dendl;
-
-  msgr->init_local_pipe();
-
-  lock.Unlock();
-  return true;
 }
 
 void SimpleMessenger::submit_message(Message *m, Pipe *pipe)

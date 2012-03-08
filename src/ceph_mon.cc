@@ -366,10 +366,27 @@ int main(int argc, const char **argv)
   }
 
   // bind
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
-  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
-
   int rank = monmap.get_rank(g_conf->name.get_id());
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
+                                                   entity_name_t::MON(rank),
+                                                   0);
+  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
+  messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
+
+  uint64_t supported =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_NOSRCADDR |
+    CEPH_FEATURE_MONCLOCKCHECK |
+    CEPH_FEATURE_PGID64;
+  messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+                        Messenger::Policy::lossless_peer(supported,
+                                                         CEPH_FEATURE_UID |
+                                                         CEPH_FEATURE_PGID64));
+  messenger->set_policy(entity_name_t::TYPE_OSD,
+                        Messenger::Policy::stateless_server(supported,
+                                                            CEPH_FEATURE_PGID64 |
+                                                            CEPH_FEATURE_OSDENC));
 
   global_print_banner();
 
@@ -379,13 +396,11 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << std::endl;
 
-  err = messenger->bind(ipaddr, 0);
+  err = messenger->bind(ipaddr);
   if (err < 0)
     return 1;
 
   // start monitor
-  messenger->register_entity(entity_name_t::MON(rank));
-  messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
   global_init_daemonize(g_ceph_context, 0);
@@ -399,20 +414,6 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
-  uint64_t supported =
-    CEPH_FEATURE_UID |
-    CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_MONCLOCKCHECK |
-    CEPH_FEATURE_PGID64;
-  messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MON,
-			Messenger::Policy::lossless_peer(supported,
-							 CEPH_FEATURE_UID |
-							 CEPH_FEATURE_PGID64));
-  messenger->set_policy(entity_name_t::TYPE_OSD,
-			Messenger::Policy::stateless_server(supported,
-							    CEPH_FEATURE_PGID64 |
-							    CEPH_FEATURE_OSDENC));
   mon->init();
   messenger->wait();
 
@@ -422,7 +423,7 @@ int main(int argc, const char **argv)
 
   store.umount();
   delete mon;
-  messenger->destroy();
+  delete messenger;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

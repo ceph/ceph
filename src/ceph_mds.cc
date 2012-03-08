@@ -69,8 +69,10 @@ static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
   common_init_finish(g_ceph_context);
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
-  int r = messenger->bind(g_conf->public_addr, getpid());
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
+                                                   entity_name_t::CLIENT(),
+                                                   getpid());
+  int r = messenger->bind(g_conf->public_addr);
   if (r < 0)
     return r;
   MonClient mc(g_ceph_context);
@@ -229,16 +231,13 @@ int main(int argc, const char **argv)
 
   global_print_banner();
 
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
+                                                   entity_name_t::MDS(-1),
+                                                   getpid());
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
-  int r = messenger->bind(g_conf->public_addr, getpid());
-  if (r < 0)
-    exit(1);
-
-  cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
+  cout << "starting " << g_conf->name << " at " << messenger->get_myaddr()
        << std::endl;
-  messenger->register_entity(entity_name_t::MDS(-1));
   uint64_t supported =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
@@ -256,6 +255,10 @@ int main(int argc, const char **argv)
 							 CEPH_FEATURE_UID));
   messenger->set_policy(entity_name_t::TYPE_CLIENT,
 			Messenger::Policy::stateful_server(supported, 0));
+
+  int r = messenger->bind(g_conf->public_addr);
+  if (r < 0)
+    exit(1);
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
     global_init_daemonize(g_ceph_context, 0);

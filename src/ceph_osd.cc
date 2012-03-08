@@ -300,42 +300,30 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context,
+                                                          entity_name_t::OSD(whoami),
+                                                          getpid());
+  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context,
+                                                           entity_name_t::OSD(whoami),
+                                                           getpid());
+  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context,
+                                                        entity_name_t::OSD(whoami),
+                                                        getpid());
+  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context,
+                                                         entity_name_t::OSD(whoami),
+                                                         getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  r = client_messenger->bind(g_conf->public_addr, getpid());
-  if (r < 0)
-    exit(1);
-  r = cluster_messenger->bind(g_conf->cluster_addr, getpid());
-  if (r < 0)
-    exit(1);
-
-  // hb should bind to same ip as cluster_addr (if specified)
-  entity_addr_t hb_addr = g_conf->cluster_addr;
-  if (!hb_addr.is_blank_ip())
-    hb_addr.set_port(0);
-  r = messenger_hbout->bind(hb_addr, getpid());
-  if (r < 0)
-    exit(1);
-
   global_print_banner();
 
   cout << "starting osd." << whoami
-       << " at " << client_messenger->get_ms_addr()
+       << " at " << client_messenger->get_myaddr()
        << " osd_data " << g_conf->osd_data
        << " " << ((g_conf->osd_journal.empty()) ?
 		    "(no journal)" : g_conf->osd_journal)
        << std::endl;
-
-  client_messenger->register_entity(entity_name_t::OSD(whoami));
-  cluster_messenger->register_entity(entity_name_t::OSD(whoami));
-  messenger_hbin->register_entity(entity_name_t::OSD(whoami));
-  messenger_hbout->register_entity(entity_name_t::OSD(whoami));
 
   Throttle client_throttler(g_conf->osd_client_message_size_cap);
 
@@ -366,6 +354,21 @@ int main(int argc, const char **argv)
 								 CEPH_FEATURE_OSDENC));
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				Messenger::Policy::stateless_server(0, 0));
+
+  r = client_messenger->bind(g_conf->public_addr);
+  if (r < 0)
+    exit(1);
+  r = cluster_messenger->bind(g_conf->cluster_addr);
+  if (r < 0)
+    exit(1);
+
+  // hb should bind to same ip as cluster_addr (if specified)
+  entity_addr_t hb_addr = g_conf->cluster_addr;
+  if (!hb_addr.is_blank_ip())
+    hb_addr.set_port(0);
+  r = messenger_hbout->bind(hb_addr);
+  if (r < 0)
+    exit(1);
 
   // Set up crypto, daemonize, etc.
   // Leave stderr open in case we need to report errors.
@@ -399,7 +402,7 @@ int main(int argc, const char **argv)
   global_init_shutdown_stderr(g_ceph_context);
 
   client_messenger->start();
-  messenger_hbin->start_with_nonce(getpid());
+  messenger_hbin->start();
   messenger_hbout->start();
   cluster_messenger->start();
 
@@ -428,10 +431,10 @@ int main(int argc, const char **argv)
 
   // done
   delete osd;
-  client_messenger->destroy();
-  messenger_hbin->destroy();
-  messenger_hbout->destroy();
-  cluster_messenger->destroy();
+  delete client_messenger;
+  delete messenger_hbin;
+  delete messenger_hbout;
+  delete cluster_messenger;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

@@ -212,6 +212,52 @@ void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, 
   o->getxattr(name, pbl, prval);
 }
 
+void librados::ObjectReadOperation::omap_get_vals(
+  const std::string &start_after,
+  const std::string &filter_prefix,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_vals(start_after, filter_prefix, max_return, out_vals, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_vals(start_after, "", max_return, out_vals, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_keys(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::set<std::string> *out_keys,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_keys(start_after, max_return, out_keys, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_header(bl, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals_by_keys(
+  const std::set<std::string> &keys,
+  std::map<std::string, bufferlist> *map,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_vals_by_keys(keys, map, prval);
+}
+
 void librados::ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -281,6 +327,13 @@ void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist
   o->setxattr(name, v);
 }
 
+void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  bufferlist c = bl;
+  o->tmap_put(c);
+}
+
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -294,6 +347,33 @@ void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->clone_range(src_oid, src_off, len, dst_off);
+}
+
+void librados::ObjectWriteOperation::omap_set(
+  const map<string, bufferlist> &map)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_set(map);
+}
+
+void librados::ObjectWriteOperation::omap_set_header(const bufferlist &bl)
+{
+  bufferlist c = bl;
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_set_header(c);
+}
+
+void librados::ObjectWriteOperation::omap_clear()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_clear();
+}
+
+void librados::ObjectWriteOperation::omap_rm_keys(
+  const std::set<std::string> &to_rm)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_rm_keys(to_rm);
 }
 
 librados::WatchCtx::
@@ -937,7 +1017,8 @@ int librados::RadosClient::connect()
     goto out;
 
   err = -ENOMEM;
-  messenger = new SimpleMessenger(cct);
+  nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
+  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), nonce);
   if (!messenger)
     goto out;
 
@@ -946,9 +1027,8 @@ int librados::RadosClient::connect()
   // how to decompose the reply data into its consituent pieces.
   messenger->set_default_policy(Messenger::Policy::client(0, CEPH_FEATURE_OSDREPLYMUX));
 
-  ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
+  ldout(cct, 1) << "starting msgr at " << messenger->get_myaddr() << dendl;
 
-  messenger->register_entity(entity_name_t::CLIENT(-1));
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
@@ -961,10 +1041,7 @@ int librados::RadosClient::connect()
 
   messenger->add_dispatcher_head(this);
 
-  nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-
-  messenger->start_with_nonce(nonce);
-  messenger->add_dispatcher_head(this);
+  messenger->start();
 
   ldout(cct, 1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
@@ -1031,7 +1108,7 @@ void librados::RadosClient::shutdown()
 librados::RadosClient::~RadosClient()
 {
   if (messenger)
-    messenger->destroy();
+    delete messenger;
   if (objecter)
     delete objecter;
   common_destroy_context(cct);
@@ -2114,7 +2191,6 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   return r;
 }
 
-
 int librados::RadosClient::exec(IoCtxImpl& io, const object_t& oid,
 				const char *cls, const char *method,
 				bufferlist& inbl, bufferlist& outbl)
@@ -2949,6 +3025,115 @@ int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
 {
   object_t obj(oid);
   return io_ctx_impl->client->tmap_get(*io_ctx_impl, obj, bl);
+}
+
+int librados::IoCtx::omap_get_vals(const std::string& oid,
+                                   const std::string& start_after,
+                                   uint64_t max_return,
+                                   std::map<std::string, bufferlist> *out_vals)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_vals(start_after, max_return, out_vals, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_vals(const std::string& oid,
+                                   const std::string& start_after,
+                                   const std::string& filter_prefix,
+                                   uint64_t max_return,
+                                   std::map<std::string, bufferlist> *out_vals)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_vals(start_after, filter_prefix, max_return, out_vals, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_keys(const std::string& oid,
+                                   const std::string& start_after,
+                                   uint64_t max_return,
+                                   std::set<std::string> *out_keys)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_keys(start_after, max_return, out_keys, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_header(const std::string& oid,
+                                     bufferlist *bl)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_header(bl, &r);
+  bufferlist b;
+  int ret = operate(oid, &op, &b);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_vals_by_keys(const std::string& oid,
+                                           const std::set<std::string>& keys,
+                                           std::map<std::string, bufferlist> *vals)
+{
+  ObjectReadOperation op;
+  int r;
+  bufferlist bl;
+  op.omap_get_vals_by_keys(keys, vals, &r);
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_set(const std::string& oid,
+                              const map<string, bufferlist>& m)
+{
+  ObjectWriteOperation op;
+  op.omap_set(m);
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_set_header(const std::string& oid,
+                                     const bufferlist& bl)
+{
+  ObjectWriteOperation op;
+  op.omap_set_header(bl);
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_clear(const std::string& oid)
+{
+  ObjectWriteOperation op;
+  op.omap_clear();
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_rm_keys(const std::string& oid,
+                                  const std::set<std::string>& keys)
+{
+  ObjectWriteOperation op;
+  op.omap_rm_keys(keys);
+  return operate(oid, &op);
 }
 
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
