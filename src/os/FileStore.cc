@@ -3987,7 +3987,7 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
   get_cdir(ncid, new_coll, sizeof(new_coll));
   int ret = 0;
   if (::rename(old_coll, new_coll)) {
-    ret = errno;
+    ret = -errno;
   }
   dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
 	   << ": ret = " << ret << dendl;
