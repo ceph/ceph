@@ -418,7 +418,8 @@ public:
 
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
-  int _collection_add(coll_t c, coll_t ocid, const hobject_t& o);
+  int _collection_add(coll_t c, coll_t ocid, const hobject_t& o,
+		      const SequencerPosition& spos);
   int _collection_remove(coll_t c, const hobject_t& o);
   int _collection_move(coll_t c, coll_t ocid, const hobject_t& o);
 
