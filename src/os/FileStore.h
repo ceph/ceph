@@ -26,6 +26,7 @@
 #include "HashIndex.h"
 #include "IndexManager.h"
 #include "ObjectMap.h"
+#include "SequencerPosition.h"
 
 #include "include/uuid.h"
 
@@ -298,6 +299,37 @@ public:
   int queue_transaction(Sequencer *osr, Transaction* t);
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0);
+
+  /**
+   * set replay guard xattr on given file
+   *
+   * This will ensure that we will not replay this (or any previous) operation
+   * against this particular inode/object.
+   *
+   * @param fd open file descriptor for the file/object
+   * @param spos sequencer position of the last operation we should not replay
+   */
+  void _set_replay_guard(int fd, const SequencerPosition& spos);
+
+  /**
+   * check replay guard xattr on given file
+   *
+   * Check the current position against any marker on the file that
+   * indicates which operations have already been applied.  If the
+   * current or a newer operation has been marked as applied, we
+   * should not replay the current operation again.
+   *
+   * If we are not replaying the journal, we already return true.  It
+   * is only on replay that we might return false, indicated that the
+   * operation should not be performed (again).
+   *
+   * @param fd open fd on the file/object in question
+   * @param spos sequencerposition for an operation we could apply/replay
+   * @return true if we can apply (maybe replay) this operation, false if spos has already been applied
+   */
+  bool _check_replay_guard(int fd, const SequencerPosition& spos);
+  bool _check_replay_guard(coll_t cid, const SequencerPosition& spos);
+  bool _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
 
   // ------------------
   // objects

@@ -87,6 +87,7 @@ using ceph::crypto::SHA1;
 #define COMMIT_SNAP_ITEM "snap_%lld"
 #define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
+#define REPLAY_GUARD_XATTR "user.cephos.seq"
 
 /*
  * long file names will have the following format:
@@ -2343,6 +2344,90 @@ void FileStore::_transaction_finish(int fd)
   dout(10) << "transaction_finish " << fd << dendl;
   ::ioctl(fd, BTRFS_IOC_TRANS_END);
   TEMP_FAILURE_RETRY(::close(fd));
+}
+
+void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
+{
+  if (btrfs_stable_commits)
+    return;
+
+  dout(10) << "_set_replay_guard " << spos << dendl;
+
+  // first make sure the previous operation commits
+  ::fsync(fd);
+
+  // then record that we did it
+  bufferlist v(40);
+  ::encode(spos, v);
+  int r = do_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  if (r < 0) {
+    r = -errno;
+    derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
+    assert(0 == "fsetxattr failed");
+  }
+
+  // and make sure our xattr is durable.
+  ::fsync(fd);
+}
+
+bool FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& spos)
+{
+  if (!replaying || btrfs_stable_commits)
+    return true;
+
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    dout(10) << "_check_replay_guard " << cid << " " << oid << " dne" << dendl;
+    return true;  // if file does not exist, there is no guard, and we can replay.
+  }
+  bool ret = _check_replay_guard(fd, spos);
+  TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+bool FileStore::_check_replay_guard(coll_t cid, const SequencerPosition& spos)
+{
+  if (!replaying || btrfs_stable_commits)
+    return true;
+
+  char fn[PATH_MAX];
+  get_cdir(cid, fn, sizeof(fn));
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    dout(10) << "_check_replay_guard " << cid << " dne" << dendl;
+    return true;  // if collection does not exist, there is no guard, and we can replay.
+  }
+  bool ret = _check_replay_guard(fd, spos);
+  TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+bool FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
+{
+  if (!replaying || btrfs_stable_commits)
+    return true;
+
+  char buf[100];
+  int r = do_fgetxattr(fd, REPLAY_GUARD_XATTR, buf, sizeof(buf));
+  if (r < 0) {
+    dout(20) << "_check_replay_guard no xattr" << dendl;
+    return true;  // no xattr
+  }
+  bufferlist bl;
+  bl.append(buf, r);
+
+  SequencerPosition opos;
+  bufferlist::iterator p = bl.begin();
+  ::decode(opos, p);
+  if (opos >= spos) {
+    dout(10) << "_check_replay_guard object has " << opos << " >= current pos " << spos
+	     << ", now or in future, SKIPPING REPLAY" << dendl;
+    return false;
+  } else {
+    dout(10) << "_check_replay_guard object has " << opos << " < current pos " << spos
+	     << ", in past, will replay" << dendl;
+    return true;
+  }
 }
 
 unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_num)
