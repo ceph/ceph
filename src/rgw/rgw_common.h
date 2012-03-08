@@ -59,8 +59,6 @@ using ceph::crypto::MD5;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 8
-
 #define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16
 #define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
@@ -281,19 +279,19 @@ struct RGWAccessKey {
 
   RGWAccessKey() {}
   void encode(bufferlist& bl) const {
-     __u32 ver = 1;
-    ::encode(ver, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(id, bl);
     ::encode(key, bl);
     ::encode(subuser, bl);
+    ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-     ::decode(ver, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      ::decode(id, bl);
      ::decode(key, bl);
      ::decode(subuser, bl);
+     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWAccessKey);
@@ -304,17 +302,17 @@ struct RGWSubUser {
 
   RGWSubUser() : perm_mask(0) {}
   void encode(bufferlist& bl) const {
-     __u32 ver = 1;
-    ::encode(ver, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(name, bl);
     ::encode(perm_mask, bl);
+    ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-     ::decode(ver, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      ::decode(name, bl);
      ::decode(perm_mask, bl);
+     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWSubUser);
@@ -334,8 +332,7 @@ struct RGWUserInfo
   RGWUserInfo() : auid(0), suspended(0) {}
 
   void encode(bufferlist& bl) const {
-     __u32 ver = USER_INFO_VER;
-     ::encode(ver, bl);
+     ENCODE_START(9, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -364,17 +361,17 @@ struct RGWUserInfo
      ::encode(subusers, bl);
      ::encode(suspended, bl);
      ::encode(swift_keys, bl);
+     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-    ::decode(ver, bl);
-     if (ver >= 2) ::decode(auid, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(9, 9, 9, bl);
+     if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
      string secret_key;
     ::decode(access_key, bl);
     ::decode(secret_key, bl);
-    if (ver < 6) {
+    if (struct_v < 6) {
       RGWAccessKey k;
       k.id = access_key;
       k.key = secret_key;
@@ -384,23 +381,24 @@ struct RGWUserInfo
     ::decode(user_email, bl);
     string swift_name;
     string swift_key;
-    if (ver >= 3) ::decode(swift_name, bl);
-    if (ver >= 4) ::decode(swift_key, bl);
-    if (ver >= 5)
+    if (struct_v >= 3) ::decode(swift_name, bl);
+    if (struct_v >= 4) ::decode(swift_key, bl);
+    if (struct_v >= 5)
       ::decode(user_id, bl);
     else
       user_id = access_key;
-    if (ver >= 6) {
+    if (struct_v >= 6) {
       ::decode(access_keys, bl);
       ::decode(subusers, bl);
     }
     suspended = 0;
-    if (ver >= 7) {
+    if (struct_v >= 7) {
       ::decode(suspended, bl);
     }
-    if (ver >= 8) {
+    if (struct_v >= 8) {
       ::decode(swift_keys, bl);
     }
+    DECODE_FINISH(bl);
   }
 
   void clear() {
@@ -438,22 +436,22 @@ struct rgw_bucket {
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+     ENCODE_START(3, 3, bl);
     ::encode(name, bl);
     ::encode(pool, bl);
     ::encode(marker, bl);
     ::encode(bucket_id, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(name, bl);
     ::decode(pool, bl);
     if (struct_v >= 2) {
       ::decode(marker, bl);
       ::decode(bucket_id, bl);
     }
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -478,20 +476,20 @@ struct RGWBucketInfo
   uint32_t flags;
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 3;
-     ::encode(ver, bl);
+     ENCODE_START(4, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
+     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-     ::decode(ver, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(4, 4, 4, bl);
      ::decode(bucket, bl);
-     if (ver >= 2)
+     if (struct_v >= 2)
        ::decode(owner, bl);
-     if (ver >= 3)
+     if (struct_v >= 3)
        ::decode(flags, bl);
+     DECODE_FINISH(bl);
   }
 
   RGWBucketInfo() : flags(0) {}
@@ -608,8 +606,7 @@ struct RGWBucketEnt {
   RGWBucketEnt() : size(0), size_rounded(0), mtime(0), count(0) {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 4;
-    ::encode(struct_v, bl);
+    ENCODE_START(5, 5, bl);
     uint64_t s = size;
     __u32 mt = mtime;
     string empty_str;  // originally had the bucket name here, but we encode bucket later
@@ -620,10 +617,10 @@ struct RGWBucketEnt {
     ::encode(bucket, bl);
     s = size_rounded;
     ::encode(s, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     string empty_str;  // backward compatibility
@@ -639,6 +636,7 @@ struct RGWBucketEnt {
     if (struct_v >= 4)
       ::decode(s, bl);
     size_rounded = s;
+    DECODE_FINISH(bl);
   }
   void clear() {
     bucket.clear();
@@ -657,20 +655,20 @@ struct RGWUploadPartInfo {
   utime_t modified;
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(num, bl);
     ::encode(size, bl);
     ::encode(etag, bl);
     ::encode(modified, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(num, bl);
     ::decode(size, bl);
     ::decode(etag, bl);
     ::decode(modified, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
@@ -836,23 +834,23 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(bucket.name, bl);
     ::encode(key, bl);
     ::encode(ns, bl);
     ::encode(object, bl);
     ::encode(bucket, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(bucket.name, bl);
     ::decode(key, bl);
     ::decode(ns, bl);
     ::decode(object, bl);
     if (struct_v >= 2)
       ::decode(bucket, bl);
+    DECODE_FINISH(bl);
   }
 
   bool operator==(const rgw_obj& o) const {

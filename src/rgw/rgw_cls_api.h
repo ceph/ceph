@@ -27,21 +27,21 @@ struct rgw_bucket_pending_info {
   uint8_t op;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     uint8_t s = (uint8_t)state;
     ::encode(s, bl);
     ::encode(timestamp, bl);
     ::encode(op, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     uint8_t s;
     ::decode(s, bl);
     state = (RGWPendingState)s;
     ::decode(timestamp, bl);
     ::decode(op, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_pending_info)
@@ -60,8 +60,7 @@ struct rgw_bucket_dir_entry_meta {
   category(0), size(0) { mtime.set_from_double(0); }
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(category, bl);
     ::encode(size, bl);
     ::encode(mtime, bl);
@@ -69,10 +68,10 @@ struct rgw_bucket_dir_entry_meta {
     ::encode(owner, bl);
     ::encode(owner_display_name, bl);
     ::encode(content_type, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(category, bl);
     ::decode(size, bl);
     ::decode(mtime, bl);
@@ -81,6 +80,7 @@ struct rgw_bucket_dir_entry_meta {
     ::decode(owner_display_name, bl);
     if (struct_v >= 2)
       ::decode(content_type, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
@@ -97,23 +97,18 @@ struct rgw_bucket_dir_entry {
     epoch(0), exists(false) {}
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    if (!locator.size()) {
-      struct_v = 1; // don't waste space encoding it
-    }
+    ENCODE_START(3, 3, bl);
     ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(epoch, bl);
     ::encode(exists, bl);
     ::encode(meta, bl);
     ::encode(pending_map, bl);
-    if (locator.size()) {
-      ::encode(locator, bl);
-    }
+    ::encode(locator, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(name, bl);
     ::decode(epoch, bl);
     ::decode(exists, bl);
@@ -122,6 +117,7 @@ struct rgw_bucket_dir_entry {
     if (struct_v >= 2) {
       ::decode(locator, bl);
     }
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
@@ -132,18 +128,18 @@ struct rgw_bucket_category_stats {
   uint64_t num_entries;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(total_size, bl);
     ::encode(total_size_rounded, bl);
     ::encode(num_entries, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(total_size, bl);
     ::decode(total_size_rounded, bl);
     ::decode(num_entries, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
@@ -152,14 +148,14 @@ struct rgw_bucket_dir_header {
   map<uint8_t, rgw_bucket_category_stats> stats;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(stats, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(stats, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
@@ -169,16 +165,16 @@ struct rgw_bucket_dir {
   std::map<string, struct rgw_bucket_dir_entry> m;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(header, bl);
     ::encode(m, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(header, bl);
     ::decode(m, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir)
@@ -191,27 +187,22 @@ struct rgw_cls_obj_prepare_op
   string locator;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    if (!locator.size()) {
-      struct_v = 1; // don't waste the encoding space
-    }
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(op, bl);
     ::encode(name, bl);
     ::encode(tag, bl);
-    if (locator.size()) {
-      ::encode(locator, bl);
-    }
+    ::encode(locator, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(op, bl);
     ::decode(name, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
     }
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
@@ -226,23 +217,17 @@ struct rgw_cls_obj_complete_op
   string tag;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    if (!locator.size()) {
-      struct_v = 1; // don't waste the encoding space
-    }
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(op, bl);
     ::encode(name, bl);
     ::encode(epoch, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
-    if (locator.size()) {
-      ::encode(locator, bl);
-    }
+    ::encode(locator, bl);
+    ENCODE_FINISH(bl);
  }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(op, bl);
     ::decode(name, bl);
     ::decode(epoch, bl);
@@ -251,6 +236,7 @@ struct rgw_cls_obj_complete_op
     if (struct_v >= 2) {
       ::decode(locator, bl);
     }
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
@@ -261,16 +247,16 @@ struct rgw_cls_list_op
   uint32_t num_entries;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(start_obj, bl);
     ::encode(num_entries, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(start_obj, bl);
     ::decode(num_entries, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_op)
@@ -281,16 +267,16 @@ struct rgw_cls_list_ret
   bool is_truncated;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(dir, bl);
     ::encode(is_truncated, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(dir, bl);
     ::decode(is_truncated, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_ret)

@@ -32,19 +32,19 @@ struct RGWObjManifestPart {
   RGWObjManifestPart() : loc_ofs(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 1;
-    ::encode(ver, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(loc, bl);
     ::encode(loc_ofs, bl);
     ::encode(size, bl);
+    ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-     ::decode(ver, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      ::decode(loc, bl);
      ::decode(loc_ofs, bl);
      ::decode(size, bl);
+     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWObjManifestPart);
@@ -56,17 +56,17 @@ struct RGWObjManifest {
   RGWObjManifest() : obj_size(0) {}
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 1;
-    ::encode(ver, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(obj_size, bl);
     ::encode(objs, bl);
+    ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-     ::decode(ver, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      ::decode(obj_size, bl);
      ::decode(objs, bl);
+     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWObjManifest);
