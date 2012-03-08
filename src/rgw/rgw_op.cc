@@ -24,7 +24,7 @@ using namespace std;
 using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
-static string tmp_ns = "tmp";
+static string shadow_ns = "shadow";
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
@@ -213,9 +213,10 @@ static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAcces
   if (!oid.empty() && !upload_id.empty()) {
     RGWMPObj mp(oid, upload_id);
     oid = mp.get_meta();
-    obj.set_ns(mp_ns);
+    obj.init_ns(bucket, oid, mp_ns);
+  } else {
+    obj.init(bucket, oid);
   }
-  obj.init(bucket, oid, object);
   int ret = get_policy_from_attr(s->obj_ctx, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
@@ -644,7 +645,7 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
 int RGWPutObjProcessor_Plain::complete(string& etag, map<string, bufferlist>& attrs)
 {
   int r = rgwstore->put_obj_meta(s->obj_ctx, obj, data.length(), NULL, attrs,
-                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &data);
+                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &data, NULL);
   return r;
 }
 
@@ -661,11 +662,12 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 
 protected:
   rgw_obj obj;
+  uint64_t obj_len;
 
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle);
 
-  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS) {}
+  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio() {
     drain_pending();
   }
@@ -673,11 +675,14 @@ protected:
 
 int RGWPutObjProcessor_Aio::handle_data(bufferlist& bl, off_t ofs, void **phandle)
 {
+  if ((uint64_t)ofs + bl.length() > obj_len)
+    obj_len = ofs + bl.length();
+
   // For the first call pass -1 as the offset to
   // do a write_full.
-  int r = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
+  int r = rgwstore->aio_put_obj_data(NULL, obj,
                                      bl,
-                                     ((ofs == 0) ? -1 : ofs),
+                                     ((ofs != 0) ? ofs : -1),
                                      false, phandle);
 
   return r;
@@ -720,9 +725,11 @@ int RGWPutObjProcessor_Aio::drain_pending()
 
 int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 {
-  struct put_obj_aio_info info;
-  info.handle = handle;
-  pending.push_back(info);
+  if (handle) {
+    struct put_obj_aio_info info;
+    info.handle = handle;
+    pending.push_back(info);
+  }
   size_t orig_size = pending.size();
   while (pending_has_completed()) {
     int r = wait_pending_front();
@@ -744,19 +751,24 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
-  bool remove_temp_obj;
+  bufferlist first_chunk;
+  rgw_obj head_obj;
 protected:
   int prepare(struct req_state *s);
   int complete(string& etag, map<string, bufferlist>& attrs);
 
 public:
-  ~RGWPutObjProcessor_Atomic();
-  RGWPutObjProcessor_Atomic() : remove_temp_obj(false) {}
+  ~RGWPutObjProcessor_Atomic() {}
+  RGWPutObjProcessor_Atomic() {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
-    int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
-    if (r >= 0) {
-      remove_temp_obj = true;
+    if (!ofs) {
+      first_chunk.claim(bl);
+      *phandle = NULL;
+      return 0;
     }
+    assert (ofs >= RGW_MAX_CHUNK_SIZE);
+    int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
+
     return r;
   }
 };
@@ -766,29 +778,38 @@ int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
   RGWPutObjProcessor::prepare(s);
 
   string oid = s->object_str;
-  obj.set_ns(tmp_ns);
+  head_obj.init(s->bucket, s->object_str);
 
   char buf[33];
   gen_rand_alphanumeric(buf, sizeof(buf) - 1);
   oid.append("_");
   oid.append(buf);
-  obj.init(s->bucket, oid, s->object_str);
+  obj.init_ns(s->bucket, oid, shadow_ns);
 
   return 0;
 }
 
 int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  rgw_obj dst_obj(s->bucket, s->object_str);
-  rgwstore->set_atomic(s->obj_ctx, dst_obj);
-  int r = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN);
+  uint64_t head_chunk_len = first_chunk.length();
+  RGWObjManifest manifest;
+  manifest.objs[0].loc = head_obj;
+  manifest.objs[0].loc_ofs = 0;
+  manifest.objs[0].size = head_chunk_len;
+  if (obj_len > RGW_MAX_CHUNK_SIZE) {
+    manifest.objs[RGW_MAX_CHUNK_SIZE].loc = obj;
+    manifest.objs[RGW_MAX_CHUNK_SIZE].loc_ofs = RGW_MAX_CHUNK_SIZE;
+    manifest.objs[RGW_MAX_CHUNK_SIZE].size = obj_len - head_chunk_len;
+  }
+
+  manifest.obj_size = obj_len;
+
+  rgwstore->set_atomic(s->obj_ctx, head_obj);
+
+  int r = rgwstore->put_obj_meta(s->obj_ctx, head_obj, obj_len, NULL, attrs,
+                                 RGW_OBJ_CATEGORY_MAIN, false, NULL, &first_chunk, &manifest);
 
   return r;
-}
-RGWPutObjProcessor_Atomic::~RGWPutObjProcessor_Atomic()
-{
-  if (remove_temp_obj)
-    rgwstore->delete_obj(NULL, obj, NULL);
 }
 
 class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
@@ -818,14 +839,13 @@ int RGWPutObjProcessor_Multipart::prepare(struct req_state *s)
   }
   oid = mp.get_part(part_num);
 
-  obj.set_ns(mp_ns);
-  obj.init(s->bucket, oid, s->object_str);
+  obj.init_ns(s->bucket, oid, mp_ns);
   return 0;
 }
 
 int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL);
+  int r = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -841,7 +861,8 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
 
   string multipart_meta_obj = mp.get_meta();
 
-  rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
+  rgw_obj meta_obj;
+  meta_obj.init_ns(s->bucket, multipart_meta_obj, mp_ns);
 
   r = rgwstore->omap_set(meta_obj, p, bl);
 
@@ -874,7 +895,6 @@ void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
 
 void RGWPutObj::execute()
 {
-  rgw_obj obj;
   RGWPutObjProcessor *processor = NULL;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -931,11 +951,13 @@ void RGWPutObj::execute()
       break;
 
     void *handle;
+    const unsigned char *data_ptr = (const unsigned char *)data.c_str();
+
     ret = processor->handle_data(data, ofs, &handle);
     if (ret < 0)
       goto done;
 
-    hash.Update((unsigned char *)data.c_str(), len);
+    hash.Update(data_ptr, len);
 
     ret = processor->throttle_data(handle);
     if (ret < 0)
@@ -943,9 +965,6 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
-
-  // was this really needed? processor->complete() will synch
-  // drain_pending(pending);
 
   if (!chunked_upload && (uint64_t)ofs != s->content_length) {
     ret = -ERR_REQUEST_TIMEOUT;
@@ -1358,9 +1377,9 @@ void RGWInitMultipart::execute()
     RGWMPObj mp(s->object_str, upload_id);
     tmp_obj_name = mp.get_meta();
 
-    obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
+    obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL);
+    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL, NULL);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1373,7 +1392,8 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
-  rgw_obj obj(s->bucket, meta_oid, s->object_str, mp_ns);
+  rgw_obj obj;
+  obj.init_ns(s->bucket, meta_oid, mp_ns);
 
   int ret = get_obj_attrs(s, obj, attrs, NULL);
   if (ret < 0)
@@ -1439,8 +1459,7 @@ void RGWCompleteMultipart::execute()
   rgw_obj meta_obj;
   rgw_obj target_obj;
   RGWMPObj mp;
-  vector<RGWCloneRangeInfo> ranges;
-
+  RGWObjManifest manifest;
 
   ret = get_params();
   if (ret < 0)
@@ -1509,35 +1528,35 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, NULL);
   if (ret < 0)
     goto done;
   
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj src_obj(s->bucket, oid, s->object_str, mp_ns);
+    rgw_obj src_obj;
+    src_obj.init_ns(s->bucket, oid, mp_ns);
 
-    RGWCloneRangeInfo range;
-    range.src = src_obj;
-    range.src_ofs = 0;
-    range.dst_ofs = ofs;
-    range.len = obj_iter->second.size;
-    ranges.push_back(range);
+    RGWObjManifestPart& part = manifest.objs[ofs];
 
-    ofs += obj_iter->second.size;
+    part.loc = src_obj;
+    part.loc_ofs = 0;
+    part.size = obj_iter->second.size;
+
+    ofs += part.size;
   }
-  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, RGW_OBJ_CATEGORY_MAIN, NULL, true, false);
+
+  manifest.obj_size = ofs;
+
+  rgwstore->set_atomic(s->obj_ctx, target_obj);
+
+  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, ofs, NULL, attrs,
+                               RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, &manifest);
   if (ret < 0)
     goto done;
 
-  // now erase all parts
-  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj obj(s->bucket, oid, s->object_str, mp_ns);
-    rgwstore->delete_obj(s->obj_ctx, obj);
-  }
-  // and also remove the metadata obj
-  meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
+  // remove the upload obj
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   rgwstore->delete_obj(s->obj_ctx, meta_obj);
 
 done:
@@ -1578,13 +1597,14 @@ void RGWAbortMultipart::execute()
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj obj(s->bucket, oid, s->object_str, mp_ns);
+    rgw_obj obj;
+    obj.init_ns(s->bucket, oid, mp_ns);
     ret = rgwstore->delete_obj(s->obj_ctx, obj);
     if (ret < 0 && ret != -ENOENT)
       goto done;
   }
   // and also remove the metadata obj
-  meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   ret = rgwstore->delete_obj(s->obj_ctx, meta_obj);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
