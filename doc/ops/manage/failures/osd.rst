@@ -186,6 +186,19 @@ Under certain combinations of failures Ceph may complain about
 
 This means that the storage cluster knows that some objects (or newer
 copies of existing objects) exist, but it hasn't found copies of them.
+One example of how this might come about for a PG whose data is on ceph-osds
+A and B:
+
+* A goes down
+* B handles some writes, alone
+* A comes up
+* A and B repeer, and the objects missing on A are queued for recovery.
+* Before the new objects are copied, B goes down.
+
+Now A knows that these object exist, but there is no live ceph-osd who
+has a copy.  In this case, IO to those objects will block, and the
+cluster will hope that the failed node comes back soon; this is
+assumed to be preferable to returning an IO error to the user.
 
 First, you can identify which objects are unfound with::
 
