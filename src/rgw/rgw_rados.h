@@ -291,12 +291,11 @@ public:
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
-  virtual bool supports_tmap() { return true; }
-  virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
-  virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
-  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
-  virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl);
-  virtual int tmap_del(rgw_obj& obj, std::string& key);
+  virtual bool supports_omap() { return true; }
+  virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
+  virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
+  virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
+  virtual int omap_del(rgw_obj& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 
@@ -338,7 +337,7 @@ public:
                           RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
-  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num,
+  int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
                       map<string, RGWObjEnt>& m, bool *is_truncated,
                       string *last_entry = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);

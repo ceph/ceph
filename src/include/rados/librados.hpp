@@ -285,9 +285,9 @@ namespace librados
      * @param out_vals [out] place key/value pairs found here on completion
      * @param prval [out] place error code in prval upon completion
      */
-    void omap_get_vals_by_key(const std::set<std::string> &keys,
-			      std::map<std::string, bufferlist> *map,
-			      int *prval);
+    void omap_get_vals_by_keys(const std::set<std::string> &keys,
+			       std::map<std::string, bufferlist> *map,
+			       int *prval);
   };
 
 
@@ -351,6 +351,32 @@ namespace librados
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
     int tmap_put(const std::string& oid, bufferlist& bl);
     int tmap_get(const std::string& oid, bufferlist& bl);
+
+    int omap_get_vals(const std::string& oid,
+                      const std::string& start_after,
+                      uint64_t max_return,
+                      std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals(const std::string& oid,
+                      const std::string& start_after,
+                      const std::string& filter_prefix,
+                      uint64_t max_return,
+                      std::map<std::string, bufferlist> *out_vals);
+    int omap_get_keys(const std::string& oid,
+                      const std::string& start_after,
+                      uint64_t max_return,
+                      std::set<std::string> *out_keys);
+    int omap_get_header(const std::string& oid,
+                        bufferlist *bl);
+    int omap_get_vals_by_keys(const std::string& oid,
+                              const std::set<std::string>& keys,
+                              std::map<std::string, bufferlist> *vals);
+    int omap_set(const std::string& oid,
+                 const map<string, bufferlist>& map);
+    int omap_set_header(const std::string& oid,
+                        const bufferlist& bl);
+    int omap_clear(const std::string& oid);
+    int omap_rm_keys(const std::string& oid,
+                     const std::set<std::string>& keys);
 
     void snap_set_read(snap_t seq);
     int selfmanaged_snap_set_write_ctx(snap_t seq, std::vector<snap_t>& snaps);

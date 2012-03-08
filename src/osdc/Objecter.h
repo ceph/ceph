@@ -405,10 +405,10 @@ struct ObjectOperation {
     }
   }
 
-  void omap_get_vals_by_key(const std::set<std::string> &to_get,
+  void omap_get_vals_by_keys(const std::set<std::string> &to_get,
 			    std::map<std::string, bufferlist> *out_set,
 			    int *prval) {
-    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEY);
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEYS);
     bufferlist bl;
     ::encode(to_get, bl);
     op.op.extent.offset = 0;

@@ -193,18 +193,6 @@ static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
   return 0;
 }
 
-static void store_buckets(string& user_id, RGWUserBuckets& buckets)
-{
-  map<string, RGWBucketEnt>& m = buckets.get_buckets();
-  map<string, RGWBucketEnt>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWBucketEnt& entry = iter->second;
-    int r = rgw_add_bucket(user_id, entry.bucket);
-    if (r < 0)
-      dout(0) << "ERROR: failed to store bucket information for user " << user_id << " bucket=" << entry.bucket << dendl;
-  }
-}
-
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
@@ -213,53 +201,26 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
 {
   int ret;
   buckets.clear();
-  if (rgwstore->supports_tmap()) {
+  if (rgwstore->supports_omap()) {
     string buckets_obj_id;
     get_buckets_obj(user_id, buckets_obj_id);
     bufferlist bl;
-#define LARGE_ENOUGH_LEN (4096 * 1024)
-    size_t len = LARGE_ENOUGH_LEN;
-    off_t ofs = 0;
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
-
-    do {
-      ret = rgwstore->read(NULL, obj, ofs, len, bl);
-      if (ret == -ENOENT) {
-        /* try to read the old format */
-        ret = rgw_read_buckets_from_attr(user_id, buckets);
-        if (!ret) {
-          store_buckets(user_id, buckets);
-          goto done;
-        }
-
-        ret = 0;
-        return 0;
-      }
-      if (ret < 0)
-        return ret;
-
-      if (bl.length() != len)
-        break;
-
-      bl.clear();
-      len *= 2;
-    } while (1);
-
-    bufferlist::iterator p = bl.begin();
     bufferlist header;
     map<string,bufferlist> m;
-    try {
-      ::decode(header, p);
-      ::decode(m, p);
-      for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
-        bufferlist::iterator iter = q->second.begin();
-        RGWBucketEnt bucket;
-        ::decode(bucket, iter);
-        buckets.add(bucket);
-      }
-    } catch (buffer::error& err) {
-      dout(0) << "ERROR: failed to decode bucket information, caught buffer::error" << dendl;
-      return -EIO;
+
+    ret = rgwstore->omap_get_all(obj, header, m);
+    if (ret == -ENOENT)
+      ret = 0;
+
+    if (ret < 0)
+      return ret;
+
+    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+      bufferlist::iterator iter = q->second.begin();
+      RGWBucketEnt bucket;
+      ::decode(bucket, iter);
+      buckets.add(bucket);
     }
   } else {
     ret = rgw_read_buckets_from_attr(user_id, buckets);
@@ -274,7 +235,6 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     }
   }
 
-done:
   list<string> buckets_list;
 
   if (need_stats) {
@@ -310,7 +270,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
   int ret;
    string& bucket_name = bucket.name;
 
-  if (rgwstore->supports_tmap()) {
+  if (rgwstore->supports_omap()) {
     bufferlist bl;
 
     RGWBucketEnt new_bucket;
@@ -323,7 +283,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
     get_buckets_obj(user_id, buckets_obj_id);
 
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
-    ret = rgwstore->tmap_create(obj, bucket_name, bl);
+    ret = rgwstore->omap_set(obj, bucket_name, bl);
     if (ret < 0) {
       dout(0) << "ERROR: error adding bucket to directory: "
 		 << cpp_strerror(-ret)<< dendl;
@@ -357,14 +317,14 @@ int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket)
 {
   int ret;
 
-  if (rgwstore->supports_tmap()) {
+  if (rgwstore->supports_omap()) {
     bufferlist bl;
 
     string buckets_obj_id;
     get_buckets_obj(user_id, buckets_obj_id);
 
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
-    ret = rgwstore->tmap_del(obj, bucket.name);
+    ret = rgwstore->omap_del(obj, bucket.name);
     if (ret < 0) {
       dout(0) << "ERROR: error removing bucket from directory: "
 		 << cpp_strerror(-ret)<< dendl;

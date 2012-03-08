@@ -249,13 +249,13 @@ void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
   o->omap_get_header(bl, prval);
 }
 
-void librados::ObjectReadOperation::omap_get_vals_by_key(
+void librados::ObjectReadOperation::omap_get_vals_by_keys(
   const std::set<std::string> &keys,
   std::map<std::string, bufferlist> *map,
   int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->omap_get_vals_by_key(keys, map, prval);
+  o->omap_get_vals_by_keys(keys, map, prval);
 }
 
 void librados::ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
@@ -2191,7 +2191,6 @@ int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferli
   return r;
 }
 
-
 int librados::RadosClient::exec(IoCtxImpl& io, const object_t& oid,
 				const char *cls, const char *method,
 				bufferlist& inbl, bufferlist& outbl)
@@ -3026,6 +3025,115 @@ int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
 {
   object_t obj(oid);
   return io_ctx_impl->client->tmap_get(*io_ctx_impl, obj, bl);
+}
+
+int librados::IoCtx::omap_get_vals(const std::string& oid,
+                                   const std::string& start_after,
+                                   uint64_t max_return,
+                                   std::map<std::string, bufferlist> *out_vals)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_vals(start_after, max_return, out_vals, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_vals(const std::string& oid,
+                                   const std::string& start_after,
+                                   const std::string& filter_prefix,
+                                   uint64_t max_return,
+                                   std::map<std::string, bufferlist> *out_vals)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_vals(start_after, filter_prefix, max_return, out_vals, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_keys(const std::string& oid,
+                                   const std::string& start_after,
+                                   uint64_t max_return,
+                                   std::set<std::string> *out_keys)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_keys(start_after, max_return, out_keys, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_header(const std::string& oid,
+                                     bufferlist *bl)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_header(bl, &r);
+  bufferlist b;
+  int ret = operate(oid, &op, &b);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_get_vals_by_keys(const std::string& oid,
+                                           const std::set<std::string>& keys,
+                                           std::map<std::string, bufferlist> *vals)
+{
+  ObjectReadOperation op;
+  int r;
+  bufferlist bl;
+  op.omap_get_vals_by_keys(keys, vals, &r);
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::omap_set(const std::string& oid,
+                              const map<string, bufferlist>& m)
+{
+  ObjectWriteOperation op;
+  op.omap_set(m);
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_set_header(const std::string& oid,
+                                     const bufferlist& bl)
+{
+  ObjectWriteOperation op;
+  op.omap_set_header(bl);
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_clear(const std::string& oid)
+{
+  ObjectWriteOperation op;
+  op.omap_clear();
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_rm_keys(const std::string& oid,
+                                  const std::set<std::string>& keys)
+{
+  ObjectWriteOperation op;
+  op.omap_rm_keys(keys);
+  return operate(oid, &op);
 }
 
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
