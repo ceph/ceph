@@ -2449,7 +2449,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _touch(cid, oid);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _touch(cid, oid);
       }
       break;
       
@@ -2461,7 +2462,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	uint64_t len = i.get_length();
 	bufferlist bl;
 	i.get_bl(bl);
-	r = _write(cid, oid, off, len, bl);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _write(cid, oid, off, len, bl);
       }
       break;
       
@@ -2471,7 +2473,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
-	r = _zero(cid, oid, off, len);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _zero(cid, oid, off, len);
       }
       break;
       
@@ -2490,7 +2493,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
-	r = _truncate(cid, oid, off);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _truncate(cid, oid, off);
       }
       break;
       
@@ -2498,7 +2502,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _remove(cid, oid);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _remove(cid, oid);
       }
       break;
       
@@ -2509,7 +2514,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
-	r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
 	if (r == -ENOSPC)
 	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
 		  << " name " << name << " size " << bl.length() << dendl;
@@ -2522,7 +2528,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t oid = i.get_oid();
 	map<string, bufferptr> aset;
 	i.get_attrset(aset);
-	r = _setattrs(cid, oid, aset);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _setattrs(cid, oid, aset);
   	if (r == -ENOSPC)
 	  dout(0) << " ENOSPC on setxattrs on " << cid << "/" << oid << dendl;
       }
@@ -2533,7 +2540,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	string name = i.get_attrname();
-	r = _rmattr(cid, oid, name.c_str());
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _rmattr(cid, oid, name.c_str());
       }
       break;
 
@@ -2541,7 +2549,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _rmattrs(cid, oid);
+	if (_check_replay_guard(cid, oid, spos))
+	  r = _rmattrs(cid, oid);
       }
       break;
       
@@ -2588,7 +2597,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	// this operation is non-idempotent, but we tolerate replay below.
 
 	coll_t cid = i.get_cid();
-	r = _create_collection(cid);
+	if (_check_replay_guard(cid, spos))
+	  r = _create_collection(cid);
       }
       break;
 
@@ -2597,7 +2607,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	// this operation is non-idempotent, but we tolerate replay below.
 
 	coll_t cid = i.get_cid();
-	r = _destroy_collection(cid);
+	if (_check_replay_guard(cid, spos))
+	  r = _destroy_collection(cid);
       }
       break;
 
@@ -2633,7 +2644,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
-	r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
+	if (_check_replay_guard(cid, spos))
+	  r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
 
@@ -2641,7 +2653,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	string name = i.get_attrname();
-	r = _collection_rmattr(cid, name.c_str());
+	if (_check_replay_guard(cid, spos))
+	  r = _collection_rmattr(cid, name.c_str());
       }
       break;
 
