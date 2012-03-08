@@ -1379,8 +1379,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
   if (ret < 0)
     return ret;
 
-  string start_after;
-  ret = rgwstore->omap_get(obj, start_after, -1, header, parts_map);
+  ret = rgwstore->omap_get_all(obj, header, parts_map);
   if (ret < 0)
     return ret;
 

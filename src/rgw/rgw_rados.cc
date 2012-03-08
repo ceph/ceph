@@ -520,8 +520,7 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
   string pool_name;
 
   rgw_obj obj(pi_buckets_rados, avail_pools);
-  string start_after;
-  int ret = omap_get(obj, start_after, -1, header, m);
+  int ret = omap_get_all(obj, header, m);
   if (ret < 0 || !m.size()) {
     vector<string> names;
     names.push_back(default_storage_pool);
@@ -582,8 +581,7 @@ int RGWRados::list_placement_set(set<string>& names)
   string pool_name;
 
   rgw_obj obj(pi_buckets_rados, avail_pools);
-  string start_after;
-  int ret = omap_get(obj, start_after, -1, header, m);
+  int ret = omap_get_all(obj, header, m);
   if (ret < 0)
     return ret;
 
@@ -1950,7 +1948,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
   return ret;
 }
 
-int RGWRados::omap_get(rgw_obj& obj, string& start_after, int max, bufferlist& header, std::map<string, bufferlist>& m)
+int RGWRados::omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
 {
   bufferlist bl;
   librados::IoCtx io_ctx;
@@ -1963,7 +1961,8 @@ int RGWRados::omap_get(rgw_obj& obj, string& start_after, int max, bufferlist& h
 
   io_ctx.locator_set_key(key);
 
-  r = io_ctx.omap_get_vals(oid, start_after, max, &m);
+  string start_after;
+  r = io_ctx.omap_get_vals(oid, start_after, -1, &m);
   if (r < 0)
     return r;
 

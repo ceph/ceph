@@ -238,7 +238,7 @@ public:
 
   virtual bool supports_omap() { return false; }
 
-  virtual int omap_get(rgw_obj& obj, string& start_after, int max, bufferlist& header, std::map<string, bufferlist>& m) { return -ENOTSUP; }
+  virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m) { return -ENOTSUP; }
   virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
   virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m) { return -ENOTSUP; }
   virtual int omap_del(rgw_obj& obj, std::string& key) { return -ENOTSUP; }

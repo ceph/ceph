@@ -209,8 +209,7 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     bufferlist header;
     map<string,bufferlist> m;
 
-    string start_after;
-    ret = rgwstore->omap_get(obj, start_after, -1, header, m);
+    ret = rgwstore->omap_get_all(obj, header, m);
     if (ret == -ENOENT)
       ret = 0;
 
