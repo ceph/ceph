@@ -106,6 +106,7 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   if (header_bl.length() != 0) {
     CLS_LOG("ERROR: index already initialized\n");
+    return -EINVAL;
   }
 
   rgw_bucket_dir dir;
