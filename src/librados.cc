@@ -214,12 +214,23 @@ void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, 
 
 void librados::ObjectReadOperation::omap_get_vals(
   const std::string &start_after,
+  const std::string &filter_prefix,
   uint64_t max_return,
   std::map<std::string, bufferlist> *out_vals,
   int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->omap_get_vals(start_after, max_return, out_vals, prval);
+  o->omap_get_vals(start_after, filter_prefix, max_return, out_vals, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_get_vals(start_after, "", max_return, out_vals, prval);
 }
 
 void librados::ObjectReadOperation::omap_get_keys(

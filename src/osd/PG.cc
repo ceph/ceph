@@ -2286,8 +2286,7 @@ void PG::read_state(ObjectStore *store)
     ObjectStore::Transaction t;
     coll_t cr_log_coll(cr_log_coll_name);
     t.create_collection(cr_log_coll);
-    t.collection_add(cr_log_coll, coll_t::META_COLL, log_oid);
-    t.collection_remove(coll_t::META_COLL, log_oid);
+    t.collection_move(cr_log_coll, coll_t::META_COLL, log_oid);
     t.touch(coll_t::META_COLL, log_oid);
     write_info(t);
     store->apply_transaction(t);

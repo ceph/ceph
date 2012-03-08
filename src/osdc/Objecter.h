@@ -383,6 +383,7 @@ struct ObjectOperation {
   }
 
   void omap_get_vals(const string &start_after,
+		     const string &filter_prefix,
 		     uint64_t max_to_get,
 		     std::map<std::string, bufferlist> *out_set,
 		     int *prval) {
@@ -390,6 +391,7 @@ struct ObjectOperation {
     bufferlist bl;
     ::encode(start_after, bl);
     ::encode(max_to_get, bl);
+    ::encode(filter_prefix, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);

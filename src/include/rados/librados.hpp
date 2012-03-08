@@ -236,6 +236,24 @@ namespace librados
       std::map<std::string, bufferlist> *out_vals,
       int *prval);
 
+    /**
+     * omap_get_vals: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @param filter_prefix [in] list only keys beginning with filter_prefix
+     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals(
+      const std::string &start_after,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      int *prval);
+
 
     /**
      * omap_get_keys: keys from the object omap
