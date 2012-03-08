@@ -68,19 +68,19 @@ this situation, the monitor marks any PG whose primary OSD has failed
 as `stale`.  For example::
 
  $ ceph health
- HEALTH_WARN 24 pgs stale; 3/3 in osds are down
+ HEALTH_WARN 24 pgs stale; 3/300 in osds are down
 
 You can identify which PGs are stale, and what the last OSDs to store
 them were, with::
 
  $ ceph health detail
- HEALTH_WARN 24 pgs stale; 3/3 in osds are down
+ HEALTH_WARN 24 pgs stale; 3/300 in osds are down
  ...
  pg 2.5 is stuck stale+active+remapped, last acting [2,0]
  ...
- osd.0 is down since epoch 23, last address 192.168.106.220:6800/11080
- osd.1 is down since epoch 13, last address 192.168.106.220:6803/11539
- osd.2 is down since epoch 24, last address 192.168.106.220:6806/11861
+ osd.10 is down since epoch 23, last address 192.168.106.220:6800/11080
+ osd.11 is down since epoch 13, last address 192.168.106.220:6803/11539
+ osd.12 is down since epoch 24, last address 192.168.106.220:6806/11861
 
 If we want to get PG 2.5 back online, for example, this tells us that
 it was last managed by ceph-osds 0 and 2.  Restarting those ceph-osd
@@ -186,6 +186,19 @@ Under certain combinations of failures Ceph may complain about
 
 This means that the storage cluster knows that some objects (or newer
 copies of existing objects) exist, but it hasn't found copies of them.
+One example of how this might come about for a PG whose data is on ceph-osds
+A and B:
+
+* A goes down
+* B handles some writes, alone
+* A comes up
+* A and B repeer, and the objects missing on A are queued for recovery.
+* Before the new objects are copied, B goes down.
+
+Now A knows that these object exist, but there is no live ceph-osd who
+has a copy.  In this case, IO to those objects will block, and the
+cluster will hope that the failed node comes back soon; this is
+assumed to be preferable to returning an IO error to the user.
 
 First, you can identify which objects are unfound with::
 

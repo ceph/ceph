@@ -339,6 +339,11 @@ AC_CHECK_FUNC([sync_file_range],
 	[AC_DEFINE([HAVE_SYNC_FILE_RANGE], [], [sync_file_range(2) is supported])],
 	[])
 
+# fallocate
+AC_CHECK_FUNC([fallocate],
+	[AC_DEFINE([HAVE_FALLOCATE], [], [fallocate(2) is supported])],
+	[])
+
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL

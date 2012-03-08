@@ -280,10 +280,11 @@ public:
   public:
     // ok
     uint64_t tail;                     // first byte of log. 
-    uint64_t head;                        // byte following end of log.
+    uint64_t head;                     // byte following end of log.
+    uint64_t zero_to;                // first non-zeroed byte of log.
     bool has_checksums;
 
-    OndiskLog() : tail(0), head(0) {}
+    OndiskLog() : tail(0), head(0), zero_to(0) {}
 
     uint64_t length() { return head - tail; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
@@ -291,12 +292,14 @@ public:
     void zero() {
       tail = 0;
       head = 0;
+      zero_to = 0;
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(3, 3, bl);
+      ENCODE_START(4, 3, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
+      ::encode(zero_to, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
@@ -304,17 +307,23 @@ public:
       has_checksums = (struct_v >= 2);
       ::decode(tail, bl);
       ::decode(head, bl);
+      if (struct_v >= 4)
+	::decode(zero_to, bl);
+      else
+	zero_to = 0;
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
       f->dump_unsigned("head", head);
       f->dump_unsigned("tail", tail);
+      f->dump_unsigned("zero_to", zero_to);
     }
     static void generate_test_instances(list<OndiskLog*>& o) {
       o.push_back(new OndiskLog);
       o.push_back(new OndiskLog);
-      o.back()->tail = 1;
-      o.back()->head = 2;
+      o.back()->tail = 2;
+      o.back()->head = 3;
+      o.back()->zero_to = 1;
     }
   };
   WRITE_CLASS_ENCODER(OndiskLog)

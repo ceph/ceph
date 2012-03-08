@@ -746,11 +746,11 @@ TEST(LibRadosAio, OmapPP) {
 
     to_get.insert("foo");
     to_get.insert("qfoo3");
-    op.omap_get_vals_by_key(to_get, &got3, 0);
+    op.omap_get_vals_by_keys(to_get, &got3, 0);
 
     op.omap_get_header(&header, 0);
 
-		op.omap_get_vals("foo2", "q", 1, &got4, 0);
+    op.omap_get_vals("foo2", "q", 1, &got4, 0);
 
     ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
     {

@@ -1900,7 +1900,7 @@ void OSD::dump_ops_in_flight(ostream& ss)
     m->print(name);
     jf.open_object_section("op");
     jf.dump_string("description", name.str().c_str()); // this OpRequest
-    jf.dump_float("received_at", (*p)->received_time);
+    jf.dump_stream("received_at") << (*p)->received_time;
     jf.dump_float("age", now - (*p)->received_time);
     jf.dump_string("flag_point", (*p)->state_string());
     if (m->get_orig_source().is_client()) {
@@ -3265,7 +3265,16 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = op_wq._dequeue();
     if (!pg)
       break;
+
+    // op_wq is inside pg->lock
+    op_wq.unlock();
     pg->lock();
+    op_wq.lock();
+
+    // we should still have something in op_queue, unless a racing
+    // thread did something very strange :/
+    assert(!pg->op_queue.empty());
+
     OpRequest *op = pg->op_queue.front();
     pg->op_queue.pop_front();
     pg->unlock();

@@ -915,7 +915,7 @@ public:
 	omap_requested_keys.insert(key);
       }
     }
-    op.omap_get_vals_by_key(omap_requested_keys, &omap_returned_values, 0);
+    op.omap_get_vals_by_keys(omap_requested_keys, &omap_returned_values, 0);
 
     op.omap_get_keys("", -1, &omap_keys, 0);
     op.omap_get_vals("", -1, &omap, 0);
