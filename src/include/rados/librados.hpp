@@ -371,7 +371,7 @@ namespace librados
                               const std::set<std::string>& keys,
                               std::map<std::string, bufferlist> *vals);
     int omap_set(const std::string& oid,
-                 const map<string, bufferlist>& map);
+                 const std::map<std::string, bufferlist>& map);
     int omap_set_header(const std::string& oid,
                         const bufferlist& bl);
     int omap_clear(const std::string& oid);
