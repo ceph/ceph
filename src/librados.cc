@@ -3043,6 +3043,23 @@ int librados::IoCtx::omap_get_vals(const std::string& oid,
   return r;
 }
 
+int librados::IoCtx::omap_get_vals(const std::string& oid,
+                                   const std::string& start_after,
+                                   const std::string& filter_prefix,
+                                   uint64_t max_return,
+                                   std::map<std::string, bufferlist> *out_vals)
+{
+  ObjectReadOperation op;
+  int r;
+  op.omap_get_vals(start_after, filter_prefix, max_return, out_vals, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
 int librados::IoCtx::omap_get_keys(const std::string& oid,
                                    const std::string& start_after,
                                    uint64_t max_return,

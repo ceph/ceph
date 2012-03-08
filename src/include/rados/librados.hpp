@@ -356,6 +356,11 @@ namespace librados
                       const std::string& start_after,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals(const std::string& oid,
+                      const std::string& start_after,
+                      const std::string& filter_prefix,
+                      uint64_t max_return,
+                      std::map<std::string, bufferlist> *out_vals);
     int omap_get_keys(const std::string& oid,
                       const std::string& start_after,
                       uint64_t max_return,
