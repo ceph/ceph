@@ -345,8 +345,11 @@ public:
   int _write(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);
   int _zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len);
   int _truncate(coll_t cid, const hobject_t& oid, uint64_t size);
-  int _clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid);
-  int _clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+	     const SequencerPosition& spos);
+  int _clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
+		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _remove(coll_t cid, const hobject_t& oid);

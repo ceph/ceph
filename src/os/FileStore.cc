@@ -2552,7 +2552,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	hobject_t noid = i.get_oid();
-	r = _clone(cid, oid, noid);
+	r = _clone(cid, oid, noid, spos);
       }
       break;
 
@@ -2565,7 +2565,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t noid = i.get_oid();
  	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
-	r = _clone_range(cid, oid, noid, off, len, off);
+	r = _clone_range(cid, oid, noid, off, len, off, spos);
       }
       break;
 
@@ -2579,7 +2579,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
  	uint64_t srcoff = i.get_length();
 	uint64_t len = i.get_length();
  	uint64_t dstoff = i.get_length();
-	r = _clone_range(cid, oid, noid, srcoff, len, dstoff);
+	r = _clone_range(cid, oid, noid, srcoff, len, dstoff, spos);
       }
       break;
 
@@ -2655,7 +2655,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	
 	coll_t cid(i.get_cid());
 	coll_t ncid(i.get_cid());
-	r = _collection_rename(cid, ncid);
+	r = _collection_rename(cid, ncid, spos);
       }
       break;
 
@@ -3024,10 +3024,13 @@ int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t l
   return ret;
 }
 
-int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid)
+int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+		      const SequencerPosition& spos)
 {
   dout(15) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
 
+  if (!_check_replay_guard(cid, newoid, spos))
+    return 0;
 
   int o, n, r;
   Index index;
@@ -3050,6 +3053,9 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     r = -errno;
   dout(20) << "objectmap_clone_keys" << dendl;
   r = object_map->clone_keys(oldoid, from, newoid, to);
+
+  // clone is non-idempotent; record our work.
+  _set_replay_guard(n, spos);
 
   TEMP_FAILURE_RETRY(::close(n));
  out:
@@ -3190,9 +3196,13 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 }
 
 int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
-			    uint64_t srcoff, uint64_t len, uint64_t dstoff)
+			    uint64_t srcoff, uint64_t len, uint64_t dstoff,
+			    const SequencerPosition& spos)
 {
   dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
+
+  if (!_check_replay_guard(cid, newoid, spos))
+    return 0;
 
   int r;
   int o, n;
@@ -3207,6 +3217,10 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
     goto out;
   }
   r = _do_clone_range(o, n, srcoff, len, dstoff);
+
+  // clone is non-idempotent; record our work.
+  _set_replay_guard(n, spos);
+
   TEMP_FAILURE_RETRY(::close(n));
  out:
   TEMP_FAILURE_RETRY(::close(o));
