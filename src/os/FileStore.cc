@@ -3980,15 +3980,27 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   return r;
 }
 
-int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
+int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
+				  const SequencerPosition& spos)
 {
   char new_coll[PATH_MAX], old_coll[PATH_MAX];
   get_cdir(cid, old_coll, sizeof(old_coll));
   get_cdir(ncid, new_coll, sizeof(new_coll));
+
+  if (!_check_replay_guard(ncid, spos))
+    return 0;
+
   int ret = 0;
   if (::rename(old_coll, new_coll)) {
     ret = -errno;
   }
+
+  if (ret >= 0) {
+    int fd = ::open(new_coll, O_RDONLY);
+    assert(fd >= 0);
+    _set_replay_guard(fd, NULL, NULL, spos);
+  }
+
   dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
 	   << ": ret = " << ret << dendl;
   return ret;

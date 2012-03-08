@@ -391,7 +391,8 @@ public:
   int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
   int _collection_rmattr(coll_t c, const char *name);
   int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
-  int _collection_rename(const coll_t &cid, const coll_t &ncid);
+  int _collection_rename(const coll_t &cid, const coll_t &ncid,
+			 const SequencerPosition& spos);
 
   // collections
   int list_collections(vector<coll_t>& ls);
