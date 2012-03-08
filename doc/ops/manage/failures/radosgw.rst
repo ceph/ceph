@@ -47,5 +47,58 @@ Of particular interest::
 
 will dump information about current in-progress requests with the
 RADOS cluster.  This allows one to identify if any requests are blocked
-by a non-responsive ceph-osd.
+by a non-responsive ceph-osd.  For example, one might see::
 
+{ "ops": [
+        { "tid": 1858,
+          "pg": "2.d2041a48",
+          "osd": 1,
+          "last_sent": "2012-03-08 14:56:37.949872",
+          "attempts": 1,
+          "object_id": "fatty_25647_object1857",
+          "object_locator": "@2",
+          "snapid": "head",
+          "snap_context": "0=[]",
+          "mtime": "2012-03-08 14:56:37.949813",
+          "osd_ops": [
+                "write 0~4096"]},
+        { "tid": 1873,
+          "pg": "2.695e9f8e",
+          "osd": 1,
+          "last_sent": "2012-03-08 14:56:37.970615",
+          "attempts": 1,
+          "object_id": "fatty_25647_object1872",
+          "object_locator": "@2",
+          "snapid": "head",
+          "snap_context": "0=[]",
+          "mtime": "2012-03-08 14:56:37.970555",
+          "osd_ops": [
+                "write 0~4096"]}],
+  "linger_ops": [],
+  "pool_ops": [],
+  "pool_stat_ops": [],
+  "statfs_ops": []}
+
+In this dump, two requests are in progress.  The ``last_sent`` field is
+the time the RADOS request was sent.  If this is a while ago, it suggests
+that the OSD is not responding.  For example, for request 1858, you could
+check the OSD status with::
+
+ $ ceph pg map 2.d2041a48
+ osdmap e9 pg 2.d2041a48 (2.0) -> up [1,0] acting [1,0]
+
+This tells us to look at ``osd.1``, the primary copy for this PG::
+
+ $ ceph --admin-daemon /var/run/ceph/osd.1.asok
+ { "num_ops": 651,
+  "ops": [
+        { "description": "osd_op(client.4124.0:1858 fatty_25647_object1857 [write 0~4096] 2.d2041a48)",
+          "received_at": "1331247573.344650",
+          "age": "25.606449",
+          "flag_point": "waiting for sub ops",
+          "client_info": { "client": "client.4124",
+              "tid": 1858}},
+ ...
+
+The ``flag_point`` field indicates that the OSD is currently waiting
+for replicas to respond, in this case ``osd.0``.  
