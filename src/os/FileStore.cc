@@ -2625,7 +2625,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
        {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _collection_remove(cid, oid);
+	if (_check_replay_guard(cid, spos))
+	  r = _collection_remove(cid, oid);
        }
       break;
 
