@@ -3265,7 +3265,16 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = op_wq._dequeue();
     if (!pg)
       break;
+
+    // op_wq is inside pg->lock
+    op_wq.unlock();
     pg->lock();
+    op_wq.lock();
+
+    // we should still have something in op_queue, unless a racing
+    // thread did something very strange :/
+    assert(!pg->op_queue.empty());
+
     OpRequest *op = pg->op_queue.front();
     pg->op_queue.pop_front();
     pg->unlock();
