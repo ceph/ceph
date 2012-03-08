@@ -2765,10 +2765,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     spos.op++;
   }
-  if (!idempotent && !btrfs_stable_commits) {
-    dout(10) << "performed non-idempotent operation and not using btrfs snaps, triggering a commit" << dendl;
-    trigger_commit(op_seq);
-  }
 
   return 0;  // FIXME count errors
 }
