@@ -709,6 +709,29 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   unsigned struct_end = bl.get_off() + struct_len;			\
   do {
 
+#define __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, skip_v, bl)	\
+  __u8 struct_v;							\
+  ::decode(struct_v, bl);						\
+  if (struct_v >= compatv) {						\
+    __u8 struct_compat;							\
+    ::decode(struct_compat, bl);					\
+    if (v < struct_compat)						\
+      throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
+  } else if (skip_v) {							\
+    if ((int)bl.get_remaining() < skip_v)				\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    bl.advance(skip_v);							\
+  }									\
+  unsigned struct_end = 0;						\
+  if (struct_v >= lenv) {						\
+    __u32 struct_len;							\
+    ::decode(struct_len, bl);						\
+    if (struct_len > bl.get_remaining())				\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    struct_end = bl.get_off() + struct_len;				\
+  }									\
+  do {
+
 /**
  * start a decoding block with legacy support for older encoding schemes
  *
@@ -724,23 +747,27 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
  * @param bl bufferlist::iterator containing the encoded data
  */
 #define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
-  __u8 struct_v;							\
-  ::decode(struct_v, bl);						\
-  if (struct_v >= compatv) {						\
-    __u8 struct_compat;							\
-    ::decode(struct_compat, bl);					\
-    if (v < struct_compat)						\
-      throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
-  }									\
-  unsigned struct_end = 0;						\
-  if (struct_v >= lenv) {						\
-    __u32 struct_len;							\
-    ::decode(struct_len, bl);						\
-    if (struct_len > bl.get_remaining())				\
-      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
-    struct_end = bl.get_off() + struct_len;				\
-  }									\
-  do {
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 0, bl)
+
+/**
+ * start a decoding block with legacy support for older encoding schemes
+ *
+ * This version of the macro assumes the legacy encoding had a 32 bit
+ * version
+ *
+ * The old encoding schemes has a __u8 struct_v only, or lacked either
+ * the compat version or length.  Skip those fields conditionally.
+ *
+ * Most of the time, v, compatv, and lenv will all match the version
+ * where the structure was switched over to the new macros.
+ *
+ * @param v current version of the encoding that the code supports/encodes
+ * @param compatv oldest version that includes a __u8 compat version field
+ * @param lenv oldest version that includes a __u32 length wrapper
+ * @param bl bufferlist::iterator containing the encoded data
+ */
+#define DECODE_START_LEGACY_COMPAT_LEN_32(v, compatv, lenv, bl)		\
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3, bl)
 
 /**
  * finish decode block
