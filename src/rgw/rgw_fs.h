@@ -21,7 +21,7 @@ public:
   int create_bucket(std::string& owner, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool system_bucket, bool exclusive, uint64_t auid=0);
   int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
 	      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-	      map<std::string, bufferlist> *rmattrs, const bufferlist *data);
+	      map<std::string, bufferlist> *rmattrs, const bufferlist *data, RGWObjManifest *manifest);
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t size, bool exclusive);
   int copy_obj(void *ctx, rgw_obj& dest_obj,

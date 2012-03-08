@@ -24,6 +24,53 @@ struct RGWCloneRangeInfo {
   uint64_t len;
 };
 
+struct RGWObjManifestPart {
+  rgw_obj loc;       /* the object where the data is located */
+  uint64_t loc_ofs;  /* the offset at that object where the data is located */
+  uint64_t size;     /* the part size */
+
+  RGWObjManifestPart() : loc_ofs(0), size(0) {}
+
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+    ::encode(ver, bl);
+    ::encode(loc, bl);
+    ::encode(loc_ofs, bl);
+    ::encode(size, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+     ::decode(ver, bl);
+     ::decode(loc, bl);
+     ::decode(loc_ofs, bl);
+     ::decode(size, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWObjManifestPart);
+
+struct RGWObjManifest {
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t obj_size;
+
+  RGWObjManifest() : obj_size(0) {}
+
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+    ::encode(ver, bl);
+    ::encode(obj_size, bl);
+    ::encode(objs, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+     ::decode(ver, bl);
+     ::decode(obj_size, bl);
+     ::decode(objs, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWObjManifest);
+
 /**
  * Abstract class defining the interface for storage devices used by RGW.
  */
@@ -75,7 +122,8 @@ public:
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                       map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                       map<std::string, bufferlist>* rmattrs,
-                      const bufferlist *data) = 0;
+                      const bufferlist *data,
+                      RGWObjManifest *manifest) = 0;
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, bool exclusive) = 0;
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
@@ -86,7 +134,7 @@ public:
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     bufferlist bl;
     bl.append(data, len);
-    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl);
+    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl, NULL);
     return ret;
   }
 
