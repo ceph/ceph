@@ -366,6 +366,17 @@ int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inb
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
+int cls_cxx_map_clear(cls_method_context_t hctx)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+
+  op.op.op = CEPH_OSD_OP_OMAPCLEAR;
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
 int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
