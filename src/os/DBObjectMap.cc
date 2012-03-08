@@ -802,7 +802,11 @@ int DBObjectMap::init() {
   return 0;
 }
 
-int DBObjectMap::write_state() {
+int DBObjectMap::sync() {
+  return write_state(true);
+}
+
+int DBObjectMap::write_state(bool sync) {
   dout(20) << "dbobjectmap: seq is " << next_seq << dendl;
   KeyValueDB::Transaction t = db->get_transaction();
   State state;
@@ -812,7 +816,7 @@ int DBObjectMap::write_state() {
   map<string, bufferlist> to_write;
   to_write[GLOBAL_STATE_KEY] = bl;
   t->set(SYS_PREFIX, to_write);
-  return db->submit_transaction(t);
+  return sync ? db->submit_transaction_sync(t) : db->submit_transaction(t);
 }
 
 

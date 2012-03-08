@@ -42,6 +42,9 @@ public:
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
+  virtual int submit_transaction_sync(Transaction t) {
+    return submit_transaction(t);
+  }
 
   /// Retrieve Keys
   virtual int get(
