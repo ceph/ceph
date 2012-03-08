@@ -251,6 +251,12 @@ protected:
   virtual void mark_disposable(Connection *con) = 0;
   virtual void mark_down_all() = 0;
 
+  /**
+   * Get the Connection object associated with a given entity. If a
+   * Connection does not exist, create one and establish a logical connection.
+   *
+   * @param dest The entity to get a connection for.
+   */
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
   virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }

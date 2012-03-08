@@ -2512,16 +2512,10 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
       }
     }
     if (!pipe) {
-      Policy& policy = get_policy(dest.name.type());
-      if (policy.lossy && policy.server)
-	pipe = NULL;
-      else
-	pipe = connect_rank(dest.addr, dest.name.type());
+      pipe = connect_rank(dest.addr, dest.name.type());
     }
   }
-  if (pipe)
-    return (Connection *)pipe->connection_state->get();
-  return NULL;
+  return (Connection *)pipe->connection_state->get();
 }
 
 
