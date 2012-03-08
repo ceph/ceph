@@ -2887,11 +2887,44 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
 
 int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len)
 {
+  dout(15) << "zero " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  int ret = 0;
+
+#ifdef HAVE_FALLOCATE
+# if !defined(DARWIN) && !defined(__FreeBSD__)
+  // first try to punch a hole.
+  int fd = lfn_open(cid, oid, O_RDONLY);
+  if (fd < 0) {
+    ret = -errno;
+    goto out;
+  }
+
+  // first try fallocate
+  ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE, offset, len);
+  if (ret < 0)
+    ret = -errno;
+  TEMP_FAILURE_RETRY(::close(fd));
+
+  if (ret == 0)
+    goto out;  // yay!
+  if (ret != -EOPNOTSUPP)
+    goto out;  // some other error
+# endif
+#endif
+
+  // lame, kernel is old and doesn't support it.
   // write zeros.. yuck!
-  bufferptr bp(len);
-  bufferlist bl;
-  bl.push_back(bp);
-  return _write(cid, oid, offset, len, bl);
+  dout(20) << "zero FALLOC_FL_PUNCH_HOLE not supported, falling back to writing zeros" << dendl;
+  {
+    bufferptr bp(len);
+    bufferlist bl;
+    bl.push_back(bp);
+    ret = _write(cid, oid, offset, len, bl);
+  }
+
+ out:
+  dout(20) << "zero " << cid << "/" << oid << " " << offset << "~" << len << " = " << ret << dendl;
+  return ret;
 }
 
 int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid)

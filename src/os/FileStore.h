@@ -37,6 +37,10 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+// from include/linux/falloc.h:
+#ifndef FALLOC_FL_PUNCH_HOLE
+# define FALLOC_FL_PUNCH_HOLE 0x2
+#endif
 
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
