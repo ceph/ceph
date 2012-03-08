@@ -1900,7 +1900,7 @@ void OSD::dump_ops_in_flight(ostream& ss)
     m->print(name);
     jf.open_object_section("op");
     jf.dump_string("description", name.str().c_str()); // this OpRequest
-    jf.dump_float("received_at", (*p)->received_time);
+    jf.dump_stream("received_at") << (*p)->received_time;
     jf.dump_float("age", now - (*p)->received_time);
     jf.dump_string("flag_point", (*p)->state_string());
     if (m->get_orig_source().is_client()) {
