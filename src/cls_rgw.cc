@@ -59,7 +59,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist bl;
 
   map<string, bufferlist> keys;
-  rc = cls_cxx_map_read_keys(hctx, op.start_obj, op.num_entries + 1, &keys);
+  rc = cls_cxx_map_read_keys(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
 

@@ -259,18 +259,22 @@ struct rgw_cls_list_op
 {
   string start_obj;
   uint32_t num_entries;
+  string filter_prefix;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(start_obj, bl);
     ::encode(num_entries, bl);
+    ::encode(filter_prefix, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(start_obj, bl);
     ::decode(num_entries, bl);
+    if (struct_v >= 2)
+      ::decode(filter_prefix, bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_op)

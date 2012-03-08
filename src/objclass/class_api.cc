@@ -251,11 +251,13 @@ int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>
   int ret;
 
   string start_after;
+  string filter_prefix;
   uint64_t max = (uint64_t)-1;
   bufferlist inbl;
 
   ::encode(start_after, op.indata);
   ::encode(max, op.indata);
+  ::encode(filter_prefix, op.indata);
 
   op.op.op = CEPH_OSD_OP_OMAPGETVALS;
   
@@ -272,7 +274,8 @@ int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>
   return vals->size();
 }
 
-int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj, uint64_t max, map<string, bufferlist>* vals)
+int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj,
+                          string& filter_prefix, uint64_t max, map<string, bufferlist>* vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -284,6 +287,7 @@ int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj, uint64_t
 
   ::encode(start_obj, op.indata);
   ::encode(max, op.indata);
+  ::encode(filter_prefix, op.indata);
 
   op.op.op = CEPH_OSD_OP_OMAPGETVALS;
   
