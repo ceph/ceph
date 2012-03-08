@@ -978,7 +978,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
   ObjectWriteOperation op;
   op.remove();
   string oid = dir_oid_prefix;
-  oid.append(marker);
+  oid.append(bucket.marker);
   librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
   r = list_ctx.aio_operate(oid, completion, &op);
   completion->release();
