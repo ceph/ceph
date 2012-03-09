@@ -666,6 +666,8 @@ struct RGWUploadPartInfo {
   string etag;
   utime_t modified;
 
+  RGWUploadPartInfo() : num(0), size(0) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(num, bl);

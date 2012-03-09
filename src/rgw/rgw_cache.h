@@ -32,7 +32,6 @@ struct ObjectMetaInfo {
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(struct_v, bl);
     ::decode(size, bl);
     utime_t t;
     ::decode(t, bl);

@@ -14,8 +14,8 @@
 #define CEPH_RGW_TAG_TIMEOUT 60*60*24
 
 enum RGWPendingState {
-  CLS_RGW_STATE_PENDING_MODIFY,
-  CLS_RGW_STATE_COMPLETE,
+  CLS_RGW_STATE_PENDING_MODIFY = 0,
+  CLS_RGW_STATE_COMPLETE       = 1,
 };
 
 enum RGWModifyOp {
@@ -27,6 +27,8 @@ struct rgw_bucket_pending_info {
   RGWPendingState state;
   utime_t timestamp;
   uint8_t op;
+
+  rgw_bucket_pending_info() : state(CLS_RGW_STATE_PENDING_MODIFY), op(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
@@ -104,7 +106,6 @@ struct rgw_bucket_dir_entry {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(3, 3, bl);
-    ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(epoch, bl);
     ::encode(exists, bl);
@@ -134,6 +135,8 @@ struct rgw_bucket_category_stats {
   uint64_t total_size;
   uint64_t total_size_rounded;
   uint64_t num_entries;
+
+  rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
@@ -200,6 +203,8 @@ struct rgw_cls_obj_prepare_op
   string tag;
   string locator;
 
+  rgw_cls_obj_prepare_op() : op(0) {}
+
   void encode(bufferlist &bl) const {
     ENCODE_START(3, 3, bl);
     ::encode(op, bl);
@@ -263,6 +268,8 @@ struct rgw_cls_list_op
 {
   string start_obj;
   uint32_t num_entries;
+
+  rgw_cls_list_op() : num_entries(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);

@@ -93,7 +93,6 @@ struct rgw_intent_log_entry {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(struct_v, bl);
     ::encode(obj, bl);
     ::encode(op_time, bl);
     ::encode(intent, bl);

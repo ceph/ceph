@@ -42,7 +42,7 @@ void ObjectCacheInfo::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("rm_xattrs");
-  for (; iter != rm_xattrs.end(); ++iter) {
+  for (iter = rm_xattrs.begin(); iter != rm_xattrs.end(); ++iter) {
     f->dump_string("name", iter->first);
     f->open_object_section("value");
     f->dump_unsigned("length", iter->second.length());
