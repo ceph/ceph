@@ -293,6 +293,8 @@ struct rgw_cls_list_ret
   rgw_bucket_dir dir;
   bool is_truncated;
 
+  rgw_cls_list_ret() : is_truncated(false) {}
+
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(dir, bl);
