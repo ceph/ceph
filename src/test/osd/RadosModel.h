@@ -248,6 +248,25 @@ public:
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
 
+  void remove_object_header(const string &oid)
+  {
+    ObjectDesc new_obj(&cont_gen);
+    for (map<int, map<string,ObjectDesc> >::reverse_iterator i =
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      map<string,ObjectDesc>::iterator j = i->second.find(oid);
+      if (j != i->second.end()) {
+	new_obj = j->second;
+	break;
+      }
+    }
+    new_obj.header = bufferlist();
+    pool_obj_cont[current_snap].erase(oid);
+    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+  }
+
+
   void update_object_header(const string &oid, const bufferlist &bl)
   {
     ObjectDesc new_obj(&cont_gen);
@@ -445,7 +464,7 @@ public:
 	     ++i) {
 	  to_remove.insert(i->first);
 	}
-	context->update_object_header(oid, bufferlist());
+	context->remove_object_header(oid);
       }
       context->rm_object_attrs(oid, to_remove);
     }
