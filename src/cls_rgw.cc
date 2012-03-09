@@ -219,9 +219,27 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.pending_map.erase(pinter);
   }
 
-  if (op.epoch <= entry.epoch) {
+  bool cancel = false;
+  bufferlist update_bl;
+
+  if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
+    CLS_LOG("rgw_bucket_complete_op(): cancel requested\n");
+    cancel = true;
+  } else if (op.epoch <= entry.epoch) {
     CLS_LOG("rgw_bucket_complete_op(): skipping request, old epoch\n");
-    return 0;
+    cancel = true;
+  }
+
+  bufferlist op_bl;
+
+  if (cancel) {
+    if (op.tag.size()) {
+      bufferlist new_key_bl;
+      ::encode(entry, new_key_bl);
+      return cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+    } else {
+      return 0;
+    }
   }
 
   if (entry.exists) {
@@ -230,8 +248,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     stats.total_size -= entry.meta.size;
     stats.total_size_rounded -= get_rounded_size(entry.meta.size);
   }
-
-  bufferlist op_bl;
 
   switch (op.op) {
   case CLS_RGW_OP_DEL:

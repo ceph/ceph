@@ -17,8 +17,9 @@ enum RGWPendingState {
 };
 
 enum RGWModifyOp {
-  CLS_RGW_OP_ADD = 0,
-  CLS_RGW_OP_DEL = 1,
+  CLS_RGW_OP_ADD    = 0,
+  CLS_RGW_OP_DEL    = 1,
+  CLS_RGW_OP_CANCEL = 2,
 };
 
 struct rgw_bucket_pending_info {
