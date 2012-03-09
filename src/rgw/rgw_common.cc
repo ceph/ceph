@@ -56,6 +56,9 @@ void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
 
 void RGWAccessKey::dump(Formatter *f) const
 {
+  f->dump_string("id", id);
+  f->dump_string("key", key);
+  f->dump_string("subuser", subuser);
 }
 
 void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
@@ -65,6 +68,8 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 
 void RGWSubUser::dump(Formatter *f) const
 {
+  f->dump_string("name", name);
+  f->dump_unsigned("perm_mask", perm_mask);
 }
 
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
@@ -74,6 +79,41 @@ void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 
 void RGWUserInfo::dump(Formatter *f) const
 {
+  f->dump_unsigned("auid", auid);
+  f->dump_string("user_id", user_id);
+  f->dump_string("display_name", display_name);
+  f->dump_string("user_email", user_email);
+
+  map<string, RGWAccessKey>::const_iterator aiter = access_keys.begin();
+  f->open_array_section("access_keys");
+  for (; aiter != access_keys.end(); ++aiter) {
+    f->open_object_section("entry");
+    f->dump_string("uid", aiter->first);
+    f->open_object_section("access_key");
+    aiter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+
+  aiter = swift_keys.begin();
+  for (; aiter != swift_keys.end(); ++aiter) {
+    f->open_object_section("entry");
+    f->dump_string("subuser", aiter->first);
+    f->open_object_section("key");
+    aiter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  map<string, RGWSubUser>::const_iterator siter = subusers.begin();
+  for (; siter != subusers.end(); ++siter) {
+    f->open_object_section("entry");
+    f->dump_string("id", siter->first);
+    f->open_object_section("subuser");
+    siter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  f->dump_int("suspended", (int)suspended);
 }
 
 void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
@@ -83,6 +123,10 @@ void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 
 void rgw_bucket::dump(Formatter *f) const
 {
+  f->dump_string("name", name);
+  f->dump_string("pool", pool);
+  f->dump_string("marker", marker);
+  f->dump_unsigned("bucket_id", bucket_id);
 }
 
 void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
@@ -92,6 +136,11 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
 
 void RGWBucketInfo::dump(Formatter *f) const
 {
+  f->open_object_section("bucket");
+  bucket.dump(f);
+  f->close_section();
+  f->dump_string("owner", owner);
+  f->dump_unsigned("flags", flags);
 }
 
 void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
@@ -101,6 +150,13 @@ void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
 
 void RGWBucketEnt::dump(Formatter *f) const
 {
+  f->open_object_section("bucket");
+  bucket.dump(f);
+  f->close_section();
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("size_rounded", size_rounded);
+  f->dump_stream("mtime") << mtime;
+  f->dump_unsigned("count", count);
 }
 
 void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
@@ -110,6 +166,10 @@ void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
 
 void RGWUploadPartInfo::dump(Formatter *f) const
 {
+  f->dump_unsigned("num", num);
+  f->dump_unsigned("size", size);
+  f->dump_string("etag", etag);
+  f->dump_stream("modified") << modified;
 }
 
 void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
@@ -119,6 +179,12 @@ void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
 
 void rgw_obj::dump(Formatter *f) const
 {
+  f->open_object_section("bucket");
+  bucket.dump(f);
+  f->close_section();
+  f->dump_string("key", key);
+  f->dump_string("ns", ns);
+  f->dump_string("object", object);
 }
 
 

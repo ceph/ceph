@@ -52,6 +52,9 @@ void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_in
 
 void rgw_bucket_pending_info::dump(Formatter *f) const
 {
+  f->dump_int("state", (int)state);
+  f->dump_stream("timestamp") << timestamp;
+  f->dump_int("op", (int)op);
 }
 
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
@@ -61,6 +64,14 @@ void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entr
 
 void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
 {
+  f->dump_int("category", category);
+  f->dump_unsigned("size", size);
+  f->dump_stream("mtime") << mtime;
+  f->dump_string("etag", etag);
+  f->dump_string("owner", owner);
+  f->dump_string("owner_display_name", owner_display_name);
+  f->dump_string("tag", tag);
+  f->dump_string("content_type", content_type);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
@@ -70,6 +81,23 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
+  f->dump_string("name", name);
+  f->dump_unsigned("epoch", epoch);
+  f->dump_string("locator", locator);
+  f->dump_int("exists", (int)exists);
+  f->open_object_section("meta");
+  meta.dump(f);
+  f->close_section();
+
+  map<string, struct rgw_bucket_pending_info>::const_iterator iter = pending_map.begin();
+  f->open_array_section("pending_map");
+  for (; iter != pending_map.end(); ++iter) {
+    f->dump_string("tag", iter->first);
+    f->open_object_section("info");
+    iter->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category_stats*>& o)
@@ -79,6 +107,9 @@ void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category
 
 void rgw_bucket_category_stats::dump(Formatter *f) const
 {
+  f->dump_unsigned("total_size", total_size);
+  f->dump_unsigned("total_size_rounded", total_size_rounded);
+  f->dump_unsigned("num_entries", num_entries);
 }
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)
@@ -88,6 +119,15 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
 
 void rgw_bucket_dir_header::dump(Formatter *f) const
 {
+  map<uint8_t, struct rgw_bucket_category_stats>::const_iterator iter = stats.begin();
+  f->open_array_section("stats");
+  for (; iter != stats.end(); ++iter) {
+    f->dump_int("category", (int)iter->first);
+    f->open_object_section("category_stats");
+    iter->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
@@ -97,6 +137,18 @@ void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
 
 void rgw_bucket_dir::dump(Formatter *f) const
 {
+  f->open_object_section("header");
+  header.dump(f);
+  f->close_section();
+  map<string, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
+  f->open_array_section("map");
+  for (; iter != m.end(); ++iter) {
+    f->dump_string("obj", iter->first);
+    f->open_object_section("dir_entry");
+    iter->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op*>& o)
@@ -106,6 +158,10 @@ void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op
 
 void rgw_cls_obj_prepare_op::dump(Formatter *f) const
 {
+  f->dump_int("op", op);
+  f->dump_string("name", name);
+  f->dump_string("tag", tag);
+  f->dump_string("locator", locator);
 }
 
 void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_op*>& o)
@@ -115,6 +171,14 @@ void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_
 
 void rgw_cls_obj_complete_op::dump(Formatter *f) const
 {
+  f->dump_int("op", (int)op);
+  f->dump_string("name", name);
+  f->dump_string("locator", locator);
+  f->dump_unsigned("epoch", epoch);
+  f->open_object_section("meta");
+  meta.dump(f);
+  f->close_section();
+  f->dump_string("tag", tag);
 }
 
 void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
@@ -124,6 +188,8 @@ void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
 
 void rgw_cls_list_op::dump(Formatter *f) const
 {
+  f->dump_string("start_obj", start_obj);
+  f->dump_unsigned("num_entries", num_entries);
 }
 
 void rgw_cls_list_ret::generate_test_instances(list<rgw_cls_list_ret*>& o)
@@ -133,6 +199,10 @@ void rgw_cls_list_ret::generate_test_instances(list<rgw_cls_list_ret*>& o)
 
 void rgw_cls_list_ret::dump(Formatter *f) const
 {
+  f->open_object_section("dir");
+  dir.dump(f);
+  f->close_section();
+  f->dump_int("is_truncated", (int)is_truncated);
 }
 
 

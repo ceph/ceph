@@ -18,6 +18,11 @@ void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>&
 
 void RGWObjManifestPart::dump(Formatter *f) const
 {
+  f->open_object_section("loc");
+  loc.dump(f);
+  f->close_section();
+  f->dump_unsigned("loc_ofs", loc_ofs);
+  f->dump_unsigned("size", size);
 }
 
 void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
@@ -27,6 +32,16 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
 
 void RGWObjManifest::dump(Formatter *f) const
 {
+  map<uint64_t, RGWObjManifestPart>::const_iterator iter = objs.begin();
+  f->open_array_section("objs");
+  for (; iter != objs.end(); ++iter) {
+    f->dump_unsigned("ofs", iter->first);
+    f->open_object_section("part");
+    iter->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->dump_unsigned("obj_size", obj_size);
 }
 
 RGWAccess* RGWAccess::store;
