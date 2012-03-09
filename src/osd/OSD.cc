@@ -546,7 +546,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   disk_tp(external_messenger->cct, "OSD::disk_tp", g_conf->osd_disk_threads),
   command_tp(external_messenger->cct, "OSD::command_tp", 1),
   heartbeat_lock("OSD::heartbeat_lock"),
-  heartbeat_stop(false), heartbeat_epoch(0),
+  heartbeat_stop(false), heartbeat_need_update(true), heartbeat_epoch(0),
   hbin_messenger(hbinm),
   hbout_messenger(hboutm),
   heartbeat_thread(this),
@@ -1464,10 +1464,22 @@ void OSD::_add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, uti
   }
 }
 
-void OSD::update_heartbeat_peers()
+void OSD::need_heartbeat_peer_update()
+{
+  heartbeat_lock.Lock();
+  dout(20) << "need_heartbeat_peer_update" << dendl;
+  heartbeat_need_update = true;
+  heartbeat_lock.Unlock();
+}
+
+void OSD::maybe_update_heartbeat_peers()
 {
   assert(osd_lock.is_locked());
-  heartbeat_lock.Lock();
+  Mutex::Locker l(heartbeat_lock);
+
+  if (!heartbeat_need_update)
+    return;
+  heartbeat_need_update = false;
 
   // filter heartbeat_from_stamp to only include osds that remain in
   // heartbeat_from.
@@ -1539,8 +1551,6 @@ void OSD::update_heartbeat_peers()
 
   dout(10) << "update_heartbeat_peers: hb   to: " << heartbeat_to << dendl;
   dout(10) << "update_heartbeat_peers: hb from: " << heartbeat_from << dendl;
-
-  heartbeat_lock.Unlock();
 }
 
 void OSD::reset_heartbeat_peers()
@@ -1800,6 +1810,8 @@ void OSD::tick()
   }
 
   map_lock.get_read();
+
+  maybe_update_heartbeat_peers();
 
   heartbeat_lock.Lock();
   heartbeat_check();
@@ -3764,7 +3776,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   trim_map_cache(oldest_last_clean);
-  update_heartbeat_peers();
+  maybe_update_heartbeat_peers();
 
   send_pg_temp();
 
@@ -4327,8 +4339,8 @@ void OSD::handle_pg_create(OpRequest *op)
   do_queries(query_map);
   do_infos(info_map);
 
-  if (num_created)
-    update_heartbeat_peers();
+  maybe_update_heartbeat_peers();
+
   op->put();
 }
 
@@ -4451,8 +4463,7 @@ void OSD::handle_pg_notify(OpRequest *op)
   do_queries(query_map);
   do_infos(info_map);
   
-  if (created)
-    update_heartbeat_peers();
+  maybe_update_heartbeat_peers();
 
   op->put();
 }
@@ -4500,8 +4511,8 @@ void OSD::handle_pg_log(OpRequest *op)
   int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(!tr);
 
-  if (created)
-    update_heartbeat_peers();
+  maybe_update_heartbeat_peers();
+
   op->put();
 }
 
@@ -4552,8 +4563,8 @@ void OSD::handle_pg_info(OpRequest *op)
   }
 
   do_infos(info_map);
-  if (created)
-    update_heartbeat_peers();
+
+  maybe_update_heartbeat_peers();
 
   op->put();
 }
@@ -4716,8 +4727,8 @@ void OSD::handle_pg_missing(OpRequest *op)
   _pro-cess_pg_info(m->get_epoch(), from, m->info, //misspelling added to prevent erroneous finds
 		   empty_log, &m->missing, query_map, NULL, created);
   do_queries(query_map);
-  if (created)
-    update_heartbeat_peers();
+
+  maybe_update_heartbeat_peers();
 
   op->put();
 #endif

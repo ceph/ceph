@@ -1686,18 +1686,30 @@ void PG::purge_strays()
 void PG::update_heartbeat_peers()
 {
   assert(is_locked());
-  heartbeat_peer_lock.Lock();
-  heartbeat_peers.clear();
+
+  set<int> new_peers;
   if (role == 0) {
     for (unsigned i=0; i<acting.size(); i++)
-      heartbeat_peers.insert(acting[i]);
+      new_peers.insert(acting[i]);
     for (unsigned i=0; i<up.size(); i++)
-      heartbeat_peers.insert(up[i]);
+      new_peers.insert(up[i]);
     for (map<int,pg_info_t>::iterator p = peer_info.begin(); p != peer_info.end(); ++p)
-      heartbeat_peers.insert(p->first);
+      new_peers.insert(p->first);
   }
-  dout(10) << "update_heartbeat_peers " << heartbeat_peers << dendl;
+
+  bool need_update = false;
+  heartbeat_peer_lock.Lock();
+  if (new_peers == heartbeat_peers) {
+    dout(10) << "update_heartbeat_peers " << heartbeat_peers << " unchanged" << dendl;
+  } else {
+    dout(10) << "update_heartbeat_peers " << heartbeat_peers << " -> " << new_peers << dendl;
+    heartbeat_peers.swap(new_peers);
+    need_update = true;
+  }
   heartbeat_peer_lock.Unlock();
+
+  if (need_update)
+    osd->need_heartbeat_peer_update();
 }
 
 void PG::update_stats()

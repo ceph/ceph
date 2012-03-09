@@ -256,7 +256,7 @@ private:
   // -- heartbeat --
   Mutex heartbeat_lock;
   Cond heartbeat_cond;
-  bool heartbeat_stop;
+  bool heartbeat_stop, heartbeat_need_update;
   epoch_t heartbeat_epoch;
   map<int, epoch_t> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
@@ -266,11 +266,12 @@ private:
   
   void _add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, utime_t>& old_from_stamp,
 			     map<int,Connection*>& old_con);
-  void update_heartbeat_peers();
+  void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();
   void heartbeat_check();
   void heartbeat_entry();
+  void need_heartbeat_peer_update();
 
   struct T_Heartbeat : public Thread {
     OSD *osd;
