@@ -45,6 +45,98 @@ static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
+void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
+{
+  o.push_back(new rgw_bucket_pending_info);
+}
+
+void rgw_bucket_pending_info::dump(Formatter *f) const
+{
+}
+
+void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
+{
+  o.push_back(new rgw_bucket_dir_entry_meta);
+}
+
+void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
+{
+}
+
+void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
+{
+  o.push_back(new rgw_bucket_dir_entry);
+}
+
+void rgw_bucket_dir_entry::dump(Formatter *f) const
+{
+}
+
+void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category_stats*>& o)
+{
+  o.push_back(new rgw_bucket_category_stats);
+}
+
+void rgw_bucket_category_stats::dump(Formatter *f) const
+{
+}
+
+void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)
+{
+  o.push_back(new rgw_bucket_dir_header);
+}
+
+void rgw_bucket_dir_header::dump(Formatter *f) const
+{
+}
+
+void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
+{
+  o.push_back(new rgw_bucket_dir);
+}
+
+void rgw_bucket_dir::dump(Formatter *f) const
+{
+}
+
+void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op*>& o)
+{
+  o.push_back(new rgw_cls_obj_prepare_op);
+}
+
+void rgw_cls_obj_prepare_op::dump(Formatter *f) const
+{
+}
+
+void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_op*>& o)
+{
+  o.push_back(new rgw_cls_obj_complete_op);
+}
+
+void rgw_cls_obj_complete_op::dump(Formatter *f) const
+{
+}
+
+void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
+{
+  o.push_back(new rgw_cls_list_op);
+}
+
+void rgw_cls_list_op::dump(Formatter *f) const
+{
+}
+
+void rgw_cls_list_ret::generate_test_instances(list<rgw_cls_list_ret*>& o)
+{
+  o.push_back(new rgw_cls_list_ret);
+}
+
+void rgw_cls_list_ret::dump(Formatter *f) const
+{
+}
+
+
+
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
 public:

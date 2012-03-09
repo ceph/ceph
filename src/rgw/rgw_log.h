@@ -81,6 +81,8 @@ struct rgw_log_entry {
       bucket_id = -1;
     DECODE_FINISH(p);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
@@ -104,6 +106,8 @@ struct rgw_intent_log_entry {
     ::decode(intent, p);
     DECODE_FINISH(p);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_intent_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 

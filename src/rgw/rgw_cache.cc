@@ -7,6 +7,33 @@
 using namespace std;
 
 
+void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
+{
+  o.push_back(new ObjectMetaInfo);
+}
+
+void ObjectMetaInfo::dump(Formatter *f) const
+{
+}
+
+void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
+{
+  o.push_back(new ObjectCacheInfo);
+}
+
+void ObjectCacheInfo::dump(Formatter *f) const
+{
+}
+
+void RGWCacheNotifyInfo::generate_test_instances(list<RGWCacheNotifyInfo*>& o)
+{
+  o.push_back(new RGWCacheNotifyInfo);
+}
+
+void RGWCacheNotifyInfo::dump(Formatter *f) const
+{
+}
+
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 {
   Mutex::Locker l(lock);

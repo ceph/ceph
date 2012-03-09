@@ -293,6 +293,8 @@ struct RGWAccessKey {
      ::decode(subuser, bl);
      DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWAccessKey*>& o);
 };
 WRITE_CLASS_ENCODER(RGWAccessKey);
 
@@ -314,6 +316,8 @@ struct RGWSubUser {
      ::decode(perm_mask, bl);
      DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWSubUser*>& o);
 };
 WRITE_CLASS_ENCODER(RGWSubUser);
 
@@ -400,6 +404,8 @@ struct RGWUserInfo
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWUserInfo*>& o);
 
   void clear() {
     user_id.clear();
@@ -453,6 +459,8 @@ struct rgw_bucket {
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
@@ -491,6 +499,8 @@ struct RGWBucketInfo
        ::decode(flags, bl);
      DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWBucketInfo*>& o);
 
   RGWBucketInfo() : flags(0) {}
 };
@@ -638,6 +648,8 @@ struct RGWBucketEnt {
     size_rounded = s;
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWBucketEnt*>& o);
   void clear() {
     bucket.clear();
     size = 0;
@@ -670,6 +682,8 @@ struct RGWUploadPartInfo {
     ::decode(modified, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWUploadPartInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
@@ -852,6 +866,8 @@ public:
       ::decode(bucket, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_obj*>& o);
 
   bool operator==(const rgw_obj& o) const {
     return (object.compare(o.object) == 0) &&

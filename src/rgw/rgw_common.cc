@@ -49,6 +49,78 @@ void rgw_perf_stop(CephContext *cct)
   delete perfcounter;
 }
 
+void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
+{
+  o.push_back(new RGWAccessKey);
+}
+
+void RGWAccessKey::dump(Formatter *f) const
+{
+}
+
+void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
+{
+  o.push_back(new RGWSubUser);
+}
+
+void RGWSubUser::dump(Formatter *f) const
+{
+}
+
+void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
+{
+  o.push_back(new RGWUserInfo);
+}
+
+void RGWUserInfo::dump(Formatter *f) const
+{
+}
+
+void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
+{
+  o.push_back(new rgw_bucket);
+}
+
+void rgw_bucket::dump(Formatter *f) const
+{
+}
+
+void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
+{
+  o.push_back(new RGWBucketInfo);
+}
+
+void RGWBucketInfo::dump(Formatter *f) const
+{
+}
+
+void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
+{
+  o.push_back(new RGWBucketEnt);
+}
+
+void RGWBucketEnt::dump(Formatter *f) const
+{
+}
+
+void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
+{
+  o.push_back(new RGWUploadPartInfo);
+}
+
+void RGWUploadPartInfo::dump(Formatter *f) const
+{
+}
+
+void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
+{
+  o.push_back(new rgw_obj);
+}
+
+void rgw_obj::dump(Formatter *f) const
+{
+}
+
 
 using namespace ceph::crypto;
 

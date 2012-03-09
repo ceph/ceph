@@ -6,6 +6,8 @@
 #include "include/types.h"
 #include "include/utime.h"
 
+#include "common/Formatter.h"
+
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
@@ -43,6 +45,8 @@ struct rgw_bucket_pending_info {
     ::decode(op, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_pending_info*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_pending_info)
 
@@ -82,6 +86,8 @@ struct rgw_bucket_dir_entry_meta {
       ::decode(content_type, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
 
@@ -119,6 +125,8 @@ struct rgw_bucket_dir_entry {
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
@@ -141,6 +149,8 @@ struct rgw_bucket_category_stats {
     ::decode(num_entries, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_category_stats*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
@@ -157,6 +167,8 @@ struct rgw_bucket_dir_header {
     ::decode(stats, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_dir_header*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
@@ -176,6 +188,8 @@ struct rgw_bucket_dir {
     ::decode(m, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_dir*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir)
 
@@ -204,6 +218,8 @@ struct rgw_cls_obj_prepare_op
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_obj_prepare_op*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
@@ -238,6 +254,8 @@ struct rgw_cls_obj_complete_op
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_obj_complete_op*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
@@ -258,6 +276,8 @@ struct rgw_cls_list_op
     ::decode(num_entries, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_list_op*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_op)
 
@@ -278,6 +298,8 @@ struct rgw_cls_list_ret
     ::decode(is_truncated, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_list_ret*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_ret)
 

@@ -15,6 +15,61 @@
 using namespace std;
 
 
+void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
+{
+  o.push_back(new ACLPermission);
+}
+
+void ACLPermission::dump(Formatter *f) const
+{
+}
+
+void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
+{
+  o.push_back(new ACLGranteeType);
+}
+
+void ACLGranteeType::dump(Formatter *f) const
+{
+}
+
+void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
+{
+  o.push_back(new ACLGrant);
+}
+
+void ACLGrant::dump(Formatter *f) const
+{
+}
+
+void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& o)
+{
+  o.push_back(new RGWAccessControlList);
+}
+
+void RGWAccessControlList::dump(Formatter *f) const
+{
+}
+
+void ACLOwner::generate_test_instances(list<ACLOwner*>& o)
+{
+  o.push_back(new ACLOwner);
+}
+
+void ACLOwner::dump(Formatter *f) const
+{
+}
+
+void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy*>& o)
+{
+  o.push_back(new RGWAccessControlPolicy);
+}
+
+
+void RGWAccessControlPolicy::dump(Formatter *f) const
+{
+}
+
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {
   ACLPermission& perm = grant->get_permission();

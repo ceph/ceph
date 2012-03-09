@@ -7,6 +7,24 @@
 
 #define DOUT_SUBSYS rgw
 
+void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
+{
+  o.push_back(new rgw_log_entry);
+}
+
+void rgw_log_entry::dump(Formatter *f) const
+{
+}
+
+void rgw_intent_log_entry::generate_test_instances(list<rgw_intent_log_entry*>& o)
+{
+  o.push_back(new rgw_intent_log_entry);
+}
+
+void rgw_intent_log_entry::dump(Formatter *f) const
+{
+}
+
 static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
 static void set_param_str(struct req_state *s, const char *name, string& str)

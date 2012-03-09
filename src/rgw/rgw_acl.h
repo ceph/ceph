@@ -56,6 +56,8 @@ public:
     ::decode(flags, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLPermission*>& o);
 };
 WRITE_CLASS_ENCODER(ACLPermission)
 
@@ -80,6 +82,8 @@ public:
     ::decode(type, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLGranteeType*>& o);
 };
 WRITE_CLASS_ENCODER(ACLGranteeType)
 
@@ -154,6 +158,8 @@ public:
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLGrant*>& o);
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
@@ -211,6 +217,9 @@ public:
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWAccessControlList*>& o);
+
   void add_grant(ACLGrant *grant);
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
@@ -247,6 +256,8 @@ public:
     ::decode(display_name, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLOwner*>& o);
   void set_id(string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 
@@ -280,7 +291,9 @@ public:
     ::decode(owner, bl);
     ::decode(acl, bl);
     DECODE_FINISH(bl);
-   }
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWAccessControlPolicy*>& o);
   void decode_owner(bufferlist::iterator& bl) { // sometimes we only need that, should be faster
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(owner, bl);

@@ -291,6 +291,7 @@ librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = librados.la
 librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
 lib_LTLIBRARIES += librgw.la
+
 endif
 
 # librbd
@@ -362,6 +363,9 @@ rgw_multiparser_SOURCES = $(my_libradosgw_src) rgw/rgw_multiparser.cc
 rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
+
+ceph_dencoder_LDADD += $(my_radosgw_ldadd)
+
 endif
 
 testcrypto_SOURCES = testcrypto.cc

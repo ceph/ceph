@@ -39,6 +39,8 @@ struct ObjectMetaInfo {
     mtime = t.sec();
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectMetaInfo*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
 
@@ -73,6 +75,8 @@ struct ObjectCacheInfo {
       ::decode(rm_xattrs, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectCacheInfo*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
 
@@ -103,6 +107,8 @@ struct RGWCacheNotifyInfo {
     ::decode(ns, ibl);
     DECODE_FINISH(ibl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 

@@ -7,6 +7,7 @@
 #include <vector>
 #include <include/types.h>
 
+#include "common/Formatter.h"
 #include "rgw_common.h"
 
 struct md_config_t;
@@ -46,6 +47,9 @@ struct RGWObjManifestPart {
      ::decode(size, bl);
      DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWObjManifestPart*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjManifestPart);
 
@@ -68,6 +72,9 @@ struct RGWObjManifest {
      ::decode(objs, bl);
      DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWObjManifest*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjManifest);
 

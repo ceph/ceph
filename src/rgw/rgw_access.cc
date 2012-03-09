@@ -11,6 +11,24 @@ static RGWCache<RGWRados> cached_rados_provider;
 static RGWFS fs_provider;
 static RGWRados rados_provider;
 
+void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
+{
+  o.push_back(new RGWObjManifestPart);
+}
+
+void RGWObjManifestPart::dump(Formatter *f) const
+{
+}
+
+void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
+{
+  o.push_back(new RGWObjManifest);
+}
+
+void RGWObjManifest::dump(Formatter *f) const
+{
+}
+
 RGWAccess* RGWAccess::store;
 
 RGWAccess::~RGWAccess()
