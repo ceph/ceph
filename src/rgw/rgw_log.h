@@ -4,9 +4,6 @@
 #include "rgw_common.h"
 #include "include/utime.h"
 
-#define LOG_ENTRY_VER 4
-#define INTENT_LOG_ENTRY_VER 1
-
 #define RGW_SHOULD_LOG_DEFAULT 1
 
 #define RGW_LOG_POOL_NAME ".log"
@@ -33,9 +30,7 @@ struct rgw_log_entry {
   uint64_t bucket_id;
 
   void encode(bufferlist &bl) const {
-    uint8_t ver;
-    ver = LOG_ENTRY_VER;
-    ::encode(ver, bl);
+    ENCODE_START(5, 5, bl);
     ::encode(object_owner, bl);
     ::encode(bucket_owner, bl);
     ::encode(bucket, bl);
@@ -54,12 +49,12 @@ struct rgw_log_entry {
     ::encode(referrer, bl);
     ::encode(bytes_received, bl);
     ::encode(bucket_id, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
-    uint8_t ver;
-    ::decode(ver, p);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, p);
     ::decode(object_owner, p);
-    if (ver > 3)
+    if (struct_v > 3)
       ::decode(bucket_owner, p);
     ::decode(bucket, p);
     ::decode(time, p);
@@ -75,16 +70,19 @@ struct rgw_log_entry {
     ::decode(total_time, p);
     ::decode(user_agent, p);
     ::decode(referrer, p);
-    if (ver >= 2)
+    if (struct_v >= 2)
       ::decode(bytes_received, p);
     else
       bytes_received = 0;
 
-    if (ver >= 3)
+    if (struct_v >= 3)
       ::decode(bucket_id, p);
     else
       bucket_id = -1;
+    DECODE_FINISH(p);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
@@ -94,20 +92,21 @@ struct rgw_intent_log_entry {
   uint32_t intent;
 
   void encode(bufferlist &bl) const {
-    uint8_t ver;
-    ver = INTENT_LOG_ENTRY_VER;
-    ::encode(ver, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(obj, bl);
     ::encode(op_time, bl);
     ::encode(intent, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
-    uint8_t ver;
-    ::decode(ver, p);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
     ::decode(obj, p);
     ::decode(op_time, p);
     ::decode(intent, p);
+    DECODE_FINISH(p);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_intent_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 

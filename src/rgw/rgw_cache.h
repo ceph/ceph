@@ -24,20 +24,22 @@ struct ObjectMetaInfo {
   ObjectMetaInfo() : size(0), mtime(0) {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(size, bl);
     utime_t t(mtime, 0);
     ::encode(t, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(size, bl);
     utime_t t;
     ::decode(t, bl);
     mtime = t.sec();
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectMetaInfo*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
 
@@ -52,18 +54,17 @@ struct ObjectCacheInfo {
   ObjectCacheInfo() : status(0), flags(0) {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(status, bl);
     ::encode(flags, bl);
     ::encode(data, bl);
     ::encode(xattrs, bl);
     ::encode(meta, bl);
     ::encode(rm_xattrs, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(status, bl);
     ::decode(flags, bl);
     ::decode(data, bl);
@@ -71,7 +72,10 @@ struct ObjectCacheInfo {
     ::decode(meta, bl);
     if (struct_v >= 2)
       ::decode(rm_xattrs, bl);
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectCacheInfo*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
 
@@ -85,23 +89,25 @@ struct RGWCacheNotifyInfo {
   RGWCacheNotifyInfo() : op(0), ofs(0) {}
 
   void encode(bufferlist& obl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, obl);
+    ENCODE_START(2, 2, obl);
     ::encode(op, obl);
     ::encode(obj, obl);
     ::encode(obj_info, obl);
     ::encode(ofs, obl);
     ::encode(ns, obl);
+    ENCODE_FINISH(obl);
   }
   void decode(bufferlist::iterator& ibl) {
-    __u8 struct_v;
-    ::decode(struct_v, ibl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, ibl);
     ::decode(op, ibl);
     ::decode(obj, ibl);
     ::decode(obj_info, ibl);
     ::decode(ofs, ibl);
     ::decode(ns, ibl);
+    DECODE_FINISH(ibl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 

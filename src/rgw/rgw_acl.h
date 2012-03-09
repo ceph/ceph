@@ -47,15 +47,17 @@ public:
   void set_permissions(int perm) { flags = perm; }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(flags, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(flags, bl);
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLPermission*>& o);
 };
 WRITE_CLASS_ENCODER(ACLPermission)
 
@@ -71,15 +73,17 @@ public:
   void set(ACLGranteeTypeEnum t) { type = t; }
 //  virtual void set(const char *s) = 0;
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(type, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(type, bl);
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLGranteeType*>& o);
 };
 WRITE_CLASS_ENCODER(ACLGranteeType)
 
@@ -124,8 +128,7 @@ public:
   ACLGroupTypeEnum get_group() { return group; }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(type, bl);
     ::encode(id, bl);
     string uri;
@@ -135,10 +138,10 @@ public:
     ::encode(name, bl);
     __u32 g = (__u32)group;
     ::encode(g, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(type, bl);
     ::decode(id, bl);
     string uri;
@@ -153,7 +156,10 @@ public:
     } else {
       group = uri_to_group(uri);
     }
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLGrant*>& o);
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
@@ -186,17 +192,16 @@ public:
   int get_perm(string& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     bool maps_initialized = true;
     ::encode(maps_initialized, bl);
     ::encode(acl_user_map, bl);
     ::encode(grant_map, bl);
     ::encode(acl_group_map, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     bool maps_initialized;
     ::decode(maps_initialized, bl);
     ::decode(acl_user_map, bl);
@@ -210,7 +215,11 @@ public:
         _add_grant(&grant);
       }
     }
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWAccessControlList*>& o);
+
   void add_grant(ACLGrant *grant);
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
@@ -236,17 +245,19 @@ public:
   ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(id, bl);
     ::encode(display_name, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(id, bl);
     ::decode(display_name, bl);
+    DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ACLOwner*>& o);
   void set_id(string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 
@@ -270,21 +281,23 @@ public:
   bool verify_permission(string& uid, int user_perm_mask, int perm);
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(owner, bl);
     ::encode(acl, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(owner, bl);
     ::decode(acl, bl);
-   }
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWAccessControlPolicy*>& o);
   void decode_owner(bufferlist::iterator& bl) { // sometimes we only need that, should be faster
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(owner, bl);
+    DECODE_FINISH(bl);
   }
 
   void set_owner(ACLOwner& o) { owner = o; }

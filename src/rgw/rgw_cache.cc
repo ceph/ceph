@@ -7,6 +7,72 @@
 using namespace std;
 
 
+void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
+{
+  o.push_back(new ObjectMetaInfo);
+}
+
+void ObjectMetaInfo::dump(Formatter *f) const
+{
+  f->dump_unsigned("size", size);
+  f->dump_stream("mtime") << mtime;
+}
+
+void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
+{
+  o.push_back(new ObjectCacheInfo);
+}
+
+void ObjectCacheInfo::dump(Formatter *f) const
+{
+  f->dump_int("status", status);
+  f->dump_unsigned("flags", flags);
+  f->open_object_section("data");
+  f->dump_unsigned("length", data.length());
+  f->close_section();
+
+  map<string, bufferlist>::const_iterator iter = xattrs.begin();
+  f->open_array_section("xattrs");
+  for (; iter != xattrs.end(); ++iter) {
+    f->dump_string("name", iter->first);
+    f->open_object_section("value");
+    f->dump_unsigned("length", iter->second.length());
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("rm_xattrs");
+  for (iter = rm_xattrs.begin(); iter != rm_xattrs.end(); ++iter) {
+    f->dump_string("name", iter->first);
+    f->open_object_section("value");
+    f->dump_unsigned("length", iter->second.length());
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("meta");
+  meta.dump(f);
+  f->close_section();
+
+}
+
+void RGWCacheNotifyInfo::generate_test_instances(list<RGWCacheNotifyInfo*>& o)
+{
+  o.push_back(new RGWCacheNotifyInfo);
+}
+
+void RGWCacheNotifyInfo::dump(Formatter *f) const
+{
+  f->dump_unsigned("op", op);
+  f->open_object_section("obj");
+  obj.dump(f);
+  f->close_section();
+  f->open_object_section("obj_info");
+  obj_info.dump(f);
+  f->close_section();
+  f->dump_unsigned("ofs", ofs);
+  f->dump_string("ns", ns);
+}
+
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 {
   Mutex::Locker l(lock);

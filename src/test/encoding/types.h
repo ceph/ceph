@@ -81,6 +81,49 @@ TYPE(MonCaps)
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
+#include "rgw/rgw_access.h"
+TYPE(RGWObjManifestPart);
+TYPE(RGWObjManifest);
+
+#include "rgw/rgw_acl.h"
+TYPE(ACLPermission)
+TYPE(ACLGranteeType)
+TYPE(ACLGrant)
+TYPE(RGWAccessControlList)
+TYPE(ACLOwner)
+TYPE(RGWAccessControlPolicy)
+
+#include "rgw/rgw_cache.h"
+TYPE(ObjectMetaInfo)
+TYPE(ObjectCacheInfo)
+TYPE(RGWCacheNotifyInfo)
+
+#include "rgw/rgw_cls_api.h"
+TYPE(rgw_bucket_pending_info)
+TYPE(rgw_bucket_dir_entry_meta)
+TYPE(rgw_bucket_dir_entry)
+TYPE(rgw_bucket_category_stats)
+TYPE(rgw_bucket_dir_header)
+TYPE(rgw_bucket_dir)
+TYPE(rgw_cls_obj_prepare_op)
+TYPE(rgw_cls_obj_complete_op)
+TYPE(rgw_cls_list_op)
+TYPE(rgw_cls_list_ret)
+
+#include "rgw/rgw_common.h"
+TYPE(RGWAccessKey);
+TYPE(RGWSubUser);
+TYPE(RGWUserInfo)
+TYPE(rgw_bucket)
+TYPE(RGWBucketInfo)
+TYPE(RGWBucketEnt)
+TYPE(RGWUploadPartInfo)
+TYPE(rgw_obj)
+
+#include "rgw/rgw_log.h"
+TYPE(rgw_log_entry)
+TYPE(rgw_intent_log_entry)
+
 // --- messages ---
 #include "messages/MAuth.h"
 MESSAGE(MAuth)

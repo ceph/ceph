@@ -49,6 +49,144 @@ void rgw_perf_stop(CephContext *cct)
   delete perfcounter;
 }
 
+void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
+{
+  o.push_back(new RGWAccessKey);
+}
+
+void RGWAccessKey::dump(Formatter *f) const
+{
+  f->dump_string("id", id);
+  f->dump_string("key", key);
+  f->dump_string("subuser", subuser);
+}
+
+void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
+{
+  o.push_back(new RGWSubUser);
+}
+
+void RGWSubUser::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_unsigned("perm_mask", perm_mask);
+}
+
+void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
+{
+  o.push_back(new RGWUserInfo);
+}
+
+void RGWUserInfo::dump(Formatter *f) const
+{
+  f->dump_unsigned("auid", auid);
+  f->dump_string("user_id", user_id);
+  f->dump_string("display_name", display_name);
+  f->dump_string("user_email", user_email);
+
+  map<string, RGWAccessKey>::const_iterator aiter = access_keys.begin();
+  f->open_array_section("access_keys");
+  for (; aiter != access_keys.end(); ++aiter) {
+    f->open_object_section("entry");
+    f->dump_string("uid", aiter->first);
+    f->open_object_section("access_key");
+    aiter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+
+  aiter = swift_keys.begin();
+  for (; aiter != swift_keys.end(); ++aiter) {
+    f->open_object_section("entry");
+    f->dump_string("subuser", aiter->first);
+    f->open_object_section("key");
+    aiter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  map<string, RGWSubUser>::const_iterator siter = subusers.begin();
+  for (; siter != subusers.end(); ++siter) {
+    f->open_object_section("entry");
+    f->dump_string("id", siter->first);
+    f->open_object_section("subuser");
+    siter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  f->dump_int("suspended", (int)suspended);
+}
+
+void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
+{
+  o.push_back(new rgw_bucket);
+}
+
+void rgw_bucket::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_string("pool", pool);
+  f->dump_string("marker", marker);
+  f->dump_unsigned("bucket_id", bucket_id);
+}
+
+void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
+{
+  o.push_back(new RGWBucketInfo);
+}
+
+void RGWBucketInfo::dump(Formatter *f) const
+{
+  f->open_object_section("bucket");
+  bucket.dump(f);
+  f->close_section();
+  f->dump_string("owner", owner);
+  f->dump_unsigned("flags", flags);
+}
+
+void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
+{
+  o.push_back(new RGWBucketEnt);
+}
+
+void RGWBucketEnt::dump(Formatter *f) const
+{
+  f->open_object_section("bucket");
+  bucket.dump(f);
+  f->close_section();
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("size_rounded", size_rounded);
+  f->dump_stream("mtime") << mtime;
+  f->dump_unsigned("count", count);
+}
+
+void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
+{
+  o.push_back(new RGWUploadPartInfo);
+}
+
+void RGWUploadPartInfo::dump(Formatter *f) const
+{
+  f->dump_unsigned("num", num);
+  f->dump_unsigned("size", size);
+  f->dump_string("etag", etag);
+  f->dump_stream("modified") << modified;
+}
+
+void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
+{
+  o.push_back(new rgw_obj);
+}
+
+void rgw_obj::dump(Formatter *f) const
+{
+  f->open_object_section("bucket");
+  bucket.dump(f);
+  f->close_section();
+  f->dump_string("key", key);
+  f->dump_string("ns", ns);
+  f->dump_string("object", object);
+}
+
 
 using namespace ceph::crypto;
 

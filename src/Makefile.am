@@ -291,6 +291,7 @@ librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = librados.la
 librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
 lib_LTLIBRARIES += librgw.la
+
 endif
 
 # librbd
@@ -362,6 +363,9 @@ rgw_multiparser_SOURCES = $(my_libradosgw_src) rgw/rgw_multiparser.cc
 rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
+
+ceph_dencoder_LDADD += $(my_radosgw_ldadd)
+
 endif
 
 testcrypto_SOURCES = testcrypto.cc
@@ -473,7 +477,7 @@ UNITTEST_STATIC_LDADD = \
 	$(PTHREAD_LIBS)
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libcephfs.la $(PTHREAD_LIBS) -lm \
+unittest_encoding_LDADD = libcephfs.la librados.la $(PTHREAD_LIBS) -lm \
 			  ${UNITTEST_LDADD}
 unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
@@ -625,7 +629,7 @@ check_PROGRAMS += unittest_daemon_config
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
-unittest_librgw_LDADD =  librgw.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
+unittest_librgw_LDADD =  librgw.la librados.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
