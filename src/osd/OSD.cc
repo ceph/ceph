@@ -2023,7 +2023,11 @@ void OSD::handle_watch_timeout(void *obc,
 			       entity_name_t entity,
 			       utime_t expire)
 {
+  // watch_lock is inside pg->lock; handle_watch_timeout checks for the race.
+  watch_lock.Unlock();
   pg->lock();
+  watch_lock.Lock();
+
   pg->handle_watch_timeout(obc, entity, expire);
   pg->unlock();
   pg->put();

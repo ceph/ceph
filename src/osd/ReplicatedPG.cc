@@ -1535,10 +1535,10 @@ void ReplicatedPG::remove_watchers_and_notifies()
     for (map<entity_name_t, OSD::Session *>::iterator witer = obc->watchers.begin();
 	 witer != obc->watchers.end();
 	 remove_watcher(obc, (witer++)->first)) ;
-    for (map<entity_name_t, Context *>::iterator iter = obc->unconnected_watchers.begin();
+    for (map<entity_name_t,Watch::C_WatchTimeout*>::iterator iter = obc->unconnected_watchers.begin();
 	 iter != obc->unconnected_watchers.end();
 	 ) {
-      map<entity_name_t, Context *>::iterator i = iter++;
+      map<entity_name_t,Watch::C_WatchTimeout*>::iterator i = iter++;
       unregister_unconnected_watcher(obc, i->first);
     }
     for (map<Watch::Notification *, bool>::iterator niter = obc->notifs.begin();
@@ -2980,7 +2980,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	session->get();
 	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
       }
-      map<entity_name_t, Context *>::iterator un_iter =
+      map<entity_name_t,Watch::C_WatchTimeout*>::iterator un_iter =
 	obc->unconnected_watchers.find(entity);
       if (un_iter != obc->unconnected_watchers.end()) {
 	unregister_unconnected_watcher(obc, un_iter->first);
@@ -3659,10 +3659,10 @@ void ReplicatedPG::register_unconnected_watcher(void *_obc,
   pgid.set_ps(obc->obs.oi.soid.hash);
   get();
   obc->ref++;
-  Context *cb = new Watch::C_WatchTimeout(osd,
-					  static_cast<void *>(obc),
-					  this,
-					  entity, expire);
+  Watch::C_WatchTimeout *cb = new Watch::C_WatchTimeout(osd,
+							static_cast<void *>(obc),
+							this,
+							entity, expire);
   osd->watch_timer.add_event_at(expire, cb);
   obc->unconnected_watchers[entity] = cb;
 }
@@ -3672,6 +3672,14 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
 					utime_t expire)
 {
   ObjectContext *obc = static_cast<ObjectContext *>(_obc);
+
+  if (obc->unconnected_watchers.count(entity) == 0 ||
+      obc->unconnected_watchers[entity]->expire != expire) {
+    dout(10) << "handle_watch_timeout must have raced, no/wrong unconnected_watcher " << entity << dendl;
+    put_object_context(obc);
+    return;
+  }
+
   obc->unconnected_watchers.erase(entity);
   obc->obs.oi.watchers.erase(entity);
 

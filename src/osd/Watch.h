@@ -65,8 +65,8 @@ public:
     void *obc;
     void *pg;
     entity_name_t entity;
-    utime_t expire;
   public:
+    utime_t expire;
     C_WatchTimeout(OSD *_osd, void *_obc, void *_pg,
 		   entity_name_t _entity, utime_t _expire) :
       osd(_osd), obc(_obc), pg(_pg), entity(_entity), expire(_expire) {}

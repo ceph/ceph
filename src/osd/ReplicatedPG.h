@@ -278,7 +278,7 @@ public:
 
     // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
-    map<entity_name_t, Context *> unconnected_watchers;
+    map<entity_name_t, Watch::C_WatchTimeout *> unconnected_watchers;
     map<Watch::Notification *, bool> notifs;
 
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
