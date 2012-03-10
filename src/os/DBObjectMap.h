@@ -155,6 +155,9 @@ public:
   /// Consistency check, debug, there must be no parallel writes
   bool check(std::ostream &out);
 
+  /// Ensure that all previous operations are durable
+  int sync();
+
   ObjectMapIterator get_iterator(const hobject_t &hoid,
 				 CollectionIndex::IndexedPath path);
 
@@ -383,7 +386,7 @@ private:
 			 KeyValueDB::Transaction t);
 
   /// Writes out State (mainly next_seq)
-  int write_state();
+  int write_state(bool sync = false);
 
   /// 0 if the complete set now contains all of key space, < 0 on error, 1 else
   int need_parent(DBObjectMapIterator iter);

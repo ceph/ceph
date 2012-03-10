@@ -1454,6 +1454,7 @@ noinst_HEADERS = \
         os/JournalingObjectStore.h\
 	os/LFNIndex.h\
         os/ObjectStore.h\
+	os/SequencerPosition.h\
         osd/Ager.h\
 	osd/ClassHandler.h\
         osd/OSD.h\

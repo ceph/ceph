@@ -26,6 +26,7 @@
 #include "HashIndex.h"
 #include "IndexManager.h"
 #include "ObjectMap.h"
+#include "SequencerPosition.h"
 
 #include "include/uuid.h"
 
@@ -293,11 +294,42 @@ public:
   unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
   int _transaction_start(uint64_t bytes, uint64_t ops);
   void _transaction_finish(int id);
-  unsigned _do_transaction(Transaction& t, uint64_t op_seq);
+  unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0);
+
+  /**
+   * set replay guard xattr on given file
+   *
+   * This will ensure that we will not replay this (or any previous) operation
+   * against this particular inode/object.
+   *
+   * @param fd open file descriptor for the file/object
+   * @param spos sequencer position of the last operation we should not replay
+   */
+  void _set_replay_guard(int fd, const SequencerPosition& spos);
+
+  /**
+   * check replay guard xattr on given file
+   *
+   * Check the current position against any marker on the file that
+   * indicates which operations have already been applied.  If the
+   * current or a newer operation has been marked as applied, we
+   * should not replay the current operation again.
+   *
+   * If we are not replaying the journal, we already return true.  It
+   * is only on replay that we might return false, indicated that the
+   * operation should not be performed (again).
+   *
+   * @param fd open fd on the file/object in question
+   * @param spos sequencerposition for an operation we could apply/replay
+   * @return true if we can apply (maybe replay) this operation, false if spos has already been applied
+   */
+  bool _check_replay_guard(int fd, const SequencerPosition& spos);
+  bool _check_replay_guard(coll_t cid, const SequencerPosition& spos);
+  bool _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
 
   // ------------------
   // objects
@@ -313,8 +345,11 @@ public:
   int _write(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);
   int _zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len);
   int _truncate(coll_t cid, const hobject_t& oid, uint64_t size);
-  int _clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid);
-  int _clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+	     const SequencerPosition& spos);
+  int _clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
+		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _remove(coll_t cid, const hobject_t& oid);
@@ -356,7 +391,8 @@ public:
   int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
   int _collection_rmattr(coll_t c, const char *name);
   int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
-  int _collection_rename(const coll_t &cid, const coll_t &ncid);
+  int _collection_rename(const coll_t &cid, const coll_t &ncid,
+			 const SequencerPosition& spos);
 
   // collections
   int list_collections(vector<coll_t>& ls);
@@ -382,7 +418,8 @@ public:
 
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
-  int _collection_add(coll_t c, coll_t ocid, const hobject_t& o);
+  int _collection_add(coll_t c, coll_t ocid, const hobject_t& o,
+		      const SequencerPosition& spos);
   int _collection_remove(coll_t c, const hobject_t& o);
   int _collection_move(coll_t c, coll_t ocid, const hobject_t& o);
 

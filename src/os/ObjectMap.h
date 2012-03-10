@@ -109,6 +109,9 @@ public:
     CollectionIndex::IndexedPath target_path ///< [in] path to target
     ) { return 0; }
 
+  /// Ensure all previous writes are durable
+  virtual int sync() { return 0; }
+
   virtual bool check(std::ostream &out) { return true; }
 
   class ObjectMapIteratorImpl {

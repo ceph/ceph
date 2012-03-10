@@ -59,6 +59,15 @@ public:
     return s.ok() ? 0 : -1;
   }
 
+  int submit_transaction_sync(KeyValueDB::Transaction t) {
+    LevelDBTransactionImpl * _t =
+      static_cast<LevelDBTransactionImpl *>(t.get());
+    leveldb::WriteOptions options;
+    options.sync = true;
+    leveldb::Status s = db->Write(options, &(_t->bat));
+    return s.ok() ? 0 : -1;
+  }
+
   int get(
     const string &prefix,
     const std::set<string> &key,

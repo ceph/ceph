@@ -63,6 +63,9 @@ TYPE(osd_peer_stat_t)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
+#include "os/SequencerPosition.h"
+TYPE(SequencerPosition)
+
 #include "os/hobject.h"
 TYPE(hobject_t)
 
