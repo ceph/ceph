@@ -2439,8 +2439,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 {
   dout(10) << "_do_transaction on " << &t << dendl;
 
-  bool idempotent = true;
-
   Transaction::iterator i = t.begin();
   
   SequencerPosition spos(op_seq, trans_num, 0);
@@ -2561,8 +2559,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       
     case Transaction::OP_CLONE:
       {
-	idempotent = false;   // this operation is non-idempotent
-
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	hobject_t noid = i.get_oid();
@@ -2572,8 +2568,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_CLONERANGE:
       {
-	idempotent = false;   // this operation is non-idempotent
-
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	hobject_t noid = i.get_oid();
@@ -2585,8 +2579,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_CLONERANGE2:
       {
-	idempotent = false;   // this operation is non-idempotent
-
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	hobject_t noid = i.get_oid();
@@ -2599,8 +2591,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_MKCOLL:
       {
-	// this operation is non-idempotent, but we tolerate replay below.
-
 	coll_t cid = i.get_cid();
 	if (_check_replay_guard(cid, spos))
 	  r = _create_collection(cid);
@@ -2609,8 +2599,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_RMCOLL:
       {
-	// this operation is non-idempotent, but we tolerate replay below.
-
 	coll_t cid = i.get_cid();
 	if (_check_replay_guard(cid, spos))
 	  r = _destroy_collection(cid);
@@ -2670,8 +2658,6 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_COLL_RENAME:
       {
-	idempotent = false;   // this operation is non-idempotent
-	
 	coll_t cid(i.get_cid());
 	coll_t ncid(i.get_cid());
 	r = _collection_rename(cid, ncid, spos);
