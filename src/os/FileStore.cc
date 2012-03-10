@@ -2356,6 +2356,11 @@ void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
   // first make sure the previous operation commits
   ::fsync(fd);
 
+  // sync object_map too.  even if this object has a header or keys,
+  // it have had them in the past and then removed them, so always
+  // sync.
+  object_map->sync();
+
   // then record that we did it
   bufferlist v(40);
   ::encode(spos, v);
