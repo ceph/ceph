@@ -1,5 +1,5 @@
 tasks:
-- ceph-fyuse:
+- ceph-fuse:
 - workunit:
     all:
     - suites/iozone.sh
