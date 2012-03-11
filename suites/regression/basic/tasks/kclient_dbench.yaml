@@ -1,5 +1,0 @@
-tasks:
-- ceph:
-- kclient:
-- autotest:
-    all: [dbench]

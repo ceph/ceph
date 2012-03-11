@@ -1,0 +1,7 @@
+tasks:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    all:
+      - suites/dbench.sh

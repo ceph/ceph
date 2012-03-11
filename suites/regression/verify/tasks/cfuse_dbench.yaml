@@ -1,9 +1,0 @@
-tasks:
-- ceph:
-    conf:
-      client:
-        debug client: 20
-        debug ms: 1
-- ceph-fuse:
-- autotest:
-    all: [dbench]

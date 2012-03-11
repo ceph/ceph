@@ -1,6 +1,0 @@
-tasks:
-- ceph:
-- rbd:
-    all:
-- autotest:
-    all: [dbench]
