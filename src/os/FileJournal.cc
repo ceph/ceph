@@ -1558,7 +1558,7 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   }
 
   // yay!
-  dout(1) << "read_entry " << read_pos << " : seq " << h->seq
+  dout(2) << "read_entry " << read_pos << " : seq " << h->seq
 	  << " " << h->len << " bytes"
 	  << dendl;
 
@@ -1580,7 +1580,7 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
 void FileJournal::throttle()
 {
   if (throttle_ops.wait(g_conf->journal_queue_max_ops))
-    dout(1) << "throttle: waited for ops" << dendl;
+    dout(2) << "throttle: waited for ops" << dendl;
   if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
-    dout(1) << "throttle: waited for bytes" << dendl;
+    dout(2) << "throttle: waited for bytes" << dendl;
 }
