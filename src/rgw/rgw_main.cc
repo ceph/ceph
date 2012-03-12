@@ -232,7 +232,7 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   req->log_init();
 
-  dout(0) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
+  dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
   rgw_env.init(fcgx->envp);
@@ -310,7 +310,7 @@ done:
   FCGX_Finish_r(fcgx);
   delete req;
 
-  dout(0) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
+  dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
 }
 
 class C_InitTimeout : public Context {
