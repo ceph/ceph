@@ -1,5 +1,4 @@
 tasks:
-- ceph:
 - rbd:
     all:
       image_size: 20480

@@ -1,5 +1,4 @@
 tasks:
-- ceph:
 - kclient:
 - workunit:
     all:
