@@ -158,7 +158,7 @@ public:
 
   void clone(hobject_t hoid, CollectionIndex::IndexedPath path,
 	     hobject_t hoid2, CollectionIndex::IndexedPath path2) {
-    db->clone_keys(hoid, path, hoid2, path2);
+    db->clone(hoid, path, hoid2, path2);
   }
 
   void clear(const string &objname) {
@@ -431,7 +431,7 @@ TEST_F(ObjectMapTest, CloneOneObject) {
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
 
-  db->clone_keys(hoid, path, hoid2, path);
+  db->clone(hoid, path, hoid2, path);
   r = get_key(hoid, path, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
@@ -493,8 +493,8 @@ TEST_F(ObjectMapTest, OddEvenClone) {
     set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));
   }
 
-  db->link_keys(hoid, path, hoid_link, path);
-  db->clone_keys(hoid, path, hoid2, path);
+  db->link(hoid, path, hoid_link, path);
+  db->clone(hoid, path, hoid2, path);
 
   int r = 0;
   for (unsigned i = 0; i < 1000; ++i) {

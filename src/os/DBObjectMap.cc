@@ -718,10 +718,10 @@ int DBObjectMap::check_keys(const hobject_t &hoid,
   return scan(header, keys, out, 0);
 }
 
-int DBObjectMap::clone_keys(const hobject_t &hoid,
-			    CollectionIndex::IndexedPath path,
-			    const hobject_t &target,
-			    CollectionIndex::IndexedPath target_path)
+int DBObjectMap::clone(const hobject_t &hoid,
+		       CollectionIndex::IndexedPath path,
+		       const hobject_t &target,
+		       CollectionIndex::IndexedPath target_path)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   {
@@ -776,10 +776,10 @@ int DBObjectMap::clone_keys(const hobject_t &hoid,
   return db->submit_transaction(t);
 }
 
-int DBObjectMap::link_keys(const hobject_t &hoid,
-			   CollectionIndex::IndexedPath path,
-			   const hobject_t &target,
-			   CollectionIndex::IndexedPath target_path)
+int DBObjectMap::link(const hobject_t &hoid,
+		      CollectionIndex::IndexedPath path,
+		      const hobject_t &target,
+		      CollectionIndex::IndexedPath target_path)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   {

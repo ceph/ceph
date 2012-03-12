@@ -345,7 +345,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
-  r = object_map->link_keys(o, path_old, o, path_new);
+  r = object_map->link(o, path_old, o, path_new);
   if (r < 0)
     return r;
 
@@ -3060,8 +3060,8 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   r = _do_clone_range(o, n, 0, st.st_size, 0);
   if (r < 0)
     r = -errno;
-  dout(20) << "objectmap_clone_keys" << dendl;
-  r = object_map->clone_keys(oldoid, from, newoid, to);
+  dout(20) << "objectmap clone" << dendl;
+  r = object_map->clone(oldoid, from, newoid, to);
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(n, spos);

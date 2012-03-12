@@ -93,8 +93,38 @@ public:
     set<string> *out                   ///< [out] Subset of keys defined on hoid
     ) = 0;
 
+  /// Get xattrs
+  virtual int get_xattrs(
+    const hobject_t &hoid,             ///< [in] object
+    CollectionIndex::IndexedPath path, ///< [in] path to hoid
+    const set<string> &to_get,         ///< [in] keys to get
+    map<string, bufferlist> *out       ///< [out] subset of attrs/vals defined
+    ) = 0;
+
+  /// Get all xattrs
+  virtual int get_all_xattrs(
+    const hobject_t &hoid,             ///< [in] object
+    CollectionIndex::IndexedPath path, ///< [in] path to hoid
+    set<string> *out       ///< [out] attrs and values
+    ) = 0;
+
+  /// set xattrs in to_set
+  virtual int set_xattrs(
+    const hobject_t &hoid,                ///< [in] object
+    CollectionIndex::IndexedPath path,    ///< [in] path to object
+    const map<string, bufferlist> &to_set ///< [in] attrs/values to set
+    ) = 0;
+
+  /// remove xattrs in to_remove
+  virtual int remove_xattrs(
+    const hobject_t &hoid,               ///< [in] object
+    CollectionIndex::IndexedPath path,   ///< [in] path to hoid
+    const set<string> &to_remove         ///< [in] attrs to remove
+    ) = 0;
+
+
   /// Clone keys efficiently from hoid map to target map
-  virtual int clone_keys(
+  virtual int clone(
     const hobject_t &hoid,             ///< [in] object containing map
     CollectionIndex::IndexedPath path, ///< [in] Path to hoid
     const hobject_t &target,           ///< [in] target of clone
@@ -102,7 +132,7 @@ public:
     ) { return 0; }
 
   /// Efficiently tie <target, target_path> to same key space as <hoid, path>
-  virtual int link_keys(
+  virtual int link(
     const hobject_t &hoid,             ///< [in] object containing map
     CollectionIndex::IndexedPath path, ///< [in] Path to hoid
     const hobject_t &target,           ///< [in] target of link

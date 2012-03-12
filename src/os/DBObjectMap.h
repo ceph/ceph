@@ -136,14 +136,39 @@ public:
     set<string> *out
     );
 
-  int clone_keys(
+  int get_xattrs(
+    const hobject_t &hoid,
+    CollectionIndex::IndexedPath path,
+    const set<string> &to_get,
+    map<string, bufferlist> *out
+    );
+
+  int get_all_xattrs(
+    const hobject_t &hoid,
+    CollectionIndex::IndexedPath path,
+    set<string> *out
+    );
+
+  int set_xattrs(
+    const hobject_t &hoid,
+    CollectionIndex::IndexedPath path,
+    const map<string, bufferlist> &to_set
+    );
+
+  int remove_xattrs(
+    const hobject_t &hoid,
+    CollectionIndex::IndexedPath path,
+    const set<string> &to_remove
+    );
+
+  int clone(
     const hobject_t &hoid,
     CollectionIndex::IndexedPath path,
     const hobject_t &target,
     CollectionIndex::IndexedPath target_path
     );
 
-  int link_keys(
+  int link(
     const hobject_t &hoid,
     CollectionIndex::IndexedPath path,
     const hobject_t &target,
