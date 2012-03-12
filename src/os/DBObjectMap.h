@@ -40,6 +40,7 @@
  * - USER_PREFIX + header_key(header->seq) + USER_PREFIX
  *              : key->value for header->seq
  * - USER_PREFIX + header_key(header->seq) + COMPLETE_PREFIX: see below
+ * - USER_PREFIX + header_key(header->seq) + XATTR_PREFIX: xattrs
  * - USER_PREFIX + header_key(header->seq) + SYS_PREFIX
  *              : USER_HEADER_KEY - omap header for header->seq
  *              : HEADER_KEY - encoding of header for header->seq
@@ -162,6 +163,7 @@ public:
 				 CollectionIndex::IndexedPath path);
 
   static const string USER_PREFIX;
+  static const string XATTR_PREFIX;
   static const string SYS_PREFIX;
   static const string COMPLETE_PREFIX;
   static const string HEADER_KEY;
@@ -255,6 +257,7 @@ private:
   string complete_prefix(Header header);
   string user_prefix(Header header);
   string sys_prefix(Header header);
+  string xattr_prefix(Header header);
   string sys_parent_prefix(_Header header);
   string sys_parent_prefix(Header header) {
     return sys_parent_prefix(*header);

@@ -25,6 +25,7 @@
 #define dout_prefix *_dout << "filestore "
 
 const string DBObjectMap::USER_PREFIX = "_USER_";
+const string DBObjectMap::XATTR_PREFIX = "_AXATTR_";
 const string DBObjectMap::SYS_PREFIX = "_SYS_";
 const string DBObjectMap::COMPLETE_PREFIX = "_COMPLETE_";
 const string DBObjectMap::HEADER_KEY = "HEADER";
@@ -153,6 +154,11 @@ string DBObjectMap::user_prefix(Header header)
 string DBObjectMap::sys_prefix(Header header)
 {
   return USER_PREFIX + header_key(header->seq) + SYS_PREFIX;
+}
+
+string DBObjectMap::xattr_prefix(Header header)
+{
+  return USER_PREFIX + header_key(header->seq) + XATTR_PREFIX;
 }
 
 string DBObjectMap::sys_parent_prefix(_Header header)
@@ -743,6 +749,16 @@ int DBObjectMap::clone_keys(const hobject_t &hoid,
   set_header(destination, t);
   set_map_header(target_path->coll(), target, ldestination, t);
 
+  map<string, bufferlist> to_set;
+  KeyValueDB::Iterator xattr_iter = db->get_iterator(xattr_prefix(parent));
+  for (xattr_iter->seek_to_first();
+       xattr_iter->valid();
+       xattr_iter->next())
+    to_set.insert(make_pair(xattr_iter->key(), xattr_iter->value()));
+  t->set(xattr_prefix(source), to_set);
+  t->set(xattr_prefix(destination), to_set);
+  t->rmkeys_by_prefix(xattr_prefix(parent));
+
   string hkey(header_key(parent->seq));
   KeyValueDB::Iterator iter = db->get_iterator(REVERSE_LEAF_PREFIX);
   iter->lower_bound(hkey);
@@ -931,6 +947,7 @@ void DBObjectMap::clear_header(Header header, KeyValueDB::Transaction t)
   t->rmkeys_by_prefix(user_prefix(header));
   t->rmkeys_by_prefix(sys_prefix(header));
   t->rmkeys_by_prefix(complete_prefix(header));
+  t->rmkeys_by_prefix(xattr_prefix(header));
   set<string> keys;
   keys.insert(header_key(header->seq));
   t->rmkeys(USER_PREFIX, keys);
