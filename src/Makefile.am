@@ -289,7 +289,7 @@ librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = librados.la
-librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl -lfcgi
+librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
 lib_LTLIBRARIES += librgw.la
 
 endif
@@ -335,24 +335,26 @@ my_libradosgw_src = \
 	rgw/rgw_fs.cc \
 	rgw/rgw_rados.cc \
 	rgw/rgw_op.cc \
-	rgw/rgw_rest.cc \
-	rgw/rgw_rest_swift.cc \
-	rgw/rgw_rest_s3.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
-	rgw/rgw_swift.cc \
-	rgw/rgw_swift_auth.cc \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
 	rgw/rgw_env.cc
 
 my_radosgw_ldadd = \
-	libglobal.la librgw.la librados.la -lfcgi -lcurl -lexpat \
+	libglobal.la librgw.la librados.la -lcurl -lexpat \
 	$(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
-radosgw_SOURCES = $(my_libradosgw_src) rgw/rgw_main.cc
-radosgw_LDADD = $(my_radosgw_ldadd)
+radosgw_SOURCES = $(my_libradosgw_src) \
+	rgw/rgw_rest.cc \
+	rgw/rgw_rest_swift.cc \
+	rgw/rgw_rest_s3.cc \
+	rgw/rgw_swift.cc \
+	rgw/rgw_swift_auth.cc \
+  rgw/rgw_main.cc
+
+radosgw_LDADD = $(my_radosgw_ldadd) -lfcgi
 radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_SOURCES = $(my_libradosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -629,7 +631,7 @@ check_PROGRAMS += unittest_daemon_config
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
-unittest_librgw_LDADD =  librgw.la librados.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
+unittest_librgw_LDADD =  librgw.la librados.la ${UNITTEST_LDADD} -lexpat $(LIBGLOBAL_LDA)
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif

@@ -584,9 +584,6 @@ struct req_state {
    ~req_state();
 };
 
-extern void flush_formatter_to_req_state(struct req_state *s,
-					 ceph::Formatter *formatter);
-
 /** Store basic data on an object */
 struct RGWObjEnt {
   std::string name;

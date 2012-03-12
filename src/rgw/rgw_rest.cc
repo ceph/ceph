@@ -80,6 +80,17 @@ static const struct rgw_html_errors *search_err(int err_no, const struct rgw_htm
   return NULL;
 }
 
+void flush_formatter_to_req_state(struct req_state *s, Formatter *formatter)
+{
+  std::ostringstream oss;
+  formatter->flush(oss);
+  std::string outs(oss.str());
+  if (!outs.empty()) {
+    CGI_PutStr(s, outs.c_str(), outs.size());
+  }
+  s->formatter->reset();
+}
+
 void set_req_state_err(struct req_state *s, int err_no)
 {
   const struct rgw_html_errors *r;

@@ -255,17 +255,6 @@ req_state::~req_state() {
   free((void *)bucket_name);
 }
 
-void flush_formatter_to_req_state(struct req_state *s, Formatter *formatter)
-{
-  std::ostringstream oss;
-  formatter->flush(oss);
-  std::string outs(oss.str());
-  if (!outs.empty()) {
-    CGI_PutStr(s, outs.c_str(), outs.size());
-  }
-  s->formatter->reset();
-}
-
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
   oss << "rgw_err(http_ret=" << err.http_ret << ", s3='" << err.s3_code << "') ";

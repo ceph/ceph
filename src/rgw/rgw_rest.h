@@ -4,6 +4,9 @@
 
 #include "rgw_op.h"
 
+extern void flush_formatter_to_req_state(struct req_state *s,
+					 ceph::Formatter *formatter);
+
 
 class RGWGetObj_REST : public RGWGetObj
 {
