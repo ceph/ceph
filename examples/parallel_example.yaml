@@ -1,0 +1,18 @@
+interactive-on-error: true
+overrides:
+roles:
+- - client.0
+- - client.1
+- - client.2
+tasks:
+- parallel_example:
+  - client.0
+  - client.1
+  - client.2  
+
+targets:
+  ubuntu@<host1>: ssh-rsa <host1 key>
+  ubuntu@<host2>: ssh-rsa <host2 key>
+  ubuntu@<host3>: ssh-rsa <host3 key>
+
+
