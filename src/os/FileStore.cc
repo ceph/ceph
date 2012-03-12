@@ -3162,28 +3162,30 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   while (pos < end) {
     int l = MIN(end-pos, buflen);
     r = ::read(from, buf, l);
-    dout(25) << "  read from " << from << "~" << l << " got " << r << dendl;
+    dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
     if (r < 0) {
       r = -errno;
-      derr << "FileStore::_do_copy_range: read error at " << from << "~" << len
+      derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
 	   << ", " << cpp_strerror(r) << dendl;
       break;
     }
     if (r == 0) {
       // hrm, bad source range, wtf.
       r = -ERANGE;
-      derr << "FileStore::_do_copy_range got short read result at " << from
-	      << " of " << from << "~" << len << dendl;
+      derr << "FileStore::_do_copy_range got short read result at " << pos
+	      << " of fd " << from << " len " << len << dendl;
       break;
     }
     int op = 0;
     while (op < r) {
       int r2 = safe_write(to, buf+op, r-op);
-      dout(25) << " write to " << to << "~" << (r-op) << " got " << r2 << dendl;      
+      dout(25) << " write to " << to << " len " << (r-op)
+	       << " got " << r2 << dendl;
       if (r2 < 0) {
 	r = r2;
-	derr << "FileStore::_do_copy_range: write error at " << to << "~" << r-op
-	     << ", " << cpp_strerror(r) << dendl;
+	derr << "FileStore::_do_copy_range: write error at " << pos << "~"
+	     << r-op << ", " << cpp_strerror(r) << dendl;
+
 	break;
       }
       op += (r-op);
