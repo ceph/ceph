@@ -2725,6 +2725,14 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	  dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
 	  ok = true;
 	}
+	if (r == -ERANGE) {
+	  dout(10) << "tolerating ERANGE on replay" << dendl;
+	  ok = true;
+	}
+	if (r == -ENOENT) {
+	  dout(10) << "tolerating ENOENT on replay" << dendl;
+	  ok = true;
+	}
       }
 
       if (!ok) {
