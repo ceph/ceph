@@ -4,8 +4,6 @@
 #include "rgw_common.h"
 #include "include/utime.h"
 
-#define RGW_SHOULD_LOG_DEFAULT 1
-
 #define RGW_LOG_POOL_NAME ".log"
 #define RGW_INTENT_LOG_POOL_NAME ".intent-log"
 

@@ -76,5 +76,5 @@ size_t RGWEnv::get_size(const char *name, size_t def_val)
 
 void RGWConf::init(RGWEnv *env)
 {
-  should_log = env->get_bool("RGW_SHOULD_LOG", RGW_SHOULD_LOG_DEFAULT);
+  should_log = g_conf->rgw_enable_ops_log;
 }
