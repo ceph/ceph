@@ -30,7 +30,7 @@ class CephContext;
  * daemons and utility programs need to call. It takes care of a lot of
  * initialization, including setting up g_ceph_context.
  */
-void global_init(std::vector < const char* >& args,
+void global_init(std::vector < const char * > *alt_def_args, std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
 
 /*

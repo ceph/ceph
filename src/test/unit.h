@@ -33,7 +33,7 @@
  */
 int main(int argc, char **argv) {
   std::vector<const char*> args;
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);

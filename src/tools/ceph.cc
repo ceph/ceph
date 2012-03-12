@@ -186,7 +186,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   // initialize globals
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   // parse user input

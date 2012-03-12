@@ -56,7 +56,7 @@ static const char* c_str_or_null(const std::string &str)
   return str.c_str();
 }
 
-void global_init(std::vector < const char* >& args,
+void global_init(std::vector < const char * > *alt_def_args, std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags)
 {
   // You can only call global_init once.
@@ -84,6 +84,9 @@ void global_init(std::vector < const char* >& args,
     dout_emergency("global_init: error reading config file.\n");
     _exit(1);
   }
+
+  if (alt_def_args)
+    conf->parse_argv(*alt_def_args);  // alternative default args
 
   conf->parse_env(); // environment variables override
 

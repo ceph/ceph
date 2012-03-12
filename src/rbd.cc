@@ -917,7 +917,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   int opt_cmd = OPT_NO_CMD;
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   const char *poolname = NULL;

@@ -115,7 +115,7 @@ int main(int argc, const char **argv)
   CrushTester tester(crush, cerr, 1);
 
   vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
-  global_init(empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+  global_init(NULL, empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
