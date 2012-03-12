@@ -10,7 +10,6 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
   int op_num = 0;
   while (i.have_op()) {
     int op = i.get_op();
-    op_num++;
     switch (op) {
     case Transaction::OP_NOP:
       f->open_object_section("nop");
@@ -350,6 +349,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       f->close_section();
       return;
     }
+    op_num++;
   }
   f->close_section();
 }
@@ -360,7 +360,6 @@ void ObjectStore::Transaction::dump(ostream& out)
   int op_num = 0;
   while (i.have_op()) {
     int op = i.get_op();
-    op_num++;
     switch (op) {
     case Transaction::OP_NOP:
       break;
@@ -590,6 +589,7 @@ void ObjectStore::Transaction::dump(ostream& out)
       out << op_num << ": unknown op code " << op << "\n";
       return;
     }
+    op_num++;
   }
 }
 
