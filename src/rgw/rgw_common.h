@@ -701,6 +701,10 @@ public:
     std::string _o(o);
     init(_b, _o);
   }
+  rgw_obj(rgw_bucket& b, const char *o) {
+    std::string _o(o);
+    init(b, _o);
+  }
   rgw_obj(rgw_bucket& b, std::string& o) {
     init(b, o);
   }

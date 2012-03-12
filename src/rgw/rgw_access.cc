@@ -16,7 +16,8 @@ void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>&
   o.push_back(new RGWObjManifestPart);
 
   RGWObjManifestPart *p = new RGWObjManifestPart;
-  p->loc = rgw_obj("bucket", "object");
+  rgw_bucket b("bucket", ".pool", "marker_", 12);
+  p->loc = rgw_obj(b, "object");
   p->loc_ofs = 512 * 1024;
   p->size = 128 * 1024;
   o.push_back(p);
@@ -36,7 +37,8 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   RGWObjManifest *m = new RGWObjManifest;
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
-    p.loc = rgw_obj("bucket", "object");
+    rgw_bucket b("bucket", ".pool", "marker_", 12);
+    p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;
     m->objs[(uint64_t)i * 512 * 1024] = p;
