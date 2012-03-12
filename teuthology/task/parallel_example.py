@@ -11,26 +11,27 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def sequential_test(ctx, config):
     """Example contextmanager that executes a command on remote hosts sequentially."""
-    log.info('running sequential test...')
-    for client in config:
-        """Create a cluster composed of a single remote host associated with a client, and run the command on it."""
-        ctx.cluster.only(client).run(args=['sleep', '5', run.Raw(';'), 'date', run.Raw(';'), 'hostname'])
+    for role in config:
+        """Create a cluster composed of all hosts with the given role, and run the command on them sequentially."""
+        log.info('Executing command on all hosts sequentially with role "%s"' % role)
+        ctx.cluster.only(role).run(args=['sleep', '5', run.Raw(';'), 'date', run.Raw(';'), 'hostname'])
     yield
 
 @contextlib.contextmanager
 def parallel_test(ctx, config):
     """Example contextmanager that executes a command on remote hosts in parallel."""
-    log.info('running parallel test...')
-    """Create a cluster of remote hosts composed of all hosts that have a role starting with 'client'"""
-    cluster = ctx.cluster.only(lambda role: role.startswith('client'))
-    nodes = {}
-    for remote in cluster.remotes.iterkeys():
-        """Call run for each remote host, but use 'wait=False' to have it return immediately."""
-        proc = remote.run(args=['sleep', '5', run.Raw(';'), 'date', run.Raw(';'), 'hostname'], wait=False,)
-        nodes[remote.name] = proc
-    for name, proc in nodes.iteritems():
-        """Wait for each process to finish before yielding and allowing other contextmanagers to run."""
-        proc.exitstatus.get()
+    for role in config:
+        """Create a cluster composed of all hosts with the given role, and run the command on them concurrently."""
+        log.info('Executing command on all hosts concurrently with role "%s"' % role)
+        cluster = ctx.cluster.only(role)
+        nodes = {}
+        for remote in cluster.remotes.iterkeys():
+            """Call run for each remote host, but use 'wait=False' to have it return immediately."""
+            proc = remote.run(args=['sleep', '5', run.Raw(';'), 'date', run.Raw(';'), 'hostname'], wait=False,)
+            nodes[remote.name] = proc
+        for name, proc in nodes.iteritems():
+            """Wait for each process to finish before yielding and allowing other contextmanagers to run."""
+            proc.exitstatus.get()
     yield
 
 @contextlib.contextmanager
