@@ -289,7 +289,7 @@ librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = librados.la
-librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
+librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl -lfcgi
 lib_LTLIBRARIES += librgw.la
 
 endif
