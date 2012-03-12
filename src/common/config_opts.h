@@ -231,7 +231,7 @@ OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_replay, OPT_BOOL, false)
 
 // If true, uses tmap as initial value for omap on old objects
-OPTION(osd_auto_upgrade_tmap, OPT_BOOL, false)
+OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
 
 // If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
 OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
