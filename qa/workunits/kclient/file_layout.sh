@@ -51,6 +51,7 @@ echo "hello, I'm a file with a custom layout" > layout_test/file2
 touch layout_test/file3
 cephfs layout_test/file3 show_layout > temp
 diff new_layout temp || return 1
+sudo ls /sys/kernel/debug/ceph
 sudo cat /sys/kernel/debug/ceph/\*/mdsmap > temp
 ceph osd pool create newpool || true
 ceph mds add_data_pool 3 || true
