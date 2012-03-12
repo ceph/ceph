@@ -258,7 +258,7 @@ public:
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ACLOwner*>& o);
-  void set_id(string& _id) { id = _id; }
+  void set_id(const string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 
   string& get_id() { return id; }

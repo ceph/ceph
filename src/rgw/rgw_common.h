@@ -699,6 +699,11 @@ public:
   std::string object;
 
   rgw_obj() {}
+  rgw_obj(const char *b, const char *o) {
+    rgw_bucket _b(b);
+    std::string _o(o);
+    init(_b, _o);
+  }
   rgw_obj(rgw_bucket& b, std::string& o) {
     init(b, o);
   }

@@ -19,6 +19,9 @@ using namespace std;
 
 void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
 {
+  ACLPermission *p = new ACLPermission;
+  p->set_permissions(RGW_PERM_WRITE_ACP);
+  o.push_back(p);
   o.push_back(new ACLPermission);
 }
 
@@ -29,6 +32,9 @@ void ACLPermission::dump(Formatter *f) const
 
 void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
 {
+  ACLGranteeType *t = new ACLGranteeType;
+  t->set(ACL_TYPE_CANON_USER);
+  o.push_back(t);
   o.push_back(new ACLGranteeType);
 }
 
@@ -39,6 +45,20 @@ void ACLGranteeType::dump(Formatter *f) const
 
 void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
 {
+  string id, name, email;
+  id = "rgw";
+  name = "Mr. RGW";
+  email = "r@gw";
+
+  ACLGrant *g1 = new ACLGrant;
+  g1->set_canon(id, name, RGW_PERM_READ);
+  g1->email = email;
+  o.push_back(g1);
+
+  ACLGrant *g2 = new ACLGrant;
+  g1->set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_WRITE);
+  o.push_back(g2);
+
   o.push_back(new ACLGrant);
 }
 
@@ -61,6 +81,19 @@ void ACLGrant::dump(Formatter *f) const
 
 void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& o)
 {
+  RGWAccessControlList *acl = new RGWAccessControlList;
+
+  list<ACLGrant *> glist;
+  list<ACLGrant *>::iterator iter;
+
+  ACLGrant::generate_test_instances(glist);
+  for (iter = glist.begin(); iter != glist.end(); ++iter) {
+    ACLGrant *grant = *iter;
+    acl->add_grant(grant);
+
+    delete grant;
+  }
+  o.push_back(acl);
   o.push_back(new RGWAccessControlList);
 }
 
@@ -101,6 +134,10 @@ void RGWAccessControlList::dump(Formatter *f) const
 
 void ACLOwner::generate_test_instances(list<ACLOwner*>& o)
 {
+  ACLOwner *owner = new ACLOwner;
+  owner->id = "rgw";
+  owner->display_name = "Mr. RGW";
+  o.push_back(owner);
   o.push_back(new ACLOwner);
 }
 
@@ -112,6 +149,26 @@ void ACLOwner::dump(Formatter *f) const
 
 void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy*>& o)
 {
+  list<RGWAccessControlList *> acl_list;
+  list<RGWAccessControlList *>::iterator iter;
+  for (iter = acl_list.begin(); iter != acl_list.end(); ++iter) {
+    RGWAccessControlList::generate_test_instances(acl_list);
+    iter = acl_list.begin();
+
+    RGWAccessControlPolicy *p = new RGWAccessControlPolicy;
+    RGWAccessControlList *l = *iter;
+    p->acl = *l;
+
+    string name = "radosgw";
+    string id = "rgw";
+    p->owner.set_name(name);
+    p->owner.set_id(id);
+
+    o.push_back(p);
+
+    delete l;
+  }
+
   o.push_back(new RGWAccessControlPolicy);
 }
 
