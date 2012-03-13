@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
                         flavor=None, format=None, arch=None):
-    BASE = 'http://gitbuilder.ceph.com/{package}-{format}-{flavor}-{dist}-{arch}/'.format(
+    BASE = 'http://gitbuilder.ceph.com/{package}-{format}-{dist}-{arch}-{flavor}/'.format(
         package=package,
         flavor=flavor,
         arch=arch,
