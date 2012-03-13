@@ -9,6 +9,9 @@ using namespace std;
 
 void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
 {
+  ObjectMetaInfo *m = new ObjectMetaInfo;
+  m->size = 1024 * 1024;
+  o.push_back(m);
   o.push_back(new ObjectMetaInfo);
 }
 
@@ -20,6 +23,21 @@ void ObjectMetaInfo::dump(Formatter *f) const
 
 void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
 {
+  ObjectCacheInfo *i = new ObjectCacheInfo;
+  i->status = 0;
+  i->flags = CACHE_FLAG_MODIFY_XATTRS;
+  string s = "this is a string";
+  string s2 = "this is a another string";
+  bufferlist data, data2;
+  ::encode(s, data);
+  ::encode(s2, data2);
+  i->data = data;
+  i->xattrs["x1"] = data;
+  i->xattrs["x2"] = data2;
+  i->rm_xattrs["r2"] = data2;
+  i->rm_xattrs["r3"] = data;
+  i->meta.size = 512 * 1024;
+  o.push_back(i);
   o.push_back(new ObjectCacheInfo);
 }
 

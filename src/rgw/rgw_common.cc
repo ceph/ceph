@@ -51,6 +51,11 @@ void rgw_perf_stop(CephContext *cct)
 
 void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
 {
+  RGWAccessKey *k = new RGWAccessKey;
+  k->id = "id";
+  k->key = "key";
+  k->subuser = "subuser";
+  o.push_back(k);
   o.push_back(new RGWAccessKey);
 }
 
@@ -63,6 +68,10 @@ void RGWAccessKey::dump(Formatter *f) const
 
 void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 {
+  RGWSubUser *u = new RGWSubUser;
+  u->name = "name";
+  u->perm_mask = 0xf;
+  o.push_back(u);
   o.push_back(new RGWSubUser);
 }
 
@@ -74,6 +83,24 @@ void RGWSubUser::dump(Formatter *f) const
 
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
+  RGWUserInfo *i = new RGWUserInfo;
+  i->auid = 1;
+  i->user_id = "user_id";
+  i->display_name =  "display_name";
+  i->user_email = "user@email";
+  RGWAccessKey k1, k2;
+  k1.id = "id1";
+  k1.key = "key1";
+  k2.id = "id2";
+  k2.subuser = "subuser";
+  RGWSubUser u;
+  u.name = "id2";
+  u.perm_mask = 0x1;
+  i->access_keys[k1.id] = k1;
+  i->swift_keys[k2.id] = k2;
+  i->subusers[u.name] = u;
+  o.push_back(i);
+
   o.push_back(new RGWUserInfo);
 }
 
@@ -118,6 +145,8 @@ void RGWUserInfo::dump(Formatter *f) const
 
 void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 {
+  rgw_bucket *b = new rgw_bucket("name", "pool", "marker", 123);
+  o.push_back(b);
   o.push_back(new rgw_bucket);
 }
 
@@ -131,6 +160,11 @@ void rgw_bucket::dump(Formatter *f) const
 
 void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
 {
+  RGWBucketInfo *i = new RGWBucketInfo;
+  i->bucket = rgw_bucket("bucket", "pool", "marker", 10);
+  i->owner = "owner";
+  i->flags = BUCKET_SUSPENDED;
+  o.push_back(i);
   o.push_back(new RGWBucketInfo);
 }
 
@@ -145,6 +179,12 @@ void RGWBucketInfo::dump(Formatter *f) const
 
 void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
 {
+  RGWBucketEnt *e = new RGWBucketEnt;
+  e->bucket = rgw_bucket("bucket", "pool", "marker", 10);
+  e->size = 1024;
+  e->size_rounded = 4096;
+  e->count = 1;
+  o.push_back(e);
   o.push_back(new RGWBucketEnt);
 }
 
@@ -161,6 +201,11 @@ void RGWBucketEnt::dump(Formatter *f) const
 
 void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
 {
+  RGWUploadPartInfo *i = new RGWUploadPartInfo;
+  i->num = 1;
+  i->size = 10 * 1024 * 1024;
+  i->etag = "etag";
+  o.push_back(i);
   o.push_back(new RGWUploadPartInfo);
 }
 
@@ -174,6 +219,9 @@ void RGWUploadPartInfo::dump(Formatter *f) const
 
 void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
 {
+  rgw_bucket b = rgw_bucket("bucket", "pool", "marker", 10);
+  rgw_obj *obj = new rgw_obj(b, "object");
+  o.push_back(obj);
   o.push_back(new rgw_obj);
 }
 

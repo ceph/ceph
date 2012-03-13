@@ -9,6 +9,23 @@
 
 void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
 {
+  rgw_log_entry *e = new rgw_log_entry;
+  e->object_owner = "object_owner";
+  e->bucket_owner = "bucket_owner";
+  e->bucket = "bucket";
+  e->remote_addr = "1.2.3.4";
+  e->user = "user";
+  e->obj = "obj";
+  e->uri = "http://uri/bucket/obj";
+  e->http_status = "200";
+  e->error_code = "error_code";
+  e->bytes_sent = 1024;
+  e->bytes_received = 512;
+  e->obj_size = 2048;
+  e->user_agent = "user_agent";
+  e->referrer = "referrer";
+  e->bucket_id = 10;
+  o.push_back(e);
   o.push_back(new rgw_log_entry);
 }
 
@@ -36,6 +53,11 @@ void rgw_log_entry::dump(Formatter *f) const
 
 void rgw_intent_log_entry::generate_test_instances(list<rgw_intent_log_entry*>& o)
 {
+  rgw_intent_log_entry *e = new rgw_intent_log_entry;
+  rgw_bucket b("bucket", "pool", "marker", 10);
+  e->obj = rgw_obj(b, "object");
+  e->intent = DEL_OBJ;
+  o.push_back(e);
   o.push_back(new rgw_intent_log_entry);
 }
 

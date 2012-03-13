@@ -47,6 +47,10 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
 {
+  rgw_bucket_pending_info *i = new rgw_bucket_pending_info;
+  i->state = CLS_RGW_STATE_COMPLETE;
+  i->op = CLS_RGW_OP_DEL;
+  o.push_back(i);
   o.push_back(new rgw_bucket_pending_info);
 }
 
@@ -59,6 +63,15 @@ void rgw_bucket_pending_info::dump(Formatter *f) const
 
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
 {
+  rgw_bucket_dir_entry_meta *m = new rgw_bucket_dir_entry_meta;
+  m->category = 1;
+  m->size = 100;
+  m->etag = "etag";
+  m->owner = "owner";
+  m->owner_display_name = "display name";
+  m->tag = "tag";
+  m->content_type = "content/type";
+  o.push_back(m);
   o.push_back(new rgw_bucket_dir_entry_meta);
 }
 
@@ -76,6 +89,23 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
 {
+  list<rgw_bucket_dir_entry_meta *> l;
+  rgw_bucket_dir_entry_meta::generate_test_instances(l);
+
+  list<rgw_bucket_dir_entry_meta *>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    rgw_bucket_dir_entry_meta *m = *iter;
+    rgw_bucket_dir_entry *e = new rgw_bucket_dir_entry;
+    e->name = "name";
+    e->epoch = 1234;
+    e->locator = "locator";
+    e->exists = true;
+    e->meta = *m;
+
+    o.push_back(e);
+
+    delete m;
+  }
   o.push_back(new rgw_bucket_dir_entry);
 }
 
@@ -102,6 +132,11 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
 
 void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category_stats*>& o)
 {
+  rgw_bucket_category_stats *s = new rgw_bucket_category_stats;
+  s->total_size = 1024;
+  s->total_size_rounded = 4096;
+  s->num_entries = 2;
+  o.push_back(s);
   o.push_back(new rgw_bucket_category_stats);
 }
 
@@ -114,6 +149,21 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)
 {
+  list<rgw_bucket_category_stats *> l;
+  list<rgw_bucket_category_stats *>::iterator iter;
+  rgw_bucket_category_stats::generate_test_instances(l);
+
+  uint8_t i;
+  for (i = 0, iter = l.begin(); iter != l.end(); ++iter, ++i) {
+    rgw_bucket_dir_header *h = new rgw_bucket_dir_header;
+    rgw_bucket_category_stats *s = *iter;
+    h->stats[i] = *s;
+
+    o.push_back(h);
+
+    delete s;
+  }
+
   o.push_back(new rgw_bucket_dir_header);
 }
 
@@ -132,6 +182,30 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
 
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
 {
+  list<rgw_bucket_dir_header *> l;
+  list<rgw_bucket_dir_header *>::iterator iter;
+  rgw_bucket_dir_header::generate_test_instances(l);
+
+  uint8_t i;
+  for (i = 0, iter = l.begin(); iter != l.end(); ++iter, ++i) {
+    rgw_bucket_dir *d = new rgw_bucket_dir;
+    rgw_bucket_dir_header *h = *iter;
+    d->header = *h;
+
+    list<rgw_bucket_dir_entry *> el;
+    list<rgw_bucket_dir_entry *>::iterator eiter;
+    for (eiter = el.begin(); eiter != el.end(); ++eiter) {
+      rgw_bucket_dir_entry *e = *eiter;
+      d->m[e->name] = *e;
+
+      delete e;
+    }
+
+    o.push_back(d);
+
+    delete h;
+  }
+
   o.push_back(new rgw_bucket_dir);
 }
 
@@ -153,6 +227,12 @@ void rgw_bucket_dir::dump(Formatter *f) const
 
 void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op*>& o)
 {
+  rgw_cls_obj_prepare_op *op = new rgw_cls_obj_prepare_op;
+  op->op = CLS_RGW_OP_ADD;
+  op->name = "name";
+  op->tag = "tag";
+  op->locator = "locator";
+  o.push_back(op);
   o.push_back(new rgw_cls_obj_prepare_op);
 }
 
@@ -166,6 +246,20 @@ void rgw_cls_obj_prepare_op::dump(Formatter *f) const
 
 void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_op*>& o)
 {
+  rgw_cls_obj_complete_op *op = new rgw_cls_obj_complete_op;
+  op->op = CLS_RGW_OP_DEL;
+  op->name = "name";
+  op->locator = "locator";
+  op->epoch = 100;
+  op->tag = "tag";
+
+  list<rgw_bucket_dir_entry_meta *> l;
+  rgw_bucket_dir_entry_meta::generate_test_instances(l);
+  list<rgw_bucket_dir_entry_meta *>::iterator iter = l.begin();
+  op->meta = *(*iter);
+
+  o.push_back(op);
+
   o.push_back(new rgw_cls_obj_complete_op);
 }
 
@@ -183,6 +277,11 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
 
 void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
 {
+  rgw_cls_list_op *op = new rgw_cls_list_op;
+  op->start_obj = "start_obj";
+  op->num_entries = 100;
+  op->filter_prefix = "filter_prefix";
+  o.push_back(op);
   o.push_back(new rgw_cls_list_op);
 }
 
@@ -194,6 +293,21 @@ void rgw_cls_list_op::dump(Formatter *f) const
 
 void rgw_cls_list_ret::generate_test_instances(list<rgw_cls_list_ret*>& o)
 {
+ list<rgw_bucket_dir *> l;
+  rgw_bucket_dir::generate_test_instances(l);
+  list<rgw_bucket_dir *>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    rgw_bucket_dir *d = *iter;
+
+    rgw_cls_list_ret *ret = new rgw_cls_list_ret;
+    ret->dir = *d;
+    ret->is_truncated = true;
+
+    o.push_back(ret);
+
+    delete d;
+  }
+
   o.push_back(new rgw_cls_list_ret);
 }
 
