@@ -15,18 +15,16 @@ from .orchestra import run
 
 log = logging.getLogger(__name__)
 
-def get_ceph_binary_url(branch=None, tag=None, sha1=None, flavor=None):
-    if flavor is None:
-        flavor = ''
-    else:
-        # TODO hardcoding amd64 here for simplicity; clients will try
-        # to fetch the tarball matching their arch, non-x86_64 just
-        # won't find anything and the test will fail. trying to
-        # support cross-arch clusters is messy because nothing
-        # guarantees the same sha1 of "master" has been built for all
-        # of them. hoping for yagni.
-        flavor = '-{flavor}-amd64'.format(flavor=flavor)
-    BASE = 'http://ceph.newdream.net/gitbuilder{flavor}/output/'.format(flavor=flavor)
+def get_ceph_binary_url(package=None,
+                        branch=None, tag=None, sha1=None, dist=None,
+                        flavor=None, format=None, arch=None):
+    BASE = 'http://gitbuilder.ceph.com/{package}-{format}-{flavor}-{dist}-{arch}/'.format(
+        package=package,
+        flavor=flavor,
+        arch=arch,
+        format=format,
+        dist=dist
+        )
 
     if sha1 is not None:
         assert branch is None, "cannot set both sha1 and branch"
@@ -48,7 +46,7 @@ def get_ceph_binary_url(branch=None, tag=None, sha1=None, flavor=None):
         sha1 = sha1_fp.read().rstrip('\n')
         sha1_fp.close()
 
-    log.debug('Using ceph sha1 %s', sha1)
+    log.debug('Using %s %s sha1 %s', package, format, sha1)
     bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
     return (sha1, bindir_url)
 
