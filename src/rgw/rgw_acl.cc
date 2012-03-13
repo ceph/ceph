@@ -81,7 +81,7 @@ void ACLGrant::dump(Formatter *f) const
 
 void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& o)
 {
-  RGWAccessControlList *acl = new RGWAccessControlList;
+  RGWAccessControlList *acl = new RGWAccessControlList(NULL);
 
   list<ACLGrant *> glist;
   list<ACLGrant *>::iterator iter;
@@ -94,7 +94,7 @@ void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& 
     delete grant;
   }
   o.push_back(acl);
-  o.push_back(new RGWAccessControlList);
+  o.push_back(new RGWAccessControlList(NULL));
 }
 
 void RGWAccessControlList::dump(Formatter *f) const
@@ -155,7 +155,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     RGWAccessControlList::generate_test_instances(acl_list);
     iter = acl_list.begin();
 
-    RGWAccessControlPolicy *p = new RGWAccessControlPolicy;
+    RGWAccessControlPolicy *p = new RGWAccessControlPolicy(NULL);
     RGWAccessControlList *l = *iter;
     p->acl = *l;
 
@@ -169,7 +169,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     delete l;
   }
 
-  o.push_back(new RGWAccessControlPolicy);
+  o.push_back(new RGWAccessControlPolicy(NULL));
 }
 
 
@@ -195,7 +195,7 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
     {
       string id;
       if (!grant->get_id(id)) {
-        dout(0) << "ERROR: grant->get_id() failed" << dendl;
+        ldout(cct, 0) << "ERROR: grant->get_id() failed" << dendl;
       }
       acl_user_map[id] |= perm.get_permissions();
     }
@@ -211,24 +211,24 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
 }
 
 int RGWAccessControlList::get_perm(string& id, int perm_mask) {
-  dout(5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
+  ldout(cct, 5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
   map<string, int>::iterator iter = acl_user_map.find(id);
   if (iter != acl_user_map.end()) {
-    dout(5) << "Found permission: " << iter->second << dendl;
+    ldout(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
   }
-  dout(5) << "Permissions for user not found" << dendl;
+  ldout(cct, 5) << "Permissions for user not found" << dendl;
   return 0;
 }
 
 int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) {
-  dout(5) << "Searching permissions for group=" << (int)group << " mask=" << perm_mask << dendl;
+  ldout(cct, 5) << "Searching permissions for group=" << (int)group << " mask=" << perm_mask << dendl;
   map<uint32_t, int>::iterator iter = acl_group_map.find((uint32_t)group);
   if (iter != acl_group_map.end()) {
-    dout(5) << "Found permission: " << iter->second << dendl;
+    ldout(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
   }
-  dout(5) << "Permissions for group not found" << dendl;
+  ldout(cct, 5) << "Permissions for group not found" << dendl;
   return 0;
 }
 
@@ -252,7 +252,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
     }
   }
 
-  dout(5) << "Getting permissions id=" << id << " owner=" << owner.get_id() << " perm=" << perm << dendl;
+  ldout(cct, 5) << "Getting permissions id=" << id << " owner=" << owner.get_id() << " perm=" << perm << dendl;
 
   return perm;
 }
@@ -276,7 +276,7 @@ bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, 
    
   int acl_perm = policy_perm & user_perm_mask;
 
-  dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
+  ldout(cct, 10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
 
   return (perm == acl_perm);
 }

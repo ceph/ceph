@@ -82,10 +82,17 @@ WRITE_CLASS_ENCODER(RGWObjManifest);
  * Abstract class defining the interface for storage devices used by RGW.
  */
 class RGWAccess {
+protected:
+  CephContext *cct;
 public:
+  CephContext *ctx() { return cct; }
   virtual ~RGWAccess();
   /** do all necessary setup of the storage device */
-  virtual int initialize(CephContext *cct) = 0;
+  int initialize(CephContext *_cct) {
+    cct = _cct;
+    return initialize();
+  }
+  virtual int initialize() = 0;
   virtual void finalize() {}
   /** prepare a listing of all buckets. */
   virtual int list_buckets_init(RGWAccessHandle *handle) = 0;

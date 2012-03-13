@@ -340,7 +340,7 @@ int RGWPutMetadata_REST_SWIFT::get_params()
     }
 
     if (read_attr || write_attr) {
-      RGWAccessControlPolicy_SWIFT swift_policy;
+      RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
       int r = swift_policy.create(s->user.user_id, s->user.display_name, read_list, write_list);
       if (r < 0)
         return r;

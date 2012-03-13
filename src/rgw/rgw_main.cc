@@ -82,8 +82,8 @@ struct RGWRequest
     delete s;
   }
  
-  req_state *init_state(RGWEnv *env) { 
-    s = new req_state(env);
+  req_state *init_state(CephContext *cct, RGWEnv *env) { 
+    s = new req_state(cct, env);
     return s;
   }
 
@@ -235,9 +235,9 @@ void RGWProcess::handle_request(RGWRequest *req)
   dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
-  rgw_env.init(fcgx->envp);
+  rgw_env.init(g_ceph_context, fcgx->envp);
 
-  struct req_state *s = req->init_state(&rgw_env);
+  struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
   s->obj_ctx = rgwstore->create_context(s);
   rgwstore->set_intent_cb(s->obj_ctx, call_log_intent);
 

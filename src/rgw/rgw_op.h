@@ -230,6 +230,7 @@ public:
   void execute();
   virtual void init(struct req_state *s, RGWHandler *h) {
     RGWOp::init(s, h);
+    policy.set_ctx(s->cct);
     ret = 0;
   }
   virtual int get_params() { return 0; }
@@ -294,6 +295,7 @@ public:
     supplied_etag = NULL;
     etag = "";
     chunked_upload = false;
+    policy.set_ctx(s->cct);
   }
 
   RGWPutObjProcessor *select_processor();
@@ -322,6 +324,7 @@ public:
     RGWOp::init(s, h);
     has_policy = false;
     ret = 0;
+    policy.set_ctx(s->cct);
   }
   int verify_permission();
   void execute();
@@ -397,6 +400,7 @@ public:
     src_bucket.clear();
     src_object.clear();
     mtime = 0;
+    dest_policy.set_ctx(s->cct);
   }
   int verify_permission();
   void execute();
@@ -464,6 +468,7 @@ public:
     RGWOp::init(s, h);
     ret = 0;
     upload_id = "";
+    policy.set_ctx(s->cct);
   }
   int verify_permission();
   void execute();
@@ -537,7 +542,7 @@ public:
     parts.clear();
     max_parts = 1000;
     marker = 0;
-    policy = RGWAccessControlPolicy();
+    policy = RGWAccessControlPolicy(s->cct);
   }
   int verify_permission();
   void execute();

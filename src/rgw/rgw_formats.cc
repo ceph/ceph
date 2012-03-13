@@ -200,7 +200,7 @@ done:
     buf = (char *)realloc(buf, max_len);
   }
   if (!buf) {
-    dout(0) << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << dendl;
+    cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;
     goto done_free;
   }
   pos = len;
@@ -208,7 +208,7 @@ done:
     pos--; // squash null termination
   strcpy(buf + pos, p);
   len = pos + strlen(p) + 1;
-  dout(20) << "RGWFormatter_Plain::write_data: len= " << len << " bytes" << dendl;
+  cerr << "RGWFormatter_Plain::write_data: len= " << len << " bytes" << std::endl;
 done_free:
   if (!p_on_stack)
     free(p);

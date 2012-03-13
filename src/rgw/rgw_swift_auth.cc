@@ -40,7 +40,7 @@ static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t&
 
 }
 
-static int encode_token(string& swift_user, string& key, bufferlist& bl)
+static int encode_token(CephContext *cct, string& swift_user, string& key, bufferlist& bl)
 {
   uint64_t nonce;
 
@@ -48,7 +48,7 @@ static int encode_token(string& swift_user, string& key, bufferlist& bl)
   if (ret < 0)
     return ret;
 
-  utime_t expiration = ceph_clock_now(g_ceph_context);
+  utime_t expiration = ceph_clock_now(cct);
   expiration += RGW_SWIFT_TOKEN_EXPIRATION; // 15 minutes
 
   ret = build_token(swift_user, key, nonce, expiration, bl);
@@ -56,7 +56,7 @@ static int encode_token(string& swift_user, string& key, bufferlist& bl)
   return ret;
 }
 
-int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
+int rgw_swift_verify_signed_token(CephContext *cct, const char *token, RGWUserInfo& info)
 {
   if (strncmp(token, "AUTH_rgwtk", 10) != 0)
     return -EINVAL;
@@ -91,8 +91,9 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
     dout(0) << "NOTICE: failed to decode token: caught exception" << dendl;
     return -EINVAL;
   }
-  if (expiration < ceph_clock_now(g_ceph_context)) {
-    dout(0) << "NOTICE: old timed out token was used now=" << ceph_clock_now(g_ceph_context) << " token.expiration=" << expiration << dendl;
+  utime_t now = ceph_clock_now(cct);
+  if (expiration < now) {
+    dout(0) << "NOTICE: old timed out token was used now=" << now << " token.expiration=" << expiration << dendl;
     return -EPERM;
   }
 
@@ -198,7 +199,7 @@ void RGW_SWIFT_Auth_Get::execute()
   CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
 	     swift_prefix.c_str());
 
-  if ((ret = encode_token(swift_key->id, swift_key->key, bl)) < 0)
+  if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
 
   {

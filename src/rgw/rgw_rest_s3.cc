@@ -178,7 +178,7 @@ void RGWListBucket_REST_S3::send_response()
 
 int RGWCreateBucket_REST_S3::get_params()
 {
-  RGWAccessControlPolicy_S3 s3policy;
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
   int r = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (r < 0)
     return r;
@@ -211,7 +211,7 @@ void RGWDeleteBucket_REST_S3::send_response()
 
 int RGWPutObj_REST_S3::get_params()
 {
-  RGWAccessControlPolicy_S3 s3policy;
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
@@ -251,7 +251,7 @@ void RGWDeleteObj_REST_S3::send_response()
 
 int RGWCopyObj_REST_S3::init_dest_policy()
 {
-  RGWAccessControlPolicy_S3 s3policy;
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
 
   /* build a policy for the target object */
   ret = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
@@ -319,7 +319,7 @@ void RGWGetACLs_REST_S3::send_response()
 
 int RGWPutACLs_REST_S3::get_canned_policy(ACLOwner& owner, stringstream& ss)
 {
-  RGWAccessControlPolicy_S3 s3policy;
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
   bool r = s3policy.create_canned(owner.get_id(), owner.get_display_name(), s->canned_acl);
   if (!r)
     return -EINVAL;
@@ -340,7 +340,7 @@ void RGWPutACLs_REST_S3::send_response()
 
 int RGWInitMultipart_REST_S3::get_params()
 {
-  RGWAccessControlPolicy_S3 s3policy;
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
   ret = s3policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!ret)
      return -EINVAL;

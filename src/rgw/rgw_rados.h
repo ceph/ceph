@@ -158,7 +158,7 @@ public:
   void tick();
 
   /** Initialize the RADOS instance and prepare to do other ops */
-  virtual int initialize(CephContext *cct);
+  virtual int initialize();
   /** set up a bucket listing. handle is filled in. */
   virtual int list_buckets_init(RGWAccessHandle *handle);
   /** 

@@ -10,7 +10,7 @@ class RGWFS  : public RGWAccess
     int fd;
   };
 public:
-  virtual int initialize(CephContext *cct);
+  virtual int initialize();
   int list_buckets_init(RGWAccessHandle *handle);
   int list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle);
 

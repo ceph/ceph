@@ -120,14 +120,16 @@ class ObjectCache {
   std::map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
   Mutex lock;
+  CephContext *cct;
 
   void touch_lru(string& name, std::list<string>::iterator& lru_iter);
   void remove_lru(string& name, std::list<string>::iterator& lru_iter);
 public:
-  ObjectCache() : lock("ObjectCache") { }
+  ObjectCache() : lock("ObjectCache"), cct(NULL) { }
   int get(std::string& name, ObjectCacheInfo& bl, uint32_t mask);
   void put(std::string& name, ObjectCacheInfo& bl);
   void remove(std::string& name);
+  void set_ctx(CephContext *_cct) { cct = _cct; }
 };
 
 static inline void normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj)
@@ -166,9 +168,10 @@ class RGWCache  : public T
     return normal_name(obj.bucket, obj.object);
   }
 
-  int initialize(CephContext *cct) {
+  int initialize() {
     int ret;
-    ret = T::initialize(cct);
+    cache.set_ctx(T::cct);
+    ret = T::initialize();
     if (ret < 0)
       return ret;
 
@@ -284,7 +287,7 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -318,7 +321,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -354,7 +357,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -389,7 +392,7 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -469,10 +472,10 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
-    dout(0) << "ERROR: got bad notification" << dendl;
+    ldout(T::cct, 0) << "ERROR: got bad notification" << dendl;
     return -EIO;
   } catch (buffer::error& err) {
-    dout(0) << "ERROR: buffer::error" << dendl;
+    ldout(T::cct, 0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
 
@@ -486,7 +489,7 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     cache.remove(name);
     break;
   default:
-    dout(0) << "WARNING: got unknown notification op: " << info.op << dendl;
+    ldout(T::cct, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
     return -EINVAL;
   }
 

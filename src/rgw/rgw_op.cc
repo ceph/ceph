@@ -221,7 +221,7 @@ static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAcces
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
-    RGWAccessControlPolicy bucket_policy;
+    RGWAccessControlPolicy bucket_policy(s->cct);
     string no_object;
     rgw_obj no_obj(bucket, no_object);
     ret = get_policy_from_attr(s->obj_ctx, &bucket_policy, no_obj);
@@ -251,7 +251,7 @@ static int build_policies(struct req_state *s, bool only_bucket, bool prefetch_d
   int ret = 0;
   string obj_str;
 
-  s->bucket_acl = new RGWAccessControlPolicy;
+  s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
@@ -264,14 +264,14 @@ static int build_policies(struct req_state *s, bool only_bucket, bool prefetch_d
     s->bucket_owner = bucket_info.owner;
 
     string no_obj;
-    RGWAccessControlPolicy bucket_acl;
+    RGWAccessControlPolicy bucket_acl(s->cct);
     ret = read_policy(s, bucket_info, s->bucket_acl, s->bucket, no_obj);
   }
 
   /* we're passed only_bucket = true when we specifically need the bucket's
      acls, that happens on write operations */
   if (!only_bucket) {
-    s->object_acl = new RGWAccessControlPolicy;
+    s->object_acl = new RGWAccessControlPolicy(s->cct);
 
     obj_str = s->object_str;
     rgw_obj obj(s->bucket, obj_str);
@@ -335,10 +335,10 @@ void RGWGetObj::execute()
     ret = 0;
 
     perfcounter->finc(l_rgw_get_lat,
-                     (ceph_clock_now(g_ceph_context) - start_time));
+                     (ceph_clock_now(s->cct) - start_time));
     send_response(handle);
     free(data);
-    start_time = ceph_clock_now(g_ceph_context);
+    start_time = ceph_clock_now(s->cct);
   }
 
   return;
@@ -522,7 +522,7 @@ int RGWCreateBucket::verify_permission()
 
 void RGWCreateBucket::execute()
 {
-  RGWAccessControlPolicy old_policy;
+  RGWAccessControlPolicy old_policy(s->cct);
   map<string, bufferlist> attrs;
   bufferlist aclbl;
   bool existed;
@@ -781,7 +781,7 @@ int RGWPutObjProcessor_Atomic::prepare(struct req_state *s)
   head_obj.init(s->bucket, s->object_str);
 
   char buf[33];
-  gen_rand_alphanumeric(buf, sizeof(buf) - 1);
+  gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
   oid.append("_");
   oid.append(buf);
   obj.init_ns(s->bucket, oid, shadow_ns);
@@ -856,7 +856,7 @@ int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>
   info.num = atoi(part_num.c_str());
   info.etag = etag;
   info.size = s->obj_size;
-  info.modified = ceph_clock_now(g_ceph_context);
+  info.modified = ceph_clock_now(s->cct);
   ::encode(info, bl);
 
   string multipart_meta_obj = mp.get_meta();
@@ -1005,7 +1005,7 @@ void RGWPutObj::execute()
 done:
   dispose_processor(processor);
   perfcounter->finc(l_rgw_put_lat,
-                   (ceph_clock_now(g_ceph_context) - s->time));
+                   (ceph_clock_now(s->cct) - s->time));
   send_response();
   return;
 }
@@ -1111,7 +1111,7 @@ bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, strin
 int RGWCopyObj::verify_permission()
 {
   string empty_str;
-  RGWAccessControlPolicy src_policy;
+  RGWAccessControlPolicy src_policy(s->cct);
   ret = get_params();
   if (ret < 0)
     return ret;
@@ -1144,7 +1144,7 @@ int RGWCopyObj::verify_permission()
   if (!src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
     return -EACCES;
 
-  RGWAccessControlPolicy dest_bucket_policy;
+  RGWAccessControlPolicy dest_bucket_policy(s->cct);
 
   /* check dest bucket permissions */
   ret = read_policy(s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
@@ -1260,8 +1260,8 @@ void RGWPutACLs::execute()
   bufferlist bl;
 
   RGWAccessControlPolicy_S3 *policy = NULL;
-  RGWACLXMLParser_S3 parser;
-  RGWAccessControlPolicy_S3 new_policy;
+  RGWACLXMLParser_S3 parser(s->cct);
+  RGWAccessControlPolicy_S3 new_policy(s->cct);
   stringstream ss;
   char *orig_data = data;
   char *new_data = NULL;
@@ -1370,7 +1370,7 @@ void RGWInitMultipart::execute()
 
   do {
     char buf[33];
-    gen_rand_alphanumeric(buf, sizeof(buf) - 1);
+    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
     upload_id = buf;
 
     string tmp_obj_name;
@@ -1449,7 +1449,7 @@ void RGWCompleteMultipart::execute()
   string meta_oid;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
-  RGWAccessControlPolicy policy;
+  RGWAccessControlPolicy policy(s->cct);
   map<string, bufferlist> attrs;
   off_t ofs = 0;
   MD5 hash;
@@ -1580,7 +1580,7 @@ void RGWAbortMultipart::execute()
   upload_id = s->args.get("uploadId");
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
-  RGWAccessControlPolicy policy;
+  RGWAccessControlPolicy policy(s->cct);
   map<string, bufferlist> attrs;
   rgw_obj meta_obj;
   RGWMPObj mp;

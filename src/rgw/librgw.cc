@@ -52,7 +52,7 @@ int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml)
     bl.append(bin, bin_len);
 
     // convert to RGWAccessControlPolicy
-    RGWAccessControlPolicy_S3 acl;
+    RGWAccessControlPolicy_S3 acl((CephContext *)rgw);
     bufferlist::iterator bli(bl.begin());
     acl.decode(bli);
 
@@ -85,7 +85,7 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
 {
   char *bin_ = NULL;
   try {
-    RGWACLXMLParser_S3 parser;
+    RGWACLXMLParser_S3 parser((CephContext *)rgw);
     if (!parser.init()) {
       return -1000;
     }
