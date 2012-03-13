@@ -5315,11 +5315,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
   } else {
-    /*
-      // atomic, synchronous, blocking.
-      objectcacher->file_atomic_sync_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-					   offset, size, bl, ceph_clock_now(cct), 0, client_lock);
-    */
     // simple, non-atomic sync write
     Mutex flock("Client::_write flock");
     Cond cond;

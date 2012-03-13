@@ -213,7 +213,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
         cur += left;
         left -= left;
         assert(left == 0);
-        assert(cur == ex_it->offset + (loff_t)ex_it->length);
+        assert(cur == (loff_t)ex_it->offset + (loff_t)ex_it->length);
         break;  // no more.
       }
       
@@ -840,7 +840,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
       map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
       assert(bh_it->second->start() <= opos);
       uint64_t bhoff = opos - bh_it->second->start();
-      map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
+      map<uint64_t, uint64_t>::iterator f_it = ex_it->buffer_extents.begin();
       uint64_t foff = 0;
       while (1) {
         BufferHead *bh = bh_it->second;
@@ -875,7 +875,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
         if (f_it == ex_it->buffer_extents.end()) break;
       }
       assert(f_it == ex_it->buffer_extents.end());
-      assert(opos == ex_it->offset + (loff_t)ex_it->length);
+      assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
     }
   }
   
@@ -939,7 +939,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
     //  - the buffer frags need not be (and almost certainly aren't)
     // note: i assume striping is monotonic... no jumps backwards, ever!
     loff_t opos = ex_it->offset;
-    for (map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
+    for (map<uint64_t, uint64_t>::iterator f_it = ex_it->buffer_extents.begin();
          f_it != ex_it->buffer_extents.end();
          f_it++) {
       ldout(cct, 10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << dendl;
@@ -1050,153 +1050,6 @@ void ObjectCacher::flusher_entry()
   lock.Unlock();
   ldout(cct, 10) << "flusher finish" << dendl;
 }
-
-
-  
-// blocking.  atomic+sync.
-int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
-{
-  ldout(cct, 10) << "atomic_sync_readx " << rd
-           << " in " << oset
-           << dendl;
-
-  if (rd->extents.size() == 1) {
-    // single object.
-    // just write synchronously.
-    Mutex flock("ObjectCacher::atomic_sync_readx flock 1");
-    Cond cond;
-    bool done = false;
-    objecter->read_trunc(rd->extents[0].oid, rd->extents[0].oloc, 
-		   rd->extents[0].offset, rd->extents[0].length,
-		   rd->snap, rd->bl, 0,
-		   oset->truncate_size, oset->truncate_seq,
-		   new C_SafeCond(&flock, &cond, &done));
-
-    // block
-    while (!done) cond.Wait(flock);
-  } else {
-    // spans multiple objects, or is big.
-
-    // sort by object...
-    map<object_t,ObjectExtent> by_oid;
-    for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
-         ex_it != rd->extents.end();
-         ex_it++) 
-      by_oid[ex_it->oid] = *ex_it;
-    
-    // lock
-    for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
-         i != by_oid.end();
-         i++) {
-      sobject_t soid(i->first, rd->snap);
-      Object *o = get_object(soid, oset, i->second.oloc);
-      rdlock(o);
-    }
-
-    // readx will hose rd
-    vector<ObjectExtent> extents = rd->extents;
-
-    // do the read, into our cache
-    Mutex flock("ObjectCacher::atomic_sync_readx flock 2");
-    Cond cond;
-    snapid_t snapid = rd->snap;
-    bool done = false;
-    readx(rd, oset, new C_SafeCond(&flock, &cond, &done));
-    
-    // block
-    while (!done) cond.Wait(flock);
-    
-    // release the locks
-    for (vector<ObjectExtent>::iterator ex_it = extents.begin();
-         ex_it != extents.end();
-         ex_it++) {
-      sobject_t soid(ex_it->oid, snapid);
-      assert(objects[oset->poolid].count(soid));
-      Object *o = objects[oset->poolid][soid];
-      rdunlock(o);
-    }
-  }
-
-  return 0;
-}
-
-int ObjectCacher::atomic_sync_writex(OSDWrite *wr, ObjectSet *oset, Mutex& lock)
-{
-  ldout(cct, 10) << "atomic_sync_writex " << wr
-           << " in " << oset
-           << dendl;
-
-  if (wr->extents.size() == 1 &&
-      wr->extents.front().length <= cct->_conf->client_oc_max_sync_write) {
-    // single object.
-    
-    // make sure we aren't already locking/locked...
-    sobject_t oid(wr->extents.front().oid, CEPH_NOSNAP);
-    Object *o = 0;
-    if (objects[oset->poolid].count(oid))
-      o = get_object(oid, oset, wr->extents.front().oloc);
-    if (!o || 
-        (o->lock_state != Object::LOCK_WRLOCK &&
-         o->lock_state != Object::LOCK_WRLOCKING &&
-         o->lock_state != Object::LOCK_UPGRADING)) {
-      // just write synchronously.
-      ldout(cct, 10) << "atomic_sync_writex " << wr
-               << " in " << oset
-               << " doing sync write"
-               << dendl;
-
-      Mutex flock("ObjectCacher::atomic_sync_writex flock");
-      Cond cond;
-      bool done = false;
-      objecter->sg_write_trunc(wr->extents, wr->snapc, wr->bl, wr->mtime, 0,
-			 oset->truncate_size, oset->truncate_seq,
-			 new C_SafeCond(&flock, &cond, &done), 0);
-      
-      // block
-      while (!done) cond.Wait(flock);
-      return 0;
-    }
-  } 
-
-  // spans multiple objects, or is big.
-  // sort by object...
-  map<object_t,ObjectExtent> by_oid;
-  for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
-       ex_it != wr->extents.end();
-       ex_it++) 
-    by_oid[ex_it->oid] = *ex_it;
-  
-  // wrlock
-  for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
-       i != by_oid.end();
-       i++) {
-    sobject_t soid(i->first, CEPH_NOSNAP);
-    Object *o = get_object(soid, oset, i->second.oloc);
-    wrlock(o);
-  }
-  
-  // writex will hose wr
-  vector<ObjectExtent> extents = wr->extents;
-
-  // do the write, into our cache
-  writex(wr, oset);
-  
-  // flush 
-  // ...and release the locks?
-  for (vector<ObjectExtent>::iterator ex_it = extents.begin();
-       ex_it != extents.end();
-       ex_it++) {
-    sobject_t soid(ex_it->oid, CEPH_NOSNAP);
-    assert(objects[oset->poolid].count(soid));
-    Object *o = objects[oset->poolid][soid];
-    
-    wrunlock(o);
-  }
-
-  return 0;
-}
- 
-
 
 // locking -----------------------------
 

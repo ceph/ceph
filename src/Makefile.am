@@ -275,7 +275,9 @@ bin_DEBUGPROGRAMS += testsignal_handlers
 
 # librados
 librados_SOURCES = \
-	librados.cc \
+	librados/librados.cc \
+	librados/RadosClient.cc \
+	librados/IoCtxImpl.cc \
 	osdc/Objecter.cc
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
@@ -1255,6 +1257,10 @@ noinst_HEADERS = \
 	include/rados/buffer.h\
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
+	librados/AioCompletionImpl.h\
+	librados/IoCtxImpl.h\
+	librados/PoolAsyncCompletionImpl.h\
+	librados/RadosClient.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
 	json_spirit/json_spirit_error_position.h\

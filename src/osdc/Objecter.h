@@ -1451,7 +1451,7 @@ public:
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	bufferlist cur;
-	for (map<__u32,__u32>::iterator bit = p->buffer_extents.begin();
+	for (map<uint64_t, uint64_t>::iterator bit = p->buffer_extents.begin();
 	     bit != p->buffer_extents.end();
 	     bit++)
 	  bl.copy(bit->first, bit->second, cur);

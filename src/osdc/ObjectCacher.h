@@ -568,10 +568,6 @@ class ObjectCacher {
   // write blocking
   bool wait_for_write(uint64_t len, Mutex& lock);
   
-  // blocking.  atomic+sync.
-  int atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock);
-  int atomic_sync_writex(OSDWrite *wr, ObjectSet *oset, Mutex& lock);
-
   bool set_is_cached(ObjectSet *oset);
   bool set_is_dirty_or_committing(ObjectSet *oset);
 
@@ -619,31 +615,6 @@ class ObjectCacher {
     filer.file_to_extents(oset->ino, layout, offset, len, wr->extents);
     return writex(wr, oset);
   }
-
-
-
-  /*** sync+blocking file interface ***/
-
-  int file_atomic_sync_read(ObjectSet *oset, ceph_file_layout *layout, 
-			    snapid_t snapid,
-                            loff_t offset, uint64_t len, 
-                            bufferlist *bl, int flags,
-                            Mutex &lock) {
-    OSDRead *rd = prepare_read(snapid, bl, flags);
-    filer.file_to_extents(oset->ino, layout, offset, len, rd->extents);
-    return atomic_sync_readx(rd, oset, lock);
-  }
-
-  int file_atomic_sync_write(ObjectSet *oset, ceph_file_layout *layout, 
-			     const SnapContext& snapc,
-                             loff_t offset, uint64_t len, 
-                             bufferlist& bl, utime_t mtime, int flags,
-                             Mutex &lock) {
-    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(oset->ino, layout, offset, len, wr->extents);
-    return atomic_sync_writex(wr, oset, lock);
-  }
-
 };
 
 
