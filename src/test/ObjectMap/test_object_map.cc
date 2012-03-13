@@ -1,13 +1,15 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include <tr1/memory>
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
 
-#include "os/CollectionIndex.h"
+#include "os/IndexManager.h"
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "os/KeyValueDB.h"
 #include "os/DBObjectMap.h"
+#include "os/HashIndex.h"
 #include "os/LevelDBStore.h"
 #include <sys/types.h>
 #include "global/global_init.h"
@@ -45,7 +47,7 @@ public:
   map<string, map<string, string> > omap;
   map<string, string > hmap;
   map<string, map<string, string> > xattrs;
-  CollectionIndex::IndexedPath def_collection;
+  Index def_collection;
   unsigned seq;
 
   ObjectMapTest() : db(), seq(0) {}
@@ -85,7 +87,7 @@ public:
 	      key, value);
   }
 
-  void set_key(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void set_key(hobject_t hoid, Index path,
 	       string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
@@ -95,7 +97,7 @@ public:
     db->set_keys(hoid, path, to_write);
   }
 
-  void set_xattr(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void set_xattr(hobject_t hoid, Index path,
 		 string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
@@ -110,7 +112,7 @@ public:
 	       value);
   }
 
-  void set_header(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void set_header(hobject_t hoid, Index path,
 		  const string &value) {
     bufferlist header;
     header.append(bufferptr(value.c_str(), value.size() + 1));
@@ -122,7 +124,7 @@ public:
 		      value);
   }
 
-  int get_header(hobject_t hoid, CollectionIndex::IndexedPath path,
+  int get_header(hobject_t hoid, Index path,
 		 string *value) {
     bufferlist header;
     int r = db->get_header(hoid, path, &header);
@@ -140,7 +142,7 @@ public:
 		     key, value);
   }
 
-  int get_xattr(hobject_t hoid, CollectionIndex::IndexedPath path,
+  int get_xattr(hobject_t hoid, Index path,
 		string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
@@ -160,7 +162,7 @@ public:
 		   key, value);
   }
 
-  int get_key(hobject_t hoid, CollectionIndex::IndexedPath path,
+  int get_key(hobject_t hoid, Index path,
 	      string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
@@ -180,7 +182,7 @@ public:
 	       key);
   }
 
-  void remove_key(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void remove_key(hobject_t hoid, Index path,
 		  string key) {
     set<string> to_remove;
     to_remove.insert(key);
@@ -192,7 +194,7 @@ public:
 		 key);
   }
 
-  void remove_xattr(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void remove_xattr(hobject_t hoid, Index path,
 		    string key) {
     set<string> to_remove;
     to_remove.insert(key);
@@ -204,8 +206,8 @@ public:
 	  hobject_t(sobject_t(target, CEPH_NOSNAP)), def_collection);
   }
 
-  void clone(hobject_t hoid, CollectionIndex::IndexedPath path,
-	     hobject_t hoid2, CollectionIndex::IndexedPath path2) {
+  void clone(hobject_t hoid, Index path,
+	     hobject_t hoid2, Index path2) {
     db->clone(hoid, path, hoid2, path2);
   }
 
@@ -213,7 +215,7 @@ public:
     clear(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection);
   }
 
-  void clear(hobject_t hoid, CollectionIndex::IndexedPath path) {
+  void clear(hobject_t hoid, Index path) {
     db->clear(hoid, path);
   }
 
@@ -236,8 +238,11 @@ public:
   }
 
   void init_default_collection(const string &coll_name) {
-    def_collection = CollectionIndex::get_testing_path(
-      "/" + coll_name, coll_t(coll_name));
+    def_collection = Index(new HashIndex(coll_t(coll_name),
+					 ("/" + coll_name).c_str(),
+					 2,
+					 2,
+					 CollectionIndex::HASH_INDEX_TAG_2));
   }
 
   void auto_set_xattr(ostream &out) {
@@ -542,9 +547,11 @@ int main(int argc, char **argv) {
 
 TEST_F(ObjectMapTest, CreateOneObject) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
-  CollectionIndex::IndexedPath path = CollectionIndex::get_testing_path(
-    "/bar", coll_t("foo_coll"));
-
+  Index path = Index(new HashIndex(coll_t("foo_coll"),
+				   string("/bar").c_str(),
+				   2,
+				   2,
+				   CollectionIndex::HASH_INDEX_TAG_2));
   map<string, bufferlist> to_set;
   string key("test");
   string val("test_val");
@@ -582,8 +589,11 @@ TEST_F(ObjectMapTest, CreateOneObject) {
 TEST_F(ObjectMapTest, CloneOneObject) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
-  CollectionIndex::IndexedPath path = CollectionIndex::get_testing_path(
-    "/bar", coll_t("foo_coll"));
+  Index path = Index(new HashIndex(coll_t("foo_coll"),
+				   string("/bar").c_str(),
+				   2,
+				   2,
+				   CollectionIndex::HASH_INDEX_TAG_2));
 
   set_key(hoid, path, "foo", "bar");
   set_key(hoid, path, "foo2", "bar2");
@@ -646,9 +656,11 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
   hobject_t hoid_link(sobject_t("foo_link", CEPH_NOSNAP));
-  CollectionIndex::IndexedPath path = CollectionIndex::get_testing_path(
-    "/bar", coll_t("foo_coll"));
-
+  Index path = Index(new HashIndex(coll_t("foo_coll"),
+				   string("/bar").c_str(),
+				   2,
+				   2,
+				   CollectionIndex::HASH_INDEX_TAG_2));
 
   for (unsigned i = 0; i < 1000; ++i) {
     set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));

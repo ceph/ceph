@@ -345,7 +345,8 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
-  r = object_map->link(o, path_old, o, path_new);
+  r = object_map->link(o, path_old->get_index(),
+		       o, path_new->get_index());
   if (r < 0)
     return r;
 
@@ -367,7 +368,7 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o)
     r = index->lookup(o, &path, &exist);
     if (r < 0)
       return r;
-    object_map->clear(o, path);
+    object_map->clear(o, path->get_index());
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -3061,7 +3062,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   if (r < 0)
     r = -errno;
   dout(20) << "objectmap clone" << dendl;
-  r = object_map->clone(oldoid, from, newoid, to);
+  r = object_map->clone(oldoid, from->get_index(), newoid, to->get_index());
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(n, spos);
@@ -4153,7 +4154,7 @@ int FileStore::omap_get(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get(hoid, path, header, out);
+  return object_map->get(hoid, path->get_index(), header, out);
 }
 
 int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
@@ -4164,7 +4165,7 @@ int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get_header(hoid, path, bl);
+  return object_map->get_header(hoid, path->get_index(), bl);
 }
 
 int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
@@ -4174,7 +4175,7 @@ int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get_keys(hoid, path, keys);
+  return object_map->get_keys(hoid, path->get_index(), keys);
 }
 
 int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
@@ -4186,7 +4187,7 @@ int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get_values(hoid, path, keys, out);
+  return object_map->get_values(hoid, path->get_index(), keys, out);
 }
 
 int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
@@ -4198,7 +4199,7 @@ int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->check_keys(hoid, path, keys, out);
+  return object_map->check_keys(hoid, path->get_index(), keys, out);
 }
 
 ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
@@ -4209,7 +4210,7 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return ObjectMap::ObjectMapIterator();
-  return object_map->get_iterator(hoid, path);
+  return object_map->get_iterator(hoid, path->get_index());
 }
 
 int FileStore::_create_collection(coll_t c) 
@@ -4283,7 +4284,7 @@ int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->clear(hoid, path);
+  return object_map->clear(hoid, path->get_index());
 }
 int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
 			     const map<string, bufferlist> &aset) {
@@ -4292,7 +4293,7 @@ int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->set_keys(hoid, path, aset);
+  return object_map->set_keys(hoid, path->get_index(), aset);
 }
 int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
 			   const set<string> &keys) {
@@ -4301,7 +4302,7 @@ int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->rm_keys(hoid, path, keys);
+  return object_map->rm_keys(hoid, path->get_index(), keys);
 }
 int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
 			       const bufferlist &bl)
@@ -4311,7 +4312,7 @@ int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->set_header(hoid, path, bl);
+  return object_map->set_header(hoid, path->get_index(), bl);
 }
 
 

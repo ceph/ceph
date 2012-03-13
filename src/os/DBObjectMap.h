@@ -12,7 +12,7 @@
 #include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
 
-#include "CollectionIndex.h"
+#include "IndexManager.h"
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
 #include "osd/osd_types.h"
@@ -82,97 +82,97 @@ public:
 
   int set_keys(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const map<string, bufferlist> &set
     );
 
   int set_header(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const bufferlist &bl
     );
 
   int get_header(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     bufferlist *bl
     );
 
   int clear(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path
+    Index index
     );
 
   int rm_keys(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const set<string> &to_clear
     );
 
   int get(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     bufferlist *header,
     map<string, bufferlist> *out
     );
 
   int get_keys(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     set<string> *keys
     );
 
   int get_values(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const set<string> &keys,
     map<string, bufferlist> *out
     );
 
   int check_keys(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const set<string> &keys,
     set<string> *out
     );
 
   int get_xattrs(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const set<string> &to_get,
     map<string, bufferlist> *out
     );
 
   int get_all_xattrs(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     set<string> *out
     );
 
   int set_xattrs(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const map<string, bufferlist> &to_set
     );
 
   int remove_xattrs(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const set<string> &to_remove
     );
 
   int clone(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const hobject_t &target,
-    CollectionIndex::IndexedPath target_path
+    Index target_index
     );
 
   int link(
     const hobject_t &hoid,
-    CollectionIndex::IndexedPath path,
+    Index index,
     const hobject_t &target,
-    CollectionIndex::IndexedPath target_path
+    Index target_index
     );
 
   /// Read initial state from backing store
@@ -185,7 +185,7 @@ public:
   int sync();
 
   ObjectMapIterator get_iterator(const hobject_t &hoid,
-				 CollectionIndex::IndexedPath path);
+				 Index index);
 
   static const string USER_PREFIX;
   static const string XATTR_PREFIX;

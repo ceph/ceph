@@ -25,7 +25,6 @@
 #include "osd/osd_types.h"
 #include "include/object.h"
 #include "common/ceph_crypto.h"
-#include "ObjectStore.h"
 
 #include "CollectionIndex.h"
 
