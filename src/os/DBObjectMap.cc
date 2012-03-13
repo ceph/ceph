@@ -718,6 +718,56 @@ int DBObjectMap::check_keys(const hobject_t &hoid,
   return scan(header, keys, out, 0);
 }
 
+int DBObjectMap::get_xattrs(const hobject_t &hoid,
+			    CollectionIndex::IndexedPath path,
+			    const set<string> &to_get,
+			    map<string, bufferlist> *out)
+{
+  Header header = lookup_map_header(path->coll(), hoid);
+  if (!header)
+    return -ENOENT;
+  return db->get(xattr_prefix(header), to_get, out);
+}
+
+int DBObjectMap::get_all_xattrs(const hobject_t &hoid,
+				CollectionIndex::IndexedPath path,
+				set<string> *out)
+{
+  Header header = lookup_map_header(path->coll(), hoid);
+  if (!header)
+    return -ENOENT;
+  KeyValueDB::Iterator iter = db->get_iterator(xattr_prefix(header));
+  if (!iter)
+    return -EINVAL;
+  for (iter->seek_to_first(); !iter->status() && iter->valid(); iter->next())
+    out->insert(iter->key());
+  return iter->status();
+}
+
+int DBObjectMap::set_xattrs(const hobject_t &hoid,
+			    CollectionIndex::IndexedPath path,
+			    const map<string, bufferlist> &to_set)
+{
+  KeyValueDB::Transaction t = db->get_transaction();
+  Header header = lookup_create_map_header(path->coll(), hoid, t);
+  if (!header)
+    return -EINVAL;
+  t->set(xattr_prefix(header), to_set);
+  return db->submit_transaction(t);
+}
+
+int DBObjectMap::remove_xattrs(const hobject_t &hoid,
+			       CollectionIndex::IndexedPath path,
+			       const set<string> &to_remove)
+{
+  KeyValueDB::Transaction t = db->get_transaction();
+  Header header = lookup_map_header(path->coll(), hoid);
+  if (!header)
+    return -ENOENT;
+  t->rmkeys(xattr_prefix(header), to_remove);
+  return db->submit_transaction(t);
+}
+
 int DBObjectMap::clone(const hobject_t &hoid,
 		       CollectionIndex::IndexedPath path,
 		       const hobject_t &target,
