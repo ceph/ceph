@@ -63,35 +63,49 @@ Mailing lists, bug tracker, IRC channel
 Status
 ======
 
-The Ceph project is currently focusing on stability. Users are
-welcome, but we do not recommend storing valuable data with it yet
-without proper precautions.
+The Ceph project is currently focused on stability.  The object store
+(RADOS), radosgw, and RBD are considered reasonably stable.  However,
+we do not yet recommend storing valuable data with it yet without
+proper precautions.
 
-As of this writing, RADOS is the most stable component, and RBD block
-devices are fairly reliable, if not performance tuned yet. The OSD
-component of RADOS relies heavily on the stability and performance of
-the underlying filesystem, and we keep hearing reports of ``btrfs``
-issues; while on the long term we believe in ``btrfs``, in the short
-term you may wish to carefully consider the tradeoffs between ``ext4``
-and ``btrfs``, and make sure you are running the latest Linux kernel.
+The OSD component of RADOS relies heavily on the stability and
+performance of the underlying filesystem.  In the long-term we believe
+that the best performance and stability will come from ``btrfs``.
+Currently, you need to run the latest ``btrfs`` kernel to get the
+latest stability fixes, and there are several performance fixes that
+have not yet hit the mainline kernel.  In the short term you may wish
+to carefully consider the tradeoffs between ``xfs``, ``ext4`` and
+``btrfs``.  In particular:
 
-Radosgw is still going through heavy development, but it will likely
-mature next.
+* ``btrfs`` can efficiently clone objects, which improves performance
+  and space utilization when using snapshots with RBD and the
+  distributed filesystem.  ``xfs`` and ``ext4`` will have to copy
+  snapshotted objects the first time they are touched.
+
+* ``xfs`` has a 64 KB limit on extended attributes (xattrs).
+
+* ``ext4`` has a 4 KB limit on xattrs.
+
+Ceph uses xattrs for internal object state, snapshot metadata, and
+``radosgw`` ACLs.  For most purposes, the 64 KB provided by ``xfs`` is
+plenty, making that our second choice if ``btrfs`` is not an option
+for you.  The 4 KB limit in ``ext4`` is easily hit by ``radosgw``, and
+will cause ``ceph-osd`` to crash, making that a poor choice for
+``radosgw`` users.  On the other hand, if you are using RADOS or RBD
+without snapshots and without ``radosgw``, ``ext4`` will be just
+fine.  We will have a workaround for xattr size limitations shortly,
+making these problems largely go away.
 
 .. _cfuse-kernel-tradeoff:
 
 The Ceph filesystem is functionally fairly complete, but has not been
 tested well enough at scale and under load yet. Multi-master MDS is
 still problematic and we recommend running just one active MDS
-(standbys are ok). If you have problems with ``kclient`` or ``ceph-fuse``,
-you may wish to try the other option; in general, ``kclient`` is
-expected to be faster (but be sure to use the latest Linux kernel!)
-while ``ceph-fuse`` provides better stability by not triggering kernel
-crashes.
-
-As individual systems mature enough, we move to improving their
-performance (throughput, latency and jitter). This work is still
-mostly ahead of us.
+(standbys are ok). If you have problems with ``kclient`` or
+``ceph-fuse``, you may wish to try the other option; in general,
+``kclient`` is expected to be faster (but be sure to use the latest
+Linux kernel!)  while ``ceph-fuse`` provides better stability by not
+triggering kernel crashes.
 
 Ceph is developed on Linux. Other platforms may work, but are not the
 focus of the project. Filesystem access from other operating systems
