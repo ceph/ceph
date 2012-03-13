@@ -738,8 +738,9 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
   }
 
   /* resize window in case messages are draining too fast */
-  if (orig_size - pending.size() >= max_chunks)
-  max_chunks++;
+  if (orig_size - pending.size() >= max_chunks) {
+    max_chunks++;
+  }
 
   if (pending.size() > max_chunks) {
     int r = wait_pending_front();
