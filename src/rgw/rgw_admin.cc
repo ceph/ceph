@@ -767,7 +767,7 @@ int main(int argc, char **argv)
     }
 
     if ((secret_key.empty() && implicit_gen_secret) || gen_secret) {
-      ret = gen_rand_base64(secret_key_buf, sizeof(secret_key_buf));
+      ret = gen_rand_base64(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
         return 1;
@@ -778,7 +778,7 @@ int main(int argc, char **argv)
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
-	ret = gen_rand_alphanumeric_upper(public_id_buf, sizeof(public_id_buf));
+	ret = gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, sizeof(public_id_buf));
 	if (ret < 0) {
 	  cerr << "aborting" << std::endl;
 	  return 1;
@@ -942,7 +942,7 @@ int main(int argc, char **argv)
     rgw_obj obj(bucket, object);
     int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
 
-    RGWAccessControlPolicy_S3 policy;
+    RGWAccessControlPolicy_S3 policy(g_ceph_context);
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       try {

@@ -16,7 +16,7 @@ RGWEnv::~RGWEnv()
   delete conf;
 }
 
-void RGWEnv::init(char **envp)
+void RGWEnv::init(CephContext *cct, char **envp)
 {
   const char *p;
 
@@ -32,7 +32,7 @@ void RGWEnv::init(char **envp)
     env_map[name] = val;
   }
 
-  conf->init(this);
+  conf->init(cct, this);
 }
 
 const char *RGWEnv::get(const char *name, const char *def_val)
@@ -74,7 +74,7 @@ size_t RGWEnv::get_size(const char *name, size_t def_val)
   return atoll(s);  
 }
 
-void RGWConf::init(RGWEnv *env)
+void RGWConf::init(CephContext *cct, RGWEnv *env)
 {
-  should_log = g_conf->rgw_enable_ops_log;
+  should_log = cct->_conf->rgw_enable_ops_log;
 }

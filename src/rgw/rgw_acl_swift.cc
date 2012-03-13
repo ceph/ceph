@@ -63,7 +63,7 @@ void RGWAccessControlPolicy_SWIFT::add_grants(vector<string>& uids, int perm)
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
       acl.add_grant(&grant);
     } else if (rgw_get_user_info_by_uid(uid, grant_user) < 0) {
-      dout(10) << "grant user does not exist:" << uid << dendl;
+      ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
       /* skipping silently */
     } else {
       grant.set_canon(uid, grant_user.display_name, perm);
@@ -82,7 +82,7 @@ bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read
     vector<string> uids;
     int r = parse_list(read_list, uids);
     if (r < 0) {
-      dout(0) << "ERROR: parse_list returned r=" << r << dendl;
+      ldout(cct, 0) << "ERROR: parse_list returned r=" << r << dendl;
       return false;
     }
 
@@ -92,7 +92,7 @@ bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read
     vector<string> uids;
     int r = parse_list(write_list, uids);
     if (r < 0) {
-      dout(0) << "ERROR: parse_list returned r=" << r << dendl;
+      ldout(cct, 0) << "ERROR: parse_list returned r=" << r << dendl;
       return false;
     }
 

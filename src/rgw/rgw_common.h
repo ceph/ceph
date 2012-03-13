@@ -159,9 +159,9 @@ enum {
 
 
  /* size should be the required string size + 1 */
-extern int gen_rand_base64(char *dest, int size);
-extern int gen_rand_alphanumeric(char *dest, int size);
-extern int gen_rand_alphanumeric_upper(char *dest, int size);
+extern int gen_rand_base64(CephContext *cct, char *dest, int size);
+extern int gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
+extern int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size);
 
 enum RGWIntentEvent {
   DEL_OBJ = 0,
@@ -242,7 +242,7 @@ public:
 
   RGWEnv();
   ~RGWEnv();
-  void init(char **envp);
+  void init(CephContext *cct, char **envp);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
@@ -252,7 +252,7 @@ public:
 class RGWConf {
   friend class RGWEnv;
 protected:
-  void init(RGWEnv * env);
+  void init(CephContext *cct, RGWEnv * env);
 public:
   RGWConf() :
     should_log(1) {}
@@ -520,6 +520,7 @@ struct RGWEnv;
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
+   CephContext *cct;
    FCGX_Request *fcgx;
    http_op op;
    bool content_started;
@@ -580,7 +581,7 @@ struct req_state {
 
    string dialect;
 
-   req_state(struct RGWEnv *e);
+   req_state(CephContext *_cct, struct RGWEnv *e);
    ~req_state();
 };
 
@@ -954,11 +955,11 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
           strcasecmp(s, "1") == 0);
 }
 
-static inline void append_rand_alpha(string& src, string& dest, int len)
+static inline void append_rand_alpha(CephContext *cct, string& src, string& dest, int len)
 {
   dest = src;
   char buf[len + 1];
-  gen_rand_alphanumeric(buf, len);
+  gen_rand_alphanumeric(cct, buf, len);
   dest.append("_");
   dest.append(buf);
 }

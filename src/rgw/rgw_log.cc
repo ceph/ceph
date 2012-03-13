@@ -147,12 +147,12 @@ int rgw_log_op(struct req_state *s)
     return 0;
 
   if (!s->bucket_name) {
-    dout(5) << "nothing to log for operation" << dendl;
+    ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
-    if (!g_conf->rgw_log_nonexistent_bucket) {
-      dout(5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
+    if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
+      ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = 0;
@@ -162,7 +162,7 @@ int rgw_log_op(struct req_state *s)
   entry.bucket = s->bucket_name;
 
   if (check_utf8(s->bucket_name, entry.bucket.size()) != 0) {
-    dout(5) << "not logging op on bucket with non-utf8 name" << dendl;
+    ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
@@ -173,8 +173,8 @@ int rgw_log_op(struct req_state *s)
 
   entry.obj_size = s->obj_size;
 
-  if (g_conf->rgw_remote_addr_param.length())
-    set_param_str(s, g_conf->rgw_remote_addr_param.c_str(), entry.remote_addr);
+  if (s->cct->_conf->rgw_remote_addr_param.length())
+    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(), entry.remote_addr);
   else
     set_param_str(s, "REMOTE_ADDR", entry.remote_addr);    
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
@@ -188,7 +188,7 @@ int rgw_log_op(struct req_state *s)
   entry.bucket_owner = s->bucket_owner;
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now(g_ceph_context) - s->time;
+  entry.total_time = ceph_clock_now(s->cct) - s->time;
   entry.bytes_sent = s->bytes_sent;
   entry.bytes_received = s->bytes_received;
   if (s->err.http_ret) {
@@ -206,12 +206,12 @@ int rgw_log_op(struct req_state *s)
 
   struct tm bdt;
   time_t t = entry.time.sec();
-  if (g_conf->rgw_log_object_name_utc)
+  if (s->cct->_conf->rgw_log_object_name_utc)
     gmtime_r(&t, &bdt);
   else
     localtime_r(&t, &bdt);
   
-  string oid = render_log_object_name(g_conf->rgw_log_object_name, &bdt,
+  string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				      s->bucket.bucket_id, entry.bucket.c_str());
 
   rgw_obj obj(log_bucket, oid);
@@ -228,7 +228,7 @@ int rgw_log_op(struct req_state *s)
   }
 done:
   if (ret < 0)
-    dout(0) << "ERROR: failed to log entry" << dendl;
+    ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
 
   return ret;
 }
@@ -244,7 +244,7 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 
   struct tm bdt;
   time_t t = entry.op_time.sec();
-  if (g_conf->rgw_intent_log_object_name_utc)
+  if (s->cct->_conf->rgw_intent_log_object_name_utc)
     gmtime_r(&t, &bdt);
   else
     localtime_r(&t, &bdt);

@@ -104,14 +104,14 @@ void parse_mime_map(const char *buf)
   }
 }
 
-static int ext_mime_map_init(const char *ext_map)
+static int ext_mime_map_init(CephContext *cct, const char *ext_map)
 {
   int fd = open(ext_map, O_RDONLY);
   char *buf = NULL;
   int ret;
   if (fd < 0) {
     ret = -errno;
-    dout(0) << "ext_mime_map_init(): failed to open file=" << ext_map << " ret=" << ret << dendl;
+    ldout(cct, 0) << "ext_mime_map_init(): failed to open file=" << ext_map << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -119,23 +119,23 @@ static int ext_mime_map_init(const char *ext_map)
   ret = fstat(fd, &st);
   if (ret < 0) {
     ret = -errno;
-    dout(0) << "ext_mime_map_init(): failed to stat file=" << ext_map << " ret=" << ret << dendl;
+    ldout(cct, 0) << "ext_mime_map_init(): failed to stat file=" << ext_map << " ret=" << ret << dendl;
     goto done;
   }
 
   buf = (char *)malloc(st.st_size + 1);
   if (!buf) {
     ret = -ENOMEM;
-    dout(0) << "ext_mime_map_init(): failed to allocate buf" << dendl;
+    ldout(cct, 0) << "ext_mime_map_init(): failed to allocate buf" << dendl;
     goto done;
   }
 
   ret = read(fd, buf, st.st_size + 1);
   if (ret != st.st_size) {
     // huh? file size has changed, what are the odds?
-    dout(0) << "ext_mime_map_init(): raced! will retry.." << dendl;
+    ldout(cct, 0) << "ext_mime_map_init(): raced! will retry.." << dendl;
     close(fd);
-    return ext_mime_map_init(ext_map);
+    return ext_mime_map_init(cct, ext_map);
   }
   buf[st.st_size] = '\0';
 
@@ -158,7 +158,7 @@ const char *rgw_find_mime_by_ext(string& ext)
 
 int rgw_tools_init(CephContext *cct)
 {
-  int ret = ext_mime_map_init(cct->_conf->rgw_mime_types_file.c_str());
+  int ret = ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
   if (ret < 0)
     return ret;
 

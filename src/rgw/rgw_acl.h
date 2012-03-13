@@ -180,12 +180,18 @@ WRITE_CLASS_ENCODER(ACLGrant)
 class RGWAccessControlList
 {
 protected:
+  CephContext *cct;
   map<string, int> acl_user_map;
   map<uint32_t, int> acl_group_map;
   multimap<string, ACLGrant> grant_map;
   void _add_grant(ACLGrant *grant);
 public:
-  RGWAccessControlList() {}
+  RGWAccessControlList(CephContext *_cct) : cct(_cct) {}
+  RGWAccessControlList() : cct(NULL) {}
+
+  void set_ctx(CephContext *ctx) {
+    cct = ctx;
+  }
 
   virtual ~RGWAccessControlList() {}
 
@@ -269,12 +275,19 @@ WRITE_CLASS_ENCODER(ACLOwner)
 class RGWAccessControlPolicy
 {
 protected:
+  CephContext *cct;
   RGWAccessControlList acl;
   ACLOwner owner;
 
 public:
-  RGWAccessControlPolicy() {}
+  RGWAccessControlPolicy(CephContext *_cct) : cct(_cct), acl(_cct) {}
+  RGWAccessControlPolicy() : cct(NULL), acl(NULL) {}
   virtual ~RGWAccessControlPolicy() {}
+
+  void set_ctx(CephContext *ctx) {
+    cct = ctx;
+    acl.set_ctx(ctx);
+  }
 
   int get_perm(string& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);

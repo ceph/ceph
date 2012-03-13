@@ -55,7 +55,7 @@ int rgw_store_user_info(RGWUserInfo& info, bool exclusive)
     RGWUserInfo inf;
     int r = rgw_get_user_info_by_swift(k.id, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      dout(0) << "WARNING: can't store user info, swift id already mapped to another user" << dendl;
+      ldout(rgwstore->ctx(), 0) << "WARNING: can't store user info, swift id already mapped to another user" << dendl;
       return -EEXIST;
     }
   }
@@ -68,7 +68,7 @@ int rgw_store_user_info(RGWUserInfo& info, bool exclusive)
       RGWAccessKey& k = iter->second;
       int r = rgw_get_user_info_by_access_key(k.id, inf);
       if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-        dout(0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
+        ldout(rgwstore->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
         return -EEXIST;
       }
     }
@@ -126,7 +126,7 @@ int rgw_get_user_info_from_index(string& key, rgw_bucket& bucket, RGWUserInfo& i
     if (!iter.end())
       info.decode(iter);
   } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    ldout(rgwstore->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
 
@@ -187,7 +187,7 @@ static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
   try {
     buckets.decode(iter);
   } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed to decode buckets info, caught buffer::error" << dendl;
+    ldout(rgwstore->ctx(), 0) << "ERROR: failed to decode buckets info, caught buffer::error" << dendl;
     return -EIO;
   }
   return 0;
@@ -241,7 +241,7 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
    map<string, RGWBucketEnt>& m = buckets.get_buckets();
    int r = rgwstore->update_containers_stats(m);
    if (r < 0)
-     dout(0) << "ERROR: could not get stats for buckets" << dendl;
+     ldout(rgwstore->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
 
   }
   return 0;
@@ -285,7 +285,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
     ret = rgwstore->omap_set(obj, bucket_name, bl);
     if (ret < 0) {
-      dout(0) << "ERROR: error adding bucket to directory: "
+      ldout(rgwstore->ctx(), 0) << "ERROR: error adding bucket to directory: "
 		 << cpp_strerror(-ret)<< dendl;
     }
   } else {
@@ -305,7 +305,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
       ret = rgw_write_buckets_attr(user_id, buckets);
       break;
     default:
-      dout(10) << "rgw_write_buckets_attr returned " << ret << dendl;
+      ldout(rgwstore->ctx(), 10) << "rgw_write_buckets_attr returned " << ret << dendl;
       break;
     }
   }
@@ -326,7 +326,7 @@ int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket)
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
     ret = rgwstore->omap_del(obj, bucket.name);
     if (ret < 0) {
-      dout(0) << "ERROR: error removing bucket from directory: "
+      ldout(rgwstore->ctx(), 0) << "ERROR: error removing bucket from directory: "
 		 << cpp_strerror(-ret)<< dendl;
     }
   } else {
@@ -393,10 +393,10 @@ int rgw_delete_user(RGWUserInfo& info) {
   }
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter) {
-    dout(10) << "removing key index: " << kiter->first << dendl;
+    ldout(rgwstore->ctx(), 10) << "removing key index: " << kiter->first << dendl;
     ret = rgw_remove_key_index(kiter->second);
     if (ret < 0 && ret != -ENOENT) {
-      dout(0) << "ERROR: could not remove " << kiter->first << " (access key object), should be fixed (err=" << ret << ")" << dendl;
+      ldout(rgwstore->ctx(), 0) << "ERROR: could not remove " << kiter->first << " (access key object), should be fixed (err=" << ret << ")" << dendl;
       return ret;
     }
   }
@@ -404,38 +404,38 @@ int rgw_delete_user(RGWUserInfo& info) {
   map<string, RGWAccessKey>::iterator siter = info.swift_keys.begin();
   for (; siter != info.swift_keys.end(); ++siter) {
     RGWAccessKey& k = siter->second;
-    dout(10) << "removing swift subuser index: " << k.id << dendl;
+    ldout(rgwstore->ctx(), 10) << "removing swift subuser index: " << k.id << dendl;
     /* check if swift mapping exists */
     ret = rgw_remove_swift_name_index(k.id);
     if (ret < 0 && ret != -ENOENT) {
-      dout(0) << "ERROR: could not remove " << k.id << " (swift name object), should be fixed (err=" << ret << ")" << dendl;
+      ldout(rgwstore->ctx(), 0) << "ERROR: could not remove " << k.id << " (swift name object), should be fixed (err=" << ret << ")" << dendl;
       return ret;
     }
   }
 
   rgw_obj email_obj(ui_email_bucket, info.user_email);
-  dout(10) << "removing email index: " << info.user_email << dendl;
+  ldout(rgwstore->ctx(), 10) << "removing email index: " << info.user_email << dendl;
   ret = rgwstore->delete_obj(NULL, email_obj);
   if (ret < 0 && ret != -ENOENT) {
-    dout(0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
+    ldout(rgwstore->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
   }
 
   string buckets_obj_id;
   get_buckets_obj(info.user_id, buckets_obj_id);
   rgw_obj uid_bucks(ui_uid_bucket, buckets_obj_id);
-  dout(10) << "removing user buckets index" << dendl;
+  ldout(rgwstore->ctx(), 10) << "removing user buckets index" << dendl;
   ret = rgwstore->delete_obj(NULL, uid_bucks);
   if (ret < 0 && ret != -ENOENT) {
-    dout(0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
+    ldout(rgwstore->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
   }
   
   rgw_obj uid_obj(ui_uid_bucket, info.user_id);
-  dout(10) << "removing user index: " << info.user_id << dendl;
+  ldout(rgwstore->ctx(), 10) << "removing user index: " << info.user_id << dendl;
   ret = rgwstore->delete_obj(NULL, uid_obj);
   if (ret < 0 && ret != -ENOENT) {
-    dout(0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
+    ldout(rgwstore->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
   }
 

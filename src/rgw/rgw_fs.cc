@@ -28,7 +28,7 @@ struct rgwfs_state {
 
 #define DIR_NAME "/tmp/radosgw"
 
-int RGWFS::initialize(CephContext *cct)
+int RGWFS::initialize()
 {
   return 0;
 }
@@ -408,7 +408,7 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
     case ERANGE:
       break;
     default:
-      dout(20) << "getxattr on " << path << " returned" << -errno << dendl;
+      ldout(cct, 20) << "getxattr on " << path << " returned" << -errno << dendl;
       return -errno;
     }
     len *= 2;
@@ -453,7 +453,6 @@ int RGWFS::set_attr(void *ctx, rgw_obj& obj,
   r = setxattr(buf, name, bl.c_str(), bl.length(), 0);
 
   int ret = (r < 0 ? -errno : 0);
-  dout(20) << "setxattr: path=" << buf << " ret=" << ret << dendl;
 
   return ret;
 }
@@ -530,7 +529,7 @@ int RGWFS::prepare_get_obj(void *ctx,
  
     r = -ECANCELED;
     if (if_match) {
-      dout(10) << "ETag: " << etag << " " << " If-Match: " << if_match << dendl;
+      ldout(cct, 10) << "ETag: " << etag << " " << " If-Match: " << if_match << dendl;
       if (strcmp(if_match, etag)) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -539,7 +538,7 @@ int RGWFS::prepare_get_obj(void *ctx,
     }
 
     if (if_nomatch) {
-      dout(10) << "ETag: " << etag << " " << " If_NoMatch: " << if_nomatch << dendl;
+      ldout(cct, 10) << "ETag: " << etag << " " << " If_NoMatch: " << if_nomatch << dendl;
       if (strcmp(if_nomatch, etag) == 0) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -613,7 +612,7 @@ int RGWFS::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t of
       pos += r;
     } else {
       if (!r) {
-        dout(20) << "pos=" << pos << " r=" << r << " len=" << len << dendl;
+        ldout(cct, 20) << "pos=" << pos << " r=" << r << " len=" << len << dendl;
         r = -EIO; /* should not happen as we validated file size earlier */
         break;
       }

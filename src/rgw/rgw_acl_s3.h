@@ -39,7 +39,7 @@ public:
   ACLGrant_S3() {}
   ~ACLGrant_S3() {}
 
-  void to_xml(ostream& out);
+  void to_xml(CephContext *cct, ostream& out);
   bool xml_end(const char *el);
   bool xml_start(const char *el, const char **attr);
 
@@ -50,7 +50,7 @@ public:
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
-  RGWAccessControlList_S3() {}
+  RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
   ~RGWAccessControlList_S3() {}
 
   bool xml_end(const char *el);
@@ -59,7 +59,7 @@ public:
     out << "<AccessControlList>";
     for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
       ACLGrant_S3& grant = static_cast<ACLGrant_S3 &>(iter->second);
-      grant.to_xml(out);
+      grant.to_xml(cct, out);
     }
     out << "</AccessControlList>";
   }
@@ -87,7 +87,7 @@ public:
 class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 {
 public:
-  RGWAccessControlPolicy_S3() {}
+  RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
   ~RGWAccessControlPolicy_S3() {}
 
   bool xml_end(const char *el);
@@ -117,9 +117,11 @@ public:
  */
 class RGWACLXMLParser_S3 : public RGWXMLParser
 {
+  CephContext *cct;
+
   XMLObj *alloc_obj(const char *el);
 public:
-  RGWACLXMLParser_S3() {}
+  RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 
 #endif

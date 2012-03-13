@@ -70,7 +70,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 #define dout_prefix *_dout
 #define DOUT_CONDVAR(cct, x) cct->_conf->debug_ ## x
 #define XDOUT_CONDVAR(cct, x) DOUT_CONDVAR(cct, x)
-#define DOUT_COND(cct, l) l <= XDOUT_CONDVAR(cct, DOUT_SUBSYS)
+#define DOUT_COND(cct, l) cct && (l <= XDOUT_CONDVAR(cct, DOUT_SUBSYS))
 
 // The array declaration will trigger a compiler error if 'l' is
 // out of range

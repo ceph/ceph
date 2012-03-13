@@ -194,7 +194,7 @@ bool ACLGrant_S3::xml_end(const char *el) {
   return true;
 }
 
-void ACLGrant_S3::to_xml(ostream& out) {
+void ACLGrant_S3::to_xml(CephContext *cct, ostream& out) {
   ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
 
   /* only show s3 compatible permissions */
@@ -217,7 +217,7 @@ void ACLGrant_S3::to_xml(ostream& out) {
     break;
   case ACL_TYPE_GROUP:
     if (!group_to_uri(group, uri)) {
-      dout(0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
+      ldout(cct, 0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
       break;
     }
     out << "<URI>" << uri << "</URI>";
@@ -324,15 +324,15 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
 
   RGWUserInfo owner_info;
   if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
-    dout(10) << "owner info does not exist" << dendl;
+    ldout(cct, 10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
   ACLOwner& dest_owner = dest.get_owner();
   dest_owner.set_id(owner->get_id());
   dest_owner.set_name(owner_info.display_name);
 
-  dout(20) << "owner id=" << owner->get_id() << dendl;
-  dout(20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+  ldout(cct, 20) << "owner id=" << owner->get_id() << dendl;
+  ldout(cct, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& dst_acl = dest.get_acl();
 
@@ -350,12 +350,12 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
       {
         string email;
         if (!src_grant.get_id(email)) {
-          dout(0) << "ERROR: src_grant.get_id() failed" << dendl;
+          ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
           return -EINVAL;
         }
-        dout(10) << "grant user email=" << email << dendl;
+        ldout(cct, 10) << "grant user email=" << email << dendl;
         if (rgw_get_user_info_by_email(email, grant_user) < 0) {
-          dout(10) << "grant user email not found or other error" << dendl;
+          ldout(cct, 10) << "grant user email not found or other error" << dendl;
           return -ERR_UNRESOLVABLE_EMAIL;
         }
         uid = grant_user.user_id;
@@ -364,13 +364,13 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
       {
         if (type.get_type() == ACL_TYPE_CANON_USER) {
           if (!src_grant.get_id(uid)) {
-            dout(0) << "ERROR: src_grant.get_id() failed" << dendl;
+            ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
             return -EINVAL;
           }
         }
     
         if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(uid, grant_user) < 0) {
-          dout(10) << "grant user does not exist:" << uid << dendl;
+          ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           return -EINVAL;
         } else {
           ACLPermission& perm = src_grant.get_permission();
@@ -378,7 +378,7 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
           grant_ok = true;
           string new_id;
           new_grant.get_id(new_id);
-          dout(10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+          ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
         }
       }
       break;
@@ -388,9 +388,9 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
         if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
           new_grant = src_grant;
           grant_ok = true;
-          dout(10) << "new grant: " << uri << dendl;
+          ldout(cct, 10) << "new grant: " << uri << dendl;
         } else {
-          dout(10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+          ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
           return -EINVAL;
         }
       }
@@ -424,11 +424,11 @@ XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
 {
   XMLObj * obj = NULL;
   if (strcmp(el, "AccessControlPolicy") == 0) {
-    obj = new RGWAccessControlPolicy_S3();
+    obj = new RGWAccessControlPolicy_S3(cct);
   } else if (strcmp(el, "Owner") == 0) {
     obj = new ACLOwner_S3();
   } else if (strcmp(el, "AccessControlList") == 0) {
-    obj = new RGWAccessControlList_S3();
+    obj = new RGWAccessControlList_S3(cct);
   } else if (strcmp(el, "ID") == 0) {
     obj = new ACLID_S3();
   } else if (strcmp(el, "DisplayName") == 0) {
