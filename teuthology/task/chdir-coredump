@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+# valgrind only dumps to cwd, so cwd there...
+cd /tmp/cephtest/archive/coredump
+
+exec "$@"

@@ -121,7 +121,7 @@ def ceph_log(ctx, config):
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
     assert config is None
-    FILES = ['daemon-helper', 'enable-coredump']
+    FILES = ['daemon-helper', 'enable-coredump', 'chdir-coredump']
     for filename in FILES:
         log.info('Shipping %r...', filename)
         src = os.path.join(os.path.dirname(__file__), filename)
