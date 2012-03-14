@@ -337,7 +337,6 @@ my_libradosgw_src = \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_access.cc \
-	rgw/rgw_fs.cc \
 	rgw/rgw_rados.cc \
 	rgw/rgw_op.cc \
 	rgw/rgw_common.cc \
@@ -1494,7 +1493,6 @@ noinst_HEADERS = \
 	rgw/rgw_cls_api.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
-	rgw/rgw_fs.h\
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
 	rgw/rgw_op.h\
