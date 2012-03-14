@@ -299,6 +299,19 @@ protected:
    */
   virtual void set_policy_throttler(int type, Throttle *t) = 0;
 
+  /**
+   * create a new messenger
+   *
+   * Create a new messenger instance, with whatever implementation is
+   * available or specified via the configuration in cct.
+   *
+   * @param cct context
+   * @param name entity name to register
+   * @param nonce nonce value to uniquely identify this instance on the current host
+   */
+  static Messenger *create(CephContext *cct,
+			   entity_name_t name,
+			   uint64_t nonce);
 };
 
 
