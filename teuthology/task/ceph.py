@@ -191,10 +191,14 @@ def binaries(ctx, config):
         # fetch from gitbuilder gitbuilder
         log.info('Fetching and unpacking ceph binaries from gitbuilder...')
         sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
+            package='ceph',
             branch=config.get('branch'),
             tag=config.get('tag'),
             sha1=config.get('sha1'),
             flavor=config.get('flavor'),
+            format=config.get('format'),
+            dist=config.get('dist'),
+            arch=config.get('arch'),
             )
         ctx.summary['ceph-sha1'] = sha1
         if ctx.archive is not None:
@@ -932,31 +936,29 @@ def task(ctx, config):
     # match is not found, the teuthology run fails. This is ugly,
     # and should be cleaned up at some point.
 
-    flavor = []
+    dist = 'oneiric'
+    format = 'tarball'
+    arch = 'x86_64'
+    flavor = 'basic'
 
     # First element: controlled by user (or not there, by default):
     # used to choose the right distribution, e.g. "oneiric".
-    flavor_user = config.get('flavor')
-    if flavor_user is not None:
-        flavor.append(flavor_user)
+    flavor = config.get('flavor', 'basic')
 
     if config.get('path'):
         # local dir precludes any other flavors
-        flavor = ['local']
+        flavor = 'local'
     else:
         if config.get('valgrind'):
             log.info('Using notcmalloc flavor and running some daemons under valgrind')
-            flavor.append('notcmalloc')
+            flavor = 'notcmalloc'
         else:
             if config.get('coverage'):
                 log.info('Recording coverage for this run.')
-                flavor.append('gcov')
+                flavor = 'gcov'
 
-    flavor = '-'.join(flavor)
-    if flavor == '':
-        flavor = None
-    ctx.summary['flavor'] = flavor or 'default'
-
+    ctx.summary['flavor'] = flavor
+    
     if config.get('coverage'):
         coverage_dir = '/tmp/cephtest/archive/coverage'
         log.info('Creating coverage directory...')
@@ -979,6 +981,9 @@ def task(ctx, config):
                 sha1=config.get('sha1'),
                 path=config.get('path'),
                 flavor=flavor,
+                dist=dist,
+                format=format,
+                arch=arch
                 )),
         lambda: valgrind_post(ctx=ctx, config=config),
         lambda: cluster(ctx=ctx, config=dict(

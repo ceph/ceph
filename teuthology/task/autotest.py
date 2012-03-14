@@ -80,7 +80,7 @@ def _download(remote):
             'wget',
             '-nv',
             '--no-check-certificate',
-            'https://github.com/tv42/autotest/tarball/ceph',
+            'https://github.com/ceph/autotest/tarball/ceph',
             '-O-',
             run.Raw('|'),
             'tar',

@@ -113,7 +113,7 @@ def _run_tests(ctx, role, tests):
             '-q',
             '-O-',
             # TODO make branch/tag/sha1 used configurable
-            'https://github.com/NewDreamNetwork/ceph/tarball/HEAD',
+            'https://github.com/ceph/ceph/tarball/HEAD',
             run.Raw('|'),
             'tar',
             '-C', srcdir,
@@ -160,7 +160,7 @@ def _run_tests(ctx, role, tests):
                         run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
                         run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
                         run.Raw('CEPH_ID="{id}"'.format(id=id_)),
-                        run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
+                        run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.7/dist-packages:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
                         '/tmp/cephtest/enable-coredump',
                         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                         '/tmp/cephtest/archive/coverage',

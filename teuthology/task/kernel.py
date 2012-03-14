@@ -97,7 +97,14 @@ def install_and_reboot(ctx, config):
         log.info('Installing kernel version {sha1} on {role}...'.format(sha1=sha1,
                                                                         role=role))
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        _, deb_url = teuthology.get_ceph_binary_url(sha1=sha1, flavor='kernel')
+        _, deb_url = teuthology.get_ceph_binary_url(
+            package='kernel',
+            sha1=sha1, 
+            format='deb',
+            flavor='basic',
+            arch='x86_64',
+            dist='oneiric',
+            )
         log.info('fetching kernel from {url}'.format(url=deb_url))
         proc = role_remote.run(
             args=[
@@ -253,10 +260,14 @@ def task(ctx, config):
     need_install = {}
     for role, role_config in config.iteritems():
         sha1, _ = teuthology.get_ceph_binary_url(
+            package='kernel',
             branch=role_config.get('branch'),
             tag=role_config.get('tag'),
             sha1=role_config.get('sha1'),
-            flavor='kernel',
+            flavor='basic',
+            format='deb',
+            dist='oneiric',
+            arch='x86_64',
             )
         log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
         ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1

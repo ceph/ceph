@@ -19,7 +19,7 @@ SHA1=`cat $TEST_DIR/ceph-sha1`
 mkdir -p $OUTPUT_DIR/ceph
 
 echo "Retrieving source and .gcno files..."
-wget -q -O- "https://github.com/NewDreamNetwork/ceph/tarball/$SHA1" | tar xzf - --strip-components=1 -C $OUTPUT_DIR/ceph
+wget -q -O- "https://github.com/ceph/ceph/tarball/$SHA1" | tar xzf - --strip-components=1 -C $OUTPUT_DIR/ceph
 tar zxf $CEPH_TARBALL -C $OUTPUT_DIR
 cp $OUTPUT_DIR/usr/local/lib/ceph/coverage/*.gcno $OUTPUT_DIR/ceph/src
 mkdir $OUTPUT_DIR/ceph/src/.libs

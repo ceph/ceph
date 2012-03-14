@@ -127,7 +127,8 @@ def task(ctx, config):
             primary = 'osd.%d' % pg['acting'][0]
 
             # verify that i can list them direct from the osd
-            log.info('listing missing/lost in %s', pg['pgid']);
+            log.info('listing missing/lost in %s state %s', pg['pgid'],
+                     pg['state']);
             m = manager.list_pg_missing(pg['pgid'])
             #log.info('%s' % m)
             assert m['num_unfound'] == pg['stat_sum']['num_objects_unfound']

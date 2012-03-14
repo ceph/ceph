@@ -166,6 +166,10 @@ def main():
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
 
+    if not ctx.summary.get('success', True):
+        import sys
+        sys.exit(1)
+
 def nuke(targets, owner, log, teuth_config, should_unlock,
          synch_clocks=True, reboot_all=True):
     from teuthology.nuke import nuke
