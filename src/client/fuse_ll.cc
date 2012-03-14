@@ -555,8 +555,10 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   newargv[newargc++] = "-o";
   newargv[newargc++] = "default_permissions";
 
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "big_writes";
+  if (g_conf->fuse_big_writes) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "big_writes";
+  }
 
   newargv[newargc++] = "-o";
   newargv[newargc++] = "atomic_o_trunc";

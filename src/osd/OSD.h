@@ -46,7 +46,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-#define CEPH_OSD_PROTOCOL     9 /* cluster internal */
+#define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
 
 enum {
