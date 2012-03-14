@@ -207,6 +207,8 @@ AS_IF([test "x$with_radosgw" != xno],
 	     fi])])
 AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
+AS_IF([test "$RADOSGW" = "1"], [AC_DEFINE([WITH_RADOSGW], [1], [define if radosgw enabled])])
+
 # fuse?
 AC_ARG_WITH([fuse],
             [AS_HELP_STRING([--without-fuse], [disable FUSE userspace client])],
