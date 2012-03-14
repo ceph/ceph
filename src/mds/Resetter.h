@@ -19,7 +19,7 @@
 #include "osdc/Journaler.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 #include "auth/Auth.h"
 
 /**
@@ -35,18 +35,18 @@ public:
   Objecter *objecter;
   Journaler *journaler;
   OSDMap *osdmap;
-  SimpleMessenger *messenger;
+  Messenger *messenger;
   MonClient *monc;
   Mutex lock;
   SafeTimer timer;
 
   /*
-   * The messenger should be a valid SimpleMessenger. You should call bind()
+   * The messenger should be a valid Messenger. You should call bind()
    * before passing it in, but not do anything else.
    * The MonClient needs to be valid, and you should have called
    * build_initial_monmap().
    */
-  Resetter(SimpleMessenger *messenger_, MonClient *monc_) :
+  Resetter(Messenger *messenger_, MonClient *monc_) :
     Dispatcher(messenger_->cct),
     messenger(messenger_),
     monc(monc_),

@@ -31,7 +31,7 @@ using namespace std;
 #include "mds/Dumper.h"
 #include "mds/Resetter.h"
 
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
@@ -69,9 +69,9 @@ static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
   common_init_finish(g_ceph_context);
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
-                                                   entity_name_t::CLIENT(),
-                                                   getpid());
+  Messenger *messenger = Messenger::create(g_ceph_context,
+					   entity_name_t::CLIENT(),
+					   getpid());
   int r = messenger->bind(g_conf->public_addr);
   if (r < 0)
     return r;
@@ -231,9 +231,9 @@ int main(int argc, const char **argv)
 
   global_print_banner();
 
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
-                                                   entity_name_t::MDS(-1),
-                                                   getpid());
+  Messenger *messenger = Messenger::create(g_ceph_context,
+					   entity_name_t::MDS(-1),
+					   getpid());
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
   cout << "starting " << g_conf->name << " at " << messenger->get_myaddr()

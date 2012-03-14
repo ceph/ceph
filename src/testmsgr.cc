@@ -21,7 +21,7 @@ using namespace std;
 
 #include "mon/MonMap.h"
 #include "mon/MonClient.h"
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 #include "messages/MPing.h"
 
 #include "common/Timer.h"
@@ -96,9 +96,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   std::string sss(ss.str());
   g_ceph_context->_conf->set_val("public_addr", sss.c_str());
   g_ceph_context->_conf->apply_changes(NULL);
-  SimpleMessenger *rank = new SimpleMessenger(g_ceph_context,
-                                              entity_name_t::MON(whoami),
-                                              getpid());
+  Messenger *rank = Messenger::create(g_ceph_context,
+				      entity_name_t::MON(whoami),
+				      getpid());
   int err = rank->bind(g_ceph_context->_conf->public_addr);
   if (err < 0)
     return 1;

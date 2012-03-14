@@ -22,7 +22,7 @@
 #include "mon/MonClient.h"
 #include "include/str_list.h"
 #include "messages/MMonMap.h"
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 #include <fcntl.h>
 #include <iostream>
@@ -77,7 +77,7 @@ public:
       goto fail;
 
     //network connection
-    messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(), msgr_nonce);
+    messenger = Messenger::create(cct, entity_name_t::CLIENT(), msgr_nonce);
 
     //at last the client
     ret = -1002;
@@ -185,7 +185,7 @@ private:
   bool mounted;
   Client *client;
   MonClient *monclient;
-  SimpleMessenger *messenger;
+  Messenger *messenger;
   CephContext *cct;
   std::string cwd;
 };

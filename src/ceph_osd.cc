@@ -31,7 +31,7 @@ using namespace std;
 #include "mon/MonClient.h"
 
 
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
@@ -300,18 +300,18 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context,
-                                                          entity_name_t::OSD(whoami),
-                                                          getpid());
-  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context,
-                                                           entity_name_t::OSD(whoami),
-                                                           getpid());
-  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context,
-                                                        entity_name_t::OSD(whoami),
-                                                        getpid());
-  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context,
-                                                         entity_name_t::OSD(whoami),
-                                                         getpid());
+  Messenger *client_messenger = Messenger::create(g_ceph_context,
+						  entity_name_t::OSD(whoami),
+						  getpid());
+  Messenger *cluster_messenger = Messenger::create(g_ceph_context,
+						   entity_name_t::OSD(whoami),
+						   getpid());
+  Messenger *messenger_hbin = Messenger::create(g_ceph_context,
+						entity_name_t::OSD(whoami),
+						getpid());
+  Messenger *messenger_hbout = Messenger::create(g_ceph_context,
+						 entity_name_t::OSD(whoami),
+						 getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);

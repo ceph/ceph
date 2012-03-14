@@ -29,7 +29,7 @@ using namespace std;
 #include "mon/MonitorStore.h"
 #include "mon/MonClient.h"
 
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 #include "include/CompatSet.h"
 
@@ -367,9 +367,9 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context,
-                                                   entity_name_t::MON(rank),
-                                                   0);
+  Messenger *messenger = Messenger::create(g_ceph_context,
+					   entity_name_t::MON(rank),
+					   0);
   messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 

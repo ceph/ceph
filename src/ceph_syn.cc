@@ -22,7 +22,7 @@ using namespace std;
 #include "client/SyntheticClient.h"
 #include "client/Client.h"
 
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 #include "mon/MonClient.h"
 
@@ -63,14 +63,14 @@ int main(int argc, const char **argv, char *envp[])
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;
-  SimpleMessenger* messengers[g_conf->num_client];
+  Messenger* messengers[g_conf->num_client];
   MonClient* mclients[g_conf->num_client];
 
   cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf->num_client; i++) {
-    messengers[i] = new SimpleMessenger(g_ceph_context,
-                                        entity_name_t(entity_name_t::TYPE_CLIENT,-1),
-                                        i * 1000000 + getpid());
+    messengers[i] = Messenger::create(g_ceph_context,
+				      entity_name_t(entity_name_t::TYPE_CLIENT,-1),
+				      i * 1000000 + getpid());
     messengers[i]->bind(g_conf->public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
