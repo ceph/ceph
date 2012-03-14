@@ -1136,7 +1136,6 @@ int RGWRados::copy_obj(void *ctx,
                struct rgw_err *err)
 {
   int ret, r;
-  char *data;
   uint64_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
@@ -1164,11 +1163,12 @@ int RGWRados::copy_obj(void *ctx,
   RGWObjManifestPart *first_part;
 
   do {
-    ret = get_obj(ctx, &handle, src_obj, &data, ofs, end);
+    bufferlist bl;
+    ret = get_obj(ctx, &handle, src_obj, bl, ofs, end);
     if (ret < 0)
       return ret;
 
-    char *orig_data = data;
+    const char *data = bl.c_str();
 
     if (ofs < RGW_MAX_CHUNK_SIZE) {
       off_t len = min(RGW_MAX_CHUNK_SIZE - ofs, (off_t)ret);
@@ -1184,7 +1184,6 @@ int RGWRados::copy_obj(void *ctx,
     if (ret > 0) {
       r = put_obj_data(ctx, shadow_obj, data, ((ofs == 0) ? -1 : ofs), ret, false);
     }
-    free(orig_data);
     if (r < 0)
       goto done_err;
 
@@ -2138,14 +2137,13 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 
 
 int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
-            char **data, off_t ofs, off_t end)
+                      bufferlist& bl, off_t ofs, off_t end)
 {
   rgw_bucket bucket;
   std::string oid, key;
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
   uint64_t len;
-  bufferlist bl;
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   RGWRadosCtx *new_ctx = NULL;
   bool reading_from_head = true;
@@ -2220,19 +2218,14 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     ldout(cct, 0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
     string loc = obj.loc();
     rgw_obj shadow(bucket, astate->shadow_obj, loc, shadow_ns);
-    r = get_obj(NULL, handle, shadow, data, ofs, end);
+    r = get_obj(NULL, handle, shadow, bl, ofs, end);
     goto done_ret;
   }
 
 done:
   if (bl.length() > 0) {
     r = bl.length();
-    *data = (char *)malloc(r);
-    memcpy(*data, bl.c_str(), bl.length());
-  } else {
-    *data = NULL;
   }
-
   if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
     delete state;
     *handle = NULL;

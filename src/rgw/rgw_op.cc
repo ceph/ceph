@@ -298,6 +298,7 @@ void RGWGetObj::execute()
 {
   void *handle = NULL;
   utime_t start_time = s->time;
+  bufferlist bl;
 
   perfcounter->inc(l_rgw_get);
 
@@ -322,8 +323,7 @@ void RGWGetObj::execute()
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
   while (ofs <= end) {
-    data = NULL;
-    ret = rgwstore->get_obj(s->obj_ctx, &handle, obj, &data, ofs, end);
+    ret = rgwstore->get_obj(s->obj_ctx, &handle, obj, bl, ofs, end);
     if (ret < 0) {
       goto done;
     }
@@ -333,16 +333,15 @@ void RGWGetObj::execute()
 
     perfcounter->finc(l_rgw_get_lat,
                      (ceph_clock_now(s->cct) - start_time));
-    send_response(handle);
-    free(data);
+    send_response(bl);
+    bl.clear();
     start_time = ceph_clock_now(s->cct);
   }
 
   return;
 
 done:
-  send_response(handle);
-  free(data);
+  send_response(bl);
   rgwstore->finish_get_obj(&handle);
 }
 

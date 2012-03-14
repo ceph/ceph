@@ -36,7 +36,6 @@ int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, 
 int rgw_get_obj(void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl)
 {
   int ret;
-  char *data = NULL;
   struct rgw_err err;
   void *handle = NULL;
   bufferlist::iterator iter;
@@ -48,17 +47,14 @@ int rgw_get_obj(void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl)
     return ret;
 
   do {
-    ret = rgwstore->get_obj(ctx, &handle, obj, &data, 0, request_len - 1);
+    ret = rgwstore->get_obj(ctx, &handle, obj, bl, 0, request_len - 1);
     if (ret < 0)
       goto done;
     if (ret < request_len)
       break;
-    free(data);
+    bl.clear();
     request_len *= 2;
   } while (true);
-
-  bl.append(data, ret);
-  free(data);
 
   ret = 0;
 done:

@@ -239,7 +239,7 @@ public:
             struct rgw_err *err) = 0;
 
   virtual int get_obj(void *ctx, void **handle, rgw_obj& obj,
-            char **data, off_t ofs, off_t end) = 0;
+                      bufferlist& bl, off_t ofs, off_t end) = 0;
 
   virtual void finish_get_obj(void **handle) = 0;
 

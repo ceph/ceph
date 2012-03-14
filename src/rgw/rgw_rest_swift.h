@@ -10,7 +10,7 @@ public:
   RGWGetObj_REST_SWIFT() {}
   ~RGWGetObj_REST_SWIFT() {}
 
-  int send_response(void *handle);
+  int send_response(bufferlist& bl);
 };
 
 class RGWListBuckets_REST_SWIFT : public RGWListBuckets_REST {

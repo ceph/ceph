@@ -63,7 +63,6 @@ protected:
   time_t *mod_ptr;
   time_t *unmod_ptr;
   map<string, bufferlist> attrs;
-  char *data;
   int ret;
   bool get_data;
   bool partial_content;
@@ -93,7 +92,6 @@ public:
     mod_ptr = NULL;
     unmod_ptr = NULL;
     attrs.clear();
-    data = NULL;
     partial_content = false;
     ret = 0;
 
@@ -106,7 +104,7 @@ public:
   void execute();
 
   virtual int get_params() = 0;
-  virtual int send_response(void *handle) = 0;
+  virtual int send_response(bufferlist& bl) = 0;
 
   virtual const char *name() { return "get_obj"; }
 };

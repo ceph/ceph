@@ -288,7 +288,7 @@ public:
             struct rgw_err *err);
 
   virtual int get_obj(void *ctx, void **handle, rgw_obj& obj,
-            char **data, off_t ofs, off_t end);
+                      bufferlist& bl, off_t ofs, off_t end);
 
   virtual void finish_get_obj(void **handle);
 

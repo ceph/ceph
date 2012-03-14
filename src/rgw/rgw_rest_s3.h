@@ -13,7 +13,7 @@ public:
   RGWGetObj_REST_S3() {}
   ~RGWGetObj_REST_S3() {}
 
-  int send_response(void *handle);
+  int send_response(bufferlist& bl);
 };
 
 class RGWListBuckets_REST_S3 : public RGWListBuckets_REST {

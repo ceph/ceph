@@ -424,7 +424,7 @@ void RGWCopyObj_REST_SWIFT::send_response()
   end_header(s);
 }
 
-int RGWGetObj_REST_SWIFT::send_response(void *handle)
+int RGWGetObj_REST_SWIFT::send_response(bufferlist& bl)
 {
   const char *content_type = NULL;
   int orig_ret = ret;
@@ -473,7 +473,7 @@ int RGWGetObj_REST_SWIFT::send_response(void *handle)
 
 send_data:
   if (get_data && !orig_ret) {
-    CGI_PutStr(s, data, len);
+    CGI_PutStr(s, bl.c_str(), len);
   }
   flush_formatter_to_req_state(s, s->formatter);
 

@@ -33,7 +33,7 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
   s->formatter->close_section();
 }
 
-int RGWGetObj_REST_S3::send_response(void *handle)
+int RGWGetObj_REST_S3::send_response(bufferlist& bl)
 {
   const char *content_type = NULL;
   int orig_ret = ret;
@@ -84,7 +84,7 @@ done:
 
 send_data:
   if (get_data && !orig_ret) {
-    CGI_PutStr(s, data, len);
+    CGI_PutStr(s, bl.c_str(), len);
   }
 
   return 0;
