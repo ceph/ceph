@@ -458,14 +458,20 @@ void ObjectCacher::bh_read(BufferHead *bh)
 		 onfinish);
 }
 
-void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start, uint64_t length, bufferlist &bl)
+void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
+				  uint64_t length, bufferlist &bl, int r)
 {
   //lock.Lock();
   ldout(cct, 7) << "bh_read_finish " 
-          << oid
-          << " " << start << "~" << length
-	  << " (bl is " << bl.length() << ")"
-          << dendl;
+		<< oid
+		<< " " << start << "~" << length
+		<< " (bl is " << bl.length() << ")"
+		<< " returned " << r
+		<< dendl;
+
+  if (r < 0) {
+    // TODO: fix bad read case
+  }
 
   if (bl.length() < length) {
     bufferptr bp(length - bl.length());
@@ -621,15 +627,20 @@ void ObjectCacher::lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid)
   }
 }
 
-void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
+void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
+				   uint64_t length, tid_t tid, int r)
 {
   //lock.Lock();
   
   ldout(cct, 7) << "bh_write_commit " 
-          << oid 
-          << " tid " << tid
-          << " " << start << "~" << length
-          << dendl;
+		<< oid 
+		<< " tid " << tid
+		<< " " << start << "~" << length
+		<< dendl;
+  if (r < 0) {
+    // TODO: handle write error
+  }
+
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
   } else {

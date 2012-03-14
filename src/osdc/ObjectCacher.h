@@ -464,8 +464,10 @@ class ObjectCacher {
   void wrunlock(Object *o);
 
  public:
-  void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
-  void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
+  void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset,
+		      uint64_t length, bufferlist &bl, int r);
+  void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset,
+		       uint64_t length, tid_t t, int r);
   void lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
@@ -479,7 +481,7 @@ class ObjectCacher {
     C_ReadFinish(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
       oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_read_finish(poolid, oid, start, length, bl);
+      oc->bh_read_finish(poolid, oid, start, length, bl, r);
     }
   };
 
@@ -494,7 +496,7 @@ class ObjectCacher {
     C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s, uint64_t l) :
       oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_write_commit(poolid, oid, start, length, tid);
+      oc->bh_write_commit(poolid, oid, start, length, tid, r);
     }
   };
 
