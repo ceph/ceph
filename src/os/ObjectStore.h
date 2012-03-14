@@ -625,7 +625,6 @@ public:
   virtual int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
   virtual int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
-  virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, void *value, size_t size) = 0;
   virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& value) = 0;
   int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferlist& value) {
     bufferptr bp;

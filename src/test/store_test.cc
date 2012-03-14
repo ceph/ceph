@@ -638,6 +638,86 @@ TEST_F(StoreTest, OMapTest) {
   store->apply_transaction(t);
 }
 
+TEST_F(StoreTest, XattrTest) {
+  coll_t cid("blah");
+  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0);
+  bufferlist big;
+  for (unsigned i = 0; i < 10000; ++i) {
+    big.append('\0');
+  }
+  bufferlist small;
+  for (unsigned i = 0; i < 10; ++i) {
+    small.append('\0');
+  }
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    t.touch(cid, hoid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferlist> attrs;
+  {
+    ObjectStore::Transaction t;
+    t.setattr(cid, hoid, "attr1", small);
+    attrs["attr1"] = small;
+    t.setattr(cid, hoid, "attr2", big);
+    attrs["attr2"] = big;
+    t.setattr(cid, hoid, "attr3", small);
+    attrs["attr3"] = small;
+    t.setattr(cid, hoid, "attr1", small);
+    attrs["attr1"] = small;
+    t.setattr(cid, hoid, "attr4", big);
+    attrs["attr4"] = big;
+    t.setattr(cid, hoid, "attr3", big);
+    attrs["attr3"] = big;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferptr> aset;
+  store->getattrs(cid, hoid, aset);
+  ASSERT_EQ(aset.size(), attrs.size());
+  for (map<string, bufferptr>::iterator i = aset.begin();
+       i != aset.end();
+       ++i) {
+    bufferlist bl;
+    bl.push_back(i->second);
+    ASSERT_TRUE(attrs[i->first] == bl);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.rmattr(cid, hoid, "attr2");
+    attrs.erase("attr2");
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  aset.clear();
+  store->getattrs(cid, hoid, aset);
+  ASSERT_EQ(aset.size(), attrs.size());
+  for (map<string, bufferptr>::iterator i = aset.begin();
+       i != aset.end();
+       ++i) {
+    bufferlist bl;
+    bl.push_back(i->second);
+    ASSERT_TRUE(attrs[i->first] == bl);
+  }
+
+  bufferptr bp;
+  r = store->getattr(cid, hoid, "attr2", bp);
+  ASSERT_EQ(r, -ENODATA);
+
+  r = store->getattr(cid, hoid, "attr3", bp);
+  ASSERT_EQ(r, 0);
+  bufferlist bl2;
+  bl2.push_back(bp);
+  ASSERT_TRUE(bl2 == attrs["attr3"]);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
