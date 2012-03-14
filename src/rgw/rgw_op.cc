@@ -98,8 +98,6 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
     end = -1;
   }
 
-  dout(10) << "parse_range ofs=" << ofs << " end=" << end << dendl;
-
   if (end >= 0 && end < ofs)
     goto done;
 
@@ -126,7 +124,6 @@ static void format_xattr(std::string &xattr)
     strcpy(mime + MIME_PREFIX_LEN + (mlen - 1), MIME_SUFFIX_STR);
     xattr.assign(mime);
     delete [] mime;
-    dout(10) << "format_xattr: formatted as '" << xattr << "'" << dendl;
   }
 }
 
@@ -143,7 +140,7 @@ void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attr
   for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
-    dout(10) << "x>> " << name << ":" << xattr << dendl;
+    ldout(s->cct, 10) << "x>> " << name << ":" << xattr << dendl;
     format_xattr(xattr);
     string attr_name(RGW_ATTR_PREFIX);
     attr_name.append(name);
@@ -161,7 +158,7 @@ void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attr
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj)
+static int get_policy_from_attr(CephContext *cct, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
@@ -174,12 +171,12 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
       try {
         policy->decode(iter);
       } catch (buffer::error& err) {
-        dout(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+        ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
         return -EIO;
       }
-      if (g_conf->debug_rgw >= 15) {
+      if (cct->_conf->debug_rgw >= 15) {
         RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-        dout(15) << "Read AccessControlPolicy";
+        ldout(cct, 15) << "Read AccessControlPolicy";
         s3policy->to_xml(*_dout);
         *_dout << dendl;
       }
@@ -206,7 +203,7 @@ static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAcces
   rgw_obj obj;
 
   if (bucket_info.flags & BUCKET_SUSPENDED) {
-    dout(0) << "NOTICE: bucket " << bucket_info.bucket.name << " is suspended" << dendl;
+    ldout(s->cct, 0) << "NOTICE: bucket " << bucket_info.bucket.name << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
   }
 
@@ -217,14 +214,14 @@ static int read_policy(struct req_state *s, RGWBucketInfo& bucket_info, RGWAcces
   } else {
     obj.init(bucket, oid);
   }
-  int ret = get_policy_from_attr(s->obj_ctx, policy, obj);
+  int ret = get_policy_from_attr(s->cct, s->obj_ctx, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
     string no_object;
     rgw_obj no_obj(bucket, no_object);
-    ret = get_policy_from_attr(s->obj_ctx, &bucket_policy, no_obj);
+    ret = get_policy_from_attr(s->cct, s->obj_ctx, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
@@ -257,7 +254,7 @@ static int build_policies(struct req_state *s, bool only_bucket, bool prefetch_d
   if (s->bucket_name_str.size()) {
     ret = rgwstore->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info);
     if (ret < 0) {
-      dout(0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
+      ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
       return ret;
     }
     s->bucket = bucket_info.bucket;
@@ -386,7 +383,7 @@ void RGWListBuckets::execute()
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
-    dout(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
+    ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
 
     /*
 
@@ -415,7 +412,7 @@ void RGWStatAccount::execute()
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
-    dout(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
+    ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
 
     /*
 
@@ -534,7 +531,7 @@ void RGWCreateBucket::execute()
     goto done;
 
   s->bucket_owner = s->user.user_id;
-  r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
+  r = get_policy_from_attr(s->cct, s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
       ret = -EEXIST;
@@ -550,7 +547,7 @@ void RGWCreateBucket::execute()
                                 true, s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
-  dout(20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
+  ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
 
   if (ret && ret != -EEXIST)   
     goto done;
@@ -586,7 +583,7 @@ void RGWDeleteBucket::execute()
     if (ret == 0) {
       ret = rgw_remove_user_bucket_info(s->user.user_id, s->bucket);
       if (ret < 0) {
-        dout(0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
+        ldout(s->cct, 0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
       }
     }
   }
@@ -918,17 +915,17 @@ void RGWPutObj::execute()
     goto done;
 
   if (supplied_md5_b64) {
-    dout(15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
+    ldout(s->cct, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
     ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
                        supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
-    dout(15) << "ceph_armor ret=" << ret << dendl;
+    ldout(s->cct, 15) << "ceph_armor ret=" << ret << dendl;
     if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
       ret = -ERR_INVALID_DIGEST;
       goto done;
     }
 
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
-    dout(15) << "supplied_md5=" << supplied_md5 << dendl;
+    ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
   if (supplied_etag) {
@@ -1090,7 +1087,7 @@ bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, strin
   url_decode(url_src, dec_src);
   src = dec_src.c_str();
 
-  dout(15) << "decoded obj=" << src << dendl;
+  ldout(s->cct, 15) << "decoded obj=" << src << dendl;
 
   if (*src == '/') ++src;
 
@@ -1282,7 +1279,7 @@ void RGWPutACLs::execute()
   if (get_params() < 0)
     goto done;
 
-  dout(15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!s->canned_acl.empty() && len) {
     ret = -EINVAL;
@@ -1309,8 +1306,8 @@ void RGWPutACLs::execute()
     goto done;
   }
 
-  if (g_conf->debug_rgw >= 15) {
-    dout(15) << "Old AccessControlPolicy";
+  if (s->cct->_conf->debug_rgw >= 15) {
+    ldout(s->cct, 15) << "Old AccessControlPolicy";
     policy->to_xml(*_dout);
     *_dout << dendl;
   }
@@ -1319,8 +1316,8 @@ void RGWPutACLs::execute()
   if (ret < 0)
     goto done;
 
-  if (g_conf->debug_rgw >= 15) {
-    dout(15) << "New AccessControlPolicy:";
+  if (s->cct->_conf->debug_rgw >= 15) {
+    ldout(s->cct, 15) << "New AccessControlPolicy:";
     new_policy.to_xml(*_dout);
     *_dout << dendl;
   }
@@ -1412,7 +1409,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
       try {
         ::decode(policy, bli);
       } catch (buffer::error& err) {
-        dout(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+        ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
         return -EIO;
       }
       break;
@@ -1427,7 +1424,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
     try {
       ::decode(info, bli);
     } catch (buffer::error& err) {
-      dout(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+      ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     }
     parts[info.num] = info;
   }
@@ -1503,12 +1500,12 @@ void RGWCompleteMultipart::execute()
        ++iter, ++obj_iter) {
     char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     if (iter->first != (int)obj_iter->first) {
-      dout(0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
+      ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
       ret = -ERR_INVALID_PART;
       goto done;
     }
     if (iter->second.compare(obj_iter->second.etag) != 0) {
-      dout(0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
+      ldout(s->cct, 0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
       ret = -ERR_INVALID_PART;
       goto done;
     }
@@ -1521,7 +1518,7 @@ void RGWCompleteMultipart::execute()
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
            "-%lld", (long long)parts->parts.size());
-  dout(10) << "calculated etag: " << final_etag_str << dendl;
+  ldout(s->cct, 10) << "calculated etag: " << final_etag_str << dendl;
 
   etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
 
@@ -1694,10 +1691,10 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;
 
-  if (g_conf->debug_rgw >= 20) {
+  if (s->cct->_conf->debug_rgw >= 20) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {
-      dout(20) << p << dendl;
+      ldout(s->cct, 20) << p << dendl;
     }
   }
   return 0;
@@ -1708,7 +1705,7 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
   int ret = build_policies(s, only_bucket, op->prefetch_data());
 
   if (ret < 0) {
-    dout(10) << "read_permissions on " << s->bucket << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
+    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
   }
