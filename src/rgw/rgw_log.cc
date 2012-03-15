@@ -3,7 +3,7 @@
 
 #include "rgw_log.h"
 #include "rgw_acl.h"
-#include "rgw_access.h"
+#include "rgw_rados.h"
 
 #define DOUT_SUBSYS rgw
 

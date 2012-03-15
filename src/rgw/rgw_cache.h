@@ -1,7 +1,7 @@
 #ifndef CEPH_RGWCACHE_H
 #define CEPH_RGWCACHE_H
 
-#include "rgw_access.h"
+#include "rgw_rados.h"
 #include <string>
 #include <map>
 #include "include/types.h"

@@ -25,7 +25,7 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "rgw_common.h"
-#include "rgw_access.h"
+#include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
@@ -394,7 +394,7 @@ int main(int argc, const char **argv)
   
   RGWStoreManager store_manager;
   
-  if (!store_manager.init("rados", g_ceph_context)) {
+  if (!store_manager.init(g_ceph_context)) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
   }

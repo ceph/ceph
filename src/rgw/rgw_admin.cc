@@ -14,7 +14,7 @@ using namespace std;
 
 #include "common/armor.h"
 #include "rgw_user.h"
-#include "rgw_access.h"
+#include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_log.h"
@@ -518,7 +518,7 @@ int main(int argc, char **argv)
   uint32_t perm_mask = 0;
   uint64_t auid = -1;
   RGWUserInfo info;
-  RGWAccess *store;
+  RGWRados *store;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
   int gen_secret = false;
@@ -683,7 +683,7 @@ int main(int argc, char **argv)
                     opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
 
   RGWStoreManager store_manager;
-  store = store_manager.init("rados", g_ceph_context);
+  store = store_manager.init(g_ceph_context);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO

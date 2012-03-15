@@ -86,7 +86,7 @@ TYPE(DBObjectMap::State)
 
 #ifdef WITH_RADOSGW
 
-#include "rgw/rgw_access.h"
+#include "rgw/rgw_rados.h"
 TYPE(RGWObjManifestPart);
 TYPE(RGWObjManifest);
 

@@ -3,13 +3,79 @@
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
-#include "rgw_access.h"
 #include "rgw_common.h"
 #include "rgw_cls_api.h"
+#include "rgw_log.h"
 
 class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
+
+class RGWAccessListFilter {
+public:
+  virtual ~RGWAccessListFilter() {}
+  virtual bool filter(string& name, string& key) = 0;
+};
+
+struct RGWCloneRangeInfo {
+  rgw_obj src;
+  off_t src_ofs;
+  off_t dst_ofs;
+  uint64_t len;
+};
+
+struct RGWObjManifestPart {
+  rgw_obj loc;       /* the object where the data is located */
+  uint64_t loc_ofs;  /* the offset at that object where the data is located */
+  uint64_t size;     /* the part size */
+
+  RGWObjManifestPart() : loc_ofs(0), size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    ::encode(loc, bl);
+    ::encode(loc_ofs, bl);
+    ::encode(size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     ::decode(loc, bl);
+     ::decode(loc_ofs, bl);
+     ::decode(size, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWObjManifestPart*>& o);
+};
+WRITE_CLASS_ENCODER(RGWObjManifestPart);
+
+struct RGWObjManifest {
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t obj_size;
+
+  RGWObjManifest() : obj_size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    ::encode(obj_size, bl);
+    ::encode(objs, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     ::decode(obj_size, bl);
+     ::decode(objs, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWObjManifest*>& o);
+};
+WRITE_CLASS_ENCODER(RGWObjManifest);
 
 struct RGWObjState {
   bool is_atomic;
@@ -90,7 +156,7 @@ struct RGWRadosCtx {
 };
 
   
-class RGWRados  : public RGWAccess
+class RGWRados
 {
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
@@ -146,19 +212,50 @@ class RGWRados  : public RGWAccess
                  bool truncate_dest,
                  bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
+
+  virtual int clone_obj(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
+                          rgw_obj& src_obj, off_t src_ofs,
+                          uint64_t size, time_t *pmtime,
+                          map<string, bufferlist> attrs,
+                          RGWObjCategory category) {
+    RGWCloneRangeInfo info;
+    vector<RGWCloneRangeInfo> v;
+    info.src = src_obj;
+    info.src_ofs = src_ofs;
+    info.dst_ofs = dst_ofs;
+    info.len = size;
+    v.push_back(info);
+    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
+  }
   int delete_obj_impl(void *ctx, rgw_obj& src_obj, bool sync);
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, bool exclusive);
 
+protected:
+  CephContext *cct;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
+  virtual ~RGWRados() {}
 
   void tick();
 
+  CephContext *ctx() { return cct; }
+  /** do all necessary setup of the storage device */
+  int initialize(CephContext *_cct) {
+    cct = _cct;
+    return initialize();
+  }
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize();
+  virtual void finalize() {}
+
+  static RGWRados *init_storage_provider(CephContext *cct);
+  static void close_storage();
+  static RGWRados *store;
+
   /** set up a bucket listing. handle is filled in. */
   virtual int list_buckets_init(RGWAccessHandle *handle);
   /** 
@@ -179,7 +276,19 @@ public:
   int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
 
 
-  /** get listing of the objects in a bucket */
+  /**
+   * get listing of the objects in a bucket.
+   * bucket: bucket to list contents of
+   * max: maximum number of results to return
+   * prefix: only return results that match this prefix
+   * delim: do not include results that match this string.
+   *     Any skipped results will have the matching portion of their name
+   *     inserted in common_prefixes with a "true" mark.
+   * marker: if filled in, begin the listing with this object.
+   * result: the objects are put in here.
+   * common_prefixes: if delim is filled in, any matching prefixes are placed
+   *     here.
+   */
   virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
@@ -206,6 +315,14 @@ public:
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
                                off_t ofs, bool exclusive, void **handle);
+  /* note that put_obj doesn't set category on an object, only use it for none user objects */
+  int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,
+              time_t *mtime, map<std::string, bufferlist>& attrs) {
+    bufferlist bl;
+    bl.append(data, len);
+    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl, NULL);
+    return ret;
+  }
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
@@ -243,7 +360,18 @@ public:
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   }
 
-  /** Copy an object, with many extra options */
+  /**
+   * Copy an object.
+   * dest_bucket: the bucket to copy into
+   * dest_obj: the object to copy into
+   * src_bucket: the bucket to copy from
+   * src_obj: the object to copy from
+   * mod_ptr, unmod_ptr, if_match, if_nomatch: as used in get_obj
+   * attrs: these are placed on the new object IN ADDITION to
+   *    (or overwriting) any attrs copied from the original object
+   * err: stores any errors resulting from the get of the original object
+   * Returns: 0 on success, -ERR# otherwise.
+   */
   virtual int copy_obj(void *ctx, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
@@ -254,26 +382,64 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                struct rgw_err *err);
-  /** delete a bucket*/
-  virtual int delete_bucket(rgw_bucket& bucket);
+  /**
+   * Delete a bucket.
+   * bucket: the name of the bucket to delete
+   * Returns 0 on success, -ERR# otherwise.
+   */  virtual int delete_bucket(rgw_bucket& bucket);
 
   virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, rgw_obj& src_obj, bool sync);
+  virtual int delete_obj(void *ctx, rgw_obj& src_obj, bool sync = true);
 
-  /** Get the attributes for an object.*/
+  /**
+   * Get the attributes for an object.
+   * bucket: name of the bucket holding the object.
+   * obj: name of the object
+   * name: name of the attr to retrieve
+   * dest: bufferlist to store the result in
+   * Returns: 0 on success, -ERR# otherwise.
+   */
   virtual int get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest);
 
-  /** Set an attr on an object. */
+  /**
+   * Set an attr on an object.
+   * bucket: name of the bucket holding the object
+   * obj: name of the object to set the attr on
+   * name: the attr to set
+   * bl: the contents of the attr
+   * Returns: 0 on success, -ERR# otherwise.
+   */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
 
   virtual int set_attrs(void *ctx, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs);
 
-  /** Get data about an object out of RADOS and into memory. */
+/**
+ * Get data about an object out of RADOS and into memory.
+ * bucket: name of the bucket the object is in.
+ * obj: name/key of the object to read
+ * data: if get_data==true, this pointer will be set
+ *    to an address containing the object's data/value
+ * ofs: the offset of the object to read from
+ * end: the point in the object to stop reading
+ * attrs: if non-NULL, the pointed-to map will contain
+ *    all the attrs of the object when this function returns
+ * mod_ptr: if non-NULL, compares the object's mtime to *mod_ptr,
+ *    and if mtime is smaller it fails.
+ * unmod_ptr: if non-NULL, compares the object's mtime to *unmod_ptr,
+ *    and if mtime is >= it fails.
+ * if_match/nomatch: if non-NULL, compares the object's etag attr
+ *    to the string and, if it doesn't/does match, fails out.
+ * err: Many errors will result in this structure being filled
+ *    with extra informatin on the error.
+ * Returns: -ERR# on failure, otherwise
+ *          (if get_data==true) length of read data,
+ *          (if get_data==false) length of the object
+ */
   virtual int prepare_get_obj(void *ctx, rgw_obj& obj,
             off_t *ofs, off_t *end,
             map<string, bufferlist> *attrs,
@@ -292,6 +458,9 @@ public:
 
   virtual void finish_get_obj(void **handle);
 
+ /**
+   * a simple object read without keeping state
+   */
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
@@ -325,6 +494,8 @@ public:
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
     rctx->set_prefetch_data(obj);
   }
+  // to notify upper layer that we need to do some operation on an object, and it's up to
+  // the upper layer to schedule this operation.. e.g., log intent in intent log
   void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
     rctx->set_intent_cb(cb);
@@ -392,5 +563,23 @@ public:
                 bool *is_truncated, string *last_entry);
 
 };
+
+class RGWStoreManager {
+  RGWRados *store;
+public:
+  RGWStoreManager() : store(NULL) {}
+  ~RGWStoreManager() {
+    if (store)
+      RGWRados::close_storage();
+  }
+  RGWRados *init(CephContext *cct) {
+    store = RGWRados::init_storage_provider(cct);
+    return store;
+  }
+
+};
+
+#define rgwstore RGWRados::store
+
 
 #endif

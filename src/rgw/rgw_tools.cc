@@ -5,7 +5,7 @@
 #include "include/types.h"
 
 #include "rgw_common.h"
-#include "rgw_access.h"
+#include "rgw_rados.h"
 #include "rgw_tools.h"
 
 #define DOUT_SUBSYS rgw
