@@ -4136,6 +4136,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   pg->state_clear(PG_STATE_BACKFILL);
   pg->state_clear(PG_STATE_RECOVERING);
 
+  // if we finished backfill, all acting are active; recheck if
+  // DEGRADED is appropriate.
+  if (pg->get_osdmap()->get_pg_size(pg->info.pgid) <= pg->acting.size())
+    pg->state_clear(PG_STATE_DEGRADED);
+
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
