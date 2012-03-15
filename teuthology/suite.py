@@ -205,6 +205,33 @@ def ls():
         if args.verbose and 'failure_reason' in summary:
             print '    {reason}'.format(reason=summary['failure_reason'])
 
+def generate_coverage(args):
+    subprocess.Popen(
+        args=[
+            os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
+            '-v',
+            '-o',
+            os.path.join(args.teuthology_config['coverage_output_dir'], args.name),
+            '--html-output',
+            os.path.join(args.teuthology_config['coverage_html_dir'], args.name),
+            '--cov-tools-dir',
+            args.teuthology_config['coverage_tools_dir'],
+            args.archive_dir,
+            ],
+        )
+
+def email_results(subject, from_, to, body):
+    import smtplib
+    from email.mime.text import MIMEText
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = from_
+    msg['To'] = to
+    log.debug('sending email %s', msg.as_string())
+    smtp = smtplib.SMTP('localhost')
+    smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
+    smtp.quit()
+
 def results():
     parser = argparse.ArgumentParser(description='Email teuthology suite results')
     parser.add_argument(
@@ -263,20 +290,6 @@ def results():
                 break
             time.sleep(10)
 
-    subprocess.Popen(
-        args=[
-            os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
-            '-v',
-            '-o',
-            os.path.join(args.teuthology_config['coverage_output_dir'], args.name),
-            '--html-output',
-            os.path.join(args.teuthology_config['coverage_html_dir'], args.name),
-            '--cov-tools-dir',
-            args.teuthology_config['coverage_tools_dir'],
-            args.archive_dir,
-            ],
-        )
-
     descriptions = []
     failures = []
     num_failures = 0
@@ -311,9 +324,6 @@ def results():
                         reason=summary['failure_reason'],
                         ))
 
-    if not args.email:
-        return
-
     if failures or unfinished:
         subject = ('{num_failed} failed, {num_hung} possibly hung, '
                    'and {num_passed} passed tests in {suite}'.format(
@@ -341,13 +351,13 @@ These tests passed:
         subject = 'All tests passed in {suite}!'.format(suite=args.name)
         body = '\n'.join(descriptions)
 
-    import smtplib
-    from email.mime.text import MIMEText
-    msg = MIMEText(body)
-    msg['Subject'] = subject
-    msg['From'] = args.teuthology_config['results_sending_email']
-    msg['To'] = args.email
-    log.debug('sending email %s', msg.as_string())
-    smtp = smtplib.SMTP('localhost')
-    smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
-    smtp.quit()
+    try:
+        if args.email:
+            email_results(
+                subject=subject,
+                from_=args.teuthology_config['results_sending_email'],
+                to=args.email,
+                body=body,
+                )
+    finally:
+        generate_coverage(args)
