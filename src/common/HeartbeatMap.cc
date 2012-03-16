@@ -131,11 +131,7 @@ void HeartbeatMap::check_touch_file()
     if (path.length()) {
       int fd = ::open(path.c_str(), O_WRONLY|O_CREAT, 0644);
       if (fd >= 0) {
-#if defined(__FreeBSD__)
-	::futimes(fd, NULL);
-#else
-	::futimens(fd, NULL);
-#endif
+	::utimes(path.c_str(), NULL);
 	::close(fd);
       } else {
 	ldout(m_cct, 0) << "unable to touch " << path << ": "
