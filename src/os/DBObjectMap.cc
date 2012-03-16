@@ -12,7 +12,7 @@
 #include <vector>
 #include <tr1/memory>
 
-#include "CollectionIndex.h"
+#include "IndexManager.h"
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
 #include "DBObjectMap.h"
@@ -25,6 +25,7 @@
 #define dout_prefix *_dout << "filestore "
 
 const string DBObjectMap::USER_PREFIX = "_USER_";
+const string DBObjectMap::XATTR_PREFIX = "_AXATTR_";
 const string DBObjectMap::SYS_PREFIX = "_SYS_";
 const string DBObjectMap::COMPLETE_PREFIX = "_COMPLETE_";
 const string DBObjectMap::HEADER_KEY = "HEADER";
@@ -155,6 +156,11 @@ string DBObjectMap::sys_prefix(Header header)
   return USER_PREFIX + header_key(header->seq) + SYS_PREFIX;
 }
 
+string DBObjectMap::xattr_prefix(Header header)
+{
+  return USER_PREFIX + header_key(header->seq) + XATTR_PREFIX;
+}
+
 string DBObjectMap::sys_parent_prefix(_Header header)
 {
   return USER_PREFIX + header_key(header.parent) + SYS_PREFIX;
@@ -187,9 +193,9 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
 
 ObjectMap::ObjectMapIterator DBObjectMap::get_iterator(
   const hobject_t &hoid,
-  CollectionIndex::IndexedPath path)
+  Index index)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return ObjectMapIterator(new EmptyIteratorImpl());
   return _get_iterator(header);
@@ -373,11 +379,11 @@ int DBObjectMap::DBObjectMapIteratorImpl::status()
 }
 
 int DBObjectMap::set_keys(const hobject_t &hoid,
-			  CollectionIndex::IndexedPath path,
+			  Index index,
 			  const map<string, bufferlist> &set)
 {
   KeyValueDB::Transaction t = db->get_transaction();
-  Header header = lookup_create_map_header(path->coll(), hoid, t);
+  Header header = lookup_create_map_header(index->coll(), hoid, t);
   if (!header)
     return -EINVAL;
 
@@ -387,11 +393,11 @@ int DBObjectMap::set_keys(const hobject_t &hoid,
 }
 
 int DBObjectMap::set_header(const hobject_t &hoid,
-			    CollectionIndex::IndexedPath path,
+			    Index index,
 			    const bufferlist &bl)
 {
   KeyValueDB::Transaction t = db->get_transaction();
-  Header header = lookup_create_map_header(path->coll(), hoid, t);
+  Header header = lookup_create_map_header(index->coll(), hoid, t);
   if (!header)
     return -EINVAL;
   _set_header(header, bl, t);
@@ -407,10 +413,10 @@ void DBObjectMap::_set_header(Header header, const bufferlist &bl,
 }
 
 int DBObjectMap::get_header(const hobject_t &hoid,
-			    CollectionIndex::IndexedPath path,
+			    Index index,
 			    bufferlist *bl)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header) {
     return 0;
   }
@@ -443,13 +449,13 @@ int DBObjectMap::_get_header(Header header,
 }
 
 int DBObjectMap::clear(const hobject_t &hoid,
-		       CollectionIndex::IndexedPath path)
+		       Index index)
 {
   KeyValueDB::Transaction t = db->get_transaction();
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return -ENOENT;
-  remove_map_header(path->coll(), hoid, header, t);
+  remove_map_header(index->coll(), hoid, header, t);
   assert(header->num_children > 0);
   header->num_children--;
   int r = _clear(header, t);
@@ -562,10 +568,10 @@ int DBObjectMap::need_parent(DBObjectMapIterator iter)
 }
 
 int DBObjectMap::rm_keys(const hobject_t &hoid,
-			 CollectionIndex::IndexedPath path,
+			 Index index,
 			 const set<string> &to_clear)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return -ENOENT;
   KeyValueDB::Transaction t = db->get_transaction();
@@ -635,11 +641,11 @@ int DBObjectMap::rm_keys(const hobject_t &hoid,
 }
 
 int DBObjectMap::get(const hobject_t &hoid,
-		     CollectionIndex::IndexedPath path,
+		     Index index,
 		     bufferlist *_header,
 		     map<string, bufferlist> *out)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return -ENOENT;
   _get_header(header, _header);
@@ -653,13 +659,13 @@ int DBObjectMap::get(const hobject_t &hoid,
 }
 
 int DBObjectMap::get_keys(const hobject_t &hoid,
-			  CollectionIndex::IndexedPath path,
+			  Index index,
 			  set<string> *keys)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return -ENOENT;
-  ObjectMapIterator iter = get_iterator(hoid, path);
+  ObjectMapIterator iter = get_iterator(hoid, index);
   for (; iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
@@ -691,48 +697,98 @@ int DBObjectMap::scan(Header header,
 }
 
 int DBObjectMap::get_values(const hobject_t &hoid,
-			    CollectionIndex::IndexedPath path,
+			    Index index,
 			    const set<string> &keys,
 			    map<string, bufferlist> *out)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return -ENOENT;
   return scan(header, keys, 0, out);;
 }
 
 int DBObjectMap::check_keys(const hobject_t &hoid,
-			    CollectionIndex::IndexedPath path,
+			    Index index,
 			    const set<string> &keys,
 			    set<string> *out)
 {
-  Header header = lookup_map_header(path->coll(), hoid);
+  Header header = lookup_map_header(index->coll(), hoid);
   if (!header)
     return -ENOENT;
   return scan(header, keys, out, 0);
 }
 
-int DBObjectMap::clone_keys(const hobject_t &hoid,
-			    CollectionIndex::IndexedPath path,
-			    const hobject_t &target,
-			    CollectionIndex::IndexedPath target_path)
+int DBObjectMap::get_xattrs(const hobject_t &hoid,
+			    Index index,
+			    const set<string> &to_get,
+			    map<string, bufferlist> *out)
+{
+  Header header = lookup_map_header(index->coll(), hoid);
+  if (!header)
+    return -ENOENT;
+  return db->get(xattr_prefix(header), to_get, out);
+}
+
+int DBObjectMap::get_all_xattrs(const hobject_t &hoid,
+				Index index,
+				set<string> *out)
+{
+  Header header = lookup_map_header(index->coll(), hoid);
+  if (!header)
+    return -ENOENT;
+  KeyValueDB::Iterator iter = db->get_iterator(xattr_prefix(header));
+  if (!iter)
+    return -EINVAL;
+  for (iter->seek_to_first(); !iter->status() && iter->valid(); iter->next())
+    out->insert(iter->key());
+  return iter->status();
+}
+
+int DBObjectMap::set_xattrs(const hobject_t &hoid,
+			    Index index,
+			    const map<string, bufferlist> &to_set)
+{
+  KeyValueDB::Transaction t = db->get_transaction();
+  Header header = lookup_create_map_header(index->coll(), hoid, t);
+  if (!header)
+    return -EINVAL;
+  t->set(xattr_prefix(header), to_set);
+  return db->submit_transaction(t);
+}
+
+int DBObjectMap::remove_xattrs(const hobject_t &hoid,
+			       Index index,
+			       const set<string> &to_remove)
+{
+  KeyValueDB::Transaction t = db->get_transaction();
+  Header header = lookup_map_header(index->coll(), hoid);
+  if (!header)
+    return -ENOENT;
+  t->rmkeys(xattr_prefix(header), to_remove);
+  return db->submit_transaction(t);
+}
+
+int DBObjectMap::clone(const hobject_t &hoid,
+		       Index index,
+		       const hobject_t &target,
+		       Index target_index)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   {
-    Header destination = lookup_map_header(target_path->coll(), target);
+    Header destination = lookup_map_header(target_index->coll(), target);
     if (destination) {
-      remove_map_header(target_path->coll(), target, destination, t);
+      remove_map_header(target_index->coll(), target, destination, t);
       destination->num_children--;
       _clear(destination, t);
     }
   }
 
-  Header parent = lookup_map_header(path->coll(), hoid);
+  Header parent = lookup_map_header(index->coll(), hoid);
   if (!parent)
     return db->submit_transaction(t);
 
-  Header source = generate_new_header(path->coll(), hoid, parent);
-  Header destination = generate_new_header(target_path->coll(), target, parent);
+  Header source = generate_new_header(index->coll(), hoid, parent);
+  Header destination = generate_new_header(target_index->coll(), target, parent);
   _Header lsource, ldestination;
   source->num_children = parent->num_children;
   lsource.parent = source->seq;
@@ -741,7 +797,17 @@ int DBObjectMap::clone_keys(const hobject_t &hoid,
   set_header(parent, t);
   set_header(source, t);
   set_header(destination, t);
-  set_map_header(target_path->coll(), target, ldestination, t);
+  set_map_header(target_index->coll(), target, ldestination, t);
+
+  map<string, bufferlist> to_set;
+  KeyValueDB::Iterator xattr_iter = db->get_iterator(xattr_prefix(parent));
+  for (xattr_iter->seek_to_first();
+       xattr_iter->valid();
+       xattr_iter->next())
+    to_set.insert(make_pair(xattr_iter->key(), xattr_iter->value()));
+  t->set(xattr_prefix(source), to_set);
+  t->set(xattr_prefix(destination), to_set);
+  t->rmkeys_by_prefix(xattr_prefix(parent));
 
   string hkey(header_key(parent->seq));
   KeyValueDB::Iterator iter = db->get_iterator(REVERSE_LEAF_PREFIX);
@@ -760,28 +826,28 @@ int DBObjectMap::clone_keys(const hobject_t &hoid,
   return db->submit_transaction(t);
 }
 
-int DBObjectMap::link_keys(const hobject_t &hoid,
-			   CollectionIndex::IndexedPath path,
-			   const hobject_t &target,
-			   CollectionIndex::IndexedPath target_path)
+int DBObjectMap::link(const hobject_t &hoid,
+		      Index index,
+		      const hobject_t &target,
+		      Index target_index)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   {
-    Header destination = lookup_map_header(target_path->coll(), target);
+    Header destination = lookup_map_header(target_index->coll(), target);
     if (destination) {
-      remove_map_header(target_path->coll(), target, destination, t);
+      remove_map_header(target_index->coll(), target, destination, t);
       destination->num_children--;
       _clear(destination, t);
     }
   }
-  Header header = lookup_create_map_header(path->coll(), hoid, t);
+  Header header = lookup_create_map_header(index->coll(), hoid, t);
 
   assert(header->num_children > 0);
   header->num_children++;
   set_header(header, t);
   _Header ldestination;
   ldestination.parent = header->seq;
-  set_map_header(target_path->coll(), target, ldestination, t);
+  set_map_header(target_index->coll(), target, ldestination, t);
   return db->submit_transaction(t);
 }
 
@@ -931,6 +997,7 @@ void DBObjectMap::clear_header(Header header, KeyValueDB::Transaction t)
   t->rmkeys_by_prefix(user_prefix(header));
   t->rmkeys_by_prefix(sys_prefix(header));
   t->rmkeys_by_prefix(complete_prefix(header));
+  t->rmkeys_by_prefix(xattr_prefix(header));
   set<string> keys;
   keys.insert(header_key(header->seq));
   t->rmkeys(USER_PREFIX, keys);

@@ -370,7 +370,6 @@ public:
   int snapshot(const string& name);
 
   // attrs
-  int getattr(coll_t cid, const hobject_t& oid, const char *name, void *value, size_t size);
   int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp);
   int getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
@@ -379,7 +378,6 @@ public:
   int _getattr(const char *fn, const char *name, bufferptr& bp);
   int _getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only = false);
 
-  int _setattr(coll_t cid, const hobject_t& oid, const char *name, const void *value, size_t size);
   int _setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset);
   int _rmattr(coll_t cid, const hobject_t& oid, const char *name);
   int _rmattrs(coll_t cid, const hobject_t& oid);

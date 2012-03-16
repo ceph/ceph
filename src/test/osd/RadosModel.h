@@ -447,6 +447,7 @@ public:
 	  if (!(*iter % 3)) {
 	    //op.rmxattr(i->first.c_str());
 	    to_remove.insert(i->first);
+	    op.rmxattr(i->first.c_str());
 	  }
 	}
 	if (!to_remove.size()) {
@@ -462,6 +463,7 @@ public:
 	for (map<string, ContDesc>::iterator i = obj.attrs.begin();
 	     i != obj.attrs.end();
 	     ++i) {
+	  op.rmxattr(i->first.c_str());
 	  to_remove.insert(i->first);
 	}
 	context->remove_object_header(oid);
@@ -521,6 +523,7 @@ public:
       context->oid_not_in_use.erase(oid);
     }
 
+    op.remove();
     map<string, bufferlist> omap_contents;
     map<string, ContDesc> omap;
     bufferlist header;
@@ -543,12 +546,12 @@ public:
       omap[key] = val;
       bufferlist val_buffer = context->cont_gen.gen_attribute(val);
       omap_contents[key] = val_buffer;
+      op.setxattr(key.c_str(), val_buffer);
     }
 
     bufferlist tmap_contents;
     ::encode(header, tmap_contents);
     ::encode(omap_contents, tmap_contents);
-    op.remove();
     op.tmap_put(tmap_contents);
     {
       Mutex::Locker l(context->state_lock);
@@ -617,6 +620,7 @@ public:
     map<string, ContDesc> omap;
     bufferlist header;
     ContentsGenerator::iterator keygen = context->cont_gen.get_iterator(cont);
+    op.create(false);
     while (!*keygen) ++keygen;
     while (*keygen) {
       header.append(*keygen);
@@ -635,6 +639,7 @@ public:
       omap[key] = val;
       bufferlist val_buffer = context->cont_gen.gen_attribute(val);
       omap_contents[key] = val_buffer;
+      op.setxattr(key.c_str(), val_buffer);
     }
     op.omap_set_header(header);
     op.omap_set(omap_contents);
@@ -886,6 +891,8 @@ public:
   set<string> omap_keys;
   map<string, bufferlist> omap;
   bufferlist header;
+
+  map<string, bufferlist> xattrs;
   ReadOp(RadosTestContext *context, 
 	 const string &oid,
 	 TestOpStat *stat = 0) : 
@@ -938,6 +945,7 @@ public:
 
     op.omap_get_keys("", -1, &omap_keys, 0);
     op.omap_get_vals("", -1, &omap, 0);
+    op.getxattrs(&xattrs, 0);
     op.omap_get_header(&header, 0);
     assert(!context->io_ctx.aio_operate(context->prefix+oid, completion, &op, 0));
     if (snap >= 0) {
@@ -995,18 +1003,27 @@ public:
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap_keys.size() == old_value.attrs.size());
       }
+      if (xattrs.size() != old_value.attrs.size()) {
+	cerr << "oid: " << oid << " xattrs.size() is " << xattrs.size()
+	     << " and old is " << old_value.attrs.size() << std::endl;
+	assert(xattrs.size() == old_value.attrs.size());
+      }
       for (map<string, bufferlist>::iterator omap_iter = omap.begin();
 	   omap_iter != omap.end();
 	   ++omap_iter) {
 	assert(old_value.attrs.count(omap_iter->first));
+	assert(xattrs.count(omap_iter->first));
 	bufferlist bl = context->cont_gen.gen_attribute(
 	  old_value.attrs[omap_iter->first]);
 	assert(bl.length() == omap_iter->second.length());
+	assert(bl.length() == xattrs[omap_iter->first].length());
 	bufferlist::iterator k = bl.begin();
+	bufferlist::iterator j = xattrs[omap_iter->first].begin();
 	for(bufferlist::iterator l = omap_iter->second.begin();
-	    !k.end() && !l.end();
-	    ++k, ++l) {
+	    !k.end() && !l.end() && !j.end();
+	    ++k, ++l, ++j) {
 	  assert(*l == *k);
+	  assert(*j == *k);
 	}
       }
       for (set<string>::iterator i = omap_requested_keys.begin();

@@ -1,13 +1,15 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include <tr1/memory>
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
 
-#include "os/CollectionIndex.h"
+#include "os/IndexManager.h"
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "os/KeyValueDB.h"
 #include "os/DBObjectMap.h"
+#include "os/HashIndex.h"
 #include "os/LevelDBStore.h"
 #include <sys/types.h>
 #include "global/global_init.h"
@@ -44,7 +46,8 @@ public:
   set<string> object_name_space;
   map<string, map<string, string> > omap;
   map<string, string > hmap;
-  CollectionIndex::IndexedPath def_collection;
+  map<string, map<string, string> > xattrs;
+  Index def_collection;
   unsigned seq;
 
   ObjectMapTest() : db(), seq(0) {}
@@ -79,7 +82,12 @@ public:
 	    key, value);
   }
 
-  void set_key(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void set_xattr(const string &objname, const string &key, const string &value) {
+    set_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+	      key, value);
+  }
+
+  void set_key(hobject_t hoid, Index path,
 	       string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
@@ -89,12 +97,22 @@ public:
     db->set_keys(hoid, path, to_write);
   }
 
+  void set_xattr(hobject_t hoid, Index path,
+		 string key, string value) {
+    map<string, bufferlist> to_write;
+    bufferptr bp(value.c_str(), value.size());
+    bufferlist bl;
+    bl.append(bp);
+    to_write.insert(make_pair(key, bl));
+    db->set_xattrs(hoid, path, to_write);
+  }
+
   void set_header(const string &objname, const string &value) {
     set_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
 	       value);
   }
 
-  void set_header(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void set_header(hobject_t hoid, Index path,
 		  const string &value) {
     bufferlist header;
     header.append(bufferptr(value.c_str(), value.size() + 1));
@@ -106,7 +124,7 @@ public:
 		      value);
   }
 
-  int get_header(hobject_t hoid, CollectionIndex::IndexedPath path,
+  int get_header(hobject_t hoid, Index path,
 		 string *value) {
     bufferlist header;
     int r = db->get_header(hoid, path, &header);
@@ -119,12 +137,32 @@ public:
     return 0;
   }
 
+  int get_xattr(const string &objname, const string &key, string *value) {
+    return get_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+		     key, value);
+  }
+
+  int get_xattr(hobject_t hoid, Index path,
+		string key, string *value) {
+    set<string> to_get;
+    to_get.insert(key);
+    map<string, bufferlist> got;
+    db->get_xattrs(hoid, path, to_get, &got);
+    if (got.size()) {
+      *value = string(got.begin()->second.c_str(),
+		      got.begin()->second.length());
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+
   int get_key(const string &objname, const string &key, string *value) {
     return get_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
 		   key, value);
   }
 
-  int get_key(hobject_t hoid, CollectionIndex::IndexedPath path,
+  int get_key(hobject_t hoid, Index path,
 	      string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
@@ -144,11 +182,23 @@ public:
 	       key);
   }
 
-  void remove_key(hobject_t hoid, CollectionIndex::IndexedPath path,
+  void remove_key(hobject_t hoid, Index path,
 		  string key) {
     set<string> to_remove;
     to_remove.insert(key);
     db->rm_keys(hoid, path, to_remove);
+  }
+
+  void remove_xattr(const string &objname, const string &key) {
+    remove_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+		 key);
+  }
+
+  void remove_xattr(hobject_t hoid, Index path,
+		    string key) {
+    set<string> to_remove;
+    to_remove.insert(key);
+    db->remove_xattrs(hoid, path, to_remove);
   }
 
   void clone(const string &objname, const string &target) {
@@ -156,16 +206,16 @@ public:
 	  hobject_t(sobject_t(target, CEPH_NOSNAP)), def_collection);
   }
 
-  void clone(hobject_t hoid, CollectionIndex::IndexedPath path,
-	     hobject_t hoid2, CollectionIndex::IndexedPath path2) {
-    db->clone_keys(hoid, path, hoid2, path2);
+  void clone(hobject_t hoid, Index path,
+	     hobject_t hoid2, Index path2) {
+    db->clone(hoid, path, hoid2, path2);
   }
 
   void clear(const string &objname) {
     clear(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection);
   }
 
-  void clear(hobject_t hoid, CollectionIndex::IndexedPath path) {
+  void clear(hobject_t hoid, Index path) {
     db->clear(hoid, path);
   }
 
@@ -188,8 +238,24 @@ public:
   }
 
   void init_default_collection(const string &coll_name) {
-    def_collection = CollectionIndex::get_testing_path(
-      "/" + coll_name, coll_t(coll_name));
+    def_collection = Index(new HashIndex(coll_t(coll_name),
+					 ("/" + coll_name).c_str(),
+					 2,
+					 2,
+					 CollectionIndex::HASH_INDEX_TAG_2));
+  }
+
+  void auto_set_xattr(ostream &out) {
+    set<string>::iterator key = rand_choose(key_space);
+    set<string>::iterator object = rand_choose(object_name_space);
+
+    string value = val_from_key(*object, *key);
+
+    xattrs[*object][*key] = value;
+    set_xattr(*object, *key, value);
+
+    out << "auto_set_xattr " << *object << ": " << *key << " -> "
+	<< value << std::endl;
   }
 
   void auto_set_key(ostream &out) {
@@ -205,6 +271,17 @@ public:
 	<< value << std::endl;
   }
 
+  void xattrs_on_object(const string &object, set<string> *out) {
+    if (!xattrs.count(object))
+      return;
+    const map<string, string> &xmap = xattrs.find(object)->second;
+    for (map<string, string>::const_iterator i = xmap.begin();
+	 i != xmap.end();
+	 ++i) {
+      out->insert(i->first);
+    }
+  }
+
   void keys_on_object(const string &object, set<string> *out) {
     if (!omap.count(object))
       return;
@@ -213,6 +290,17 @@ public:
 	 i != kmap.end();
 	 ++i) {
       out->insert(i->first);
+    }
+  }
+
+  void xattrs_off_object(const string &object, set<string> *out) {
+    *out = key_space;
+    set<string> xspace;
+    xattrs_on_object(object, &xspace);
+    for (set<string>::iterator i = xspace.begin();
+	 i != xspace.end();
+	 ++i) {
+      out->erase(*i);
     }
   }
 
@@ -226,6 +314,39 @@ public:
       out->erase(*i);
     }
   }
+
+  int auto_check_present_xattr(ostream &out) {
+    set<string>::iterator object = rand_choose(object_name_space);
+    set<string> xspace;
+    xattrs_on_object(*object, &xspace);
+    set<string>::iterator key = rand_choose(xspace);
+    if (key == xspace.end()) {
+      return 1;
+    }
+
+    string result;
+    int r = get_xattr(*object, *key, &result);
+    if (!r) {
+      out << "auto_check_present_key: failed to find key "
+	  << *key << " on object " << *object << std::endl;
+      return 0;
+    }
+
+    if (result != xattrs[*object][*key]) {
+      out << "auto_check_present_key: for key "
+	  << *key << " on object " << *object
+	  << " found value " << result << " where we should have found "
+	  << xattrs[*object][*key] << std::endl;
+      return 0;
+    }
+
+    out << "auto_check_present_key: for key "
+	<< *key << " on object " << *object
+	<< " found value " << result << " where we should have found "
+	<< xattrs[*object][*key] << std::endl;
+    return 1;
+  }
+
 
   int auto_check_present_key(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
@@ -257,6 +378,30 @@ public:
 	<< " found value " << result << " where we should have found "
 	<< omap[*object][*key] << std::endl;
     return 1;
+  }
+
+  int auto_check_absent_xattr(ostream &out) {
+    set<string>::iterator object = rand_choose(object_name_space);
+    set<string> xspace;
+    xattrs_off_object(*object, &xspace);
+    set<string>::iterator key = rand_choose(xspace);
+    if (key == xspace.end()) {
+      return 1;
+    }
+
+    string result;
+    int r = get_xattr(*object, *key, &result);
+    if (!r) {
+      out << "auto_check_absent_key: did not find key "
+	  << *key << " on object " << *object << std::endl;
+      return 1;
+    }
+
+    out << "auto_check_basent_key: for key "
+	<< *key << " on object " << *object
+	<< " found value " << result << " where we should have found nothing"
+	<< std::endl;
+    return 0;
   }
 
   int auto_check_absent_key(ostream &out) {
@@ -305,6 +450,13 @@ public:
       out << " hmap source present." << std::endl;
       hmap[*target] = hmap[*object];
     }
+    if (!xattrs.count(*object)) {
+      out << " hmap source missing." << std::endl;
+      xattrs.erase(*target);
+    } else {
+      out << " hmap source present." << std::endl;
+      xattrs[*target] = xattrs[*object];
+    }
   }
 
   void auto_remove_key(ostream &out) {
@@ -320,12 +472,26 @@ public:
     remove_key(*object, *key);
   }
 
+  void auto_remove_xattr(ostream &out) {
+    set<string>::iterator object = rand_choose(object_name_space);
+    set<string> kspace;
+    xattrs_on_object(*object, &kspace);
+    set<string>::iterator key = rand_choose(kspace);
+    if (key == kspace.end()) {
+      return;
+    }
+    out << "removing xattr " << *key << " from " << *object << std::endl;
+    xattrs[*object].erase(*key);
+    remove_xattr(*object, *key);
+  }
+
   void auto_delete_object(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
     out << "auto_delete_object " << *object << std::endl;
     clear(*object);
     omap.erase(*object);
     hmap.erase(*object);
+    xattrs.erase(*object);
   }
 
   void auto_write_header(ostream &out) {
@@ -381,9 +547,11 @@ int main(int argc, char **argv) {
 
 TEST_F(ObjectMapTest, CreateOneObject) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
-  CollectionIndex::IndexedPath path = CollectionIndex::get_testing_path(
-    "/bar", coll_t("foo_coll"));
-
+  Index path = Index(new HashIndex(coll_t("foo_coll"),
+				   string("/bar").c_str(),
+				   2,
+				   2,
+				   CollectionIndex::HASH_INDEX_TAG_2));
   map<string, bufferlist> to_set;
   string key("test");
   string val("test_val");
@@ -421,8 +589,11 @@ TEST_F(ObjectMapTest, CreateOneObject) {
 TEST_F(ObjectMapTest, CloneOneObject) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
-  CollectionIndex::IndexedPath path = CollectionIndex::get_testing_path(
-    "/bar", coll_t("foo_coll"));
+  Index path = Index(new HashIndex(coll_t("foo_coll"),
+				   string("/bar").c_str(),
+				   2,
+				   2,
+				   CollectionIndex::HASH_INDEX_TAG_2));
 
   set_key(hoid, path, "foo", "bar");
   set_key(hoid, path, "foo2", "bar2");
@@ -431,7 +602,7 @@ TEST_F(ObjectMapTest, CloneOneObject) {
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
 
-  db->clone_keys(hoid, path, hoid2, path);
+  db->clone(hoid, path, hoid2, path);
   r = get_key(hoid, path, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
@@ -485,16 +656,18 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
   hobject_t hoid_link(sobject_t("foo_link", CEPH_NOSNAP));
-  CollectionIndex::IndexedPath path = CollectionIndex::get_testing_path(
-    "/bar", coll_t("foo_coll"));
-
+  Index path = Index(new HashIndex(coll_t("foo_coll"),
+				   string("/bar").c_str(),
+				   2,
+				   2,
+				   CollectionIndex::HASH_INDEX_TAG_2));
 
   for (unsigned i = 0; i < 1000; ++i) {
     set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));
   }
 
-  db->link_keys(hoid, path, hoid_link, path);
-  db->clone_keys(hoid, path, hoid2, path);
+  db->link(hoid, path, hoid_link, path);
+  db->clone(hoid, path, hoid2, path);
 
   int r = 0;
   for (unsigned i = 0; i < 1000; ++i) {
@@ -569,7 +742,7 @@ TEST_F(ObjectMapTest, OddEvenClone) {
 
 TEST_F(ObjectMapTest, RandomTest) {
   def_init();
-  for (unsigned i = 0; i < 1000; ++i) {
+  for (unsigned i = 0; i < 5000; ++i) {
     unsigned val = rand();
     val <<= 8;
     val %= 100;
@@ -583,14 +756,22 @@ TEST_F(ObjectMapTest, RandomTest) {
       ASSERT_TRUE(auto_verify_header(std::cerr));
     } else if (val < 30) {
       auto_set_key(std::cerr);
+    } else if (val < 42) {
+      auto_set_xattr(std::cerr);
     } else if (val < 55) {
       ASSERT_TRUE(auto_check_present_key(std::cerr));
+    } else if (val < 62) {
+      ASSERT_TRUE(auto_check_present_xattr(std::cerr));
     } else if (val < 70) {
       ASSERT_TRUE(auto_check_absent_key(std::cerr));
+    } else if (val < 73) {
+      ASSERT_TRUE(auto_check_absent_xattr(std::cerr));
     } else if (val < 76) {
       auto_delete_object(std::cerr);
     } else if (val < 85) {
       auto_clone_key(std::cerr);
+    } else if (val < 92) {
+      auto_remove_xattr(std::cerr);
     } else {
       auto_remove_key(std::cerr);
     }

@@ -64,6 +64,11 @@ protected:
 
     /// Getter for collection
     coll_t coll() const { return parent_coll; }
+
+    /// Getter for parent
+    std::tr1::shared_ptr<CollectionIndex> get_index() const {
+      return parent_ref;
+    }
   };
  public:
   /// Type of returned paths

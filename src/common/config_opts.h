@@ -311,6 +311,13 @@ OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op
 OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
+// Use omap for xattrs for attrs over
+OPTION(filestore_xattr_use_omap, OPT_BOOL, false)
+// filestore_max_inline_xattr_size or
+OPTION(filestore_max_inline_xattr_size, OPT_U32, 512)
+// for more than filestore_max_inline_xattrs attrs
+OPTION(filestore_max_inline_xattrs, OPT_U32, 2)
+
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
 OPTION(filestore_dev, OPT_STR, "")

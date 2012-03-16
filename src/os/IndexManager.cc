@@ -19,6 +19,8 @@
 #include <sys/param.h>
 #endif
 
+#include <errno.h>
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/config.h"

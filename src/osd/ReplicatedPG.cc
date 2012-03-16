@@ -2759,10 +2759,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       map<string, bufferptr> attrs;
       t.clone(coll,
 	      rollback_to_sobject, soid);
-      osd->store->getattrs(coll,
-			   rollback_to_sobject, attrs, false);
-      osd->filter_xattrs(attrs);
-      t.setattrs(coll, soid, attrs);
       snapset.head_exists = true;
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
@@ -2804,13 +2800,9 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
   bufferlist bv;
   ::encode(*poi, bv);
 
-  map<string, bufferptr> attrs;
-  osd->store->getattrs(coll, head, attrs);
-  osd->filter_xattrs(attrs);
-
   t.clone(coll, head, coid);
   t.setattr(coll, coid, OI_ATTR, bv);
-  t.setattrs(coll, coid, attrs);
+  t.rmattr(coll, coid, SS_ATTR);
 }
 
 void ReplicatedPG::make_writeable(OpContext *ctx)

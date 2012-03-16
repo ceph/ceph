@@ -710,6 +710,13 @@ test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_store
 
+xattr_bench_SOURCES = test/xattr_bench.cc
+xattr_bench_LDFLAGS = ${AM_LDFLAGS}
+xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
+bin_DEBUGPROGRAMS += xattr_bench
+
 test_filejournal_SOURCES = test/test_filejournal.cc
 test_filejournal_LDFLAGS = ${AM_LDFLAGS}
 test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)

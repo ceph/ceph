@@ -15,6 +15,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "osd/osd_types.h"
+#include <errno.h>
 
 #include "HashIndex.h"
 

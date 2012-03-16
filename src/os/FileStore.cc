@@ -345,7 +345,8 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
-  r = object_map->link_keys(o, path_old, o, path_new);
+  r = object_map->link(o, path_old->get_index(),
+		       o, path_new->get_index());
   if (r < 0)
     return r;
 
@@ -367,7 +368,7 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o)
     r = index->lookup(o, &path, &exist);
     if (r < 0)
       return r;
-    object_map->clear(o, path);
+    object_map->clear(o, path->get_index());
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -1233,6 +1234,26 @@ int FileStore::_detect_fs()
 	   << "file system with the 'user_xattr' option." << dendl;
     return -ENOTSUP;
   }
+
+  char buf[1000];
+  do_setxattr(fn, "user.test", &buf, sizeof(buf));
+  do_setxattr(fn, "user.test2", &buf, sizeof(buf));
+  do_setxattr(fn, "user.test3", &buf, sizeof(buf));
+  do_setxattr(fn, "user.test4", &buf, sizeof(buf));
+  ret = do_setxattr(fn, "user.test5", &buf, sizeof(buf));
+  if (ret == -ENOSPC) {
+    if (!g_conf->filestore_xattr_use_omap) {
+      derr << "limited size xattrs -- enable filestore_xattr_use_omap" << dendl;
+      return -ENOTSUP;
+    } else {
+      derr << "limited size xattrs -- filestore_xattr_use_omap enabled" << dendl;
+    }
+  }
+  do_removexattr(fn, "user.test");
+  do_removexattr(fn, "user.test2");
+  do_removexattr(fn, "user.test3");
+  do_removexattr(fn, "user.test4");
+  do_removexattr(fn, "user.test5");
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0)
@@ -2517,8 +2538,11 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
-	if (_check_replay_guard(cid, oid, spos))
-	  r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
+	if (!_check_replay_guard(cid, oid, spos))
+	  break;
+	map<string, bufferptr> to_set;
+	to_set[name] = bufferptr(bl.c_str(), bl.length());
+	r = _setattrs(cid, oid, to_set);
 	if (r == -ENOSPC)
 	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
 		  << " name " << name << " size " << bl.length() << dendl;
@@ -3042,30 +3066,43 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     return 0;
 
   int o, n, r;
-  Index index;
-  IndexedPath from, to;
-  o = lfn_open(cid, oldoid, O_RDONLY, 0, &from, &index);
-  if (o < 0) {
-    r = o;
-    goto out2;
-  }
-  n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644, &to, &index);
-  if (n < 0) {
-    r = n;
-    goto out;
+  {
+    Index index;
+    IndexedPath from, to;
+    o = lfn_open(cid, oldoid, O_RDONLY, 0, &from, &index);
+    if (o < 0) {
+      r = o;
+      goto out2;
+    }
+    n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644, &to, &index);
+    if (n < 0) {
+      r = n;
+      goto out;
+    }
+    struct stat st;
+    ::fstat(o, &st);
+    r = _do_clone_range(o, n, 0, st.st_size, 0);
+    if (r < 0)
+      r = -errno;
+    dout(20) << "objectmap clone" << dendl;
+    r = object_map->clone(oldoid, from->get_index(), newoid, to->get_index());
   }
 
-  struct stat st;
-  ::fstat(o, &st);
-  r = _do_clone_range(o, n, 0, st.st_size, 0);
-  if (r < 0)
-    r = -errno;
-  dout(20) << "objectmap_clone_keys" << dendl;
-  r = object_map->clone_keys(oldoid, from, newoid, to);
+  {
+    map<string, bufferptr> aset;
+    r = _getattrs(cid, oldoid, aset);
+    if (r < 0)
+      goto out3;
+
+    r = _setattrs(cid, newoid, aset);
+    if (r < 0)
+      goto out3;
+  }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(n, spos);
 
+ out3:
   TEMP_FAILURE_RETRY(::close(n));
  out:
   TEMP_FAILURE_RETRY(::close(o));
@@ -3809,23 +3846,35 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset, bool user_
 
 // objects
 
-int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name,
-		       void *value, size_t size) 
-{
-  dout(15) << "getattr " << cid << "/" << oid << " '" << name << "' len " << size << dendl;
-  char n[ATTR_MAX_NAME_LEN];
-  get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = lfn_getxattr(cid, oid, n, value, size);
-  dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' len " << size << " = " << r << dendl;
-  return r;
-}
-
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
   int r = _getattr(cid, oid, n, bp);
+  if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
+    map<string, bufferlist> got;
+    set<string> to_get;
+    to_get.insert(string(name));
+    Index index;
+    r = get_index(cid, &index);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      return r;
+    }
+    r = object_map->get_xattrs(oid, index, to_get, &got);
+    if (r < 0 && r != -ENOENT) {
+      dout(10) << __func__ << " get_xattrs err r =" << r << dendl;
+      return r;
+    }
+    if (!got.size()) {
+      dout(10) << __func__ << " got.size() is 0" << dendl;
+      return -ENODATA;
+    }
+    bp = bufferptr(got.begin()->second.c_str(),
+		   got.begin()->second.length());
+    r = 0;
+  }
   dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
@@ -3834,23 +3883,54 @@ int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>&
 {
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
   int r = _getattrs(cid, oid, aset, user_only);
+  if (g_conf->filestore_xattr_use_omap) {
+    set<string> omap_attrs;
+    map<string, bufferlist> omap_aset;
+    Index index;
+    int r = get_index(cid, &index);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      return r;
+    }
+    r = object_map->get_all_xattrs(oid, index, &omap_attrs);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+      return r;
+    }
+    r = object_map->get_xattrs(oid, index, omap_attrs, &omap_aset);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+      return r;
+    }
+    assert(omap_attrs.size() == omap_aset.size());
+    for (map<string, bufferlist>::iterator i = omap_aset.begin();
+	 i != omap_aset.end();
+	 ++i) {
+      string key;
+      if (user_only) {
+	if (i->first[0] != '_')
+	  continue;
+	if (i->first == "_")
+	  continue;
+	key = i->first.substr(1, i->first.size());
+      } else {
+	key = i->first;
+      }
+      aset.insert(make_pair(key,
+			    bufferptr(i->second.c_str(), i->second.length())));
+    }
+  }
   dout(10) << "getattrs " << cid << "/" << oid << " = " << r << dendl;
-  return r;
-}
-
-int FileStore::_setattr(coll_t cid, const hobject_t& oid, const char *name,
-			const void *value, size_t size) 
-{
-  dout(15) << "setattr " << cid << "/" << oid << " '" << name << "' len " << size << dendl;
-  char n[ATTR_MAX_NAME_LEN];
-  get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = lfn_setxattr(cid, oid, n, value, size);
-  dout(10) << "setattr " << cid << "/" << oid << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
 }
 
 int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset) 
 {
+  map<string, bufferlist> omap_set;
+  set<string> omap_remove;
+  map<string, bufferptr> inline_set;
+  if (g_conf->filestore_xattr_use_omap)
+    _getattrs(cid, oid, inline_set);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
   int r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
@@ -3858,6 +3938,33 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
        ++p) {
     char n[ATTR_MAX_NAME_LEN];
     get_attrname(p->first.c_str(), n, ATTR_MAX_NAME_LEN);
+    if (g_conf->filestore_xattr_use_omap) {
+      if (p->second.length() > g_conf->filestore_max_inline_xattr_size) {
+	if (inline_set.count(p->first)) {
+	  inline_set.erase(p->first);
+	  r = lfn_removexattr(cid, oid, n);
+	  if (r < 0)
+	    return r;
+	}
+	omap_set[p->first].push_back(p->second);
+	continue;
+      }
+
+      if (!inline_set.count(p->first) &&
+	  inline_set.size() >= g_conf->filestore_max_inline_xattrs) {
+	if (inline_set.count(p->first)) {
+	  inline_set.erase(p->first);
+	  r = lfn_removexattr(cid, oid, n);
+	  if (r < 0)
+	    return r;
+	}
+	omap_set[p->first].push_back(p->second);
+	continue;
+      }
+      omap_remove.insert(p->first);
+      inline_set.insert(*p);
+    }
+
     const char *val;
     if (p->second.length())
       val = p->second.c_str();
@@ -3868,6 +3975,25 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
     if (r < 0) {
       derr << "FileStore::_setattrs: do_setxattr returned " << r << dendl;
       break;
+    }
+  }
+
+  if (g_conf->filestore_xattr_use_omap) {
+    Index index;
+    int r = get_index(cid, &index);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      return r;
+    }
+    r = object_map->remove_xattrs(oid, index, omap_remove);
+    if (r < 0 && r != -ENOENT) {
+      dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
+      return r;
+    }
+    r = object_map->set_xattrs(oid, index, omap_set);
+    if (r < 0) {
+      dout(10) << __func__ << " could not set_xattrs r = " << r << dendl;
+      return r;
     }
   }
   dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
@@ -3881,6 +4007,21 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name)
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
   int r = lfn_removexattr(cid, oid, n);
+  if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
+    Index index;
+    r = get_index(cid, &index);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      return r;
+    }
+    set<string> to_remove;
+    to_remove.insert(string(name));
+    r = object_map->remove_xattrs(oid, index, to_remove);
+    if (r < 0 && r != -ENOENT) {
+      dout(10) << __func__ << " could not remove_xattrs index r = " << r << dendl;
+      return r;
+    }
+  }
   dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
@@ -3898,6 +4039,25 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid)
       r = lfn_removexattr(cid, oid, n);
       if (r < 0)
 	break;
+    }
+  }
+  if (g_conf->filestore_xattr_use_omap) {
+    set<string> omap_attrs;
+    Index index;
+    r = get_index(cid, &index);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      return r;
+    }
+    r = object_map->get_all_xattrs(oid, index, &omap_attrs);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+      return r;
+    }
+    r = object_map->remove_xattrs(oid, index, omap_attrs);
+    if (r < 0) {
+      dout(10) << __func__ << " could not remove omap_attrs r = " << r << dendl;
+      return r;
     }
   }
   dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
@@ -4153,7 +4313,7 @@ int FileStore::omap_get(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get(hoid, path, header, out);
+  return object_map->get(hoid, path->get_index(), header, out);
 }
 
 int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
@@ -4164,7 +4324,7 @@ int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get_header(hoid, path, bl);
+  return object_map->get_header(hoid, path->get_index(), bl);
 }
 
 int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
@@ -4174,7 +4334,7 @@ int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get_keys(hoid, path, keys);
+  return object_map->get_keys(hoid, path->get_index(), keys);
 }
 
 int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
@@ -4186,7 +4346,7 @@ int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->get_values(hoid, path, keys, out);
+  return object_map->get_values(hoid, path->get_index(), keys, out);
 }
 
 int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
@@ -4198,7 +4358,7 @@ int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->check_keys(hoid, path, keys, out);
+  return object_map->check_keys(hoid, path->get_index(), keys, out);
 }
 
 ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
@@ -4209,7 +4369,7 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
   int r = lfn_find(c, hoid, &path);
   if (r < 0)
     return ObjectMap::ObjectMapIterator();
-  return object_map->get_iterator(hoid, path);
+  return object_map->get_iterator(hoid, path->get_index());
 }
 
 int FileStore::_create_collection(coll_t c) 
@@ -4283,7 +4443,7 @@ int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->clear(hoid, path);
+  return object_map->clear(hoid, path->get_index());
 }
 int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
 			     const map<string, bufferlist> &aset) {
@@ -4292,7 +4452,7 @@ int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->set_keys(hoid, path, aset);
+  return object_map->set_keys(hoid, path->get_index(), aset);
 }
 int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
 			   const set<string> &keys) {
@@ -4301,7 +4461,7 @@ int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->rm_keys(hoid, path, keys);
+  return object_map->rm_keys(hoid, path->get_index(), keys);
 }
 int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
 			       const bufferlist &bl)
@@ -4311,7 +4471,7 @@ int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  return object_map->set_header(hoid, path, bl);
+  return object_map->set_header(hoid, path->get_index(), bl);
 }
 
 
