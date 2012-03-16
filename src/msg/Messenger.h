@@ -254,9 +254,65 @@ protected:
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
   virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
+
+  virtual int bind(entity_addr_t bind_addr) = 0;
+
+  /**
+   * Set the cluster protocol in use by this daemon.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  virtual void set_cluster_protocol(int p) = 0;
+
+  /**
+   * Set a policy which is applied to all peers who do not have a type-specific
+   * Policy.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The Policy to apply.
+   */
+  virtual void set_default_policy(Policy p) = 0;
+
+  /**
+   * Set a policy which is applied to all peers of the given type.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this policy applies to.
+   * @param p The policy to apply.
+   */
+  virtual void set_policy(int type, Policy p) = 0;
+
+  /**
+   * Set a Throttler which is applied to all Messages from the given
+   * type of peer.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this Throttler will apply to.
+   * @param t The Throttler to apply. SimpleMessenger does not take
+   * ownership of this pointer, but you must not destroy it before
+   * you destroy SimpleMessenger.
+   */
+  virtual void set_policy_throttler(int type, Throttle *t) = 0;
+
+  /**
+   * create a new messenger
+   *
+   * Create a new messenger instance, with whatever implementation is
+   * available or specified via the configuration in cct.
+   *
+   * @param cct context
+   * @param name entity name to register
+   * @param nonce nonce value to uniquely identify this instance on the current host
+   */
+  static Messenger *create(CephContext *cct,
+			   entity_name_t name,
+			   uint64_t nonce);
 };
-
-
 
 
 

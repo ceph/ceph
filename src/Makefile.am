@@ -943,6 +943,7 @@ libcommon_files = \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
+	msg/Messenger.cc \
 	os/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
