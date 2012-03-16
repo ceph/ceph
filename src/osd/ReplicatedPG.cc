@@ -4801,6 +4801,7 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
     obc->ondisk_write_lock();
     obc->obs.exists = true;
     obc->obs.oi = pi.recovery_info.oi;
+    populate_obc_watchers(obc);
 
     if (hoid.snap == CEPH_NOSNAP || hoid.snap == CEPH_SNAPDIR) {
       obc->ssc->snapset = pi.recovery_info.ss;
@@ -5164,8 +5165,6 @@ void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, Object
 {
   lock();
   dout(10) << "_applied_recovered_object " << *obc << dendl;
-  if (is_primary())
-    populate_obc_watchers(obc);
   put_object_context(obc);
   unlock();
   delete t;
