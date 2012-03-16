@@ -5547,11 +5547,7 @@ void ReplicatedPG::on_shutdown()
 
 void ReplicatedPG::on_activate()
 {
-  for (map<hobject_t, ObjectContext *>::iterator i = object_contexts.begin();
-       i != object_contexts.end();
-       ++i) {
-    populate_obc_watchers(i->second);
-  }
+  assert(object_contexts.empty());
 
   for (unsigned i = 1; i<acting.size(); i++) {
     if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
