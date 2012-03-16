@@ -5766,48 +5766,11 @@ int ReplicatedPG::recover_primary(int max)
     if (latest) {
       switch (latest->op) {
       case pg_log_entry_t::CLONE:
-	{
-	  // is this a clone operation that we can do locally?
-	  if (missing.is_missing(head) &&
-	      missing.have_old(head) == latest->prior_version) {
-	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
-		     << " to " << soid << " v" << latest->version
-		     << " snaps " << latest->snaps << dendl;
-	    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-
-	    // NOTE: we know headobc exists on disk, and the oloc will be loaded with it, so
-	    // it is safe to pass in a blank one here.
-	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
-
-	    object_info_t oi(headobc->obs.oi);
-	    oi.soid = soid;
-	    oi.version = latest->version;
-	    oi.prior_version = latest->prior_version;
-	    bufferlist::iterator i = latest->snaps.begin();
-	    ::decode(oi.snaps, i);
-	    assert(oi.snaps.size() > 0);
-	    oi.copy_user_bits(headobc->obs.oi);
-
-	    ObjectContext *clone_obc = new ObjectContext(oi, true, NULL);
-	    clone_obc->get();
-	    clone_obc->ondisk_write_lock();
-	    clone_obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
-	    register_object_context(clone_obc);
-
-	    _make_clone(*t, head, soid, &clone_obc->obs.oi);
-
-	    Context *onreadable = new C_OSD_AppliedRecoveredObject(this, t, clone_obc);
-	    Context *onreadable_sync = new C_OSD_OndiskWriteUnlock(clone_obc);
-	    int tr = osd->store->queue_transaction(&osr, t, onreadable, NULL, onreadable_sync);
-	    assert(tr == 0);
-
-	    put_object_context(headobc);
-
-	    missing.got(latest->soid, latest->version);
-	    missing_loc.erase(latest->soid);
-	    continue;
-	  }
-	}
+	/*
+	 * Handling for this special case removed for now, until we
+	 * can correctly construct an accurate SnapSet from the old
+	 * one.
+	 */
 	break;
 
       case pg_log_entry_t::LOST_REVERT:
