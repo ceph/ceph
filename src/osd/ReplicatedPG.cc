@@ -3761,36 +3761,34 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
     if (r < 0) {
       if (!can_create)
 	return NULL;   // -ENOENT!
+
+      // new object.
       object_info_t oi(soid, oloc);
-      obc = new ObjectContext(oi, false, NULL);
+      SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
+      return create_object_context(oi, ssc);
     }
-    else {
-      object_info_t oi(bv);
 
-      // if the on-disk oloc is bad/undefined, set up the pool value
-      if (oi.oloc.get_pool() < 0) {
-	oi.oloc.pool = info.pgid.pool();
-	oi.oloc.preferred = info.pgid.preferred();
-      }
+    object_info_t oi(bv);
 
-      SnapSetContext *ssc = NULL;
-      if (can_create)
-	ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
-      obc = new ObjectContext(oi, true, ssc);
+    // if the on-disk oloc is bad/undefined, set up the pool value
+    if (oi.oloc.get_pool() < 0) {
+      oi.oloc.pool = info.pgid.pool();
+      oi.oloc.preferred = info.pgid.preferred();
     }
+
+    SnapSetContext *ssc = NULL;
+    if (can_create)
+      ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
+    obc = new ObjectContext(oi, true, ssc);
+    obc->obs.oi.decode(bv);
+    obc->obs.exists = true;
+
     register_object_context(obc);
 
     if (can_create && !obc->ssc)
       obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
 
-    if (r >= 0) {
-      obc->obs.oi.decode(bv);
-      obc->obs.exists = true;
-
-      populate_obc_watchers(obc);
-    } else {
-      obc->obs.exists = false;
-    }
+    populate_obc_watchers(obc);
     dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
   }
   obc->ref++;
