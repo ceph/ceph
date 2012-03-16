@@ -58,7 +58,7 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 	my_cflags_save="$CFLAGS"
 	CFLAGS="$my_cflags_save $1"
 	AC_MSG_CHECKING([whether $CC accepts $1])
-	AC_COMPILE_IFELSE(AC_LANG_PROGRAM(),
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]], [[ ]])],
 			  [AC_MSG_RESULT([yes]); AC_SUBST([$2], ["$1"])],
 			  [AC_MSG_RESULT([no])]
 			 )
