@@ -42,6 +42,7 @@ def store_coverage(ctx, test_coverage, rev, suite):
             raise
         else:
             db.commit()
+            log.info('added coverage to database')
         finally:
             cursor.close()
 
@@ -110,9 +111,26 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
 
     teuthology.read_config(args)
 
+    handler = logging.FileHandler(
+        filename=os.path.join(args.test_dir, 'coverage.log'),
+        )
+    formatter = logging.Formatter(
+        fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+        )
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
+
+    try:
+        _analyze(args)
+    except:
+        log.exception('error generating coverage')
+        raise
+
+def _analyze(args):
     tests = [
         f for f in sorted(os.listdir(args.test_dir))
-        if not f.startswith('.')
+        if not f.startswith('.') and os.path.isdir(f)
         and os.path.exists(os.path.join(args.test_dir, f, 'summary.yaml'))
         and os.path.exists(os.path.join(args.test_dir, f, 'ceph-sha1'))]
 

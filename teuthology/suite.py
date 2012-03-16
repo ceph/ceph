@@ -157,7 +157,7 @@ def ls():
     args = parser.parse_args()
 
     for j in sorted(os.listdir(args.archive_dir)):
-        if j.startswith('.'):
+        if j.startswith('.') or os.path.isdir(j):
             continue
 
         summary = {}
@@ -206,6 +206,7 @@ def ls():
             print '    {reason}'.format(reason=summary['failure_reason'])
 
 def generate_coverage(args):
+    log.info('starting coverage generation')
     subprocess.Popen(
         args=[
             os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
@@ -221,6 +222,7 @@ def generate_coverage(args):
         )
 
 def email_results(subject, from_, to, body):
+    log.info('Sending results to {to}: {body}'.format(to=to, body=body))
     import smtplib
     from email.mime.text import MIMEText
     msg = MIMEText(body)
@@ -272,9 +274,26 @@ def results():
 
     teuthology.read_config(args)
 
+    handler = logging.FileHandler(
+        filename=os.path.join(args.archive_dir, 'results.log'),
+        )
+    formatter = logging.Formatter(
+        fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+        )
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
+
+    try:
+        _results(args)
+    except:
+        log.exception('error generating results')
+        raise
+
+def _results(args):
     running_tests = [
         f for f in sorted(os.listdir(args.archive_dir))
-        if not f.startswith('.')
+        if not f.startswith('.') and os.path.isdir(f)
         and not os.path.exists(os.path.join(args.archive_dir, f, 'summary.yaml'))
         ]
     starttime = time.time()
