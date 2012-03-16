@@ -4813,17 +4813,18 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   if (complete) {
     submit_push_complete(pi.recovery_info, t);
 
-    ObjectContext *obc = get_object_context(hoid,
-					    pi.recovery_info.oi.oloc,
-					    true);
-    obc->ondisk_write_lock();
-    obc->obs.exists = true;
-    obc->obs.oi = pi.recovery_info.oi;
-    populate_obc_watchers(obc);
-
+    SnapSetContext *ssc;
     if (hoid.snap == CEPH_NOSNAP || hoid.snap == CEPH_SNAPDIR) {
-      obc->ssc->snapset = pi.recovery_info.ss;
+      ssc = create_snapset_context(hoid.oid);
+      ssc->snapset = pi.recovery_info.ss;
+    } else {
+      ssc = get_snapset_context(hoid.oid, hoid.get_key(), hoid.hash, false);
+      assert(ssc);
     }
+    ObjectContext *obc = create_object_context(pi.recovery_info.oi, ssc);
+    obc->obs.exists = true;
+
+    obc->ondisk_write_lock();
 
     onreadable = new C_OSD_AppliedRecoveredObject(this, t, obc);
     onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
