@@ -534,6 +534,7 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
+  SnapSetContext *create_snapset_context(const object_t& oid);
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
 				      ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {

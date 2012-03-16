@@ -3970,6 +3970,15 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
     pgstat->stats.cat_sum[oi.category].add(stat);
 }
 
+ReplicatedPG::SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
+{
+  SnapSetContext *ssc = new SnapSetContext(oid);
+  dout(10) << "create_snapset_context " << ssc << " " << ssc->oid << dendl;
+  register_snapset_context(ssc);
+  ssc->ref++;
+  return ssc;
+}
+
 ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
 								const string& key,
 								ps_t seed,
