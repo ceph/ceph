@@ -3066,30 +3066,43 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     return 0;
 
   int o, n, r;
-  Index index;
-  IndexedPath from, to;
-  o = lfn_open(cid, oldoid, O_RDONLY, 0, &from, &index);
-  if (o < 0) {
-    r = o;
-    goto out2;
-  }
-  n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644, &to, &index);
-  if (n < 0) {
-    r = n;
-    goto out;
+  {
+    Index index;
+    IndexedPath from, to;
+    o = lfn_open(cid, oldoid, O_RDONLY, 0, &from, &index);
+    if (o < 0) {
+      r = o;
+      goto out2;
+    }
+    n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644, &to, &index);
+    if (n < 0) {
+      r = n;
+      goto out;
+    }
+    struct stat st;
+    ::fstat(o, &st);
+    r = _do_clone_range(o, n, 0, st.st_size, 0);
+    if (r < 0)
+      r = -errno;
+    dout(20) << "objectmap clone" << dendl;
+    r = object_map->clone(oldoid, from->get_index(), newoid, to->get_index());
   }
 
-  struct stat st;
-  ::fstat(o, &st);
-  r = _do_clone_range(o, n, 0, st.st_size, 0);
-  if (r < 0)
-    r = -errno;
-  dout(20) << "objectmap clone" << dendl;
-  r = object_map->clone(oldoid, from->get_index(), newoid, to->get_index());
+  {
+    map<string, bufferptr> aset;
+    r = _getattrs(cid, oldoid, aset);
+    if (r < 0)
+      goto out3;
+
+    r = _setattrs(cid, newoid, aset);
+    if (r < 0)
+      goto out3;
+  }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(n, spos);
 
+ out3:
   TEMP_FAILURE_RETRY(::close(n));
  out:
   TEMP_FAILURE_RETRY(::close(o));
