@@ -3733,6 +3733,17 @@ ReplicatedPG::ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_
   return NULL;
 }
 
+ReplicatedPG::ObjectContext *ReplicatedPG::create_object_context(const object_info_t& oi,
+								 SnapSetContext *ssc)
+{
+  ObjectContext *obc = new ObjectContext(oi, false, ssc);
+  dout(10) << "create_object_context " << obc << " " << oi.soid << " " << obc->ref << dendl;
+  register_object_context(obc);
+  populate_obc_watchers(obc);
+  obc->ref++;
+  return obc;
+}
+
 ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
 							      const object_locator_t& oloc,
 							      bool can_create)

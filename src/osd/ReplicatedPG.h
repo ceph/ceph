@@ -510,6 +510,7 @@ protected:
     return NULL;
   }
   ObjectContext *_lookup_object_context(const hobject_t& oid);
+  ObjectContext *create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   ObjectContext *get_object_context(const hobject_t& soid, const object_locator_t& oloc,
 				    bool can_create);
   void register_object_context(ObjectContext *obc) {
