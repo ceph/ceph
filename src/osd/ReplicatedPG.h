@@ -514,6 +514,7 @@ protected:
 				    bool can_create);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
+      assert(object_contexts.count(obc->obs.oi.soid) == 0);
       obc->registered = true;
       object_contexts[obc->obs.oi.soid] = obc;
     }
@@ -537,6 +538,7 @@ protected:
 				      ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
     if (!ssc->registered) {
+      assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
       snapset_contexts[ssc->oid] = ssc;
     }
