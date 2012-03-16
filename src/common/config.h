@@ -109,6 +109,7 @@ public:
 
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostringstream *oss);
+  void _apply_changes(std::ostringstream *oss);
   void call_all_observers();
 
   // Called by the Ceph daemons to make configuration changes at runtime
@@ -125,6 +126,7 @@ public:
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const char *key, char **buf, int len) const;
+  int _get_val(const char *key, char **buf, int len) const;
 
   // Return a list of all the sections that the current entity is a member of.
   void get_my_sections(std::vector <std::string> &sections) const;

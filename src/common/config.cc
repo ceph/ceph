@@ -379,6 +379,11 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
 void md_config_t::apply_changes(std::ostringstream *oss)
 {
   Mutex::Locker l(lock);
+  _apply_changes(oss);
+}
+
+void md_config_t::_apply_changes(std::ostringstream *oss)
+{
   /* Maps observers to the configuration options that they care about which
    * have changed. */
   typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
@@ -401,7 +406,7 @@ void md_config_t::apply_changes(std::ostringstream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
-    if ((oss) && (!get_val(key.c_str(), &bufptr, sizeof(buf)))) {
+    if ((oss) && (!_get_val(key.c_str(), &bufptr, sizeof(buf)))) {
       (*oss) << "applying configuration change: " << key << " = '"
 		     << buf << "'\n";
     }
@@ -474,7 +479,7 @@ int md_config_t::injectargs(const std::string& s, std::ostringstream *oss)
     *oss << "\n";
     ret = -EINVAL;
   }
-  apply_changes(oss);
+  _apply_changes(oss);
   return ret;
 }
 
@@ -523,6 +528,13 @@ int md_config_t::set_val(const char *key, const char *val)
 int md_config_t::get_val(const char *key, char **buf, int len) const
 {
   Mutex::Locker l(lock);
+  return _get_val(key, buf,len);
+}
+
+int md_config_t::_get_val(const char *key, char **buf, int len) const
+{
+  assert(lock.is_locked());
+
   if (!key)
     return -EINVAL;
 

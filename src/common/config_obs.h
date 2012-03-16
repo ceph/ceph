@@ -25,7 +25,7 @@ public:
   virtual ~md_config_obs_t();
   virtual const char** get_tracked_conf_keys() const = 0;
   virtual void handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed) = 0;
+				  const std::set <std::string> &changed) = 0;
 };
 
 #endif
