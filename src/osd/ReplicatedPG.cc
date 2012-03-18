@@ -1945,15 +1945,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
 	if (op.extent.truncate_seq > seq) {
 	  // write arrives before trimtrunc
-	  dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
-		   << ", truncating to " << op.extent.truncate_size << dendl;
-	  t.truncate(coll, soid, op.extent.truncate_size);
-	  oi.truncate_seq = op.extent.truncate_seq;
-	  oi.truncate_size = op.extent.truncate_size;
-	  if (op.extent.truncate_size != oi.size) {
-	    ctx->delta_stats.num_bytes -= oi.size;
-	    ctx->delta_stats.num_bytes += op.extent.truncate_size;
-	    oi.size = op.extent.truncate_size;
+	  if (obs.exists) {
+	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
+		     << ", truncating to " << op.extent.truncate_size << dendl;
+	    t.truncate(coll, soid, op.extent.truncate_size);
+	    oi.truncate_seq = op.extent.truncate_seq;
+	    oi.truncate_size = op.extent.truncate_size;
+	    if (op.extent.truncate_size != oi.size) {
+	      ctx->delta_stats.num_bytes -= oi.size;
+	      ctx->delta_stats.num_bytes += op.extent.truncate_size;
+	      oi.size = op.extent.truncate_size;
+	    }
+	  } else {
+	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
+		     << ", but object is new" << dendl;
+	    oi.truncate_seq = op.extent.truncate_seq;
+	    oi.truncate_size = op.extent.truncate_size;
 	  }
 	}
 	bufferlist nbl;
