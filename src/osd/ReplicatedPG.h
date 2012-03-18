@@ -510,10 +510,12 @@ protected:
     return NULL;
   }
   ObjectContext *_lookup_object_context(const hobject_t& oid);
+  ObjectContext *create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   ObjectContext *get_object_context(const hobject_t& soid, const object_locator_t& oloc,
 				    bool can_create);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
+      assert(object_contexts.count(obc->obs.oi.soid) == 0);
       obc->registered = true;
       object_contexts[obc->obs.oi.soid] = obc;
     }
@@ -533,10 +535,12 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
+  SnapSetContext *create_snapset_context(const object_t& oid);
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
 				      ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
     if (!ssc->registered) {
+      assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
       snapset_contexts[ssc->oid] = ssc;
     }

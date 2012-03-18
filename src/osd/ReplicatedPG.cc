@@ -1945,15 +1945,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
 	if (op.extent.truncate_seq > seq) {
 	  // write arrives before trimtrunc
-	  dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
-		   << ", truncating to " << op.extent.truncate_size << dendl;
-	  t.truncate(coll, soid, op.extent.truncate_size);
-	  oi.truncate_seq = op.extent.truncate_seq;
-	  oi.truncate_size = op.extent.truncate_size;
-	  if (op.extent.truncate_size != oi.size) {
-	    ctx->delta_stats.num_bytes -= oi.size;
-	    ctx->delta_stats.num_bytes += op.extent.truncate_size;
-	    oi.size = op.extent.truncate_size;
+	  if (obs.exists) {
+	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
+		     << ", truncating to " << op.extent.truncate_size << dendl;
+	    t.truncate(coll, soid, op.extent.truncate_size);
+	    oi.truncate_seq = op.extent.truncate_seq;
+	    oi.truncate_size = op.extent.truncate_size;
+	    if (op.extent.truncate_size != oi.size) {
+	      ctx->delta_stats.num_bytes -= oi.size;
+	      ctx->delta_stats.num_bytes += op.extent.truncate_size;
+	      oi.size = op.extent.truncate_size;
+	    }
+	  } else {
+	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
+		     << ", but object is new" << dendl;
+	    oi.truncate_seq = op.extent.truncate_seq;
+	    oi.truncate_size = op.extent.truncate_size;
 	  }
 	}
 	bufferlist nbl;
@@ -3725,6 +3732,17 @@ ReplicatedPG::ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_
   return NULL;
 }
 
+ReplicatedPG::ObjectContext *ReplicatedPG::create_object_context(const object_info_t& oi,
+								 SnapSetContext *ssc)
+{
+  ObjectContext *obc = new ObjectContext(oi, false, ssc);
+  dout(10) << "create_object_context " << obc << " " << oi.soid << " " << obc->ref << dendl;
+  register_object_context(obc);
+  populate_obc_watchers(obc);
+  obc->ref++;
+  return obc;
+}
+
 ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
 							      const object_locator_t& oloc,
 							      bool can_create)
@@ -3742,36 +3760,34 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
     if (r < 0) {
       if (!can_create)
 	return NULL;   // -ENOENT!
+
+      // new object.
       object_info_t oi(soid, oloc);
-      obc = new ObjectContext(oi, false, NULL);
+      SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
+      return create_object_context(oi, ssc);
     }
-    else {
-      object_info_t oi(bv);
 
-      // if the on-disk oloc is bad/undefined, set up the pool value
-      if (oi.oloc.get_pool() < 0) {
-	oi.oloc.pool = info.pgid.pool();
-	oi.oloc.preferred = info.pgid.preferred();
-      }
+    object_info_t oi(bv);
 
-      SnapSetContext *ssc = NULL;
-      if (can_create)
-	ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
-      obc = new ObjectContext(oi, true, ssc);
+    // if the on-disk oloc is bad/undefined, set up the pool value
+    if (oi.oloc.get_pool() < 0) {
+      oi.oloc.pool = info.pgid.pool();
+      oi.oloc.preferred = info.pgid.preferred();
     }
+
+    SnapSetContext *ssc = NULL;
+    if (can_create)
+      ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
+    obc = new ObjectContext(oi, true, ssc);
+    obc->obs.oi.decode(bv);
+    obc->obs.exists = true;
+
     register_object_context(obc);
 
     if (can_create && !obc->ssc)
       obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
 
-    if (r >= 0) {
-      obc->obs.oi.decode(bv);
-      obc->obs.exists = true;
-
-      populate_obc_watchers(obc);
-    } else {
-      obc->obs.exists = false;
-    }
+    populate_obc_watchers(obc);
     dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
   }
   obc->ref++;
@@ -3960,6 +3976,15 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
   pgstat->stats.sum.add(stat);
   if (oi.category.length())
     pgstat->stats.cat_sum[oi.category].add(stat);
+}
+
+ReplicatedPG::SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
+{
+  SnapSetContext *ssc = new SnapSetContext(oid);
+  dout(10) << "create_snapset_context " << ssc << " " << ssc->oid << dendl;
+  register_snapset_context(ssc);
+  ssc->ref++;
+  return ssc;
 }
 
 ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
@@ -4787,16 +4812,18 @@ void ReplicatedPG::handle_pull_response(OpRequest *op)
   if (complete) {
     submit_push_complete(pi.recovery_info, t);
 
-    ObjectContext *obc = get_object_context(hoid,
-					    pi.recovery_info.oi.oloc,
-					    true);
-    obc->ondisk_write_lock();
-    obc->obs.exists = true;
-    obc->obs.oi = pi.recovery_info.oi;
-
+    SnapSetContext *ssc;
     if (hoid.snap == CEPH_NOSNAP || hoid.snap == CEPH_SNAPDIR) {
-      obc->ssc->snapset = pi.recovery_info.ss;
+      ssc = create_snapset_context(hoid.oid);
+      ssc->snapset = pi.recovery_info.ss;
+    } else {
+      ssc = get_snapset_context(hoid.oid, hoid.get_key(), hoid.hash, false);
+      assert(ssc);
     }
+    ObjectContext *obc = create_object_context(pi.recovery_info.oi, ssc);
+    obc->obs.exists = true;
+
+    obc->ondisk_write_lock();
 
     onreadable = new C_OSD_AppliedRecoveredObject(this, t, obc);
     onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
@@ -5156,8 +5183,6 @@ void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, Object
 {
   lock();
   dout(10) << "_applied_recovered_object " << *obc << dendl;
-  if (is_primary())
-    populate_obc_watchers(obc);
   put_object_context(obc);
   unlock();
   delete t;
@@ -5740,48 +5765,11 @@ int ReplicatedPG::recover_primary(int max)
     if (latest) {
       switch (latest->op) {
       case pg_log_entry_t::CLONE:
-	{
-	  // is this a clone operation that we can do locally?
-	  if (missing.is_missing(head) &&
-	      missing.have_old(head) == latest->prior_version) {
-	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
-		     << " to " << soid << " v" << latest->version
-		     << " snaps " << latest->snaps << dendl;
-	    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-
-	    // NOTE: we know headobc exists on disk, and the oloc will be loaded with it, so
-	    // it is safe to pass in a blank one here.
-	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
-
-	    object_info_t oi(headobc->obs.oi);
-	    oi.soid = soid;
-	    oi.version = latest->version;
-	    oi.prior_version = latest->prior_version;
-	    bufferlist::iterator i = latest->snaps.begin();
-	    ::decode(oi.snaps, i);
-	    assert(oi.snaps.size() > 0);
-	    oi.copy_user_bits(headobc->obs.oi);
-
-	    ObjectContext *clone_obc = new ObjectContext(oi, true, NULL);
-	    clone_obc->get();
-	    clone_obc->ondisk_write_lock();
-	    clone_obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
-	    register_object_context(clone_obc);
-
-	    _make_clone(*t, head, soid, &clone_obc->obs.oi);
-
-	    Context *onreadable = new C_OSD_AppliedRecoveredObject(this, t, clone_obc);
-	    Context *onreadable_sync = new C_OSD_OndiskWriteUnlock(clone_obc);
-	    int tr = osd->store->queue_transaction(&osr, t, onreadable, NULL, onreadable_sync);
-	    assert(tr == 0);
-
-	    put_object_context(headobc);
-
-	    missing.got(latest->soid, latest->version);
-	    missing_loc.erase(latest->soid);
-	    continue;
-	  }
-	}
+	/*
+	 * Handling for this special case removed for now, until we
+	 * can correctly construct an accurate SnapSet from the old
+	 * one.
+	 */
 	break;
 
       case pg_log_entry_t::LOST_REVERT:
