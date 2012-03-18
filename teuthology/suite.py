@@ -157,7 +157,7 @@ def ls():
     args = parser.parse_args()
 
     for j in sorted(os.listdir(args.archive_dir)):
-        if j.startswith('.') or os.path.isdir(j):
+        if j.startswith('.') or not os.path.isdir(j):
             continue
 
         summary = {}
