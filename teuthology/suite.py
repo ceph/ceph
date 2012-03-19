@@ -157,12 +157,13 @@ def ls():
     args = parser.parse_args()
 
     for j in sorted(os.listdir(args.archive_dir)):
-        if j.startswith('.') or not os.path.isdir(j):
+        job_dir = os.path.join(args.archive_dir, j)
+        if j.startswith('.') or not os.path.isdir(job_dir):
             continue
 
         summary = {}
         try:
-            with file('%s/%s/summary.yaml' % (args.archive_dir, j)) as f:
+            with file(os.path.join(job_dir, 'summary.yaml')) as f:
                 g = yaml.safe_load_all(f)
                 for new in g:
                     summary.update(new)
@@ -172,7 +173,7 @@ def ls():
 
                 # pid
                 try:
-                    pidfile = '%s/%s/pid' % (args.archive_dir, j)
+                    pidfile = os.path.join(job_dir, 'pid')
                     found = False
                     if os.path.isfile(pidfile):
                         pid = open(pidfile, 'r').read()
@@ -293,7 +294,8 @@ def results():
 def _results(args):
     running_tests = [
         f for f in sorted(os.listdir(args.archive_dir))
-        if not f.startswith('.') and os.path.isdir(f)
+        if not f.startswith('.')
+        and os.path.isdir(os.path.join(args.archive_dir, f))
         and not os.path.exists(os.path.join(args.archive_dir, f, 'summary.yaml'))
         ]
     starttime = time.time()
@@ -318,9 +320,10 @@ def _results(args):
     passed = []
     all_jobs = sorted(os.listdir(args.archive_dir))
     for j in all_jobs:
-        if j.startswith('.'):
+        job_dir = os.path.join(args.archive_dir, j)
+        if j.startswith('.') or not os.path.isdir(job_dir):
             continue
-        summary_fn = os.path.join(args.archive_dir, j, 'summary.yaml')
+        summary_fn = os.path.join(job_dir, 'summary.yaml')
         if not os.path.exists(summary_fn):
             unfinished.append(j)
             continue

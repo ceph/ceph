@@ -130,7 +130,8 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
 def _analyze(args):
     tests = [
         f for f in sorted(os.listdir(args.test_dir))
-        if not f.startswith('.') and os.path.isdir(f)
+        if not f.startswith('.')
+        and os.path.isdir(os.path.join(args.test_dir, f))
         and os.path.exists(os.path.join(args.test_dir, f, 'summary.yaml'))
         and os.path.exists(os.path.join(args.test_dir, f, 'ceph-sha1'))]
 
