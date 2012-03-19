@@ -297,6 +297,7 @@ def _results(args):
         and not os.path.exists(os.path.join(args.archive_dir, f, 'summary.yaml'))
         ]
     starttime = time.time()
+    log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
     while running_tests and args.timeout > 0:
         if os.path.exists(os.path.join(
                 args.archive_dir,
@@ -308,6 +309,7 @@ def _results(args):
                          args.timeout)
                 break
             time.sleep(10)
+    log.info('Tests finished! gathering results...')
 
     descriptions = []
     failures = []
