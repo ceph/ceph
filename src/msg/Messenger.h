@@ -94,7 +94,7 @@ protected:
 
   // accessors
   entity_name_t get_myname() { return _my_name; }
-  virtual entity_addr_t get_myaddr() = 0;
+  virtual const entity_addr_t& get_myaddr() = 0;
   virtual void set_ip(entity_addr_t &addr) = 0;
   entity_inst_t get_myinst() { return entity_inst_t(get_myname(), get_myaddr()); }
   

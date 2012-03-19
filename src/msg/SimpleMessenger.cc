@@ -487,10 +487,9 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
   return 0;
 }
 
-entity_addr_t SimpleMessenger::get_myaddr()
+const entity_addr_t& SimpleMessenger::get_myaddr()
 {
-  entity_addr_t a = ms_addr;
-  return a;  
+  return ms_addr;
 }
 
 /**

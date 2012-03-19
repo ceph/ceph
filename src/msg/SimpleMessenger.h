@@ -72,7 +72,7 @@ public:
    * @return A copy of he address this Messenger currently
    * believes to be its own.
    */
-  virtual entity_addr_t get_myaddr();
+  virtual const entity_addr_t& get_myaddr();
   /**
    * Retrieve the Connection for an endpoint.
    *
