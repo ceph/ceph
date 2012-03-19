@@ -34,14 +34,22 @@ def task(ctx, config):
                      'count=100'])
 
     log.info('writing some data and simulating a failure')
-    remote.run(args=[
+    remote.run(
+        args=[
+            '/tmp/cephtest/enable-coredump',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            '/tmp/cephtest/archive/coverage',
             '/tmp/cephtest/binary/usr/local/bin/test_filestore_idempotent',
             '-c', '/tmp/cephtest/ceph.conf',
             'write', dir, journal
             ])
 
     log.info('verifying journal replay gives the correct result')
-    remote.run(args=[
+    remote.run(
+        args=[
+            '/tmp/cephtest/enable-coredump',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            '/tmp/cephtest/archive/coverage',
             '/tmp/cephtest/binary/usr/local/bin/test_filestore_idempotent',
             '-c', '/tmp/cephtest/ceph.conf',
             'verify', dir, journal
