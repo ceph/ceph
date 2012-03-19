@@ -2050,7 +2050,6 @@ void OSD::disconnect_session_watches(Session *session)
 
     ReplicatedPG *pg = static_cast<ReplicatedPG *>(lookup_lock_raw_pg(oiter->second));
     assert(pg);
-    obc->lock.Lock();
     watch_lock.Lock();
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
@@ -2075,7 +2074,6 @@ void OSD::disconnect_session_watches(Session *session)
       ++witer;
     }
     watch_lock.Unlock();
-    obc->lock.Unlock();
     pg->put_object_context(obc);
     /* now drop a reference to that obc */
     pg->unlock();

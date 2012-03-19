@@ -268,7 +268,9 @@ public:
 
     SnapSetContext *ssc;  // may be null
 
+  private:
     Mutex lock;
+  public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
