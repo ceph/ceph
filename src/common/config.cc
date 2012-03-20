@@ -25,6 +25,8 @@
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 
+#include "include/assert.h"
+
 #include <errno.h>
 #include <sstream>
 #include <stdlib.h>
