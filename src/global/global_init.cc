@@ -68,6 +68,10 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
 
+
+  if (alt_def_args)
+    conf->parse_argv(*alt_def_args);  // alternative default args
+
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, flags);
   if (ret == -EDOM) {
@@ -84,9 +88,6 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
     dout_emergency("global_init: error reading config file.\n");
     _exit(1);
   }
-
-  if (alt_def_args)
-    conf->parse_argv(*alt_def_args);  // alternative default args
 
   conf->parse_env(); // environment variables override
 
