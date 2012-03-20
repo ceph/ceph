@@ -52,7 +52,7 @@ static sighandler_t sighandler_alrm;
 static sighandler_t sighandler_term;
 
 
-#define SOCKET_BACKLOG 20
+#define SOCKET_BACKLOG 1024
 
 static void godown_handler(int signum)
 {
