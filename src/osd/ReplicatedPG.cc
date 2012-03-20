@@ -1898,8 +1898,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
-	if (!timeout || timeout > (uint32_t)g_conf->osd_max_notify_timeout)
-	  timeout = g_conf->osd_max_notify_timeout;
+	if (!timeout)
+	  timeout = g_conf->osd_default_notify_timeout;
 
 	notify_info_t n;
 	n.timeout = timeout;
