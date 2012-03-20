@@ -40,7 +40,6 @@ RGWRados* RGWRados::store;
 
 static string notify_oid = "notify";
 static string shadow_ns = "shadow";
-static string bucket_marker_ver_oid = ".rgw.bucket-marker-ver";
 static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
 static string avail_pools = ".pools.avail";
