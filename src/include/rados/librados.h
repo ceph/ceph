@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 30
+#define LIBRADOS_VER_MINOR 44
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -388,6 +388,16 @@ int rados_pool_list(rados_t cluster, char *buf, size_t len);
  * @returns config handle for this cluster
  */
 rados_config_t rados_cct(rados_t cluster);
+
+/**
+ * Get a global id for current instance
+ *
+ * This id is a unique representation of current connection to the cluster
+ *
+ * @param cluster cluster handle
+ * @returns instance global id
+ */
+uint64_t rados_get_instance_id(rados_t cluster);
 
 /**
  * Create an io context

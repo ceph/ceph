@@ -196,6 +196,18 @@ void librados::RadosClient::shutdown()
   ldout(cct, 1) << "shutdown" << dendl;
 }
 
+uint64_t librados::RadosClient::get_instance_id()
+{
+  lock.Lock();
+  if (state == DISCONNECTED) {
+    lock.Unlock();
+    return 0;
+  }
+  uint64_t id = monclient.get_global_id();
+  lock.Unlock();
+  return id;
+}
+
 librados::RadosClient::~RadosClient()
 {
   if (messenger)

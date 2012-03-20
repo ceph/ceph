@@ -25,10 +25,10 @@ struct rgw_log_entry {
   utime_t total_time;
   string user_agent;
   string referrer;
-  uint64_t bucket_id;
+  string bucket_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 5, bl);
+    ENCODE_START(6, 5, bl);
     ::encode(object_owner, bl);
     ::encode(bucket_owner, bl);
     ::encode(bucket, bl);
@@ -50,7 +50,7 @@ struct rgw_log_entry {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, p);
     ::decode(object_owner, p);
     if (struct_v > 3)
       ::decode(bucket_owner, p);
@@ -73,10 +73,18 @@ struct rgw_log_entry {
     else
       bytes_received = 0;
 
-    if (struct_v >= 3)
-      ::decode(bucket_id, p);
-    else
-      bucket_id = -1;
+    if (struct_v >= 3) {
+      if (struct_v <= 5) {
+        uint64_t id;
+        ::decode(id, p);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%llu", (long long)id);
+        bucket_id = buf;
+      } else {
+        ::decode(bucket_id, p);
+      }
+    } else
+      bucket_id = "";
     DECODE_FINISH(p);
   }
   void dump(Formatter *f) const;

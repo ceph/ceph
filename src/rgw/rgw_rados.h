@@ -190,6 +190,9 @@ class RGWRados
   librados::IoCtx root_pool_ctx;      // .rgw
   librados::IoCtx control_pool_ctx;   // .rgw.control
 
+  Mutex bucket_id_lock;
+  uint64_t max_bucket_id;
+
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
@@ -237,7 +240,8 @@ protected:
   CephContext *cct;
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
+  RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0),
+               bucket_id_lock("rados_bucket_id"), max_bucket_id(0) {}
   virtual ~RGWRados() {}
 
   void tick();
@@ -562,6 +566,8 @@ public:
   int pool_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
                 bool *is_truncated, string *last_entry);
 
+  uint64_t instance_id();
+  uint64_t next_bucket_id();
 };
 
 class RGWStoreManager {

@@ -1027,6 +1027,11 @@ void librados::Rados::shutdown()
   client = NULL;
 }
 
+uint64_t librados::Rados::get_instance_id()
+{
+  return client->get_instance_id();
+}
+
 int librados::Rados::conf_read_file(const char * const path) const
 {
   return rados_conf_read_file((rados_t)client, path);
@@ -1277,6 +1282,12 @@ extern "C" void rados_shutdown(rados_t cluster)
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   radosp->shutdown();
   delete radosp;
+}
+
+extern "C" uint64_t rados_get_instance_id(rados_t cluster)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->get_instance_id();
 }
 
 extern "C" void rados_version(int *major, int *minor, int *extra)

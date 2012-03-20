@@ -363,7 +363,7 @@ void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>&
   o.push_back(new RGWObjManifestPart);
 
   RGWObjManifestPart *p = new RGWObjManifestPart;
-  rgw_bucket b("bucket", ".pool", "marker_", 12);
+  rgw_bucket b("bucket", ".pool", "marker_", "12");
   p->loc = rgw_obj(b, "object");
   p->loc_ofs = 512 * 1024;
   p->size = 128 * 1024;
@@ -384,7 +384,7 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   RGWObjManifest *m = new RGWObjManifest;
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
-    rgw_bucket b("bucket", ".pool", "marker_", 12);
+    rgw_bucket b("bucket", ".pool", "marker_", "12");
     p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;
@@ -820,16 +820,12 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     if (r < 0)
       return r;
 
-    r = id_io_ctx.write(bucket_marker_ver_oid, bl, bl.length(), 0);
-    if (r < 0)
-      return r;
-
-    uint64_t ver = id_io_ctx.get_last_version();
-    ldout(cct, 20) << "got obj version=" << ver << dendl;
+    uint64_t iid = instance_id();
+    uint64_t bid = next_bucket_id();
     char buf[32];
-    snprintf(buf, sizeof(buf), "%llu", (unsigned long long)ver);
+    snprintf(buf, sizeof(buf), "%llu.%llu", (long long)iid, (long long)bid); 
     bucket.marker = buf;
-    bucket.bucket_id = ver;
+    bucket.bucket_id = bucket.marker;
 
     string dir_oid =  dir_oid_prefix;
     dir_oid.append(bucket.marker);
@@ -860,12 +856,9 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
   if (ret < 0)
     return ret;
 
-  char bucket_char[16];
-  snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
-  string bucket_id_string(bucket_char);
-  ret = rgw_put_obj(info.owner, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length(), false, pattrs);
+  ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.bucket_id, bl.c_str(), bl.length(), false, pattrs);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to store " << pi_buckets_rados << ":" << bucket_id_string << " ret=" << ret << dendl;
+    ldout(cct, 0) << "ERROR: failed to store " << pi_buckets_rados << ":" << info.bucket.bucket_id << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -3080,4 +3073,15 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   }
 
   return ret;
+}
+
+uint64_t RGWRados::instance_id()
+{
+  return rados->get_instance_id();
+}
+
+uint64_t RGWRados::next_bucket_id()
+{
+  Mutex::Locker l(bucket_id_lock);
+  return ++max_bucket_id;
 }

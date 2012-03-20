@@ -145,7 +145,7 @@ void RGWUserInfo::dump(Formatter *f) const
 
 void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 {
-  rgw_bucket *b = new rgw_bucket("name", "pool", "marker", 123);
+  rgw_bucket *b = new rgw_bucket("name", "pool", "marker", "123");
   o.push_back(b);
   o.push_back(new rgw_bucket);
 }
@@ -155,13 +155,13 @@ void rgw_bucket::dump(Formatter *f) const
   f->dump_string("name", name);
   f->dump_string("pool", pool);
   f->dump_string("marker", marker);
-  f->dump_unsigned("bucket_id", bucket_id);
+  f->dump_string("bucket_id", bucket_id);
 }
 
 void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
 {
   RGWBucketInfo *i = new RGWBucketInfo;
-  i->bucket = rgw_bucket("bucket", "pool", "marker", 10);
+  i->bucket = rgw_bucket("bucket", "pool", "marker", "10");
   i->owner = "owner";
   i->flags = BUCKET_SUSPENDED;
   o.push_back(i);
@@ -180,7 +180,7 @@ void RGWBucketInfo::dump(Formatter *f) const
 void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
 {
   RGWBucketEnt *e = new RGWBucketEnt;
-  e->bucket = rgw_bucket("bucket", "pool", "marker", 10);
+  e->bucket = rgw_bucket("bucket", "pool", "marker", "10");
   e->size = 1024;
   e->size_rounded = 4096;
   e->count = 1;
@@ -219,7 +219,7 @@ void RGWUploadPartInfo::dump(Formatter *f) const
 
 void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
 {
-  rgw_bucket b = rgw_bucket("bucket", "pool", "marker", 10);
+  rgw_bucket b = rgw_bucket("bucket", "pool", "marker", "10");
   rgw_obj *obj = new rgw_obj(b, "object");
   o.push_back(obj);
   o.push_back(new rgw_obj);

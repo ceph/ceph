@@ -70,6 +70,8 @@ public:
   int connect();
   void shutdown();
 
+  uint64_t get_instance_id();
+
   int create_ioctx(const char *name, IoCtxImpl **io);
 
   int64_t lookup_pool(const char *name);

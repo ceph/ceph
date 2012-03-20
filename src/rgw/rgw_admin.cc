@@ -476,7 +476,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_string("bucket", bucket.name.c_str());
   formatter->dump_string("pool", bucket.pool.c_str());
   
-  formatter->dump_int("id", bucket.bucket_id);
+  formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker.c_str());
   formatter->dump_string("owner", bucket_info.owner.c_str());
   formatter->open_object_section("usage");
@@ -528,7 +528,7 @@ int main(int argc, char **argv)
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
-  int64_t bucket_id = -1;
+  string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
   RGWBucketInfo bucket_info;
@@ -598,14 +598,10 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = str_to_perm(access.c_str());
-    } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "--bucket-id", (char*)NULL)) {
-      if (!errs.str().empty()) {
-	cerr << errs.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
-      bucket_id = tmp;
-      if (bucket_id < 0) {
-        cerr << "bad bucket-id: " << bucket_id << std::endl;
+    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
+      bucket_id = val;
+      if (bucket_id.empty()) {
+        cerr << "bad bucket-id" << std::endl;
         return usage();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
@@ -793,13 +789,9 @@ int main(int argc, char **argv)
   map<string, RGWSubUser>::iterator uiter;
   RGWUserInfo old_info = info;
 
-  if ((!bucket_name.empty()) || bucket_id >= 0) {
-    if (bucket_id >= 0) {
-      char bucket_char[16];
-      snprintf(bucket_char, sizeof(bucket_char), ".%lld",
-               (long long unsigned)bucket_id);
-      string bucket_string(bucket_char);
-      int ret = rgwstore->get_bucket_info(NULL, bucket_string, bucket_info);
+  if ((!bucket_name.empty()) || !bucket_id.empty()) {
+    if (!bucket_id.empty()) {
+      int ret = rgwstore->get_bucket_info(NULL, bucket_id, bucket_info);
 
       if (ret < 0) {
         cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
@@ -1086,7 +1078,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
-    if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id < 0)) {
+    if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
       cerr << "object or (at least one of date, bucket, bucket-id) were not specified" << std::endl;
       return usage();
     }
@@ -1095,11 +1087,9 @@ int main(int argc, char **argv)
     if (!object.empty()) {
       oid = object;
     } else {
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%lld", (unsigned long long)bucket_id);
       oid = date;
       oid += "-";
-      oid += buf;
+      oid += bucket_id;
       oid += "-";
       oid += string(bucket.name);
     }
@@ -1124,7 +1114,7 @@ int main(int argc, char **argv)
 	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
-      formatter->dump_int("bucket_id", entry.bucket_id);
+      formatter->dump_string("bucket_id", entry.bucket_id);
       formatter->dump_string("bucket_owner", entry.bucket_owner);
       formatter->dump_string("bucket", entry.bucket);
 
@@ -1249,7 +1239,7 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
-    if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
+    if (bucket_name.empty() && bucket_id.empty() && user_id.empty()) {
       cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
       return usage();
     }

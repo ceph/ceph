@@ -24,7 +24,7 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->obj_size = 2048;
   e->user_agent = "user_agent";
   e->referrer = "referrer";
-  e->bucket_id = 10;
+  e->bucket_id = "10";
   o.push_back(e);
   o.push_back(new rgw_log_entry);
 }
@@ -48,13 +48,13 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_stream("total_time") << total_time;
   f->dump_string("user_agent", user_agent);
   f->dump_string("referrer", referrer);
-  f->dump_unsigned("bucket_id", bucket_id);
+  f->dump_string("bucket_id", bucket_id);
 }
 
 void rgw_intent_log_entry::generate_test_instances(list<rgw_intent_log_entry*>& o)
 {
   rgw_intent_log_entry *e = new rgw_intent_log_entry;
-  rgw_bucket b("bucket", "pool", "marker", 10);
+  rgw_bucket b("bucket", "pool", "marker", "10");
   e->obj = rgw_obj(b, "object");
   e->intent = DEL_OBJ;
   o.push_back(e);
@@ -80,7 +80,7 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 }
 
 string render_log_object_name(const string& format,
-			      struct tm *dt, int64_t bucket_id, const string& bucket_name)
+			      struct tm *dt, string& bucket_id, const string& bucket_name)
 {
   string o;
   for (unsigned i=0; i<format.size(); i++) {
@@ -120,8 +120,8 @@ string render_log_object_name(const string& format,
 	break;
 
       case 'i':
-	sprintf(buf, "%lld", (long long)bucket_id);
-	break;
+	o += bucket_id;
+	continue;
       case 'n':
 	o += bucket_name;
 	continue;
@@ -141,7 +141,7 @@ string render_log_object_name(const string& format,
 int rgw_log_op(struct req_state *s)
 {
   struct rgw_log_entry entry;
-  uint64_t bucket_id;
+  string bucket_id;
 
   if (!s->should_log)
     return 0;
@@ -155,7 +155,7 @@ int rgw_log_op(struct req_state *s)
       ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
     }
-    bucket_id = 0;
+    bucket_id = "";
   } else {
     bucket_id = s->bucket.bucket_id;
   }
@@ -249,9 +249,9 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
   else
     localtime_r(&t, &bdt);
 
-  char buf[obj.bucket.name.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
-	  (long long)s->bucket.bucket_id, obj.bucket.name.c_str());
+  char buf[obj.bucket.name.size() + s->bucket.bucket_id.size() + 16];
+  sprintf(buf, "%.4d-%.2d-%.2d-%s-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
+	  s->bucket.bucket_id.c_str(), obj.bucket.name.c_str());
   string oid(buf);
   rgw_obj log_obj(intent_log_bucket, oid);
 

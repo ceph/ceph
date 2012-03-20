@@ -492,6 +492,7 @@ namespace librados
     int pool_delete_async(const char *name, PoolAsyncCompletion *c);
     int64_t pool_lookup(const char *name);
 
+    uint64_t get_instance_id();
 
     int ioctx_create(const char *name, IoCtx &pioctx);
 
