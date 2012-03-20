@@ -201,7 +201,7 @@ def ls():
             owner=summary.get('owner', '-'),
             desc=summary.get('description', '-'),
             success='pass' if summary['success'] else 'FAIL',
-            duration=int(summary.get('duration', 0))
+            duration=int(summary.get('duration', 0)),
             )
         if args.verbose and 'failure_reason' in summary:
             print '    {reason}'.format(reason=summary['failure_reason'])
@@ -333,7 +333,7 @@ def _results(args):
             for new in g:
                 summary.update(new)
         desc = '{test}: ({duration}s) {desc}'.format(
-            duration=int(summary['duration']),
+            duration=int(summary.get('duration', 0)),
             desc=summary['description'],
             test=j,
             )
