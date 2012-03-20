@@ -16,6 +16,7 @@
 #include "Object.h"
 #include "TestOpStat.h"
 #include "inttypes.h"
+#include "test/rados-api/test.h"
 
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H
@@ -46,7 +47,36 @@ enum TestOpType {
   TEST_OP_ROLLBACK,
   TEST_OP_SETATTR,
   TEST_OP_RMATTR,
-  TEST_OP_TMAPPUT
+  TEST_OP_TMAPPUT,
+  TEST_OP_WATCH
+};
+
+class TestWatchContext : public librados::WatchCtx {
+  TestWatchContext(const TestWatchContext&);
+public:
+  Cond cond;
+  uint64_t handle;
+  bool waiting;
+  Mutex lock;
+  TestWatchContext() : handle(0), waiting(false),
+		       lock("watch lock") {}
+  void notify(uint8_t opcode, uint64_t ver, bufferlist &bl) {
+    Mutex::Locker l(lock);
+    waiting = false;
+    cond.SignalAll();
+  }
+  void start() {
+    Mutex::Locker l(lock);
+    waiting = true;
+  }
+  void wait() {
+    Mutex::Locker l(lock);
+    while (waiting)
+      cond.Wait(lock);
+  }
+  uint64_t &get_handle() {
+    return handle;
+  }
 };
 
 class TestOp {
@@ -123,6 +153,7 @@ public:
   uint64_t seq;
   const char *rados_id;
   bool initialized;
+  map<string, TestWatchContext*> watches;
   
 	
   RadosTestContext(const string &pool_name, 
@@ -223,6 +254,21 @@ public:
   void kick()
   {
     wait_cond.Signal();
+  }
+
+  TestWatchContext *get_watch_context(const string &oid) {
+    return watches.count(oid) ? watches[oid] : 0;
+  }
+
+  TestWatchContext *watch(const string &oid) {
+    assert(!watches.count(oid));
+    return (watches[oid] = new TestWatchContext);
+  }
+
+  void unwatch(const string &oid) {
+    assert(watches.count(oid));
+    delete watches[oid];
+    watches.erase(oid);
   }
 
   void rm_object_attrs(const string &oid, const set<string> &attrs)
@@ -351,6 +397,7 @@ public:
 
   void remove_object(const string &oid)
   {
+    assert(!get_watch_context(oid));
     ObjectDesc new_obj(&cont_gen);
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
@@ -400,6 +447,7 @@ public:
 
   void roll_back(const string &oid, int snap)
   {
+    assert(!get_watch_context(oid));
     ObjectDesc contents(&cont_gen);
     find_object(oid, &contents, snap);
     pool_obj_cont.rbegin()->second.erase(oid);
@@ -822,14 +870,17 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
-    done = 0;
+    if (context->get_watch_context(oid)) {
+      context->kick();
+      context->state_lock.Unlock();
+      return;
+    }
+
     stringstream acc;
 
     ObjectDesc contents(&context->cont_gen);
-    bool present = context->find_object(oid, &contents);
-    if (present) {
-      present = !contents.deleted();
-    }
+    context->find_object(oid, &contents);
+    bool present = !contents.deleted();
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
@@ -918,7 +969,24 @@ public:
     context->oid_not_in_use.erase(oid);
     assert(context->find_object(oid, &old_value, snap));
 
+    TestWatchContext *ctx = context->get_watch_context(oid);
     context->state_lock.Unlock();
+    if (ctx) {
+      assert(old_value.exists);
+      TestAlarm alarm;
+      std::cerr << "about to start" << std::endl;
+      ctx->start();
+      std::cerr << "started" << std::endl;
+      bufferlist bl;
+      context->io_ctx.set_notify_timeout(600);
+      int r = context->io_ctx.notify(context->prefix+oid, 0, bl);
+      if (r < 0) {
+	std::cerr << "r is " << r << std::endl;
+	assert(0);
+      }
+      std::cerr << "notified, waiting" << std::endl;
+      ctx->wait();
+    }
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
@@ -1136,6 +1204,78 @@ public:
   }
 };
 
+class WatchOp : public TestOp {
+  string oid;
+public:
+  WatchOp(RadosTestContext *context,
+	     const string &_oid,
+	     TestOpStat *stat = 0) :
+    TestOp(context, stat),
+    oid(_oid)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+    ObjectDesc contents(&context->cont_gen);
+    context->find_object(oid, &contents);
+    if (contents.deleted()) {
+      context->kick();
+      context->state_lock.Unlock();
+      return;
+    }
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    vector<uint64_t> snapset(context->snaps.size());
+    int j = 0;
+    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
+	 i != context->snaps.rend();
+	 ++i, ++j) {
+      snapset[j] = i->second;
+    }
+
+    TestWatchContext *ctx = context->get_watch_context(oid);
+    context->state_lock.Unlock();
+    assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
+    int r;
+    if (!ctx) {
+      {
+	Mutex::Locker l(context->state_lock);
+	ctx = context->watch(oid);
+      }
+
+      r = context->io_ctx.watch(context->prefix+oid,
+				0,
+				&ctx->get_handle(),
+				ctx);
+    } else {
+      r = context->io_ctx.unwatch(context->prefix+oid,
+				  ctx->get_handle());
+      {
+	Mutex::Locker l(context->state_lock);
+	context->unwatch(oid);
+      }
+    }
+
+    if (r) {
+      cerr << "r is " << r << std::endl;
+      assert(0);
+    }
+
+    {
+      Mutex::Locker l(context->state_lock);
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+    }
+  }
+
+  string getType()
+  {
+    return "WatchOp";
+  }
+};
+
 class RollbackOp : public TestOp {
 public:
   string oid;
@@ -1152,6 +1292,11 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
+    if (context->get_watch_context(oid)) {
+      context->kick();
+      context->state_lock.Unlock();
+      return;
+    }
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
     context->roll_back(oid, roll_back_to);
