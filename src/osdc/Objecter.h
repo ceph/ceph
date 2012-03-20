@@ -570,6 +570,7 @@ public:
     pg_t pgid;
     vector<int> acting;
     bool used_replica;
+    bool resend_on_any_change;
 
     Connection *con;  // for rx buffer only
 
@@ -602,7 +603,7 @@ public:
        int f, Context *ac, Context *co, eversion_t *ov) :
       session(NULL), session_item(this), incarnation(0),
       oid(o), oloc(ol),
-      used_replica(false), con(NULL),
+      used_replica(false), resend_on_any_change(false), con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       flags(f), priority(0), onack(ac), oncommit(co),
