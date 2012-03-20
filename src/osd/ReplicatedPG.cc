@@ -2088,7 +2088,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
     
     case CEPH_OSD_OP_DELETE:
-      result = _delete_head(ctx);
+      if (ctx->obc->obs.oi.watchers.size()) {
+	// Cannot delete an object with watchers
+	result = -EBUSY;
+      } else {
+	result = _delete_head(ctx);
+      }
       break;
 
     case CEPH_OSD_OP_CLONERANGE:
@@ -2727,8 +2732,13 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // if there's no snapshot, we delete the object; otherwise, do nothing.
       dout(20) << "_rollback_to deleting head on " << soid.oid
 	       << " because got ENOENT on find_object_context" << dendl;
-      _delete_head(ctx);
-      ret = 0;
+      if (ctx->obc->obs.oi.watchers.size()) {
+	// Cannot delete an object with watchers
+	ret = -EBUSY;
+      } else {
+	_delete_head(ctx);
+	ret = 0;
+      }
     } else if (-EAGAIN == ret) {
       /* a different problem, like degraded pool
        * with not-yet-restored object. We shouldn't have been able
