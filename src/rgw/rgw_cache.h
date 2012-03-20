@@ -198,7 +198,7 @@ public:
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
 
-  int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
+  int get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& bl, off_t ofs, off_t end);
 
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
@@ -225,13 +225,13 @@ int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 }
 
 template <class T>
-int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
+int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& obl, off_t ofs, off_t end)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.' || ofs != 0)
-    return T::get_obj(ctx, handle, obj, data, ofs, end);
+    return T::get_obj(ctx, handle, obj, obl, ofs, end);
 
   string name = normal_name(obj.bucket, oid);
 
@@ -242,11 +242,14 @@ int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, of
 
     bufferlist& bl = info.data;
 
-    *data = (char *)malloc(bl.length());
-    memcpy(*data, bl.c_str(), bl.length());
+    bufferlist::iterator i = bl.begin();
+
+    obl.clear();
+
+    i.copy_all(obl);
     return bl.length();
   }
-  int r = T::get_obj(ctx, handle, obj, data, ofs, end);
+  int r = T::get_obj(ctx, handle, obj, obl, ofs, end);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
@@ -257,9 +260,9 @@ int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, of
 
   bufferptr p(r);
   bufferlist& bl = info.data;
-  memcpy(p.c_str(), *data, r);
   bl.clear();
-  bl.append(p);
+  bufferlist::iterator o = obl.begin();
+  o.copy_all(bl);
   info.status = 0;
   info.flags = CACHE_FLAG_DATA;
   cache.put(name, info);
