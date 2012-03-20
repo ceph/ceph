@@ -920,8 +920,6 @@ libcommon_files = \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
-	msg/Message.cc \
-	msg/msg_types.cc \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
 	common/admin_socket.cc \
@@ -946,11 +944,14 @@ libcommon_files = \
 	json_spirit/json_spirit_reader.cpp \
 	json_spirit/json_spirit_writer.cpp \
 	json_spirit/json_spirit_value.cpp \
-	msg/SimpleMessenger.cc \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
+	msg/Message.cc \
 	msg/Messenger.cc \
+	msg/SimpleMessenger.cc \
+	msg/msg_types.cc \
+	msg/tcp.cc \
 	os/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
@@ -1454,7 +1455,6 @@ noinst_HEADERS = \
         msg/Messenger.h\
         msg/SimpleMessenger.h\
         msg/msg_types.h\
-        msg/tcp.cc\
         msg/tcp.h\
 	objclass/objclass.h\
 	obsync/obsync\

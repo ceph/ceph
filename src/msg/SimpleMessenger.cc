@@ -23,6 +23,7 @@
 #include <sys/uio.h>
 #include <limits.h>
 #include <sys/user.h>
+#include <poll.h>
 
 #include "common/config.h"
 #include "global/global_init.h"
@@ -48,8 +49,6 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
   return *_dout << "-- " << msgr->ms_addr << " ";
 }
 
-
-#include "tcp.cc"
 
 /********************************************
  * Accepter

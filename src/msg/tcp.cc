@@ -2,9 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <poll.h>
+#include <errno.h>
+
 #include "tcp.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
+#include "common/debug.h"
 
 /******************
  * tcp crap

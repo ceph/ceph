@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+#include <ostream>
+
 using std::ostream;
 
 class CephContext;
@@ -25,6 +27,5 @@ inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
 inline bool operator!=(const sockaddr_in& a, const sockaddr_in& b) {
   return strncmp((const char*)&a, (const char*)&b, sizeof(a)) != 0;
 }
-
 
 #endif
