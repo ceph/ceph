@@ -245,6 +245,20 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
        }
       break;
 
+    case Transaction::OP_COLL_MOVE:
+       {
+	coll_t ocid = i.get_cid();
+	coll_t ncid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	f->open_object_section("collection_move");
+	f->dump_stream("src_collection") << ocid;
+	f->dump_stream("dst_collection") << ncid;
+	f->dump_stream("oid") << oid;
+	f->close_section();
+       }
+      break;
+
+
     case Transaction::OP_COLL_SETATTR:
       {
 	coll_t cid = i.get_cid();
@@ -518,6 +532,15 @@ void ObjectStore::Transaction::dump(ostream& out)
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	out << op_num << ": coll_remove " << cid << " " << oid << "\n";
+       }
+      break;
+
+    case Transaction::OP_COLL_MOVE:
+       {
+	coll_t ocid = i.get_cid();
+	coll_t ncid = i.get_cid();
+	hobject_t oid = i.get_oid();
+	out << op_num << ": coll_move " << ocid << " " << ncid << " " << oid << "\n";
        }
       break;
 
