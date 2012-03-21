@@ -233,6 +233,7 @@ class RGWRados
   int delete_obj_impl(void *ctx, rgw_obj& src_obj, bool sync);
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
+  int update_placement_map();
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, bool exclusive);
 
