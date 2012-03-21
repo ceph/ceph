@@ -183,7 +183,7 @@ def ls():
                                 print '(pid %s)' % pid,
                                 found = True
                     if not found:
-                        '(no process or summary.yaml)' % j,
+                        print '(no process or summary.yaml)'
                     # tail
                     tail = os.popen(
                         'tail -1 %s/%s/teuthology.log' % (args.archive_dir, j)
