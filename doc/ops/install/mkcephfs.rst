@@ -28,8 +28,9 @@ We regularly build Debian and Ubuntu packages for the `amd64` and
 `i386` architectures, for the following distributions:
 
 - ``sid`` (Debian unstable)
+- ``wheezy`` (Debian 7.0)
 - ``squeeze`` (Debian 6.0)
-- ``lenny`` (Debian 5.0)
+- ``precise`` (Ubuntu 12.04)
 - ``oneiric`` (Ubuntu 11.10)
 - ``natty`` (Ubuntu 11.04)
 - ``maverick`` (Ubuntu 10.10)
