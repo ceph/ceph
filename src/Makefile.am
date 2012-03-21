@@ -48,7 +48,7 @@ if LINUX
 ceph_osd_LDADD += -ldl
 endif
 bin_PROGRAMS += ceph-osd
-ceph_osd_CXXFLAGS = ${AM_CXXFLAGS} \
+ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 
 # mds
@@ -111,6 +111,7 @@ osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc
+ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.la
 bin_PROGRAMS += ceph-dencoder
 
@@ -1002,6 +1003,7 @@ libmon_la_SOURCES = \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
+libmon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libmon_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libmon.la
 
@@ -1070,6 +1072,7 @@ libosdc_la_SOURCES = \
 	osdc/ObjectCacher.cc \
 	osdc/Filer.cc \
 	osdc/Journaler.cc
+libosdc_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libosdc_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libosdc.la
 
