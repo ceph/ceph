@@ -460,7 +460,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
 void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 				  uint64_t length, bufferlist &bl, int r)
 {
-  //lock.Lock();
+  assert(lock.is_locked());
   ldout(cct, 7) << "bh_read_finish " 
 		<< oid
 		<< " " << start << "~" << length
@@ -535,7 +535,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       ob->try_merge_bh(bh);
     }
   }
-  //lock.Unlock();
 }
 
 
@@ -629,8 +628,7 @@ void ObjectCacher::lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid)
 void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 				   uint64_t length, tid_t tid, int r)
 {
-  //lock.Lock();
-  
+  assert(lock.is_locked());
   ldout(cct, 7) << "bh_write_commit " 
 		<< oid 
 		<< " tid " << tid
@@ -701,7 +699,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       flush_set_callback(flush_set_callback_arg, oset);      
     }
   }
-  //lock.Unlock();
 }
 
 void ObjectCacher::flush(loff_t amount)
@@ -788,6 +785,7 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, sna
  */
 int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 {
+  assert(lock.is_locked());
   bool success = true;
   list<BufferHead*> hit_ls;
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
@@ -930,6 +928,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
 {
+  assert(lock.is_locked());
   utime_t now = ceph_clock_now(cct);
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
