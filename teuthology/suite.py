@@ -169,7 +169,7 @@ def ls():
                     summary.update(new)
         except IOError, e:
             if e.errno == errno.ENOENT:
-                print '%s      ',
+                print '%s      ' % j
 
                 # pid
                 try:
