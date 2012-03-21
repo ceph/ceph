@@ -65,6 +65,7 @@ def task(ctx, config):
         '--op', 'rollback', str(op_weights.get('rollback', 0)),
         '--op', 'setattr', str(op_weights.get('setattr', 0)),
         '--op', 'rmattr', str(op_weights.get('rmattr', 0)),
+        '--op', 'watch', str(op_weights.get('watch', 0)),
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
