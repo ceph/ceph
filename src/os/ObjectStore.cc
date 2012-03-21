@@ -629,6 +629,7 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   coll_t c2("foocoll2");
   hobject_t o1("obj", "", 123, 456);
   hobject_t o2("obj2", "", 123, 456);
+  hobject_t o3("obj3", "", 123, 456);
   t->touch(c, o1);
   bufferlist bl;
   bl.append("some data");
@@ -648,11 +649,13 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->rmattrs(c, o1);
 
   t->clone(c, o1, o2);
+  t->clone(c, o1, o3);
   t->clone_range(c, o1, o2, 1, 12, 99);
 
   t->create_collection(c);
   t->collection_add(c, c2, o1);
   t->collection_add(c, c2, o2);
+  t->collection_move(c, c2, o3);
   t->remove_collection(c);
   t->collection_setattr(c, "this", bl);
   t->collection_rmattr(c, "foo");
