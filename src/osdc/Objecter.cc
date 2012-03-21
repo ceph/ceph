@@ -257,7 +257,6 @@ void Objecter::send_linger(LingerOp *info)
 		   onack, oncommit,
 		   info->pobjver);
     o->snapid = info->snap;
-    o->resend_on_any_change = true;
 
     if (info->session) {
       int r = recalc_op_target(o);
@@ -982,9 +981,7 @@ int Objecter::recalc_op_target(Op *op)
   }
   osdmap->pg_to_acting_osds(pgid, acting);
 
-  if (op->pgid != pgid || is_pg_changed(op->acting, acting,
-					(op->resend_on_any_change ||
-					 op->used_replica))) {
+  if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
     op->pgid = pgid;
     op->acting = acting;
     ldout(cct, 10) << "recalc_op_target tid " << op->tid
