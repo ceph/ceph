@@ -1043,7 +1043,7 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
   }
   osdmap->pg_to_acting_osds(pgid, acting);
 
-  if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting)) {
+  if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting, true)) {
     linger_op->pgid = pgid;
     linger_op->acting = acting;
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
