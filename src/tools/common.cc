@@ -180,7 +180,7 @@ static void handle_notify(CephToolCtx *ctx, MMonObserveNotify *notify)
 	::decode(v, p);
 	while (!p.end()) {
 	  le.decode(p);
-	  *ctx->log << now << "   log " << le << std::endl;
+	  *ctx->log << le << std::endl;
 	}
       }
       break;
