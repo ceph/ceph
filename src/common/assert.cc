@@ -62,10 +62,17 @@ namespace ceph {
     bt->print(oss);
     dout_emergency(oss.str());
 
-    snprintf(buf, sizeof(buf),
-	     " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	     "is needed to interpret this.\n");
-    dout_emergency(oss.str());
+    dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
+		   "is needed to interpret this.\n");
+
+    if (g_assert_context) {
+      lderr(g_assert_context) << buf << std::endl;
+      bt->print(*_dout);
+      *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
+	     << "is needed to interpret this.\n" << dendl;
+
+      g_assert_context->_log->dump_recent();
+    }
 
     throw FailedAssertion(bt);
   }
