@@ -325,6 +325,7 @@ public:
 #endif
       return _len;
     }
+    bool contents_equal(buffer::list& other);
 
     bool is_page_aligned() const;
     bool is_n_page_sized() const;

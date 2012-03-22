@@ -611,6 +611,21 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     other.last_p = other.begin();
   }
 
+  bool buffer::list::contents_equal(ceph::buffer::list& other)
+  {
+    if (length() != other.length())
+      return false;
+    bufferlist::iterator me = begin();
+    bufferlist::iterator him = other.begin();
+    while (!me.end()) {
+      if (*me != *him)
+        return false;
+      ++me;
+      ++him;
+    }
+    return true;
+  }
+
   bool buffer::list::is_page_aligned() const
   {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
