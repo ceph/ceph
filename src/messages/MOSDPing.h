@@ -22,12 +22,18 @@
 
 
 class MOSDPing : public Message {
+
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
+
  public:
   enum {
     HEARTBEAT = 0,
     START_HEARTBEAT = 1,
     YOU_DIED = 2,
     STOP_HEARTBEAT = 3,
+    PING = 4,
+    PING_REPLY = 5,
   };
   const char *get_op_name(int op) const {
     switch (op) {
@@ -35,6 +41,8 @@ class MOSDPing : public Message {
     case START_HEARTBEAT: return "start_heartbeat";
     case STOP_HEARTBEAT: return "stop_heartbeat";
     case YOU_DIED: return "you_died";
+    case PING: return "ping";
+    case PING_REPLY: return "ping_reply";
     default: return "???";
     }
   }
@@ -43,12 +51,15 @@ class MOSDPing : public Message {
   epoch_t map_epoch, peer_as_of_epoch;
   __u8 op;
   osd_peer_stat_t peer_stat;
+  utime_t stamp;
 
-  MOSDPing(const uuid_d& f, epoch_t e, epoch_t pe, __u8 o) : 
-    Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o) { }
-  MOSDPing(const uuid_d& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, __u8 o=HEARTBEAT) : 
-    Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o), peer_stat(ps) { }
-  MOSDPing() : Message(MSG_OSD_PING) {}
+  MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s)
+    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
+      fsid(f), map_epoch(e), peer_as_of_epoch(0), op(o), stamp(s)
+  { }
+  MOSDPing()
+    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION)
+  {}
 private:
   ~MOSDPing() {}
 
@@ -60,6 +71,8 @@ public:
     ::decode(peer_as_of_epoch, p);
     ::decode(op, p);
     ::decode(peer_stat, p);
+    if (header.version >= 2)
+      ::decode(stamp, p);
   }
   void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
@@ -67,11 +80,16 @@ public:
     ::encode(peer_as_of_epoch, payload);
     ::encode(op, payload);
     ::encode(peer_stat, payload);
+    ::encode(stamp, payload);
   }
 
   const char *get_type_name() const { return "osd_ping"; }
   void print(ostream& out) const {
-    out << "osd_ping(" << get_op_name(op) << " e" << map_epoch << " as_of " << peer_as_of_epoch << ")";
+    out << "osd_ping(" << get_op_name(op)
+	<< " e" << map_epoch
+      //<< " as_of " << peer_as_of_epoch
+	<< " stamp " << stamp
+	<< ")";
   }
 };
 

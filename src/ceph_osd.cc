@@ -355,6 +355,11 @@ int main(int argc, const char **argv)
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				Messenger::Policy::stateless_server(0, 0));
 
+  messenger_hbin->set_policy(entity_name_t::TYPE_OSD,
+			     Messenger::Policy::client(0, 0));
+  messenger_hbout->set_policy(entity_name_t::TYPE_OSD,
+			     Messenger::Policy::stateless_server(0, 0));
+
   r = client_messenger->bind(g_conf->public_addr);
   if (r < 0)
     exit(1);
