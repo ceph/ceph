@@ -12,14 +12,14 @@ Concepts
    Note that agreeing on the state does not mean that
    they all have the latest contents.
 
-*Active Set*
+*Activing set*
    the ordered list of OSDs who are (or were as of some epoch)
    responsible for a particular PG.
 
 *Up set*
    the ordered list of OSDs responsible for a particular PG for
    a particular epoch according to CRUSH.  Normally this
-   is the same as the *acting set*, unless it has been
+   is the same as the *acting set*, except when the *acting set* has been
    explicitly overridden via pg_temp in the OSDMap.
 
 *current interval* or *past interval*
@@ -128,7 +128,7 @@ process:
 
    Changes can only be made after successful *peering*.
 
-Thus, if a new primary can use the latest OSD map along with a recent
+Thus, a new primary can use the latest OSD map along with a recent
 history of past maps to generate a set of *past intervals* to
 determine which OSDs must be consulted before we can successfully
 *peer*.  The set of past intervals is bounded by *last epoch started*,
@@ -209,16 +209,16 @@ The high level process is for the current PG primary to:
 
      a) start accepting client write operations (because we have unanimous
 	agreement on the state of the objects into which those updates are
-	being accepted).  Note, however, that we will delay any attempts to
-	write to objects that are not yet fully replicated throughout the
-	current *acting set*.
+	being accepted).  Note, however, that if a client tries to write to an
+        object it will be promoted to the front of the recovery queue, and the
+        write willy be applied after it is fully replicated to the current *acting set*.
 
      b) update the *last epoch started* value in our local *PG info*, and instruct
 	other *active set* OSDs to do the same.
 
      c) start pulling object data updates that other OSDs have, but I do not.  We may
 	need to query OSDs from additional *past intervals* prior to *last epoch started*
-	(the last time *peering* completed) and *last epoch clean* (the last epoch that
+	(the last time *peering* completed) and following *last epoch clean* (the last epoch that
 	recovery completed) in order to find copies of all objects.
 
      d) start pushing object data updates to other OSDs that do not yet have them.
