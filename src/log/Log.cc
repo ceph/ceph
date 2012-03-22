@@ -20,8 +20,16 @@
 namespace ceph {
 namespace log {
 
+static void log_on_exit(int r, void *p)
+{
+  Log *l = *(Log **)p;
+  if (l)
+    l->flush();
+}
+
 Log::Log(SubsystemMap *s)
-  : m_subs(s),
+  : m_indirect_this(new (Log*)(this)),   // we will deliberately leak this
+    m_subs(s),
     m_new(DEFAULT_MAX_NEW), m_recent(DEFAULT_MAX_RECENT),
     m_fd(-1),
     m_syslog_log(-1), m_syslog_crash(-1),
@@ -29,6 +37,12 @@ Log::Log(SubsystemMap *s)
     m_stop(false)
 {
   int ret;
+
+  // Make sure we flush on shutdown.  We do this by deliberately
+  // leaking an indirect pointer to ourselves (on_exit() can't
+  // unregister a callback).  This is not racy only becuase we
+  // assume that exit() won't race with ~Log().
+  on_exit(log_on_exit, m_indirect_this);
 
   ret = pthread_spin_init(&m_lock, PTHREAD_PROCESS_SHARED);
   assert(ret == 0);
@@ -45,6 +59,8 @@ Log::Log(SubsystemMap *s)
 
 Log::~Log()
 {
+  *m_indirect_this = NULL;
+
   assert(!is_started());
   if (m_fd >= 0)
     TEMP_FAILURE_RETRY(::close(m_fd));

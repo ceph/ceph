@@ -17,6 +17,8 @@ namespace log {
 
 class Log : private Thread
 {
+  Log **m_indirect_this;
+
   SubsystemMap *m_subs;
   
   pthread_spinlock_t m_lock;
