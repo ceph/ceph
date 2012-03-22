@@ -47,15 +47,15 @@ struct bench_data {
   char *object_contents; //pointer to the contents written to each object
 };
 
-void generate_object_name(char *s, int objnum, int pid = 0)
+void generate_object_name(char *s, size_t size, int objnum, int pid = 0)
 {
   char hostname[30];
   gethostname(hostname, sizeof(hostname)-1);
   hostname[sizeof(hostname)-1] = 0;
   if (pid) {
-    snprintf(s, sizeof(hostname), "%s_%d_object%d", hostname, pid, objnum);
+    snprintf(s, size, "%s_%d_object%d", hostname, pid, objnum);
   } else {
-    snprintf(s, sizeof(hostname), "%s_%d_object%d", hostname, getpid(), objnum);
+    snprintf(s, size, "%s_%d_object%d", hostname, getpid(), objnum);
   }
 }
 
@@ -158,7 +158,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
     contents[i] = new bufferlist();
-    generate_object_name(name[i], i);
+    generate_object_name(name[i], 128, i);
     snprintf(data->object_contents, data->object_size, "I'm the %dth object!", i);
     contents[i]->append(data->object_contents, data->object_size);
   }
@@ -209,7 +209,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
     newName = new char[128];
-    generate_object_name(newName, data->started);
+    generate_object_name(newName, 128, data->started);
     snprintf(data->object_contents, data->object_size, "I'm the %dth object!", data->started);
     newContents->append(data->object_contents, data->object_size);
     completions[slot]->wait_for_safe();
@@ -341,7 +341,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
     name[i] = new char[128];
-    generate_object_name(name[i], i, pid);
+    generate_object_name(name[i], 128, i, pid);
     contents[i] = new bufferlist();
   }
 
@@ -389,7 +389,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
     }
     dataLock.Unlock();
     newName = new char[128];
-    generate_object_name(newName, data->started, pid);
+    generate_object_name(newName, 128, data->started, pid);
     int current_index = index[slot];
     index[slot] = data->started;
     completions[slot]->wait_for_complete();
