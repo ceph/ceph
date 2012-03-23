@@ -468,7 +468,6 @@ private:
 
   // where i listen
   bool need_addr;
-  entity_addr_t& ms_addr;
   uint64_t nonce;
   
   // local
@@ -570,7 +569,6 @@ public:
     accepter(this),
     lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    ms_addr(my_inst.addr),
     nonce(_nonce), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 

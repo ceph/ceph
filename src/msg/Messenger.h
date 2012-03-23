@@ -75,7 +75,6 @@ private:
 protected:
   /// the "name" of the local daemon. eg client.99
   entity_inst_t my_inst;
-  entity_name_t& _my_name;
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
@@ -84,11 +83,10 @@ protected:
   CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
-      _my_name(my_inst.name),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
       cct(cct_)
   {
-    _my_name = w;
+    my_inst.name = w;
   }
   virtual ~Messenger() {}
 
@@ -96,7 +94,7 @@ protected:
   }
 
   // accessors
-  const entity_name_t& get_myname() { return _my_name; }
+  const entity_name_t& get_myname() { return my_inst.name; }
   /**
    * Retrieve the Messenger's address.
    *
@@ -114,7 +112,7 @@ protected:
    *
    * @param m The name to set.
    */
-  void set_myname(const entity_name_t m) { _my_name = m; }
+  void set_myname(const entity_name_t m) { my_inst.name = m; }
 
   /**
    * Set the default send priority
