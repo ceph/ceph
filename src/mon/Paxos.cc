@@ -191,9 +191,13 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
 
 void Paxos::store_state(MMonPaxos *m)
 {
+  map<version_t,bufferlist>::iterator start = m->values.begin();
+
   // stash?
   if (m->latest_version && m->latest_version > last_committed) {
     dout(10) << "store_state got stash version " << m->latest_version << ", zapping old states" << dendl;
+
+    assert(start != m->values.end() && start->first == m->latest_version);
 
     // wipe out everything we had previously
     trim_to(last_committed + 1);
@@ -202,14 +206,13 @@ void Paxos::store_state(MMonPaxos *m)
 
     first_committed = m->latest_version;
     last_committed = m->latest_version;
+    mon->store->put_bl_sn(start->second, machine_name, m->latest_version);
     mon->store->put_int(first_committed, machine_name, "first_committed");
     mon->store->put_int(last_committed, machine_name, "last_committed");
   }
 
   // build map of values to store
   // we want to write the range [last_committed, m->last_committed] only.
-  map<version_t,bufferlist>::iterator start = m->values.begin();
-
   if (start != m->values.end() &&
       start->first > last_committed + 1) {
     // ignore everything if values start in the future.
