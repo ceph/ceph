@@ -65,7 +65,7 @@ public:
    *
    * @param addr The IP address to set internally.
    */
-  void set_ip(entity_addr_t& addr);
+  void set_addr_unknowns(entity_addr_t& addr);
   /**
    * Retrieve the Connection for an endpoint.
    *

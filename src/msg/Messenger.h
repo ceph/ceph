@@ -102,7 +102,16 @@ protected:
    * believes to be its own.
    */
   const entity_addr_t& get_myaddr() { return my_inst.addr; }
-  virtual void set_ip(entity_addr_t &addr) = 0;
+  /**
+   * Set the unknown address components for this Messenger.
+   * This is useful if the Messenger doesn't know its full address just by
+   * binding, but another Messenger on the same interface has already learned
+   * its full address. This function does not fill in known address elements,
+   * cause a rebind, or do anything of that sort.
+   *
+   * @param addr The address to use as a template.
+   */
+  virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
   const entity_inst_t& get_myinst() { return my_inst; }
   
   /**
