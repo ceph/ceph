@@ -574,7 +574,6 @@ class ObjectCacher {
   void flush_all(Context *onfinish=0);
 
   bool commit_set(ObjectSet *oset, Context *oncommit);
-  void commit_all(Context *oncommit=0);
 
   void purge_set(ObjectSet *oset);
 
@@ -582,10 +581,6 @@ class ObjectCacher {
   uint64_t release_all();
 
   void truncate_set(ObjectSet *oset, vector<ObjectExtent>& ex);
-
-  void kick_sync_writers(ObjectSet *oset);
-  void kick_sync_readers(ObjectSet *oset);
-
 
   // file functions
 

@@ -1543,51 +1543,6 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
     flush_set_callback(flush_set_callback_arg, oset);
 }
 
-
-void ObjectCacher::kick_sync_writers(ObjectSet *oset)
-{
-  if (oset->objects.empty()) {
-    ldout(cct, 10) << "kick_sync_writers on " << oset << " dne" << dendl;
-    return;
-  }
-
-  ldout(cct, 10) << "kick_sync_writers on " << oset << dendl;
-
-  list<Context*> ls;
-
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-    
-    ls.splice(ls.begin(), ob->waitfor_wr);
-  }
-
-  finish_contexts(cct, ls);
-}
-
-void ObjectCacher::kick_sync_readers(ObjectSet *oset)
-{
-  if (oset->objects.empty()) {
-    ldout(cct, 10) << "kick_sync_readers on " << oset << " dne" << dendl;
-    return;
-  }
-
-  ldout(cct, 10) << "kick_sync_readers on " << oset << dendl;
-
-  list<Context*> ls;
-
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-    
-    ls.splice(ls.begin(), ob->waitfor_rd);
-  }
-
-  finish_contexts(cct, ls);
-}
-
-
-
 void ObjectCacher::verify_stats() const
 {
   ldout(cct, 10) << "verify_stats" << dendl;
