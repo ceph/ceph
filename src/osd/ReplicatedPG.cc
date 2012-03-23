@@ -3284,6 +3284,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
 {
   lock();
   dout(10) << "op_applied " << *repop << dendl;
+  repop->ctx->op->mark_event("op_applied");
 
   // discard my reference to the buffer
   if (repop->ctx->op)
@@ -3337,6 +3338,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
 void ReplicatedPG::op_commit(RepGather *repop)
 {
   lock();
+  repop->ctx->op->mark_event("op_commit");
 
   if (repop->aborted) {
     dout(10) << "op_commit " << *repop << " -- aborted" << dendl;
@@ -3599,6 +3601,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 	    << dendl;
   
   if (ack_type & CEPH_OSD_FLAG_ONDISK) {
+    repop->ctx->op->mark_event("sub_op_commit_rec");
     // disk
     if (repop->waitfor_disk.count(fromosd)) {
       repop->waitfor_disk.erase(fromosd);
@@ -3612,6 +3615,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
     repop->waitfor_ack.erase(fromosd);*/
   } else {
     // ack
+    repop->ctx->op->mark_event("sub_op_applied_rec");
     repop->waitfor_ack.erase(fromosd);
   }
 
@@ -4159,6 +4163,7 @@ void ReplicatedPG::sub_op_modify(OpRequest *op)
 void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 {
   lock();
+  rm->op->mark_event("sub_op_applied");
   dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op->request << dendl;
   MOSDSubOp *m = (MOSDSubOp*)rm->op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
@@ -4197,6 +4202,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 {
   lock();
+  rm->op->mark_event("sub_op_commit");
 
   // send commit.
   dout(10) << "sub_op_modify_commit on op " << *rm->op->request

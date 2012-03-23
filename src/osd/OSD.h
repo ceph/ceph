@@ -45,6 +45,7 @@ using namespace std;
 #include <ext/hash_set>
 using namespace __gnu_cxx;
 
+#include "OpRequest.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -120,7 +121,6 @@ class ReplicatedPG;
 
 class AuthAuthorizeHandlerRegistry;
 
-class OpRequest;
 class OpsFlightSocketHook;
 
 extern const coll_t meta_coll;
@@ -331,16 +331,9 @@ private:
   void do_waiters();
   
   // -- op tracking --
-  xlist<OpRequest*> ops_in_flight;
-  /** This is an inner lock that is taken by the following three
-   * functions without regard for what locks the callers hold. It
-   * protects the xlist, but not the OpRequests. */
-  Mutex ops_in_flight_lock;
-  void register_inflight_op(xlist<OpRequest*>::item *i);
+  OpTracker op_tracker;
   void check_ops_in_flight();
-  void unregister_inflight_op(xlist<OpRequest*>::item *i);
   void dump_ops_in_flight(ostream& ss);
-  friend struct OpRequest;
   friend class OpsFlightSocketHook;
   OpsFlightSocketHook *admin_ops_hook;
 

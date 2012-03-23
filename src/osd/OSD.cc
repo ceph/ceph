@@ -553,7 +553,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
-  ops_in_flight_lock("OSD::ops_in_flight_lock"),
   admin_ops_hook(NULL),
   op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
@@ -1872,77 +1871,15 @@ void OSD::tick()
 
 void OSD::check_ops_in_flight()
 {
-  ops_in_flight_lock.Lock();
-  if (ops_in_flight.size()) {
-    utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t too_old = now;
-    too_old -= g_conf->osd_op_complaint_time;
-    dout(1) << "ops_in_flight.size: " << ops_in_flight.size()
-              << "; oldest is " << now - ops_in_flight.front()->received_time
-              << " seconds old" << dendl;
-    xlist<OpRequest*>::iterator i = ops_in_flight.begin();
-    while (!i.end() && (*i)->received_time < too_old) {
-      // exponential backoff of warning intervals
-      if ( ( (*i)->received_time +
-            (g_conf->osd_op_complaint_time *
-              (*i)->warn_interval_multiplier) )< now) {
-        stringstream ss;
-        ss << "old request " << *((*i)->request) << " received at "
-           << (*i)->received_time << " currently " << (*i)->state_string();
-        clog.warn(ss);
-        (*i)->warn_interval_multiplier *= 2;
-      }
-      ++i;
-    }
-  }
-  ops_in_flight_lock.Unlock();
+  stringstream ss;
+  if (op_tracker.check_ops_in_flight(ss))
+    clog.warn(ss);
+  return;
 }
 
 void OSD::dump_ops_in_flight(ostream& ss)
 {
-  JSONFormatter jf(true);
-  Mutex::Locker locker(ops_in_flight_lock);
-  jf.open_object_section("ops_in_flight"); // overall dump
-  jf.dump_int("num_ops", ops_in_flight.size());
-  jf.open_array_section("ops"); // list of OpRequests
-  utime_t now = ceph_clock_now(g_ceph_context);
-  for (xlist<OpRequest*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
-    stringstream name;
-    Message *m = (*p)->request;
-    m->print(name);
-    jf.open_object_section("op");
-    jf.dump_string("description", name.str().c_str()); // this OpRequest
-    jf.dump_stream("received_at") << (*p)->received_time;
-    jf.dump_float("age", now - (*p)->received_time);
-    jf.dump_string("flag_point", (*p)->state_string());
-    if (m->get_orig_source().is_client()) {
-      jf.open_object_section("client_info");
-      stringstream client_name;
-      client_name << m->get_orig_source();
-      jf.dump_string("client", client_name.str());
-      jf.dump_int("tid", m->get_tid());
-      jf.close_section(); // client_info
-    }
-    jf.close_section(); // this OpRequest
-  }
-  jf.close_section(); // list of OpRequests
-  jf.close_section(); // overall dump
-  jf.flush(ss);
-}
-
-void OSD::register_inflight_op(xlist<OpRequest*>::item *i)
-{
-  ops_in_flight_lock.Lock();
-  ops_in_flight.push_back(i);
-  ops_in_flight_lock.Unlock();
-}
-
-void OSD::unregister_inflight_op(xlist<OpRequest*>::item *i)
-{
-  ops_in_flight_lock.Lock();
-  assert(i->get_list() == &ops_in_flight);
-  i->remove_myself();
-  ops_in_flight_lock.Unlock();
+  op_tracker.dump_ops_in_flight(ss);
 }
 
 // =========================================
@@ -2960,8 +2897,8 @@ void OSD::_dispatch(Message *m)
 
   default:
     {
-      OpRequest *op = new OpRequest(m, this);
-      register_inflight_op(&op->xitem);
+      OpRequest *op = new OpRequest(m, &op_tracker);
+      op->mark_event("waiting_for_osdmap");
       // no map?  starting up?
       if (!osdmap) {
         dout(7) << "no OSDMap, not booted" << dendl;
