@@ -514,7 +514,6 @@ class ObjectCacher {
 
 
 
- public:
   ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg);
