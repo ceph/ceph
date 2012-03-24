@@ -499,10 +499,10 @@ unittest_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_str_list
 
-unittest_log_SOURCES = log/test.cc
+unittest_log_SOURCES = log/test.cc common/PrebufferedStreambuf.cc
 unittest_log_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_log_LDADD = libcommon.la ${UNITTEST_LDADD}
-unittest_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} -O2
 check_PROGRAMS += unittest_log
 
 unittest_base64_SOURCES = test/base64.cc

@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "log/log.h"
+#include "log/Log.h"
 #include "common/Clock.h"
-
+#include "common/PrebufferedStreambuf.h"
 
 using namespace ceph::log;
 
@@ -81,7 +81,7 @@ TEST(Log, ManyGatherLog)
   log.stop();
 }
 
-TEST(Log, ManyGatherLogB)
+TEST(Log, ManyGatherLogStringAssign)
 {
   SubsystemMap subs;
   subs.add(1, "foo", 20, 10);
@@ -102,7 +102,7 @@ TEST(Log, ManyGatherLogB)
   log.flush();
   log.stop();
 }
-TEST(Log, ManyGatherLogC)
+TEST(Log, ManyGatherLogStringAssignWithReserve)
 {
   SubsystemMap subs;
   subs.add(1, "foo", 20, 10);
@@ -118,6 +118,52 @@ TEST(Log, ManyGatherLogC)
       oss.str().reserve(80);
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
       e->m_str = oss.str();
+      log.submit_entry(e);
+    }
+  }
+  log.flush();
+  log.stop();
+}
+
+TEST(Log, ManyGatherLogPrebuf)
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 20, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/big");
+  log.reopen_log_file();
+  for (int i=0; i<many; i++) {
+    int l = 10;
+    if (subs.should_gather(1, l)) {
+      Entry *e = new Entry(ceph_clock_now(NULL), pthread_self(), l, 1);
+      PrebufferedStreambuf psb(e->m_static_buf, sizeof(e->m_static_buf));
+      ostream oss(&psb);
+      oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
+      //e->m_str = oss.str();
+      log.submit_entry(e);
+    }
+  }
+  log.flush();
+  log.stop();
+}
+
+TEST(Log, ManyGatherLogPrebufOverflow)
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 20, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/big");
+  log.reopen_log_file();
+  for (int i=0; i<many; i++) {
+    int l = 10;
+    if (subs.should_gather(1, l)) {
+      Entry *e = new Entry(ceph_clock_now(NULL), pthread_self(), l, 1);
+      PrebufferedStreambuf psb(e->m_static_buf, 20);
+      ostream oss(&psb);
+      oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
+      //e->m_str = oss.str();
       log.submit_entry(e);
     }
   }

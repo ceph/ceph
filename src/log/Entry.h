@@ -18,6 +18,7 @@ struct Entry {
   short m_prio, m_subsys;
   Entry *m_next;
 
+  char m_static_buf[80];
   std::string m_str;
 
   Entry(utime_t s, pthread_t t, short pr, short sub,
