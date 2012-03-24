@@ -549,7 +549,7 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing
 
     map<hobject_t, set<int> >::iterator ml = missing_loc.find(soid);
     if (ml == missing_loc.end()) {
-      map<hobject_t, list<class OpRequest*> >::iterator wmo =
+      map<hobject_t, list<OpRequestRef> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
 	osd->requeue_ops(this, wmo->second);
@@ -1395,7 +1395,7 @@ void PG::do_pending_flush()
   }
 }
 
-void PG::do_request(OpRequest *op)
+void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
   do_pending_flush();
@@ -1434,11 +1434,11 @@ void PG::replay_queued_ops()
 {
   assert(is_replay() && is_active());
   eversion_t c = info.last_update;
-  list<OpRequest*> replay;
+  list<OpRequestRef> replay;
   dout(10) << "replay_queued_ops" << dendl;
   state_clear(PG_STATE_REPLAY);
 
-  for (map<eversion_t,OpRequest*>::iterator p = replay_queue.begin();
+  for (map<eversion_t,OpRequestRef>::iterator p = replay_queue.begin();
        p != replay_queue.end();
        p++) {
     if (p->first.version != c.version+1) {
@@ -2434,9 +2434,9 @@ void PG::adjust_local_snaps()
   }
 }
 
-void PG::requeue_object_waiters(map<hobject_t, list<OpRequest*> >& m)
+void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
 {
-  for (map<hobject_t, list<OpRequest*> >::iterator it = m.begin();
+  for (map<hobject_t, list<OpRequestRef> >::iterator it = m.begin();
        it != m.end();
        it++)
     osd->requeue_ops(this, it->second);
@@ -2514,7 +2514,7 @@ bool PG::sched_scrub()
 }
 
 
-void PG::sub_op_scrub_map(OpRequest *op)
+void PG::sub_op_scrub_map(OpRequestRef op)
 {
   MOSDSubOp *m = (MOSDSubOp *)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
@@ -2588,7 +2588,7 @@ void PG::_request_scrub_map(int replica, eversion_t version)
                                        get_osdmap()->get_cluster_inst(replica));
 }
 
-void PG::sub_op_scrub_reserve(OpRequest *op)
+void PG::sub_op_scrub_reserve(OpRequestRef op)
 {
   MOSDSubOp *m = (MOSDSubOp*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
@@ -2611,7 +2611,7 @@ void PG::sub_op_scrub_reserve(OpRequest *op)
   op->put();
 }
 
-void PG::sub_op_scrub_reserve_reply(OpRequest *op)
+void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 {
   MOSDSubOpReply *reply = (MOSDSubOpReply*)op->request;
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
@@ -2647,7 +2647,7 @@ void PG::sub_op_scrub_reserve_reply(OpRequest *op)
   op->put();
 }
 
-void PG::sub_op_scrub_unreserve(OpRequest *op)
+void PG::sub_op_scrub_unreserve(OpRequestRef op)
 {
   assert(op->request->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_unreserve" << dendl;
@@ -2659,7 +2659,7 @@ void PG::sub_op_scrub_unreserve(OpRequest *op)
   op->put();
 }
 
-void PG::sub_op_scrub_stop(OpRequest *op)
+void PG::sub_op_scrub_stop(OpRequestRef op)
 {
   op->mark_started();
 
@@ -3579,8 +3579,8 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
       clear_stats();
 	
       // take replay queue waiters
-      list<OpRequest*> ls;
-      for (map<eversion_t,OpRequest*>::iterator it = replay_queue.begin();
+      list<OpRequestRef> ls;
+      for (map<eversion_t,OpRequestRef>::iterator it = replay_queue.begin();
 	   it != replay_queue.end();
 	   it++)
 	ls.push_back(it->second);

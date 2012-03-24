@@ -133,7 +133,7 @@ public:
     }
     state_t state;
     int num_wr;
-    list<OpRequest*> waiting;
+    list<OpRequestRef> waiting;
     list<Cond*> waiting_cond;
     bool wake;
 
@@ -333,7 +333,7 @@ public:
    * Capture all object state associated with an in-progress read or write.
    */
   struct OpContext {
-    OpRequest *op;
+    OpRequestRef op;
     osd_reqid_t reqid;
     vector<OSDOp>& ops;
 
@@ -380,7 +380,7 @@ public:
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    OpContext(OpRequest *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
+    OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
@@ -573,8 +573,8 @@ protected:
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
 			       bufferlist *data_usable);
-  void handle_pull_response(OpRequest *op);
-  void handle_push(OpRequest *op);
+  void handle_pull_response(OpRequestRef op);
+  void handle_push(OpRequestRef op);
   int send_push(int peer,
 		ObjectRecoveryInfo recovery_info,
 		ObjectRecoveryProgress progress,
@@ -690,7 +690,7 @@ protected:
 
   struct RepModify {
     ReplicatedPG *pg;
-    OpRequest *op;
+    OpRequestRef op;
     OpContext *ctx;
     bool applied, committed;
     int ackerosd;
@@ -701,7 +701,7 @@ protected:
     ObjectStore::Transaction opt, localt;
     list<ObjectStore::Transaction*> tls;
     
-    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
+    RepModify() : pg(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
 		  bytes_written(0) {}
   };
 
@@ -748,10 +748,10 @@ protected:
   };
   struct C_OSD_CommittedPushedObject : public Context {
     ReplicatedPG *pg;
-    OpRequest *op;
+    OpRequestRef op;
     epoch_t same_since;
     eversion_t last_complete;
-    C_OSD_CommittedPushedObject(ReplicatedPG *p, OpRequest *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
+    C_OSD_CommittedPushedObject(ReplicatedPG *p, OpRequestRef o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
       if (op)
 	op->get();
       pg->get();
@@ -763,22 +763,22 @@ protected:
     }
   };
 
-  void sub_op_remove(OpRequest *op);
+  void sub_op_remove(OpRequestRef op);
 
-  void sub_op_modify(OpRequest *op);
+  void sub_op_modify(OpRequestRef op);
   void sub_op_modify_applied(RepModify *rm);
   void sub_op_modify_commit(RepModify *rm);
 
-  void sub_op_modify_reply(OpRequest *op);
+  void sub_op_modify_reply(OpRequestRef op);
   void _applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc);
-  void _committed_pushed_object(OpRequest *op, epoch_t same_since, eversion_t lc);
+  void _committed_pushed_object(OpRequestRef op, epoch_t same_since, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
-  void sub_op_push(OpRequest *op);
-  void _failed_push(OpRequest *op);
-  void sub_op_push_reply(OpRequest *op);
-  void sub_op_pull(OpRequest *op);
+  void sub_op_push(OpRequestRef op);
+  void _failed_push(OpRequestRef op);
+  void sub_op_push_reply(OpRequestRef op);
+  void sub_op_pull(OpRequestRef op);
 
-  void log_subop_stats(OpRequest *op, int tag_inb, int tag_lat);
+  void log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat);
 
 
   // -- scrub --
@@ -799,13 +799,13 @@ public:
 
   int do_command(vector<string>& cmd, ostream& ss, bufferlist& idata, bufferlist& odata);
 
-  void do_op(OpRequest *op);
+  void do_op(OpRequestRef op);
   bool pg_op_must_wait(MOSDOp *op);
-  void do_pg_op(OpRequest *op);
-  void do_sub_op(OpRequest *op);
-  void do_sub_op_reply(OpRequest *op);
-  void do_scan(OpRequest *op);
-  void do_backfill(OpRequest *op);
+  void do_pg_op(OpRequestRef op);
+  void do_sub_op(OpRequestRef op);
+  void do_sub_op_reply(OpRequestRef op);
+  void do_scan(OpRequestRef op);
+  void do_backfill(OpRequestRef op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<hobject_t> &obs_to_trim);
@@ -888,11 +888,11 @@ public:
   bool same_for_rep_modify_since(epoch_t e);
 
   bool is_missing_object(const hobject_t& oid);
-  void wait_for_missing_object(const hobject_t& oid, OpRequest *op);
-  void wait_for_all_missing(OpRequest *op);
+  void wait_for_missing_object(const hobject_t& oid, OpRequestRef op);
+  void wait_for_all_missing(OpRequestRef op);
 
   bool is_degraded_object(const hobject_t& oid);
-  void wait_for_degraded_object(const hobject_t& oid, OpRequest *op);
+  void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);

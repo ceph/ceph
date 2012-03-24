@@ -69,7 +69,6 @@ private:
   static const uint8_t flag_started =     1 << 3;
   static const uint8_t flag_sub_op_sent = 1 << 4;
 
-public:
   OpRequest(Message *req, OpTracker *tracker) :
     request(req), xitem(this),
     warn_interval_multiplier(1),
@@ -78,6 +77,7 @@ public:
     received_time = request->get_recv_stamp();
     tracker->register_inflight_op(&xitem);
   }
+public:
   ~OpRequest() {
     assert(request);
     request->put();
