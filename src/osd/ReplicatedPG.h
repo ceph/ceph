@@ -454,8 +454,6 @@ public:
       if (--nref == 0) {
 	assert(!obc);
 	assert(src_obc.empty());
-	if (ctx->op)
-	  ctx->op->put();
 	delete ctx;
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
@@ -752,14 +750,10 @@ protected:
     epoch_t same_since;
     eversion_t last_complete;
     C_OSD_CommittedPushedObject(ReplicatedPG *p, OpRequestRef o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
-      if (op)
-	op->get();
       pg->get();
     }
     void finish(int r) {
       pg->_committed_pushed_object(op, same_since, last_complete);
-      if (op)
-	op->put();
     }
   };
 

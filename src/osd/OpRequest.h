@@ -52,7 +52,7 @@ public:
  * you want to track, create an OpRequest with it, and then pass around that OpRequest
  * the way you used to pass around the Message.
  */
-struct OpRequest : public RefCountedObject {
+struct OpRequest {
   friend class OpTracker;
   Message *request;
   xlist<OpRequest*>::item xitem;

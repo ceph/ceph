@@ -3652,7 +3652,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     } else {
       dout(10) << " discarding waiting ops for " << pgid << dendl;
       while (!p->second.empty()) {
-	p->second.front()->put();
 	p->second.pop_front();
       }
       waiting_for_pg.erase(p++);
@@ -3922,7 +3921,6 @@ bool OSD::require_osd_peer(OpRequestRef op)
   if (!op->request->get_connection()->peer_is_osd()) {
     dout(0) << "require_osd_peer received from non-osd " << op->request->get_connection()->get_peer_addr()
 	    << " " << *op->request << dendl;
-    op->put();
     return false;
   }
   return true;
@@ -3946,7 +3944,6 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
 
   if (epoch < up_epoch) {
     dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
-    op->put();
     return false;
   }
 
@@ -3963,7 +3960,6 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
       cluster_messenger->mark_down_on_empty(con);
       cluster_messenger->mark_disposable(con);
 
-      op->put();
       return false;
     }
   }
@@ -3971,7 +3967,6 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
   // ok, we have at least as new a map as they do.  are we (re)booting?
   if (!is_active()) {
     dout(7) << "still in boot state, dropping message " << *m << dendl;
-    op->put();
     return false;
   }
 
@@ -4172,7 +4167,6 @@ void OSD::handle_pg_create(OpRequestRef op)
   if (!require_mon_peer(op->request)) {
     // we have to hack around require_mon_peer's interface limits
     op->request = NULL;
-    op->put();
     return;
   }
 
@@ -4279,8 +4273,6 @@ void OSD::handle_pg_create(OpRequestRef op)
   do_infos(info_map);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
 
@@ -4403,8 +4395,6 @@ void OSD::handle_pg_notify(OpRequestRef op)
   do_infos(info_map);
   
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
 void OSD::handle_pg_log(OpRequestRef op)
@@ -4425,7 +4415,6 @@ void OSD::handle_pg_log(OpRequestRef op)
   PG *pg = get_or_create_pg(m->info, m->get_epoch(), 
 			    from, created, false, &t, &fin);
   if (!pg) {
-    op->put();
     return;
   }
 
@@ -4451,8 +4440,6 @@ void OSD::handle_pg_log(OpRequestRef op)
   assert(!tr);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
 void OSD::handle_pg_info(OpRequestRef op)
@@ -4504,8 +4491,6 @@ void OSD::handle_pg_info(OpRequestRef op)
   do_infos(info_map);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
 void OSD::handle_pg_trim(OpRequestRef op)
@@ -4530,7 +4515,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
     if (m->epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
       pg->unlock();
-      goto out;
+      return;
     }
     assert(pg);
 
@@ -4552,9 +4537,6 @@ void OSD::handle_pg_trim(OpRequestRef op)
     }
     pg->unlock();
   }
-
- out:
-  op->put();
 }
 
 void OSD::handle_pg_scan(OpRequestRef op)
@@ -4571,7 +4553,6 @@ void OSD::handle_pg_scan(OpRequestRef op)
   PG *pg;
   
   if (!_have_pg(m->pgid)) {
-    op->put();
     return;
   }
 
@@ -4592,7 +4573,6 @@ bool OSD::scan_is_queueable(PG *pg, OpRequestRef op)
 
   if (m->query_epoch < pg->info.history.same_interval_since) {
     dout(10) << *pg << " got old scan, ignoring" << dendl;
-    op->put();
     return false;
   }
 
@@ -4613,7 +4593,6 @@ void OSD::handle_pg_backfill(OpRequestRef op)
   PG *pg;
   
   if (!_have_pg(m->pgid)) {
-    op->put();
     return;
   }
 
@@ -4634,7 +4613,6 @@ bool OSD::backfill_is_queueable(PG *pg, OpRequestRef op)
 
   if (m->query_epoch < pg->info.history.same_interval_since) {
     dout(10) << *pg << " got old backfill, ignoring" << dendl;
-    op->put();
     return false;
   }
 
@@ -4668,8 +4646,6 @@ void OSD::handle_pg_missing(OpRequestRef op)
   do_queries(query_map);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 #endif
 }
 
@@ -4774,8 +4750,6 @@ void OSD::handle_pg_query(OpRequestRef op)
   }
   
   do_notifies(notify_list, m->get_epoch());
-
-  op->put();
 }
 
 
@@ -4820,7 +4794,6 @@ void OSD::handle_pg_remove(OpRequestRef op)
     }
     pg->unlock();
   }
-  op->put();
 }
 
 
@@ -5187,7 +5160,6 @@ void OSD::reply_op_error(OpRequestRef op, int err, eversion_t v)
   if (m->get_source().is_osd())
     msgr = cluster_messenger;
   msgr->send_message(reply, m->get_connection());
-  op->put();
 }
 
 void OSD::handle_misdirected_op(PG *pg, OpRequestRef op)
@@ -5197,7 +5169,6 @@ void OSD::handle_misdirected_op(PG *pg, OpRequestRef op)
   if (pg) {
     if (m->get_map_epoch() < pg->info.history.same_primary_since) {
       dout(7) << *pg << " changed after " << m->get_map_epoch() << ", dropping" << dendl;
-      op->put();
       return;
     } else {
       dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
@@ -5223,7 +5194,6 @@ void OSD::handle_op(OpRequestRef op)
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
-    op->put();
     return;
   }
 
@@ -5304,7 +5274,6 @@ void OSD::handle_op(OpRequestRef op)
     // okay, we aren't valid now; check send epoch
     if (m->get_map_epoch() >= superblock.oldest_map) {
       dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
-      op->put();
       return;
     }
     OSDMapRef send_map = get_map(m->get_map_epoch());
@@ -5317,7 +5286,6 @@ void OSD::handle_op(OpRequestRef op)
     
     if (send_map->get_pg_role(m->get_pg(), whoami) >= 0) {
       dout(7) << "dropping request; client will resend when they get new map" << dendl;
-      op->put();
     } else {
       dout(7) << "we are invalid target" << dendl;
       handle_misdirected_op(NULL, op);
@@ -5370,7 +5338,6 @@ void OSD::handle_sub_op(OpRequestRef op)
   dout(10) << "handle_sub_op " << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
-    op->put();
     return;
   }
 
@@ -5393,7 +5360,6 @@ void OSD::handle_sub_op(OpRequestRef op)
 
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
   if (!pg) {
-    op->put();
     return;
   }
   pg->get();
@@ -5408,7 +5374,6 @@ void OSD::handle_sub_op_reply(OpRequestRef op)
   assert(m->get_header().type == MSG_OSD_SUBOPREPLY);
   if (m->get_map_epoch() < up_epoch) {
     dout(3) << "replica op reply from before up" << dendl;
-    op->put();
     return;
   }
 
@@ -5430,7 +5395,6 @@ void OSD::handle_sub_op_reply(OpRequestRef op)
 
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
   if (!pg) {
-    op->put();
     return;
   }
   pg->get();
@@ -5473,7 +5437,6 @@ bool OSD::op_is_queueable(PG *pg, OpRequestRef op)
   }
 
   if (op_is_discardable(m)) {
-    op->put();
     return false;
   }
 
@@ -5529,7 +5492,6 @@ bool OSD::subop_is_queueable(PG *pg, OpRequestRef op)
     dout(10) << "handle_sub_op pg changed " << pg->info.history
 	     << " after " << m->map_epoch
 	     << ", dropping" << dendl;
-    op->put();
     return false;
   }
 

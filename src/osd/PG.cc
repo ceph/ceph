@@ -1402,9 +1402,7 @@ void PG::do_request(OpRequestRef op)
 
   switch (op->request->get_type()) {
   case CEPH_MSG_OSD_OP:
-    if (osd->op_is_discardable((MOSDOp*)op->request))
-      op->put();
-    else
+    if (!osd->op_is_discardable((MOSDOp*)op->request))
       do_op(op); // do it now
     break;
 
@@ -2523,7 +2521,6 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   if (m->map_epoch < info.history.same_interval_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
 	     << m->map_epoch << " < " << info.history.same_interval_since << dendl;
-    op->put();
     return;
   }
 
@@ -2547,8 +2544,6 @@ void PG::sub_op_scrub_map(OpRequestRef op)
     assert(last_update_applied == info.last_update);
     osd->scrub_finalize_wq.queue(this);
   }
-
-  op->put();
 }
 
 /* 
@@ -2596,7 +2591,6 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
 
   if (scrub_reserved) {
     dout(10) << "Ignoring reserve request: Already reserved" << dendl;
-    op->put();
     return;
   }
 
@@ -2607,8 +2601,6 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
   MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   ::encode(scrub_reserved, reply->get_data());
   osd->cluster_messenger->send_message(reply, m->get_connection());
-
-  op->put();
 }
 
 void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
@@ -2619,7 +2611,6 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 
   if (!scrub_reserved) {
     dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
-    op->put();
     return;
   }
 
@@ -2643,8 +2634,6 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
     }
     sched_scrub();
   }
-
-  op->put();
 }
 
 void PG::sub_op_scrub_unreserve(OpRequestRef op)
@@ -2655,8 +2644,6 @@ void PG::sub_op_scrub_unreserve(OpRequestRef op)
   op->mark_started();
 
   clear_scrub_reserved();
-
-  op->put();
 }
 
 void PG::sub_op_scrub_stop(OpRequestRef op)
@@ -2672,8 +2659,6 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   osd->cluster_messenger->send_message(reply, m->get_connection());
-
-  op->put();
 }
 
 void PG::clear_scrub_reserved()

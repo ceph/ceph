@@ -541,7 +541,6 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
   reply->set_data(outdata);
   reply->set_result(result);
   osd->client_messenger->send_message(reply, m->get_connection());
-  op->put();
   delete filter;
 }
 
@@ -786,7 +785,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     } else {
       dout(10) << "no src oid specified for multi op " << osd_op << dendl;
       osd->reply_op_error(op, -EINVAL);
-      op->put();
     }
     put_object_contexts(src_obc);
     put_object_context(obc);
@@ -933,7 +931,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     ctx->reply = NULL;
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->client_messenger->send_message(reply, m->get_connection());
-    op->put();
     delete ctx;
     put_object_context(obc);
     put_object_contexts(src_obc);
@@ -1133,8 +1130,6 @@ void ReplicatedPG::do_scan(OpRequestRef op)
     }
     break;
   }
-
-  op->put();
 }
 
 void ReplicatedPG::do_backfill(OpRequestRef op)
@@ -1181,8 +1176,6 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
     }
     break;
   }
-
-  op->put();
 }
 
 /* Returns head of snap_trimq as snap_to_trim and the relevant objects as 
@@ -4194,7 +4187,6 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   unlock();
   if (done) {
     delete rm->ctx;
-    rm->op->put();
     delete rm;
     put();
   }
@@ -4226,7 +4218,6 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   unlock();
   if (done) {
     delete rm->ctx;
-    rm->op->put();
     delete rm;
     put();
   }
@@ -4250,8 +4241,6 @@ void ReplicatedPG::sub_op_modify_reply(OpRequestRef op)
 	      fromosd, 
 	      r->get_last_complete_ondisk());
   }
-
-  op->put();
 }
 
 
@@ -5093,7 +5082,6 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
       }
     }
   }
-  op->put();
 }
 
 void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
@@ -5157,7 +5145,6 @@ void ReplicatedPG::sub_op_pull(OpRequestRef op)
   }
 
   log_subop_stats(op, 0, l_osd_sop_pull_lat);
-  op->put();
 }
 
 
@@ -5290,7 +5277,6 @@ void ReplicatedPG::sub_op_push(OpRequestRef op)
   } else {
     handle_push(op);
   }
-  op->put();
   return;
 }
 
@@ -5316,8 +5302,6 @@ void ReplicatedPG::_failed_push(OpRequestRef op)
   finish_recovery_op(soid);  // close out this attempt,
   pull_from_peer[from].erase(soid);
   pulling.erase(soid);
-
-  op->put();
 }
 
 void ReplicatedPG::sub_op_remove(OpRequestRef op)
@@ -5332,8 +5316,6 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
   remove_object_with_snap_hardlinks(*t, m->poid);
   int r = osd->store->queue_transaction(&osr, t);
   assert(r == 0);
-  
-  op->put();
 }
 
 
