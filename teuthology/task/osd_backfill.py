@@ -53,7 +53,7 @@ def task(ctx, config):
     manager.wait_for_clean()
 
     # write some data
-    p = rados_start(mon, ['-p', 'data', 'bench', '15', 'write', '-b', '4096'])
+    p = rados_start(mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096'])
     err = p.exitstatus.get();
     log.info('err is %d' % err)
 
