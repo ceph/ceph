@@ -798,6 +798,10 @@ void FileJournal::queue_completions_thru(uint64_t seq)
     }
     if (completions.front().finish)
       finisher->queue(completions.front().finish);
+    assert(pending_ops.count(completions.front().seq));
+    if (pending_ops[completions.front().seq])
+      pending_ops[completions.front().seq]->mark_event("journaled_completion_queued");
+    pending_ops.erase(completions.front().seq);
     completions.pop_front();
   }
 }
@@ -864,6 +868,9 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   if (queue_pos > header.max_size)
     queue_pos = queue_pos + get_top() - header.max_size;
 
+  assert(pending_ops.count(seq));
+  if (pending_ops[seq])
+    pending_ops[seq]->mark_event("write_thread_in_journal_buffer");
   return 0;
 }
 
@@ -1336,7 +1343,8 @@ void FileJournal::check_aio_completion()
 }
 #endif
 
-void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit)
+void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
+			       Context *oncommit, TrackedOpRef osd_op)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
@@ -1347,8 +1355,11 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
   assert(e.length() > 0);
 
   completions.push_back(completion_item(seq, oncommit, ceph_clock_now(g_ceph_context)));
+  pending_ops[seq] = osd_op;
 
   if (full_state == FULL_NOTFULL) {
+    if (osd_op)
+      osd_op->mark_event("commit_queued_for_journal_write");
     // queue and kick writer thread
     dout(30) << "XXX throttle take " << e.length() << dendl;
     throttle_ops.take(1);
@@ -1364,6 +1375,8 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
     writeq.push_back(write_item(seq, e, alignment));
     write_cond.Signal();
   } else {
+    if (osd_op)
+      osd_op->mark_event("commit_blocked_by_journal_full");
     // not journaling this.  restart writing no sooner than seq + 1.
     dout(10) << " journal is/was full" << dendl;
   }

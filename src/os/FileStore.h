@@ -116,6 +116,7 @@ class FileStore : public JournalingObjectStore,
     list<Transaction*> tls;
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
+    TrackedOpRef osd_op;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
@@ -222,7 +223,8 @@ class FileStore : public JournalingObjectStore,
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
   Op *build_op(list<Transaction*>& tls,
-	       Context *onreadable, Context *onreadable_sync);
+	       Context *onreadable, Context *onreadable_sync,
+	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
   void op_queue_reserve_throttle(Op *o);
   void _op_queue_reserve_throttle(Op *o, const char *caller = 0);
@@ -297,8 +299,10 @@ public:
   unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
-  int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
-			 Context *onreadable_sync=0);
+  int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
+			 Context *onreadable, Context *ondisk=0,
+			 Context *onreadable_sync=0,
+			 TrackedOpRef op = TrackedOpRef());
 
   /**
    * set replay guard xattr on given file

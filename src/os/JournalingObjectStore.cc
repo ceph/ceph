@@ -280,15 +280,8 @@ void JournalingObjectStore::commit_finish()
   }
 }
 
-void JournalingObjectStore::op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
-						    Context *onjournal)
-{
-  Mutex::Locker l(journal_lock);
-  _op_journal_transactions(tls, op, onjournal);
-}
-
 void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
-						     Context *onjournal)
+						     Context *onjournal, TrackedOpRef osd_op)
 {
   assert(journal_lock.is_locked());
   dout(10) << "op_journal_transactions " << op << " " << tls << dendl;
@@ -305,7 +298,7 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
       }
       ::encode(*t, tbl);
     }
-    journal->submit_entry(op, tbl, data_align, onjournal);
+    journal->submit_entry(op, tbl, data_align, onjournal, osd_op);
   } else if (onjournal)
     commit_waiters[op].push_back(onjournal);
 }

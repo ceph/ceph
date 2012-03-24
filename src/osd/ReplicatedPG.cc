@@ -3266,7 +3266,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   Context *onapplied = new C_OSD_OpApplied(this, repop);
   Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc,
 							repop->ctx->clone_obc);
-  int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync);
+  int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync, repop->ctx->op);
   if (r) {
     derr << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
     assert(0);
@@ -4146,7 +4146,7 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
   
   Context *oncommit = new C_OSD_RepModifyCommit(rm);
   Context *onapply = new C_OSD_RepModifyApply(rm);
-  int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit);
+  int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit, 0, op);
   if (r) {
     dout(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
