@@ -2897,7 +2897,7 @@ void OSD::_dispatch(Message *m)
 
   default:
     {
-      OpRequest *op = new OpRequest(m, &op_tracker);
+      OpRequestRef *op = new OpRequest(m, &op_tracker);
       op->mark_event("waiting_for_osdmap");
       // no map?  starting up?
       if (!osdmap) {

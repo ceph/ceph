@@ -19,9 +19,18 @@
 #include "common/Mutex.h"
 #include "include/xlist.h"
 #include "msg/Message.h"
+#include <tr1/memory>
 
 class OpRequest;
+typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpTracker {
+  class RemoveOnDelete {
+    OpTracker *tracker;
+  public:
+    RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
+    void operator()(OpRequest *op);
+  };
+  friend class RemoveOnDelete;
   uint64_t seq;
   Mutex ops_in_flight_lock;
   xlist<OpRequest *> ops_in_flight;
@@ -33,6 +42,7 @@ public:
   void unregister_inflight_op(xlist<OpRequest*>::item *i);
   bool check_ops_in_flight(std::ostream &out);
   void mark_event(OpRequest *op, const string &evt);
+  OpRequestRef create_request(Message *req);
 };
 
 /**
@@ -69,7 +79,6 @@ public:
     tracker->register_inflight_op(&xitem);
   }
   ~OpRequest() {
-    tracker->unregister_inflight_op(&xitem);
     assert(request);
     request->put();
   }

@@ -94,7 +94,18 @@ void OpTracker::mark_event(OpRequest *op, const string &dest)
   Mutex::Locker locker(ops_in_flight_lock);
   utime_t now = ceph_clock_now(g_ceph_context);
   dout(1) << "seq: " << op->seq << ", time: " << now << ", event: " << dest
-	  << " " << *op << dendl;
+	  << " " << *op->request << dendl;
+}
+
+void OpTracker::RemoveOnDelete::operator()(OpRequest *op) {
+  tracker->unregister_inflight_op(&(op->xitem));
+  delete op;
+}
+
+OpRequestRef OpTracker::create_request(Message *ref)
+{
+  return OpRequestRef(new OpRequest(ref, this),
+		      RemoveOnDelete(this));
 }
 
 void OpRequest::mark_event(const string &event)
