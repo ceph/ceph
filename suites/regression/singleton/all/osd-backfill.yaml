@@ -13,4 +13,4 @@ tasks:
     conf:
       osd:
         osd min pg log entries: 5
-- backfill:
+- osd_backfill:
