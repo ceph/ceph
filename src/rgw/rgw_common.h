@@ -20,11 +20,6 @@
 #include "common/perf_counters.h"
 
 #include "acconfig.h"
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
 
 #include <errno.h>
 #include <string.h>
@@ -524,6 +519,7 @@ struct RGWBucketStats
 struct req_state;
 
 struct RGWEnv;
+struct FCGX_Request;
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {

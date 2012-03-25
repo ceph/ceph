@@ -13,6 +13,13 @@
 
 #include "rgw_formats.h"
 
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
+
+
 #define DOUT_SUBSYS rgw
 
 static void dump_status(struct req_state *s, const char *status)

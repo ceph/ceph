@@ -4,6 +4,12 @@
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
 
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
+
 #include <sstream>
 
 #define DOUT_SUBSYS rgw

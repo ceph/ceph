@@ -6,6 +6,12 @@
 
 #include "auth/Crypto.h"
 
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
+
 #define DOUT_SUBSYS rgw
 
 #define DEFAULT_SWIFT_PREFIX "swift"

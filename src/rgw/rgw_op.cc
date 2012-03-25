@@ -18,6 +18,12 @@
 #include "rgw_log.h"
 #include "rgw_multi.h"
 
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
+
 #define DOUT_SUBSYS rgw
 
 using namespace std;
