@@ -1,0 +1,7 @@
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    all:
+      - direct_io
+

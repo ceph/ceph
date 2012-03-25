@@ -1,0 +1,5 @@
+tasks:
+- kclient:
+- workunit:
+    all:
+      - suites/ffsb.sh
