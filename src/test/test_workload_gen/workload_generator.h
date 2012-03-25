@@ -1,118 +1,128 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /*
- * workload_generator.h
+ * Ceph - scalable distributed file system
  *
- *  Created on: Mar 12, 2012
- *      Author: jecluis
+ * Copyright (C) 2012 New Dream Network
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
  */
-
 #ifndef WORKLOAD_GENERATOR_H_
 #define WORKLOAD_GENERATOR_H_
 
 #include "os/FileStore.h"
 #include <boost/scoped_ptr.hpp>
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/uniform_int.hpp>
-#include <pthread.h>
+#include <queue>
+#include <set>
 
-typedef boost::mt11213b gen_type;
-
-class WorkloadGenerator
-{
+class WorkloadGenerator {
 private:
-	  static const int NUM_THREADS 		= 2;
-	  static const int MAX_IN_FLIGHT	= 50;
+  /* kept in upper case for consistency with coll_t's */
+  static const coll_t META_COLL;
+  static const coll_t TEMP_COLL;
 
-	  static const int DEF_NUM_OBJ_PER_COLL = 6000;
-	  static const int DEF_NUM_COLLS	= 30;
+  static const int max_in_flight = 50;
 
-	  static const coll_t META_COLL;
-	  static const coll_t TEMP_COLL;
+  static const int def_num_obj_per_coll = 6000;
+  static const int def_num_colls = 30;
+  static const int def_prob_destroy_coll = 30;
+  static const int def_prob_create_coll = 10;
 
-	  static const size_t MIN_WRITE_BYTES = 1;
-	  static const size_t MAX_WRITE_MB	  = 5;
-	  static const size_t MAX_WRITE_BYTES = (MAX_WRITE_MB * 1024 * 1024);
+  static const size_t min_write_bytes = 1;
+  static const size_t max_write_mb = 5;
+  static const size_t max_write_bytes = (max_write_mb * 1024 * 1024);
 
-	  static const size_t MIN_XATTR_OBJ_BYTES 	= 2;
-	  static const size_t MAX_XATTR_OBJ_BYTES 	= 300;
-	  static const size_t MIN_XATTR_COLL_BYTES 	= 4;
-	  static const size_t MAX_XATTR_COLL_BYTES 	= 600;
-//	  static const size_t XATTR_NAME_BYTES		= 30;
+  static const size_t min_xattr_obj_bytes = 2;
+  static const size_t max_xattr_obj_bytes = 300;
+  static const size_t min_xattr_coll_bytes = 4;
+  static const size_t max_xattr_coll_bytes = 600;
 
-	  static const size_t LOG_APPEND_BYTES		= 1024;
+  static const size_t log_append_bytes = 1024;
 
-	  int NUM_COLLS;
-	  int NUM_OBJ_PER_COLL;
+  /* probabilities for creating or destroying a collection */
+  bool m_allow_coll_destruction;
+  int m_prob_destroy_coll;
+  int m_prob_create_coll;
 
-	  boost::scoped_ptr<ObjectStore> store;
+  int m_num_colls;
+  int m_num_obj_per_coll;
 
-	  gen_type rng;
-	  int in_flight;
-	  ObjectStore::Sequencer *osr;
+  boost::scoped_ptr<ObjectStore> m_store;
 
-	  Mutex lock;
-	  Cond cond;
+  int m_in_flight;
+  vector<ObjectStore::Sequencer> m_osr;
 
-	  bool stop_running;
+  Mutex m_lock;
+  Cond m_cond;
 
-	  void wait_for_ready() {
-		  while (in_flight >= MAX_IN_FLIGHT)
-			  cond.Wait(lock);
-	  }
+  set<coll_t> m_available_collections;
+  set<coll_t> m_removed_collections;
 
-	  void wait_for_done() {
-		  Mutex::Locker locker(lock);
-		  while (in_flight)
-			  cond.Wait(lock);
-	  }
 
-	  void init_args(vector<const char*> args);
-	  void init();
+  void wait_for_ready() {
+    while (m_in_flight >= max_in_flight)
+      m_cond.Wait(m_lock);
+  }
 
-	  int get_random_collection_nr();
-	  int get_random_object_nr(int coll_nr);
+  void wait_for_done() {
+    Mutex::Locker locker(m_lock);
+    while (m_in_flight)
+      m_cond.Wait(m_lock);
+  }
 
-	  coll_t get_collection_by_nr(int nr);
-	  hobject_t get_object_by_nr(int nr);
-	  hobject_t get_coll_meta_object(coll_t coll);
+  void init_args(vector<const char*> args);
+  void init();
 
-	  size_t get_random_byte_amount(size_t min, size_t max);
-	  void get_filled_byte_array(bufferlist& bl, size_t size);
+  int get_random_collection_nr();
+  int get_random_object_nr(int coll_nr);
 
-	  int do_write_object(ObjectStore::Transaction *t,
-			  coll_t coll, hobject_t obj);
-	  int do_setattr_object(ObjectStore::Transaction *t,
-	  			  coll_t coll, hobject_t obj);
-	  int do_setattr_collection(ObjectStore::Transaction *t, coll_t coll);
-	  int do_append_log(ObjectStore::Transaction *t, coll_t coll);
+  coll_t get_collection_by_nr(int nr);
+  hobject_t get_object_by_nr(int nr);
+  hobject_t get_coll_meta_object(coll_t coll);
+
+  size_t get_random_byte_amount(size_t min, size_t max);
+  void get_filled_byte_array(bufferlist& bl, size_t size);
+
+  void do_write_object(ObjectStore::Transaction *t,
+      coll_t coll, hobject_t obj);
+  void do_setattr_object(ObjectStore::Transaction *t,
+      coll_t coll, hobject_t obj);
+  void do_setattr_collection(ObjectStore::Transaction *t, coll_t coll);
+  void do_append_log(ObjectStore::Transaction *t, coll_t coll);
+
+  bool allow_collection_destruction();
+  void do_destroy_collection(ObjectStore::Transaction *t);
+  void do_create_collection(ObjectStore::Transaction *t);
 
 public:
-	WorkloadGenerator(vector<const char*> args);
-	~WorkloadGenerator() {
-		store->umount();
-	}
+  WorkloadGenerator(vector<const char*> args);
+  ~WorkloadGenerator() {
+    m_store->umount();
+  }
 
-	class C_WorkloadGeneratorOnReadable : public Context {
-		WorkloadGenerator *state;
-		ObjectStore::Transaction *t;
+  class C_WorkloadGeneratorOnReadable: public Context {
+    WorkloadGenerator *m_state;
+    ObjectStore::Transaction *m_tx;
 
-	public:
-		C_WorkloadGeneratorOnReadable(WorkloadGenerator *state,
-				ObjectStore::Transaction *t) : state(state), t(t) {}
+  public:
+    C_WorkloadGeneratorOnReadable(WorkloadGenerator *state,
+        ObjectStore::Transaction *t) :
+      m_state(state), m_tx(t) {
+    }
 
-		void finish(int r) {
-			dout(0) << "Got one back!" << dendl;
-			Mutex::Locker locker(state->lock);
-			state->in_flight--;
-			state->cond.Signal();
-		}
-	};
+    void finish(int r) {
+      dout(0) << "Got one back!" << dendl;
+      Mutex::Locker locker(m_state->m_lock);
+      m_state->m_in_flight--;
+      m_state->m_cond.Signal();
+    }
+  };
 
-
-	void run(void);
-	void print_results(void);
-	void stop() {
-		stop_running = true;
-	}
+  void run(void);
+  void print_results(void);
 };
 
 #endif /* WORKLOAD_GENERATOR_H_ */
