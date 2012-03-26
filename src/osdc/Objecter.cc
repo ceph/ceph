@@ -1137,9 +1137,14 @@ void Objecter::throttle_op(Op *op, int op_budget)
 {
   if (!op_budget)
     op_budget = calc_op_budget(op);
-  if (!op_throttler.get_or_fail(op_budget)) { //couldn't take right now
+  if (!op_throttle_bytes.get_or_fail(op_budget)) { //couldn't take right now
     client_lock.Unlock();
-    op_throttler.get(op_budget);
+    op_throttle_bytes.get(op_budget);
+    client_lock.Lock();
+  }
+  if (!op_throttle_ops.get_or_fail(1)) { //couldn't take right now
+    client_lock.Unlock();
+    op_throttle_ops.get(1);
     client_lock.Lock();
   }
 }

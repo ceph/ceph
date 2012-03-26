@@ -894,13 +894,15 @@ public:
     if (keep_balanced_budget)
       throttle_op(op, op_budget);
     else
-      op_throttler.take(op_budget);
+      op_throttle_bytes.take(op_budget);
+    op_throttle_ops.take(1);
   }
   void put_op_budget(Op *op) {
     int op_budget = calc_op_budget(op);
-    op_throttler.put(op_budget);
+    op_throttle_bytes.put(op_budget);
+    op_throttle_ops.put(1);
   }
-  Throttle op_throttler;
+  Throttle op_throttle_bytes, op_throttle_ops;
 
  public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
@@ -917,7 +919,8 @@ public:
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
-    op_throttler(cct->_conf->objecter_inflight_op_bytes)
+    op_throttle_bytes(cct->_conf->objecter_inflight_op_bytes),
+    op_throttle_ops(cct->_conf->objecter_inflight_ops)
   { }
   ~Objecter() {
     assert(!tick_event);
