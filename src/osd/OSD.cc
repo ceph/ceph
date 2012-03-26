@@ -1665,7 +1665,7 @@ void OSD::heartbeat()
     if (i->second.first_tx == utime_t())
       i->second.first_tx = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
-    hbout_messenger->send_message(m, i->second.con);
+    hbin_messenger->send_message(m, i->second.con);
   }
 
   if (map_locked) {
