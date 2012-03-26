@@ -306,15 +306,15 @@ int main(int argc, const char **argv)
   Messenger *cluster_messenger = Messenger::create(g_ceph_context,
 						   entity_name_t::OSD(whoami),
 						   getpid());
-  Messenger *messenger_hbin = Messenger::create(g_ceph_context,
+  Messenger *messenger_hbclient = Messenger::create(g_ceph_context,
 						entity_name_t::OSD(whoami),
 						getpid());
-  Messenger *messenger_hbout = Messenger::create(g_ceph_context,
+  Messenger *messenger_hbserver = Messenger::create(g_ceph_context,
 						 entity_name_t::OSD(whoami),
 						 getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  messenger_hbin->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  messenger_hbout->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hbserver->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
   global_print_banner();
 
@@ -355,9 +355,9 @@ int main(int argc, const char **argv)
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				Messenger::Policy::stateless_server(0, 0));
 
-  messenger_hbin->set_policy(entity_name_t::TYPE_OSD,
+  messenger_hbclient->set_policy(entity_name_t::TYPE_OSD,
 			     Messenger::Policy::client(0, 0));
-  messenger_hbout->set_policy(entity_name_t::TYPE_OSD,
+  messenger_hbserver->set_policy(entity_name_t::TYPE_OSD,
 			     Messenger::Policy::stateless_server(0, 0));
 
   r = client_messenger->bind(g_conf->public_addr);
@@ -371,7 +371,7 @@ int main(int argc, const char **argv)
   entity_addr_t hb_addr = g_conf->cluster_addr;
   if (!hb_addr.is_blank_ip())
     hb_addr.set_port(0);
-  r = messenger_hbout->bind(hb_addr);
+  r = messenger_hbserver->bind(hb_addr);
   if (r < 0)
     exit(1);
 
@@ -393,7 +393,7 @@ int main(int argc, const char **argv)
   global_init_chdir(g_ceph_context);
 
   osd = new OSD(whoami, cluster_messenger, client_messenger,
-		messenger_hbin, messenger_hbout,
+		messenger_hbclient, messenger_hbserver,
 		&mc,
 		g_conf->osd_data, g_conf->osd_journal);
   err = osd->pre_init();
@@ -407,8 +407,8 @@ int main(int argc, const char **argv)
   global_init_shutdown_stderr(g_ceph_context);
 
   client_messenger->start();
-  messenger_hbin->start();
-  messenger_hbout->start();
+  messenger_hbclient->start();
+  messenger_hbserver->start();
   cluster_messenger->start();
 
   // install signal handlers
@@ -426,8 +426,8 @@ int main(int argc, const char **argv)
   }
 
   client_messenger->wait();
-  messenger_hbin->wait();
-  messenger_hbout->wait();
+  messenger_hbclient->wait();
+  messenger_hbserver->wait();
   cluster_messenger->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
@@ -437,8 +437,8 @@ int main(int argc, const char **argv)
   // done
   delete osd;
   delete client_messenger;
-  delete messenger_hbin;
-  delete messenger_hbout;
+  delete messenger_hbclient;
+  delete messenger_hbserver;
   delete cluster_messenger;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.

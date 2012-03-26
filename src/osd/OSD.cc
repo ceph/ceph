@@ -523,7 +523,7 @@ int OSD::peek_journal_fsid(string path, uuid_d& fsid)
 // cons/des
 
 OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
-	 Messenger *hbinm, Messenger *hboutm, MonClient *mc,
+	 Messenger *hbclientm, Messenger *hbserverm, MonClient *mc,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(external_messenger->cct),
   osd_lock("OSD::osd_lock"),
@@ -547,8 +547,8 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   command_tp(external_messenger->cct, "OSD::command_tp", 1),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_need_update(true), heartbeat_epoch(0),
-  hbin_messenger(hbinm),
-  hbout_messenger(hboutm),
+  hbclient_messenger(hbclientm),
+  hbserver_messenger(hbserverm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
@@ -710,8 +710,8 @@ int OSD::init()
   client_messenger->add_dispatcher_head(&clog);
   cluster_messenger->add_dispatcher_head(this);
 
-  hbin_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hbout_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hbclient_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hbserver_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
@@ -962,8 +962,8 @@ int OSD::shutdown()
 
   client_messenger->shutdown();
   cluster_messenger->shutdown();
-  hbin_messenger->shutdown();
-  hbout_messenger->shutdown();
+  hbclient_messenger->shutdown();
+  hbserver_messenger->shutdown();
 
   monc->shutdown();
 
@@ -1446,7 +1446,7 @@ void OSD::_add_heartbeat_peer(int p)
   map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(p);
   if (i == heartbeat_peers.end()) {
     hi = &heartbeat_peers[p];
-    hi->con = hbin_messenger->get_connection(osdmap->get_hb_inst(p));
+    hi->con = hbclient_messenger->get_connection(osdmap->get_hb_inst(p));
     dout(10) << "_add_heartbeat_peer: new peer osd." << p
 	     << " " << hi->con->get_peer_addr() << dendl;
   } else {
@@ -1495,7 +1495,7 @@ void OSD::maybe_update_heartbeat_peers()
       dout(20) << " removing heartbeat peer osd." << p->first
 	       << " " << p->second.con->get_peer_addr()
 	       << dendl;
-      hbin_messenger->mark_down(p->second.con);
+      hbclient_messenger->mark_down(p->second.con);
       p->second.con->put();
       heartbeat_peers.erase(p++);
     } else {
@@ -1510,7 +1510,7 @@ void OSD::reset_heartbeat_peers()
   dout(10) << "reset_heartbeat_peers" << dendl;
   heartbeat_lock.Lock();
   while (!heartbeat_peers.empty()) {
-    hbin_messenger->mark_down(heartbeat_peers.begin()->second.con);
+    hbclient_messenger->mark_down(heartbeat_peers.begin()->second.con);
     heartbeat_peers.begin()->second.con->put();
     heartbeat_peers.erase(heartbeat_peers.begin());
   }
@@ -1541,7 +1541,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 				locked ? osdmap->get_epoch():0, 
 				MOSDPing::PING_REPLY,
 				m->stamp);
-      hbout_messenger->send_message(r, m->get_connection());
+      hbserver_messenger->send_message(r, m->get_connection());
 
       if (osdmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
@@ -1665,7 +1665,7 @@ void OSD::heartbeat()
     if (i->second.first_tx == utime_t())
       i->second.first_tx = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
-    hbin_messenger->send_message(m, i->second.con);
+    hbclient_messenger->send_message(m, i->second.con);
   }
 
   if (map_locked) {
@@ -1999,12 +1999,12 @@ void OSD::send_boot()
     cluster_messenger->set_ip(cluster_addr);
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
   }
-  entity_addr_t hb_addr = hbout_messenger->get_myaddr();
+  entity_addr_t hb_addr = hbserver_messenger->get_myaddr();
   if (hb_addr.is_blank_ip()) {
     int port = hb_addr.get_port();
     hb_addr = cluster_addr;
     hb_addr.set_port(port);
-    hbout_messenger->set_ip(hb_addr);
+    hbserver_messenger->set_ip(hb_addr);
     dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
   MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr, cluster_addr);
@@ -3278,7 +3278,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     } else if (!osdmap->is_up(whoami) ||
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_addr(whoami).probably_equals(hbout_messenger->get_myaddr())) {
+	       !osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
       if (!osdmap->is_up(whoami))
 	clog.warn() << "map e" << osdmap->get_epoch()
 		    << " wrongly marked me down or wrong addr";
@@ -3290,10 +3290,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
 		    << " != my " << cluster_messenger->get_myaddr();
-      else if (!osdmap->get_hb_addr(whoami).probably_equals(hbout_messenger->get_myaddr()))
+      else if (!osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
-		    << " != my " << hbout_messenger->get_myaddr();
+		    << " != my " << hbserver_messenger->get_myaddr();
       
       state = STATE_BOOTING;
       up_epoch = 0;
@@ -3301,17 +3301,17 @@ void OSD::handle_osd_map(MOSDMap *m)
       bind_epoch = osdmap->get_epoch();
 
       int cport = cluster_messenger->get_myaddr().get_port();
-      int hbport = hbout_messenger->get_myaddr().get_port();
+      int hbport = hbserver_messenger->get_myaddr().get_port();
 
       int r = cluster_messenger->rebind(hbport);
       if (r != 0)
 	do_shutdown = true;  // FIXME: do_restart?
 
-      r = hbout_messenger->rebind(cport);
+      r = hbserver_messenger->rebind(cport);
       if (r != 0)
 	do_shutdown = true;  // FIXME: do_restart?
 
-      hbin_messenger->mark_down_all();
+      hbclient_messenger->mark_down_all();
 
       reset_heartbeat_peers();
     }

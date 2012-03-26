@@ -270,7 +270,7 @@ private:
   epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbin_messenger, *hbout_messenger;
+  Messenger *hbclient_messenger, *hbserver_messenger;
   
   void _add_heartbeat_peer(int p);
   void maybe_update_heartbeat_peers();
