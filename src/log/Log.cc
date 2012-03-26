@@ -114,6 +114,13 @@ void Log::submit_entry(Entry *e)
   pthread_mutex_unlock(&m_queue_mutex);
 }
 
+Entry *Log::create_entry(int level, int subsys)
+{
+  return new Entry(ceph_clock_now(NULL),
+		   pthread_self(),
+		   level, subsys);
+}
+
 void Log::flush()
 {
   pthread_mutex_lock(&m_flush_mutex);

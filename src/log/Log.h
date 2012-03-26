@@ -59,6 +59,7 @@ public:
   void set_syslog_level(int log, int crash);
   void set_stderr_level(int log, int crash);
 
+  Entry *create_entry(int level, int subsys);
   void submit_entry(Entry *e);
 
   void start();
