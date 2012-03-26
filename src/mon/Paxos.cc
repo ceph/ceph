@@ -162,7 +162,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
   assert(peer_last_committed < last_committed);
 
   dout(10) << "share_state peer has fc " << peer_first_committed << " lc " << peer_last_committed << dendl;
-  version_t v = peer_last_committed;
+  version_t v = peer_last_committed + 1;
 
   // start with a stashed full copy?
   if (peer_last_committed + 1 < first_committed) {
@@ -175,8 +175,8 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
     v = l;
   }
 
-  // include (remaining) incrementals
-  for (v++;
+  // include incrementals
+  for ( ;
        v <= last_committed;
        v++) {
     if (mon->store->exists_bl_sn(machine_name, v)) {
