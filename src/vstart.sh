@@ -283,6 +283,7 @@ $DAEMONOPTS
         osd class tmp = out
         osd class dir = .libs
         osd scrub load threshold = 5.0
+        filestore xattr use omap = true
 $COSDDEBUG
 [mon]
 $DAEMONOPTS
