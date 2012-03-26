@@ -379,7 +379,7 @@ def task(ctx, config):
               fs_type: xfs
     """
     if config is None:
-        config = { all: None }
+        config = { 'all': None }
     norm_config = config
     if isinstance(config, dict):
         norm_config = teuthology.replace_all_with_clients(ctx.cluster, config)
@@ -391,6 +391,8 @@ def task(ctx, config):
             role_images[role] = properties.get('image_name')
     else:
         role_images = norm_config
+
+    log.debug('rbd config is: %s', norm_config)
 
     with contextutil.nested(
         lambda: create_image(ctx=ctx, config=norm_config),
