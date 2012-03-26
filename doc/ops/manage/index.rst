@@ -7,6 +7,7 @@
    key
    grow/index
    failures/index
+   crush
    pool
    cephfs
 
