@@ -460,6 +460,11 @@ testrados_watch_notify_SOURCES = \
 testrados_watch_notify_LDADD = libsystest.la librados.la
 bin_DEBUGPROGRAMS += testrados_watch_notify
 
+bench_log_SOURCES = \
+	test/bench_log.cc
+bench_log_LDADD = libcommon.la libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += bench_log
+
 ## unit tests
 
 # target to build but not run the unit tests
