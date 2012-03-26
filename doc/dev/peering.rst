@@ -12,7 +12,7 @@ Concepts
    Note that agreeing on the state does not mean that
    they all have the latest contents.
 
-*Activing set*
+*Acting set*
    the ordered list of OSDs who are (or were as of some epoch)
    responsible for a particular PG.
 
