@@ -1218,7 +1218,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_RAND_READ;
     else
       usage_exit();
-    ret = aio_bench(rados, io_ctx, operation, seconds, concurrent_ios, op_size);
+    RadosBencher bencher(rados, io_ctx);
+    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
