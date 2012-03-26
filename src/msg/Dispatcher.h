@@ -37,9 +37,9 @@ public:
   virtual void ms_handle_connect(Connection *con) { };
 
   /*
-   * on any connection reset.
    * this indicates that the ordered+reliable delivery semantics have 
    * been violated.  messages may have been lost.
+   * Only called on lossy Connections.
    */
   virtual bool ms_handle_reset(Connection *con) = 0;
 
