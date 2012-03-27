@@ -931,6 +931,7 @@ libcommon_files = \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
+	common/PrebufferedStreambuf.cc \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
 	common/admin_socket.cc \

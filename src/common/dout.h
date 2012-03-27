@@ -49,9 +49,9 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
       char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
     }									\
     ceph::log::Entry *_dout_e = cct->_log->create_entry(v, sub);	\
-    ostringstream _dout_ss;						\
+    ostream _dout_os(&_dout_e->m_streambuf);				\
     CephContext *_dout_cct = cct;					\
-    std::ostream* _dout = &_dout_ss;
+    std::ostream* _dout = &_dout_os;
 
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
@@ -62,7 +62,6 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 #define lgeneric_derr(cct) dout_impl(cct, ceph_subsys_, -1) *_dout
 
 #define dendl std::flush;				\
-      _dout_e->m_str = _dout_ss.str();			\
       _dout_cct->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)

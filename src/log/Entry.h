@@ -5,9 +5,11 @@
 #define __CEPH_LOG_ENTRY_H
 
 #include "include/utime.h"
+#include "common/PrebufferedStreambuf.h"
 #include <pthread.h>
 #include <string>
 
+#define CEPH_LOG_ENTRY_PREALLOC 80
 
 namespace ceph {
 namespace log {
@@ -18,16 +20,26 @@ struct Entry {
   short m_prio, m_subsys;
   Entry *m_next;
 
-  char m_static_buf[80];
-  std::string m_str;
+  char m_static_buf[CEPH_LOG_ENTRY_PREALLOC];
+  PrebufferedStreambuf m_streambuf;
 
+  Entry()
+    : m_next(NULL), m_streambuf(m_static_buf, sizeof(m_static_buf))
+  {}
   Entry(utime_t s, pthread_t t, short pr, short sub,
 	const char *msg = NULL)
     : m_stamp(s), m_thread(t), m_prio(pr), m_subsys(sub),
-      m_next(NULL)
+      m_next(NULL),
+      m_streambuf(m_static_buf, sizeof(m_static_buf))
   {
-    if (msg)
-      m_str = msg;
+    if (msg) {
+      ostream os(&m_streambuf);
+      os << msg;
+    }
+  }
+
+  std::string get_str() const {
+    return m_streambuf.get_str();
   }
 };
 

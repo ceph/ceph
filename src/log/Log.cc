@@ -17,6 +17,8 @@
 #define DEFAULT_MAX_NEW     1000
 #define DEFAULT_MAX_RECENT 10000
 
+#define PREALLOC 1000000
+
 namespace ceph {
 namespace log {
 
@@ -55,6 +57,11 @@ Log::Log(SubsystemMap *s)
 
   ret = pthread_cond_init(&m_cond, NULL);
   assert(ret == 0);
+
+  // kludge for prealloc testing
+  if (false)
+    for (int i=0; i < PREALLOC; i++)
+      m_recent.enqueue(new Entry);
 }
 
 Log::~Log()
@@ -116,9 +123,19 @@ void Log::submit_entry(Entry *e)
 
 Entry *Log::create_entry(int level, int subsys)
 {
-  return new Entry(ceph_clock_now(NULL),
+  if (true) {
+    return new Entry(ceph_clock_now(NULL),
 		   pthread_self(),
 		   level, subsys);
+  } else {
+    // kludge for perf testing
+    Entry *e = m_recent.dequeue();
+    e->m_stamp = ceph_clock_now(NULL);
+    e->m_thread = pthread_self();
+    e->m_prio = level;
+    e->m_subsys = subsys;
+    return e;
+  }
 }
 
 void Log::flush()
@@ -135,40 +152,38 @@ void Log::flush()
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
   Entry *e;
+  char buf[80];
   while ((e = t->dequeue()) != NULL) {
     unsigned sub = e->m_subsys;
 
-    ostringstream ss;
-    ss << e->m_stamp
-       << ' '
-       << std::hex << e->m_thread << std::dec
-       << ' '
-       << std::setw(2) << std::setfill('0') << e->m_prio << std::setw(0)
-      /*
-       << ':'
-       << std::setiosflags(ios::left)
-       << std::setw(m_subs->get_max_subsys_len()) << std::setfill(' ') << m_subs->get_name(sub)
-       << std::setiosflags(ios::right)
-      */
-       << ' ';
+    bool do_fd = m_fd >= 0 && (crash || m_subs->get_log_level(sub) >= e->m_prio);
+    bool do_syslog = (crash ? m_syslog_crash : m_syslog_log) >= e->m_prio;
+    bool do_stderr = (crash ? m_stderr_crash : m_stderr_log) >= e->m_prio;
 
-    if ((crash || m_subs->get_log_level(sub) >= e->m_prio)) {
-      if (m_fd >= 0) {
-	int r = safe_write(m_fd, ss.str().data(), ss.str().size());
+    if (do_fd || do_syslog || do_stderr) {
+      int buflen = e->m_stamp.sprintf(buf, sizeof(buf));
+      buflen += sprintf(buf + buflen, " %lx %2d ",
+			(unsigned long)e->m_thread, e->m_prio);
+
+      // FIXME: this is slow
+      string s = e->get_str();
+
+      if (do_fd) {
+	int r = safe_write(m_fd, buf, buflen);
 	if (r >= 0)
-	  r = safe_write(m_fd, e->m_str.data(), e->m_str.size());
+	  r = safe_write(m_fd, s.data(), s.size());
 	if (r >= 0)
-	  r = safe_write(m_fd, "\n", 1);
+	  r = write(m_fd, "\n", 1);
 	if (r < 0)
 	  cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
 
-      if ((crash ? m_syslog_crash : m_syslog_log) >= e->m_prio) {
-	syslog(LOG_USER, "%s%s", ss.str().c_str(), e->m_str.c_str());
+      if (do_syslog) {
+	syslog(LOG_USER, "%s%s", buf, s.c_str());
       }
 
-      if ((crash ? m_stderr_crash : m_stderr_log) >= e->m_prio) {
-	cerr << ss.str() << e->m_str << std::endl;
+      if (do_stderr) {
+	cerr << buf << s << std::endl;
       }
     }
 
