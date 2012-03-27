@@ -3114,9 +3114,13 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         int r = open_bucket_ctx(entry.obj.bucket, io_ctx);
         if (r < 0)
           return r;
+        ObjectWriteOperation op;
+        op.remove();
         string oid = dir_oid_prefix;
         oid.append(entry.obj.bucket.marker);
-        r = io_ctx.remove(oid);
+        librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+        r = io_ctx.aio_operate(oid, completion, &op);
+        completion->release();
         if (r < 0 && r != -ENOENT) {
           cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
           complete = false;
@@ -3132,7 +3136,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     rgw_obj obj(bucket, oid);
     cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
     if (purge) {
-      r = delete_obj(NULL, obj, true);
+      r = delete_obj(NULL, obj, false);
       if (r < 0)
         cerr << "failed to remove obj: " << obj << std::endl;
     }
