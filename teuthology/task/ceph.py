@@ -316,11 +316,47 @@ def cluster(ctx, config):
             )
         )
 
+
+    devs_to_clean = {}
+    remote_to_roles_to_devs = {}
+    remote_to_roles_to_journals = {}
+    osds = ctx.cluster.only(teuthology.is_type('osd'))
+    for remote, roles_for_host in osds.remotes.iteritems():
+        devs = teuthology.get_scratch_devices(remote)
+        roles_to_devs = {}
+        roles_to_journals = {}
+        if config.get('fs'):
+            log.info('fs option selected, checkin for scratch devs')
+            log.info('found devs: %s' % (str(devs),))
+            roles_to_devs = assign_devs(
+                teuthology.roles_of_type(roles_for_host, 'osd'), devs
+                )
+            if len(roles_to_devs) < len(devs):
+                devs = devs[len(roles_to_devs):]
+            log.info('dev map: %s' % (str(roles_to_devs),))
+            devs_to_clean[remote] = []
+
+        if config.get('block_journal'):
+            log.info('block journal enabled')
+            roles_to_journals = assign_devs(
+                teuthology.roles_of_type(roles_for_host, 'osd'), devs
+                )
+            log.info('journal map: %s', roles_to_journals)
+        remote_to_roles_to_devs[remote] = roles_to_devs
+        remote_to_roles_to_journals[remote] = roles_to_journals
+
+
     log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
     ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in remotes_and_roles)]
     conf = teuthology.skeleton_config(roles=roles, ips=ips)
+    for remote, roles_to_journals in remote_to_roles_to_journals.iteritems():
+        for role, journal in roles_to_journals.iteritems():
+            key = "osd." + str(role)
+            if key not in conf:
+                conf[key] = {}
+            conf[key]['osd journal'] = journal
     for section, keys in config['conf'].iteritems():
         for key, value in keys.iteritems():
             log.info("[%s] %s = %s" % (section, key, value))
@@ -443,7 +479,6 @@ def cluster(ctx, config):
         )
 
     log.info('Setting up osd nodes...')
-    osds = ctx.cluster.only(teuthology.is_type('osd'))
     for remote, roles_for_host in osds.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
@@ -560,20 +595,12 @@ def cluster(ctx, config):
                 )
 
     log.info('Running mkfs on osd nodes...')
-    devs_to_clean = {}
     for remote, roles_for_host in osds.remotes.iteritems():
-        roles_to_devs = {}
-        if config.get('fs'):
-            log.info('fs option selected, checkin for scratch devs')
-            devs = teuthology.get_scratch_devices(remote)
-            log.info('found devs: %s' % (str(devs),))
-            roles_to_devs = assign_devs(
-                teuthology.roles_of_type(roles_for_host, 'osd'), devs
-                )
-            log.info('dev map: %s' % (str(roles_to_devs),))
-            devs_to_clean[remote] = []
-
+        roles_to_devs = remote_to_roles_to_devs[remote]
+        roles_to_journals = remote_to_roles_to_journals[remote]
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
+            log.info(str(roles_to_journals))
+            log.info(id_)
             remote.run(
                 args=[
                     'mkdir',
@@ -989,6 +1016,7 @@ def task(ctx, config):
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {}),
                 fs=config.get('fs', None),
+                block_journal=config.get('block_journal', None),
                 log_whitelist=config.get('log-whitelist', []),
                 )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
