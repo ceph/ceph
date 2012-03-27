@@ -334,6 +334,20 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   }
   block_size = MAX(blksize, (blksize_t)CEPH_PAGE_SIZE);
 
+  if (create && g_conf->journal_zero_on_create) {
+    derr << "FileJournal::_open_file : zeroing journal" << dendl;
+    uint64_t write_size = 1 << 20;
+    char *buf = new char[write_size];
+    memset(static_cast<void*>(buf), 0, write_size);
+    uint64_t i = 0;
+    for (; (i + write_size) <= (unsigned)max_size; i += write_size)
+      ::pwrite(fd, static_cast<void*>(buf), write_size, i);
+    if (i < (unsigned)max_size)
+      ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
+    delete [] buf;
+  }
+      
+
   dout(10) << "_open journal is not a block device, NOT checking disk "
            << "write cache on '" << fn << "'" << dendl;
 
