@@ -57,6 +57,10 @@ int main(int argc, const char **argv)
     delete t;    
   }
 
+  utime_t t = ceph_clock_now(NULL);
+  t -= start;
+  cout << " flushing.. " << t << " so far ..." << std::endl;
+
   g_ceph_context->_log->flush();
 
   utime_t end = ceph_clock_now(NULL);
