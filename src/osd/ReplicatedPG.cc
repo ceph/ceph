@@ -5637,28 +5637,65 @@ void ReplicatedPG::_clear_recovery_state()
   pull_from_peer.clear();
 }
 
-void ReplicatedPG::check_recovery_op_pulls(const OSDMapRef osdmap)
+bool ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
 {
-  for (map<int, set<hobject_t> >::iterator j = pull_from_peer.begin();
-       j != pull_from_peer.end();
-       ) {
-    if (osdmap->is_up(j->first)) {
-      ++j;
+  /*
+   * check that any peers we are planning to (or currently) pulling
+   * objects from are dealt with.
+   */
+  set<int> now_down;
+  for (set<int>::iterator p = missing_loc_sources.begin();
+       p != missing_loc_sources.end();
+       ++p) {
+    if (osdmap->is_up(*p)) {
+      p++;
       continue;
     }
-    dout(10) << "Reseting pulls from osd." << j->first
-	     << ", osdmap has it marked down" << dendl;
-    
-    for (set<hobject_t>::iterator i = j->second.begin();
-	 i != j->second.end();
-	 ++i) {
-      assert(pulling.count(*i) == 1);
-      pulling.erase(*i);
-      finish_recovery_op(*i);
+    dout(10) << "check_recovery_sources source osd." << *p << " now down" << dendl;
+    now_down.insert(*p);
+
+    // reset pulls?
+    map<int, set<hobject_t> >::iterator j = pull_from_peer.find(*p);
+    if (j != pull_from_peer.end()) {
+      dout(10) << "check_recovery_sources resetting pulls from osd." << *p
+	       << ", osdmap has it marked down" << dendl;
+      for (set<hobject_t>::iterator i = j->second.begin();
+	   i != j->second.end();
+	   ++i) {
+	assert(pulling.count(*i) == 1);
+	pulling.erase(*i);
+	finish_recovery_op(*i);
+      }
+      log.last_requested = 0;
+      pull_from_peer.erase(j++);
     }
-    log.last_requested = 0;
-    pull_from_peer.erase(j++);
+
+    // remove from missing_loc_sources
+    missing_loc_sources.erase(p++);
   }
+  if (now_down.empty()) {
+    dout(10) << "check_recovery_sources source osds (" << missing_loc_sources << ") went down" << dendl;
+    return false;
+  }
+  dout(10) << "check_recovery_sources sources osds " << now_down << " now down, remaining sources are "
+	   << missing_loc_sources << dendl;
+
+  // filter missing_loc
+  map<hobject_t, set<int> >::iterator p = missing_loc.begin();
+  while (p != missing_loc.end()) {
+    set<int>::iterator q = p->second.begin();
+    while (q != p->second.end())
+      if (now_down.count(*q))
+	p->second.erase(q++);
+      else
+	q++;
+    if (p->second.empty())
+      missing_loc.erase(p++);
+    else
+      p++;
+  }
+
+  return true;
 }
   
 

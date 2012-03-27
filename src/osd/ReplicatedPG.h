@@ -639,7 +639,7 @@ protected:
   void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
-  void check_recovery_op_pulls(const OSDMapRef map);
+  bool check_recovery_sources(const OSDMapRef map);
   int pull(const hobject_t& oid, eversion_t v);
 
   // low level ops

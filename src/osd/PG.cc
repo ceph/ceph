@@ -4050,8 +4050,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   assert(pg->is_active());
   assert(pg->is_primary());
 
-  pg->check_recovery_op_pulls(pg->get_osdmap());
-	
+  if (pg->check_recovery_sources(pg->get_osdmap()) &&
+      pg->have_unfound()) {
+    // object may have become unfound
+    pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
+  }
+
   if (g_conf->osd_check_for_log_corruption)
     pg->check_log_for_corruption(pg->osd->store);
 
