@@ -260,9 +260,23 @@ protected:
   virtual int lazy_send_message(Message *m, Connection *con) = 0;
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
   virtual int send_keepalive(Connection *con) = 0;
-
+  /**
+   * Mark down a connection to a remote. This will cause us to
+   * discard our outgoing queue for them, and if they try
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset.
+   * It does not generate any notifications to he Dispatcher.
+   */
   virtual void mark_down(const entity_addr_t& a) = 0;
   virtual void mark_down(Connection *con) = 0;
+  /**
+   * Unlike mark_down, this function will try and deliver
+   * all messages before ending the connection. But the
+   * messages are not delivered reliably, and once they've
+   * all been sent out the Connection will be closed and
+   * generate an ms_handle_reset notification to the
+   * Dispatcher.
+   */
   virtual void mark_down_on_empty(Connection *con) = 0;
   virtual void mark_disposable(Connection *con) = 0;
   virtual void mark_down_all() = 0;
