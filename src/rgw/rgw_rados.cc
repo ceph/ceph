@@ -712,19 +712,15 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   string cur_marker = marker;
   bool truncated;
 
+  if (bucket_is_system(bucket)) {
+    return -EINVAL;
+  }
   result.clear();
 
   do {
     std::map<string, RGWObjEnt> ent_map;
-    int r;
-
-    if (bucket_is_system(bucket)) {
-        r = pool_list(bucket, cur_marker, max - count, ent_map,
-                      &truncated, &cur_marker);
-    } else {
-        r = cls_bucket_list(bucket, cur_marker, prefix, max - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, prefix, max - count, ent_map,
                             &truncated, &cur_marker);
-    }
     if (r < 0)
       return r;
 
@@ -2653,22 +2649,26 @@ int RGWRados::distribute(bufferlist& bl)
   return r;
 }
 
-int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
-			bool *is_truncated, string *last_entry)
+int RGWRados::pool_iterate_begin(rgw_bucket& bucket, RGWPoolIterCtx& ctx)
 {
-  librados::IoCtx io_ctx;
+  librados::IoCtx& io_ctx = ctx.io_ctx;
+  librados::ObjectIterator& iter = ctx.iter;
+
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
 
-  librados::ObjectIterator iter = io_ctx.objects_begin();
-  while (iter != io_ctx.objects_end()) {
-    const std::string& oid = iter->first;
-    if (oid.compare(start) >= 0)
-      break;
+  iter = io_ctx.objects_begin();
 
-    ++iter;
-  }
+  return 0;
+}
+
+int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
+                           bool *is_truncated, RGWAccessListFilter *filter)
+{
+  librados::IoCtx& io_ctx = ctx.io_ctx;
+  librados::ObjectIterator& iter = ctx.iter;
+
   if (iter == io_ctx.objects_end())
     return -ENOENT;
 
@@ -2676,21 +2676,22 @@ int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<stri
 
   for (i = 0; i < num && iter != io_ctx.objects_end(); ++i, ++iter) {
     RGWObjEnt e;
-    const string &oid = iter->first;
+
+    string oid = iter->first;
+    dout(20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
+    if (filter && !filter->filter(oid, oid))
+      continue;
+
     e.name = oid;
-    m[e.name] = e;
-    ldout(cct, 20) << "RGWRados::pool_list: got " << e.name << dendl;
+    objs.push_back(e);
   }
 
-  if (m.size()) {
-    *last_entry = m.rbegin()->first;
-  }
   if (is_truncated)
     *is_truncated = (iter != io_ctx.objects_end());
 
-  return m.size();
+  return objs.size();
 }
 
 int RGWRados::cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid)
@@ -2826,7 +2827,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     return -EIO;
   }
 
-  if (is_truncated)
+  if (is_truncated != NULL)
     *is_truncated = ret.is_truncated;
 
   struct rgw_bucket_dir& dir = ret.dir;
@@ -3012,15 +3013,19 @@ int RGWRados::remove_temp_objects(string date, string time)
   string prefix, delim, marker;
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
-  string ns;
   
   int max = 1000;
   bool is_truncated;
   IntentLogNameFilter filter(date.c_str(), &tm);
+  RGWPoolIterCtx iter_ctx;
+  int r = pool_iterate_begin(bucket, iter_ctx);
+  if (r < 0) {
+    cerr << "failed to list objects" << std::endl;
+    return r;
+  }
   do {
-    int r = store->list_objects(bucket, max, prefix, delim, marker,
-				objs, common_prefixes, false, ns,
-				&is_truncated, &filter);
+    objs.clear();
+    r = pool_iterate(iter_ctx, max, objs, &is_truncated, &filter);
     if (r == -ENOENT)
       break;
     if (r < 0) {
@@ -3094,7 +3099,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
         break;
       }
-      r = rgwstore->delete_obj(NULL, entry.obj);
+      r = rgwstore->delete_obj(NULL, entry.obj, false);
       if (r < 0 && r != -ENOENT) {
         cerr << "failed to remove obj: " << entry.obj << std::endl;
         complete = false;
@@ -3109,9 +3114,13 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         int r = open_bucket_ctx(entry.obj.bucket, io_ctx);
         if (r < 0)
           return r;
+        ObjectWriteOperation op;
+        op.remove();
         string oid = dir_oid_prefix;
         oid.append(entry.obj.bucket.marker);
-        r = io_ctx.remove(oid);
+        librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+        r = io_ctx.aio_operate(oid, completion, &op);
+        completion->release();
         if (r < 0 && r != -ENOENT) {
           cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
           complete = false;
@@ -3127,7 +3136,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     rgw_obj obj(bucket, oid);
     cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
     if (purge) {
-      r = delete_obj(NULL, obj, true);
+      r = delete_obj(NULL, obj, false);
       if (r < 0)
         cerr << "failed to remove obj: " << obj << std::endl;
     }

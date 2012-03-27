@@ -891,11 +891,12 @@ public:
   void throttle_op(Op *op, int op_size=0);
   void take_op_budget(Op *op) {
     int op_budget = calc_op_budget(op);
-    if (keep_balanced_budget)
+    if (keep_balanced_budget) {
       throttle_op(op, op_budget);
-    else
+    } else {
       op_throttle_bytes.take(op_budget);
-    op_throttle_ops.take(1);
+      op_throttle_ops.take(1);
+    }
   }
   void put_op_budget(Op *op) {
     int op_budget = calc_op_budget(op);
