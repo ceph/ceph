@@ -91,6 +91,40 @@ def need_to_install(ctx, role, sha1):
     version_fp.close()
     return ret
 
+def install_firmware(ctx, config):
+    uri = 'git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
+    fw_dir = '/lib/firmware/updates'
+
+    for role in config.iterkeys():
+        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Installing linux-firmware on {role}...'.format(role=role))
+        role_remote.run(
+            args=[
+                'sudo', 'install', '-d', '-m0755', fw_dir,
+                run.Raw('&&'),
+                'cd', fw_dir,
+                run.Raw('&&'),
+                'sudo', 'git', 'init',
+                ],
+            )
+        role_remote.run(
+            args=[
+                'sudo', 'git', '--git-dir=%s/.git' % fw_dir, 'config',           
+                '--get', 'remote.origin.url', run.Raw('>/dev/null'),
+                run.Raw('||'),
+                'sudo', 'git', '--git-dir=%s/.git' % fw_dir,           
+                'remote', 'add', 'origin', uri,
+                ],
+            )
+        role_remote.run(
+            args=[
+                'cd', fw_dir,
+                run.Raw('&&'),
+                'sudo', 'git', 'pull', uri,
+                ],
+            )
+
+
 def install_and_reboot(ctx, config):
     procs = {}
     for role, sha1 in config.iteritems():
@@ -275,5 +309,6 @@ def task(ctx, config):
             need_install[role] = sha1
 
     if need_install:
+        install_firmware(ctx, need_install)
         install_and_reboot(ctx, need_install)
         wait_for_reboot(ctx, need_install, timeout)
