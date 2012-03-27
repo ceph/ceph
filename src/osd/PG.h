@@ -459,6 +459,7 @@ public:
   OndiskLog   ondisklog;
   pg_missing_t     missing;
   map<hobject_t, set<int> > missing_loc;
+  set<int> missing_loc_sources;           // superset of missing_loc locations
   
   interval_set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
