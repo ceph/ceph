@@ -102,6 +102,8 @@ public:
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
       "log_file",
+      "log_max_new",
+      "log_max_recent",
       "log_to_syslog",
       "err_to_syslog",
       "log_to_stderr",
@@ -129,6 +131,14 @@ public:
     if (changed.count("log_file")) {
       log->set_log_file(conf->log_file);
       log->reopen_log_file();
+    }
+
+    if (changed.count("log_max_new")) {
+      log->set_max_new(conf->log_max_new);
+    }
+
+    if (changed.count("log_max_recent")) {
+      log->set_max_new(conf->log_max_recent);
     }
   }
 };
