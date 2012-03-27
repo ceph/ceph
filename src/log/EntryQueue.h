@@ -10,7 +10,7 @@ namespace ceph {
 namespace log {
 
 struct EntryQueue {
-  int m_len, m_max_len;
+  int m_len;
   struct Entry *m_head, *m_tail;
 
   bool empty() const {
@@ -50,9 +50,10 @@ struct EntryQueue {
     return e;
   }
 
-  EntryQueue(int max=0)
-    : m_len(0), m_max_len(max),
-      m_head(NULL), m_tail(NULL)
+  EntryQueue()
+    : m_len(0),
+      m_head(NULL),
+      m_tail(NULL)
   {}
   ~EntryQueue() {
     Entry *t;

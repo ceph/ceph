@@ -14,7 +14,7 @@
 #include "common/Clock.h"
 #include "include/assert.h"
 
-#define DEFAULT_MAX_NEW     1000
+#define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
 
 #define PREALLOC 1000000
@@ -32,11 +32,13 @@ static void log_on_exit(int r, void *p)
 Log::Log(SubsystemMap *s)
   : m_indirect_this(new (Log*)(this)),   // we will deliberately leak this
     m_subs(s),
-    m_new(DEFAULT_MAX_NEW), m_recent(DEFAULT_MAX_RECENT),
+    m_new(), m_recent(),
     m_fd(-1),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
-    m_stop(false)
+    m_stop(false),
+    m_max_new(DEFAULT_MAX_NEW),
+    m_max_recent(DEFAULT_MAX_RECENT)
 {
   int ret;
 
@@ -81,6 +83,16 @@ Log::~Log()
 
 ///
 
+void Log::set_max_new(int n)
+{
+  m_max_new = n;
+}
+
+void Log::set_max_recent(int n)
+{
+  m_max_recent = n;
+}
+
 void Log::set_log_file(string fn)
 {
   m_log_file = fn;
@@ -116,8 +128,13 @@ void Log::set_stderr_level(int log, int crash)
 void Log::submit_entry(Entry *e)
 {
   pthread_mutex_lock(&m_queue_mutex);
-  m_new.enqueue(e);
   pthread_cond_signal(&m_cond);
+
+  // wait for flush to catch up
+  while (m_new.m_len > m_max_new)
+    pthread_cond_wait(&m_cond, &m_queue_mutex);
+
+  m_new.enqueue(e);
   pthread_mutex_unlock(&m_queue_mutex);
 }
 
@@ -144,8 +161,15 @@ void Log::flush()
   pthread_mutex_lock(&m_queue_mutex);
   EntryQueue t;
   t.swap(m_new);
+  pthread_cond_signal(&m_cond);
   pthread_mutex_unlock(&m_queue_mutex);
   _flush(&t, &m_recent, false);
+
+  // trim
+  while (m_recent.m_len > m_max_recent) {
+    delete m_recent.dequeue();
+  }
+
   pthread_mutex_unlock(&m_flush_mutex);
 }
 
@@ -214,13 +238,12 @@ void Log::dump_recent()
   pthread_mutex_unlock(&m_flush_mutex);
 
   pthread_mutex_lock(&m_queue_mutex);
-  EntryQueue t(1);
+  EntryQueue t;
   t.swap(m_new);
   pthread_mutex_unlock(&m_queue_mutex);
   _flush(&t, &m_recent, false);
 
-  EntryQueue old(0);
-
+  EntryQueue old;
   _log_message("--- begin dump of recent events ---", true);
   _flush(&m_recent, &old, true);  
   _log_message("--- end dump of recent events ---", true);

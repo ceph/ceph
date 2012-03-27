@@ -37,6 +37,8 @@ class Log : private Thread
 
   bool m_stop;
 
+  int m_max_new, m_max_recent;
+
   void *entry();
 
   void _flush(EntryQueue *q, EntryQueue *requeue, bool crash);
