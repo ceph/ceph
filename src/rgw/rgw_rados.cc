@@ -2827,7 +2827,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     return -EIO;
   }
 
-  if (is_truncated)
+  if (is_truncated != NULL)
     *is_truncated = ret.is_truncated;
 
   struct rgw_bucket_dir& dir = ret.dir;

@@ -568,7 +568,22 @@ public:
     return (bucket.name[0] == '.');
   }
 
+  /**
+   * Init pool iteration
+   * bucket: pool name in a bucket object
+   * ctx: context object to use for the iteration
+   * Returns: 0 on success, -ERR# otherwise.
+   */
   int pool_iterate_begin(rgw_bucket& bucket, RGWPoolIterCtx& ctx);
+  /**
+   * Iterate over pool return object names, use optional filter
+   * ctx: iteration context, initialized with pool_iterate_begin()
+   * num: max number of objects to return
+   * objs: a vector that the results will append into
+   * is_truncated: if not NULL, will hold true iff iteration is complete
+   * filter: if not NULL, will be used to filter returned objects
+   * Returns: 0 on success, -ERR# otherwise.
+   */
   int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
