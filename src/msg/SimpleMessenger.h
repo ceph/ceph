@@ -460,7 +460,6 @@ private:
   void dispatch_throttle_release(uint64_t msize);
 
   // SimpleMessenger stuff
- public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
   bool did_bind;
@@ -483,6 +482,13 @@ private:
   Policy default_policy;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
+  // --- pipes ---
+  set<Pipe*>      pipes;
+  list<Pipe*>     pipe_reap_queue;
+
+  Mutex global_seq_lock;
+  __u32 global_seq;
+public:
   Policy& get_policy(int t) {
     if (policy_map.count(t))
       return policy_map[t];
@@ -490,15 +496,7 @@ private:
       return default_policy;
   }
 
-  // --- pipes ---
-  set<Pipe*>      pipes;
-  list<Pipe*>     pipe_reap_queue;
-  
-  Mutex global_seq_lock;
-  __u32 global_seq;
-      
   Pipe *connect_rank(const entity_addr_t& addr, int type);
-
   virtual void mark_down(const entity_addr_t& addr);
   virtual void mark_down(Connection *con);
   virtual void mark_down_on_empty(Connection *con);
