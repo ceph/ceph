@@ -712,19 +712,15 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   string cur_marker = marker;
   bool truncated;
 
+  if (bucket_is_system(bucket)) {
+    return -EINVAL;
+  }
   result.clear();
 
   do {
     std::map<string, RGWObjEnt> ent_map;
-    int r;
-
-    if (bucket_is_system(bucket)) {
-        r = pool_list(bucket, cur_marker, max - count, ent_map,
-                      &truncated, &cur_marker);
-    } else {
-        r = cls_bucket_list(bucket, cur_marker, prefix, max - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, prefix, max - count, ent_map,
                             &truncated, &cur_marker);
-    }
     if (r < 0)
       return r;
 
@@ -2651,51 +2647,6 @@ int RGWRados::distribute(bufferlist& bl)
   ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   int r = control_pool_ctx.notify(notify_oid, 0, bl);
   return r;
-}
-
-int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
-			bool *is_truncated, string *last_entry)
-{
-  librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
-  if (r < 0)
-    return r;
-
-  librados::ObjectIterator iter = io_ctx.objects_begin();
-  if (!start.empty()) {
-    while (iter != io_ctx.objects_end()) {
-      const std::string& oid = iter->first;
-      ++iter;
-
-      if (oid.compare(start) == 0) {
-        break;
-      }
-    }
-  }
-  if (iter == io_ctx.objects_end())
-    return -ENOENT;
-
-  uint32_t i;
-
-  string oid;
-
-  for (i = 0; i < num && iter != io_ctx.objects_end(); ++i, ++iter) {
-    RGWObjEnt e;
-    oid = iter->first;
-
-    // fill it in with initial values; we may correct later
-    e.name = oid;
-    m[e.name] = e;
-    ldout(cct, 20) << "RGWRados::pool_list: got " << e.name << dendl;
-  }
-
-  if (m.size()) {
-    *last_entry = oid;
-  }
-  if (is_truncated)
-    *is_truncated = (iter != io_ctx.objects_end());
-
-  return m.size();
 }
 
 int RGWRados::pool_iterate_begin(rgw_bucket& bucket, RGWPoolIterCtx& ctx)
