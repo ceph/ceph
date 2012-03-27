@@ -32,7 +32,7 @@ private:
   bool _should_wait(int64_t c) {
     return
       max &&
-      ((c < max && count + c > max) ||   // normally stay under max
+      ((c <= max && count + c > max) ||   // normally stay under max
        (c >= max && count > max));       // except for large c
   }
 
