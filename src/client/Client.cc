@@ -3170,7 +3170,7 @@ void Client::handle_cap_grant(Inode *in, int mds, Cap *cap, MClientCaps *m)
     ldout(cct, 10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
     cap->issued = new_caps;
 
-    if ((cap->issued & ~old_caps) & CEPH_CAP_FILE_CACHE)
+    if ((~cap->issued & old_caps) & CEPH_CAP_FILE_CACHE)
       _release(in, false);
     
     if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER) &&

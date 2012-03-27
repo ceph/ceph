@@ -279,9 +279,9 @@ OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
 OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
 OPTION(osd_age, OPT_FLOAT, .8)
 OPTION(osd_age_time, OPT_INT, 0)
-OPTION(osd_heartbeat_interval, OPT_INT, 1)
-OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // if no peers, ping monitor
-OPTION(osd_heartbeat_grace, OPT_INT, 20)
+OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping peers
+OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
+OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping monitor if no peers
 OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_mon_ack_timeout, OPT_INT, 30) // time out a mon if it doesn't ack stats
