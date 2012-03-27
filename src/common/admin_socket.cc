@@ -39,6 +39,8 @@
 
 #include "include/compat.h"
 
+#define dout_subsys ceph_subsys_
+
 using std::ostringstream;
 
 /*

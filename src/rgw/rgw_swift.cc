@@ -10,7 +10,7 @@
 #include "rgw_swift_auth.h"
 #include "rgw_user.h"
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
 {

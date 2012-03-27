@@ -13,7 +13,6 @@
  */
 
 #include "common/BackTrace.h"
-#include "common/DoutStreambuf.h"
 #include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/debug.h"

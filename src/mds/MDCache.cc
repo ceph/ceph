@@ -98,7 +98,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDS *mds) {

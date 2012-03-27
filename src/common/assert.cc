@@ -45,11 +45,6 @@ namespace ceph {
 
   void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
   {
-    DoutLocker dout_locker;
-    if (g_assert_context) {
-      g_assert_context->dout_trylock(&dout_locker);
-    }
-
     ostringstream tss;
     tss << ceph_clock_now(g_assert_context);
 
@@ -78,11 +73,6 @@ namespace ceph {
   void __ceph_assert_warn(const char *assertion, const char *file,
 			  int line, const char *func)
   {
-    DoutLocker dout_locker;
-    if (g_assert_context) {
-      g_assert_context->dout_trylock(&dout_locker);
-    }
-
     char buf[8096];
     snprintf(buf, sizeof(buf),
 	     "WARNING: assert(%s) at: %s: %d: %s()\n",

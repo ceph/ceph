@@ -36,7 +36,7 @@ using namespace std;
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS client
+#define dout_subsys ceph_subsys_client
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << (whoami >= 0 ? whoami:client->get_nodeid()) << " "
 

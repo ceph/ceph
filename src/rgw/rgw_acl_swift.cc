@@ -7,6 +7,8 @@
 #include "rgw_user.h"
 #include "rgw_acl_swift.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 using namespace std;
 
 #define SWIFT_PERM_READ  RGW_PERM_READ_OBJS

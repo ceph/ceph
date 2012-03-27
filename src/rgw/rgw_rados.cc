@@ -26,7 +26,7 @@ using namespace librados;
 
 #include "rgw_log.h"
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
@@ -355,7 +355,7 @@ static void get_obj_bucket_and_oid_key(rgw_obj& obj, rgw_bucket& bucket, string&
 }
 
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
 {

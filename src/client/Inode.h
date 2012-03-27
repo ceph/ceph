@@ -163,12 +163,12 @@ class Inode {
 
   void get() { 
     _ref++; 
-    ldout(cct, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
+    lsubdout(cct, mds, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
 		   << " now " << _ref << dendl;
   }
   int put(int n=1) { 
     _ref -= n; 
-    ldout(cct, 15) << "inode.put on " << this << " " << ino << '.' << snapid
+    lsubdout(cct, mds, 15) << "inode.put on " << this << " " << ino << '.' << snapid
 		   << " now " << _ref << dendl;
     assert(_ref >= 0);
     return _ref;

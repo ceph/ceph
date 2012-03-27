@@ -23,7 +23,7 @@
 #include "common/errno.h"
 
 #include "debug.h"
-#define DOUT_SUBSYS heartbeatmap
+#define dout_subsys ceph_subsys_heartbeatmap
 #undef dout_prefix
 #define dout_prefix *_dout << "heartbeat_map "
 

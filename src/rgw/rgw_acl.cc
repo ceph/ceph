@@ -12,7 +12,7 @@
 
 #include "rgw_acl_s3.h" // required for backward compatibility
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 

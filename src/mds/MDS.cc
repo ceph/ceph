@@ -71,13 +71,12 @@
 
 #include "common/config.h"
 #include "common/errno.h"
-#include "common/DoutStreambuf.h"
 
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
 

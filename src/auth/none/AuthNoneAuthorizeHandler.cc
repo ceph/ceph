@@ -15,6 +15,8 @@
 #include "AuthNoneAuthorizeHandler.h"
 #include "common/debug.h"
 
+#define dout_subsys ceph_subsys_auth
+
 bool AuthNoneAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
 						 bufferlist& authorizer_data, bufferlist& authorizer_reply,
 						 EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info,

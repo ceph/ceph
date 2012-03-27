@@ -9,7 +9,7 @@
 #include "auth/RotatingKeyRing.h"
 #include "auth/KeyRing.h"
 
-#define DOUT_SUBSYS auth
+#define dout_subsys ceph_subsys_auth
 #undef dout_prefix
 #define dout_prefix *_dout << "auth: "
 
@@ -19,6 +19,7 @@ bool RotatingKeyRing::need_new_secrets() const
   Mutex::Locker l(lock);
   return secrets.need_new_secrets();
 }
+
 bool RotatingKeyRing::need_new_secrets(utime_t now) const
 {
   Mutex::Locker l(lock);

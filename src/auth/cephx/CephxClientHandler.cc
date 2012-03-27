@@ -22,7 +22,7 @@
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS auth
+#define dout_subsys ceph_subsys_auth
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx client: "
 

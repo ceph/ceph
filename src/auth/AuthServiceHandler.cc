@@ -18,7 +18,7 @@
 #include "AuthSupported.h"
 #include "common/config.h"
 
-#define DOUT_SUBSYS auth
+#define dout_subsys ceph_subsys_auth
 
 
 AuthServiceHandler *get_auth_service_handler(int type, CephContext *cct, KeyServer *ks)

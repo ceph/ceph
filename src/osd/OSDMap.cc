@@ -20,6 +20,8 @@
 
 #include "common/code_environment.h"
 
+#define dout_subsys ceph_subsys_osd
+
 // ----------------------------------
 // osd_info_t
 

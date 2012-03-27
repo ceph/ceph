@@ -27,13 +27,13 @@ using std::string;
 
 TEST(DaemonConfig, SimpleSet) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("debug", "21");
+  ret = g_ceph_context->_conf->set_val("num_client", "21");
   ASSERT_EQ(ret, 0);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
   memset(buf, 0, sizeof(buf));
   char *tmp = buf;
-  ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("21"), string(buf));
 }
@@ -43,7 +43,7 @@ TEST(DaemonConfig, ArgV) {
 				       "false"));
 
   int ret;
-  const char *argv[] = { "foo", "--debug", "22",
+  const char *argv[] = { "foo", "--num-client", "22",
 			 "--keyfile", "/tmp/my-keyfile", NULL };
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
   vector<const char*> args;
@@ -59,7 +59,7 @@ TEST(DaemonConfig, ArgV) {
   ASSERT_EQ(string("/tmp/my-keyfile"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("22"), string(buf));
 
@@ -69,27 +69,26 @@ TEST(DaemonConfig, ArgV) {
 
 TEST(DaemonConfig, InjectArgs) {
   int ret;
-  std::ostringstream chat;
-  std::string injection("--debug 56 --debug-mds 42");
-  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  std::string injection("--num-client 56 --max-open-files 42");
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
 
   char buf[128];
   char *tmp = buf;
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("debug_mds", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("max_open_files", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("42"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("56"), string(buf));
 
-  injection = "--debug 57";
-  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  injection = "--num-client 57";
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
-  ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("57"), string(buf));
 }
@@ -102,14 +101,13 @@ TEST(DaemonConfig, InjectArgsReject) {
   char *tmp2 = buf2;
 
   // We should complain about the garbage in the input
-  std::ostringstream chat;
-  std::string injection("--random-garbage-in-injectargs 26 --debug 28");
-  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  std::string injection("--random-garbage-in-injectargs 26 --num-client 28");
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, -EINVAL); 
 
   // But, debug should still be set...
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("28"), string(buf));
 
@@ -120,8 +118,8 @@ TEST(DaemonConfig, InjectArgsReject) {
 
   // Injectargs shouldn't let us change this, since it is a string-valued
   // variable and there isn't an observer for it.
-  std::string injection2("--osd_data /tmp/some-other-directory --debug 4");
-  ret = g_ceph_context->_conf->injectargs(injection2, &chat);
+  std::string injection2("--osd_data /tmp/some-other-directory --num-client 4");
+  ret = g_ceph_context->_conf->injectargs(injection2, &cout);
   ASSERT_EQ(ret, -ENOSYS); 
 
   // It should be unchanged.
@@ -137,9 +135,8 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   char *tmp = buf;
 
   // Change log_to_syslog
-  std::ostringstream chat;
-  std::string injection("--log_to_syslog --debug 28");
-  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  std::string injection("--log_to_syslog --num-client 28");
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
 
   // log_to_syslog should be set...
@@ -149,9 +146,8 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   ASSERT_EQ(string("true"), string(buf));
 
   // Turn off log_to_syslog
-  std::ostringstream chat2;
-  injection = "--log_to_syslog=false --debug 28";
-  ret = g_ceph_context->_conf->injectargs(injection, &chat2);
+  injection = "--log_to_syslog=false --num-client 28";
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
 
   // log_to_syslog should be cleared...
@@ -161,9 +157,8 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   ASSERT_EQ(string("false"), string(buf));
 
   // Turn on log_to_syslog
-  std::ostringstream chat3;
-  injection = "--debug 1 --log_to_syslog=true --debug-ms 40";
-  ret = g_ceph_context->_conf->injectargs(injection, &chat3);
+  injection = "--num-client 1 --log_to_syslog=true --max-open-files 40";
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
 
   // log_to_syslog should be set...
@@ -173,9 +168,8 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   ASSERT_EQ(string("true"), string(buf));
 
   // parse error
-  std::ostringstream chat4;
-  injection = "--debug 1 --log_to_syslog=falsey --debug-ms 42";
-  ret = g_ceph_context->_conf->injectargs(injection, &chat3);
+  injection = "--num-client 1 --log_to_syslog=falsey --max-open-files 42";
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, -EINVAL);
 
   // log_to_syslog should still be set...
@@ -186,14 +180,13 @@ TEST(DaemonConfig, InjectArgsBooleans) {
 
   // debug-ms should still become 42...
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("debug_ms", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("max_open_files", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("42"), string(buf));
 }
 
 TEST(DaemonConfig, InjectArgsLogfile) {
   int ret;
-  std::ostringstream chat;
   char tmpfile[PATH_MAX];
   const char *tmpdir = getenv("TMPDIR");
   if (!tmpdir)
@@ -203,7 +196,7 @@ TEST(DaemonConfig, InjectArgsLogfile) {
   std::string injection("--log_file ");
   injection += tmpfile;
   // We're allowed to change log_file because there is an observer.
-  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
 
   // It should have taken effect.

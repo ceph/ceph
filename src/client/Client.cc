@@ -67,7 +67,7 @@ using namespace std;
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS client
+#define dout_subsys ceph_subsys_client
 
 #include "include/lru.h"
 

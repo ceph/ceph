@@ -86,7 +86,6 @@
 
 #include "messages/MWatchNotify.h"
 
-#include "common/DoutStreambuf.h"
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
@@ -113,7 +112,7 @@
 #include "include/assert.h"
 #include "common/config.h"
 
-#define DOUT_SUBSYS osd
+#define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 

@@ -2,7 +2,7 @@
 
 #include <errno.h>
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 

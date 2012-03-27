@@ -17,7 +17,6 @@
  *
  * Test the Ceph signal handlers
  */
-#include "common/DoutStreambuf.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/errno.h"
@@ -39,7 +38,7 @@ static int* get_null()
 
 static void simple_segv_test()
 {
-  dout(-1) << "triggering SIGSEGV..." << dendl;
+  generic_dout(-1) << "triggering SIGSEGV..." << dendl;
   int i = *get_null();
   std::cout << "i = " << i << std::endl;
 }
@@ -51,7 +50,7 @@ static void infinite_recursion_test_impl()
 
 static void infinite_recursion_test()
 {
-  dout(0) << "triggering SIGSEGV with infinite recursion..." << dendl;
+  generic_dout(0) << "triggering SIGSEGV with infinite recursion..." << dendl;
   infinite_recursion_test_impl();
 }
 

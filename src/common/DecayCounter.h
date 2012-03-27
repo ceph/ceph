@@ -37,7 +37,7 @@ public:
   DecayRate() : k(0) {}
   DecayRate(double hl) { set_halflife(hl); }
   void set_halflife(double hl) {
-    k = log(.5) / hl;
+    k = ::log(.5) / hl;
   }    
 };
 

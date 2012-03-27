@@ -6,6 +6,8 @@
 #include "mdstypes.h"
 #include "mds/flock.h"
 
+#define dout_subsys ceph_subsys_mds
+
 bool ceph_lock_state_t::is_waiting(ceph_filelock &fl)
 {
   multimap<uint64_t, ceph_filelock>::iterator p = waiting_locks.find(fl.start);

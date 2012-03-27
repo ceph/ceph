@@ -45,6 +45,8 @@ using namespace std;
 
 #include "auth/KeyRing.h"
 
+#define dout_subsys ceph_subsys_mds
+
 void usage()
 {
   derr << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"

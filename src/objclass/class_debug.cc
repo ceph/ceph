@@ -9,7 +9,7 @@
 
 #include <iostream>
 
-#define DOUT_SUBSYS objclass
+#define dout_subsys ceph_subsys_objclass
 
 int cls_log(const char *format, ...)
 {

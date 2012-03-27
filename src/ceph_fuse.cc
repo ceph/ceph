@@ -108,6 +108,8 @@ int main(int argc, const char **argv, const char *envp[]) {
       exit(1);
     }
 
+    g_ceph_context->_log->stop();
+
     childpid = fork();
   }
 
@@ -116,6 +118,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (childpid == 0) {
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
+
+    g_ceph_context->_log->start();
 
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     messenger->start();

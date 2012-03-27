@@ -76,7 +76,7 @@ using ceph::crypto::SHA1;
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS filestore
+#define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
 

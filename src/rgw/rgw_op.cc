@@ -24,7 +24,7 @@
 # include "fcgiapp.h"
 #endif
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 using ceph::crypto::MD5;

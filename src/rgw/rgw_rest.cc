@@ -19,8 +19,7 @@
 # include "fcgiapp.h"
 #endif
 
-
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 static void dump_status(struct req_state *s, const char *status)
 {

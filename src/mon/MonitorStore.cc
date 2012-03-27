@@ -28,7 +28,7 @@
 
 #include "include/compat.h"
 
-#define DOUT_SUBSYS mon
+#define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, dir)
 static ostream& _prefix(std::ostream *_dout, const string& dir) {

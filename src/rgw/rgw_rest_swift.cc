@@ -12,7 +12,7 @@
 
 #include <sstream>
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 int RGWListBuckets_REST_SWIFT::get_params()
 {

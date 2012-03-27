@@ -7,6 +7,8 @@
 
 #include <errno.h>
 
+#define dout_subsys ceph_subsys_
+
 static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 						     const struct ifaddrs *ifa,
 						     const std::string networks)

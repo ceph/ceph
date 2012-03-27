@@ -32,6 +32,7 @@
 
 #include <fstream>
 
+#define dout_subsys ceph_subsys_crush
 
 using namespace std;
 
