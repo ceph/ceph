@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
+#include "common/Throttle.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -122,6 +123,7 @@ struct RGWRequest
 class RGWProcess {
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
+  Throttle req_throttle;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess *process;
@@ -154,6 +156,7 @@ class RGWProcess {
     void _process(RGWRequest *req) {
       perfcounter->inc(l_rgw_qactive);
       process->handle_request(req);
+      process->req_throttle.put(1);
       perfcounter->inc(l_rgw_qactive, -1);
     }
     void _dump_queue() {
@@ -177,6 +180,7 @@ class RGWProcess {
 public:
   RGWProcess(CephContext *cct, int num_threads)
     : m_tp(cct, "RGWProcess::m_tp", num_threads),
+      req_throttle(num_threads),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}
@@ -207,6 +211,7 @@ void RGWProcess::run()
     req->id = ++max_req_id;
     dout(10) << "allocated request req=" << hex << req << dec << dendl;
     FCGX_InitRequest(&req->fcgx, s, 0);
+    req_throttle.get(1);
     int ret = FCGX_Accept_r(&req->fcgx);
     if (ret < 0)
       break;
