@@ -155,6 +155,10 @@ struct RGWRadosCtx {
   }
 };
 
+struct RGWPoolIterCtx {
+  librados::IoCtx io_ctx;
+  librados::ObjectIterator iter;
+};
   
 class RGWRados
 {
@@ -567,6 +571,10 @@ public:
   int pool_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
                 bool *is_truncated, string *last_entry);
 
+  int pool_iterate_begin(rgw_bucket& bucket, RGWPoolIterCtx& ctx);
+  int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
+                   bool *is_truncated, RGWAccessListFilter *filter);
+
   uint64_t instance_id();
   uint64_t next_bucket_id();
 };
@@ -583,7 +591,6 @@ public:
     store = RGWRados::init_storage_provider(cct);
     return store;
   }
-
 };
 
 #define rgwstore RGWRados::store
