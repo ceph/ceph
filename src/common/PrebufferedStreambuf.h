@@ -22,9 +22,9 @@ class PrebufferedStreambuf
   std::string m_overflow;
 
   typedef std::char_traits<char> traits_ty;
-  typedef typename traits_ty::int_type int_type;
-  typedef typename traits_ty::pos_type pos_type;
-  typedef typename traits_ty::off_type off_type;
+  typedef traits_ty::int_type int_type;
+  typedef traits_ty::pos_type pos_type;
+  typedef traits_ty::off_type off_type;
 
 public:
   PrebufferedStreambuf(char *buf, size_t len);
