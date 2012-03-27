@@ -14,6 +14,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
 -P                               profiling build
+-O <level>                       optimize
 
 EOF
 }
@@ -26,11 +27,13 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-CONFIGURE_FLAGS=
-while getopts  "d:e:hHTPv" flag
+CONFIGURE_FLAGS=""
+while getopts  "d:e:hHTPvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
+
+    O) CFLAGS="${CFLAGS} -O$OPTARG";;
 
     P) profile=1;;
 
