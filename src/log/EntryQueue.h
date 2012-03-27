@@ -28,13 +28,6 @@ struct EntryQueue {
     other.m_tail = t;
   }
 
-  void trim() {
-    while (m_len > m_max_len) {
-      Entry *e = dequeue();
-      delete e;
-    }
-  }
-
   void enqueue(Entry *e) {
     if (m_tail) {
       m_tail->m_next = e;
@@ -43,7 +36,6 @@ struct EntryQueue {
       m_head = m_tail = e;
     }
     m_len++;
-    trim();
   }
 
   Entry *dequeue() {
