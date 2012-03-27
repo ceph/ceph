@@ -52,12 +52,12 @@ PrebufferedStreambuf::int_type PrebufferedStreambuf::underflow()
 std::string PrebufferedStreambuf::get_str() const
 {
   if (m_overflow.size()) {
-    std::string s(m_buf, m_buf_len);
+    std::string s(m_buf, m_buf + m_buf_len);
     s.append(&m_overflow[0], this->pptr() - &m_overflow[0]);
     return s;
-  } else if (this->gptr() == m_buf) {
+  } else if (this->pptr() == m_buf) {
     return std::string();
   } else {
-    return std::string(m_buf, this->gptr() - m_buf);
+    return std::string(m_buf, this->pptr() - m_buf);
   }  
 }
