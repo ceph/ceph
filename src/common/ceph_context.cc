@@ -103,6 +103,7 @@ public:
     static const char *KEYS[] = {
       "log_file",
       "log_to_syslog",
+      "err_to_syslog",
       "log_to_stderr",
       "err_to_stderr",
       NULL
@@ -120,7 +121,7 @@ public:
 
     // syslog
     if (changed.count("log_to_syslog")) {
-      int l = conf->log_to_syslog ? 99 : -1;
+      int l = conf->log_to_syslog ? 99 : (conf->err_to_syslog ? -1 : -2);
       log->set_syslog_level(l, l);
     }
 

@@ -34,7 +34,7 @@ Log::Log(SubsystemMap *s)
     m_subs(s),
     m_new(DEFAULT_MAX_NEW), m_recent(DEFAULT_MAX_RECENT),
     m_fd(-1),
-    m_syslog_log(-1), m_syslog_crash(-1),
+    m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
     m_stop(false)
 {
