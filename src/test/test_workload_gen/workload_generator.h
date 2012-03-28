@@ -35,7 +35,6 @@ public:
     }
   };
 
-private:
 
   /* kept in upper case for consistency with coll_t's */
   static const coll_t META_COLL;
@@ -58,6 +57,7 @@ private:
 
   static const size_t log_append_bytes = 1024;
 
+private:
   int m_destroy_coll_every_nr_runs;
   int m_num_colls;
   int m_num_obj_per_coll;

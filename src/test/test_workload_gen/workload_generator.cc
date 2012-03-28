@@ -22,7 +22,10 @@
 #include "global/global_init.h"
 #include "common/debug.h"
 #include <boost/scoped_ptr.hpp>
+#include <boost/lexical_cast.hpp>
 #include "workload_generator.h"
+
+void usage(const char *name);
 
 boost::scoped_ptr<WorkloadGenerator> wrkldgen;
 const coll_t WorkloadGenerator::META_COLL("meta");
@@ -37,9 +40,9 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
   int err = 0;
 
   init_args(args);
-  dout(0) << "data         = " << g_conf->osd_data << dendl;
-  dout(0) << "journal      = " << g_conf->osd_journal << dendl;
-  dout(0) << "journal size = " << g_conf->osd_journal_size << dendl;
+  dout(0) << "data            = " << g_conf->osd_data << dendl;
+  dout(0) << "journal         = " << g_conf->osd_journal << dendl;
+  dout(0) << "journal size    = " << g_conf->osd_journal_size << dendl;
 
   ::mkdir(g_conf->osd_data.c_str(), 0755);
   ObjectStore *store_ptr = new FileStore(g_conf->osd_data, g_conf->osd_journal);
@@ -50,6 +53,11 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
   ceph_assert(err == 0);
 
   init();
+
+  dout(0) << "#colls          = " << m_num_colls << dendl;
+  dout(0) << "#objs per coll  = " << m_num_obj_per_coll << dendl;
+  dout(0) << "#txs per destr  = " << m_destroy_coll_every_nr_runs << dendl;
+
 }
 
 void WorkloadGenerator::init_args(vector<const char*> args) {
@@ -58,13 +66,20 @@ void WorkloadGenerator::init_args(vector<const char*> args) {
 
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_witharg(args, i, &val, "-C", "--num-collections",
-        (char*) NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val,
+        "--test-num-colls", (char*) NULL)) {
       m_num_colls = strtoll(val.c_str(), NULL, 10);
-    } else if (ceph_argparse_witharg(args, i, &val, "-O", "--num-objects",
-        (char*) NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val,
+        "--test-objs-per-coll", (char*) NULL)) {
       m_num_obj_per_coll = strtoll(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val,
+        "--test-destroy-coll-per-N-trans", (char*) NULL)) {
+      m_destroy_coll_every_nr_runs = strtoll(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_flag(args, i, "--help", (char*) NULL)) {
+      usage(NULL);
+      exit(0);
     }
+
 //    else if (ceph_argparse_binary_flag(args, i, &allow_coll_dest, NULL,
 //        "--allow-coll-destruction", (char*) NULL)) {
 //      m_allow_coll_destruction = (allow_coll_dest ? true : false);
@@ -294,6 +309,27 @@ void WorkloadGenerator::run() {
 
 void WorkloadGenerator::print_results() {
 
+}
+
+void usage(const char *name) {
+  if (name)
+    cout << "usage: " << name << "[options]" << std::endl;
+
+  cout << "\
+\n\
+Global Options:\n\
+  -c FILE                             Read configuration from FILE\n\
+  --osd-data PATH                     Set OSD Data path\n\
+  --osd-journal PATH                  Set OSD Journal path\n\
+  --osd-journal-size VAL              Set Journal size\n\
+  --help                              This message\n\
+\n\
+Test-specific Options:\n\
+  --test-num-colls VAL                Set the number of collections\n\
+  --test-num-objs-per-coll VAL        Set the number of objects per collection\n\
+  --test-destroy-coll-per-N-trans VAL Set how many transactions to run before\n\
+                                      destroying a collection.\
+    " << std::endl;
 }
 
 int main(int argc, const char *argv[]) {
