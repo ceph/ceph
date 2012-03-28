@@ -3540,6 +3540,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   // deactivate.
   state_clear(PG_STATE_ACTIVE);
   state_clear(PG_STATE_DOWN);
+  state_clear(PG_STATE_RECOVERING);
 
   peer_missing.clear();
 
