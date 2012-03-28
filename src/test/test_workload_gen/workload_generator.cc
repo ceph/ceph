@@ -34,6 +34,8 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
     m_store(0), m_nr_runs(0),
     m_in_flight(0), m_lock("State Lock"), m_next_coll_nr(0) {
 
+  int err = 0;
+
   init_args(args);
   dout(0) << "data         = " << g_conf->osd_data << dendl;
   dout(0) << "journal      = " << g_conf->osd_journal << dendl;
@@ -42,8 +44,10 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
   ::mkdir(g_conf->osd_data.c_str(), 0755);
   ObjectStore *store_ptr = new FileStore(g_conf->osd_data, g_conf->osd_journal);
   m_store.reset(store_ptr);
-  m_store->mkfs();
-  m_store->mount();
+  err = m_store->mkfs();
+  ceph_assert(err == 0);
+  err = m_store->mount();
+  ceph_assert(err == 0);
 
   init();
 }
@@ -72,7 +76,8 @@ void WorkloadGenerator::init() {
 
   dout(0) << "Initializing..." << dendl;
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction *t;
+  t = new ObjectStore::Transaction;
 
   t->create_collection(META_COLL);
   t->create_collection(TEMP_COLL);
@@ -222,6 +227,7 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 
   struct stat st;
   int err = m_store->stat(META_COLL, log_obj, &st);
+//  dout(0) << "stat return: " << err << dendl;
   assert(err >= 0);
   t->write(META_COLL, log_obj, st.st_size, bl.length(), bl);
 }
@@ -291,16 +297,18 @@ void WorkloadGenerator::print_results() {
 }
 
 int main(int argc, const char *argv[]) {
+  vector<const char*> def_args;
   vector<const char*> args;
-  args.push_back("--osd-journal-size");
-  args.push_back("400");
-  args.push_back("--osd-data");
-  args.push_back("workload_gen_dir");
-  args.push_back("--osd-journal");
-  args.push_back("workload_gen_journal");
+  def_args.push_back("--osd-journal-size");
+  def_args.push_back("400");
+  def_args.push_back("--osd-data");
+  def_args.push_back("workload_gen_dir");
+  def_args.push_back("--osd-journal");
+  def_args.push_back("workload_gen_journal");
   argv_to_vec(argc, argv, args);
 
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(&def_args, args,
+      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
