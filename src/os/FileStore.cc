@@ -2749,6 +2749,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	  dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
 	  ok = true;
 	}
+	if (r == -EEXIST && op == Transaction::OP_COLL_MOVE) {
+	  dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
+	  ok = true;
+	}
 	if (r == -ERANGE) {
 	  dout(10) << "tolerating ERANGE on replay" << dendl;
 	  ok = true;
@@ -4431,7 +4435,7 @@ int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o)
 {
   dout(15) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
   int r = lfn_link(oldcid, c, o);
-  if (r == 0)
+  if (r == 0 || (replaying && r == -EEXIST))
     r = lfn_unlink(oldcid, o);
   dout(10) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
