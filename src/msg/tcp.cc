@@ -12,6 +12,13 @@
 
 /******************
  * tcp crap
+ *
+ * These functions only propagate unrecoverable errors -- if you see an error,
+ * close the socket. You can't know what has and hasn't been written out.
+ */
+/**
+ * Read the specified amount of data, in a blocking fashion.
+ * If there is an error, return -1 (unrecoverable).
  */
 int tcp_read(CephContext *cct, int sd, char *buf, int len, int timeout) 
 {
@@ -42,6 +49,13 @@ int tcp_read(CephContext *cct, int sd, char *buf, int len, int timeout)
   return len;
 }
 
+/**
+ * Wait for data to become available for reading on the given socket. You
+ * can specify a timeout in milliseconds, or -1 to wait forever.
+ *
+ * @return 0 when data is available, or -1 if there
+ * is an error (unrecoverable).
+ */
 int tcp_read_wait(int sd, int timeout) 
 {
   if (sd < 0)
@@ -70,9 +84,13 @@ int tcp_read_wait(int sd, int timeout)
   return 0;
 }
 
-/* This function can only be called if poll/select says there is
- * data available.  Otherwise we cannot properly interpret a
- * read of 0 bytes.
+/**
+ *  Read data off of a given socket.
+ *
+ * This function can only be called if poll/select says there is data
+ * available -- otherwise we can't properly interpret a read of 0 bytes.
+ *
+ * @return The number of bytes read, or -1 on error (unrecoverable).
  */
 int tcp_read_nonblocking(CephContext *cct, int sd, char *buf, int len)
 {
@@ -96,6 +114,12 @@ again:
   return got;
 }
 
+/**
+ * Write the given data to the given socket. This function will loop until
+ * all passed data has been written out.
+ *
+ * @return 0, or -1 on error (unrecoverable).
+ */
 int tcp_write(CephContext *cct, int sd, const char *buf, int len)
 {
   if (sd < 0)
