@@ -2678,7 +2678,7 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
     RGWObjEnt e;
 
     string oid = iter->first;
-    dout(20) << "RGWRados::pool_iterate: got " << oid << dendl;
+    ldout(cct, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
     if (filter && !filter->filter(oid, oid))
