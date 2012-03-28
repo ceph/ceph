@@ -1093,7 +1093,7 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
-  if (do_sendmsg(sd, &msg, msglen)) {
+  if (do_sendmsg(&msg, msglen)) {
     ldout(msgr->cct,2) << "connect couldn't write my banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
@@ -1141,7 +1141,7 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
-  if (do_sendmsg(sd, &msg, msglen)) {
+  if (do_sendmsg(&msg, msglen)) {
     ldout(msgr->cct,2) << "connect couldn't write my addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
@@ -1182,7 +1182,7 @@ int SimpleMessenger::Pipe::connect()
 
     ldout(msgr->cct,10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
-    if (do_sendmsg(sd, &msg, msglen)) {
+    if (do_sendmsg(&msg, msglen)) {
       ldout(msgr->cct,2) << "connect couldn't write gseq, cseq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       goto fail;
     }
@@ -2054,7 +2054,7 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   return ret;
 }
 
-int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
+int SimpleMessenger::Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
   char buf[80];
 
@@ -2077,40 +2077,6 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
       ldout(msgr->cct,10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
       errno = EINTR;
       return -1; // close enough
-    }
-
-    if (0) {
-      // hex dump
-      struct iovec *v = msg->msg_iov;
-      size_t left = r;
-      size_t vpos = 0;
-      ldout(msgr->cct,0) << "do_sendmsg wrote " << r << " bytes, hexdump:\n";
-      int pos = 0;
-      int col = 0;
-      char buf[20];
-      while (left > 0) {
-	if (col == 0) {
-	  snprintf(buf, sizeof(buf), "%05x : ", pos);
-	  *_dout << buf;
-	}
-	snprintf(buf, sizeof(buf), " %02x", ((unsigned char*)v->iov_base)[vpos]);
-	*_dout << buf;
-	left--;
-	if (!left)
-	  break;
-	vpos++;
-	pos++;
-	if (vpos == v->iov_len) {
-	  v++;
-	  vpos = 0;
-	}	  
-	col++;
-	if (col == 16) {
-	  *_dout << "\n";
-	  col = 0;
-	}
-      }
-      *_dout << dendl;
     }
 
     len -= r;
@@ -2156,7 +2122,7 @@ int SimpleMessenger::Pipe::write_ack(uint64_t seq)
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 2;
   
-  if (do_sendmsg(sd, &msg, 1 + sizeof(s), true) < 0) 
+  if (do_sendmsg(&msg, 1 + sizeof(s), true) < 0)
     return -1;	
   return 0;
 }
@@ -2175,7 +2141,7 @@ int SimpleMessenger::Pipe::write_keepalive()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   
-  if (do_sendmsg(sd, &msg, 1) < 0) 
+  if (do_sendmsg(&msg, 1) < 0)
     return -1;	
   return 0;
 }
@@ -2255,7 +2221,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 	     << dendl;
     
     if (msg.msg_iovlen >= IOV_MAX-2) {
-      if (do_sendmsg(sd, &msg, msglen, true)) 
+      if (do_sendmsg(&msg, msglen, true))
 	goto fail;
       
       // and restart the iov
@@ -2289,7 +2255,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   msg.msg_iovlen++;
 
   // send
-  if (do_sendmsg(sd, &msg, msglen)) 
+  if (do_sendmsg(&msg, msglen))
     goto fail;
 
   ret = 0;

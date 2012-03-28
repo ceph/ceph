@@ -205,7 +205,18 @@ private:
 
     int read_message(Message **pm);
     int write_message(Message *m);
-    int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
+    /**
+     * Write the given data (of length len) to the Pipe's socket. This function
+     * will loop until all passed data has been written out.
+     * If more is set, the function will optimize socket writes
+     * for additional data (by passing the MSG_MORE flag, aka TCP_CORK).
+     *
+     * @param msg The msghdr to write out
+     * @param len The length of the data in msg
+     * @param more Should be set true if this is one part of a larger message
+     * @return 0, or -1 on failure (unrecoverable -- close the socket).
+     */
+    int do_sendmsg(struct msghdr *msg, int len, bool more=false);
     int write_ack(uint64_t s);
     int write_keepalive();
 
