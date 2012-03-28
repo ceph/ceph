@@ -31,7 +31,8 @@ kernel file system may unresponsive; check ``dmesg`` output for disk
 or other kernel errors.
 
 If the problem is a software error (failed assertion or other
-unexpected error), it should be reported to the :ref:`mailing-list`.
+unexpected error), it should be reported to the :ref:`mailing list
+<mailing-list>`.
 
 
 Full cluster
