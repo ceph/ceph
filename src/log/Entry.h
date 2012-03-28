@@ -38,6 +38,11 @@ struct Entry {
     }
   }
 
+  void set_str(const std::string s) {
+    ostream os(&m_streambuf);
+    os << s;
+  }
+
   std::string get_str() const {
     return m_streambuf.get_str();
   }

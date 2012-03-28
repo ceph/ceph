@@ -43,7 +43,7 @@ TEST(Log, Simple)
   log.stop();
 }
 
-int many = 10000000;
+int many = 10000;
 
 TEST(Log, ManyNoGather)
 {
@@ -95,7 +95,7 @@ TEST(Log, ManyGatherLogStringAssign)
       Entry *e = new Entry(ceph_clock_now(NULL), pthread_self(), l, 1);
       ostringstream oss;
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
-      e->m_str = oss.str();
+      e->set_str(oss.str());
       log.submit_entry(e);
     }
   }
@@ -117,7 +117,7 @@ TEST(Log, ManyGatherLogStringAssignWithReserve)
       ostringstream oss;
       oss.str().reserve(80);
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
-      e->m_str = oss.str();
+      e->set_str(oss.str());
       log.submit_entry(e);
     }
   }
