@@ -553,7 +553,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
-  ops_in_flight_lock("OSD::ops_in_flight_lock"),
   admin_ops_hook(NULL),
   op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
@@ -1872,77 +1871,15 @@ void OSD::tick()
 
 void OSD::check_ops_in_flight()
 {
-  ops_in_flight_lock.Lock();
-  if (ops_in_flight.size()) {
-    utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t too_old = now;
-    too_old -= g_conf->osd_op_complaint_time;
-    dout(1) << "ops_in_flight.size: " << ops_in_flight.size()
-              << "; oldest is " << now - ops_in_flight.front()->received_time
-              << " seconds old" << dendl;
-    xlist<OpRequest*>::iterator i = ops_in_flight.begin();
-    while (!i.end() && (*i)->received_time < too_old) {
-      // exponential backoff of warning intervals
-      if ( ( (*i)->received_time +
-            (g_conf->osd_op_complaint_time *
-              (*i)->warn_interval_multiplier) )< now) {
-        stringstream ss;
-        ss << "old request " << *((*i)->request) << " received at "
-           << (*i)->received_time << " currently " << (*i)->state_string();
-        clog.warn(ss);
-        (*i)->warn_interval_multiplier *= 2;
-      }
-      ++i;
-    }
-  }
-  ops_in_flight_lock.Unlock();
+  stringstream ss;
+  if (op_tracker.check_ops_in_flight(ss))
+    clog.warn(ss);
+  return;
 }
 
 void OSD::dump_ops_in_flight(ostream& ss)
 {
-  JSONFormatter jf(true);
-  Mutex::Locker locker(ops_in_flight_lock);
-  jf.open_object_section("ops_in_flight"); // overall dump
-  jf.dump_int("num_ops", ops_in_flight.size());
-  jf.open_array_section("ops"); // list of OpRequests
-  utime_t now = ceph_clock_now(g_ceph_context);
-  for (xlist<OpRequest*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
-    stringstream name;
-    Message *m = (*p)->request;
-    m->print(name);
-    jf.open_object_section("op");
-    jf.dump_string("description", name.str().c_str()); // this OpRequest
-    jf.dump_stream("received_at") << (*p)->received_time;
-    jf.dump_float("age", now - (*p)->received_time);
-    jf.dump_string("flag_point", (*p)->state_string());
-    if (m->get_orig_source().is_client()) {
-      jf.open_object_section("client_info");
-      stringstream client_name;
-      client_name << m->get_orig_source();
-      jf.dump_string("client", client_name.str());
-      jf.dump_int("tid", m->get_tid());
-      jf.close_section(); // client_info
-    }
-    jf.close_section(); // this OpRequest
-  }
-  jf.close_section(); // list of OpRequests
-  jf.close_section(); // overall dump
-  jf.flush(ss);
-}
-
-void OSD::register_inflight_op(xlist<OpRequest*>::item *i)
-{
-  ops_in_flight_lock.Lock();
-  ops_in_flight.push_back(i);
-  ops_in_flight_lock.Unlock();
-}
-
-void OSD::unregister_inflight_op(xlist<OpRequest*>::item *i)
-{
-  ops_in_flight_lock.Lock();
-  assert(i->get_list() == &ops_in_flight);
-  i->remove_myself();
-  ops_in_flight_lock.Unlock();
+  op_tracker.dump_ops_in_flight(ss);
 }
 
 // =========================================
@@ -2828,13 +2765,13 @@ void OSD::do_waiters()
   if (finished.empty()) {
     finished_lock.Unlock();
   } else {
-    list<OpRequest*> waiting;
+    list<OpRequestRef> waiting;
     waiting.splice(waiting.begin(), finished);
 
     finished_lock.Unlock();
     
     dout(2) << "do_waiters -- start" << dendl;
-    for (list<OpRequest*>::iterator it = waiting.begin();
+    for (list<OpRequestRef>::iterator it = waiting.begin();
          it != waiting.end();
          it++)
       dispatch_op(*it);
@@ -2842,7 +2779,7 @@ void OSD::do_waiters()
   }
 }
 
-void OSD::dispatch_op(OpRequest *op)
+void OSD::dispatch_op(OpRequestRef op)
 {
   switch (op->request->get_type()) {
 
@@ -2960,8 +2897,8 @@ void OSD::_dispatch(Message *m)
 
   default:
     {
-      OpRequest *op = new OpRequest(m, this);
-      register_inflight_op(&op->xitem);
+      OpRequestRef op = op_tracker.create_request(m);
+      op->mark_event("waiting_for_osdmap");
       // no map?  starting up?
       if (!osdmap) {
         dout(7) << "no OSDMap, not booted" << dendl;
@@ -3152,7 +3089,7 @@ void OSD::dec_scrubs_active()
 // =====================================================
 // MAP
 
-void OSD::wait_for_new_map(OpRequest *op)
+void OSD::wait_for_new_map(OpRequestRef op)
 {
   // ask?
   if (waiting_for_osdmap.empty()) {
@@ -3274,7 +3211,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   op_wq.lock();
 
-  list<OpRequest*> rq;
+  list<OpRequestRef> rq;
   while (true) {
     PG *pg = op_wq._dequeue();
     if (!pg)
@@ -3289,7 +3226,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     // thread did something very strange :/
     assert(!pg->op_queue.empty());
 
-    OpRequest *op = pg->op_queue.front();
+    OpRequestRef op = pg->op_queue.front();
     pg->op_queue.pop_front();
     pg->unlock();
     pg->put();
@@ -3702,7 +3639,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   }
 
   // scan pgs with waiters
-  map<pg_t, list<OpRequest*> >::iterator p = waiting_for_pg.begin();
+  map<pg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
   while (p != waiting_for_pg.end()) {
     pg_t pgid = p->first;
 
@@ -3715,7 +3652,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     } else {
       dout(10) << " discarding waiting ops for " << pgid << dendl;
       while (!p->second.empty()) {
-	p->second.front()->put();
 	p->second.pop_front();
       }
       waiting_for_pg.erase(p++);
@@ -3980,12 +3916,11 @@ bool OSD::require_mon_peer(Message *m)
   return true;
 }
 
-bool OSD::require_osd_peer(OpRequest *op)
+bool OSD::require_osd_peer(OpRequestRef op)
 {
   if (!op->request->get_connection()->peer_is_osd()) {
     dout(0) << "require_osd_peer received from non-osd " << op->request->get_connection()->get_peer_addr()
 	    << " " << *op->request << dendl;
-    op->put();
     return false;
   }
   return true;
@@ -3995,7 +3930,7 @@ bool OSD::require_osd_peer(OpRequest *op)
  * require that we have same (or newer) map, and that
  * the source is the pg primary.
  */
-bool OSD::require_same_or_newer_map(OpRequest *op, epoch_t epoch)
+bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
 {
   Message *m = op->request;
   dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
@@ -4009,7 +3944,6 @@ bool OSD::require_same_or_newer_map(OpRequest *op, epoch_t epoch)
 
   if (epoch < up_epoch) {
     dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
-    op->put();
     return false;
   }
 
@@ -4026,7 +3960,6 @@ bool OSD::require_same_or_newer_map(OpRequest *op, epoch_t epoch)
       cluster_messenger->mark_down_on_empty(con);
       cluster_messenger->mark_disposable(con);
 
-      op->put();
       return false;
     }
   }
@@ -4034,7 +3967,6 @@ bool OSD::require_same_or_newer_map(OpRequest *op, epoch_t epoch)
   // ok, we have at least as new a map as they do.  are we (re)booting?
   if (!is_active()) {
     dout(7) << "still in boot state, dropping message " << *m << dendl;
-    op->put();
     return false;
   }
 
@@ -4225,7 +4157,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 /*
  * holding osd_lock
  */
-void OSD::handle_pg_create(OpRequest *op)
+void OSD::handle_pg_create(OpRequestRef op)
 {
   MOSDPGCreate *m = (MOSDPGCreate*)op->request;
   assert(m->get_header().type == MSG_OSD_PG_CREATE);
@@ -4235,7 +4167,6 @@ void OSD::handle_pg_create(OpRequest *op)
   if (!require_mon_peer(op->request)) {
     // we have to hack around require_mon_peer's interface limits
     op->request = NULL;
-    op->put();
     return;
   }
 
@@ -4342,8 +4273,6 @@ void OSD::handle_pg_create(OpRequest *op)
   do_infos(info_map);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
 
@@ -4415,7 +4344,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
  * includes pg_info_t.
  * NOTE: called with opqueue active.
  */
-void OSD::handle_pg_notify(OpRequest *op)
+void OSD::handle_pg_notify(OpRequestRef op)
 {
   MOSDPGNotify *m = (MOSDPGNotify*)op->request;
   assert(m->get_header().type == MSG_OSD_PG_NOTIFY);
@@ -4466,11 +4395,9 @@ void OSD::handle_pg_notify(OpRequest *op)
   do_infos(info_map);
   
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
-void OSD::handle_pg_log(OpRequest *op)
+void OSD::handle_pg_log(OpRequestRef op)
 {
   MOSDPGLog *m = (MOSDPGLog*) op->request;
   assert(m->get_header().type == MSG_OSD_PG_LOG);
@@ -4488,7 +4415,6 @@ void OSD::handle_pg_log(OpRequest *op)
   PG *pg = get_or_create_pg(m->info, m->get_epoch(), 
 			    from, created, false, &t, &fin);
   if (!pg) {
-    op->put();
     return;
   }
 
@@ -4514,11 +4440,9 @@ void OSD::handle_pg_log(OpRequest *op)
   assert(!tr);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
-void OSD::handle_pg_info(OpRequest *op)
+void OSD::handle_pg_info(OpRequestRef op)
 {
   MOSDPGInfo *m = (MOSDPGInfo *)op->request;
   assert(m->get_header().type == MSG_OSD_PG_INFO);
@@ -4567,11 +4491,9 @@ void OSD::handle_pg_info(OpRequest *op)
   do_infos(info_map);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 }
 
-void OSD::handle_pg_trim(OpRequest *op)
+void OSD::handle_pg_trim(OpRequestRef op)
 {
   MOSDPGTrim *m = (MOSDPGTrim *)op->request;
   assert(m->get_header().type == MSG_OSD_PG_TRIM);
@@ -4593,7 +4515,7 @@ void OSD::handle_pg_trim(OpRequest *op)
     if (m->epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
       pg->unlock();
-      goto out;
+      return;
     }
     assert(pg);
 
@@ -4615,12 +4537,9 @@ void OSD::handle_pg_trim(OpRequest *op)
     }
     pg->unlock();
   }
-
- out:
-  op->put();
 }
 
-void OSD::handle_pg_scan(OpRequest *op)
+void OSD::handle_pg_scan(OpRequestRef op)
 {
   MOSDPGScan *m = (MOSDPGScan*)op->request;
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
@@ -4634,7 +4553,6 @@ void OSD::handle_pg_scan(OpRequest *op)
   PG *pg;
   
   if (!_have_pg(m->pgid)) {
-    op->put();
     return;
   }
 
@@ -4647,7 +4565,7 @@ void OSD::handle_pg_scan(OpRequest *op)
   pg->put();
 }
 
-bool OSD::scan_is_queueable(PG *pg, OpRequest *op)
+bool OSD::scan_is_queueable(PG *pg, OpRequestRef op)
 {
   MOSDPGScan *m = (MOSDPGScan *)op->request;
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
@@ -4655,14 +4573,13 @@ bool OSD::scan_is_queueable(PG *pg, OpRequest *op)
 
   if (m->query_epoch < pg->info.history.same_interval_since) {
     dout(10) << *pg << " got old scan, ignoring" << dendl;
-    op->put();
     return false;
   }
 
   return true;
 }
 
-void OSD::handle_pg_backfill(OpRequest *op)
+void OSD::handle_pg_backfill(OpRequestRef op)
 {
   MOSDPGBackfill *m = (MOSDPGBackfill*)op->request;
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
@@ -4676,7 +4593,6 @@ void OSD::handle_pg_backfill(OpRequest *op)
   PG *pg;
   
   if (!_have_pg(m->pgid)) {
-    op->put();
     return;
   }
 
@@ -4689,7 +4605,7 @@ void OSD::handle_pg_backfill(OpRequest *op)
   pg->put();
 }
 
-bool OSD::backfill_is_queueable(PG *pg, OpRequest *op)
+bool OSD::backfill_is_queueable(PG *pg, OpRequestRef op)
 {
   MOSDPGBackfill *m = (MOSDPGBackfill *)op->request;
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
@@ -4697,7 +4613,6 @@ bool OSD::backfill_is_queueable(PG *pg, OpRequest *op)
 
   if (m->query_epoch < pg->info.history.same_interval_since) {
     dout(10) << *pg << " got old backfill, ignoring" << dendl;
-    op->put();
     return false;
   }
 
@@ -4706,7 +4621,7 @@ bool OSD::backfill_is_queueable(PG *pg, OpRequest *op)
 
 
 
-void OSD::handle_pg_missing(OpRequest *op)
+void OSD::handle_pg_missing(OpRequestRef op)
 {
   MOSDPGMissing *m = (MOSDPGMissing *)op->request;
   assert(m->get_header().type == MSG_OSD_PG_MISSING);
@@ -4731,8 +4646,6 @@ void OSD::handle_pg_missing(OpRequest *op)
   do_queries(query_map);
 
   maybe_update_heartbeat_peers();
-
-  op->put();
 #endif
 }
 
@@ -4740,7 +4653,7 @@ void OSD::handle_pg_missing(OpRequest *op)
  * from primary to replica | stray
  * NOTE: called with opqueue active.
  */
-void OSD::handle_pg_query(OpRequest *op)
+void OSD::handle_pg_query(OpRequestRef op)
 {
   assert(osd_lock.is_locked());
 
@@ -4837,12 +4750,10 @@ void OSD::handle_pg_query(OpRequest *op)
   }
   
   do_notifies(notify_list, m->get_epoch());
-
-  op->put();
 }
 
 
-void OSD::handle_pg_remove(OpRequest *op)
+void OSD::handle_pg_remove(OpRequestRef op)
 {
   MOSDPGRemove *m = (MOSDPGRemove *)op->request;
   assert(m->get_header().type == MSG_OSD_PG_REMOVE);
@@ -4883,7 +4794,6 @@ void OSD::handle_pg_remove(OpRequest *op)
     }
     pg->unlock();
   }
-  op->put();
 }
 
 
@@ -5232,12 +5142,12 @@ void OSD::defer_recovery(PG *pg)
 // =========================================================
 // OPS
 
-void OSD::reply_op_error(OpRequest *op, int err)
+void OSD::reply_op_error(OpRequestRef op, int err)
 {
   reply_op_error(op, err, eversion_t());
 }
 
-void OSD::reply_op_error(OpRequest *op, int err, eversion_t v)
+void OSD::reply_op_error(OpRequestRef op, int err, eversion_t v)
 {
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
@@ -5250,17 +5160,15 @@ void OSD::reply_op_error(OpRequest *op, int err, eversion_t v)
   if (m->get_source().is_osd())
     msgr = cluster_messenger;
   msgr->send_message(reply, m->get_connection());
-  op->put();
 }
 
-void OSD::handle_misdirected_op(PG *pg, OpRequest *op)
+void OSD::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (pg) {
     if (m->get_map_epoch() < pg->info.history.same_primary_since) {
       dout(7) << *pg << " changed after " << m->get_map_epoch() << ", dropping" << dendl;
-      op->put();
       return;
     } else {
       dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
@@ -5281,12 +5189,11 @@ void OSD::handle_misdirected_op(PG *pg, OpRequest *op)
   reply_op_error(op, -ENXIO);
 }
 
-void OSD::handle_op(OpRequest *op)
+void OSD::handle_op(OpRequestRef op)
 {
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
-    op->put();
     return;
   }
 
@@ -5367,7 +5274,6 @@ void OSD::handle_op(OpRequest *op)
     // okay, we aren't valid now; check send epoch
     if (m->get_map_epoch() >= superblock.oldest_map) {
       dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
-      op->put();
       return;
     }
     OSDMapRef send_map = get_map(m->get_map_epoch());
@@ -5380,7 +5286,6 @@ void OSD::handle_op(OpRequest *op)
     
     if (send_map->get_pg_role(m->get_pg(), whoami) >= 0) {
       dout(7) << "dropping request; client will resend when they get new map" << dendl;
-      op->put();
     } else {
       dout(7) << "we are invalid target" << dendl;
       handle_misdirected_op(NULL, op);
@@ -5425,7 +5330,7 @@ bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
   return true;
 }
 
-void OSD::handle_sub_op(OpRequest *op)
+void OSD::handle_sub_op(OpRequestRef op)
 {
   MOSDSubOp *m = (MOSDSubOp*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
@@ -5433,7 +5338,6 @@ void OSD::handle_sub_op(OpRequest *op)
   dout(10) << "handle_sub_op " << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
-    op->put();
     return;
   }
 
@@ -5456,7 +5360,6 @@ void OSD::handle_sub_op(OpRequest *op)
 
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
   if (!pg) {
-    op->put();
     return;
   }
   pg->get();
@@ -5465,13 +5368,12 @@ void OSD::handle_sub_op(OpRequest *op)
   pg->put();
 }
 
-void OSD::handle_sub_op_reply(OpRequest *op)
+void OSD::handle_sub_op_reply(OpRequestRef op)
 {
   MOSDSubOpReply *m = (MOSDSubOpReply*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOPREPLY);
   if (m->get_map_epoch() < up_epoch) {
     dout(3) << "replica op reply from before up" << dendl;
-    op->put();
     return;
   }
 
@@ -5493,7 +5395,6 @@ void OSD::handle_sub_op_reply(OpRequest *op)
 
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
   if (!pg) {
-    op->put();
     return;
   }
   pg->get();
@@ -5524,7 +5425,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
  *
  * @return true if the op is queueable; false otherwise.
  */
-bool OSD::op_is_queueable(PG *pg, OpRequest *op)
+bool OSD::op_is_queueable(PG *pg, OpRequestRef op)
 {
   assert(pg->is_locked());
   MOSDOp *m = (MOSDOp*)op->request;
@@ -5536,7 +5437,6 @@ bool OSD::op_is_queueable(PG *pg, OpRequest *op)
   }
 
   if (op_is_discardable(m)) {
-    op->put();
     return false;
   }
 
@@ -5580,7 +5480,7 @@ bool OSD::op_is_queueable(PG *pg, OpRequest *op)
 /*
  * discard operation, or return true.  no side-effects.
  */
-bool OSD::subop_is_queueable(PG *pg, OpRequest *op)
+bool OSD::subop_is_queueable(PG *pg, OpRequestRef op)
 {
   MOSDSubOp *m = (MOSDSubOp *)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
@@ -5592,7 +5492,6 @@ bool OSD::subop_is_queueable(PG *pg, OpRequest *op)
     dout(10) << "handle_sub_op pg changed " << pg->info.history
 	     << " after " << m->map_epoch
 	     << ", dropping" << dendl;
-    op->put();
     return false;
   }
 
@@ -5602,7 +5501,7 @@ bool OSD::subop_is_queueable(PG *pg, OpRequest *op)
 /*
  * enqueue called with osd_lock held
  */
-void OSD::enqueue_op(PG *pg, OpRequest *op)
+void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
   dout(15) << *pg << " enqueue_op " << op->request << " "
            << *(op->request) << dendl;
@@ -5671,7 +5570,7 @@ PG *OSD::OpWQ::_dequeue()
  * thread is currently chewing on so as not to violate ordering from
  * the clients' perspective.
  */
-void OSD::requeue_ops(PG *pg, list<OpRequest*>& ls)
+void OSD::requeue_ops(PG *pg, list<OpRequestRef>& ls)
 {
   dout(15) << *pg << " requeue_ops " << ls << dendl;
   assert(pg->is_locked());
@@ -5680,17 +5579,17 @@ void OSD::requeue_ops(PG *pg, list<OpRequest*>& ls)
   assert(&ls != &pg->op_queue);
 
   // set current queue contents aside..
-  list<OpRequest*> orig_queue;
+  list<OpRequestRef> orig_queue;
   orig_queue.swap(pg->op_queue);
 
   // grab whole list at once, in case methods we call below start adding things
   // back on the list reference we were passed!
-  list<OpRequest*> q;
+  list<OpRequestRef> q;
   q.swap(ls);
 
   // requeue old items, now at front.
   while (!q.empty()) {
-    OpRequest *op = q.front();
+    OpRequestRef op = q.front();
     q.pop_front();
     enqueue_op(pg, op);
   }
@@ -5704,7 +5603,7 @@ void OSD::requeue_ops(PG *pg, list<OpRequest*>& ls)
  */
 void OSD::dequeue_op(PG *pg)
 {
-  OpRequest *op = 0;
+  OpRequestRef op;
 
   osd_lock.Lock();
   {

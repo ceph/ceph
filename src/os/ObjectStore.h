@@ -20,6 +20,7 @@
 #include "include/buffer.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
+#include "common/TrackedOp.h"
 #include "ObjectMap.h"
 
 #include <errno.h>
@@ -579,15 +580,15 @@ public:
 
   virtual int queue_transaction(Sequencer *osr, Transaction* t) = 0;
   virtual int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
-				Context *onreadable_sync=0) {
+				Context *onreadable_sync=0,
+				TrackedOpRef op = TrackedOpRef()) {
     list<Transaction*> tls;
     tls.push_back(t);
-    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync);
+    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync, op);
   }
   virtual int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
-				 Context *onreadable_sync=0) = 0;
-
-
+				 Context *onreadable_sync=0,
+				 TrackedOpRef op = TrackedOpRef()) = 0;
 
  public:
   ObjectStore() : logger(NULL) {}

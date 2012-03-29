@@ -185,6 +185,7 @@ private:
       : seq(o), finish(c), start(s) {}
   };
   deque<completion_item> completions;  // queued, writing, waiting for commit.
+  map<uint64_t, TrackedOpRef> pending_ops;
 
   uint64_t writing_seq, journaled_seq;
   bool plug_journal_completions;
@@ -306,7 +307,8 @@ private:
   void make_writeable();
 
   // writes
-  void submit_entry(uint64_t seq, bufferlist& bl, int alignment, Context *oncommit);  // submit an item
+  void submit_entry(uint64_t seq, bufferlist& bl, int alignment, Context *oncommit,
+		    TrackedOpRef osd_op = TrackedOpRef());  // submit an item
   void commit_start();
   void committed_thru(uint64_t seq);
   bool should_commit_now() {

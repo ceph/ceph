@@ -56,8 +56,8 @@ protected:
   uint64_t _op_apply_start(uint64_t op);
   void op_apply_finish(uint64_t op);
 
-  void op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
-  void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
+  void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
+				Context *onjournal, TrackedOpRef osd_op);
 
   virtual int do_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op_seq) = 0;
 

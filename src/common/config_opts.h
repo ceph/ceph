@@ -57,6 +57,7 @@ OPTION(debug_journaler, OPT_INT, 0)
 OPTION(debug_objectcacher, OPT_INT, 0)
 OPTION(debug_client, OPT_INT, 0)
 OPTION(debug_osd, OPT_INT, 0)
+OPTION(debug_optracker, OPT_INT, 10)
 OPTION(debug_objclass, OPT_INT, 0)
 OPTION(debug_filestore, OPT_INT, 1)
 OPTION(debug_journal, OPT_INT, 1)
@@ -355,6 +356,7 @@ OPTION(journal_queue_max_ops, OPT_INT, 500)
 OPTION(journal_queue_max_bytes, OPT_INT, 100 << 20)
 OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
 OPTION(journal_replay_from, OPT_INT, 0)
+OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(bdev_lock, OPT_BOOL, true)
 OPTION(bdev_iothreads, OPT_INT, 1)         // number of ios to queue with kernel
 OPTION(bdev_idle_kick_after_ms, OPT_INT, 100)  // ms

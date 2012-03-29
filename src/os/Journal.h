@@ -21,6 +21,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "common/Finisher.h"
+#include "common/TrackedOp.h"
 
 class PerfCounters;
 
@@ -55,7 +56,9 @@ public:
   // writes
   virtual bool is_writeable() = 0;
   virtual void make_writeable() = 0;
-  virtual void submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit) = 0;
+  virtual void submit_entry(uint64_t seq, bufferlist& e, int alignment,
+			    Context *oncommit,
+			    TrackedOpRef osd_op = TrackedOpRef()) = 0;
   virtual void commit_start() = 0;
   virtual void committed_thru(uint64_t seq) = 0;
   virtual bool read_entry(bufferlist& bl, uint64_t &seq) = 0;

@@ -31,6 +31,7 @@
 #include "include/xlist.h"
 #include "include/atomic.h"
 
+#include "OpRequest.h"
 #include "OSDMap.h"
 #include "os/ObjectStore.h"
 #include "msg/Messenger.h"
@@ -52,7 +53,6 @@ using namespace __gnu_cxx;
 
 
 class OSD;
-class OpRequest;
 class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
@@ -394,7 +394,7 @@ public:
   }
 
 
-  list<OpRequest*> op_queue;  // op queue
+  list<OpRequestRef> op_queue;  // op queue
 
   bool dirty_info, dirty_log;
 
@@ -648,14 +648,14 @@ protected:
 
 
   // pg waiters
-  list<OpRequest*>            waiting_for_active;
-  list<OpRequest*>            waiting_for_all_missing;
-  map<hobject_t, list<OpRequest*> > waiting_for_missing_object,
+  list<OpRequestRef>            waiting_for_active;
+  list<OpRequestRef>            waiting_for_all_missing;
+  map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
                                         waiting_for_degraded_object;
-  map<eversion_t,list<OpRequest*> > waiting_for_ondisk;
-  map<eversion_t,OpRequest*>   replay_queue;
+  map<eversion_t,list<OpRequestRef> > waiting_for_ondisk;
+  map<eversion_t,OpRequestRef>   replay_queue;
 
-  void requeue_object_waiters(map<hobject_t, list<OpRequest*> >& m);
+  void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
 
   // stats
   Mutex pg_stats_lock;
@@ -813,11 +813,11 @@ public:
   bool sched_scrub();
 
   void replica_scrub(class MOSDRepScrub *op);
-  void sub_op_scrub_map(OpRequest *op);
-  void sub_op_scrub_reserve(OpRequest *op);
-  void sub_op_scrub_reserve_reply(OpRequest *op);
-  void sub_op_scrub_unreserve(OpRequest *op);
-  void sub_op_scrub_stop(OpRequest *op);
+  void sub_op_scrub_map(OpRequestRef op);
+  void sub_op_scrub_reserve(OpRequestRef op);
+  void sub_op_scrub_reserve_reply(OpRequestRef op);
+  void sub_op_scrub_unreserve(OpRequestRef op);
+  void sub_op_scrub_stop(OpRequestRef op);
 
 
   // -- recovery state --
@@ -1423,13 +1423,13 @@ public:
 
 
   // abstract bits
-  void do_request(OpRequest *op);
+  void do_request(OpRequestRef op);
 
-  virtual void do_op(OpRequest *op) = 0;
-  virtual void do_sub_op(OpRequest *op) = 0;
-  virtual void do_sub_op_reply(OpRequest *op) = 0;
-  virtual void do_scan(OpRequest *op) = 0;
-  virtual void do_backfill(OpRequest *op) = 0;
+  virtual void do_op(OpRequestRef op) = 0;
+  virtual void do_sub_op(OpRequestRef op) = 0;
+  virtual void do_sub_op_reply(OpRequestRef op) = 0;
+  virtual void do_scan(OpRequestRef op) = 0;
+  virtual void do_backfill(OpRequestRef op) = 0;
   virtual bool snap_trimmer() = 0;
 
   virtual int do_command(vector<string>& cmd, ostream& ss,

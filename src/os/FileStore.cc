@@ -2017,7 +2017,9 @@ int FileStore::get_max_object_name_length()
 /// -----------------------------
 
 FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
-				   Context *onreadable, Context *onreadable_sync)
+				   Context *onreadable,
+				   Context *onreadable_sync,
+				   TrackedOpRef osd_op)
 {
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
@@ -2034,6 +2036,7 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
   o->onreadable_sync = onreadable_sync;
   o->ops = ops;
   o->bytes = bytes;
+  o->osd_op = osd_op;
   return o;
 }
 
@@ -2170,7 +2173,8 @@ int FileStore::queue_transaction(Sequencer *osr, Transaction *t)
 
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  Context *onreadable, Context *ondisk,
-				  Context *onreadable_sync)
+				  Context *onreadable_sync,
+				  TrackedOpRef osd_op)
 {
   if (g_conf->filestore_blackhole) {
     dout(0) << "queue_transactions filestore_blackhole = TRUE, dropping transaction" << dendl;
@@ -2192,14 +2196,14 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
-    Op *o = build_op(tls, onreadable, onreadable_sync);
+    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     op_queue_reserve_throttle(o);
     journal->throttle();
     o->op = op_submit_start();
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
-      _op_journal_transactions(o->tls, o->op, ondisk);
+      _op_journal_transactions(o->tls, o->op, ondisk, osd_op);
       
       // queue inside journal lock, to preserve ordering
       queue_op(osr, o);
@@ -2208,7 +2212,9 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       osr->queue_journal(o->op);
 
-      _op_journal_transactions(o->tls, o->op, new C_JournaledAhead(this, osr, o, ondisk));
+      _op_journal_transactions(o->tls, o->op,
+			       new C_JournaledAhead(this, osr, o, ondisk),
+			       osd_op);
     } else {
       assert(0);
     }
@@ -2223,7 +2229,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    _op_journal_transactions(tls, op, ondisk);
+    _op_journal_transactions(tls, op, ondisk, osd_op);
   } else {
     delete ondisk;
   }
