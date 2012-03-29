@@ -20,6 +20,7 @@
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include <tr1/memory>
+#include "common/TrackedOp.h"
 
 class OpRequest;
 typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
@@ -52,7 +53,7 @@ public:
  * you want to track, create an OpRequest with it, and then pass around that OpRequest
  * the way you used to pass around the Message.
  */
-struct OpRequest {
+struct OpRequest : public TrackedOp {
   friend class OpTracker;
   Message *request;
   xlist<OpRequest*>::item xitem;
@@ -131,7 +132,7 @@ public:
     latest_flag_point = flag_sub_op_sent;
   }
 
-  void mark_event(const string &new_state);
+  void mark_event(const string &event);
 };
 
 #endif /* OPREQUEST_H_ */
