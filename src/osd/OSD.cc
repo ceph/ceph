@@ -3020,6 +3020,12 @@ void OSD::note_down_osd(int peer)
   heartbeat_lock.Lock();
   failure_queue.erase(peer);
   failure_pending.erase(peer);
+  map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(peer);
+  if (p != heartbeat_peers.end()) {
+    hbclient_messenger->mark_down(p->second.con);
+    p->second.con->put();
+    heartbeat_peers.erase(p);
+  }
   heartbeat_lock.Unlock();
 }
 
