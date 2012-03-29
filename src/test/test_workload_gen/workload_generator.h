@@ -137,6 +137,8 @@ public:
       m_state->m_in_flight--;
       m_state->m_nr_runs++;
       m_state->m_cond.Signal();
+
+      delete m_tx;
     }
   };
 
