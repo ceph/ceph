@@ -924,7 +924,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   // read or error?
   if (ctx->op_t.empty() || result < 0) {
-    log_op_stats(ctx);
+    if (result >= 0) {
+      log_op_stats(ctx);
+      update_stats();
+    }
     
     MOSDOpReply *reply = ctx->reply;
     reply->set_version(info.last_update);
@@ -3320,7 +3323,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
     dout(10) << "requeueing scrub for cleanup" << dendl;
     osd->scrub_wq.queue(this);
   }
-  update_stats();
 
   if (!repop->aborted)
     eval_repop(repop);
@@ -3401,6 +3403,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     if (repop->waitfor_disk.empty()) {
 
       log_op_stats(repop->ctx);
+      update_stats();
 
       if (m->wants_ondisk() && !repop->sent_disk) {
 	// send commit.
