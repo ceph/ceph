@@ -556,9 +556,11 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing
       }
       stats_updated = true;
       missing_loc[soid].insert(fromosd);
+      missing_loc_sources.insert(fromosd);
     }
     else {
       ml->second.insert(fromosd);
+      missing_loc_sources.insert(fromosd);
     }
     found_missing = true;
   }
@@ -799,6 +801,8 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
     if (!osdmap->is_up(p->first)) {
       dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
       peer_missing.erase(p->first);
+      peer_log_requested.erase(p->first);
+      peer_missing_requested.erase(p->first);
       peer_info.erase(p++);
       removed = true;
     } else
@@ -894,6 +898,8 @@ void PG::clear_primary_state()
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
 
   missing_loc.clear();
+  missing_loc_sources.clear();
+
   log.reset_recovery_pointers();
 
   scrub_reserved_peers.clear();
@@ -2796,6 +2802,7 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
 
     missing.add(soid, oi.version, eversion_t());
     missing_loc[soid].insert(ok_peer);
+    missing_loc_sources.insert(ok_peer);
 
     log.last_requested = 0;
   }
@@ -4030,8 +4037,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   assert(pg->is_active());
   assert(pg->is_primary());
 
-  pg->check_recovery_op_pulls(pg->get_osdmap());
-	
+  if (pg->check_recovery_sources(pg->get_osdmap()) &&
+      pg->have_unfound()) {
+    // object may have become unfound
+    pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
+  }
+
   if (g_conf->osd_check_for_log_corruption)
     pg->check_log_for_corruption(pg->osd->store);
 
