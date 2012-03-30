@@ -1558,7 +1558,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	i->second.last_rx = m->stamp;
       }
 
-      if (osdmap->is_up(from)) {
+      if (m->map_epoch &&        // peer may not have gotten map_lock on ping reply
+	  osdmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
 	if (locked && is_active())
 	  _share_map_outgoing(osdmap->get_cluster_inst(from));
