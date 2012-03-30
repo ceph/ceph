@@ -5626,6 +5626,7 @@ void ReplicatedPG::on_role_change()
 void ReplicatedPG::_clear_recovery_state()
 {
   missing_loc.clear();
+  missing_loc_sources.clear();
 #ifdef DEBUG_RECOVERY_OIDS
   recovering_oids.clear();
 #endif
@@ -5685,10 +5686,12 @@ bool ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
   while (p != missing_loc.end()) {
     set<int>::iterator q = p->second.begin();
     while (q != p->second.end())
-      if (now_down.count(*q))
+      if (now_down.count(*q)) {
 	p->second.erase(q++);
-      else
+      } else {
+	assert(missing_loc_sources.count(*q));
 	q++;
+      }
     if (p->second.empty())
       missing_loc.erase(p++);
     else
@@ -5864,8 +5867,10 @@ int ReplicatedPG::recover_primary(int max)
 
 	    set<int>& loc = missing_loc[soid];
 	    for (map<int,pg_missing_t>::iterator p = peer_missing.begin(); p != peer_missing.end(); ++p)
-	      if (p->second.missing[soid].have == need)
+	      if (p->second.missing[soid].have == need) {
+		missing_loc_sources.insert(p->first);
 		loc.insert(p->first);
+	      }
 	    dout(10) << " will pull " << need << " from one of " << loc << dendl;
 	    unfound = false;
 	  }
@@ -5919,6 +5924,7 @@ int ReplicatedPG::recover_object_replicas(const hobject_t& soid, eversion_t v)
       int peer = acting[i];
       if (!peer_missing[peer].is_missing(soid, v)) {
 	missing_loc[soid].insert(peer);
+	missing_loc_sources.insert(peer);
 	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
 		 << ", there should be a copy on osd." << peer << dendl;
 	uhoh = false;

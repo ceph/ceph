@@ -560,6 +560,7 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing
     }
     else {
       ml->second.insert(fromosd);
+      missing_loc_sources.insert(fromosd);
     }
     found_missing = true;
   }
