@@ -79,11 +79,6 @@ void WorkloadGenerator::init_args(vector<const char*> args) {
       usage(NULL);
       exit(0);
     }
-
-//    else if (ceph_argparse_binary_flag(args, i, &allow_coll_dest, NULL,
-//        "--allow-coll-destruction", (char*) NULL)) {
-//      m_allow_coll_destruction = (allow_coll_dest ? true : false);
-//    }
   }
 }
 
@@ -286,8 +281,10 @@ void WorkloadGenerator::run() {
     bool destroy_collection = should_destroy_collection();
     coll_entry_t *entry = get_rnd_coll_entry(destroy_collection);
 
+    Context *c;
     if (destroy_collection) {
       do_destroy_collection(t, entry);
+      c = new C_WorkloadGeneratorOnDestroyed(this, t, entry);
     } else {
       int obj_nr = get_random_object_nr(entry->id);
       hobject_t obj = get_object_by_nr(obj_nr);
@@ -296,10 +293,10 @@ void WorkloadGenerator::run() {
       do_setattr_object(t, entry->coll, obj);
       do_setattr_collection(t, entry->coll);
       do_append_log(t, entry->coll);
+      c = new C_WorkloadGeneratorOnReadable(this, t);
     }
 
-    m_store->queue_transaction(&(entry->osr), t,
-        new C_WorkloadGeneratorOnReadable(this, t));
+    m_store->queue_transaction(&(entry->osr), t, c);
 
     m_in_flight++;
 

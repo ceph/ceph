@@ -132,13 +132,30 @@ public:
     }
 
     void finish(int r) {
-      dout(0) << "Got one back!" << dendl;
+//      dout(0) << "Got one back!" << dendl;
       Mutex::Locker locker(m_state->m_lock);
       m_state->m_in_flight--;
       m_state->m_nr_runs++;
       m_state->m_cond.Signal();
 
       delete m_tx;
+    }
+  };
+
+  class C_WorkloadGeneratorOnDestroyed: public C_WorkloadGeneratorOnReadable {
+//    WorkloadGenerator *m_state;
+//    ObjectStore::Transaction *m_tx;
+    coll_entry_t *m_entry;
+
+  public:
+    C_WorkloadGeneratorOnDestroyed(WorkloadGenerator *state,
+        ObjectStore::Transaction *t, coll_entry_t *entry) :
+          C_WorkloadGeneratorOnReadable(state, t), m_entry(entry) {}
+
+    void finish(int r) {
+      C_WorkloadGeneratorOnReadable::finish(r);
+      dout(0) << "Destroyed collection " << m_entry->coll.to_str() << dendl;
+      delete m_entry;
     }
   };
 
