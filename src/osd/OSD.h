@@ -255,18 +255,24 @@ public:
 
 private:
   // -- heartbeat --
+  /// information about a heartbeat peer
+  struct HeartbeatInfo {
+    Connection *con;    ///< peer connection
+    utime_t first_tx;   ///< time we sent our first ping request
+    utime_t last_tx;    ///< last time we sent a ping request
+    utime_t last_rx;    ///< last time we got a ping reply
+    epoch_t epoch;      ///< most recent epoch we wanted this peer
+  };
   Mutex heartbeat_lock;
   Cond heartbeat_cond;
-  bool heartbeat_stop, heartbeat_need_update;
-  epoch_t heartbeat_epoch;
-  map<int, epoch_t> heartbeat_to, heartbeat_from;
-  map<int, utime_t> heartbeat_from_stamp;
-  map<int, Connection*> heartbeat_to_con, heartbeat_from_con;
+  bool heartbeat_stop;
+  bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
+  epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
+  map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbin_messenger, *hbout_messenger;
+  Messenger *hbclient_messenger, *hbserver_messenger;
   
-  void _add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, utime_t>& old_from_stamp,
-			     map<int,Connection*>& old_con);
+  void _add_heartbeat_peer(int p);
   void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();
