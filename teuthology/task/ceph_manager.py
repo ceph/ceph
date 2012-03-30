@@ -5,7 +5,7 @@ import re
 import gevent
 import json
 
-class Thrasher(gevent.Greenlet):
+class Thrasher:
     def __init__(self, manager, config, logger=None):
         self.ceph_manager = manager
         self.ceph_manager.wait_for_clean()
@@ -28,8 +28,8 @@ class Thrasher(gevent.Greenlet):
         # prevent monitor from auto-marking things out while thrasher runs
         manager.raw_cluster_cmd('mon', 'tell', '*', 'injectargs',
                                 '--mon-osd-down-out-interval', '0')
-        gevent.Greenlet.__init__(self, self.do_thrash)
-        self.start()
+        self.thread = gevent.spawn(self.do_thrash)
+        self.thread.start()
 
     def kill_osd(self, osd=None):
         if osd is None:
@@ -81,7 +81,7 @@ class Thrasher(gevent.Greenlet):
 
     def do_join(self):
         self.stopping = True
-        self.get()
+        self.thread.get()
 
     def choose_action(self):
         chance_down = self.config.get("chance_down", 0)
