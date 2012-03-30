@@ -5668,7 +5668,7 @@ bool ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
     missing_loc_sources.erase(p++);
   }
   if (now_down.empty()) {
-    dout(10) << "check_recovery_sources source osds (" << missing_loc_sources << ") went down" << dendl;
+    dout(10) << "check_recovery_sources no source osds (" << missing_loc_sources << ") went down" << dendl;
     return false;
   }
   dout(10) << "check_recovery_sources sources osds " << now_down << " now down, remaining sources are "
