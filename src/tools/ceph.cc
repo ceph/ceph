@@ -80,6 +80,8 @@ static void parse_cmd_args(vector<const char*> &args,
       *mode = CEPH_TOOL_MODE_OBSERVER;
     } else if (ceph_argparse_flag(args, i, "--concise", (char*)NULL)) {
       *concise = true;
+    } else if (ceph_argparse_flag(args, i, "--verbose", (char*)NULL)) {
+      *concise = false;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
     } else {
@@ -190,7 +192,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   // parse user input
-  bool concise = false;
+  bool concise = true;
   string admin_socket;
   string admin_socket_cmd;
   parse_cmd_args(args, &in_file, &out_file, &mode, &concise, &admin_socket, &admin_socket_cmd);
