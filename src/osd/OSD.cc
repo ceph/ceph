@@ -1555,6 +1555,11 @@ void OSD::handle_osd_ping(MOSDPing *m)
     {
       map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(from);
       if (i != heartbeat_peers.end()) {
+	dout(25) << "handle_osd_ping got reply from osd." << from
+		 << " first_rx " << i->second.first_tx
+		 << " last_tx " << i->second.last_tx
+		 << " last_rx " << i->second.last_rx << " -> " << m->stamp
+		 << dendl;
 	i->second.last_rx = m->stamp;
       }
 
