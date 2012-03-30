@@ -26,12 +26,12 @@ TEST(LibRadosConfig, SimpleSet) {
   int ret = rados_create(&cl, NULL);
   ASSERT_EQ(ret, 0);
 
-  ret = rados_conf_set(cl, "debug", "21");
+  ret = rados_conf_set(cl, "max_open_files", "21");
   ASSERT_EQ(ret, 0);
 
   char buf[128];
   memset(buf, 0, sizeof(buf));
-  ret = rados_conf_get(cl, "debug", buf, sizeof(buf));
+  ret = rados_conf_get(cl, "max_open_files", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("21"), string(buf));
 
@@ -43,7 +43,7 @@ TEST(LibRadosConfig, ArgV) {
   int ret = rados_create(&cl, NULL);
   ASSERT_EQ(ret, 0);
 
-  const char *argv[] = { "foo", "--debug", "2",
+  const char *argv[] = { "foo", "--max-open-files", "2",
 			 "--keyfile", "/tmp/my-keyfile", NULL };
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
   rados_conf_parse_argv(cl, argc, argv);
@@ -55,7 +55,7 @@ TEST(LibRadosConfig, ArgV) {
   ASSERT_EQ(string("/tmp/my-keyfile"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = rados_conf_get(cl, "debug", buf, sizeof(buf));
+  ret = rados_conf_get(cl, "max_open_files", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("2"), string(buf));
 
