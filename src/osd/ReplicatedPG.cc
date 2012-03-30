@@ -5646,7 +5646,7 @@ bool ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
   set<int> now_down;
   for (set<int>::iterator p = missing_loc_sources.begin();
        p != missing_loc_sources.end();
-       ++p) {
+       ) {
     if (osdmap->is_up(*p)) {
       p++;
       continue;
