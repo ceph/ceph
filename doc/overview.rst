@@ -107,8 +107,6 @@ to facilitate VM migration between hosts.
 QEMU has its own hypervisor which interfaces with the librdb
 user-space library to store its virtual machines
 
-.. _monitor:
-
 Monitors
 ========
 
