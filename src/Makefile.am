@@ -636,6 +636,12 @@ unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
 unittest_librados_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados_config
 
+unittest_librgw_link_SOURCES = test/librgw_link.cc
+unittest_librgw_link_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+unittest_librgw_link_LDADD =  librgw.la ${UNITTEST_LDADD}
+unittest_librgw_link_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_librgw_link
+
 unittest_daemon_config_SOURCES = test/daemon_config.cc
 unittest_daemon_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
