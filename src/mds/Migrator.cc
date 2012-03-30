@@ -496,7 +496,8 @@ void Migrator::show_exporting()
 
 void Migrator::audit()
 {
-  if (g_conf->debug_mds < 5) return;  // hrm.
+  if (!g_conf->subsys.should_gather(ceph_subsys_mds, 5))
+    return;  // hrm.
 
   // import_state
   show_importing();

@@ -178,8 +178,8 @@ public:
 #define OPTION_OPT_U32(name) const uint32_t name;
 #define OPTION_OPT_U64(name) const uint64_t name;
 #define OPTION(name, ty, init) OPTION_##ty(name)
-#define SUBSYS(name, log, gather) OPTION_OPT_INT(debug_##name)
-#define DEFAULT_SUBSYS(log, gather) OPTION_OPT_INT(debug)
+#define SUBSYS(name, log, gather)
+#define DEFAULT_SUBSYS(log, gather)
 #include "common/config_opts.h"
 #undef OPTION_OPT_INT
 #undef OPTION_OPT_LONGLONG

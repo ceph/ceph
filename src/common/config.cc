@@ -85,8 +85,7 @@ const void *config_option::conf_ptr(const md_config_t *conf) const
 struct config_option config_optionsp[] = {
 #define OPTION(name, type, def_val) \
        { STRINGIFY(name), type, offsetof(struct md_config_t, name) },
-#define SUBSYS(name, log, gather)		\
-  { "debug_" STRINGIFY(name), OPT_INT, offsetof(struct md_config_t, debug_##name) },
+#define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
 #include "common/config_opts.h"
 #undef OPTION
@@ -119,8 +118,8 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 md_config_t::md_config_t()
   : 
 #define OPTION(name, type, def_val) name(def_val),
-#define SUBSYS(name, log, gather) debug_##name(log),
-#define DEFAULT_SUBSYS(log, gather) debug(log),
+#define SUBSYS(name, log, gather)
+#define DEFAULT_SUBSYS(log, gather)
 #include "common/config_opts.h"
 #undef OPTION
 #undef SUBSYS

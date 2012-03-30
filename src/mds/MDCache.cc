@@ -9972,7 +9972,7 @@ void MDCache::show_subtrees(int dbl)
 {
   //dout(10) << "show_subtrees" << dendl;
 
-  if (dbl > g_conf->debug && dbl > g_conf->debug_mds) 
+  if (!g_conf->subsys.should_gather(ceph_subsys_mds, dbl))
     return;  // i won't print anything.
 
   if (subtrees.empty()) {
