@@ -34,7 +34,7 @@
 #endif
 
 
-#define DOUT_SUBSYS journal
+#define dout_subsys ceph_subsys_journal
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
 

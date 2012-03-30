@@ -42,7 +42,7 @@
 
 #include "include/compat.h"
 
-#define DOUT_SUBSYS ms
+#define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, msgr)
 static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {

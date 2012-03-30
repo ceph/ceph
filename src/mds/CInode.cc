@@ -42,7 +42,7 @@
 #include "common/config.h"
 #include "global/global_context.h"
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 

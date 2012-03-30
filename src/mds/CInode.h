@@ -81,7 +81,7 @@ struct default_file_layout {
     __u8 struct_v;
     ::decode(struct_v, bl);
     if (struct_v != 1) { //uh-oh
-      dout(0) << "got default layout I don't understand!" << dendl;
+      derr << "got default layout I don't understand!" << dendl;
       assert(0);
     }
     ::decode(layout, bl);

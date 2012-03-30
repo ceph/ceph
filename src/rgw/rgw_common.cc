@@ -13,7 +13,7 @@
 
 #include <sstream>
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 PerfCounters *perfcounter = NULL;
 

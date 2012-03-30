@@ -5,7 +5,7 @@
 #include "rgw_acl.h"
 #include "rgw_rados.h"
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
 {

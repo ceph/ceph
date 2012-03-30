@@ -6,6 +6,8 @@
 
 #include <fstream>
 
+#define dout_subsys ceph_subsys_
+
 MemoryModel::MemoryModel(CephContext *cct_)
   : cct(cct_)
 {

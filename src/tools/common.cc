@@ -45,6 +45,8 @@ extern "C" {
 #include <histedit.h>
 }
 
+#define dout_subsys ceph_subsys_
+
 // TODO: should move these into CephToolCtx for consistency
 static enum ceph_tool_mode_t
   ceph_tool_mode(CEPH_TOOL_MODE_CLI_INPUT);

@@ -20,7 +20,7 @@
 #include "HashIndex.h"
 
 #include "common/debug.h"
-#define DOUT_SUBSYS filestore
+#define dout_subsys ceph_subsys_filestore
 
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";

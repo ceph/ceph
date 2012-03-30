@@ -4,6 +4,8 @@
 #include "CephxProtocol.h"
 #include "CephxAuthorizeHandler.h"
 
+#define dout_subsys ceph_subsys_auth
+
 
 bool CephxAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
 					      bufferlist& authorizer_data, bufferlist& authorizer_reply,

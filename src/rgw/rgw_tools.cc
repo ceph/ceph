@@ -8,7 +8,7 @@
 #include "rgw_rados.h"
 #include "rgw_tools.h"
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 #define READ_CHUNK_LEN (16 * 1024)
 

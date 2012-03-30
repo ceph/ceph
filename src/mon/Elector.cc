@@ -22,7 +22,7 @@
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS mon
+#define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, epoch)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {

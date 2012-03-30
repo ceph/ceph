@@ -12,7 +12,6 @@
  *
  */
 
-#include "common/DoutStreambuf.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
@@ -27,6 +26,8 @@
 
 #include <errno.h>
 #include <deque>
+
+#define dout_subsys ceph_subsys_
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)

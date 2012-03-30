@@ -25,7 +25,7 @@
 #include <sstream>
 #include <string.h>
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 int librgw_create(librgw_t *rgw, const char * const id)
 {

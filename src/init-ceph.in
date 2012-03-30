@@ -179,9 +179,7 @@ for name in $what; do
     [ -n "$pid_file" ] && do_cmd "mkdir -p "`dirname $pid_file`
 
     get_conf log_dir "" "log dir"
-    get_conf log_sym_dir "" "log sym dir"
     [ -n "$log_dir" ] && do_cmd "mkdir -p $log_dir"
-    [ -n "$log_sym_dir" ] && do_cmd "mkdir -p $log_sym_dir"
 
     binary="$BINDIR/ceph-$type"
     if [ "$command" = "start" ]; then
@@ -338,15 +336,11 @@ for name in $what; do
 
 	cleanlogs)
 	    echo removing logs
-	    if [ -n "$log_sym_dir" ]; then
-		do_cmd "for f in $log_sym_dir/$type.$id.*; do rm -f \`readlink \$f\` ; rm -f \$f ; done ; rm -f $log_dir/$type.$id.*"
-	    fi
 	    [ -n "$log_dir" ] && do_cmd "rm -f $log_dir/$type.$id.*"
 	    ;;
 
 	cleanalllogs)
 	    echo removing all logs
-	    [ -n "$log_sym_dir" ] && do_cmd "rm -f $log_sym_dir/* || true"
 	    [ -n "$log_dir" ] && do_cmd "rm -f $log_dir/* || true"
 	    ;;
 

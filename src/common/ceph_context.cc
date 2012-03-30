@@ -15,13 +15,13 @@
 #include <time.h>
 
 #include "common/admin_socket.h"
-#include "common/DoutStreambuf.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
+#include "log/Log.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -58,7 +58,7 @@ public:
 	break;
       }
       if (_reopen_logs) {
-	_cct->_doss->reopen_logs(_cct->_conf);
+	_cct->_log->reopen_log_file();
 	_reopen_logs = false;
       }
       _cct->_heartbeat_map->check_touch_file();
@@ -83,6 +83,64 @@ private:
   volatile bool _exit_thread;
   sem_t _sem;
   CephContext *_cct;
+};
+
+
+/**
+ * observe logging config changes
+ *
+ * The logging subsystem sits below most of the ceph code, including
+ * the config subsystem, to keep it simple and self-contained.  Feed
+ * logging-related config changes to the log.
+ */
+class LogObs : public md_config_obs_t {
+  ceph::log::Log *log;
+
+public:
+  LogObs(ceph::log::Log *l) : log(l) {}
+
+  const char** get_tracked_conf_keys() const {
+    static const char *KEYS[] = {
+      "log_file",
+      "log_max_new",
+      "log_max_recent",
+      "log_to_syslog",
+      "err_to_syslog",
+      "log_to_stderr",
+      "err_to_stderr",
+      NULL
+    };
+    return KEYS;
+  }
+
+  void handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed) {
+    // stderr
+    if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
+      int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
+      log->set_stderr_level(l, l);
+    }
+
+    // syslog
+    if (changed.count("log_to_syslog")) {
+      int l = conf->log_to_syslog ? 99 : (conf->err_to_syslog ? -1 : -2);
+      log->set_syslog_level(l, l);
+    }
+
+    // file
+    if (changed.count("log_file")) {
+      log->set_log_file(conf->log_file);
+      log->reopen_log_file();
+    }
+
+    if (changed.count("log_max_new")) {
+      log->set_max_new(conf->log_max_new);
+    }
+
+    if (changed.count("log_max_recent")) {
+      log->set_max_new(conf->log_max_recent);
+    }
+  }
 };
 
 
@@ -112,18 +170,24 @@ public:
 
 CephContext::CephContext(uint32_t module_type_)
   : _conf(new md_config_t()),
-    _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
-    _dout(_doss),
+    _log(NULL),
     _module_type(module_type_),
     _service_thread(NULL),
+    _log_obs(NULL),
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
+
+  _log = new ceph::log::Log(&_conf->subsys);
+  _log->start();
+
+  _log_obs = new LogObs(_log);
+  _conf->add_observer(_log_obs);
+
   _perf_counters_collection = new PerfCountersCollection(this);
-  _conf->add_observer(_doss);
   _admin_socket = new AdminSocket(this);
   _conf->add_observer(_admin_socket);
   _heartbeat_map = new HeartbeatMap(this);
@@ -148,7 +212,6 @@ CephContext::~CephContext()
   delete _heartbeat_map;
 
   _conf->remove_observer(_admin_socket);
-  _conf->remove_observer(_doss);
 
   delete _perf_counters_collection;
   _perf_counters_collection = NULL;
@@ -156,8 +219,13 @@ CephContext::~CephContext()
   delete _perf_counters_conf_obs;
   _perf_counters_conf_obs = NULL;
 
-  delete _doss;
-  _doss = NULL;
+  _conf->remove_observer(_log_obs);
+  delete _log_obs;
+  _log_obs = NULL;
+
+  _log->stop();
+  delete _log;
+  _log = NULL;
 
   delete _conf;
   pthread_spin_destroy(&_service_thread_lock);
@@ -182,28 +250,6 @@ void CephContext::reopen_logs()
   if (_service_thread)
     _service_thread->reopen_logs();
   pthread_spin_unlock(&_service_thread_lock);
-}
-
-void CephContext::dout_lock(DoutLocker *locker)
-{
-  pthread_mutex_t *lock = &_doss->lock;
-  pthread_mutex_lock(lock);
-  locker->lock = lock;
-}
-
-void CephContext::dout_trylock(DoutLocker *locker)
-{
-  static const int MAX_DOUT_TRYLOCK_TRIES = 3;
-
-  /* Try a few times to get the lock. If we can't seem to get it, just give up. */
-  pthread_mutex_t *lock = &_doss->lock;
-  for (int i = 0; i < MAX_DOUT_TRYLOCK_TRIES; ++i) {
-    if (pthread_mutex_trylock(lock) == 0) {
-      locker->lock = lock;
-      return;
-    }
-    usleep(50000);
-  }
 }
 
 void CephContext::join_service_thread()

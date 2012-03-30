@@ -44,7 +44,7 @@
 #include "include/types.h"
 #include "common/BackTrace.h"
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
@@ -358,6 +358,9 @@ int main(int argc, const char **argv)
       cerr << "radosgw: must specify 'rgw socket path' to run as a daemon" << std::endl;
       exit(1);
     }
+
+    g_ceph_context->_log->stop();
+
     childpid = fork();
     if (childpid) {
       // i am the parent
@@ -373,6 +376,8 @@ int main(int argc, const char **argv)
     if (r < 0) {
       dout(0) << "weird, i couldn't chdir to '" << g_conf->chdir << "'" << dendl;
     }
+
+    g_ceph_context->_log->start();
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);

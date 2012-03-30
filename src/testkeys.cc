@@ -16,7 +16,7 @@ int main(int argc, const char **argv)
 
   KeyServer server(g_ceph_context);
 
-  dout(0) << "server created" << dendl;
+  generic_dout(0) << "server created" << dendl;
 
   getchar();
 

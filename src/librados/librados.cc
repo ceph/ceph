@@ -27,7 +27,7 @@ using namespace std;
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 
-#define DOUT_SUBSYS rados
+#define dout_subsys ceph_subsys_rados
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 

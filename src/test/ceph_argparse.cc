@@ -271,9 +271,6 @@ TEST(CephArgParse, WithDashesAndUnderscores) {
   ASSERT_EQ(found_baz, "");
 }
 
-extern bool ceph_argparse_withint(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, int *ret,
-	std::ostringstream *oss, ...);
 
 TEST(CephArgParse, WithInt) {
   const char *BAZSTUFF1[] = { "./myprog", "--foo", "50", "--bar", "52", NULL };

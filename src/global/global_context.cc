@@ -20,4 +20,3 @@
  */
 CephContext *g_ceph_context = NULL;
 md_config_t *g_conf = NULL;
-DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss = NULL;

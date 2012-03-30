@@ -24,7 +24,7 @@
 # include "fcgiapp.h"
 #endif
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 using ceph::crypto::MD5;
@@ -180,7 +180,7 @@ static int get_policy_from_attr(CephContext *cct, void *ctx, RGWAccessControlPol
         ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
         return -EIO;
       }
-      if (cct->_conf->debug_rgw >= 15) {
+      if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
         RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
         ldout(cct, 15) << "Read AccessControlPolicy";
         s3policy->to_xml(*_dout);
@@ -1311,7 +1311,7 @@ void RGWPutACLs::execute()
     goto done;
   }
 
-  if (s->cct->_conf->debug_rgw >= 15) {
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "Old AccessControlPolicy";
     policy->to_xml(*_dout);
     *_dout << dendl;
@@ -1321,7 +1321,7 @@ void RGWPutACLs::execute()
   if (ret < 0)
     goto done;
 
-  if (s->cct->_conf->debug_rgw >= 15) {
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "New AccessControlPolicy:";
     new_policy.to_xml(*_dout);
     *_dout << dendl;
@@ -1696,7 +1696,7 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;
 
-  if (s->cct->_conf->debug_rgw >= 20) {
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {
       ldout(s->cct, 20) << p << dendl;

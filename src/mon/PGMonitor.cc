@@ -41,7 +41,7 @@
 #include "common/config.h"
 #include <sstream>
 
-#define DOUT_SUBSYS mon
+#define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, pg_map)
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon, const PGMap& pg_map) {

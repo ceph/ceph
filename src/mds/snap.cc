@@ -22,7 +22,7 @@
  * SnapRealm
  */
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mdcache->mds->get_nodeid(), inode, srnode.seq, this)
 static ostream& _prefix(std::ostream *_dout, int whoami, CInode *inode,

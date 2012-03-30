@@ -3,7 +3,7 @@
 #include "Finisher.h"
 
 #include "common/debug.h"
-#define DOUT_SUBSYS finisher
+#define dout_subsys ceph_subsys_finisher
 #undef dout_prefix
 #define dout_prefix *_dout << "finisher(" << this << ") "
 

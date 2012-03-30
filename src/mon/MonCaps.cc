@@ -19,6 +19,8 @@
 #include "MonCaps.h"
 #include "mon_types.h"
 
+#define dout_subsys ceph_subsys_auth
+
 bool MonCaps::get_next_token(string s, size_t& pos, string& token)
 {
   int start = s.find_first_not_of(" \t", pos);

@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
+#define dout_subsys ceph_subsys_hadoop
+
 union ceph_mount_union_t {
   struct ceph_mount_info *cmount;
   jlong cjlong;

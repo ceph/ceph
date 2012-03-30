@@ -38,6 +38,8 @@
 
 #include "common/config.h"
 
+#define dout_subsys ceph_subsys_monc
+
 /*
  * Given a clog log_type, return the equivalent syslog priority
  */

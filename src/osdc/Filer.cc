@@ -26,7 +26,7 @@
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS filer
+#define dout_subsys ceph_subsys_filer
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".filer "
 

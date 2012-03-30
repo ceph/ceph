@@ -12,7 +12,7 @@
 # include "fcgiapp.h"
 #endif
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 #define DEFAULT_SWIFT_PREFIX "swift"
 

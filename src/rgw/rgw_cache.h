@@ -17,6 +17,8 @@ enum {
 #define CACHE_FLAG_META           0x4
 #define CACHE_FLAG_MODIFY_XATTRS  0x8
 
+#define mydout(v) lsubdout(T::cct, rgw, v)
+
 struct ObjectMetaInfo {
   uint64_t size;
   time_t mtime;
@@ -290,7 +292,7 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -324,7 +326,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -360,7 +362,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -395,7 +397,7 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        ldout(T::cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -475,10 +477,10 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
-    ldout(T::cct, 0) << "ERROR: got bad notification" << dendl;
+    mydout(0) << "ERROR: got bad notification" << dendl;
     return -EIO;
   } catch (buffer::error& err) {
-    ldout(T::cct, 0) << "ERROR: buffer::error" << dendl;
+    mydout(0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
 
@@ -492,7 +494,7 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     cache.remove(name);
     break;
   default:
-    ldout(T::cct, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
+    mydout(0) << "WARNING: got unknown notification op: " << info.op << dendl;
     return -EINVAL;
   }
 

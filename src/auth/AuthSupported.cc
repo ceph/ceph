@@ -17,9 +17,10 @@
 #include "common/debug.h"
 #include "include/str_list.h"
 
-#define DOUT_SUBSYS auth
-
 #include "AuthSupported.h"
+
+const static int dout_subsys = ceph_subsys_auth;
+
 
 AuthSupported::AuthSupported(CephContext *cct)
 {
