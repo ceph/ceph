@@ -1,8 +1,8 @@
+.. _adjusting-crush:
+
 =========================
  Adjusting the CRUSH map
 =========================
-
-.. _adjusting-crush:
 
 There are a few ways to adjust the crush map:
 

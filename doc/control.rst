@@ -84,7 +84,7 @@ mon_osd_report_timeout). ::
 	$ ceph pg <pgid> mark_unfound_lost revert
 
 Revert "lost" objects to their prior state, either a previous version
-or delete them if they were just created. ::
+or delete them if they were just created.
 
 
 OSD subsystem

@@ -49,7 +49,7 @@ will dump information about current in-progress requests with the
 RADOS cluster.  This allows one to identify if any requests are blocked
 by a non-responsive ceph-osd.  For example, one might see::
 
-{ "ops": [
+  { "ops": [
         { "tid": 1858,
           "pg": "2.d2041a48",
           "osd": 1,

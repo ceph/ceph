@@ -86,12 +86,12 @@ Concepts
    osd map epoch by having the monitor set its *up_thru* in the osd
    map.  This helps peering ignore previous *acting sets* for which
    peering never completed after certain sequences of failures, such as
-   the second interval below::
+   the second interval below:
 
- - *acting set* = [A,B]
- - *acting set* = [A]
- - *acting set* = [] very shortly after (e.g., simultaneous failure, but staggered detection)
- - *acting set* = [B] (B restarts, A does not)
+   - *acting set* = [A,B]
+   - *acting set* = [A]
+   - *acting set* = [] very shortly after (e.g., simultaneous failure, but staggered detection)
+   - *acting set* = [B] (B restarts, A does not)
 
 *last epoch clean*
    the last epoch at which all nodes in the *acting set*
