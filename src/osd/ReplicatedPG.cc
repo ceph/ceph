@@ -1728,8 +1728,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bp.copy(op.cls.indata_len, indata);
 
 	ClassHandler::ClassData *cls;
-	int result = osd->class_handler->open_class(cname, &cls);
-	assert(result == 0);
+	result = osd->class_handler->open_class(cname, &cls);
+	assert(result == 0);   // init_op_flags() already verified this works.
 
 	ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
 	if (!method) {
