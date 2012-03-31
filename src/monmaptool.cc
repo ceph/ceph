@@ -29,7 +29,7 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--print] [--create [--clobber]] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
+  cout << " usage: [--print] [--create [--clobber][--fsid uuid]] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
   exit(1);
 }
 

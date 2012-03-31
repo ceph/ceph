@@ -88,11 +88,6 @@ int main(int argc, const char **argv)
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
       inject_monmap = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--fsid", (char*)NULL)) {
-      if (!fsid.parse(val.c_str())) {
-	cerr << "unable to parse fsid '" << val << "'" << std::endl;
-	exit(1);
-      }
     } else {
       ++i;
     }
@@ -177,9 +172,13 @@ int main(int argc, const char **argv)
       }
     }
 
-    if (!fsid.is_zero()) {
-      cout << argv[0] << ": setting fsid to " << fsid << std::endl;
-      monmap.fsid = fsid;
+    if (!g_conf->fsid.empty()) {
+      if (!monmap.fsid.parse(g_conf->fsid.c_str())) {
+        cerr << "unable to parse fsid '" << g_conf->fsid << "'" << std::endl;
+        exit(1);
+      } else {
+        cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
+      }
     }
     
     if (monmap.fsid.is_zero()) {
