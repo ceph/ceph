@@ -177,6 +177,10 @@ test_mutate_SOURCES = test/test_mutate.cc
 test_mutate_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
 
+test_rewrite_latency_SOURCES = test/test_rewrite_latency.cc
+test_rewrite_latency_LDADD = libcommon.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_rewrite_latency
+
 testmsgr_SOURCES = testmsgr.cc
 testmsgr_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testmsgr
