@@ -3057,6 +3057,7 @@ int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t l
   dout(20) << "zero FALLOC_FL_PUNCH_HOLE not supported, falling back to writing zeros" << dendl;
   {
     bufferptr bp(len);
+    bp.zero();
     bufferlist bl;
     bl.push_back(bp);
     ret = _write(cid, oid, offset, len, bl);
