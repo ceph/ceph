@@ -732,20 +732,30 @@ int main(int argc, char **argv)
     }
   }
 
+  bool subuser_found = false;
+
+  if (!subuser.empty()) {
+    map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
+    subuser_found = (iter != info.subusers.end());
+
+    if (!subuser_found && opt_cmd != OPT_SUBUSER_CREATE) {
+      cerr << "subuser specified but was not found, aborting" << std::endl;
+      return 1;
+    }
+  }
+
   if (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY ||
       opt_cmd == OPT_SUBUSER_RM) {
     if (subuser.empty()) {
       cerr << "subuser creation was requires specifying subuser name" << std::endl;
       return 1;
     }
-    map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
-    bool found = (iter != info.subusers.end());
     if (opt_cmd == OPT_SUBUSER_CREATE) {
-      if (found) {
+      if (subuser_found) {
         cerr << "error: subuser already exists" << std::endl;
         return 1;
       }
-    } else if (!found) {
+    } else if (!subuser_found) {
       cerr << "error: subuser doesn't exist" << std::endl;
       return 1;
     }
