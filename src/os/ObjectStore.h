@@ -102,7 +102,7 @@ public:
     }
 
     /// return a unique string identifier for this sequencer
-    const string& get_name() {
+    const string& get_name() const {
       return name;
     }
     /// wait for any queued transactions on this sequencer to apply
@@ -750,5 +750,7 @@ public:
 
 
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
+
+ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 
 #endif

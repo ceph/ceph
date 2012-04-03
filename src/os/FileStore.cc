@@ -114,6 +114,13 @@ using ceph::crypto::SHA1;
 #define ALIGNED(x, by) (!((x) % (by)))
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
+
+ostream& operator<<(ostream& out, const FileStore::OpSequencer& s)
+{
+  assert(&out);
+  return out << *s.parent;
+}
+
 int do_getxattr(const char *fn, const char *name, void *val, size_t size);
 int do_fgetxattr(int fd, const char *name, void *val, size_t size);
 int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
@@ -2065,9 +2072,11 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
   op_tp.unlock();
 
-  dout(5) << "queue_op " << o << " seq " << o->op << " " << o->bytes << " bytes"
-	   << "   (queue has " << op_queue_len << " ops and " << op_queue_bytes << " bytes)"
-	   << dendl;
+  dout(5) << "queue_op " << o << " seq " << o->op
+	  << " " << *osr
+	  << " " << o->bytes << " bytes"
+	  << "   (queue has " << op_queue_len << " ops and " << op_queue_bytes << " bytes)"
+	  << dendl;
   op_wq.queue(osr);
 }
 
@@ -2118,10 +2127,10 @@ void FileStore::_do_op(OpSequencer *osr)
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
 
-  dout(5) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
+  dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = do_transactions(o->tls, o->op);
   op_apply_finish(o->op);
-  dout(10) << "_do_op " << o << " " << o->op << " r = " << r
+  dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
   
   /*dout(10) << "op_entry finished " << o->bytes << " bytes, queue now "
@@ -2133,7 +2142,7 @@ void FileStore::_finish_op(OpSequencer *osr)
 {
   Op *o = osr->dequeue();
   
-  dout(10) << "_finish_op on osr " << osr << "/" << osr->parent << dendl;
+  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
@@ -2188,12 +2197,12 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     posr = &default_osr;
   if (posr->p) {
     osr = (OpSequencer *)posr->p;
-    dout(5) << "queue_transactions existing osr " << osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
+    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new osr " << osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
@@ -2251,7 +2260,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
 void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
 {
-  dout(5) << "_journaled_ahead " << o->op << " " << o->tls << dendl;
+  dout(5) << "_journaled_ahead " << o << " seq " << o->op << " " << *osr << " " << o->tls << dendl;
 
   // this should queue in order because the journal does it's completions in order.
   journal_lock.Lock();

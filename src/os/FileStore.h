@@ -180,6 +180,9 @@ class FileStore : public JournalingObjectStore,
       assert(q.empty());
     }
   };
+
+  friend ostream& operator<<(ostream& out, const OpSequencer& s);
+
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
@@ -463,5 +466,7 @@ private:
   int m_filestore_queue_committing_max_ops;
   int m_filestore_queue_committing_max_bytes;
 };
+
+ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);
 
 #endif

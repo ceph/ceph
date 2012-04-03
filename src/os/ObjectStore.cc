@@ -2,6 +2,10 @@
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 
+ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
+{
+  return out << "osr(" << s.get_name() << " " << &s << ")";
+}
 
 void ObjectStore::Transaction::dump(ceph::Formatter *f)
 {
