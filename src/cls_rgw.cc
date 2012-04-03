@@ -144,8 +144,13 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   struct rgw_bucket_dir_entry entry;
   if (rc != -ENOENT) {
-    bufferlist::iterator biter = cur_value.begin();
-    ::decode(entry, biter);
+    try {
+      bufferlist::iterator biter = cur_value.begin();
+      ::decode(entry, biter);
+    } catch (buffer::error& err) {
+      CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode entry\n");
+      /* ignoring error */
+    }
   } else { // no entry, initialize fields
     entry.name = op.name;
     entry.epoch = 0;
@@ -209,8 +214,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     }
   } else {
     bufferlist::iterator cur_iter = current_entry.begin();
-    ::decode(entry, cur_iter);
-    CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld name=%s locator=%s\n", entry.epoch, entry.name.c_str(), entry.locator.c_str());
+    try {
+      ::decode(entry, cur_iter);
+      CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld name=%s locator=%s\n", entry.epoch, entry.name.c_str(), entry.locator.c_str());
+    } catch (buffer::error& err) {
+      CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode entry\n");
+    }
   }
 
   if (op.tag.size()) {
@@ -306,8 +315,14 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   int rc = cls_cxx_map_read_header(hctx, &header_bl);
   if (rc < 0)
     return rc;
-  bufferlist::iterator header_iter = header_bl.begin();
-  ::decode(header, header_iter);
+
+  try {
+    bufferlist::iterator header_iter = header_bl.begin();
+    ::decode(header, header_iter);
+  } catch (buffer::error& error) {
+    CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode header\n");
+    return -EINVAL;
+  }
 
   bufferlist::iterator in_iter = in->begin();
   __u8 op;
@@ -327,7 +342,12 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 
     cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
     bufferlist::iterator cur_disk_iter = cur_disk_bl.begin();
-    ::decode(cur_disk, cur_disk_iter);
+    try {
+      ::decode(cur_disk, cur_disk_iter);
+    } catch (buffer::error& error) {
+      CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode cur_disk\n");
+      return -EINVAL;
+    }
 
     utime_t cur_time = ceph_clock_now(g_ceph_context);
     map<string, struct rgw_bucket_pending_info>::iterator iter =
