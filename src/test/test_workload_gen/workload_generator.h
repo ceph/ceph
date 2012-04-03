@@ -31,7 +31,8 @@ public:
 
     coll_entry_t(int i, char *coll_buf, char *meta_obj_buf)
     : id(i), coll(coll_buf),
-      meta_obj(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP)) {
+      meta_obj(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP)),
+      osr(coll_buf) {
     }
   };
 
