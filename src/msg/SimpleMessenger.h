@@ -65,14 +65,7 @@ public:
    *
    * @param addr The IP address to set internally.
    */
-  void set_ip(entity_addr_t& addr);
-  /**
-   * Retrieve the Messenger's address.
-   *
-   * @return A copy of he address this Messenger currently
-   * believes to be its own.
-   */
-  virtual entity_addr_t get_myaddr();
+  void set_addr_unknowns(entity_addr_t& addr);
   /**
    * Retrieve the Connection for an endpoint.
    *
@@ -212,7 +205,18 @@ private:
 
     int read_message(Message **pm);
     int write_message(Message *m);
-    int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
+    /**
+     * Write the given data (of length len) to the Pipe's socket. This function
+     * will loop until all passed data has been written out.
+     * If more is set, the function will optimize socket writes
+     * for additional data (by passing the MSG_MORE flag, aka TCP_CORK).
+     *
+     * @param msg The msghdr to write out
+     * @param len The length of the data in msg
+     * @param more Should be set true if this is one part of a larger message
+     * @return 0, or -1 on failure (unrecoverable -- close the socket).
+     */
+    int do_sendmsg(struct msghdr *msg, int len, bool more=false);
     int write_ack(uint64_t s);
     int write_keepalive();
 
@@ -467,7 +471,6 @@ private:
   void dispatch_throttle_release(uint64_t msize);
 
   // SimpleMessenger stuff
- public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
   bool did_bind;
@@ -475,7 +478,6 @@ private:
 
   // where i listen
   bool need_addr;
-  entity_addr_t ms_addr;
   uint64_t nonce;
   
   // local
@@ -491,6 +493,13 @@ private:
   Policy default_policy;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
+  // --- pipes ---
+  set<Pipe*>      pipes;
+  list<Pipe*>     pipe_reap_queue;
+
+  Mutex global_seq_lock;
+  __u32 global_seq;
+public:
   Policy& get_policy(int t) {
     if (policy_map.count(t))
       return policy_map[t];
@@ -498,15 +507,7 @@ private:
       return default_policy;
   }
 
-  // --- pipes ---
-  set<Pipe*>      pipes;
-  list<Pipe*>     pipe_reap_queue;
-  
-  Mutex global_seq_lock;
-  __u32 global_seq;
-      
   Pipe *connect_rank(const entity_addr_t& addr, int type);
-
   virtual void mark_down(const entity_addr_t& addr);
   virtual void mark_down(Connection *con);
   virtual void mark_down_on_empty(Connection *con);

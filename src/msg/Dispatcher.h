@@ -37,14 +37,20 @@ public:
   virtual void ms_handle_connect(Connection *con) { };
 
   /*
-   * on any connection reset.
    * this indicates that the ordered+reliable delivery semantics have 
-   * been violated.  messages may have been lost.
+   * been violated.  Messages may have been lost due to a fault
+   * in the network connection.
+   * Only called on lossy Connections or those you've
+   * designated mark_down_on_empty().
    */
   virtual bool ms_handle_reset(Connection *con) = 0;
 
-  // on deliberate reset of connection by remote
-  //  implies incoming messages dropped; possibly/probably some of our previous outgoing too.
+  /**
+   * This indicates that the ordered+reliable delivery semantics
+   * have been violated because the remote somehow reset.
+   * It implies that incoming messages were dropped, and
+   * probably some of our previous outgoing messages were too.
+   */
   virtual void ms_handle_remote_reset(Connection *con) = 0;
   
   // authorization handshake provides mutual authentication of peers.

@@ -74,7 +74,7 @@ private:
 
 protected:
   /// the "name" of the local daemon. eg client.99
-  entity_name_t _my_name;
+  entity_inst_t my_inst;
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
@@ -82,10 +82,11 @@ protected:
  public:
   CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
-    : default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
+    : my_inst(),
+      default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
       cct(cct_)
   {
-    _my_name = w;
+    my_inst.name = w;
   }
   virtual ~Messenger() {}
 
@@ -93,10 +94,25 @@ protected:
   }
 
   // accessors
-  entity_name_t get_myname() { return _my_name; }
-  virtual entity_addr_t get_myaddr() = 0;
-  virtual void set_ip(entity_addr_t &addr) = 0;
-  entity_inst_t get_myinst() { return entity_inst_t(get_myname(), get_myaddr()); }
+  const entity_name_t& get_myname() { return my_inst.name; }
+  /**
+   * Retrieve the Messenger's address.
+   *
+   * @return A copy of the address this Messenger currently
+   * believes to be its own.
+   */
+  const entity_addr_t& get_myaddr() { return my_inst.addr; }
+  /**
+   * Set the unknown address components for this Messenger.
+   * This is useful if the Messenger doesn't know its full address just by
+   * binding, but another Messenger on the same interface has already learned
+   * its full address. This function does not fill in known address elements,
+   * cause a rebind, or do anything of that sort.
+   *
+   * @param addr The address to use as a template.
+   */
+  virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
+  const entity_inst_t& get_myinst() { return my_inst; }
   
   /**
    * Set the name of the local entity. The name is reported to others and
@@ -105,7 +121,7 @@ protected:
    *
    * @param m The name to set.
    */
-  void set_myname(const entity_name_t m) { _my_name = m; }
+  void set_myname(const entity_name_t m) { my_inst.name = m; }
 
   /**
    * Set the default send priority
@@ -244,13 +260,33 @@ protected:
   virtual int lazy_send_message(Message *m, Connection *con) = 0;
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
   virtual int send_keepalive(Connection *con) = 0;
-
+  /**
+   * Mark down a connection to a remote. This will cause us to
+   * discard our outgoing queue for them, and if they try
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset.
+   * It does not generate any notifications to he Dispatcher.
+   */
   virtual void mark_down(const entity_addr_t& a) = 0;
   virtual void mark_down(Connection *con) = 0;
+  /**
+   * Unlike mark_down, this function will try and deliver
+   * all messages before ending the connection. But the
+   * messages are not delivered reliably, and once they've
+   * all been sent out the Connection will be closed and
+   * generate an ms_handle_reset notification to the
+   * Dispatcher.
+   */
   virtual void mark_down_on_empty(Connection *con) = 0;
   virtual void mark_disposable(Connection *con) = 0;
   virtual void mark_down_all() = 0;
 
+  /**
+   * Get the Connection object associated with a given entity. If a
+   * Connection does not exist, create one and establish a logical connection.
+   *
+   * @param dest The entity to get a connection for.
+   */
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
   virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }

@@ -46,7 +46,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, msgr)
 static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
-  return *_dout << "-- " << msgr->ms_addr << " ";
+  return *_dout << "-- " << msgr->get_myaddr() << " ";
 }
 
 
@@ -145,20 +145,20 @@ int SimpleMessenger::Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, i
     return -errno;
   }
   
-  msgr->ms_addr = bind_addr;
-  if (msgr->ms_addr != entity_addr_t())
+  msgr->my_inst.addr = bind_addr;
+  if (msgr->my_inst.addr != entity_addr_t())
     msgr->need_addr = false;
   else 
     msgr->need_addr = true;
 
-  if (msgr->ms_addr.get_port() == 0) {
-    msgr->ms_addr = listen_addr;
-    msgr->ms_addr.nonce = msgr->nonce;
+  if (msgr->my_inst.addr.get_port() == 0) {
+    msgr->my_inst.addr = listen_addr;
+    msgr->my_inst.addr.nonce = msgr->nonce;
   }
 
   msgr->init_local_pipe();
 
-  ldout(msgr->cct,1) << "accepter.bind ms_addr is " << msgr->ms_addr << " need_addr=" << msgr->need_addr << dendl;
+  ldout(msgr->cct,1) << "accepter.bind my_inst.addr is " << msgr->my_inst.addr << " need_addr=" << msgr->need_addr << dendl;
   msgr->did_bind = true;
   return 0;
 }
@@ -170,7 +170,7 @@ int SimpleMessenger::Accepter::rebind(int avoid_port)
   
   stop();
 
-  entity_addr_t addr = msgr->ms_addr;
+  entity_addr_t addr = msgr->my_inst.addr;
   int old_port = addr.get_port();
   addr.set_port(0);
 
@@ -487,22 +487,16 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
   return 0;
 }
 
-entity_addr_t SimpleMessenger::get_myaddr()
-{
-  entity_addr_t a = ms_addr;
-  return a;  
-}
-
 /**
- * If ms_addr doesn't have an IP set, this function
+ * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void SimpleMessenger::set_ip(entity_addr_t &addr)
+void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
 {
-  if (ms_addr.is_blank_ip()) {
-    int port = ms_addr.get_port();
-    ms_addr.addr = addr.addr;
-    ms_addr.set_port(port);
+  if (my_inst.addr.is_blank_ip()) {
+    int port = my_inst.addr.get_port();
+    my_inst.addr.addr = addr.addr;
+    my_inst.addr.set_port(port);
   }
 }
 
@@ -539,7 +533,7 @@ int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 #undef dout_prefix
 #define dout_prefix _pipe_prefix(_dout)
 ostream& SimpleMessenger::Pipe::_pipe_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << msgr->ms_addr << " >> " << peer_addr << " pipe(" << this
+  return *_dout << "-- " << msgr->my_inst.addr << " >> " << peer_addr << " pipe(" << this
 		<< " sd=" << sd
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
@@ -626,7 +620,7 @@ int SimpleMessenger::Pipe::accept()
 
   // and my addr
   bufferlist addrs;
-  ::encode(msgr->ms_addr, addrs);
+  ::encode(msgr->my_inst.addr, addrs);
 
   // and peer's socket addr (they might not know their ip)
   entity_addr_t socket_addr;
@@ -830,7 +824,7 @@ int SimpleMessenger::Pipe::accept()
 
       if (connect.connect_seq == existing->connect_seq) {
 	// connection race?
-	if (peer_addr < msgr->ms_addr ||
+	if (peer_addr < msgr->my_inst.addr ||
 	    existing->policy.server) {
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
@@ -850,7 +844,7 @@ int SimpleMessenger::Pipe::accept()
 	  // our existing outgoing wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
-	  assert(peer_addr > msgr->ms_addr);
+	  assert(peer_addr > msgr->my_inst.addr);
 	  if (!(existing->state == STATE_CONNECTING ||
 		existing->state == STATE_OPEN))
 	    lderr(msgr->cct) << "accept race bad state, would send wait, existing=" << existing->state
@@ -1099,7 +1093,7 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
-  if (do_sendmsg(sd, &msg, msglen)) {
+  if (do_sendmsg(&msg, msglen)) {
     ldout(msgr->cct,2) << "connect couldn't write my banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
@@ -1139,7 +1133,7 @@ int SimpleMessenger::Pipe::connect()
   if (msgr->need_addr)
     msgr->learned_addr(peer_addr_for_me);
 
-  ::encode(msgr->ms_addr, myaddrbl);
+  ::encode(msgr->my_inst.addr, myaddrbl);
 
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = myaddrbl.c_str();
@@ -1147,11 +1141,11 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
-  if (do_sendmsg(sd, &msg, msglen)) {
+  if (do_sendmsg(&msg, msglen)) {
     ldout(msgr->cct,2) << "connect couldn't write my addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
-  ldout(msgr->cct,10) << "connect sent my addr " << msgr->ms_addr << dendl;
+  ldout(msgr->cct,10) << "connect sent my addr " << msgr->my_inst.addr << dendl;
 
 
   while (1) {
@@ -1188,7 +1182,7 @@ int SimpleMessenger::Pipe::connect()
 
     ldout(msgr->cct,10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
-    if (do_sendmsg(sd, &msg, msglen)) {
+    if (do_sendmsg(&msg, msglen)) {
       ldout(msgr->cct,2) << "connect couldn't write gseq, cseq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       goto fail;
     }
@@ -2060,7 +2054,7 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   return ret;
 }
 
-int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
+int SimpleMessenger::Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
   char buf[80];
 
@@ -2083,40 +2077,6 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
       ldout(msgr->cct,10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
       errno = EINTR;
       return -1; // close enough
-    }
-
-    if (0) {
-      // hex dump
-      struct iovec *v = msg->msg_iov;
-      size_t left = r;
-      size_t vpos = 0;
-      ldout(msgr->cct,0) << "do_sendmsg wrote " << r << " bytes, hexdump:\n";
-      int pos = 0;
-      int col = 0;
-      char buf[20];
-      while (left > 0) {
-	if (col == 0) {
-	  snprintf(buf, sizeof(buf), "%05x : ", pos);
-	  *_dout << buf;
-	}
-	snprintf(buf, sizeof(buf), " %02x", ((unsigned char*)v->iov_base)[vpos]);
-	*_dout << buf;
-	left--;
-	if (!left)
-	  break;
-	vpos++;
-	pos++;
-	if (vpos == v->iov_len) {
-	  v++;
-	  vpos = 0;
-	}	  
-	col++;
-	if (col == 16) {
-	  *_dout << "\n";
-	  col = 0;
-	}
-      }
-      *_dout << dendl;
     }
 
     len -= r;
@@ -2162,7 +2122,7 @@ int SimpleMessenger::Pipe::write_ack(uint64_t seq)
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 2;
   
-  if (do_sendmsg(sd, &msg, 1 + sizeof(s), true) < 0) 
+  if (do_sendmsg(&msg, 1 + sizeof(s), true) < 0)
     return -1;	
   return 0;
 }
@@ -2181,7 +2141,7 @@ int SimpleMessenger::Pipe::write_keepalive()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   
-  if (do_sendmsg(sd, &msg, 1) < 0) 
+  if (do_sendmsg(&msg, 1) < 0)
     return -1;	
   return 0;
 }
@@ -2261,7 +2221,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 	     << dendl;
     
     if (msg.msg_iovlen >= IOV_MAX-2) {
-      if (do_sendmsg(sd, &msg, msglen, true)) 
+      if (do_sendmsg(&msg, msglen, true))
 	goto fail;
       
       // and restart the iov
@@ -2295,7 +2255,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   msg.msg_iovlen++;
 
   // send
-  if (do_sendmsg(sd, &msg, msglen)) 
+  if (do_sendmsg(&msg, msglen))
     goto fail;
 
   ret = 0;
@@ -2413,7 +2373,7 @@ int SimpleMessenger::start()
   started = true;
 
   if (!did_bind)
-    ms_addr.nonce = nonce;
+    my_inst.addr.nonce = nonce;
 
   lock.Unlock();
 
@@ -2432,7 +2392,7 @@ int SimpleMessenger::start()
 SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, int type)
 {
   assert(lock.is_locked());
-  assert(addr != ms_addr);
+  assert(addr != my_inst.addr);
   
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
@@ -2494,7 +2454,7 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
   Pipe *pipe = NULL;
-  if (ms_addr == dest.addr) {
+  if (my_inst.addr == dest.addr) {
     // local
     pipe = dispatch_queue.local_pipe;
   } else {
@@ -2512,16 +2472,10 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
       }
     }
     if (!pipe) {
-      Policy& policy = get_policy(dest.name.type());
-      if (policy.lossy && policy.server)
-	pipe = NULL;
-      else
-	pipe = connect_rank(dest.addr, dest.name.type());
+      pipe = connect_rank(dest.addr, dest.name.type());
     }
   }
-  if (pipe)
-    return (Connection *)pipe->connection_state->get();
-  return NULL;
+  return (Connection *)pipe->connection_state->get();
 }
 
 
@@ -2541,7 +2495,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
   lock.Lock();
   {
     // local?
-    if (ms_addr == dest_addr) {
+    if (my_inst.addr == dest_addr) {
       if (!destination_stopped) {
         // local
         ldout(cct,20) << "submit_message " << *m << " local" << dendl;
@@ -2599,7 +2553,7 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
   lock.Lock();
   {
     // local?
-    if (ms_addr != dest_addr) {
+    if (my_inst.addr != dest_addr) {
       // remote.
       Pipe *pipe = 0;
       if (rank_pipe.count( dest_proc_addr )) {
@@ -2808,13 +2762,13 @@ void SimpleMessenger::mark_disposable(Connection *con)
 void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   // be careful here: multiple threads may block here, and readers of
-  // ms_addr do NOT hold any lock.
+  // my_inst.addr do NOT hold any lock.
   lock.Lock();
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
-    t.set_port(ms_addr.get_port());
-    ms_addr.addr = t.addr;
-    ldout(cct,1) << "learned my addr " << ms_addr << dendl;
+    t.set_port(my_inst.addr.get_port());
+    my_inst.addr.addr = t.addr;
+    ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     init_local_pipe();
   }
@@ -2823,6 +2777,6 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 void SimpleMessenger::init_local_pipe()
 {
-  dispatch_queue.local_pipe->connection_state->peer_addr = msgr->ms_addr;
+  dispatch_queue.local_pipe->connection_state->peer_addr = msgr->my_inst.addr;
   dispatch_queue.local_pipe->connection_state->peer_type = msgr->my_type;
 }
