@@ -1123,7 +1123,10 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   crush.set_type_name(0, "osd");
   crush.set_type_name(1, "host");
   crush.set_type_name(2, "rack");
-  crush.set_type_name(3, "pool");
+  crush.set_type_name(3, "row");
+  crush.set_type_name(4, "room");
+  crush.set_type_name(5, "datacenter");
+  crush.set_type_name(6, "pool");
 
   // root
   int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 3 /* pool */, 0, NULL, NULL);
