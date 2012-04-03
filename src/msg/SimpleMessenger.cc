@@ -487,11 +487,6 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
   return 0;
 }
 
-const entity_addr_t& SimpleMessenger::get_myaddr()
-{
-  return ms_addr;
-}
-
 /**
  * If ms_addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
