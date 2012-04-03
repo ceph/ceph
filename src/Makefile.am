@@ -1189,6 +1189,7 @@ noinst_HEADERS = \
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
+	common/TrackedOp.h\
         common/arch.h\
         common/armor.h\
 	global/global_init.h \
