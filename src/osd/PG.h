@@ -26,6 +26,7 @@
 #include "include/assert.h" 
 
 #include "include/types.h"
+#include "include/stringify.h"
 #include "osd_types.h"
 #include "include/buffer.h"
 #include "include/xlist.h"
@@ -1286,6 +1287,7 @@ public:
     backfill_target(-1),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
+    osr(stringify(p)),
     finish_sync_event(NULL),
     finalizing_scrub(false),
     scrub_reserved(false), scrub_reserve_failed(false),

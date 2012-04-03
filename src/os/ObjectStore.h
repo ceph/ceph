@@ -80,16 +80,32 @@ public:
 
   Logger *logger;
 
+  /**
+   * a sequencer orders transactions
+   *
+   * Any transactions queued under a given sequencer will be applied in
+   * sequence.  Transactions queued under different sequencers may run
+   * in parallel.
+   */
   struct Sequencer_impl {
     virtual void flush() = 0;
     virtual ~Sequencer_impl() {}
   };
   struct Sequencer {
+    string name;
     Sequencer_impl *p;
-    Sequencer() : p(NULL) {}
+
+    Sequencer(string n)
+      : name(n), p(NULL) {}
     ~Sequencer() {
       delete p;
     }
+
+    /// return a unique string identifier for this sequencer
+    const string& get_name() {
+      return name;
+    }
+    /// wait for any queued transactions on this sequencer to apply
     void flush() {
       if (p)
 	p->flush();

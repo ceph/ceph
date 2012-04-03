@@ -436,7 +436,7 @@ public:
 };
 
 TEST_F(StoreTest, Synthetic) {
-  ObjectStore::Sequencer osr;
+  ObjectStore::Sequencer osr("test");
   MixedGenerator gen;
   gen_type rng(time(NULL));
   coll_t cid("synthetic_1");

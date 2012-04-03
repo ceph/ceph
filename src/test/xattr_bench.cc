@@ -92,7 +92,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
   Cond cond;
   int in_flight = 0;
   ObjectStore::Transaction t;
-  map<string, pair<set<string>, ObjectStore::Sequencer> > collections;
+  map<string, pair<set<string>, ObjectStore::Sequencer*> > collections;
   for (int i = 0; i < 3*THREADS; ++i) {
     stringstream coll_str;
     coll_str << "coll_" << i << "_" << run;
@@ -105,7 +105,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 	      hobject_t(sobject_t(obj_str.str(), CEPH_NOSNAP)));
       objects.insert(obj_str.str());
     }
-    collections[coll_str.str()] = make_pair(objects, ObjectStore::Sequencer());
+    collections[coll_str.str()] = make_pair(objects, new ObjectStore::Sequencer(coll_str.str()));
   }
   store->apply_transaction(t);
 
@@ -122,7 +122,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 	cond.Wait(lock);
     }
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    map<string, pair<set<string>, ObjectStore::Sequencer> >::iterator iter =
+    map<string, pair<set<string>, ObjectStore::Sequencer*> >::iterator iter =
       rand_choose(collections);
     for (set<string>::iterator obj = iter->second.first.begin();
 	 obj != iter->second.first.end();
@@ -136,7 +136,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 		   bl);
       }
     }
-    store->queue_transaction(&(iter->second.second), t,
+    store->queue_transaction(iter->second.second, t,
 			     new OnApplied(&lock, &cond, &in_flight,
 					   t));
   }
