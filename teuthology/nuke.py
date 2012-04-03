@@ -120,7 +120,8 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
                 'grep', 'ceph', '/etc/mtab', run.Raw('|'),
                 'grep', '-o', "on /.* type", run.Raw('|'),
                 'grep', '-o', "/.* ", run.Raw('|'),
-                'xargs', 'sudo', 'umount', '-f', run.Raw(';'),
+                'xargs', '-r',
+                'sudo', 'umount', '-f', run.Raw(';'),
                 'fi'
                 ],
             wait=False
@@ -139,7 +140,8 @@ def remove_osd_mounts(ctx, log):
         args=[
             'grep', '/tmp/cephtest/data/', '/etc/mtab', run.Raw('|'),
             'awk', '{print $2}', run.Raw('|'),
-            'xargs', 'sudo', 'umount', run.Raw(';'),
+            'xargs', '-r',
+            'sudo', 'umount', run.Raw(';'),
             'true'
             ],
         )
