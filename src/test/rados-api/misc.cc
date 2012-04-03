@@ -157,7 +157,8 @@ TEST(LibRadosMisc, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
-  ASSERT_EQ(0, ioctx.exec("foo", "rbd", "test_exec", bl2, out));
+  int r = ioctx.exec("foo", "rbd", "test_exec", bl2, out);
+  ASSERT_EQ((int)out.length(), r);
   bufferlist::iterator iter = out.begin();
   std::string outstring;
   ::decode(outstring, iter);
