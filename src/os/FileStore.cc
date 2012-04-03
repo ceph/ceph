@@ -2659,7 +2659,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _collection_move(ocid, ncid, oid);
+	r = _collection_move(ocid, ncid, oid, spos);
       }
       break;
 
@@ -4439,12 +4439,24 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   return r;
 }
 
-int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o) 
+int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o,
+				const SequencerPosition& spos) 
 {
   dout(15) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
+
+  if (!_check_replay_guard(oldcid, o, spos))
+    return 0;
+
   int r = lfn_link(oldcid, c, o);
-  if (r == 0 || (replaying && r == -EEXIST))
+  if (r == 0 || (replaying && r == -EEXIST)) {
     r = lfn_unlink(oldcid, o);
+
+    // set guard on object so we don't do this again
+    int fd = lfn_open(c, o, 0);
+    assert(fd >= 0);
+    _set_replay_guard(fd, spos);
+    TEMP_FAILURE_RETRY(::close(fd));
+  }
   dout(10) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
 }
