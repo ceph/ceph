@@ -715,6 +715,13 @@ test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_store
 
+test_wrkldgen_SOURCES = test/test_workload_gen/workload_generator.cc
+test_wrkldgen_LDFLAGS = ${AM_LDFLAGS}
+test_wrkldgen_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_wrkldgen_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+	-I$(top_srcdir)/src/leveldb/include
+bin_DEBUGPROGRAMS += test_wrkldgen
+
 xattr_bench_SOURCES = test/xattr_bench.cc
 xattr_bench_LDFLAGS = ${AM_LDFLAGS}
 xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
