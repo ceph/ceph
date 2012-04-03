@@ -140,6 +140,8 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   if (rc < 0 && rc != -ENOENT)
     return rc;
 
+  rc = 0;
+
   struct rgw_bucket_dir_entry entry;
   if (rc != -ENOENT) {
     bufferlist::iterator biter = cur_value.begin();
@@ -198,6 +200,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (rc != -ENOENT) {
       return rc;
     } else {
+      rc = 0;
       entry.name = op.name;
       entry.epoch = op.epoch;
       entry.meta = op.meta;
