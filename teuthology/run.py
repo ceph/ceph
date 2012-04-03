@@ -82,6 +82,13 @@ def main():
         level=loglevel,
         )
 
+
+    if 'targets' in ctx.config and 'roles' in ctx.config:
+        targets = len(ctx.config['targets'])
+        roles = len(ctx.config['roles'])
+        assert targets >= roles, \
+            '%d targets are needed for all roles but found %d listed.' % (roles, targets)
+       
     if ctx.block:
         assert ctx.lock, \
             'the --block option is only supported with the --lock option'
