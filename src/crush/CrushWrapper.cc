@@ -85,9 +85,9 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       continue;
 
     if (loc.count(p->second) == 0) {
-      ldout(cct, 1) << "error: did not specify location for '" << p->second << "' level (levels are "
+      ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
-      return -EINVAL;
+      continue;
     }
 
     int id = get_item_id(loc[p->second].c_str());
