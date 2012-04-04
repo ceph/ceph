@@ -651,7 +651,7 @@ int BackedUpObject::upload(IoCtx &io_ctx, const char *file_name, const char *dir
   static const int CHUNK_SZ = 32765;
   while (true) {
     char buf[CHUNK_SZ];
-    int flen = fread(buf, CHUNK_SZ, 1, fp);
+    int flen = fread(buf, 1, CHUNK_SZ, fp);
     if (flen < 0) {
       int err = errno;
       cerr << ERR_PREFIX << "upload: fread(" << file_name << ") error: "
