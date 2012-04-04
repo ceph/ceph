@@ -531,7 +531,7 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
   }
   ret = parse_injectargs(nargs, oss);
   if (!nargs.empty()) {
-    *oss << "ERROR: failed to parse arguments: ";
+    *oss << " failed to parse arguments: ";
     std::string prefix;
     for (std::vector<const char*>::const_iterator i = nargs.begin();
 	 i != nargs.end(); ++i) {
