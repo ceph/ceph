@@ -170,6 +170,10 @@ public:
   ceph::log::SubsystemMap subsys;
 
   EntityName name;
+
+  /// cluster name
+  string cluster;
+
 #define OPTION_OPT_INT(name) const int name;
 #define OPTION_OPT_LONGLONG(name) const long long name;
 #define OPTION_OPT_STR(name) const std::string name;
