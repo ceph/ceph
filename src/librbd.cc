@@ -1456,8 +1456,12 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   uint64_t start_block = get_block_num(ictx->header, off);
   uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
+  snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
+
+  if (snap != CEPH_NOSNAP)
+    return -EROFS;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
@@ -1632,12 +1636,16 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   uint64_t start_block = get_block_num(ictx->header, off);
   uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
+  snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
 
   r = check_io(ictx, off, len);
   if (r < 0)
     return r;
+
+  if (snap != CEPH_NOSNAP)
+    return -EROFS;
 
   c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
