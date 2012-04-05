@@ -13,7 +13,6 @@
  */
 
 #include "common/BackTrace.h"
-#include "common/DoutStreambuf.h"
 #include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -91,6 +90,16 @@ static void handle_fatal_signal(int signum)
   ostringstream oss;
   bt.print(oss);
   dout_emergency(oss.str());
+
+  // dump to log.  this uses the heap extensively, but we're better
+  // off trying than not.
+  derr << buf << std::endl;
+  bt.print(*_dout);
+  *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
+	 << "is needed to interpret this.\n"
+	 << dendl;
+
+  g_ceph_context->_log->dump_recent();
 
   reraise_fatal(signum);
 }

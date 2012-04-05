@@ -4,7 +4,7 @@
 
 #include "CrushWrapper.h"
 
-#define DOUT_SUBSYS crush
+#define dout_subsys ceph_subsys_crush
 
 
 void CrushWrapper::find_roots(set<int>& roots) const

@@ -41,7 +41,7 @@
 #include "common/perf_counters.h"
 
 
-#define DOUT_SUBSYS objecter
+#define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
 #define dout_prefix *_dout << messenger->get_myname() << ".objecter "
 

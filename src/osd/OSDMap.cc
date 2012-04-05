@@ -20,6 +20,8 @@
 
 #include "common/code_environment.h"
 
+#define dout_subsys ceph_subsys_osd
+
 // ----------------------------------
 // osd_info_t
 
@@ -1292,7 +1294,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
       loc["datacenter"] = dc;
     loc["pool"] = "default";
 
-    ldout(cct, 0) << " adding osd." << o << " at " << loc << dendl;
+    ldout(cct, 5) << " adding osd." << o << " at " << loc << dendl;
     crush.insert_item(cct, o, 1.0, *i, loc);
   }
 

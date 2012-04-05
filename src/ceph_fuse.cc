@@ -101,12 +101,16 @@ int main(int argc, const char **argv, const char *envp[]) {
   // we need to handle the forking ourselves.
   int fd[2] = {0, 0};  // parent's, child's
   pid_t childpid = 0;
+  bool restart_log = false;
   if (g_conf->daemonize) {
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
       cerr << "ceph-fuse[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno) << std::endl;
       exit(1);
     }
+
+    g_ceph_context->_log->stop();
+    restart_log = true;
 
     childpid = fork();
   }
@@ -116,6 +120,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (childpid == 0) {
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
+
+    if (restart_log)
+      g_ceph_context->_log->start();
 
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     messenger->start();

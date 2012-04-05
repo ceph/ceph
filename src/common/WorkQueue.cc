@@ -21,7 +21,7 @@
 #include "common/config.h"
 #include "common/HeartbeatMap.h"
 
-#define DOUT_SUBSYS tp
+#define dout_subsys ceph_subsys_tp
 #undef dout_prefix
 #define dout_prefix *_dout << name << " "
 

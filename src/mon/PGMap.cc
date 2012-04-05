@@ -3,7 +3,7 @@
 
 #include "PGMap.h"
 
-#define DOUT_SUBSYS mon
+#define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
 
 #include "common/Formatter.h"

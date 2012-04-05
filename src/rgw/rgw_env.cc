@@ -4,7 +4,7 @@
 #include <string>
 #include <map>
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 RGWEnv::RGWEnv()
 {

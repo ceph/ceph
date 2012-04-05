@@ -227,20 +227,20 @@ private:
 
     /* Clean up sent list */
     void handle_ack(uint64_t seq) {
-      ldout(msgr->cct, 15) << "reader got ack seq " << seq << dendl;
+      lsubdout(msgr->cct, ms, 15) << "reader got ack seq " << seq << dendl;
       // trim sent list
       while (!sent.empty() &&
           sent.front()->get_seq() <= seq) {
         Message *m = sent.front();
         sent.pop_front();
-        ldout(msgr->cct, 10) << "reader got ack seq "
+        lsubdout(msgr->cct, ms, 10) << "reader got ack seq "
             << seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
         m->put();
       }
 
       if (sent.empty() && close_on_empty) {
 	// this is slightly hacky
-	ldout(msgr->cct, 10) << "reader got last ack, queue empty, closing" << dendl;
+	lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
 	policy.lossy = true;
 	fault();
       }

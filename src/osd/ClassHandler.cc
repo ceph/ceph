@@ -14,7 +14,7 @@
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS osd
+#define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix *_dout
 

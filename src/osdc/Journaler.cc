@@ -19,7 +19,7 @@
 #include "osdc/Journaler.h"
 #include "common/errno.h"
 
-#define DOUT_SUBSYS journaler
+#define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler" << (readonly ? "(ro) ":"(rw) ")
 

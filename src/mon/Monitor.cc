@@ -45,7 +45,6 @@
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/Clock.h"
-#include "common/DoutStreambuf.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
@@ -70,7 +69,7 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#define DOUT_SUBSYS mon
+#define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {

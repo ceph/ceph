@@ -4,6 +4,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 
+#define dout_subsys ceph_subsys_auth
 
 #define AES_KEY_LEN	16
 

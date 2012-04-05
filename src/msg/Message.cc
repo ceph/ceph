@@ -146,6 +146,7 @@ using namespace std;
 
 #define DEBUGLVL  10    // debug level of output
 
+#define dout_subsys ceph_subsys_ms
 
 void Message::encode(uint64_t features, bool datacrc)
 {
@@ -632,9 +633,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   }
   catch (const buffer::error &e) {
     if (cct) {
-      ldout(cct, 0) << "failed to decode message of type " << type
-		    << " v" << header.version
-		    << ": " << e.what() << dendl;
+      lderr(cct) << "failed to decode message of type " << type
+		 << " v" << header.version
+		 << ": " << e.what() << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
 	assert(0);
     }

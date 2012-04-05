@@ -76,7 +76,7 @@
 #include "common/config.h"
 
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l <= cct->_conf->debug_mds || l <= cct->_conf->debug_mds_migrator)
 #undef dout_prefix
@@ -496,7 +496,8 @@ void Migrator::show_exporting()
 
 void Migrator::audit()
 {
-  if (g_conf->debug_mds < 5) return;  // hrm.
+  if (!g_conf->subsys.should_gather(ceph_subsys_mds, 5))
+    return;  // hrm.
 
   // import_state
   show_importing();

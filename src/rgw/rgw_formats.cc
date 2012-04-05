@@ -19,7 +19,7 @@
 
 #define LARGE_SIZE 8192
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 RGWFormatter_Plain::RGWFormatter_Plain()
   : buf(NULL), len(0), max_len(0), min_stack_level(0)

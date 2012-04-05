@@ -253,7 +253,7 @@ Dir *Inode::open_dir()
 {
   if (!dir) {
     dir = new Dir(this);
-    ldout(cct, 15) << "open_dir " << dir << " on " << this << dendl;
+    lsubdout(cct, mds, 15) << "open_dir " << dir << " on " << this << dendl;
     assert(dn_set.size() < 2); // dirs can't be hard-linked
     if (!dn_set.empty())
       (*dn_set.begin())->get();      // pin dentry

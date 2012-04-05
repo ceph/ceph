@@ -20,7 +20,7 @@
 #include "common/config.h"
 #include "include/Context.h"
 
-#define DOUT_SUBSYS timer
+#define dout_subsys ceph_subsys_timer
 #undef dout_prefix
 #define dout_prefix *_dout << "timer(" << this << ")."
 

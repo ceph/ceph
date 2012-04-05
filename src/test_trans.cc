@@ -18,6 +18,7 @@
 #include "os/FileStore.h"
 #include "global/global_init.h"
 
+#define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout
 

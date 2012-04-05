@@ -20,7 +20,7 @@
 #include "messages/MMDSTableRequest.h"
 #include "events/ETableServer.h"
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
 

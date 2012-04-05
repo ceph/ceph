@@ -184,7 +184,7 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
 
 static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostringstream *oss, va_list ap)
+	std::ostream *oss, va_list ap)
 {
   const char *first = *i;
   char tmp[strlen(first)+1];
@@ -231,7 +231,7 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 
 bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostringstream *oss, ...)
+	std::ostream *oss, ...)
 {
   bool r;
   va_list ap;
@@ -293,7 +293,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 
 bool ceph_argparse_withint(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostringstream *oss, ...)
+	std::ostream *oss, ...)
 {
   bool r;
   va_list ap;
@@ -316,7 +316,7 @@ bool ceph_argparse_withint(std::vector<const char*> &args,
 
 bool ceph_argparse_withlonglong(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, long long *ret,
-	std::ostringstream *oss, ...)
+	std::ostream *oss, ...)
 {
   bool r;
   va_list ap;

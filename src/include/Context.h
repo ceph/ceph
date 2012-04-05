@@ -24,7 +24,7 @@
 
 #include <iostream>
 
-#define DOUT_SUBSYS context
+#define mydout(cct, v) lgeneric_subdout(cct, context, v)
 
 /*
  * Context - abstract callback class
@@ -56,12 +56,12 @@ inline void finish_contexts(CephContext *cct, std::list<Context*>& finished,
   list<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  ldout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
+  mydout(cct, 10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    ldout(cct,10) << "---- " << c << dendl;
+    mydout(cct,10) << "---- " << c << dendl;
     c->complete(result);
   }
 }
@@ -75,12 +75,12 @@ inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished,
   vector<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  ldout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
+  mydout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::vector<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    ldout(cct,10) << "---- " << c << dendl;
+    mydout(cct,10) << "---- " << c << dendl;
     c->complete(result);
   }
 }
@@ -143,7 +143,7 @@ private:
     waitfor.erase(sub);
 #endif
     --sub_existing_count;
-    ldout(cct,10) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub
+    mydout(cct,10) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub
 #ifdef DEBUG_GATHER
 		    << " (remaining " << waitfor << ")"
 #endif
@@ -186,11 +186,11 @@ private:
       lock("C_Gather::lock", true, false), //disable lockdep
       activated(false)
   {
-    ldout(cct,10) << "C_Gather " << this << ".new" << dendl;
+    mydout(cct,10) << "C_Gather " << this << ".new" << dendl;
   }
 public:
   ~C_Gather() {
-    ldout(cct,10) << "C_Gather " << this << ".delete" << dendl;
+    mydout(cct,10) << "C_Gather " << this << ".delete" << dendl;
   }
   void set_finisher(Context *onfinish_) {
     Mutex::Locker l(lock);
@@ -217,7 +217,7 @@ public:
 #ifdef DEBUG_GATHER
     waitfor.insert(s);
 #endif
-    ldout(cct,10) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
+    mydout(cct,10) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
   }
   void finish(int r) {
@@ -307,6 +307,6 @@ private:
   bool activated;
 };
 
-#undef DOUT_SUBSYS
+#undef mydout
 
 #endif

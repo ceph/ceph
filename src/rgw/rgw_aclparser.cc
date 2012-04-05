@@ -7,7 +7,7 @@
 #include <iostream>
 #include <map>
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 int main(int argc, char **argv) {
   RGWACLXMLParser parser;

@@ -12,7 +12,7 @@
 
 /*** ObjectCacher::Object ***/
 
-#define DOUT_SUBSYS objectcacher
+#define dout_subsys ceph_subsys_objectcacher
 #undef dout_prefix
 #define dout_prefix *_dout << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 

@@ -21,7 +21,7 @@
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS paxos
+#define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, machine_name, state, first_committed, last_committed)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name, int rank,

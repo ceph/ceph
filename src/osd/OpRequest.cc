@@ -6,7 +6,7 @@
 #include "common/debug.h"
 #include "common/config.h"
 
-#define DOUT_SUBSYS optracker
+#define dout_subsys ceph_subsys_optracker
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 

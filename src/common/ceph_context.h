@@ -18,13 +18,8 @@
 #include <iostream>
 #include <stdint.h>
 
-/* Forward declarations */ 
-template <typename T, typename U>
-class DoutStreambuf;
-
 class AdminSocket;
 class CephContextServiceThread;
-class DoutLocker;
 class PerfCountersCollection;
 class md_config_obs_t;
 class md_config_t;
@@ -32,6 +27,9 @@ class PerfCountersHook;
 
 namespace ceph {
   class HeartbeatMap;
+  namespace log {
+    class Log;
+  }
 }
 
 /* A CephContext represents the context held by a single library user.
@@ -46,20 +44,14 @@ public:
   CephContext(uint32_t module_type_);
   ~CephContext();
   md_config_t *_conf;
-  DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
-  std::ostream _dout;
+
+  ceph::log::Log *_log;
 
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 
   /* Reopen the log files */
   void reopen_logs();
-
-  /* Lock the dout lock. */
-  void dout_lock(DoutLocker *locker);
-
-  /* Try to lock the dout lock. */
-  void dout_trylock(DoutLocker *locker);
 
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
@@ -94,6 +86,8 @@ private:
    * SIGHUP wakes this thread, which then reopens logfiles */
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
+
+  md_config_obs_t *_log_obs;
 
   /* The admin socket associated with this context */
   AdminSocket *_admin_socket;

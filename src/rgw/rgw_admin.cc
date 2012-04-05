@@ -21,7 +21,7 @@ using namespace std;
 #include "rgw_formats.h"
 #include "auth/Crypto.h"
 
-#define DOUT_SUBSYS rgw
+#define dout_subsys ceph_subsys_rgw
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20

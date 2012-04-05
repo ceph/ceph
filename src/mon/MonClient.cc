@@ -40,7 +40,7 @@
 #include "common/config.h"
 
 
-#define DOUT_SUBSYS monc
+#define dout_subsys ceph_subsys_monc
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (hunting ? "(hunting)":"") << ": "
 

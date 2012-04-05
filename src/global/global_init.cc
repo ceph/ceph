@@ -12,7 +12,6 @@
  *
  */
 
-#include "common/DoutStreambuf.h"
 #include "common/Thread.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
@@ -33,11 +32,12 @@
 #include <errno.h>
 #include <deque>
 
+#define dout_subsys ceph_subsys_
+
 static void global_init_set_globals(CephContext *cct)
 {
   g_ceph_context = cct;
   g_conf = cct->_conf;
-  _doss = g_ceph_context->_doss;
 }
 
 static void output_ceph_version()
@@ -130,6 +130,10 @@ void global_init_daemonize(CephContext *cct, int flags)
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize)
     return;
+
+  // stop log thread
+  g_ceph_context->_log->stop();
+
   int num_threads = Thread::get_num_threads();
   if (num_threads > 1) {
     derr << "global_init_daemonize: BUG: there are " << num_threads - 1
@@ -144,6 +148,9 @@ void global_init_daemonize(CephContext *cct, int flags)
 	 << cpp_strerror(ret) << dendl;
     exit(1);
   }
+
+  // restart log thread
+  g_ceph_context->_log->start();
 
   if (atexit(pidfile_remove_void)) {
     derr << "global_init_daemonize: failed to set pidfile_remove function "
@@ -181,12 +188,6 @@ void global_init_daemonize(CephContext *cct, int flags)
     }
   }
   pidfile_write(g_conf);
-  ret = cct->_doss->handle_pid_change(g_conf);
-  if (ret) {
-    derr << "global_init_daemonize: _doss->handle_pid_change failed with "
-	 << "error code " << ret << dendl;
-    exit(1);
-  }
   ldout(cct, 1) << "finished global_init_daemonize" << dendl;
 }
 
@@ -215,7 +216,7 @@ int global_init_shutdown_stderr(CephContext *cct)
 	 << err << dendl;
     return 1;
   }
-  cct->_doss->handle_stderr_shutdown();
+  cct->_log->set_stderr_level(-1, -1);
   return 0;
 }
 

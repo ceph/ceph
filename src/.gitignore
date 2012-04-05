@@ -25,6 +25,7 @@
 /rbdtool
 /rgw_multiparser
 /streamtest
+/bench_log
 /test_ioctls
 /test_trans
 /testceph
@@ -53,7 +54,6 @@
 /xattr_bench
 dev
 mondata
-log
 mnt
 TAGS
 tags

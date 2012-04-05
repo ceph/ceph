@@ -36,6 +36,7 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define dout_subsys ceph_subsys_ms
 
 Messenger *messenger = 0;
 

@@ -98,7 +98,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/config.h"
 
-#define DOUT_SUBSYS mds
+#define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDS *mds) {
@@ -9972,7 +9972,7 @@ void MDCache::show_subtrees(int dbl)
 {
   //dout(10) << "show_subtrees" << dendl;
 
-  if (dbl > g_conf->debug && dbl > g_conf->debug_mds) 
+  if (!g_conf->subsys.should_gather(ceph_subsys_mds, dbl))
     return;  // i won't print anything.
 
   if (subtrees.empty()) {

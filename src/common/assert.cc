@@ -45,11 +45,6 @@ namespace ceph {
 
   void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
   {
-    DoutLocker dout_locker;
-    if (g_assert_context) {
-      g_assert_context->dout_trylock(&dout_locker);
-    }
-
     ostringstream tss;
     tss << ceph_clock_now(g_assert_context);
 
@@ -67,10 +62,17 @@ namespace ceph {
     bt->print(oss);
     dout_emergency(oss.str());
 
-    snprintf(buf, sizeof(buf),
-	     " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	     "is needed to interpret this.\n");
-    dout_emergency(oss.str());
+    dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
+		   "is needed to interpret this.\n");
+
+    if (g_assert_context) {
+      lderr(g_assert_context) << buf << std::endl;
+      bt->print(*_dout);
+      *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
+	     << "is needed to interpret this.\n" << dendl;
+
+      g_assert_context->_log->dump_recent();
+    }
 
     throw FailedAssertion(bt);
   }
@@ -78,11 +80,6 @@ namespace ceph {
   void __ceph_assert_warn(const char *assertion, const char *file,
 			  int line, const char *func)
   {
-    DoutLocker dout_locker;
-    if (g_assert_context) {
-      g_assert_context->dout_trylock(&dout_locker);
-    }
-
     char buf[8096];
     snprintf(buf, sizeof(buf),
 	     "WARNING: assert(%s) at: %s: %d: %s()\n",

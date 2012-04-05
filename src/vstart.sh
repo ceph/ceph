@@ -198,7 +198,6 @@ $SUDO rm -f core*
 
 test -d out || mkdir out
 $SUDO rm -rf out/*
-test -d log && rm -f log/*
 test -d gmon && $SUDO rm -rf gmon/*
 
 [ "$cephx" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
@@ -246,9 +245,7 @@ do
 done
 
 DAEMONOPTS="
-	log file = out/\$host
-	log per instance = true
-	log sym history = 100
+	log file = out/\$name.log
         admin socket = out/\$name.asok
 	chdir = \"\"
 	pid file = out/\$name.pid
