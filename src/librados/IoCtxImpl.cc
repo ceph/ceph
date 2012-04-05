@@ -737,6 +737,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   uint64_t off)
 {
   utime_t ut = ceph_clock_now(client->cct);
+  ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
 
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
