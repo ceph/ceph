@@ -1366,8 +1366,7 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
                << " will finish on commit tid " << ob->last_write_tid
                << dendl;
       safe = false;
-      if (onfinish != NULL)
-        ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
+      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
   gather.activate();
