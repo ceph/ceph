@@ -276,6 +276,17 @@ void md_config_t::parse_env()
   }
 }
 
+void md_config_t::show_config(std::ostream& out)
+{
+  out << "name = " << name << std::endl;
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = config_optionsp + i;
+    char *buf;
+    _get_val(opt->name, &buf, -1);
+    out << opt->name << " = " << buf << std::endl;
+  }
+}
+
 int md_config_t::parse_argv(std::vector<const char*>& args)
 {
   Mutex::Locker l(lock);
@@ -296,6 +307,17 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
       cerr << cf << std::endl;
+      _exit(0);
+    }
+    else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
+      show_config(cout);
+      _exit(0);
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
+      char *buf = 0;
+      _get_val(val.c_str(), &buf, -1);
+      if (buf)
+	std::cout << buf << std::endl;
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {

@@ -140,6 +140,8 @@ public:
   int get_val_from_conf_file(const std::vector <std::string> &sections,
 		   const char *key, std::string &out, bool emeta) const;
 
+  void show_config(std::ostream& out);
+
 private:
   int parse_option(std::vector<const char*>& args,
 		   std::vector<const char*>::iterator& i,
