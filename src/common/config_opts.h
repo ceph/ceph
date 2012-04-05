@@ -62,7 +62,6 @@ SUBSYS(optracker, 0, 5)
 SUBSYS(objclass, 0, 5)
 SUBSYS(filestore, 1, 5)
 SUBSYS(journal, 1, 5)
-SUBSYS(bdev, 1, 5)         // block device
 SUBSYS(ms, 0, 5)
 SUBSYS(mon, 1, 5)
 SUBSYS(monc, 0, 5)
@@ -361,16 +360,6 @@ OPTION(journal_queue_max_bytes, OPT_INT, 100 << 20)
 OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
-OPTION(bdev_lock, OPT_BOOL, true)
-OPTION(bdev_iothreads, OPT_INT, 1)         // number of ios to queue with kernel
-OPTION(bdev_idle_kick_after_ms, OPT_INT, 100)  // ms
-OPTION(bdev_el_fw_max_ms, OPT_INT, 10000)      // restart elevator at least once every 1000 ms
-OPTION(bdev_el_bw_max_ms, OPT_INT, 3000)       // restart elevator at least once every 300 ms
-OPTION(bdev_el_bidir, OPT_BOOL, false)          // bidirectional elevator?
-OPTION(bdev_iov_max, OPT_INT, 512)            // max # iov's to collect into a single readv()/writev() call
-OPTION(bdev_debug_check_io_overlap, OPT_BOOL, true)  // [DEBUG] check for any pending io overlaps
-OPTION(bdev_fake_mb, OPT_INT, 0)
-OPTION(bdev_fake_max_mb, OPT_INT, 0)
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
