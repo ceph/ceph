@@ -1386,6 +1386,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
+    uint64_t bytes_read;
 
     if (ictx->object_cacher) {
       r = ictx->read_from_cache(oid, &bl, read_len, block_ofs);
@@ -1396,6 +1397,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 	r = cb(total_read, read_len, NULL, arg);
       else
 	r = cb(total_read, read_len, bl.c_str(), arg);
+
+      bytes_read = read_len; // ObjectCacher pads with zeroes at end of object
     } else {
       map<uint64_t, uint64_t> m;
       r = ictx->data_ctx.sparse_read(oid, m, bl, read_len, block_ofs);
@@ -1406,13 +1409,14 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
       }
 
       r = handle_sparse_read(ictx->cct, bl, block_ofs, m, total_read, read_len, cb, arg);
+      bytes_read = r;
     }
     if (r < 0) {
       return r;
     }
 
-    total_read += r;
-    left -= r;
+    total_read += bytes_read;
+    left -= bytes_read;
   }
   ret = total_read;
 
