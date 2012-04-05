@@ -53,7 +53,7 @@ using std::pair;
 using std::set;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf";
+const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
 
 // file layouts
 struct ceph_file_layout g_default_file_layout = {
@@ -116,7 +116,8 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 }
 
 md_config_t::md_config_t()
-  : 
+  : cluster("ceph"),
+
 #define OPTION(name, type, def_val) name(def_val),
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
@@ -202,7 +203,9 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   list<string>::const_iterator c;
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
-    int ret = cf.parse_file(c->c_str(), parse_errors);
+    string fn = *c;
+    expand_meta(fn);
+    int ret = cf.parse_file(fn.c_str(), parse_errors);
     if (ret == 0)
       break;
     else if (ret != -ENOENT)
@@ -279,6 +282,7 @@ void md_config_t::parse_env()
 void md_config_t::show_config(std::ostream& out)
 {
   out << "name = " << name << std::endl;
+  out << "cluster = " << cluster << std::endl;
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     char *buf;
@@ -418,7 +422,8 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     else if (ceph_argparse_witharg(args, i, &val,
 				   as_option.c_str(), (char*)NULL)) {
       if (oss && (
-		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR)) &&
+		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
+		   (opt->type == OPT_UUID)) &&
 		  (observers.find(opt->name) == observers.end()))) {
 	*oss << "You cannot change " << opt->name << " using injectargs.\n";
 	ret = -ENOSYS;
@@ -591,7 +596,8 @@ int md_config_t::set_val(const char *key, const char *val)
     if (strcmp(opt->name, k.c_str()) == 0) {
       if (internal_safe_to_start_threads) {
 	// If threads have been started...
-	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR)) {
+	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
+	    (opt->type == OPT_UUID)) {
 	  // And this is NOT an integer valued variable....
 	  if (observers.find(opt->name) == observers.end()) {
 	    // And there is no observer to safely change it...
@@ -658,10 +664,12 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
       case OPT_U64:
         oss << *(uint64_t*)opt->conf_ptr(this);
         break;
-      case OPT_ADDR: {
+      case OPT_ADDR:
         oss << *(entity_addr_t*)opt->conf_ptr(this);
         break;
-      }
+      case OPT_UUID:
+	oss << *(uuid_d*)opt->conf_ptr(this);
+        break;
     }
     string str(oss.str());
     int l = strlen(str.c_str()) + 1;
@@ -797,12 +805,18 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       }
       return 0;
     }
+    case OPT_UUID: {
+      uuid_d *u = (uuid_d*)opt->conf_ptr(this);
+      if (!u->parse(val))
+	return -EINVAL;
+      return 0;
+    }
   }
   return -ENOSYS;
 }
 
 static const char *CONF_METAVARIABLES[] =
-      { "type", "name", "host", "num", "id" };
+  { "cluster", "type", "name", "host", "num", "id" };
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -828,6 +842,8 @@ bool md_config_t::expand_meta(std::string &val) const
 	continue;
       if (strcmp(CONF_METAVARIABLES[i], "type")==0)
 	out += name.get_type_name();
+      else if (strcmp(CONF_METAVARIABLES[i], "cluster")==0)
+	out += cluster;
       else if (strcmp(CONF_METAVARIABLES[i], "name")==0)
 	out += name.to_cstr();
       else if (strcmp(CONF_METAVARIABLES[i], "host")==0)

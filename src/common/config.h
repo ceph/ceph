@@ -170,6 +170,10 @@ public:
   ceph::log::SubsystemMap subsys;
 
   EntityName name;
+
+  /// cluster name
+  string cluster;
+
 #define OPTION_OPT_INT(name) const int name;
 #define OPTION_OPT_LONGLONG(name) const long long name;
 #define OPTION_OPT_STR(name) const std::string name;
@@ -179,6 +183,7 @@ public:
 #define OPTION_OPT_ADDR(name) const entity_addr_t name;
 #define OPTION_OPT_U32(name) const uint32_t name;
 #define OPTION_OPT_U64(name) const uint64_t name;
+#define OPTION_OPT_UUID(name) const uuid_d name;
 #define OPTION(name, ty, init) OPTION_##ty(name)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
@@ -192,6 +197,7 @@ public:
 #undef OPTION_OPT_ADDR
 #undef OPTION_OPT_U32
 #undef OPTION_OPT_U64
+#undef OPTION_OPT_UUID
 #undef OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
@@ -205,7 +211,7 @@ public:
 
 typedef enum {
 	OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-	OPT_ADDR, OPT_U32, OPT_U64
+	OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
 } opt_type_t;
 
 bool ceph_resolve_file_search(const std::string& filename_list,
