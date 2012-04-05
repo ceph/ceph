@@ -19,7 +19,7 @@ struct uuid_d {
     memset(&uuid, 0, sizeof(uuid));
   }
 
-  bool is_zero() {
+  bool is_zero() const {
     return uuid_is_null(uuid);
   }
 

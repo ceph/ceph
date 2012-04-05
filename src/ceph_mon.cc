@@ -174,13 +174,9 @@ int main(int argc, const char **argv)
       }
     }
 
-    if (!g_conf->fsid.empty()) {
-      if (!monmap.fsid.parse(g_conf->fsid.c_str())) {
-        cerr << "unable to parse fsid '" << g_conf->fsid << "'" << std::endl;
-        exit(1);
-      } else {
-        cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
-      }
+    if (!g_conf->fsid.is_zero()) {
+      monmap.fsid = g_conf->fsid;
+      cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
     }
     
     if (monmap.fsid.is_zero()) {

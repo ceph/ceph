@@ -124,17 +124,14 @@ int main(int argc, const char **argv)
     monmap.created = ceph_clock_now(g_ceph_context);
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
-    if (g_conf->fsid.empty()) {
+    if (g_conf->fsid.is_zero()) {
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;
     }
     modified = true;
   }
-  if (g_conf->fsid.length()) {
-    if (!monmap.fsid.parse(g_conf->fsid.c_str())) {
-      cerr << me << ": failed to parse fsid '" << g_conf->fsid << "'" << std::endl;
-      exit(1);
-    }
+  if (!g_conf->fsid.is_zero()) {
+    monmap.fsid = g_conf->fsid;
     cout << me << ": set fsid to " << monmap.fsid << std::endl;
     modified = true;
   }
