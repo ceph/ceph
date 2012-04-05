@@ -5,6 +5,10 @@ Please see http://ceph.newdream.net/ for current info.
 
 ----
 
+To prepare the source tree for the first time in case it has been git cloned,
+
+$ git submodule update --init
+
 To build the server daemons, and FUSE client,
 
 $ ./autogen.sh
