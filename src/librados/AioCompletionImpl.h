@@ -130,4 +130,37 @@ struct librados::AioCompletionImpl {
   }
 };
 
+namespace librados {
+struct C_AioComplete : public Context {
+  AioCompletionImpl *c;
+
+  C_AioComplete(AioCompletionImpl *cc) : c(cc) {
+    c->ref++;
+  }
+
+  void finish(int r) {
+    rados_callback_t cb = c->callback_complete;
+    void *cb_arg = c->callback_arg;
+    cb(c, cb_arg);
+    c->put();
+  }
+};
+
+struct C_AioSafe : public Context {
+  AioCompletionImpl *c;
+
+  C_AioSafe(AioCompletionImpl *cc) : c(cc) {
+    c->ref++;
+  }
+
+  void finish(int r) {
+    rados_callback_t cb = c->callback_safe;
+    void *cb_arg = c->callback_arg;
+    cb(c, cb_arg);
+    c->put();
+  }
+};
+
+}
+
 #endif

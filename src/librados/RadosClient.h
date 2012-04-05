@@ -64,6 +64,7 @@ private:
   SafeTimer timer;
 
 public:
+  Finisher finisher;
 
   RadosClient(CephContext *cct_);
   ~RadosClient();

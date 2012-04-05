@@ -1500,11 +1500,7 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
   }
 
   if (c->callback_complete) {
-    rados_callback_t cb = c->callback_complete;
-    void *cb_arg = c->callback_arg;
-    c->lock.Unlock();
-    cb(c, cb_arg);
-    c->lock.Lock();
+    c->io->client->finisher.queue(new C_AioComplete(c));
   }
 
   c->put_unlock();
@@ -1532,11 +1528,7 @@ void librados::IoCtxImpl::C_aio_sparse_read_Ack::finish(int r)
   }
 
   if (c->callback_complete) {
-    rados_callback_t cb = c->callback_complete;
-    void *cb_arg = c->callback_arg;
-    c->lock.Unlock();
-    cb(c, cb_arg);
-    c->lock.Lock();
+    c->io->client->finisher.queue(new C_AioComplete(c));
   }
 
   c->put_unlock();
@@ -1560,11 +1552,7 @@ void librados::IoCtxImpl::C_aio_Safe::finish(int r)
   c->cond.Signal();
 
   if (c->callback_safe) {
-    rados_callback_t cb = c->callback_safe;
-    void *cb_arg = c->callback_arg;
-    c->lock.Unlock();
-    cb(c, cb_arg);
-    c->lock.Lock();
+    c->io->client->finisher.queue(new C_AioSafe(c));
   }
 
   c->io->complete_aio_write(c);

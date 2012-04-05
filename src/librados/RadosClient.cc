@@ -53,16 +53,18 @@ bool librados::RadosClient::ms_get_authorizer(int dest_type,
   return *authorizer != NULL;
 }
 
-librados::RadosClient::RadosClient(CephContext *cct_) : Dispatcher(cct_),
-							cct(cct_),
-							conf(cct_->_conf),
-							state(DISCONNECTED),
-							monclient(cct_),
-							messenger(NULL),
-							objecter(NULL),
-							lock("radosclient"),
-							timer(cct, lock),
-							max_watch_cookie(0)
+librados::RadosClient::RadosClient(CephContext *cct_)
+  : Dispatcher(cct_),
+    cct(cct_),
+    conf(cct_->_conf),
+    state(DISCONNECTED),
+    monclient(cct_),
+    messenger(NULL),
+    objecter(NULL),
+    lock("radosclient"),
+    timer(cct, lock),
+    finisher(cct),
+    max_watch_cookie(0)
 {
 }
 
@@ -164,7 +166,11 @@ int librados::RadosClient::connect()
     ldout(cct, 1) << "waiting for osdmap" << dendl;
     cond.Wait(lock);
   }
+
+  finisher.start();
+
   state = CONNECTED;
+
   lock.Unlock();
 
   ldout(cct, 1) << "init done" << dendl;
@@ -182,6 +188,9 @@ void librados::RadosClient::shutdown()
   if (state == DISCONNECTED) {
     lock.Unlock();
     return;
+  }
+  if (state == CONNECTED) {
+    finisher.stop();
   }
   monclient.shutdown();
   if (objecter && state == CONNECTED)
