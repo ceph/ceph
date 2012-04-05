@@ -64,8 +64,7 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();
   aio_write_list_lock.Lock();
-  assert(!c->io);
-  c->io = this;
+  assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
   aio_write_list.push_back(&c->aio_write_list_item);
   aio_write_list_lock.Unlock();
@@ -75,7 +74,6 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
   aio_write_list_lock.Lock();
   assert(c->io == this);
-  c->io = NULL;
   c->aio_write_list_item.remove_myself();
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
@@ -648,6 +646,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->io = this;
   c->pbl = pbl;
 
   Mutex::Locker l(*lock);
@@ -668,6 +667,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   Context *onack = new C_aio_Ack(c);
   Context *oncommit = new C_aio_Safe(c);
 
+  c->io = this;
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
@@ -683,6 +683,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   Context *onack = new C_aio_Ack(c);
   eversion_t ver;
 
+  c->io = this;
   c->pbl = pbl;
 
   Mutex::Locker l(*lock);
@@ -697,6 +698,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->io = this;
   c->buf = buf;
   c->maxlen = len;
 
@@ -720,6 +722,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   onack->data_bl = data_bl;
   eversion_t ver;
 
+  c->io = this;
   c->pbl = NULL;
 
   Mutex::Locker l(*lock);
@@ -739,6 +742,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  c->io = this;
   queue_aio_write(c);
 
   Context *onack = new C_aio_Ack(c);
@@ -761,6 +765,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  c->io = this;
   queue_aio_write(c);
 
   Context *onack = new C_aio_Ack(c);
@@ -784,6 +789,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  c->io = this;
   queue_aio_write(c);
 
   Context *onack = new C_aio_Ack(c);
@@ -1002,6 +1008,8 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  bufferlist& inbl, bufferlist *outbl)
 {
   Context *onack = new C_aio_Ack(c);
+
+  c->io = this;
 
   Mutex::Locker l(*lock);
   ::ObjectOperation rd;
