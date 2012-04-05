@@ -155,7 +155,7 @@ public:
 
     void finish(int r) {
       C_WorkloadGeneratorOnReadable::finish(r);
-      dout(0) << "Destroyed collection " << m_entry->coll.to_str() << dendl;
+      //dout(0) << "Destroyed collection " << m_entry->coll.to_str() << dendl;
       delete m_entry;
     }
   };

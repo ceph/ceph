@@ -24,12 +24,15 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include "workload_generator.h"
+#include "common/debug.h"
 
 void usage(const char *name);
 
 boost::scoped_ptr<WorkloadGenerator> wrkldgen;
 const coll_t WorkloadGenerator::META_COLL("meta");
 const coll_t WorkloadGenerator::TEMP_COLL("temp");
+
+#define dout_subsys ceph_subsys_
 
 WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
     m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
