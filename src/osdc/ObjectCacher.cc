@@ -1342,6 +1342,9 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
 
   if (oset->objects.empty()) {
     ldout(cct, 10) << "commit_set on " << oset << " dne" << dendl;
+    // need to delete this here, since this is what C_GatherBuilder does
+    // if no subs were registered
+    delete onfinish;
     return true;
   }
 
