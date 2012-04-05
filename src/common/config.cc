@@ -314,14 +314,23 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
+      expand_all_meta();
       show_config(cout);
       _exit(0);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
       char *buf = 0;
-      _get_val(val.c_str(), &buf, -1);
-      if (buf)
-	std::cout << buf << std::endl;
+      int r = _get_val(val.c_str(), &buf, -1);
+      if (r < 0) {
+	if (r == -ENOENT)
+	  std::cerr << "failed to get config option '" << val << "': option not found" << std::endl;
+	else
+	  std::cerr << "failed to get config option '" << val << "': " << strerror(-r) << std::endl;
+	_exit(1);
+      }
+      string s = buf;
+      expand_meta(s);
+      std::cout << s << std::endl;
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
@@ -477,14 +486,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
    * have changed. */
   typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
 
-  // Expand all metavariables
-  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-    config_option *opt = config_optionsp + i;
-    if (opt->type == OPT_STR) {
-      std::string *str = (std::string *)opt->conf_ptr(this);
-      expand_meta(*str);
-    }
-  }
+  expand_all_meta();
 
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
@@ -522,14 +524,7 @@ void md_config_t::call_all_observers()
 {
   Mutex::Locker l(lock);
 
-  // Expand all metavariables
-  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-    config_option *opt = config_optionsp + i;
-    if (opt->type == OPT_STR) {
-      std::string *str = (std::string *)opt->conf_ptr(this);
-      expand_meta(*str);
-    }
-  }
+  expand_all_meta();
 
   std::map<md_config_obs_t*,std::set<std::string> > obs;
   for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r)
@@ -819,6 +814,18 @@ static const char *CONF_METAVARIABLES[] =
   { "cluster", "type", "name", "host", "num", "id" };
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
+
+void md_config_t::expand_all_meta()
+{
+  // Expand all metavariables
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = config_optionsp + i;
+    if (opt->type == OPT_STR) {
+      std::string *str = (std::string *)opt->conf_ptr(this);
+      expand_meta(*str);
+    }
+  }
+}
 
 bool md_config_t::expand_meta(std::string &val) const
 {

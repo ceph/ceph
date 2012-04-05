@@ -160,6 +160,9 @@ private:
   // Returns true if any metavariables were found and expanded.
   bool expand_meta(std::string &val) const;
 
+  /// expand all metavariables in config structure.
+  void expand_all_meta();
+
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
 
