@@ -422,7 +422,8 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     else if (ceph_argparse_witharg(args, i, &val,
 				   as_option.c_str(), (char*)NULL)) {
       if (oss && (
-		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR)) &&
+		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
+		   (opt->type == OPT_UUID)) &&
 		  (observers.find(opt->name) == observers.end()))) {
 	*oss << "You cannot change " << opt->name << " using injectargs.\n";
 	ret = -ENOSYS;
@@ -595,7 +596,8 @@ int md_config_t::set_val(const char *key, const char *val)
     if (strcmp(opt->name, k.c_str()) == 0) {
       if (internal_safe_to_start_threads) {
 	// If threads have been started...
-	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR)) {
+	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
+	    (opt->type == OPT_UUID)) {
 	  // And this is NOT an integer valued variable....
 	  if (observers.find(opt->name) == observers.end()) {
 	    // And there is no observer to safely change it...
@@ -662,10 +664,12 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
       case OPT_U64:
         oss << *(uint64_t*)opt->conf_ptr(this);
         break;
-      case OPT_ADDR: {
+      case OPT_ADDR:
         oss << *(entity_addr_t*)opt->conf_ptr(this);
         break;
-      }
+      case OPT_UUID:
+	oss << *(uuid_d*)opt->conf_ptr(this);
+        break;
     }
     string str(oss.str());
     int l = strlen(str.c_str()) + 1;
@@ -799,6 +803,12 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       if (!addr->parse(val)) {
 	return -EINVAL;
       }
+      return 0;
+    }
+    case OPT_UUID: {
+      uuid_d *u = (uuid_d*)opt->conf_ptr(this);
+      if (!u->parse(val))
+	return -EINVAL;
       return 0;
     }
   }
