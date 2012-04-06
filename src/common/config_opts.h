@@ -34,7 +34,7 @@ OPTION(log_to_syslog, OPT_BOOL, false)
 OPTION(err_to_syslog, OPT_BOOL, false)
 OPTION(clog_to_monitors, OPT_BOOL, true)
 OPTION(clog_to_syslog, OPT_BOOL, false)
-OPTION(pid_file, OPT_STR, "/var/run/ceph/$cluster.$name.$pid")
+OPTION(pid_file, OPT_STR, "")
 OPTION(chdir, OPT_STR, "/")
 OPTION(max_open_files, OPT_LONGLONG, 0)
 
