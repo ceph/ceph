@@ -89,7 +89,7 @@ OPTION(ms_bind_ipv6, OPT_BOOL, false)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
-OPTION(mon_data, OPT_STR, "")
+OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
 OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
@@ -242,8 +242,8 @@ OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
 // If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
 OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
 
-OPTION(osd_data, OPT_STR, "")
-OPTION(osd_journal, OPT_STR, "")
+OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
+OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
 OPTION(osd_journal_size, OPT_INT, 0)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_balance_reads, OPT_BOOL, false)
