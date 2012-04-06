@@ -11,6 +11,24 @@ class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 
+static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
+{
+  if (bucket.marker.empty() || orig_oid.empty()) {
+    oid = orig_oid;
+  } else {
+    oid = bucket.marker;
+    oid.append("_");
+    oid.append(orig_oid);
+  }
+}
+
+static inline void get_obj_bucket_and_oid_key(rgw_obj& obj, rgw_bucket& bucket, string& oid, string& key)
+{
+  bucket = obj.bucket;
+  prepend_bucket_marker(bucket, obj.object, oid);
+  prepend_bucket_marker(bucket, obj.key, key);
+}
+
 class RGWAccessListFilter {
 public:
   virtual ~RGWAccessListFilter() {}

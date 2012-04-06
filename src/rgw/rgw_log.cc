@@ -7,69 +7,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
-{
-  rgw_log_entry *e = new rgw_log_entry;
-  e->object_owner = "object_owner";
-  e->bucket_owner = "bucket_owner";
-  e->bucket = "bucket";
-  e->remote_addr = "1.2.3.4";
-  e->user = "user";
-  e->obj = "obj";
-  e->uri = "http://uri/bucket/obj";
-  e->http_status = "200";
-  e->error_code = "error_code";
-  e->bytes_sent = 1024;
-  e->bytes_received = 512;
-  e->obj_size = 2048;
-  e->user_agent = "user_agent";
-  e->referrer = "referrer";
-  e->bucket_id = "10";
-  o.push_back(e);
-  o.push_back(new rgw_log_entry);
-}
-
-void rgw_log_entry::dump(Formatter *f) const
-{
-  f->dump_string("object_owner", object_owner);
-  f->dump_string("bucket_owner", bucket_owner);
-  f->dump_string("bucket", bucket);
-  f->dump_stream("time") << time;
-  f->dump_string("remote_addr", remote_addr);
-  f->dump_string("user", user);
-  f->dump_string("obj", obj);
-  f->dump_string("op", op);
-  f->dump_string("uri", uri);
-  f->dump_string("http_status", http_status);
-  f->dump_string("error_code", error_code);
-  f->dump_unsigned("bytes_sent", bytes_sent);
-  f->dump_unsigned("bytes_received", bytes_received);
-  f->dump_unsigned("obj_size", obj_size);
-  f->dump_stream("total_time") << total_time;
-  f->dump_string("user_agent", user_agent);
-  f->dump_string("referrer", referrer);
-  f->dump_string("bucket_id", bucket_id);
-}
-
-void rgw_intent_log_entry::generate_test_instances(list<rgw_intent_log_entry*>& o)
-{
-  rgw_intent_log_entry *e = new rgw_intent_log_entry;
-  rgw_bucket b("bucket", "pool", "marker", "10");
-  e->obj = rgw_obj(b, "object");
-  e->intent = DEL_OBJ;
-  o.push_back(e);
-  o.push_back(new rgw_intent_log_entry);
-}
-
-void rgw_intent_log_entry::dump(Formatter *f) const
-{
-  f->open_object_section("obj");
-  obj.dump(f);
-  f->close_section();
-  f->dump_stream("op_time") << op_time;
-  f->dump_unsigned("intent", intent);
-}
-
 static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
 static void set_param_str(struct req_state *s, const char *name, string& str)

@@ -110,7 +110,10 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
-ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc
+rgw_dencoder_src = rgw/rgw_dencoder.cc \
+                   rgw/rgw_acl.cc
+
+ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.la
 bin_PROGRAMS += ceph-dencoder
@@ -370,7 +373,7 @@ rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
 
-ceph_dencoder_LDADD += $(my_radosgw_ldadd)
+# ceph_dencoder_LDADD += $(my_radosgw_ldadd)
 
 endif
 
