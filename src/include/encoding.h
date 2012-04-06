@@ -656,7 +656,7 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   ::encode(struct_v, bl);				     \
   ::encode(struct_compat, bl);				     \
   __le32 struct_len = 0;				     \
-  unsigned struct_len_pos = bl.length();		     \
+  buffer::list::iterator struct_len_it = bl.end();	     \
   ::encode(struct_len, bl);				     \
   do {
 
@@ -667,8 +667,8 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
  */
 #define ENCODE_FINISH(bl)						\
   } while (false);							\
-  struct_len = bl.length() - struct_len_pos - sizeof(struct_len);	\
-  bl.copy_in(struct_len_pos, 4, (char *)&struct_len);
+  struct_len = bl.length() - struct_len_it.get_off() - sizeof(struct_len); \
+  struct_len_it.copy_in(4, (char *)&struct_len);
 
 #define DECODE_ERR_VERSION(func, v)			\
   "" #func " unknown encoding version > " #v
