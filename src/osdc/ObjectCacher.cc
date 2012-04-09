@@ -3,8 +3,7 @@
 
 #include "msg/Messenger.h"
 #include "ObjectCacher.h"
-#include "Objecter.h"
-
+#include "WritebackHandler.h"
 
 
 /*** ObjectCacher::BufferHead ***/
@@ -14,12 +13,13 @@
 
 #define dout_subsys ceph_subsys_objectcacher
 #undef dout_prefix
-#define dout_prefix *_dout << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define dout_prefix *_dout << "objectcacher.object(" << oid << ") "
 
 ObjectCacher::
-ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l, flush_set_callback_t flush_callback,
+ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
+	     flush_set_callback_t flush_callback,
 	     void *flush_callback_arg) : 
-    cct(cct_), objecter(o), filer(o), lock(l),
+    cct(cct_), writeback_handler(wb), lock(l),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
@@ -421,7 +421,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 /*** ObjectCacher ***/
 
 #undef dout_prefix
-#define dout_prefix *_dout << objecter->messenger->get_myname() << ".objectcacher "
+#define dout_prefix *_dout << "objectcacher "
 
 /* private */
 
@@ -451,11 +451,10 @@ void ObjectCacher::bh_read(BufferHead *bh)
   ObjectSet *oset = bh->ob->oset;
 
   // go
-  objecter->read_trunc(bh->ob->get_oid(), bh->ob->get_oloc(), 
-		 bh->start(), bh->length(), bh->ob->get_snap(),
-		 &onfinish->bl, 0,
-		 oset->truncate_size, oset->truncate_seq,
-		 onfinish);
+  writeback_handler.read(bh->ob->get_oid(), bh->ob->get_oloc(),
+			 bh->start(), bh->length(), bh->ob->get_snap(),
+			 &onfinish->bl, oset->truncate_size, oset->truncate_seq,
+			 onfinish);
 }
 
 void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
@@ -551,11 +550,11 @@ void ObjectCacher::bh_write(BufferHead *bh)
   ObjectSet *oset = bh->ob->oset;
 
   // go
-  tid_t tid = objecter->write_trunc(bh->ob->get_oid(), bh->ob->get_oloc(),
-			      bh->start(), bh->length(),
-			      bh->snapc, bh->bl, bh->last_write, 0,
-			      oset->truncate_size, oset->truncate_seq,
-				    NULL, oncommit);
+  tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(),
+				      bh->start(), bh->length(),
+				      bh->snapc, bh->bl, bh->last_write,
+				      oset->truncate_size, oset->truncate_seq,
+				      oncommit);
 
   // set bh last_write_tid
   oncommit->tid = tid;
@@ -1080,7 +1079,9 @@ void ObjectCacher::rdlock(Object *o)
     
     commit->tid = 
       ack->tid = 
-      o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), CEPH_OSD_OP_RDLOCK, 0, ack, commit);
+      o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+						 CEPH_OSD_OP_RDLOCK, 0,
+						 ack, commit);
   }
   
   // stake our claim.
@@ -1125,7 +1126,8 @@ void ObjectCacher::wrlock(Object *o)
     
     commit->tid = 
       ack->tid = 
-      o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), op, 0, ack, commit);
+      o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+						 op, 0, ack, commit);
   }
   
   // stake our claim.
@@ -1170,7 +1172,9 @@ void ObjectCacher::rdunlock(Object *o)
                                             o->get_soid(), 0, 0);
   commit->tid = 
     lockack->tid = 
-    o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), CEPH_OSD_OP_RDUNLOCK, 0, lockack, commit);
+    o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+					       CEPH_OSD_OP_RDUNLOCK, 0,
+					       lockack, commit);
 }
 
 void ObjectCacher::wrunlock(Object *o)
@@ -1203,7 +1207,8 @@ void ObjectCacher::wrunlock(Object *o)
                                             o->get_soid(), 0, 0);
   commit->tid = 
     lockack->tid = 
-    o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), op, 0, lockack, commit);
+    o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+					       op, 0, lockack, commit);
 }
 
 

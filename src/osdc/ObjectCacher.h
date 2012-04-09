@@ -15,7 +15,7 @@
 #include "Filer.h"
 
 class CephContext;
-class Objecter;
+class WritebackHandler;
 
 class ObjectCacher {
  public:
@@ -267,11 +267,9 @@ class ObjectCacher {
 
   // ******* ObjectCacher *********
   // ObjectCacher fields
- public:
-  Objecter *objecter;
-  Filer filer;
-
  private:
+  WritebackHandler& writeback_handler;
+
   Mutex& lock;
   
   flush_set_callback_t flush_set_callback;
@@ -517,7 +515,7 @@ class ObjectCacher {
 
 
  public:
-  ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l,
+  ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg);
   ~ObjectCacher() {

@@ -58,8 +58,7 @@ using namespace std;
 #include "mon/MonMap.h"
 
 #include "osdc/Filer.h"
-#include "osdc/Objecter.h"
-#include "osdc/ObjectCacher.h"
+#include "osdc/WritebackHandler.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -81,6 +80,7 @@ using namespace std;
 #include "Fh.h"
 #include "MetaSession.h"
 #include "MetaRequest.h"
+#include "ObjecterWriteback.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
@@ -150,7 +150,8 @@ Client::Client(Messenger *m, MonClient *mc)
   mdsmap = new MDSMap;
   objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
-  objectcacher = new ObjectCacher(cct, objecter, client_lock, 
+  writeback_handler = new ObjecterWriteback(objecter);
+  objectcacher = new ObjectCacher(cct, *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this);
   filer = new Filer(objecter);
@@ -166,6 +167,11 @@ Client::~Client()
   if (objectcacher) { 
     delete objectcacher; 
     objectcacher = 0; 
+  }
+
+  if (writeback_handler) {
+    delete writeback_handler;
+    writeback_handler = NULL;
   }
 
   if (filer) { delete filer; filer = 0; }

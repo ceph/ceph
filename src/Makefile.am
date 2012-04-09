@@ -1137,7 +1137,7 @@ libclient_la_SOURCES = \
 	client/Inode.cc \
 	client/MetaRequest.cc \
 	client/Trace.cc
-libclient_la_LIBADD = libcommon.la $(LIBEDIT_LIBS)
+libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
 noinst_LTLIBRARIES += libclient.la
 
 dist-hook:
@@ -1185,6 +1185,7 @@ noinst_HEADERS = \
         client/fuse_ll.h\
 	client/ioctl.h\
         client/hadoop/CephFSInterface.h\
+	client/ObjecterWriteback.h\
 	cls_acl.cc\
 	cls_crypto.cc\
 	common/BackTrace.h\
@@ -1545,6 +1546,7 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
+	osdc/WritebackHandler.h\
         perfglue/cpu_profiler.h\
         perfglue/heap_profiler.h\
 	rgw/rgw_acl.h\
