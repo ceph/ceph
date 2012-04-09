@@ -1912,7 +1912,7 @@ int FileStore::mount()
 
   {
     stringstream err2;
-    if (!object_map->check(err2)) {
+    if (g_conf->filestore_debug_omap_check && !object_map->check(err2)) {
       derr << err2.str() << dendl;;
       ret = -EINVAL;
       goto close_current_fd;
@@ -3452,7 +3452,7 @@ void FileStore::sync_entry()
 	assert(0);
       }
       stringstream errstream;
-      if (!object_map->check(errstream)) {
+      if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
 	assert(0);
       }
