@@ -616,6 +616,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 {
   out << "bh["
       << bh.start() << "~" << bh.length()
+      << " " << bh.ob
       << " (" << bh.bl.length() << ")"
       << " v " << bh.last_write_tid;
   if (bh.is_tx()) out << " tx";
