@@ -319,10 +319,13 @@ lib_LTLIBRARIES += librgw.la
 endif
 
 # librbd
-librbd_la_SOURCES = librbd.cc
+librbd_la_SOURCES = \
+	librbd.cc \
+	librbd/LibrbdWriteback.cc \
+	osdc/ObjectCacher.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
-librbd_la_LIBADD = librados.la 
+librbd_la_LIBADD = librados.la
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
@@ -1321,6 +1324,7 @@ noinst_HEADERS = \
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
+	librbd/LibrbdWriteback.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
 	json_spirit/json_spirit_error_position.h\
