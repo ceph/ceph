@@ -10,9 +10,9 @@
 #include <string>
 #include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
-#include "leveldb/include/leveldb/db.h"
-#include "leveldb/include/leveldb/write_batch.h"
-#include "leveldb/include/leveldb/slice.h"
+#include "leveldb/db.h"
+#include "leveldb/write_batch.h"
+#include "leveldb/slice.h"
 
 /**
  * Uses LevelDB to implement the KeyValueDB interface
