@@ -808,6 +808,9 @@ public:
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
   void do_osd_op_effects(OpContext *ctx);
 private:
+  bool temp_created;
+  coll_t temp_coll;
+  coll_t get_temp_coll(ObjectStore::Transaction *t);
   struct NotTrimming;
   struct SnapTrim : boost::statechart::event< SnapTrim > {
     SnapTrim() : boost::statechart::event < SnapTrim >() {}

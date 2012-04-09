@@ -250,6 +250,19 @@ ostream& operator<<(ostream& out, const pg_t &pg)
 
 // -- coll_t --
 
+bool coll_t::is_temp(pg_t& pgid) const
+{
+  const char *cstr(str.c_str());
+  if (!pgid.parse(cstr))
+    return false;
+  const char *tmp_start = strchr(cstr, '_');
+  if (!tmp_start)
+    return false;
+  if (strncmp(tmp_start, "_TEMP", 4) == 0)
+    return true;
+  return false;
+}
+
 bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
 {
   const char *cstr(str.c_str());

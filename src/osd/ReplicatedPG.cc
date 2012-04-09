@@ -574,7 +574,8 @@ void ReplicatedPG::calc_trim_to()
 }
 
 ReplicatedPG::ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, const hobject_t& ioid) : 
-  PG(o, _pool, p, oid, ioid), snap_trimmer_machine(this)
+  PG(o, _pool, p, oid, ioid), temp_created(false),
+  temp_coll(coll_t::make_temp_coll(p)), snap_trimmer_machine(this)
 { 
   snap_trimmer_machine.initiate();
 }
@@ -3079,6 +3080,15 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   }
 }
 
+coll_t ReplicatedPG::get_temp_coll(ObjectStore::Transaction *t)
+{
+  if (temp_created)
+    return temp_coll;
+  if (!osd->store->collection_exists(temp_coll))
+      t->create_collection(temp_coll);
+  temp_created = true;
+  return temp_coll;
+}
 
 int ReplicatedPG::prepare_transaction(OpContext *ctx)
 {
@@ -4644,9 +4654,9 @@ void ReplicatedPG::submit_push_data(
   ObjectStore::Transaction *t)
 {
   if (first) {
-    t->remove(coll_t::TEMP_COLL, recovery_info.soid);
-    t->touch(coll_t::TEMP_COLL, recovery_info.soid);
-    t->omap_setheader(coll_t::TEMP_COLL, recovery_info.soid, omap_header);
+    t->remove(get_temp_coll(t), recovery_info.soid);
+    t->touch(get_temp_coll(t), recovery_info.soid);
+    t->omap_setheader(get_temp_coll(t), recovery_info.soid, omap_header);
   }
   uint64_t off = 0;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
@@ -4654,14 +4664,14 @@ void ReplicatedPG::submit_push_data(
        ++p) {
     bufferlist bit;
     bit.substr_of(data_included, off, p.get_len());
-    t->write(coll_t::TEMP_COLL, recovery_info.soid,
+    t->write(get_temp_coll(t), recovery_info.soid,
 	     p.get_start(), p.get_len(), bit);
     off += p.get_len();
   }
 
-  t->omap_setkeys(coll_t::TEMP_COLL, recovery_info.soid,
+  t->omap_setkeys(get_temp_coll(t), recovery_info.soid,
 		  omap_entries);
-  t->setattrs(coll_t::TEMP_COLL, recovery_info.soid,
+  t->setattrs(get_temp_coll(t), recovery_info.soid,
 	      attrs);
 }
 
@@ -4669,7 +4679,7 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					ObjectStore::Transaction *t)
 {
   remove_object_with_snap_hardlinks(*t, recovery_info.soid);
-  t->collection_move(coll, coll_t::TEMP_COLL, recovery_info.soid);
+  t->collection_move(coll, get_temp_coll(t), recovery_info.soid);
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
        p != recovery_info.clone_subset.end();

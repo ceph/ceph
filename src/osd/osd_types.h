@@ -314,7 +314,6 @@ namespace __gnu_cxx {
 class coll_t {
 public:
   const static coll_t META_COLL;
-  const static coll_t TEMP_COLL;
 
   coll_t()
     : str("meta")
@@ -327,6 +326,10 @@ public:
   explicit coll_t(pg_t pgid, snapid_t snap = CEPH_NOSNAP)
     : str(pg_and_snap_to_str(pgid, snap))
   { }
+
+  static coll_t make_temp_coll(pg_t pgid) {
+    return coll_t(pg_to_tmp_str(pgid));
+  }
 
   const std::string& to_str() const {
     return str;
@@ -341,6 +344,7 @@ public:
   }
 
   bool is_pg(pg_t& pgid, snapid_t& snap) const;
+  bool is_temp(pg_t& pgid) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   inline bool operator==(const coll_t& rhs) const {
@@ -357,6 +361,11 @@ private:
   static std::string pg_and_snap_to_str(pg_t p, snapid_t s) {
     std::ostringstream oss;
     oss << p << "_" << s;
+    return oss.str();
+  }
+  static std::string pg_to_tmp_str(pg_t p) {
+    std::ostringstream oss;
+    oss << p << "_TEMP";
     return oss.str();
   }
 

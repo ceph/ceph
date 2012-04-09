@@ -518,7 +518,7 @@ protected:
   
   friend class C_OSD_GetVersion;
 
-  void clear_temp();
+  void clear_temp(coll_t tmp);
 
   // -- alive --
   epoch_t up_thru_wanted;

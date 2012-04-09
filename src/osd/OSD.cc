@@ -121,7 +121,6 @@ static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
 }
 
 const coll_t coll_t::META_COLL("meta");
-const coll_t coll_t::TEMP_COLL("temp");
 
 static CompatSet get_osd_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
@@ -346,7 +345,6 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       ObjectStore::Transaction t;
       t.create_collection(coll_t::META_COLL);
       t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-      t.create_collection(coll_t::TEMP_COLL);
       ret = store->apply_transaction(t);
       if (ret) {
 	derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
@@ -680,16 +678,6 @@ int OSD::init()
   osdmap = get_map(superblock.current_epoch);
 
   bind_epoch = osdmap->get_epoch();
-
-  clear_temp();
-
-  // make sure (newish) temp dir exists
-  if (!store->collection_exists(coll_t::TEMP_COLL)) {
-    dout(10) << "creating temp pg dir" << dendl;
-    ObjectStore::Transaction t;
-    t.create_collection(coll_t::TEMP_COLL);
-    store->apply_transaction(t);
-  }
 
   // load up pgs (as they previously existed)
   load_pgs();
@@ -1026,12 +1014,12 @@ int OSD::read_superblock()
 
 
 
-void OSD::clear_temp()
+void OSD::clear_temp(coll_t tmp)
 {
   dout(10) << "clear_temp" << dendl;
 
   vector<hobject_t> objects;
-  store->collection_list(coll_t::TEMP_COLL, objects);
+  store->collection_list(tmp, objects);
 
   dout(10) << objects.size() << " objects" << dendl;
   if (objects.empty())
@@ -1042,7 +1030,8 @@ void OSD::clear_temp()
   for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
        p++)
-    t->collection_remove(coll_t::TEMP_COLL, *p);
+    t->collection_remove(tmp, *p);
+  t->remove_collection(tmp);
   int r = store->queue_transaction(NULL, t);
   assert(r == 0);
   store->sync_and_flush();
@@ -1205,6 +1194,8 @@ void OSD::load_pgs()
     pg_t pgid;
     snapid_t snap;
     if (!it->is_pg(pgid, snap)) {
+      if (it->is_temp(pgid))
+	clear_temp(*it);
       dout(10) << "load_pgs skipping non-pg " << *it << dendl;
       continue;
     }
@@ -4833,6 +4824,9 @@ void OSD::_remove_pg(PG *pg)
     assert(tr == 0);
   }
 
+  if (store->collection_exists(coll_t::make_temp_coll(pg->get_pgid()))) {
+    clear_temp(coll_t::make_temp_coll(pg->get_pgid()));
+  }
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from 
   // the pg_map must be done together without unlocking the pg lock,
