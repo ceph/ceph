@@ -428,25 +428,44 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     return *this;
     }*/
 
-  void buffer::list::iterator::advance(unsigned o)
+  void buffer::list::iterator::advance(int o)
   {
     //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
-    p_off += o;
-    while (p_off > 0) {
-      if (p == ls->end())
-	throw end_of_buffer();
-      if (p_off >= p->length()) {
-	// skip this buffer
-	p_off -= p->length();
-	p++;
+    if (o > 0) {
+      p_off += o;
+      while (p_off > 0) {
+	if (p == ls->end())
+	  throw end_of_buffer();
+	if (p_off >= p->length()) {
+	  // skip this buffer
+	  p_off -= p->length();
+	  p++;
+	} else {
+	  // somewhere in this buffer!
+	  break;
+	}
+      }
+      off += o;
+      return;
+    }
+    while (o < 0) {
+      if (p_off) {
+	unsigned d = -o;
+	if (d > p_off)
+	  d = p_off;
+	p_off -= d;
+	off -= d;
+	o += d;
+      } else if (off > 0) {
+	assert(p != ls->begin());
+	p--;
+	p_off = p->length();
       } else {
-	// somewhere in this buffer!
-	break;
+	throw end_of_buffer();
       }
     }
-    off += o;
   }
-  
+
   void buffer::list::iterator::seek(unsigned o)
   {
     //cout << this << " seek " << o << std::endl;
