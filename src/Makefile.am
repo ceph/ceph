@@ -1205,6 +1205,7 @@ noinst_HEADERS = \
 	common/admin_socket_client.h \
         common/MemoryModel.h\
         common/Mutex.h\
+	common/PrebufferedStreambuf.h\
         common/RWLock.h\
         common/Semaphore.h\
         common/Thread.h\
