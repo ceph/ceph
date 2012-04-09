@@ -751,6 +751,12 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
     return r;
 
   Mutex::Locker l(ictx->lock);
+  // We need to flush the cache here so that reading our new snapshot
+  // won't just give us -ENOENT if we've never flushed an object and try
+  // to read from the new snapshot.
+  // TODO: Fix this in the ObjectCacher
+  if (ictx->object_cacher)
+    ictx->flush_cache();
   r = add_snap(ictx, snap_name);
 
   if (r < 0)
