@@ -1,3 +1,4 @@
+// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
 /*
  * Copyright (c) 1998-2001 Apple Computer, Inc. All rights reserved.
  *
@@ -42,17 +43,9 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#ifdef _UWIN
-# include <sys/param.h>
-# include <limits.h>
-# include <time.h>
-# include <strings.h>
-#endif
+#include <time.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#ifndef MAP_FILE
-# define MAP_FILE 0
-#endif
 #include <limits.h>
 #include <signal.h>
 #include <stdio.h>
@@ -61,6 +54,10 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <math.h>
+
+#include "include/rados/librados.h"
+#include "include/rbd/librbd.h"
 
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
@@ -97,8 +94,10 @@ int page_mask;
 char	*original_buf;			/* a pointer to the original data */
 char	*good_buf;			/* a pointer to the correct data */
 char	*temp_buf;			/* a pointer to the current data */
-char	*fname;				/* name of our test file */
-int	fd;				/* fd for our test file */
+char	*pool;				/* name of the pool our test image is in */
+char	*iname;				/* name of our test image */
+rados_ioctx_t	ioctx;			/* handle for our test pool */
+rbd_image_t	image;			/* handle for our test image */
 
 off_t		file_size = 0;
 off_t		biggest = 0;
@@ -146,7 +145,6 @@ vwarnc(code, fmt, ap)
 	fprintf(stderr, "%s\n", strerror(code));
 }
 
-
 void
 warn(const char * fmt, ...)
 {
@@ -156,6 +154,11 @@ warn(const char * fmt, ...)
 	va_end(ap);
 }
 
+void
+simple_err(const char *msg, int err)
+{
+    fprintf(stderr, "%s: %s", msg, strerror(-err));
+}
 
 void
 prt(char *fmt, ...)
@@ -179,6 +182,11 @@ prterr(char *prefix)
 	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(errno));
 }
 
+void
+prterrcode(char *prefix, int code)
+{
+	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(-code));
+}
 
 void
 log4(int operation, int arg0, int arg1, int arg2)
@@ -285,12 +293,12 @@ logdump(void)
 
 
 void
-save_buffer(char *buffer, off_t bufferlength, int fd)
+save_buffer(char *buffer, off_t bufferlength, int image)
 {
 	off_t ret;
 	ssize_t byteswritten;
 
-	if (fd <= 0 || bufferlength == 0)
+	if (image <= 0 || bufferlength == 0)
 		return;
 
 	if (bufferlength > SSIZE_MAX) {
@@ -298,7 +306,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		exit(67);
 	}
 	if (lite) {
-		off_t size_by_seek = lseek(fd, (off_t)0, SEEK_END);
+		off_t size_by_seek = lseek(image, (off_t)0, SEEK_END);
 		if (size_by_seek == (off_t)-1)
 			prterr("save_buffer: lseek eof");
 		else if (bufferlength > size_by_seek) {
@@ -308,11 +316,11 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		}
 	}
 
-	ret = lseek(fd, (off_t)0, SEEK_SET);
+	ret = lseek(image, (off_t)0, SEEK_SET);
 	if (ret == (off_t)-1)
 		prterr("save_buffer: lseek 0");
 	
-	byteswritten = write(fd, buffer, (size_t)bufferlength);
+	byteswritten = write(image, buffer, (size_t)bufferlength);
 	if (byteswritten != bufferlength) {
 		if (byteswritten == -1)
 			prterr("save_buffer write");
@@ -334,7 +342,7 @@ report_failure(int status)
 			save_buffer(good_buf, file_size, fsxgoodfd);
 			prt("Correct content saved for comparison\n");
 			prt("(maybe hexdump \"%s\" vs \"%s.fsxgood\")\n",
-			    fname, fname);
+			    iname, iname);
 		}
 		close(fsxgoodfd);
 	}
@@ -391,19 +399,16 @@ check_buffers(unsigned offset, unsigned size)
 void
 check_size(void)
 {
-	struct stat	statbuf;
-	off_t	size_by_seek;
+	rbd_image_info_t statbuf;
+	int ret;
 
-	if (fstat(fd, &statbuf)) {
-		prterr("check_size: fstat");
-		statbuf.st_size = -1;
+	if ((ret = rbd_stat(image, &statbuf, sizeof(statbuf))) < 0) {
+		prterrcode("check_size: fstat", ret);
 	}
-	size_by_seek = lseek(fd, (off_t)0, SEEK_END);
-	if (file_size != statbuf.st_size || file_size != size_by_seek) {
-		prt("Size error: expected 0x%llx stat 0x%llx seek 0x%llx\n",
+	if (file_size != statbuf.size) {
+		prt("Size error: expected 0x%llx stat 0x%llx\n",
 		    (unsigned long long)file_size,
-		    (unsigned long long)statbuf.st_size,
-		    (unsigned long long)size_by_seek);
+		    (unsigned long long)statbuf.size);
 		report_failure(120);
 	}
 }
@@ -412,24 +417,71 @@ check_size(void)
 void
 check_trunc_hack(void)
 {
-	struct stat statbuf;
+	rbd_image_info_t statbuf;
 
-	ftruncate(fd, (off_t)0);
-	ftruncate(fd, (off_t)100000);
-	fstat(fd, &statbuf);
-	if (statbuf.st_size != (off_t)100000) {
+	rbd_resize(image, (off_t)0);
+	rbd_resize(image, (off_t)100000);
+	rbd_stat(image, &statbuf, sizeof(statbuf));
+	if (statbuf.size != (off_t)100000) {
 		prt("no extend on truncate! not posix!\n");
 		exit(130);
 	}
-	ftruncate(fd, (off_t)0);
+	rbd_resize(image, (off_t)0);
+}
+
+
+int
+create_image()
+{
+	int r;
+	rados_t cluster;
+	int order = 0;
+	r = rados_create(&cluster, NULL);
+	if (r < 0) {
+		simple_err("Could not create cluster handle", r);
+		return r;
+	}
+	rados_conf_parse_env(cluster, NULL);
+	r = rados_conf_read_file(cluster, NULL);
+	if (r < 0) {
+		simple_err("Error reading ceph config file", r);
+		goto failed_shutdown;
+	}
+	r = rados_connect(cluster);
+	if (r < 0) {
+		simple_err("Error connecting to cluster", r);
+		goto failed_shutdown;
+	}
+	r = rados_pool_create(cluster, pool);
+	if (r < 0) {
+		simple_err("Error creating pool", r);
+		goto failed_shutdown;
+	}
+	r = rados_ioctx_create(cluster, pool, &ioctx);
+	if (r < 0) {
+		simple_err("Error creating ioctx", r);
+		goto failed_shutdown;
+	}
+	r = rbd_create(ioctx, iname, 0, &order);
+	if (r < 0) {
+		simple_err("Error creating image", r);
+		goto failed_open;
+	}
+
+	return 0;
+
+ failed_open:
+	rados_ioctx_destroy(ioctx);
+ failed_shutdown:
+	rados_shutdown(cluster);
+	return r;
 }
 
 
 void
 doread(unsigned offset, unsigned size)
 {
-	off_t ret;
-	unsigned iret;
+	int ret;
 
 	offset -= offset % readbdy;
 	if (size == 0) {
@@ -458,24 +510,17 @@ doread(unsigned offset, unsigned size)
 			  (monitorend == -1 || offset <= monitorend))))))
 		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
-	ret = lseek(fd, (off_t)offset, SEEK_SET);
-	if (ret == (off_t)-1) {
-		prterr("doread: lseek");
-		report_failure(140);
-	}
-	iret = read(fd, temp_buf, size);
-	if (iret != size) {
-		if (iret == -1)
-			prterr("doread: read");
+	ret = rbd_read(image, offset, size, temp_buf);
+	if (ret != size) {
+		if (ret < 0)
+			prterrcode("doread: read", ret);
 		else
 			prt("short read: 0x%x bytes instead of 0x%x\n",
-			    iret, size);
+			    ret, size);
 		report_failure(141);
 	}
 	check_buffers(offset, size);
 }
-
-typedef long uintptr_t;
 
 void
 check_eofpage(char *s, unsigned offset, char *p, int size)
@@ -505,62 +550,6 @@ check_eofpage(char *s, unsigned offset, char *p, int size)
 
 
 void
-domapread(unsigned offset, unsigned size)
-{
-	unsigned pg_offset;
-	unsigned map_size;
-	char    *p;
-
-	offset -= offset % readbdy;
-	if (size == 0) {
-		if (!quiet && testcalls > simulatedopcount)
-			prt("skipping zero size read\n");
-		log4(OP_SKIPPED, OP_MAPREAD, offset, size);
-		return;
-	}
-	if (size + offset > file_size) {
-		if (!quiet && testcalls > simulatedopcount)
-			prt("skipping seek/read past end of file\n");
-		log4(OP_SKIPPED, OP_MAPREAD, offset, size);
-		return;
-	}
-
-	log4(OP_MAPREAD, offset, size, 0);
-
-	if (testcalls <= simulatedopcount)
-		return;
-
-	if (!quiet && ((progressinterval &&
-			testcalls % progressinterval == 0) ||
-		       (debug &&
-			(monitorstart == -1 ||
-			 (offset + size > monitorstart &&
-			  (monitorend == -1 || offset <= monitorend))))))
-		prt("%lu mapread\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
-		    offset, offset + size - 1, size);
-
-	pg_offset = offset & page_mask;
-	map_size  = pg_offset + size;
-
-	if ((p = (char *)mmap(0, map_size, PROT_READ, MAP_FILE | MAP_SHARED, fd,
-			      (off_t)(offset - pg_offset))) == (char *)-1) {
-		prterr("domapread: mmap");
-		report_failure(190);
-	}
-	memcpy(temp_buf, p + pg_offset, size);
-
-	check_eofpage("Read", offset, p, size);
-
-	if (munmap(p, map_size) != 0) {
-		prterr("domapread: munmap");
-		report_failure(191);
-	}
-
-	check_buffers(offset, size);
-}
-
-
-void
 gendata(char *original_buf, char *good_buf, unsigned offset, unsigned size)
 {
 	while (size--) {
@@ -575,8 +564,8 @@ gendata(char *original_buf, char *good_buf, unsigned offset, unsigned size)
 void
 dowrite(unsigned offset, unsigned size)
 {
-	off_t ret;
-	unsigned iret;
+	ssize_t ret;
+	off_t newsize;
 
 	offset -= offset % writebdy;
 	if (size == 0) {
@@ -590,12 +579,20 @@ dowrite(unsigned offset, unsigned size)
 
 	gendata(original_buf, good_buf, offset, size);
 	if (file_size < offset + size) {
-		if (file_size < offset)
-			memset(good_buf + file_size, '\0', offset - file_size);
-		file_size = offset + size;
+		newsize = ceil(((double)offset + size) / truncbdy) * truncbdy;
+		if (file_size < newsize)
+			memset(good_buf + file_size, '\0', newsize - file_size);
+		file_size = newsize;
 		if (lite) {
 			warn("Lite file size bug in fsx!");
 			report_failure(149);
+		}
+		ret = rbd_resize(image, newsize);
+		if (ret < 0) {
+			prterrcode("dowrite: resize", ret);
+			report_failure(150);
+		} else {
+			prt("resized to 0x%x ", newsize);
 		}
 	}
 
@@ -610,91 +607,15 @@ dowrite(unsigned offset, unsigned size)
 			  (monitorend == -1 || offset <= monitorend))))))
 		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
-	ret = lseek(fd, (off_t)offset, SEEK_SET);
-	if (ret == (off_t)-1) {
-		prterr("dowrite: lseek");
-		report_failure(150);
-	}
-	iret = write(fd, good_buf + offset, size);
-	if (iret != size) {
-		if (iret == -1)
-			prterr("dowrite: write");
+
+	ret = rbd_write(image, offset, size, good_buf + offset);
+	if (ret != size) {
+		if (ret < 0)
+			prterrcode("dowrite: rbd_write", ret);
 		else
 			prt("short write: 0x%x bytes instead of 0x%x\n",
-			    iret, size);
+			    ret, size);
 		report_failure(151);
-	}
-}
-
-
-void
-domapwrite(unsigned offset, unsigned size)
-{
-	unsigned pg_offset;
-	unsigned map_size;
-	off_t    cur_filesize;
-	char    *p;
-
-	offset -= offset % writebdy;
-	if (size == 0) {
-		if (!quiet && testcalls > simulatedopcount)
-			prt("skipping zero size write\n");
-		log4(OP_SKIPPED, OP_MAPWRITE, offset, size);
-		return;
-	}
-	cur_filesize = file_size;
-
-	log4(OP_MAPWRITE, offset, size, 0);
-
-	gendata(original_buf, good_buf, offset, size);
-	if (file_size < offset + size) {
-		if (file_size < offset)
-			memset(good_buf + file_size, '\0', offset - file_size);
-		file_size = offset + size;
-		if (lite) {
-			warn("Lite file size bug in fsx!");
-			report_failure(200);
-		}
-	}
-
-	if (testcalls <= simulatedopcount)
-		return;
-
-	if (!quiet && ((progressinterval &&
-			testcalls % progressinterval == 0) ||
-		       (debug &&
-			(monitorstart == -1 ||
-			 (offset + size > monitorstart &&
-			  (monitorend == -1 || offset <= monitorend))))))
-		prt("%lu mapwrite\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
-		    offset, offset + size - 1, size);
-
-	if (file_size > cur_filesize) {
-		if (ftruncate(fd, file_size) == -1) {
-			prterr("domapwrite: ftruncate");
-			exit(201);
-		}
-	}
-	pg_offset = offset & page_mask;
-	map_size  = pg_offset + size;
-
-	if ((p = (char *)mmap(0, map_size, PROT_READ | PROT_WRITE,
-			      MAP_FILE | MAP_SHARED, fd,
-			      (off_t)(offset - pg_offset))) == (char *)-1) {
-		prterr("domapwrite: mmap");
-		report_failure(202);
-	}
-	memcpy(p + pg_offset, good_buf + offset, size);
-	if (msync(p, map_size, 0) != 0) {
-		prterr("domapwrite: msync");
-		report_failure(203);
-	}
-
-	check_eofpage("Write", offset, p, size);
-
-	if (munmap(p, map_size) != 0) {
-		prterr("domapwrite: munmap");
-		report_failure(204);
 	}
 }
 
@@ -703,6 +624,7 @@ void
 dotruncate(unsigned size)
 {
 	int oldsize = file_size;
+	int ret;
 
 	size -= size % truncbdy;
 	if (size > biggest) {
@@ -715,6 +637,8 @@ dotruncate(unsigned size)
 
 	if (size > file_size)
 		memset(good_buf + file_size, '\0', size - file_size);
+	else if (size < file_size)
+		memset(good_buf + size, '\0', file_size - size);
 	file_size = size;
 
 	if (testcalls <= simulatedopcount)
@@ -724,9 +648,9 @@ dotruncate(unsigned size)
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		       size <= monitorend)))
 		prt("%lu trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize, size);
-	if (ftruncate(fd, (off_t)size) == -1) {
-		prt("ftruncate1: %x\n", size);
-		prterr("dotruncate: ftruncate");
+	if ((ret = rbd_resize(image, size)) < 0) {
+		prt("rbd_resize: %x\n", size);
+		prterrcode("dotruncate: ftruncate", ret);
 		report_failure(160);
 	}
 }
@@ -735,24 +659,20 @@ dotruncate(unsigned size)
 void
 writefileimage()
 {
-	ssize_t iret;
+	ssize_t ret;
 
-	if (lseek(fd, (off_t)0, SEEK_SET) == (off_t)-1) {
-		prterr("writefileimage: lseek");
-		report_failure(171);
-	}
-	iret = write(fd, good_buf, file_size);
-	if ((off_t)iret != file_size) {
-		if (iret == -1)
-			prterr("writefileimage: write");
+	ret = rbd_write(image, 0, file_size, good_buf);
+	if (ret != file_size) {
+		if (ret < 0)
+			prterrcode("writefileimage: write", ret);
 		else
 			prt("short write: 0x%x bytes instead of 0x%llx\n",
-			    iret, (unsigned long long)file_size);
+			    ret, (unsigned long long)file_size);
 		report_failure(172);
 	}
-	if (lite ? 0 : ftruncate(fd, file_size) == -1) {
-		prt("ftruncate2: %llx\n", (unsigned long long)file_size);
-		prterr("writefileimage: ftruncate");
+	if (lite ? 0 : (ret = rbd_resize(image, file_size)) < 0) {
+		prt("rbd_resize: %llx\n", (unsigned long long)file_size);
+		prterrcode("writefileimage: rbd_resize", ret);
 		report_failure(173);
 	}
 }
@@ -760,19 +680,20 @@ writefileimage()
 
 void
 docloseopen(void)
-{ 
+{
+	int ret;
 	if (testcalls <= simulatedopcount)
 		return;
 
 	if (debug)
 		prt("%lu close/open\n", testcalls);
-	if (close(fd)) {
-		prterr("docloseopen: close");
+	if ((ret = rbd_close(image)) < 0) {
+		prterrcode("docloseopen: close", ret);
 		report_failure(180);
 	}
-	fd = open(fname, O_RDWR, 0);
-	if (fd < 0) {
-		prterr("docloseopen: open");
+	ret = rbd_open(ioctx, iname, &image, NULL);
+	if (ret < 0) {
+		prterrcode("docloseopen: open", ret);
 		report_failure(181);
 	}
 }
@@ -826,7 +747,7 @@ test(void)
 				if (offset + size > maxfilelen)
 					size = maxfilelen - offset;
 				if (op != 1)
-					domapwrite(offset, size);
+					exit(182);
 				else
 					dowrite(offset, size);
 			} else {
@@ -837,7 +758,7 @@ test(void)
 				if (offset + size > file_size)
 					size = file_size - offset;
 				if (op != 0)
-					domapread(offset, size);
+					exit(183);
 				else
 					doread(offset, size);
 			}
@@ -865,7 +786,7 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dnqLOW] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dnqLOW] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] iname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
@@ -887,8 +808,9 @@ usage(void)
 	-S seed: for random # generator (default 1) 0 gets timestamp\n\
 	-W: mapped write operations DISabled\n\
 	-R: mapped read operations DISabled)\n\
-	fname: this filename is REQUIRED (no default)\n");
-	exit(90);
+	poolname: this is REQUIRED (no default)\n\
+	imagename: this is REQUIRED (no default)\n");
+	exit(89);
 }
 
 
@@ -925,11 +847,10 @@ getnum(char *s, char **e)
 	return (ret);
 }
 
-
 int
 main(int argc, char **argv)
 {
-	int	i, ch;
+	int	i, ch, ret;
 	char	*endp;
 	char goodfile[1024];
 	char logfile[1024];
@@ -993,8 +914,6 @@ main(int argc, char **argv)
 			break;
 		case 'p':
 			progressinterval = getnum(optarg, &endp);
-			if (progressinterval < 0)
-				usage();
 			break;
 		case 'q':
 			quiet = 1;
@@ -1026,6 +945,8 @@ main(int argc, char **argv)
 			break;
 		case 'L':
 			lite = 1;
+			prt("lite mode not supported for rbd");
+			exit(1);
 			break;
 		case 'N':
 			numops = getnum(optarg, &endp);
@@ -1065,9 +986,10 @@ main(int argc, char **argv)
 		}
 	argc -= optind;
 	argv += optind;
-	if (argc != 1)
+	if (argc != 2)
 		usage();
-	fname = argv[0];
+	pool = argv[0];
+	iname = argv[1];
 
 	signal(SIGHUP,	cleanup);
 	signal(SIGINT,	cleanup);
@@ -1082,39 +1004,30 @@ main(int argc, char **argv)
 
 	initstate(seed, state, 256);
 	setstate(state);
-	fd = open(fname, O_RDWR|(lite ? 0 : O_CREAT|O_TRUNC), 0666);
-	if (fd < 0) {
-		prterr(fname);
+
+	ret = create_image();
+	if (ret < 0) {
+		prterrcode(iname, ret);
+		exit(90);
+	}
+	ret = rbd_open(ioctx, iname, &image, NULL);
+	if (ret < 0) {
+		simple_err("Error opening image", ret);
 		exit(91);
 	}
-	strncat(goodfile, fname, 256);
+	strncat(goodfile, iname, 256);
 	strcat (goodfile, ".fsxgood");
 	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
 	if (fsxgoodfd < 0) {
 		prterr(goodfile);
 		exit(92);
 	}
-	strncat(logfile, fname, 256);
+	strncat(logfile, iname, 256);
 	strcat (logfile, ".fsxlog");
 	fsxlogf = fopen(logfile, "w");
 	if (fsxlogf == NULL) {
 		prterr(logfile);
 		exit(93);
-	}
-	if (lite) {
-		off_t ret;
-		file_size = maxfilelen = lseek(fd, (off_t)0, SEEK_END);
-		if (file_size == (off_t)-1) {
-			prterr(fname);
-			warn("main: lseek eof");
-			exit(94);
-		}
-		ret = lseek(fd, (off_t)0, SEEK_SET);
-		if (ret == (off_t)-1) {
-			prterr(fname);
-			warn("main: lseek 0");
-			exit(95);
-		}
 	}
 	original_buf = (char *) malloc(maxfilelen);
 	for (i = 0; i < maxfilelen; i++)
@@ -1126,10 +1039,10 @@ main(int argc, char **argv)
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
 
-		written = write(fd, good_buf, (size_t)maxfilelen);
+		written = rbd_write(image, 0, (size_t)maxfilelen, good_buf);
 		if (written != maxfilelen) {
-			if (written == -1) {
-				prterr(fname);
+			if (written < 0) {
+				prterrcode(iname, written);
 				warn("main: error on write");
 			} else
 				warn("main: short write, 0x%x bytes instead of 0x%x\n",
@@ -1142,8 +1055,8 @@ main(int argc, char **argv)
 	while (numops == -1 || numops--)
 		test();
 
-	if (close(fd)) {
-		prterr("close");
+	if ((ret = rbd_close(image)) < 0) {
+		prterrcode("rbd_close", ret);
 		report_failure(99);
 	}
 	prt("All operations completed A-OK!\n");
@@ -1151,4 +1064,3 @@ main(int argc, char **argv)
 	exit(0);
 	return 0;
 }
-

@@ -690,6 +690,11 @@ test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
 
+test_librbd_fsx_SOURCES = test/rbd/fsx.c
+test_librbd_fsx_LDADD =  librbd.la librados.la
+test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
+bin_DEBUGPROGRAMS += test_librbd_fsx
+
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}

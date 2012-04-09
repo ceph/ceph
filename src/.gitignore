@@ -107,5 +107,6 @@ Makefile
 /test_rados_api_snapshots
 /test_rados_api_misc
 /test_librbd
+/test_librbd_fsx
 /scratchtool
 /scratchtoolpp
