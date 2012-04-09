@@ -434,7 +434,7 @@ public:
     return pg;
   }
 
-  object_locator_t file_to_object_locator(const ceph_file_layout& layout) const {
+  static object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
     return object_locator_t(layout.fl_pg_pool, layout.fl_pg_preferred);
   }
 

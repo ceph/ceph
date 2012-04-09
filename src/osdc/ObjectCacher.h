@@ -596,7 +596,7 @@ class ObjectCacher {
   int file_is_cached(ObjectSet *oset, ceph_file_layout *layout, snapid_t snapid,
 		     loff_t offset, uint64_t len) {
     vector<ObjectExtent> extents;
-    filer.file_to_extents(oset->ino, layout, offset, len, extents);
+    Filer::file_to_extents(cct, oset->ino, layout, offset, len, extents);
     return is_cached(oset, extents, snapid);
   }
 
@@ -606,7 +606,7 @@ class ObjectCacher {
 		int flags,
                 Context *onfinish) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
-    filer.file_to_extents(oset->ino, layout, offset, len, rd->extents);
+    Filer::file_to_extents(cct, oset->ino, layout, offset, len, rd->extents);
     return readx(rd, oset, onfinish);
   }
 
@@ -614,7 +614,7 @@ class ObjectCacher {
                  loff_t offset, uint64_t len, 
                  bufferlist& bl, utime_t mtime, int flags) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(oset->ino, layout, offset, len, wr->extents);
+    Filer::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
     return writex(wr, oset);
   }
 };
