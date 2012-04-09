@@ -3040,7 +3040,7 @@ int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t l
   dout(15) << "zero " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int ret = 0;
 
-#ifdef HAVE_FALLOCATE
+#ifdef CEPH_HAVE_FALLOCATE
 # if !defined(DARWIN) && !defined(__FreeBSD__)
   // first try to punch a hole.
   int fd = lfn_open(cid, oid, O_RDONLY);

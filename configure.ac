@@ -343,7 +343,7 @@ AC_CHECK_FUNC([sync_file_range],
 
 # fallocate
 AC_CHECK_FUNC([fallocate],
-	[AC_DEFINE([HAVE_FALLOCATE], [], [fallocate(2) is supported])],
+	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
 
