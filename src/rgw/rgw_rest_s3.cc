@@ -442,11 +442,13 @@ void RGWListMultipart_REST_S3::send_response()
       struct tm tmp;
       gmtime_r(&sec, &tmp);
       char buf[TIME_BUF_SIZE];
+
+      s->formatter->open_object_section("Part");
+
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_format("LastModified", buf);
       }
 
-      s->formatter->open_object_section("Part");
       s->formatter->dump_unsigned("PartNumber", info.num);
       s->formatter->dump_format("ETag", "%s", info.etag.c_str());
       s->formatter->dump_unsigned("Size", info.size);
