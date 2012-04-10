@@ -11,8 +11,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
@@ -577,7 +575,6 @@ public:
       DECODE_FINISH(bl);
     }
 
-    void dump(ostream& out);
     void dump(ceph::Formatter *f);
     static void generate_test_instances(list<Transaction*>& o);
   };
