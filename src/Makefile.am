@@ -381,8 +381,6 @@ rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
 
-# ceph_dencoder_LDADD += $(my_radosgw_ldadd)
-
 endif
 
 testcrypto_SOURCES = testcrypto.cc
