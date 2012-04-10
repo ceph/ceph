@@ -121,7 +121,9 @@ def install_firmware(ctx, config):
             args=[
                 'cd', fw_dir,
                 run.Raw('&&'),
-                'sudo', 'git', 'pull', 'origin', 'master'
+                'sudo', 'git', 'fetch', 'origin',
+                run.Raw('&&'),
+                'sudo', 'git', 'reset', '--hard', 'origin/master'
                 ],
             )
 
