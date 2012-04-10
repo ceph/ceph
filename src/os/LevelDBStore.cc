@@ -6,9 +6,9 @@
 #include <map>
 #include <string>
 #include <tr1/memory>
-#include "leveldb/include/leveldb/db.h"
-#include "leveldb/include/leveldb/write_batch.h"
-#include "leveldb/include/leveldb/slice.h"
+#include "leveldb/db.h"
+#include "leveldb/write_batch.h"
+#include "leveldb/slice.h"
 #include <errno.h>
 using std::string;
 

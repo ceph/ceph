@@ -1,5 +1,5 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf leveldb
+SUBDIRS = ocf
 DIST_SUBDIRS = gtest ocf leveldb
 CLEANFILES =
 bin_PROGRAMS =
@@ -43,13 +43,21 @@ bin_PROGRAMS += ceph-mon
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-ceph_osd_LDADD = libosd.la libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA)
+ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+bin_PROGRAMS += ceph-osd
+
+if WITH_SYSTEM_LEVELDB
+ceph_osd_LDADD += -lleveldb -lsnappy
+else
+ceph_osd_LDADD += leveldb/libleveldb.a
+ceph_osd_CXXFLAGS += -I$(top_srcdir)/src/leveldb/include
+SUBDIRS += leveldb
+endif
+
 if LINUX
 ceph_osd_LDADD += -ldl
 endif
-bin_PROGRAMS += ceph-osd
-ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
 
 # mds
 ceph_mds_SOURCES = ceph_mds.cc

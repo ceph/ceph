@@ -656,8 +656,9 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   ::encode(struct_v, bl);				     \
   ::encode(struct_compat, bl);				     \
   __le32 struct_len = 0;				     \
-  buffer::list::iterator struct_len_it = bl.end();	     \
   ::encode(struct_len, bl);				     \
+  buffer::list::iterator struct_len_it = bl.end();	     \
+  struct_len_it.advance(-4);				     \
   do {
 
 /**

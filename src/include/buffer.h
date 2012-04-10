@@ -270,7 +270,7 @@ public:
 	//return off == bl->length();
       }
 
-      void advance(unsigned o);
+      void advance(int o);
       void seek(unsigned o);
       char operator*();
       iterator& operator++();
