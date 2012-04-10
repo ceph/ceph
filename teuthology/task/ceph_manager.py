@@ -29,7 +29,6 @@ class Thrasher:
         manager.raw_cluster_cmd('mon', 'tell', '*', 'injectargs',
                                 '--mon-osd-down-out-interval', '0')
         self.thread = gevent.spawn(self.do_thrash)
-        self.thread.start()
 
     def kill_osd(self, osd=None):
         if osd is None:
