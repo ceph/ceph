@@ -101,6 +101,16 @@ def install_firmware(ctx, config):
         log.info('Installing linux-firmware on {role}...'.format(role=role))
         role_remote.run(
             args=[
+                # kludge around mysterious 0-byte .git/HEAD files
+                'cd', fw_dir,
+                run.Raw('&&'),
+                'test', '-d', '.git',
+                run.Raw('&&'),
+                'test', '!', '-s', '.git/HEAD',
+                run.Raw('&&'),
+                'sudo', 'rm', '-rf', '.git',
+                run.Raw(';'),
+                # init
                 'sudo', 'install', '-d', '-m0755', fw_dir,
                 run.Raw('&&'),
                 'cd', fw_dir,
