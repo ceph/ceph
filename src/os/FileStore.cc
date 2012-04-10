@@ -4427,9 +4427,12 @@ int FileStore::_collection_add(coll_t c, coll_t cid, const hobject_t& o,
     return 0;
 
   int r = lfn_link(cid, c, o);
+  if (replaying && !btrfs_stable_commits &&
+      r == -EEXIST)    // crashed between link() and set_replay_guard()
+    r = 0;
 
   // set guard on object so we don't do this again
-  if (r >= 0) {
+  if (r == 0) {
     int fd = lfn_open(c, o, 0);
     assert(fd >= 0);
     _set_replay_guard(fd, spos);
