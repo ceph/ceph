@@ -45,6 +45,7 @@
 #endif // DARWIN
 
 
+#include <fstream>
 #include <sstream>
 
 #include "FileStore.h"
@@ -698,7 +699,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   m_filestore_queue_max_ops(g_conf->filestore_queue_max_ops),
   m_filestore_queue_max_bytes(g_conf->filestore_queue_max_bytes),
   m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
-  m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes)
+  m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
+//  m_filestore_do_dump(!g_conf->filestore_dump_file.empty()),
+  m_filestore_dump_fmt(false)
 {
   ostringstream oss;
   oss << basedir << "/current";
@@ -737,6 +740,11 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   plb.add_u64_counter(l_os_j_full, "journal_full");
 
   logger = plb.create_perf_counters();
+
+  if (!g_conf->filestore_dump_file.empty()) {
+    dump_start(g_conf->filestore_dump_file);
+//  m_filestore_dump.open(g_conf->filestore_dump_file.c_str());
+  }
 }
 
 FileStore::~FileStore()
@@ -744,6 +752,17 @@ FileStore::~FileStore()
   if (journal)
     journal->logger = NULL;
   delete logger;
+
+  if (m_filestore_do_dump) {
+    dump_stop();
+  }
+/*
+  if (m_filestore_do_dump) {
+    m_filestore_dump_fmt.close_section();
+    m_filestore_dump_fmt.flush(m_filestore_dump);
+    m_filestore_dump.flush();
+  }
+ */
 }
 
 static void get_attrname(const char *name, char *buf, int len)
@@ -2203,6 +2222,13 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     osr->parent = posr;
     posr->p = osr;
     dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+  }
+
+  if (m_filestore_do_dump) {
+    for (list<Transaction*>::iterator it = tls.begin(); it != tls.end(); it++) {
+      Transaction *t = *it;
+      dump_transaction(t, osr);
+    }
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
@@ -4535,4 +4561,42 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(sync_entry_timeo_lock);
     m_filestore_commit_timeout = conf->filestore_commit_timeout;
   }
+}
+
+void FileStore::dump_start(const std::string& file) {
+  if (m_filestore_do_dump) {
+    dump_stop();
+  }
+  m_filestore_dump_fmt.reset();
+  m_filestore_dump.open(file.c_str());
+  m_filestore_do_dump = true;
+}
+
+void FileStore::dump_stop() {
+  m_filestore_do_dump = false;
+  if (m_filestore_dump.is_open()) {
+    m_filestore_dump_fmt.flush(m_filestore_dump);
+    m_filestore_dump.flush();
+    m_filestore_dump.close();
+  }
+}
+
+void
+FileStore::dump_transaction(ObjectStore::Transaction *t, OpSequencer *osr) {
+
+  /* test -- dump to dout */
+
+  /*
+  dout(0) << " transaction dump:\n";
+  t->dump(*_dout);
+  *_dout << dendl;
+  */
+
+  m_filestore_dump_fmt.open_object_section("transaction");
+  m_filestore_dump_fmt.dump_format("osr", "%x", osr);
+  t->dump(&m_filestore_dump_fmt);
+  m_filestore_dump_fmt.close_section();
+  m_filestore_dump_fmt.flush(m_filestore_dump);
+  m_filestore_dump << "\n";
+  m_filestore_dump.flush();
 }

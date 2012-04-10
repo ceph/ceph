@@ -33,6 +33,7 @@
 #include <map>
 #include <deque>
 #include <boost/scoped_ptr.hpp>
+#include <fstream>
 using namespace std;
 
 #include <ext/hash_map>
@@ -430,6 +431,10 @@ public:
   int _collection_move(coll_t c, coll_t ocid, const hobject_t& o,
 		       const SequencerPosition& spos);
 
+  void dump_start(const std::string& file);
+  void dump_stop();
+  void dump_transaction(ObjectStore::Transaction *t, OpSequencer *osr);
+
 private:
   // omap
   int _omap_clear(coll_t cid, const hobject_t &hoid);
@@ -465,6 +470,9 @@ private:
   int m_filestore_queue_max_bytes;
   int m_filestore_queue_committing_max_ops;
   int m_filestore_queue_committing_max_bytes;
+  bool m_filestore_do_dump;
+  std::ofstream m_filestore_dump;
+  JSONFormatter m_filestore_dump_fmt;
 };
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);
