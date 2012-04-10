@@ -4195,6 +4195,7 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
     int fd = ::open(new_coll, O_RDONLY);
     assert(fd >= 0);
     _set_replay_guard(fd, spos);
+    TEMP_FAILURE_RETRY(::close(fd));
   }
 
   dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
