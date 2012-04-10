@@ -2554,14 +2554,14 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
-	if (!_check_replay_guard(cid, oid, spos))
-	  break;
-	map<string, bufferptr> to_set;
-	to_set[name] = bufferptr(bl.c_str(), bl.length());
-	r = _setattrs(cid, oid, to_set);
-	if (r == -ENOSPC)
-	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
-		  << " name " << name << " size " << bl.length() << dendl;
+	if (_check_replay_guard(cid, oid, spos)) {
+	  map<string, bufferptr> to_set;
+	  to_set[name] = bufferptr(bl.c_str(), bl.length());
+	  r = _setattrs(cid, oid, to_set);
+	  if (r == -ENOSPC)
+	    dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
+		    << " name " << name << " size " << bl.length() << dendl;
+	}
       }
       break;
       
