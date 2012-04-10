@@ -4453,19 +4453,40 @@ int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o,
 {
   dout(15) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
 
-  if (!_check_replay_guard(oldcid, o, spos))
-    return 0;
+  /*
+   * Treat this as two distinct steps:
+   *
+   *  1) link to new location, with read from old location
+   *  2) remove old location
+   *
+   * We have to make sure the first part is stable in the new location
+   * before we remove it from the old location.
+   *
+   * Because we set the guard between link and unlink, replay the
+   * unlink even if the guard is set.
+   */
 
-  int r = lfn_link(oldcid, c, o);
-  if (r == 0 || (replaying && r == -EEXIST)) {
-    r = lfn_unlink(oldcid, o);
-
-    // set guard on object so we don't do this again
-    int fd = lfn_open(c, o, 0);
-    assert(fd >= 0);
-    _set_replay_guard(fd, spos);
-    TEMP_FAILURE_RETRY(::close(fd));
+  int r = 0;
+  if (_check_replay_guard(c, o, spos)) {
+    r = lfn_link(oldcid, c, o);
+    if (replaying && r == -EEXIST)
+      r = 0;
+    if (r == 0) {
+      // set guard on object so we don't do this again.  set this
+      // _before_ we unlink so that if we crash now we don't unlink old
+      // copy _and_ clobber the new copy due to the lack of a guard.
+      int fd = lfn_open(c, o, 0);
+      assert(fd >= 0);
+      _set_replay_guard(fd, spos);
+      TEMP_FAILURE_RETRY(::close(fd));
+    }
   }
+
+  if (r == 0 &&
+      _check_replay_guard(oldcid, o, spos)) {
+    r = lfn_unlink(oldcid, o);
+  }
+
   dout(10) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
 }
