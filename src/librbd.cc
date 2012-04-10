@@ -58,6 +58,7 @@ namespace librbd {
     char *buf;
     map<uint64_t,uint64_t> m;
     bufferlist data_bl;
+    librados::ObjectWriteOperation write_op;
 
     AioBlockCompletion(CephContext *cct_, AioCompletion *aio_completion,
 		       uint64_t _ofs, size_t _len, char *_buf)
@@ -429,8 +430,10 @@ namespace librbd {
 		       void *arg);
   ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
+  int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
                 AioCompletion *c);
+  int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
                char *buf, AioCompletion *c);
   int flush(ImageCtx *ictx);
@@ -1507,6 +1510,51 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   return total_write;
 }
 
+int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
+{
+  ldout(ictx->cct, 20) << "discard " << ictx << " off = " << off << " len = " << len << dendl;
+
+  if (!len)
+    return 0;
+
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  r = check_io(ictx, off, len);
+  if (r < 0)
+    return r;
+
+  size_t total_write = 0;
+  ictx->lock.Lock();
+  uint64_t start_block = get_block_num(ictx->header, off);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->header);
+  ictx->lock.Unlock();
+  uint64_t left = len;
+
+  for (uint64_t i = start_block; i <= end_block; i++) {
+    ictx->lock.Lock();
+    string oid = get_block_oid(ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    ictx->lock.Unlock();
+    uint64_t write_len = min(block_size - block_ofs, left);
+    librados::ObjectWriteOperation write_op;
+    if (block_ofs == 0 && write_len == block_size)
+      write_op.remove();
+    else if (write_len + block_ofs == block_size)
+      write_op.truncate(block_ofs);
+    else
+      write_op.zero(block_ofs, write_len);
+    r = ictx->data_ctx.operate(oid, &write_op);
+    if (r < 0)
+      return r;
+    total_write += write_len;
+    left -= write_len;
+  }
+  return total_write;
+}
+
 ssize_t handle_sparse_read(CephContext *cct,
 			   bufferlist data_bl,
 			   uint64_t block_ofs,
@@ -1701,6 +1749,67 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     total_write += write_len;
     left -= write_len;
   }
+done:
+  c->finish_adding_completions();
+  c->put();
+
+  /* FIXME: cleanup all the allocated stuff */
+  return r;
+}
+
+int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
+{
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = " << len << dendl;
+
+  if (!len)
+    return 0;
+
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  size_t total_write = 0;
+  ictx->lock.Lock();
+  uint64_t start_block = get_block_num(ictx->header, off);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->header);
+  ictx->lock.Unlock();
+  uint64_t left = len;
+
+  r = check_io(ictx, off, len);
+  if (r < 0)
+    return r;
+
+  c->get();
+  for (uint64_t i = start_block; i <= end_block; i++) {
+    ictx->lock.Lock();
+    string oid = get_block_oid(ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    ictx->lock.Unlock();
+
+    AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
+
+    uint64_t write_len = min(block_size - block_ofs, left);
+    if (block_ofs == 0 && write_len == block_size)
+      block_completion->write_op.remove();
+    else if (block_ofs + write_len == block_size)
+      block_completion->write_op.truncate(block_ofs);
+    else
+      block_completion->write_op.zero(block_ofs, write_len);
+
+    c->add_block_completion(block_completion);
+    librados::AioCompletion *rados_completion =
+      Rados::aio_create_completion(block_completion, NULL, rados_cb);
+
+    r = ictx->data_ctx.aio_operate(oid, rados_completion, &block_completion->write_op);
+    rados_completion->release();
+    if (r < 0)
+      goto done;
+    total_write += write_len;
+    left -= write_len;
+  }
+  r = 0;
 done:
   c->finish_adding_completions();
   c->put();
@@ -1994,12 +2103,24 @@ ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
   return librbd::write(ictx, ofs, len, bl.c_str());
 }
 
+int Image::discard(uint64_t ofs, uint64_t len)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::discard(ictx, ofs, len);
+}
+
 int Image::aio_write(uint64_t off, size_t len, bufferlist& bl, RBD::AioCompletion *c)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   if (bl.length() < len)
     return -EINVAL;
   return librbd::aio_write(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
+}
+
+int Image::aio_discard(uint64_t off, size_t len, RBD::AioCompletion *c)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::aio_discard(ictx, off, len, (librbd::AioCompletion *)c->pc);
 }
 
 int Image::aio_read(uint64_t off, size_t len, bufferlist& bl, RBD::AioCompletion *c)
@@ -2247,6 +2368,12 @@ extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const 
   return librbd::write(ictx, ofs, len, buf);
 }
 
+extern "C" int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::discard(ictx, ofs, len);
+}
+
 extern "C" int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c)
 {
   librbd::RBD::AioCompletion *rbd_comp = new librbd::RBD::AioCompletion(cb_arg, complete_cb);
@@ -2259,6 +2386,13 @@ extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const 
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   return librbd::aio_write(ictx, off, len, buf, (librbd::AioCompletion *)comp->pc);
+}
+
+extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, size_t len, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  return librbd::aio_discard(ictx, off, len, (librbd::AioCompletion *)comp->pc);
 }
 
 extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len, char *buf, rbd_completion_t c)

@@ -99,8 +99,10 @@ ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf);
 int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 			 int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
 ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf);
+int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
 int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const char *buf, rbd_completion_t c);
 int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len, char *buf, rbd_completion_t c);
+int rbd_aio_discard(rbd_image_t image, uint64_t off, size_t len, rbd_completion_t c);
 int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c);
 int rbd_aio_wait_for_complete(rbd_completion_t c);
 ssize_t rbd_aio_get_return_value(rbd_completion_t c);
