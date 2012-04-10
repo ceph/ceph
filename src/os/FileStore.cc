@@ -4184,7 +4184,11 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
 
   int ret = 0;
   if (::rename(old_coll, new_coll)) {
-    ret = -errno;
+    if (replaying && !btrfs_stable_commits &&
+	(errno == EEXIST || errno == ENOTEMPTY))
+      ret = 0;   // crashed between rename and set_replay_guard
+    else
+      ret = -errno;
   }
 
   if (ret >= 0) {
