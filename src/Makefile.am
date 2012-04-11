@@ -207,6 +207,14 @@ test_filestore_idempotent2_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA
 test_filestore_idempotent2_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent test_filestore_idempotent2
 
+test_filestore_idempotent_sequence_SOURCES = \
+     test/filestore_test/test_idempotent_sequence.cc \
+     test/filestore_test/DeterministicOpSequence.cc \
+     test/filestore_test/TestFileStoreState.cc \
+     test/filestore_test/VerifyFileStore.cc
+test_filestore_idempotent_sequence_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
+
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
