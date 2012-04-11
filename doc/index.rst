@@ -22,8 +22,8 @@ using NFS or Samba re-exports.
 
    start/index
    install/index
+   create_cluster/index
    configure/index
-   architecture
    ops/index
    rec/index
    config
@@ -31,5 +31,6 @@ using NFS or Samba re-exports.
    api/index
    Internals <dev/index>
    man/index
+   architecture
    papers
    appendix/index
