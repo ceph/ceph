@@ -21,6 +21,11 @@ possibly an associated capability specification. Each key is
 associated with an entity name, of the form
 ``{client,mon,mds,osd}.name``.
 
+**WARNING** Ceph provides authentication and protection against
+man-in-the-middle attacks once secret keys are in place.  However,
+data over the wire is not encrypted, which may include the messages
+used to configure said keys.  The system is primarily intended to be
+used in trusted environments.
 
 Options
 =======
