@@ -48,3 +48,4 @@ Reasons to use Ceph include:
  - Open source and free
  - Uses heterogeneous commodity hardware
  - Easy to setup and maintain
+ - Commercial support is available (if needed)
