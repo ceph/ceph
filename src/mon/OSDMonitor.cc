@@ -2016,6 +2016,26 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, ret, rs, paxos->get_version()));
 	  return true;
 	}
+      } else if (m->cmd.size() >= 5 &&
+		 m->cmd[2] == "disable_lpgs" &&
+		 m->cmd[4] == "--yes-i-really-mean-it") {
+	// semi-kludge to disable localized pgs for a pool
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	if (pool < 0) {
+	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  err = -ENOENT;
+	} else {
+	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
+	  if (pending_inc.new_pools.count(pool) == 0)
+	    pending_inc.new_pools[pool] = *p;
+	  pending_inc.new_pools[pool].lpg_num = 0;
+	  pending_inc.new_pools[pool].lpgp_num = 0;
+	  pending_inc.new_pools[pool].last_change = pending_inc.epoch;
+	  ss << "disabled localized pgs for pool " << pool;
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
       } else if (m->cmd[2] == "set") {
 	if (m->cmd.size() != 6) {
 	  err = -EINVAL;
