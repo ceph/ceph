@@ -7,16 +7,11 @@ to support storing many petabytes of data with the ability to store exabytes of 
 
 A number of factors make it challenging to build large storage systems. Three of them include:
 
-- **Capital Expenditure**: Proprietary systems are expensive. So building scalable systems requires
-using less expensive commodity hardware and a "scale out" approach to reduce build-out expenses.
+- **Capital Expenditure**: Proprietary systems are expensive. So building scalable systems requires using less expensive commodity hardware and a "scale out" approach to reduce build-out expenses.
 
-- **Ongoing Operating Expenses**: Supporting thousands of storage hosts can impose significant personnel
-expenses, particularly as hardware and networking infrastructure must be installed, maintained and replaced
-ongoingly. 
+- **Ongoing Operating Expenses**: Supporting thousands of storage hosts can impose significant personnel expenses, particularly as hardware and networking infrastructure must be installed, maintained and replaced ongoingly. 
 
-- **Loss of Data or Access to Data**: Mission-critical enterprise applications cannot suffer significant
-amounts of downtime, including loss of data *or access to data*. Yet, in systems with thousands of storage hosts, 
-hardware failure is an expectation, not an exception. 
+- **Loss of Data or Access to Data**: Mission-critical enterprise applications cannot suffer significant amounts of downtime, including loss of data *or access to data*. Yet, in systems with thousands of storage hosts,  hardware failure is an expectation, not an exception. 
 
 Because of the foregoing factors and other factors, building massive storage systems requires new thinking.
 
@@ -49,5 +44,3 @@ RADOS Gateway without MDSs. The MDSs dynamically adapt their behavior to the cur
 As the size and popularity of parts of the file system hierarchy change over time, the MDSs 
 dynamically redistribute the file system hierarchy among the available
 MDSs to balance the load to use server resources effectively.
-
-<image>

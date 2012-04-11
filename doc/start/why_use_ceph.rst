@@ -1,13 +1,24 @@
 =============
 Why use Ceph?
 =============
-Ceph provides an economic and technical foundation for massive scalability. 
-
-Financial constraints limit scalability. Ceph is free and open source, which means it does not require expensive 
-license fees or expensive updates. Ceph can run on economical commodity hardware, which reduces one economic barrier to scalability. Ceph is easy to install and administer, so it reduces expenses related to administration. Ceph supports popular and widely accepted interfaces (e.g., POSIX-compliance, Swift, Amazon S3, FUSE, etc.). So Ceph provides a compelling solution for building petabyte-to-exabyte scale storage systems.
+Ceph provides an economic and technical foundation for massive scalability. Ceph is free and open source, 
+which means it does not require expensive license fees or expensive updates. Ceph can run on economical 
+commodity hardware, which reduces another economic barrier to scalability. Ceph is easy to install and administer, 
+so it reduces expenses related to administration. Ceph supports popular and widely accepted interfaces in a 
+unified storage system (e.g., Amazon S3, Swift, FUSE, block devices, POSIX-compliant shells, etc.), so you don't 
+need to build out a different storage system for each storage interface you support.
 
 Technical and personnel constraints also limit scalability. The performance profile of highly scaled systems 
-can very substantially. With intelligent load balancing and adaptive metadata servers that re-balance the file system dynamically, Ceph alleviates the administrative burden of optimizing performance. Additionally, because Ceph provides for data replication, Ceph is fault tolerant. Ceph administrators can simply replace a failed host by subtituting new hardware without having to rely on complex fail-over scenarios. With POSIX semantics for Unix/Linux-based operating systems, popular interfaces like Swift or Amazon S3, and advanced features like directory-level snapshots, system administrators can deploy enterprise applications on Ceph, and provide those applications with a long-term economical solution for scalable persistence.
+can very substantially. Ceph relieves system administrators of the complex burden of manual performance optimization
+by utilizing the storage system's computing resources to balance loads intelligently and rebalance the file system dynamically.
+Ceph replicates data automatically so that hardware failures do not result in data loss or cascading load spikes.
+Ceph fault tolerant, so complex fail-over scenarios are unnecessary. Ceph administrators can simply replace a failed host 
+with new hardware. 
+
+With POSIX semantics for Unix/Linux-based operating systems, popular interfaces like Amazon S3 or Swift, block devices
+and advanced features like directory-level snapshots, you can deploy enterprise applications on Ceph while 
+providing them with a long-term economical solution for scalable storage. While Ceph is open source, commercial 
+support is available too! So Ceph provides a compelling solution for building petabyte-to-exabyte scale storage systems.
 
 Reasons to use Ceph include:
 

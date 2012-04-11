@@ -1,27 +1,20 @@
-=============================
-Designing a Storage Cluster
-=============================
+==========================
+Installing Ceph Components
+==========================
 Storage clusters are the foundation of the Ceph file system, and they can also provide
-object storage to clients via ``librados``, ``rbd`` and ``radosgw``. The following sections 
+object storage to ``librados``, ``rbd`` and ``radosgw``. The following sections 
 provide guidance for configuring a storage cluster:
 
-1. :doc:`Hardware Requirements <hardware_requirements>`
-2. :doc:`File System Requirements <file_system_requirements>`
-3. :doc:`Build Prerequisites <build_prerequisites>`
-4. :doc:`Download Packages <download_packages>`
-5. :doc:`Downloading a Ceph Release <downloading_a_ceph_release>`
-6. :doc:`Cloning the Ceph Source Code Repository <cloning_the_ceph_source_code_repository>`
-7. :doc:`Building Ceph<building_ceph>`
-8. :doc:`Installing RADOS Processes and Daemons <installing_rados_processes_and_daemons>`
+1. :doc:`Hardware Requirements <hardware_recommendations>`
+2. :doc:`File System Requirements <file_system_recommendations>`
+3. :doc:`Download Packages <download_packages>`
+4. :doc:`Building Ceph from Source <building_ceph_from_source>`
+
 
 .. toctree::
    :hidden:
 
-   Hardware <hardware_requirements>
-   File System Reqs <file_system_requirements>
-   build_prerequisites
+   Hardware Recs <hardware_recommendations>
+   File System Recs <file_system_recommendations>
    Download Packages <download_packages>
-   Download a Release <downloading_a_ceph_release>
-   Clone the Source Code <cloning_the_ceph_source_code_repository>
-   building_ceph
-   Installation <installing_rados_processes_and_daemons>
+   Build From Source <building_ceph_from_source>
