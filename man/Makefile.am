@@ -23,4 +23,5 @@ dist_man_MANS = \
 	ceph-clsinfo.8 \
 	ceph-debugpack.8 \
 	cephfs.8 \
-	ceph-dencoder.8
+	ceph-dencoder.8 \
+	ceph-rbdnamer.8
