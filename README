@@ -1,9 +1,30 @@
 Ceph - a scalable distributed storage system
------------------------------------------
+============================================
 
 Please see http://ceph.newdream.net/ for current info.
 
-----
+
+Contributing Code
+-----------------
+
+Most of Ceph is licensed under the LGPL version 2.1.  Some
+miscellaneous code is under BSD-style license or is public domain.
+The documentation is licensed under Creative Commons
+Attribution-ShareAlike (CC BY-SA).  There are a handful of headers
+included here that are licensed under the GPL.  Please see the file
+COPYING for a full inventory of licenses by file.
+
+Code contributions must include a valid "Signed-off-by" acknowledging
+the license for the modified or contributed file.  Please see the file
+SubmittingPatches for details on what that means and on how to
+generate and submit patches.
+
+We do not require assignment of copyright to contribute code; code is
+contributed under the terms of the applicable license.
+
+
+Building Ceph
+-------------
 
 To prepare the source tree for the first time in case it has been git cloned,
 
@@ -17,25 +38,31 @@ $ make
 
 (Note that the FUSE client will only be built if libfuse is present.)
 
-----
 
-A quick summary of binaries that will be built in src/
+Dependencies
+------------
 
-daemons:
- ceph-mon -- monitor daemon.  handles cluster state and configuration
-         information.
- ceph-osd -- storage daemon.  stores objects on a given block device.
- ceph-mds -- metadata daemon.  handles file system namespace.
- ceph-fuse -- fuse client.
+The configure script will complain about any missing dependencies as
+it goes.  You can also refer to debian/control or ceph.spec.in for the
+package build dependencies on those platforms.  In many cases,
+dependencies can be avoided with --with-foo or --without-bar switches.
+For example,
 
-tools:
- ceph -- send management commands to the monitor cluster.
- rados -- interact with the object store
- rbd -- manipulate rados block device images
- monmaptool -- create/edit mon map
- osdmaptool -- create/edit osd map 
- crushtool -- create/edit crush map
+$ ./configure --with-nss         # use libnss instead of libcrypto++
+$ ./configure --without-radosgw  # do not build radosgw and avoid libfcgi-dev
+$ ./configure --without-tcmalloc # avoid google-perftools dependency
 
-scripts:
- mkcephfs -- cluster mkfs tool
- init-ceph -- init.d start/stop script
+
+Building packages
+-----------------
+
+You can build packages for Debian or Debian-derived (e.g., Ubuntu)
+systems with
+
+$ sudo apt-get dpkg-dev
+$ dpkg-checkbuilddeps        # make sure we have all dependencies
+$ dpkg-buildpackage
+
+For RPM-based systems (Redhat, Suse, etc.),
+
+$ rpmbuild
