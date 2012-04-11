@@ -2826,7 +2826,11 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 		<< " (" << spos << ", or op " << spos.op << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
-	t.dump(*_dout);
+	JSONFormatter f(true);
+	f.open_object_section("transaction");
+	t.dump(&f);
+	f.close_section();
+	f.flush(*_dout);
 	*_dout << dendl;
 	assert(0 == "unexpected error");
       }
