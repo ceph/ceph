@@ -21,8 +21,20 @@ class PerfCounters;
 enum {
   l_objectcacher_first = 25000,
 
-  l_objectcacher_cache_hit,
-  l_objectcacher_cache_miss,
+  l_objectcacher_cache_ops_hit, // ops we satisfy completely from cache
+  l_objectcacher_cache_ops_miss, // ops we don't satisfy completely from cache
+
+  l_objectcacher_cache_bytes_hit, // bytes read directly from cache
+  l_objectcacher_cache_bytes_miss, // bytes we couldn't read directly from cache
+
+  l_objectcacher_data_read, // total bytes read out
+  l_objectcacher_data_written, // bytes written to cache
+  l_objectcacher_data_flushed, // bytes flushed to WritebackHandler
+  l_objectcacher_overwritten_in_flush, // bytes overwritten while flushing is in progress
+
+  l_objectcacher_write_ops_blocked, // total write ops we delayed due to dirty limits
+  l_objectcacher_write_bytes_blocked, // total number of write bytes we delayed due to dirty limits
+  l_objectcacher_write_time_blocked, // total time in seconds spent blocking a write due to dirty limits
 
   l_objectcacher_last,
 };
