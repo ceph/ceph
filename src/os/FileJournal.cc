@@ -568,6 +568,9 @@ int FileJournal::dump(ostream& out)
 
   read_pos = header.start;
 
+  JSONFormatter f(true);
+
+  f.open_array_section("journal");
   while (1) {
     bufferlist bl;
     uint64_t seq = 0;
@@ -577,16 +580,27 @@ int FileJournal::dump(ostream& out)
       break;
     }
 
-    out << "offset " << pos << " seq " << seq << "\n";
-   
+    f.open_object_section("entry");
+    f.dump_unsigned("offset", pos);
+    f.dump_unsigned("seq", seq);
+    f.open_array_section("transactions");
     bufferlist::iterator p = bl.begin();
+    int trans_num = 0;
     while (!p.end()) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction(p);
-      t->dump(out);
+      f.open_object_section("transaction");
+      f.dump_unsigned("trans_num", trans_num);
+      t->dump(&f);
+      f.close_section();
       delete t;
+      trans_num++;
     }
+    f.close_section();
+    f.close_section();
+    f.flush(cout);
   }
-  out << std::endl;
+
+  f.close_section();
   dout(10) << "dump finish" << dendl;
   return 0;
 }
