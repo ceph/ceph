@@ -16,8 +16,19 @@
 
 class CephContext;
 class WritebackHandler;
+class PerfCounters;
+
+enum {
+  l_objectcacher_first = 25000,
+
+  l_objectcacher_cache_hit,
+  l_objectcacher_cache_miss,
+
+  l_objectcacher_last,
+};
 
 class ObjectCacher {
+  PerfCounters *perfcounter;
  public:
   CephContext *cct;
   class Object;
@@ -512,12 +523,16 @@ class ObjectCacher {
     }
   };
 
+  void perf_start();
+  void perf_stop();
+
 
 
   ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg);
   ~ObjectCacher() {
+    perf_stop();
     // we should be empty.
     for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
         i != objects.end();

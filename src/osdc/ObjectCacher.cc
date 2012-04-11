@@ -4,6 +4,7 @@
 #include "msg/Messenger.h"
 #include "ObjectCacher.h"
 #include "WritebackHandler.h"
+#include "common/perf_counters.h"
 
 
 /*** ObjectCacher::BufferHead ***/
@@ -19,12 +20,32 @@ ObjectCacher::
 ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
 	     flush_set_callback_t flush_callback,
 	     void *flush_callback_arg) : 
+    perfcounter(NULL),
     cct(cct_), writeback_handler(wb), lock(l),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
-  }
+  perf_start();
+}
+
+void ObjectCacher::perf_start()
+{
+  PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_objectcacher_first, l_objectcacher_last);
+
+  plb.add_u64_counter(l_objectcacher_cache_hit, "cache_hit");
+  plb.add_u64_counter(l_objectcacher_cache_miss, "cache_miss");
+
+  perfcounter = plb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(perfcounter);
+}
+
+void ObjectCacher::perf_stop()
+{
+  assert(perfcounter);
+  cct->get_perfcounters_collection()->remove(perfcounter);
+  delete perfcounter;
+}
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t off)
 {
