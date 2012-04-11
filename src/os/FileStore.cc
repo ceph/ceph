@@ -739,10 +739,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   plb.add_u64_counter(l_os_j_full, "journal_full");
 
   logger = plb.create_perf_counters();
-
-  if (!g_conf->filestore_dump_file.empty()) {
-    dump_start(g_conf->filestore_dump_file);
-  }
 }
 
 FileStore::~FileStore()
@@ -4536,6 +4532,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_max_sync_interval",
     "filestore_flusher_max_fds",
     "filestore_commit_timeout",
+    "filestore_dump_file",
     NULL
   };
   return KEYS;
@@ -4555,6 +4552,14 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
     m_filestore_commit_timeout = conf->filestore_commit_timeout;
+  }
+  if (changed.count("filestore_dump_file")) {
+    if (conf->filestore_dump_file.length() &&
+	conf->filestore_dump_file != "-") {
+      dump_start(conf->filestore_dump_file);
+    } else {
+      dump_stop();
+    }
   }
 }
 
