@@ -1974,7 +1974,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
         if (m->cmd.size() > 4) { // try to parse out pg_num and pgp_num
           const char *start = m->cmd[4].c_str();
           char *end = (char*)start;
-          pg_num = strtol(start, &end, 10);
+          pgp_num = pg_num = strtol(start, &end, 10);
           if (*end != '\0') { // failed to parse
             err = -EINVAL;
             ss << "usage: osd pool create <poolname> [pg_num [pgp_num]]";
