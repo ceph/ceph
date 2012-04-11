@@ -700,7 +700,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   m_filestore_queue_max_bytes(g_conf->filestore_queue_max_bytes),
   m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
   m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
-  m_filestore_dump_fmt(false)
+  m_filestore_dump_fmt(true)
 {
   ostringstream oss;
   oss << basedir << "/current";
@@ -2220,6 +2220,10 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     op_queue_reserve_throttle(o);
     journal->throttle();
     o->op = op_submit_start();
+
+    if (m_filestore_do_dump)
+      dump_transactions(o->tls, o->op, osr);
+
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
@@ -2244,6 +2248,9 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   uint64_t op = op_submit_start();
   dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
+
+  if (m_filestore_do_dump)
+    dump_transactions(tls, op, osr);
 
   _op_apply_start(op);
   int r = do_transactions(tls, op);
@@ -4553,29 +4560,41 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
 
 void FileStore::dump_start(const std::string& file)
 {
+  dout(10) << "dump_start " << file << dendl;
   if (m_filestore_do_dump) {
     dump_stop();
   }
   m_filestore_dump_fmt.reset();
+  m_filestore_dump_fmt.open_array_section("dump");
   m_filestore_dump.open(file.c_str());
   m_filestore_do_dump = true;
 }
 
 void FileStore::dump_stop()
 {
+  dout(10) << "dump_stop" << dendl;
   m_filestore_do_dump = false;
   if (m_filestore_dump.is_open()) {
+    m_filestore_dump_fmt.close_section();
     m_filestore_dump_fmt.flush(m_filestore_dump);
     m_filestore_dump.flush();
     m_filestore_dump.close();
   }
 }
 
-  m_filestore_dump_fmt.open_object_section("transaction");
-  m_filestore_dump_fmt.dump_format("osr", "%x", osr);
-  t->dump(&m_filestore_dump_fmt);
+void FileStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr)
+{
+  m_filestore_dump_fmt.open_array_section("transactions");
+  unsigned trans_num = 0;
+  for (list<ObjectStore::Transaction*>::iterator i = ls.begin(); i != ls.end(); ++i, ++trans_num) {
+    m_filestore_dump_fmt.open_object_section("transaction");
+    m_filestore_dump_fmt.dump_string("osr", osr->get_name());
+    m_filestore_dump_fmt.dump_unsigned("seq", seq);
+    m_filestore_dump_fmt.dump_unsigned("trans_num", trans_num);
+    (*i)->dump(&m_filestore_dump_fmt);
+    m_filestore_dump_fmt.close_section();
+  }
   m_filestore_dump_fmt.close_section();
   m_filestore_dump_fmt.flush(m_filestore_dump);
-  m_filestore_dump << "\n";
   m_filestore_dump.flush();
 }

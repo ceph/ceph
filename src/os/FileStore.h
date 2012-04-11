@@ -180,6 +180,10 @@ class FileStore : public JournalingObjectStore,
     ~OpSequencer() {
       assert(q.empty());
     }
+
+    const string& get_name() const {
+      return parent->get_name();
+    }
   };
 
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
@@ -433,7 +437,7 @@ public:
 
   void dump_start(const std::string& file);
   void dump_stop();
-  void dump_transaction(ObjectStore::Transaction *t, OpSequencer *osr);
+  void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
 
 private:
   // omap
