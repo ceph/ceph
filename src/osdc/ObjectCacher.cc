@@ -29,6 +29,19 @@ ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
   perf_start();
 }
 
+ObjectCacher::~ObjectCacher()
+{
+  perf_stop();
+  // we should be empty.
+  for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
+      i != objects.end();
+      ++i)
+    assert(!i->size());
+  assert(lru_rest.lru_get_size() == 0);
+  assert(lru_dirty.lru_get_size() == 0);
+  assert(dirty_bh.empty());
+}
+
 void ObjectCacher::perf_start()
 {
   PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_objectcacher_first, l_objectcacher_last);
@@ -445,6 +458,22 @@ void ObjectCacher::Object::truncate(loff_t s)
 #define dout_prefix *_dout << "objectcacher "
 
 /* private */
+ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid, ObjectSet *oset,
+                                 object_locator_t &l)
+{
+  // have it?
+  if ((uint32_t)l.pool < objects.size()) {
+    if (objects[l.pool].count(oid))
+      return objects[l.pool][oid];
+  } else {
+    objects.resize(l.pool+1);
+  }
+
+  // create it.
+  Object *o = new Object(this, oid, oset, l);
+  objects[l.pool][oid] = o;
+  return o;
+}
 
 void ObjectCacher::close_object(Object *ob) 
 {
@@ -1616,5 +1645,100 @@ void ObjectCacher::verify_stats() const
   assert(tx == stat_tx);
   assert(dirty == stat_dirty);
   assert(missing == stat_missing);
+}
+
+void ObjectCacher::bh_stat_add(BufferHead *bh)
+{
+  switch (bh->get_state()) {
+  case BufferHead::STATE_MISSING:
+    stat_missing += bh->length();
+    break;
+  case BufferHead::STATE_CLEAN:
+    stat_clean += bh->length();
+    break;
+  case BufferHead::STATE_DIRTY:
+    stat_dirty += bh->length();
+    bh->ob->dirty_or_tx += bh->length();
+    bh->ob->oset->dirty_or_tx += bh->length();
+    break;
+  case BufferHead::STATE_TX:
+    stat_tx += bh->length();
+    bh->ob->dirty_or_tx += bh->length();
+    bh->ob->oset->dirty_or_tx += bh->length();
+    break;
+  case BufferHead::STATE_RX:
+    stat_rx += bh->length();
+    break;
+  }
+  if (stat_waiter) stat_cond.Signal();
+}
+
+void ObjectCacher::bh_stat_sub(BufferHead *bh)
+{
+  switch (bh->get_state()) {
+  case BufferHead::STATE_MISSING:
+    stat_missing -= bh->length();
+    break;
+  case BufferHead::STATE_CLEAN:
+    stat_clean -= bh->length();
+    break;
+  case BufferHead::STATE_DIRTY:
+    stat_dirty -= bh->length();
+    bh->ob->dirty_or_tx -= bh->length();
+    bh->ob->oset->dirty_or_tx -= bh->length();
+    break;
+  case BufferHead::STATE_TX:
+    stat_tx -= bh->length();
+    bh->ob->dirty_or_tx -= bh->length();
+    bh->ob->oset->dirty_or_tx -= bh->length();
+    break;
+  case BufferHead::STATE_RX:
+    stat_rx -= bh->length();
+    break;
+  }
+}
+
+void ObjectCacher::bh_set_state(BufferHead *bh, int s)
+{
+  // move between lru lists?
+  if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
+    lru_rest.lru_remove(bh);
+    lru_dirty.lru_insert_top(bh);
+    dirty_bh.insert(bh);
+  }
+  if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
+    lru_dirty.lru_remove(bh);
+    lru_rest.lru_insert_top(bh);
+    dirty_bh.erase(bh);
+  }
+
+  // set state
+  bh_stat_sub(bh);
+  bh->set_state(s);
+  bh_stat_add(bh);
+}
+
+void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
+{
+  ob->add_bh(bh);
+  if (bh->is_dirty()) {
+    lru_dirty.lru_insert_top(bh);
+    dirty_bh.insert(bh);
+  } else {
+    lru_rest.lru_insert_top(bh);
+  }
+  bh_stat_add(bh);
+}
+
+void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
+{
+  ob->remove_bh(bh);
+  if (bh->is_dirty()) {
+    lru_dirty.lru_remove(bh);
+    dirty_bh.erase(bh);
+  } else {
+    lru_rest.lru_remove(bh);
+  }
+  bh_stat_sub(bh);
 }
 
