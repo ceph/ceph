@@ -121,7 +121,7 @@ binary-arch: build install
 	dh_compress
 	dh_fixperms
 	dh_makeshlibs -n  # we do the postinst/postrm scripts manually
-	dh_pysupport
+	dh_python2
 	dh_installdeb
 	dh_shlibdeps
 	dh_gencontrol
