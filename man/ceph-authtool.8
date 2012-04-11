@@ -1,4 +1,4 @@
-.TH "CEPH-AUTHTOOL" "8" "September 22, 2011" "dev" "Ceph"
+.TH "CEPH-AUTHTOOL" "8" "April 11, 2012" "dev" "Ceph"
 .SH NAME
 ceph-authtool \- ceph keyring manipulation tool
 .
@@ -44,6 +44,12 @@ file. A keyring file stores one or more Ceph authentication keys and
 possibly an associated capability specification. Each key is
 associated with an entity name, of the form
 \fB{client,mon,mds,osd}.name\fP.
+.sp
+\fBWARNING\fP Ceph provides authentication and protection against
+man\-in\-the\-middle attacks once secret keys are in place.  However,
+data over the wire is not encrypted, which may include the messages
+used to configure said keys.  The system is primarily intended to be
+used in trusted environments.
 .SH OPTIONS
 .INDENT 0.0
 .TP
