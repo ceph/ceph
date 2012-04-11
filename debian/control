@@ -248,8 +248,6 @@ Description: Ceph distributed file system client library (development files)
  link against libcephfs.
 
 Package: librgw1
-Conflicts: librgw, librgw1
-Replaces: librgw, librgw1
 Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -259,8 +257,6 @@ Description: radosgw data access library
  format expected by radosgw.
 
 Package: librgw1-dbg
-Conflicts: librgw1-dbg
-Replaces: librgw1-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
