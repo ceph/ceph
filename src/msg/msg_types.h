@@ -310,6 +310,16 @@ struct entity_addr_t {
     }
   }
 
+  bool is_ip() const {
+    switch (addr.ss_family) {
+    case AF_INET:
+    case AF_INET6:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   bool parse(const char *s, const char **end = 0);
 
   void encode(bufferlist& bl) const {

@@ -373,7 +373,8 @@ int main(int argc, const char **argv)
   entity_addr_t hb_addr = g_conf->osd_heartbeat_addr;
   if (hb_addr.is_blank_ip()) {
     hb_addr = g_conf->cluster_addr;
-    hb_addr.set_port(0);
+    if (hb_addr.is_ip())
+      hb_addr.set_port(0);
   }
   r = messenger_hbserver->bind(hb_addr);
   if (r < 0)
