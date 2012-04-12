@@ -260,40 +260,42 @@ bool diff(FileStore *store, FileStore *verify)
   return ret;
 }
 
-void run_diff(std::string& store_path, std::string& store_journal_path,
-    std::string& verify_store_path, std::string& verify_store_journal_path)
+int run_diff(std::string& a_path, std::string& a_journal,
+	      std::string& b_path, std::string& b_journal)
 {
   if (!is_seed_set)
     seed = (int) time(NULL);
 
-  FileStore *store = new FileStore(store_path, store_journal_path, "store");
-  FileStore *verify_store = new FileStore(verify_store_path,
-      verify_store_journal_path, "ablaer");
+  FileStore *a = new FileStore(a_path, a_journal, "a");
+  FileStore *b = new FileStore(b_path, b_journal, "b");
 
   int err;
-  err = verify_store->mkfs();
+  err = a->mount();
   ceph_assert(err == 0);
-  err = verify_store->mount();
-  ceph_assert(err == 0);
-  err = store->mount();
+  err = b->mount();
   ceph_assert(err == 0);
 
-  if (diff(store, verify_store)) {
+  int ret = 0;
+  if (diff(a, b)) {
     dout(0) << "diff looks okay!" << dendl;
   } else {
     dout(0) << "diff found an error." << dendl;
+    ret = -1;
   }
 
-  store->umount();
-  verify_store->umount();
+  a->umount();
+  b->umount();
+
+  return ret;
 }
 
-void run_get_last_op(std::string& filestore_path, std::string& journal_path)
+int run_get_last_op(std::string& filestore_path, std::string& journal_path)
 {
   FileStore *store = new FileStore(filestore_path, journal_path);
 
   int err = store->mount();
-  ceph_assert(err == 0);
+  if (err)
+    return err;
 
   coll_t txn_coll("meta");
   hobject_t txn_object(sobject_t("txn", CEPH_NOSNAP));
@@ -307,9 +309,10 @@ void run_get_last_op(std::string& filestore_path, std::string& journal_path)
   delete store;
 
   cout << txn << std::endl;
+  return 0;
 }
 
-void run_sequence_to(int val, std::string& filestore_path,
+int run_sequence_to(int val, std::string& filestore_path,
 		     std::string& journal_path)
 {
   num_txs = val;
@@ -325,7 +328,7 @@ void run_sequence_to(int val, std::string& filestore_path,
   err = ::mkdir(filestore_path.c_str(), 0755);
   if (err) {
     cerr << filestore_path << " already exists" << std::endl;
-    return;
+    return err;
   }
   
   err = store->mkfs();
@@ -338,9 +341,11 @@ void run_sequence_to(int val, std::string& filestore_path,
   op_sequence.init(num_colls, num_objs);
   op_sequence.generate(seed, num_txs);
   store->umount();
+
+  return 0;
 }
 
-void run_command(std::string& command, std::vector<std::string>& args)
+int run_command(std::string& command, std::vector<std::string>& args)
 {
   if (command.empty()) {
     usage(our_name);
@@ -354,29 +359,26 @@ void run_command(std::string& command, std::vector<std::string>& args)
   if (command == "diff") {
     /* expect 4 arguments: (filestore path + journal path)*2 */
     if (args.size() == 4) {
-      run_diff(args[0], args[1], args[2], args[3]);
-      return;
+      return run_diff(args[0], args[1], args[2], args[3]);
     }
   } else if (command == "get-last-op") {
     /* expect 2 arguments: a filestore path + journal */
     if (args.size() == 2) {
-      run_get_last_op(args[0], args[1]);
-      return;
+      return run_get_last_op(args[0], args[1]);
     }
   } else if (command == "run-sequence-to") {
     /* expect 3 arguments: # of operations and a filestore path + journal. */
     if (args.size() == 3) {
-      run_sequence_to(strtoll(args[0].c_str(), NULL, 10), args[1], args[2]);
-      return;
+      return run_sequence_to(strtoll(args[0].c_str(), NULL, 10), args[1], args[2]);
     }
   } else {
     std::cout << "unknown command " << command << std::endl;
     usage(our_name);
-    exit(0);
+    exit(1);
   }
 
   usage(our_name, command);
-  exit(0);
+  exit(1);
 }
 
 int main(int argc, const char *argv[])
@@ -423,59 +425,7 @@ int main(int argc, const char *argv[])
     }
   }
 
-  run_command(command, command_args);
+  int ret = run_command(command, command_args);
 
-
-#if 0
-  FileStore *store = new FileStore(g_conf->osd_data, g_conf->osd_journal);
-
-  if (!is_seed_set)
-    seed = (int) time(NULL);
-
-  dout(0) << "running with "
-      << " --test-seed " << seed
-      << " --test-num-txs" << num_txs
-      << " --test-num-colls " << num_colls
-      << " --test-num-objs " << num_objs
-      << " --filestore-kill-at " << (g_conf->filestore_kill_at)
-      << " --test-verify-at " << verify_at << dendl;
-
-  if (verify_at > 0) {
-    std::ostringstream ss;
-    ss << g_conf->osd_data << ".verify";
-    std::string verify_osd_data = ss.str();
-    ss.str("");
-    ss << g_conf->osd_journal << ".verify";
-    std::string verify_osd_journal = ss.str();
-
-    FileStore *verify_store =
-        new FileStore(verify_osd_data, verify_osd_journal);
-
-    ::mkdir(verify_osd_data.c_str(), 0755);
-    int err;
-    err = verify_store->mkfs();
-    ceph_assert(err == 0);
-    err = verify_store->mount();
-    ceph_assert(err == 0);
-
-    VerifyFileStore verify(store, verify_store, status_file);
-    verify.init(num_colls, num_objs);
-    verify.generate(seed, verify_at);
-
-    verify_store->umount();
-
-  } else {
-    ::mkdir(g_conf->osd_data.c_str(), 0755);
-    err = store->mkfs();
-    ceph_assert(err == 0);
-    err = store->mount();
-    ceph_assert(err == 0);
-
-    DeterministicOpSequence op_sequence(store, status_file);
-    op_sequence.init(num_colls, num_objs);
-    op_sequence.generate(seed, num_txs);
-    store->umount();
-  }
-  return 0;
-#endif
+  return ret;
 }
