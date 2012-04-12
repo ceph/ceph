@@ -432,6 +432,7 @@ void DeterministicOpSequence::_do_coll_add(coll_t orig_coll, coll_t new_coll,
 {
   ObjectStore::Transaction t;
   note_txn(&t);
+  t.remove(new_coll, obj);
   t.collection_add(orig_coll, new_coll, obj);
   m_store->apply_transaction(t);
 }
