@@ -58,6 +58,9 @@ void DeterministicOpSequence::run_one_op(int op, rngen_t& gen) {
   case DSOP_COLL_ADD:
     do_coll_add(gen);
     break;
+  case DSOP_COLL_RENAME:
+    do_coll_rename(gen);
+    break;
   case DSOP_CLONE:
     do_clone(gen);
     break;
@@ -331,8 +334,27 @@ void DeterministicOpSequence::do_coll_move(rngen_t& gen)
   _do_coll_move(new_coll->m_coll, orig_coll->m_coll, *obj);
 }
 
-void DeterministicOpSequence::do_coll_rename(rngen_t& gen) {
+void DeterministicOpSequence::do_coll_rename(rngen_t& gen)
+{
+  int coll_pos = _gen_coll_id(gen);
+  dout(0) << "do_coll_rename coll pos #" << coll_pos << dendl;
 
+  coll_entry_t *coll_entry = get_coll_at(coll_pos);
+  if (!coll_entry) {
+    dout(0) << "do_coll_rename no collection at pos #" << coll_pos << dendl;
+    return;
+  }
+
+  coll_t orig_coll = coll_entry->m_coll;
+  char buf[100];
+  memset(buf, 0, 100);
+  snprintf(buf, 100, "0.%d_head", m_next_coll_nr++);
+  coll_t new_coll(buf);
+  coll_entry->m_coll = new_coll;
+
+  dout(0) << "do_coll_rename " << orig_coll.to_str()
+      << " => " << new_coll.to_str() << dendl;
+  _do_coll_rename(orig_coll, new_coll);
 }
 
 void DeterministicOpSequence::do_coll_add(rngen_t& gen)
@@ -404,5 +426,12 @@ void DeterministicOpSequence::_do_coll_add(coll_t orig_coll, coll_t new_coll,
 {
   ObjectStore::Transaction t;
   t.collection_add(orig_coll, new_coll, obj);
+  m_store->apply_transaction(t);
+}
+
+void DeterministicOpSequence::_do_coll_rename(coll_t orig_coll, coll_t new_coll)
+{
+  ObjectStore::Transaction t;
+  t.collection_rename(orig_coll, new_coll);
   m_store->apply_transaction(t);
 }
