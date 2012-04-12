@@ -773,6 +773,8 @@ int DBObjectMap::clone(const hobject_t &hoid,
 		       const hobject_t &target,
 		       Index target_index)
 {
+  assert(index->coll() != target_index->coll() ||
+	 hoid != target);
   KeyValueDB::Transaction t = db->get_transaction();
   {
     Header destination = lookup_map_header(target_index->coll(), target);
@@ -831,6 +833,8 @@ int DBObjectMap::link(const hobject_t &hoid,
 		      const hobject_t &target,
 		      Index target_index)
 {
+  assert(index->coll() != target_index->coll() ||
+	 hoid != target);
   KeyValueDB::Transaction t = db->get_transaction();
   {
     Header destination = lookup_map_header(target_index->coll(), target);
