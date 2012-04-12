@@ -31,11 +31,29 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
-void usage(const char *name) {
-  if (name)
-    cout << "usage: " << name << "[options]" << std::endl;
+void usage(const char *name, std::string command = "") {
+  assert(name != NULL);
 
-  cout << "\
+  std::string more = "cmd <args...>";
+  std::string diff = "diff <filestoreA> <journalA> <filestoreB> <journalB>";
+  std::string get_last_op = "get-last-op <filestore> <journal>";
+  std::string run_seq_to = "run-sequence-to <num-ops> <filestore> <journal>";
+
+  if (!command.empty()) {
+    if (command == "diff")
+      more = diff;
+    else if (command == "get-last-op")
+      more = get_last_op;
+    else if (command == "run-sequence-to")
+      more = run_seq_to;
+  }
+  std::cout << "usage: " << name << " " << more << " [options]" << std::endl;
+
+  std::cout << "\
+Commands:\n\
+  " << diff << "\n\
+  " << get_last_op << "\n\
+  " << run_seq_to << "\n\
 \n\
 Global Options:\n\
   -c FILE                             Read configuration from FILE\n\
@@ -45,21 +63,115 @@ Global Options:\n\
   --help                              This message\n\
 \n\
 Test-specific Options:\n\
-    " << std::endl;
+  --test-seed VAL                     Seed to run the test\n\
+  --test-status-file PATH             Path to keep the status file\n\
+" << std::endl;
 }
 
-int main(int argc, const char *argv[]) {
+const char *our_name = NULL;
+int seed = 0, num_txs = 100, num_colls = 30, num_objs = 0;
+bool is_seed_set = false;
+int verify_at = 0;
+std::string status_file;
+
+void run_diff(std::string& store_path, std::string& store_journal_path,
+    std::string& verify_store_path, std::string& verify_store_journal_path)
+{
+  if (!is_seed_set)
+    seed = (int) time(NULL);
+
+  FileStore *store = new FileStore(store_path, store_journal_path, "store");
+  FileStore *verify_store = new FileStore(verify_store_path,
+      verify_store_journal_path, "verify_store");
+
+  ::mkdir(verify_store_path.c_str(), 0755);
   int err;
+  err = verify_store->mkfs();
+  ceph_assert(err == 0);
+  err = verify_store->mount();
+  ceph_assert(err == 0);
+  err = store->mount();
+  ceph_assert(err == 0);
+
+  VerifyFileStore verify(store, verify_store, status_file);
+  verify.init(num_colls, num_objs);
+  verify.generate(seed, verify_at);
+
+  store->umount();
+  verify_store->umount();
+}
+
+void run_get_last_op(std::string& filestore_path, std::string& journal_path)
+{
+
+}
+
+void run_sequence_to(int val, std::string& filestore_path,
+    std::string& filestore_journal)
+{
+  num_txs = val;
+
+  if (!is_seed_set)
+    seed = (int) time(NULL);
+
+  FileStore *store = new FileStore(filestore_path, filestore_journal);
+
+  int err;
+  ::mkdir(g_conf->osd_data.c_str(), 0755);
+  err = store->mkfs();
+  ceph_assert(err == 0);
+  err = store->mount();
+  ceph_assert(err == 0);
+
+  DeterministicOpSequence op_sequence(store, status_file);
+  op_sequence.init(num_colls, num_objs);
+  op_sequence.generate(seed, num_txs);
+  store->umount();
+}
+
+void run_command(std::string& command, std::vector<std::string>& args)
+{
+  if (command.empty()) {
+    usage(our_name);
+    exit(0);
+  }
+
+  /* We'll have a class that will handle the options, the command
+   * and its arguments. For the time being, and so we can move on, let's
+   * tolerate this big, ugly code.
+   */
+  if (command == "diff") {
+    /* expect 4 arguments: (filestore path + journal path)*2 */
+    if (args.size() == 4) {
+      run_diff(args[0], args[1], args[2], args[3]);
+    }
+  } else if (command == "get-last-op") {
+    /* expect 2 arguments: a filestore path + journal */
+    if (args.size() == 2) {
+      run_get_last_op(args[0], args[1]);
+      return;
+    }
+  } else if (command == "run-sequence-to") {
+    /* expect 3 arguments: # of operations and a filestore path + journal. */
+    if (args.size() == 3) {
+      run_sequence_to(strtoll(args[0].c_str(), NULL, 10), args[1], args[2]);
+      return;
+    }
+  } else {
+    std::cout << "unknown command " << command << std::endl;
+    usage(our_name);
+    exit(0);
+  }
+
+  usage(our_name, command);
+  exit(0);
+}
+
+int main(int argc, const char *argv[])
+{
   vector<const char*> def_args;
   vector<const char*> args;
-  const char *our_name = argv[0];
-
-  def_args.push_back("--osd-journal-size");
-  def_args.push_back("400");
-  def_args.push_back("--osd-data");
-  def_args.push_back("test_idempotent_data");
-  def_args.push_back("--osd-journal");
-  def_args.push_back("test_idempotent_journal");
+  our_name = argv[0];
   argv_to_vec(argc, argv, args);
 
   global_init(&def_args, args,
@@ -67,10 +179,8 @@ int main(int argc, const char *argv[]) {
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
-  int seed = 0, num_txs = 100, num_colls = 30, num_objs = 0;
-  bool is_seed_set = false;
-  int verify_at = 0;
-  std::string status_file;
+  std::string command;
+  std::vector<std::string> command_args;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end();) {
     string val;
@@ -81,9 +191,6 @@ int main(int argc, const char *argv[]) {
         "--test-seed", (char*) NULL)) {
       seed = strtoll(val.c_str(), NULL, 10);
       is_seed_set = true;
-    } else if (ceph_argparse_witharg(args, i, &val,
-        "--test-num-txs", (char*) NULL)) {
-      num_txs = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-num-colls", (char*) NULL)) {
       num_colls = strtoll(val.c_str(), NULL, 10);
@@ -99,9 +206,18 @@ int main(int argc, const char *argv[]) {
     } else if (ceph_argparse_flag(args, i, "--help", (char*) NULL)) {
       usage(our_name);
       exit(0);
+    } else {
+      if (command.empty())
+        command = *i++;
+      else
+        command_args.push_back(string(*i++));
     }
   }
 
+  run_command(command, command_args);
+
+
+#if 0
   FileStore *store = new FileStore(g_conf->osd_data, g_conf->osd_journal);
 
   if (!is_seed_set)
@@ -152,4 +268,5 @@ int main(int argc, const char *argv[]) {
     store->umount();
   }
   return 0;
+#endif
 }
