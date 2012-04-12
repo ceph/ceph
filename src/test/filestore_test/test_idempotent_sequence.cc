@@ -23,7 +23,6 @@
 #include "os/FileStore.h"
 
 #include "DeterministicOpSequence.h"
-#include "VerifyFileStore.h"
 
 #include "common/config.h"
 
@@ -410,9 +409,6 @@ int main(int argc, const char *argv[])
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-num-objs", (char*) NULL)) {
       num_objs = strtoll(val.c_str(), NULL, 10);
-    } else if (ceph_argparse_witharg(args, i, &val,
-        "--test-verify-at", (char*) NULL)) {
-      verify_at = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-status-file", (char*) NULL)) {
       status_file = val;
