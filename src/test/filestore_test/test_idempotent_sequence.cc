@@ -163,17 +163,17 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
     struct stat v_stat, s_stat;
     err = verify->stat(coll, v_obj, &v_stat);
     if (err < 0) {
-      dout(0) << "diff_objects error stating " << v_obj.oid.name << dendl;
+      dout(0) << "diff_objects error stating B object " << v_obj.oid.name << dendl;
       return false;
     }
     err = store->stat(coll, s_obj, &s_stat);
     if (err < 0) {
-      dout(0) << "diff_objects error stating " << s_obj.oid.name << dendl;
+      dout(0) << "diff_objects error stating A object " << s_obj.oid.name << dendl;
       return false;
     }
 
     if (diff_objects_stat(v_stat, s_stat)) {
-      dout(0) << "diff_objects stat mismatch" << dendl;
+      dout(0) << "diff_objects stat mismatch on " << coll << "/" << v_obj << dendl;
       return false;
     }
 
@@ -182,21 +182,21 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
     store->read(coll, s_obj, 0, s_stat.st_size, s_bl);
 
     if (!s_bl.contents_equal(v_bl)) {
-      dout(0) << "diff_objects content mismatch" << dendl;
+      dout(0) << "diff_objects content mismatch on " << coll << "/" << v_obj << dendl;
       return false;
     }
 
     std::map<std::string, bufferptr> s_attrs_map, v_attrs_map;
     err = store->getattrs(coll, s_obj, s_attrs_map);
     if (err < 0) {
-      dout(0) << "diff_objects getattrs on store object " << s_obj.oid.name
-                      << "returns " << err << dendl;
+      dout(0) << "diff_objects getattrs on A object " << coll << "/" << s_obj
+	      << "returns " << err << dendl;
       return false;
     }
     err = verify->getattrs(coll, v_obj, v_attrs_map);
     if (err < 0) {
-      dout(0) << "diff_objects getattrs on verify object " << v_obj.oid.name
-          << "returns " << err << dendl;
+      dout(0) << "diff_objects getattrs on B object " << coll << "/" << v_obj
+	      << "returns " << err << dendl;
       return false;
     }
 
