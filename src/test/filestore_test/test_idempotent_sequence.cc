@@ -301,9 +301,11 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
   hobject_t txn_object(sobject_t("txn", CEPH_NOSNAP));
   bufferlist bl;
   store->read(txn_coll, txn_object, 0, 100, bl);
-  bufferlist::iterator p = bl.begin();
-  int32_t txn;
-  ::decode(txn, p);
+  int32_t txn = 0;
+  if (bl.length()) {
+    bufferlist::iterator p = bl.begin();
+    ::decode(txn, p);
+  }
 
   store->umount();
   delete store;
