@@ -26,7 +26,6 @@
 typedef boost::mt11213b rngen_t;
 
 class DeterministicOpSequence : public TestFileStoreState {
-
  public:
   DeterministicOpSequence(FileStore *store, std::string status = std::string());
   virtual ~DeterministicOpSequence();
@@ -48,10 +47,17 @@ class DeterministicOpSequence : public TestFileStoreState {
     DSOP_LAST = DSOP_COLL_ADD,
   };
 
+  int32_t txn;
+
+  coll_t txn_coll;
+  hobject_t txn_object;
+
   ObjectStore::Sequencer m_osr;
   std::ofstream m_status;
 
   void run_one_op(int op, rngen_t& gen);
+
+  void note_txn(ObjectStore::Transaction *t);
   void do_touch(rngen_t& gen);
   void do_write(rngen_t& gen);
   void do_clone(rngen_t& gen);
