@@ -148,12 +148,6 @@ int main(int argc, const char *argv[]) {
 
     DeterministicOpSequence op_sequence(store, status_file);
     op_sequence.init(num_colls, num_objs);
-    if (g_conf->filestore_kill_at) {
-      std::ostringstream injection_oss;
-      injection_oss << "--filestore-kill-at " << g_conf->filestore_kill_at;
-      g_conf->injectargs(injection_oss.str(), &cout);
-    }
-
     op_sequence.generate(seed, num_txs);
     store->umount();
   }
