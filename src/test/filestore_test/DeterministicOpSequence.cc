@@ -224,22 +224,15 @@ bool DeterministicOpSequence::_prepare_clone(rngen_t& gen,
     return false;
   }
 
-  hobject_t *orig_obj = NULL;
   boost::uniform_int<> orig_obj_rng(0, entry->m_objects.size()-1);
   int orig_obj_pos = orig_obj_rng(gen);
-  map<int, hobject_t*>::iterator it = entry->m_objects.begin();
-  for (int i = 0; it != entry->m_objects.end(); it++, i++) {
-    if (i == orig_obj_pos) {
-      orig_obj = it->second;
-      break;
-    }
-  }
-  assert(orig_obj);
+  int orig_obj_id = -1;
+  hobject_t *orig_obj = entry->get_obj_at(orig_obj_pos, &orig_obj_id);
 
   int id;
   do {
     id = _gen_obj_id(gen);
-  } while (id == orig_obj_pos);
+  } while (id == orig_obj_id);
   hobject_t *new_obj = entry->touch_obj(id);
 
   coll_ret = entry->m_coll;
