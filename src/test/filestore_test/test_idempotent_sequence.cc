@@ -117,9 +117,17 @@ void run_sequence_to(int val, std::string& filestore_path,
   FileStore *store = new FileStore(filestore_path, filestore_journal);
 
   int err;
-  ::mkdir(g_conf->osd_data.c_str(), 0755);
+
+  // mkfs iff directory dne
+  err = ::mkdir(filestore_path.c_str(), 0755);
+  if (err) {
+    cerr << filestore_path << " already exists" << std::endl;
+    return;
+  }
+
   err = store->mkfs();
   ceph_assert(err == 0);
+
   err = store->mount();
   ceph_assert(err == 0);
 
