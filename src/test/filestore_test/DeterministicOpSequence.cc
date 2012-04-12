@@ -139,7 +139,7 @@ void DeterministicOpSequence::do_touch(rngen_t& gen)
   hobject_t *obj = entry->touch_obj(obj_id);
 
   dout(0) << "do_touch " << entry->m_coll.to_str() << "/" << obj->oid.name
-      << dendl;
+	  << dendl;
 
   _do_touch(entry->m_coll, *obj);
 }
@@ -183,7 +183,7 @@ void DeterministicOpSequence::do_write(rngen_t& gen)
   _gen_random(gen, size, bl);
 
   dout(0) << "do_write " << entry->m_coll.to_str() << "/" << obj->oid.name
-      << " 0~" << size << dendl;
+	  << " 0~" << size << dendl;
 
   _do_write(entry->m_coll, *obj, 0, bl.length(), bl);
 }
@@ -201,7 +201,7 @@ bool DeterministicOpSequence::_prepare_clone(rngen_t& gen,
 
   if (entry->m_objects.size() == 0) {
     dout(0) << "_prepare_clone coll " << entry->m_coll.to_str()
-              << " has no objects to clone" << dendl;
+	    << " has no objects to clone" << dendl;
     return false;
   }
 
@@ -218,7 +218,7 @@ bool DeterministicOpSequence::_prepare_clone(rngen_t& gen,
 
   if (!orig_obj) {
     dout(0) << "_prepare_clone coll " << entry->m_coll.to_str()
-              << " has no object in pos #" << orig_obj_pos << dendl;
+	    << " has no object in pos #" << orig_obj_pos << dendl;
     return false;
   }
 
@@ -238,8 +238,8 @@ bool DeterministicOpSequence::_prepare_clone(rngen_t& gen,
 
   if (!orig_obj || !new_obj) {
     dout(0) << "_prepare_clone coll " << entry->m_coll.to_str()
-              << " has no object (orig: " << orig_obj << " pos #" << orig_obj_pos
-              << " ; new: " << new_obj << " #" << new_obj_id << ")" << dendl;
+	    << " has no object (orig: " << orig_obj << " pos #" << orig_obj_pos
+	    << " ; new: " << new_obj << " #" << new_obj_id << ")" << dendl;
     return false;
   }
 
@@ -343,11 +343,11 @@ void DeterministicOpSequence::do_coll_move(rngen_t& gen)
 
   hobject_t *new_coll_old_obj = new_coll->replace_obj(obj_key, obj);
   dout(0) << "do_coll_move " << orig_coll->m_coll.to_str() << "/" << obj->oid.name
-      << " => " << new_coll->m_coll.to_str() << "/" << obj->oid.name << dendl;
+	  << " => " << new_coll->m_coll.to_str() << "/" << obj->oid.name << dendl;
   if (new_coll_old_obj != NULL) {
     dout(0) << "do_coll_move replacing obj " << new_coll->m_coll.to_str()
-        << "/" << new_coll_old_obj->oid.name
-        << " with " << obj->oid.name << dendl;
+	    << "/" << new_coll_old_obj->oid.name
+	    << " with " << obj->oid.name << dendl;
     delete new_coll_old_obj;
   }
 
