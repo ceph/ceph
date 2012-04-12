@@ -32,7 +32,8 @@
 const coll_t TestFileStoreState::META_COLL("meta");
 const coll_t TestFileStoreState::TEMP_COLL("temp");
 
-void TestFileStoreState::init(int colls, int objs) {
+void TestFileStoreState::init(int colls, int objs)
+{
   dout(5) << "init " << colls << " colls " << objs << " objs" << dendl;
 
   ObjectStore::Transaction *t;
@@ -71,7 +72,8 @@ void TestFileStoreState::init(int colls, int objs) {
   dout(5) << "init finished" << dendl;
 }
 
-TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id) {
+TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id)
+{
   char buf[100];
   char meta_buf[100];
   memset(buf, 0, 100);
@@ -81,7 +83,8 @@ TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id) {
   return (new coll_entry_t(id, buf, meta_buf));
 }
 
-TestFileStoreState::coll_entry_t *TestFileStoreState::get_coll_at(int pos) {
+TestFileStoreState::coll_entry_t *TestFileStoreState::get_coll_at(int pos)
+{
   dout(5) << "get_coll_at pos " << pos << dendl;
 
   coll_entry_t *entry = NULL;
@@ -125,7 +128,7 @@ hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
 
   char buf[100];
   memset(buf, 0, 100);
-  snprintf(buf, 100, "%d_%d", m_id, id);
+  snprintf(buf, 100, "obj%d", id);
 
   hobject_t *obj = new hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
   m_objects.insert(make_pair(id, obj));
