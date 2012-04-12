@@ -103,18 +103,34 @@ void run_diff(std::string& store_path, std::string& store_journal_path,
 
 void run_get_last_op(std::string& filestore_path, std::string& journal_path)
 {
+  FileStore *store = new FileStore(filestore_path, journal_path);
 
+  int err = store->mount();
+  ceph_assert(err == 0);
+
+  coll_t txn_coll("meta");
+  hobject_t txn_object(sobject_t("txn", CEPH_NOSNAP));
+  bufferlist bl;
+  store->read(txn_coll, txn_object, 0, 100, bl);
+  bufferlist::iterator p = bl.begin();
+  int32_t txn;
+  ::decode(txn, p);
+
+  store->umount();
+  delete store;
+
+  cout << txn << std::endl;
 }
 
 void run_sequence_to(int val, std::string& filestore_path,
-    std::string& filestore_journal)
+		     std::string& journal_path)
 {
   num_txs = val;
 
   if (!is_seed_set)
     seed = (int) time(NULL);
 
-  FileStore *store = new FileStore(filestore_path, filestore_journal);
+  FileStore *store = new FileStore(filestore_path, journal_path);
 
   int err;
 
