@@ -79,7 +79,7 @@ protected:
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
 
- public:
+public:
   CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
@@ -90,16 +90,20 @@ protected:
   }
   virtual ~Messenger() {}
 
-  virtual void destroy() {
-  }
+  virtual void destroy() {}
 
-  // accessors
+  /**
+   * Retrieve the Messenger's name.
+   *
+   * @return A const reference to the name this Messenger
+   * currently believes to be its own.
+   */
   const entity_name_t& get_myname() { return my_inst.name; }
   /**
    * Retrieve the Messenger's address.
    *
-   * @return A copy of the address this Messenger currently
-   * believes to be its own.
+   * @return A const reference to the address this Messenger
+   * currently believes to be its own.
    */
   const entity_addr_t& get_myaddr() { return my_inst.addr; }
   /**
@@ -112,8 +116,13 @@ protected:
    * @param addr The address to use as a template.
    */
   virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
+  /**
+   * Retrieve the Messenger's instance.
+   *
+   * @return A const reference to the instance this Messenger
+   * currently believes to be its own.
+   */
   const entity_inst_t& get_myinst() { return my_inst; }
-  
   /**
    * Set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
@@ -122,7 +131,6 @@ protected:
    * @param m The name to set.
    */
   void set_myname(const entity_name_t m) { my_inst.name = m; }
-
   /**
    * Set the default send priority
    * This is an init-time function and must be called *before* calling
@@ -134,10 +142,14 @@ protected:
     assert(!started);
     default_send_priority = p;
   }
+  /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   
-  // hrmpf.
-  virtual int get_dispatch_queue_len() { return 0; };
+  /**
+   * Get the number of Messages which the Messenger has received
+   * but not yet dispatched.
+   */
+  virtual int get_dispatch_queue_len() = 0;
 
   /**
    * Add a new Dispatcher to the front of the list. If you add
@@ -166,10 +178,20 @@ protected:
       ready();
   }
 
+  /**
+   * A courtesy function for Messenger implementations which
+   * will be called when we receive our first Dispatcher.
+   */
   virtual void ready() { }
-  bool is_ready() { return !dispatchers.empty(); }
 
-  // dispatch incoming messages
+  /**
+   *  Deliver a single Message. Send it to each Dispatcher
+   *  in sequence until one of them handles it.
+   *  If none of our Dispatchers can handle it, assert(0).
+   *
+   *  @param m The Message to deliver. We take ownership of
+   *  one reference to it.
+   */
   void ms_deliver_dispatch(Message *m) {
     m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
