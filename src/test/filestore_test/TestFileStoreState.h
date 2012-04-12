@@ -88,7 +88,7 @@ public:
 
  public:
   TestFileStoreState(FileStore *store) :
-    m_next_coll_nr(0), m_num_objs_per_coll(6000),
+    m_next_coll_nr(0), m_num_objs_per_coll(10),
     m_max_in_flight(0), m_in_flight(0), m_finished_lock("Finished Lock") {
     m_store.reset(store);
   }
