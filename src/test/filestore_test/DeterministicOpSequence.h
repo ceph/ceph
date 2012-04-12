@@ -59,6 +59,7 @@ class DeterministicOpSequence : public TestFileStoreState {
 
   void note_txn(ObjectStore::Transaction *t);
   void do_touch(rngen_t& gen);
+  void do_remove(rngen_t& gen);
   void do_write(rngen_t& gen);
   void do_clone(rngen_t& gen);
   void do_clone_range(rngen_t& gen);
@@ -67,6 +68,7 @@ class DeterministicOpSequence : public TestFileStoreState {
   void do_coll_add(rngen_t& gen);
 
   virtual void _do_touch(coll_t coll, hobject_t& obj);
+  virtual void _do_remove(coll_t coll, hobject_t& obj);
   virtual void _do_write(coll_t coll, hobject_t& obj, uint64_t off,
       uint64_t len, const bufferlist& data);
   virtual void _do_clone(coll_t coll, hobject_t& orig_obj, hobject_t& new_obj);

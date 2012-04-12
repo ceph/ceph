@@ -61,21 +61,26 @@ void DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
   case DSOP_WRITE:
     do_write(gen);
     break;
-  case DSOP_COLL_MOVE:
-    do_coll_move(gen);
-    break;
-  case DSOP_COLL_ADD:
-    do_coll_add(gen);
-    break;
-  case DSOP_COLL_RENAME:
-    do_coll_rename(gen);
-    break;
   case DSOP_CLONE:
     do_clone(gen);
     break;
   case DSOP_CLONE_RANGE:
     do_clone_range(gen);
     break;
+  case DSOP_OBJ_REMOVE:
+    do_remove(gen);
+    break;
+  case DSOP_COLL_MOVE:
+    //do_coll_move(gen);
+    break;
+  case DSOP_COLL_ADD:
+    //do_coll_add(gen);
+    break;
+  case DSOP_COLL_RENAME:
+    //do_coll_rename(gen);
+    break;
+  default:
+    assert(0 == "bad op");
   }
 }
 
@@ -139,6 +144,21 @@ void DeterministicOpSequence::do_touch(rngen_t& gen)
   hobject_t *obj = entry->touch_obj(obj_id);
 
   dout(0) << "do_touch " << entry->m_coll.to_str() << "/" << obj->oid.name << dendl;
+
+  _do_touch(entry->m_coll, *obj);
+}
+
+void DeterministicOpSequence::do_remove(rngen_t& gen)
+{
+  int coll_id = _gen_coll_id(gen);
+  int obj_id = _gen_obj_id(gen);
+
+  coll_entry_t *entry = get_coll_at(coll_id);
+  hobject_t *obj = entry->touch_obj(obj_id);
+
+  // ENOENT ok here.
+
+  dout(0) << "do_remove " << entry->m_coll.to_str() << "/" << obj->oid.name << dendl;
 
   _do_touch(entry->m_coll, *obj);
 }
@@ -386,6 +406,14 @@ void DeterministicOpSequence::_do_touch(coll_t coll, hobject_t& obj)
   ObjectStore::Transaction t;
   note_txn(&t);
   t.touch(coll, obj);
+  m_store->apply_transaction(t);
+}
+
+void DeterministicOpSequence::_do_remove(coll_t coll, hobject_t& obj)
+{
+  ObjectStore::Transaction t;
+  note_txn(&t);
+  t.remove(coll, obj);
   m_store->apply_transaction(t);
 }
 
