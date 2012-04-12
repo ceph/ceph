@@ -71,7 +71,7 @@ void DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
     do_remove(gen);
     break;
   case DSOP_COLL_MOVE:
-    //do_coll_move(gen);
+    do_coll_move(gen);
     break;
   case DSOP_COLL_ADD:
     //do_coll_add(gen);
@@ -451,7 +451,7 @@ void DeterministicOpSequence::_do_coll_move(coll_t new_coll,
   ObjectStore::Transaction t;
   note_txn(&t);
   t.remove(new_coll, obj);
-  t.collection_move(old_coll, new_coll, obj);
+  t.collection_move(new_coll, old_coll, obj);
   m_store->apply_transaction(t);
 }
 
