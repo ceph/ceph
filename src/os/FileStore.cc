@@ -701,6 +701,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
   m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes)
 {
+  m_filestore_kill_at.set(g_conf->filestore_kill_at);
+
   ostringstream oss;
   oss << basedir << "/current";
   current_fn = oss.str();
