@@ -98,33 +98,33 @@ bool diff_objects_stat(struct stat& a, struct stat& b)
   if (a.st_uid != b.st_uid) {
     dout(0) << "diff_objects_stat uid mismatch ("
         << a.st_uid << " != " << b.st_uid << ")" << dendl;
-    return false;
+    return true;
   }
 
   if (a.st_gid != b.st_gid) {
     dout(0) << "diff_objects_stat gid mismatch ("
         << a.st_gid << " != " << b.st_gid << ")" << dendl;
-    return false;
+    return true;
   }
 
   if (a.st_mode != b.st_mode) {
     dout(0) << "diff_objects_stat mode mismatch ("
         << a.st_mode << " != " << b.st_mode << ")" << dendl;
-    return false;
+    return true;
   }
 
   if (a.st_nlink != b.st_nlink) {
     dout(0) << "diff_objects_stat nlink mismatch ("
         << a.st_nlink << " != " << b.st_nlink << ")" << dendl;
-    return false;
+    return true;
   }
 
   if (a.st_size != b.st_size) {
     dout(0) << "diff_objects_stat size mismatch ("
         << a.st_size << " != " << b.st_size << ")" << dendl;
-    return false;
+    return true;
   }
-  return true;
+  return false;
 }
 
 bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
@@ -190,7 +190,7 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
     err = store->getattrs(coll, s_obj, s_attrs_map);
     if (err < 0) {
       dout(0) << "diff_objects getattrs on A object " << coll << "/" << s_obj
-	      << "returns " << err << dendl;
+	      << " returns " << err << dendl;
       return false;
     }
     err = verify->getattrs(coll, v_obj, v_attrs_map);
