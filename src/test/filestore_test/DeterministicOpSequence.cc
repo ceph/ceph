@@ -443,7 +443,8 @@ void DeterministicOpSequence::_do_coll_move(coll_t new_coll,
 {
   ObjectStore::Transaction t;
   note_txn(&t);
-  t.collection_move(new_coll, old_coll, obj);
+  t.remove(new_coll, obj);
+  t.collection_move(old_coll, new_coll, obj);
   m_store->apply_transaction(t);
 }
 
