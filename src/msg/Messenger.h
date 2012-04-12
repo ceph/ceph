@@ -36,7 +36,19 @@ class Timer;
 
 
 class Messenger {
+private:
+  list<Dispatcher*> dispatchers;
+
+protected:
+  /// the "name" of the local daemon. eg client.99
+  entity_inst_t my_inst;
+  int default_send_priority;
+  /// set to true once the Messenger has started, and set to false on shutdown
+  bool started;
+
 public:
+  CephContext *cct;
+
   struct Policy {
     bool lossy;
     bool server;
@@ -68,19 +80,6 @@ public:
     }
   };
 
-
-private:
-  list<Dispatcher*> dispatchers;
-
-protected:
-  /// the "name" of the local daemon. eg client.99
-  entity_inst_t my_inst;
-  int default_send_priority;
-  /// set to true once the Messenger has started, and set to false on shutdown
-  bool started;
-
-public:
-  CephContext *cct;
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
@@ -176,73 +175,6 @@ public:
     dispatchers.push_back(d);
     if (first)
       ready();
-  }
-
-  /**
-   * A courtesy function for Messenger implementations which
-   * will be called when we receive our first Dispatcher.
-   */
-  virtual void ready() { }
-
-  /**
-   *  Deliver a single Message. Send it to each Dispatcher
-   *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, assert(0).
-   *
-   *  @param m The Message to deliver. We take ownership of
-   *  one reference to it.
-   */
-  void ms_deliver_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      if ((*p)->ms_dispatch(m))
-	return;
-    std::ostringstream oss;
-    oss << "ms_deliver_dispatch: fatal error: unhandled message "
-	<< m << " " << *m << " from " << m->get_source_inst();
-    dout_emergency(oss.str());
-    assert(0);
-  }
-  void ms_deliver_handle_connect(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      (*p)->ms_handle_connect(con);
-  }
-  void ms_deliver_handle_reset(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      if ((*p)->ms_handle_reset(con))
-	return;
-  }
-  void ms_deliver_handle_remote_reset(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      (*p)->ms_handle_remote_reset(con);
-  }
-
-  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
-    AuthAuthorizer *a = 0;
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      if ((*p)->ms_get_authorizer(peer_type, &a, force_new))
-	return a;
-    return NULL;
-  }
-  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid))
-	return true;
-    return false;
   }
 
   // setup
@@ -368,8 +300,75 @@ public:
    * @param nonce nonce value to uniquely identify this instance on the current host
    */
   static Messenger *create(CephContext *cct,
-			   entity_name_t name,
-			   uint64_t nonce);
+                           entity_name_t name,
+                           uint64_t nonce);
+protected:
+  /**
+   * A courtesy function for Messenger implementations which
+   * will be called when we receive our first Dispatcher.
+   */
+  virtual void ready() { }
+
+  /**
+   *  Deliver a single Message. Send it to each Dispatcher
+   *  in sequence until one of them handles it.
+   *  If none of our Dispatchers can handle it, assert(0).
+   *
+   *  @param m The Message to deliver. We take ownership of
+   *  one reference to it.
+   */
+  void ms_deliver_dispatch(Message *m) {
+    m->set_dispatch_stamp(ceph_clock_now(cct));
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_dispatch(m))
+	return;
+    std::ostringstream oss;
+    oss << "ms_deliver_dispatch: fatal error: unhandled message "
+	<< m << " " << *m << " from " << m->get_source_inst();
+    dout_emergency(oss.str());
+    assert(0);
+  }
+  void ms_deliver_handle_connect(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_connect(con);
+  }
+  void ms_deliver_handle_reset(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_handle_reset(con))
+	return;
+  }
+  void ms_deliver_handle_remote_reset(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_remote_reset(con);
+  }
+
+  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
+    AuthAuthorizer *a = 0;
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_get_authorizer(peer_type, &a, force_new))
+	return a;
+    return NULL;
+  }
+  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
+				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+				    bool& isvalid) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid))
+	return true;
+    return false;
+  }
 };
 
 
