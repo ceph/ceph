@@ -47,6 +47,7 @@ class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
   static const uint32_t on_disk_version = 2;
+  string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
   std::string current_fn;
   std::string current_op_seq_fn;
@@ -274,7 +275,7 @@ public:
   int lfn_unlink(coll_t cid, const hobject_t& o);
 
  public:
-  FileStore(const std::string &base, const std::string &jdev);
+  FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore");
   ~FileStore();
 
   int _detect_fs();

@@ -648,7 +648,8 @@ done:
   return r;
 }
 
-FileStore::FileStore(const std::string &base, const std::string &jdev) :
+FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name) :
+  internal_name(name),
   basedir(base), journalpath(jdev),
   btrfs(false),
   btrfs_stable_commits(false),
@@ -713,7 +714,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   omap_dir = omss.str();
 
   // initialize logger
-  PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
 
   plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
   plb.add_u64(l_os_jq_ops, "journal_queue_ops");
