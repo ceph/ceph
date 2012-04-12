@@ -2,14 +2,13 @@
 Building Ceph from Source
 =========================
 
-<placeholder>
+You can build Ceph from source by downloading a release or cloning the ``ceph`` repository at github. If you intend to build Ceph
+from source, please see the build pre-requisites first. Making sure you have all the pre-requisites will save you time.
 
 1. :doc:`Build Prerequisites <build_from_source/build_prerequisites>`
 2. Get Source Code
-
-	a. :doc:`Downloading a Ceph Release <build_from_source/downloading_a_ceph_release>`
-	b. :doc:`Cloning the Ceph Source Code Repository <build_from_source/cloning_the_ceph_source_code_repository>`
-
+	* :doc:`Downloading a Ceph Release <build_from_source/downloading_a_ceph_release>`
+	* :doc:`Cloning the Ceph Source Code Repository <build_from_source/cloning_the_ceph_source_code_repository>`
 3. :doc:`Building Ceph<build_from_source/building_ceph>`
 4. :doc:`Installing RADOS Processes and Daemons <build_from_source/installing_rados_processes_and_daemons>`
 
