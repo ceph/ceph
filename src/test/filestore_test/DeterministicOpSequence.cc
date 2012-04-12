@@ -138,14 +138,13 @@ void DeterministicOpSequence::do_touch(rngen_t& gen)
   coll_entry_t *entry = get_coll_at(coll_id);
   hobject_t *obj = entry->touch_obj(obj_id);
 
-  dout(0) << "do_touch " << entry->m_coll.to_str() << "/" << obj->oid.name
-	  << dendl;
+  dout(0) << "do_touch " << entry->m_coll.to_str() << "/" << obj->oid.name << dendl;
 
   _do_touch(entry->m_coll, *obj);
 }
 
 void DeterministicOpSequence::_gen_random(rngen_t& gen,
-    size_t size, bufferlist& bl) {
+					  size_t size, bufferlist& bl) {
 
   static const char alphanum[] = "0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -215,33 +214,13 @@ bool DeterministicOpSequence::_prepare_clone(rngen_t& gen,
       break;
     }
   }
+  assert(orig_obj);
 
-  if (!orig_obj) {
-    dout(0) << "_prepare_clone coll " << entry->m_coll.to_str()
-	    << " has no object in pos #" << orig_obj_pos << dendl;
-    return false;
-  }
-
-  int new_obj_id = -1, i = 0;
+  int id;
   do {
-    i++;
-    // we'll spin 10 times looking for a free object id.
-    int id = _gen_obj_id(gen);
-    map<int, hobject_t*>::iterator it = entry->m_objects.find(new_obj_id);
-    if (it == entry->m_objects.end()) {
-      new_obj_id = id;
-      break;
-    }
-  } while (i <= 10);
-
-  hobject_t *new_obj = entry->touch_obj(new_obj_id);
-
-  if (!orig_obj || !new_obj) {
-    dout(0) << "_prepare_clone coll " << entry->m_coll.to_str()
-	    << " has no object (orig: " << orig_obj << " pos #" << orig_obj_pos
-	    << " ; new: " << new_obj << " #" << new_obj_id << ")" << dendl;
-    return false;
-  }
+    id = _gen_obj_id(gen);
+  } while (id == orig_obj_pos);
+  hobject_t *new_obj = entry->touch_obj(id);
 
   coll_ret = entry->m_coll;
   orig_obj_ret = *orig_obj;
