@@ -2669,7 +2669,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _collection_move(ocid, ncid, oid, spos);
+	r = _collection_add(ocid, ncid, oid, spos);
+	if (r == 0 &&
+	    _check_replay_guard(ocid, oid, spos))
+	  r = _collection_remove(ocid, oid);
       }
       break;
 
@@ -4454,49 +4457,6 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   dout(15) << "collection_remove " << c << "/" << o << dendl;
   int r = lfn_unlink(c, o);
   dout(10) << "collection_remove " << c << "/" << o << " = " << r << dendl;
-  return r;
-}
-
-int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o,
-				const SequencerPosition& spos) 
-{
-  dout(15) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
-
-  /*
-   * Treat this as two distinct steps:
-   *
-   *  1) link to new location, with read from old location
-   *  2) remove old location
-   *
-   * We have to make sure the first part is stable in the new location
-   * before we remove it from the old location.
-   *
-   * Because we set the guard between link and unlink, replay the
-   * unlink even if the guard is set.
-   */
-
-  int r = 0;
-  if (_check_replay_guard(c, o, spos)) {
-    r = lfn_link(oldcid, c, o);
-    if (replaying && r == -EEXIST)
-      r = 0;
-    if (r == 0) {
-      // set guard on object so we don't do this again.  set this
-      // _before_ we unlink so that if we crash now we don't unlink old
-      // copy _and_ clobber the new copy due to the lack of a guard.
-      int fd = lfn_open(c, o, 0);
-      assert(fd >= 0);
-      _set_replay_guard(fd, spos);
-      TEMP_FAILURE_RETRY(::close(fd));
-    }
-  }
-
-  if (r == 0 &&
-      _check_replay_guard(oldcid, o, spos)) {
-    r = lfn_unlink(oldcid, o);
-  }
-
-  dout(10) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
 }
 
