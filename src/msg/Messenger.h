@@ -202,15 +202,11 @@ public:
    * @return 0 on success, -errno otherwise.
    */
   virtual int shutdown() { started = false; return 0; }
-  virtual void suicide() = 0;
 
   // send message
-  virtual void prepare_dest(const entity_inst_t& inst) {}
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
   virtual int send_message(Message *m, Connection *con) = 0;
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) {
-    return send_message(m, dest);
-  }
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) = 0;
   virtual int lazy_send_message(Message *m, Connection *con) = 0;
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
   virtual int send_keepalive(Connection *con) = 0;

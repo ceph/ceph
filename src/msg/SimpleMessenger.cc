@@ -410,23 +410,6 @@ int SimpleMessenger::shutdown()
   return 0;
 }
 
-void SimpleMessenger::suicide()
-{
-  ldout(cct,10) << "suicide " << get_myaddr() << dendl;
-  shutdown();
-  // hmm, or exit(0)?
-}
-
-void SimpleMessenger::prepare_dest(const entity_inst_t& inst)
-{
-  lock.Lock();
-  {
-    if (rank_pipe.count(inst.addr) == 0)
-      connect_rank(inst.addr, inst.name.type());
-  }
-  lock.Unlock();
-}
-
 int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope

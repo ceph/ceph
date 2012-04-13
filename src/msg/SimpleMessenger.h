@@ -540,8 +540,6 @@ public:
 
   virtual void ready();
   virtual int shutdown();
-  virtual void suicide();
-  void prepare_dest(const entity_inst_t& inst);
   virtual int send_message(Message *m, const entity_inst_t& dest);
   virtual int send_message(Message *m, Connection *con);
   virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
