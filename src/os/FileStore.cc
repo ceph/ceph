@@ -74,6 +74,8 @@ using ceph::crypto::SHA1;
 #  include "btrfs_ioctl.h"
 #endif
 
+#include "include/assert.h"
+
 #include "common/config.h"
 
 #define DOUT_SUBSYS filestore
