@@ -2647,10 +2647,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
+	coll_t ocid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _collection_add(ocid, ncid, oid, spos);
+	r = _collection_add(ncid, ocid, oid, spos);
       }
       break;
 
@@ -4427,15 +4427,15 @@ int FileStore::_destroy_collection(coll_t c)
 }
 
 
-int FileStore::_collection_add(coll_t c, coll_t cid, const hobject_t& o,
+int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
 			       const SequencerPosition& spos) 
 {
-  dout(15) << "collection_add " << c << "/" << o << " " << cid << "/" << o << dendl;
+  dout(15) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
   
   if (!_check_replay_guard(c, o, spos))
     return 0;
 
-  int r = lfn_link(cid, c, o);
+  int r = lfn_link(oldcid, c, o);
   if (replaying && !btrfs_stable_commits &&
       r == -EEXIST)    // crashed between link() and set_replay_guard()
     r = 0;
@@ -4448,7 +4448,7 @@ int FileStore::_collection_add(coll_t c, coll_t cid, const hobject_t& o,
     TEMP_FAILURE_RETRY(::close(fd));
   }
 
-  dout(10) << "collection_add " << c << "/" << o << " " << cid << "/" << o << " = " << r << dendl;
+  dout(10) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
 }
 
