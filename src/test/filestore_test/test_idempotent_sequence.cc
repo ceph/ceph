@@ -129,6 +129,8 @@ bool diff_objects_stat(struct stat& a, struct stat& b)
 
 bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
 {
+  dout(0) << __func__ << " coll "  << coll << dendl;
+
   int err;
   std::vector<hobject_t> verify_objects, store_objects;
   err = verify->collection_list(coll, verify_objects);
