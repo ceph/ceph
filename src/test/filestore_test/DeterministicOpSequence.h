@@ -74,6 +74,9 @@ class DeterministicOpSequence : public TestFileStoreState {
   virtual void _do_clone(coll_t coll, hobject_t& orig_obj, hobject_t& new_obj);
   virtual void _do_clone_range(coll_t coll, hobject_t& orig_obj,
       hobject_t& new_obj, uint64_t srcoff, uint64_t srclen, uint64_t dstoff);
+  virtual void _do_write_and_clone_range(coll_t coll, hobject_t& orig_obj,
+      hobject_t& new_obj, uint64_t srcoff, uint64_t srclen,
+      uint64_t dstoff, bufferlist& bl);
   virtual void _do_coll_move(coll_t new_coll, coll_t old_coll, hobject_t& obj);
   virtual void _do_coll_add(coll_t orig_coll, coll_t new_coll, hobject_t& obj);
   virtual void _do_coll_rename(coll_t orig_coll, coll_t new_coll);

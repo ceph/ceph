@@ -133,6 +133,7 @@ void DeterministicOpSequence::note_txn(ObjectStore::Transaction *t)
   ::encode(txn, bl);
   t->truncate(txn_coll, txn_object, 0);
   t->write(txn_coll, txn_object, 0, bl.length(), bl);
+  dout(10) << __func__ << " " << txn << dendl;
 }
 
 void DeterministicOpSequence::do_touch(rngen_t& gen)
@@ -275,7 +276,6 @@ void DeterministicOpSequence::do_clone_range(rngen_t& gen)
   size_t size = (size_t) write_size_rng(gen);
   bufferlist bl;
   _gen_random(gen, size, bl);
-  _do_write(coll, orig_obj, 0, bl.length(), bl);
 
   boost::uniform_int<> clone_len(1, bl.length());
   size = (size_t) clone_len(gen);
@@ -284,7 +284,7 @@ void DeterministicOpSequence::do_clone_range(rngen_t& gen)
       << " (0~" << size << ")"
       << " => " << coll.to_str() << "/" << new_obj.oid.name
       << " (0)" << dendl;
-  _do_clone_range(coll, orig_obj, new_obj, 0, size, 0);
+  _do_write_and_clone_range(coll, orig_obj, new_obj, 0, size, 0, bl);
 }
 
 bool DeterministicOpSequence::_prepare_colls(rngen_t& gen,
@@ -435,6 +435,21 @@ void DeterministicOpSequence::_do_clone_range(coll_t coll,
 {
   ObjectStore::Transaction t;
   note_txn(&t);
+  t.clone_range(coll, orig_obj, new_obj, srcoff, srclen, dstoff);
+  m_store->apply_transaction(t);
+}
+
+void DeterministicOpSequence::_do_write_and_clone_range(coll_t coll,
+                                                        hobject_t& orig_obj,
+                                                        hobject_t& new_obj,
+                                                        uint64_t srcoff,
+                                                        uint64_t srclen,
+                                                        uint64_t dstoff,
+                                                        bufferlist& bl)
+{
+  ObjectStore::Transaction t;
+  note_txn(&t);
+  t.write(coll, orig_obj, srcoff, bl.length(), bl);
   t.clone_range(coll, orig_obj, new_obj, srcoff, srclen, dstoff);
   m_store->apply_transaction(t);
 }
