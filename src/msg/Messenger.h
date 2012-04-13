@@ -330,12 +330,25 @@ protected:
     dout_emergency(oss.str());
     assert(0);
   }
+  /**
+   * Notify each Dispatcher of a new Connection. Call
+   * this function whenever a new Connection is initiated.
+   *
+   * @param con Pointer to the new Connection.
+   */
   void ms_deliver_handle_connect(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
       (*p)->ms_handle_connect(con);
   }
+  /**
+   * Notify each Dispatcher of a Connection which may have lost
+   * Messages. Call this function whenever you detect that a lossy Connection
+   * has been disconnected.
+   *
+   * @param con Pointer to the broken Connection.
+   */
   void ms_deliver_handle_reset(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
@@ -343,13 +356,26 @@ protected:
       if ((*p)->ms_handle_reset(con))
 	return;
   }
+  /**
+   * Notify each Dispatcher of a Connection which has been "forgotten" about
+   * by the remote end, implying that messages have probably been lost.
+   * Call this function whenever you detect a reset.
+   *
+   * @param con Pointer to the broken Connection.
+   */
   void ms_deliver_handle_remote_reset(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
       (*p)->ms_handle_remote_reset(con);
   }
-
+  /**
+   * Get the AuthAuthorizer for a new outgoing Connection.
+   *
+   * @param peer_type The peer type for the new Connection
+   * @param force_new True if we want to wait for new keys, false otherwise.
+   * @return A pointer to the AuthAuthorizer, if we have one; NULL otherwise
+   */
   AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
     AuthAuthorizer *a = 0;
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
@@ -359,6 +385,20 @@ protected:
 	return a;
     return NULL;
   }
+  /**
+   * Verify that the authorizer on a new incoming Connection is correct.
+   *
+   * @param con The new incoming Connection
+   * @param peer_type The type of the endpoint on the new Connection
+   * @param protocol The ID of the protocol in use (at time of writing, cephx or none)
+   * @param authorizer The authorization string supplied by the remote
+   * @param authorizer_reply Output param: The string we should send back to
+   * the remote to authorize ourselves. Only filled in if isvalid
+   * @param isvalid Output param: True if authorizer is valid, false otherwise
+   *
+   * @return True if we were able to prove or disprove correctness of
+   * authorizer, false otherwise.
+   */
   bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 				    bool& isvalid) {
