@@ -2665,6 +2665,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     case Transaction::OP_COLL_MOVE:
       {
+	// WARNING: this is deprecated and buggy; only here to replay old journals.
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
 	hobject_t oid = i.get_oid();

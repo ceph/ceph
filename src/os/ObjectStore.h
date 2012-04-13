@@ -434,12 +434,9 @@ public:
       ops++;
     }
     void collection_move(coll_t cid, coll_t oldcid, const hobject_t& oid) {
-      __u32 op = OP_COLL_MOVE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oldcid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      collection_add(cid, oldcid, oid);
+      collection_remove(oldcid, oid);
+      return;
     }
 
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
