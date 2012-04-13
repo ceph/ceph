@@ -145,8 +145,8 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
   }
 
   if (verify_objects.size() != store_objects.size()) {
-    dout(0) << "diff_objects size mismatch (verify: " << verify_objects.size()
-        << ", store: " << store_objects.size() << ")" << dendl;
+    dout(0) << "diff_objects num objs mismatch (A: " << store_objects.size()
+        << ", B: " << verify_objects.size() << ")" << dendl;
     return false;
   }
 
@@ -155,25 +155,29 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
   for (; v_it != verify_objects.end(); ++v_it, ++s_it) {
     hobject_t v_obj = *v_it, s_obj = *s_it;
     if (v_obj.oid.name != s_obj.oid.name) {
-      dout(0) << "diff_objects name mismatch (verify: "<< v_obj.oid.name
-          << ", store: " << s_obj.oid.name << ")" << dendl;
+      dout(0) << "diff_objects name mismatch on A object "
+          << coll << "/" << s_obj << " and B object "
+          << coll << "/" << v_obj << dendl;
       return false;
     }
 
     struct stat v_stat, s_stat;
     err = verify->stat(coll, v_obj, &v_stat);
     if (err < 0) {
-      dout(0) << "diff_objects error stating B object " << v_obj.oid.name << dendl;
+      dout(0) << "diff_objects error stating B object "
+          << coll.to_str() << "/" << v_obj.oid.name << dendl;
       return false;
     }
     err = store->stat(coll, s_obj, &s_stat);
     if (err < 0) {
-      dout(0) << "diff_objects error stating A object " << s_obj.oid.name << dendl;
+      dout(0) << "diff_objects error stating A object "
+          << coll << "/" << s_obj << dendl;
       return false;
     }
 
     if (diff_objects_stat(v_stat, s_stat)) {
-      dout(0) << "diff_objects stat mismatch on " << coll << "/" << v_obj << dendl;
+      dout(0) << "diff_objects stat mismatch on "
+          << coll << "/" << v_obj << dendl;
       return false;
     }
 
@@ -182,7 +186,8 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
     store->read(coll, s_obj, 0, s_stat.st_size, s_bl);
 
     if (!s_bl.contents_equal(v_bl)) {
-      dout(0) << "diff_objects content mismatch on " << coll << "/" << v_obj << dendl;
+      dout(0) << "diff_objects content mismatch on "
+          << coll << "/" << v_obj << dendl;
       return false;
     }
 
@@ -201,7 +206,9 @@ bool diff_objects(FileStore *store, FileStore *verify, coll_t coll)
     }
 
     if (!diff_attrs(v_attrs_map, s_attrs_map)) {
-      dout(0) << "diff_objects attrs mismatch" << dendl;
+      dout(0) << "diff_objects attrs mismatch on A object "
+          << coll << "/" << s_obj << " and B object "
+          << coll << "/" << v_obj << dendl;
       return false;
     }
   }
@@ -221,14 +228,14 @@ bool diff_coll_attrs(FileStore *store, FileStore *verify, coll_t coll)
   }
   err = store->collection_getattrs(coll, store_coll_attrs);
   if (err < 0) {
-    dout(0) << "diff_attrs getattrs on store coll " << coll.to_str()
+    dout(0) << "diff_attrs getattrs on A coll " << coll.to_str()
               << "returns " << err << dendl;
     return false;
   }
 
   if (verify_coll_attrs.size() != store_coll_attrs.size()) {
-    dout(0) << "diff_attrs size mismatch (verify: " << verify_coll_attrs.size()
-        << ", store: " << store_coll_attrs.size() << ")" << dendl;
+    dout(0) << "diff_attrs size mismatch (A: " << store_coll_attrs.size()
+        << ", B: " << store_coll_attrs.size() << ")" << dendl;
     return false;
   }
 
@@ -245,7 +252,7 @@ bool diff(FileStore *store, FileStore *verify)
   for (; it != verify_coll_list.end(); ++it) {
     coll_t verify_coll = *it;
     if (!store->collection_exists(verify_coll)) {
-      dout(0) << "diff collection " << verify_coll.to_str() << " DNE" << dendl;
+      dout(0) << "diff B coll " << verify_coll.to_str() << " DNE on A" << dendl;
       return false;
     }
 
