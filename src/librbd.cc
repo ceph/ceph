@@ -434,6 +434,7 @@ namespace librbd {
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
                char *buf, AioCompletion *c);
   int flush(ImageCtx *ictx);
+  int _flush(ImageCtx *ictx);
 
   ssize_t handle_sparse_read(CephContext *cct,
 			     bufferlist data_bl,
@@ -751,12 +752,6 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  // We need to flush the cache here so that reading our new snapshot
-  // won't just give us -ENOENT if we've never flushed an object and try
-  // to read from the new snapshot.
-  // TODO: Fix this in the ObjectCacher
-  if (ictx->object_cacher)
-    ictx->flush_cache();
   r = add_snap(ictx, snap_name);
 
   if (r < 0)
@@ -1126,6 +1121,13 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
     return r;
   }
 
+  std::map<snap_t, std::string> old_snap_ids;
+  for (std::map<std::string, struct SnapInfo>::iterator it =
+	 ictx->snaps_by_name.begin(); it != ictx->snaps_by_name.end(); ++it) {
+    old_snap_ids[it->second.id] = it->first;
+  }
+  bool new_snap = false;
+
   ictx->snaps.clear();
   ictx->snapc.snaps.clear();
   ictx->snaps_by_name.clear();
@@ -1141,6 +1143,15 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
     ::decode(image_size, iter);
     ::decode(s, iter);
     ictx->add_snap(s, id, image_size);
+    std::map<snap_t, std::string>::const_iterator it = old_snap_ids.find(id);
+    if (it == old_snap_ids.end()) {
+      new_snap = true;
+      ldout(cct, 20) << "new snapshot " << s << " size " << image_size << dendl;
+    }
+  }
+
+  if (new_snap) {
+    _flush(ictx);
   }
 
   if (!ictx->snapc.is_valid()) {
@@ -1614,6 +1625,13 @@ int flush(ImageCtx *ictx)
   if (r < 0)
     return r;
 
+  return _flush(ictx);
+}
+
+int _flush(ImageCtx *ictx)
+{
+  CephContext *cct = ictx->cct;
+  int r;
   // flush any outstanding writes
   if (ictx->object_cacher) {
     ictx->flush_cache();
