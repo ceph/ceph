@@ -2846,6 +2846,12 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     e.owner_display_name = dirent.meta.owner_display_name;
     e.content_type = dirent.meta.content_type;
 
+    /* oh, that shouldn't happen! */
+    if (e.name.empty()) {
+      ldout(cct, 0) << "WARNING: got empty dirent name, skipping" << dendl;
+      continue;
+    }
+
     if (!dirent.exists || !dirent.pending_map.empty()) {
       /* there are uncommitted ops. We need to check the current state,
        * and if the tags are old we need to do cleanup as well. */
