@@ -429,6 +429,8 @@ public:
   int _collection_remove(coll_t c, const hobject_t& o);
 
 private:
+  void _inject_failure();
+
   // omap
   int _omap_clear(coll_t cid, const hobject_t &hoid);
   int _omap_setkeys(coll_t cid, const hobject_t &hoid,
@@ -463,6 +465,7 @@ private:
   int m_filestore_queue_max_bytes;
   int m_filestore_queue_committing_max_ops;
   int m_filestore_queue_committing_max_bytes;
+  atomic_t m_filestore_kill_at;
 };
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);

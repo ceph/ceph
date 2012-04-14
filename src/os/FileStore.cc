@@ -2390,6 +2390,8 @@ void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
 
   dout(10) << "_set_replay_guard " << spos << dendl;
 
+  _inject_failure();
+
   // first make sure the previous operation commits
   ::fsync(fd);
 
@@ -2397,6 +2399,8 @@ void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
   // it have had them in the past and then removed them, so always
   // sync.
   object_map->sync();
+
+  _inject_failure();
 
   // then record that we did it
   bufferlist v(40);
@@ -2410,6 +2414,8 @@ void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
 
   // and make sure our xattr is durable.
   ::fsync(fd);
+
+  _inject_failure();
 }
 
 bool FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& spos)
@@ -2482,6 +2488,9 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
   while (i.have_op()) {
     int op = i.get_op();
     int r = 0;
+
+    _inject_failure();
+
     switch (op) {
     case Transaction::OP_NOP:
       break;
@@ -2812,6 +2821,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     spos.op++;
   }
+
+  _inject_failure();
 
   return 0;  // FIXME count errors
 }
@@ -4440,6 +4451,8 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
       r == -EEXIST)    // crashed between link() and set_replay_guard()
     r = 0;
 
+  _inject_failure();
+
   // set guard on object so we don't do this again
   if (r == 0) {
     int fd = lfn_open(c, o, 0);
@@ -4458,6 +4471,19 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   int r = lfn_unlink(c, o);
   dout(10) << "collection_remove " << c << "/" << o << " = " << r << dendl;
   return r;
+}
+
+
+void FileStore::_inject_failure()
+{
+  if (m_filestore_kill_at.read()) {
+    int final = m_filestore_kill_at.dec();
+    dout(5) << "_inject_failure " << (final+1) << " -> " << final << dendl;
+    if (final == 0) {
+      derr << "_inject_failure KILLING" << dendl;
+      _exit(1);
+    }
+  }
 }
 
 int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
@@ -4505,6 +4531,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_max_sync_interval",
     "filestore_flusher_max_fds",
     "filestore_commit_timeout",
+    "filestore_kill_at",
     NULL
   };
   return KEYS;
@@ -4514,12 +4541,14 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed)
 {
   if (changed.count("filestore_min_sync_interval") ||
-     changed.count("filestore_max_sync_interval") ||
-     changed.count("filestore_flusher_max_fds")) {
+      changed.count("filestore_max_sync_interval") ||
+      changed.count("filestore_flusher_max_fds") ||
+      changed.count("filestore_kill_at")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
     m_filestore_flusher_max_fds = conf->filestore_flusher_max_fds;
+    m_filestore_kill_at.set(conf->filestore_kill_at);
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
