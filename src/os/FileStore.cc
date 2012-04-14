@@ -75,6 +75,8 @@ using ceph::crypto::SHA1;
 #  include "btrfs_ioctl.h"
 #endif
 
+#include "include/assert.h"
+
 #include "common/config.h"
 
 #define dout_subsys ceph_subsys_filestore
@@ -649,7 +651,8 @@ done:
   return r;
 }
 
-FileStore::FileStore(const std::string &base, const std::string &jdev) :
+FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name) :
+  internal_name(name),
   basedir(base), journalpath(jdev),
   btrfs(false),
   btrfs_stable_commits(false),
@@ -702,6 +705,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
   m_filestore_dump_fmt(true)
 {
+  m_filestore_kill_at.set(g_conf->filestore_kill_at);
+
   ostringstream oss;
   oss << basedir << "/current";
   current_fn = oss.str();
@@ -715,7 +720,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   omap_dir = omss.str();
 
   // initialize logger
-  PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
 
   plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
   plb.add_u64(l_os_jq_ops, "journal_queue_ops");
@@ -2396,12 +2401,14 @@ void FileStore::_transaction_finish(int fd)
   TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
+void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos, bool in_progress)
 {
   if (btrfs_stable_commits)
     return;
 
-  dout(10) << "_set_replay_guard " << spos << dendl;
+  dout(10) << "_set_replay_guard " << spos << (in_progress ? " START" : "") << dendl;
+
+  _inject_failure();
 
   // first make sure the previous operation commits
   ::fsync(fd);
@@ -2411,9 +2418,12 @@ void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
   // sync.
   object_map->sync();
 
+  _inject_failure();
+
   // then record that we did it
   bufferlist v(40);
   ::encode(spos, v);
+  ::encode(in_progress, v);
   int r = do_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     r = -errno;
@@ -2423,50 +2433,84 @@ void FileStore::_set_replay_guard(int fd, const SequencerPosition& spos)
 
   // and make sure our xattr is durable.
   ::fsync(fd);
+
+  _inject_failure();
+
+  dout(10) << "_set_replay_guard " << spos << " done" << dendl;
 }
 
-bool FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& spos)
+void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
+{
+  if (btrfs_stable_commits)
+    return;
+
+  dout(10) << "_close_replay_guard " << spos << dendl;
+
+  _inject_failure();
+
+  // then record that we are done with this operation
+  bufferlist v(40);
+  ::encode(spos, v);
+  bool in_progress = false;
+  ::encode(in_progress, v);
+  int r = do_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  if (r < 0) {
+    r = -errno;
+    derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
+    assert(0 == "fsetxattr failed");
+  }
+
+  // and make sure our xattr is durable.
+  ::fsync(fd);
+
+  _inject_failure();
+
+  dout(10) << "_close_replay_guard " << spos << " done" << dendl;
+}
+
+
+int FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& spos)
 {
   if (!replaying || btrfs_stable_commits)
-    return true;
+    return 1;
 
   int fd = lfn_open(cid, oid, 0);
   if (fd < 0) {
     dout(10) << "_check_replay_guard " << cid << " " << oid << " dne" << dendl;
-    return true;  // if file does not exist, there is no guard, and we can replay.
+    return 1;  // if file does not exist, there is no guard, and we can replay.
   }
-  bool ret = _check_replay_guard(fd, spos);
+  int ret = _check_replay_guard(fd, spos);
   TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
 
-bool FileStore::_check_replay_guard(coll_t cid, const SequencerPosition& spos)
+int FileStore::_check_replay_guard(coll_t cid, const SequencerPosition& spos)
 {
   if (!replaying || btrfs_stable_commits)
-    return true;
+    return 1;
 
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     dout(10) << "_check_replay_guard " << cid << " dne" << dendl;
-    return true;  // if collection does not exist, there is no guard, and we can replay.
+    return 1;  // if collection does not exist, there is no guard, and we can replay.
   }
-  bool ret = _check_replay_guard(fd, spos);
+  int ret = _check_replay_guard(fd, spos);
   TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
 
-bool FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
+int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
 {
   if (!replaying || btrfs_stable_commits)
-    return true;
+    return 1;
 
   char buf[100];
   int r = do_fgetxattr(fd, REPLAY_GUARD_XATTR, buf, sizeof(buf));
   if (r < 0) {
     dout(20) << "_check_replay_guard no xattr" << dendl;
-    return true;  // no xattr
+    return 1;  // no xattr
   }
   bufferlist bl;
   bl.append(buf, r);
@@ -2474,14 +2518,27 @@ bool FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   SequencerPosition opos;
   bufferlist::iterator p = bl.begin();
   ::decode(opos, p);
-  if (opos >= spos) {
-    dout(10) << "_check_replay_guard object has " << opos << " >= current pos " << spos
+  bool in_progress = false;
+  if (!p.end())   // older journals don't have this
+    ::decode(in_progress, p);
+  if (opos > spos) {
+    dout(10) << "_check_replay_guard object has " << opos << " > current pos " << spos
 	     << ", now or in future, SKIPPING REPLAY" << dendl;
-    return false;
+    return -1;
+  } else if (opos == spos) {
+    if (in_progress) {
+      dout(10) << "_check_replay_guard object has " << opos << " == current pos " << spos
+	       << ", in_progress=true, CONDITIONAL REPLAY" << dendl;
+      return 0;
+    } else {
+      dout(10) << "_check_replay_guard object has " << opos << " == current pos " << spos
+	       << ", in_progress=false, SKIPPING REPLAY" << dendl;
+      return -1;
+    }
   } else {
     dout(10) << "_check_replay_guard object has " << opos << " < current pos " << spos
 	     << ", in past, will replay" << dendl;
-    return true;
+    return 1;
   }
 }
 
@@ -2495,6 +2552,9 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
   while (i.have_op()) {
     int op = i.get_op();
     int r = 0;
+
+    _inject_failure();
+
     switch (op) {
     case Transaction::OP_NOP:
       break;
@@ -2502,7 +2562,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _touch(cid, oid);
       }
       break;
@@ -2515,7 +2575,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	uint64_t len = i.get_length();
 	bufferlist bl;
 	i.get_bl(bl);
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _write(cid, oid, off, len, bl);
       }
       break;
@@ -2526,7 +2586,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _zero(cid, oid, off, len);
       }
       break;
@@ -2546,7 +2606,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _truncate(cid, oid, off);
       }
       break;
@@ -2555,7 +2615,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _remove(cid, oid);
       }
       break;
@@ -2567,14 +2627,14 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
-	if (!_check_replay_guard(cid, oid, spos))
-	  break;
-	map<string, bufferptr> to_set;
-	to_set[name] = bufferptr(bl.c_str(), bl.length());
-	r = _setattrs(cid, oid, to_set);
-	if (r == -ENOSPC)
-	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
-		  << " name " << name << " size " << bl.length() << dendl;
+	if (_check_replay_guard(cid, oid, spos) > 0) {
+	  map<string, bufferptr> to_set;
+	  to_set[name] = bufferptr(bl.c_str(), bl.length());
+	  r = _setattrs(cid, oid, to_set);
+	  if (r == -ENOSPC)
+	    dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
+		    << " name " << name << " size " << bl.length() << dendl;
+	}
       }
       break;
       
@@ -2584,7 +2644,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t oid = i.get_oid();
 	map<string, bufferptr> aset;
 	i.get_attrset(aset);
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _setattrs(cid, oid, aset);
   	if (r == -ENOSPC)
 	  dout(0) << " ENOSPC on setxattrs on " << cid << "/" << oid << dendl;
@@ -2596,7 +2656,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
 	string name = i.get_attrname();
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _rmattr(cid, oid, name.c_str());
       }
       break;
@@ -2605,7 +2665,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	if (_check_replay_guard(cid, oid, spos))
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _rmattrs(cid, oid);
       }
       break;
@@ -2645,7 +2705,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_MKCOLL:
       {
 	coll_t cid = i.get_cid();
-	if (_check_replay_guard(cid, spos))
+	if (_check_replay_guard(cid, spos) > 0)
 	  r = _create_collection(cid);
       }
       break;
@@ -2653,17 +2713,17 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_RMCOLL:
       {
 	coll_t cid = i.get_cid();
-	if (_check_replay_guard(cid, spos))
+	if (_check_replay_guard(cid, spos) > 0)
 	  r = _destroy_collection(cid);
       }
       break;
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
+	coll_t ocid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _collection_add(ocid, ncid, oid, spos);
+	r = _collection_add(ncid, ocid, oid, spos);
       }
       break;
 
@@ -2671,17 +2731,21 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
        {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	if (_check_replay_guard(cid, spos))
+	if (_check_replay_guard(cid, spos) > 0)
 	  r = _collection_remove(cid, oid);
        }
       break;
 
     case Transaction::OP_COLL_MOVE:
       {
+	// WARNING: this is deprecated and buggy; only here to replay old journals.
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	r = _collection_move(ocid, ncid, oid, spos);
+	r = _collection_add(ocid, ncid, oid, spos);
+	if (r == 0 &&
+	    _check_replay_guard(ocid, oid, spos))
+	  r = _collection_remove(ocid, oid);
       }
       break;
 
@@ -2691,7 +2755,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
-	if (_check_replay_guard(cid, spos))
+	if (_check_replay_guard(cid, spos) > 0)
 	  r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
@@ -2700,7 +2764,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	string name = i.get_attrname();
-	if (_check_replay_guard(cid, spos))
+	if (_check_replay_guard(cid, spos) > 0)
 	  r = _collection_rmattr(cid, name.c_str());
       }
       break;
@@ -2825,6 +2889,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
     spos.op++;
   }
+
+  _inject_failure();
 
   return 0;  // FIXME count errors
 }
@@ -3100,7 +3166,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
 {
   dout(15) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
 
-  if (!_check_replay_guard(cid, newoid, spos))
+  if (_check_replay_guard(cid, newoid, spos) < 0)
     return 0;
 
   int o, n, r;
@@ -3291,7 +3357,7 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
 {
   dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
 
-  if (!_check_replay_guard(cid, newoid, spos))
+  if (_check_replay_guard(cid, newoid, spos) < 0)
     return 0;
 
   int r;
@@ -4200,18 +4266,23 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
   get_cdir(cid, old_coll, sizeof(old_coll));
   get_cdir(ncid, new_coll, sizeof(new_coll));
 
-  if (!_check_replay_guard(ncid, spos))
+  if (_check_replay_guard(ncid, spos) < 0)
     return 0;
 
   int ret = 0;
   if (::rename(old_coll, new_coll)) {
-    ret = -errno;
+    if (replaying && !btrfs_stable_commits &&
+	(errno == EEXIST || errno == ENOTEMPTY))
+      ret = 0;   // crashed between rename and set_replay_guard
+    else
+      ret = -errno;
   }
 
   if (ret >= 0) {
     int fd = ::open(new_coll, O_RDONLY);
     assert(fd >= 0);
     _set_replay_guard(fd, spos);
+    TEMP_FAILURE_RETRY(::close(fd));
   }
 
   dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
@@ -4454,25 +4525,37 @@ int FileStore::_destroy_collection(coll_t c)
 }
 
 
-int FileStore::_collection_add(coll_t c, coll_t cid, const hobject_t& o,
+int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
 			       const SequencerPosition& spos) 
 {
-  dout(15) << "collection_add " << c << "/" << o << " " << cid << "/" << o << dendl;
+  dout(15) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
   
-  if (!_check_replay_guard(c, o, spos))
+  int cmp = _check_replay_guard(c, o, spos);
+  if (cmp < 0)
     return 0;
 
-  int r = lfn_link(cid, c, o);
-
-  // set guard on object so we don't do this again
-  if (r >= 0) {
-    int fd = lfn_open(c, o, 0);
-    assert(fd >= 0);
-    _set_replay_guard(fd, spos);
-    TEMP_FAILURE_RETRY(::close(fd));
+  // open guard on object so we don't any previous operations on the
+  // new name that will modify the source inode.
+  int fd = lfn_open(oldcid, o, 0);
+  assert(fd >= 0);
+  if (cmp > 0) {
+    _set_replay_guard(fd, spos, true);
   }
 
-  dout(10) << "collection_add " << c << "/" << o << " " << cid << "/" << o << " = " << r << dendl;
+  int r = lfn_link(oldcid, c, o);
+  if (replaying && !btrfs_stable_commits &&
+      r == -EEXIST)    // crashed between link() and set_replay_guard()
+    r = 0;
+
+  _inject_failure();
+
+  // close guard on object so we don't do this again
+  if (r == 0) {
+    _close_replay_guard(fd, spos);
+  }
+  TEMP_FAILURE_RETRY(::close(fd));
+
+  dout(10) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
 }
 
@@ -4484,26 +4567,17 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   return r;
 }
 
-int FileStore::_collection_move(coll_t c, coll_t oldcid, const hobject_t& o,
-				const SequencerPosition& spos) 
+
+void FileStore::_inject_failure()
 {
-  dout(15) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
-
-  if (!_check_replay_guard(oldcid, o, spos))
-    return 0;
-
-  int r = lfn_link(oldcid, c, o);
-  if (r == 0 || (replaying && r == -EEXIST)) {
-    r = lfn_unlink(oldcid, o);
-
-    // set guard on object so we don't do this again
-    int fd = lfn_open(c, o, 0);
-    assert(fd >= 0);
-    _set_replay_guard(fd, spos);
-    TEMP_FAILURE_RETRY(::close(fd));
+  if (m_filestore_kill_at.read()) {
+    int final = m_filestore_kill_at.dec();
+    dout(5) << "_inject_failure " << (final+1) << " -> " << final << dendl;
+    if (final == 0) {
+      derr << "_inject_failure KILLING" << dendl;
+      _exit(1);
+    }
   }
-  dout(10) << "collection_move " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
-  return r;
 }
 
 int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid) {
@@ -4558,6 +4632,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_flusher_max_fds",
     "filestore_commit_timeout",
     "filestore_dump_file",
+    "filestore_kill_at",
     NULL
   };
   return KEYS;
@@ -4567,12 +4642,14 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed)
 {
   if (changed.count("filestore_min_sync_interval") ||
-     changed.count("filestore_max_sync_interval") ||
-     changed.count("filestore_flusher_max_fds")) {
+      changed.count("filestore_max_sync_interval") ||
+      changed.count("filestore_flusher_max_fds") ||
+      changed.count("filestore_kill_at")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
     m_filestore_flusher_max_fds = conf->filestore_flusher_max_fds;
+    m_filestore_kill_at.set(conf->filestore_kill_at);
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
