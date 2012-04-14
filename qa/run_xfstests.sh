@@ -407,7 +407,7 @@ setup
 
 pushd "${XFSTESTS_DIR}"
 ./check ${TESTS}
-# sadly, check doesn't return a meaningful exit status
+status=$?
 popd
 
 cleanup
@@ -415,4 +415,4 @@ cleanup
 echo "This xfstests run started at:  ${start_date}"
 echo "xfstests run completed at:     $(date)"
 
-exit 0
+exit "${status}"
