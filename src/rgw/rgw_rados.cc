@@ -2870,7 +2870,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
   if (updates.length()) {
     // we don't care if we lose suggested updates, send them off blindly
     AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_exec(oid, c, "rgw", "dir_suggest_changes", in, NULL);
+    r = io_ctx.aio_exec(oid, c, "rgw", "dir_suggest_changes", updates, NULL);
     c->release();
   }
   return m.size();
