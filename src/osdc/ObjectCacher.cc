@@ -441,7 +441,7 @@ ObjectCacher::~ObjectCacher()
 
 void ObjectCacher::perf_start()
 {
-  PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_objectcacher_first, l_objectcacher_last);
+  PerfCountersBuilder plb(cct, "objectcacher", l_objectcacher_first, l_objectcacher_last);
 
   plb.add_u64_counter(l_objectcacher_cache_ops_hit, "cache_ops_hit");
   plb.add_u64_counter(l_objectcacher_cache_ops_miss, "cache_ops_miss");
