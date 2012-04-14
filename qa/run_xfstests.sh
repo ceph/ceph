@@ -395,7 +395,7 @@ function cleanup() {
 	remove_xfstests
 	cleanup_host_options
 }
-trap cleanup hup int quit
+trap cleanup EXIT ERR HUP INT QUIT
 
 # ################################################################
 
@@ -410,7 +410,7 @@ pushd "${XFSTESTS_DIR}"
 status=$?
 popd
 
-cleanup
+# cleanup is called via the trap call, above
 
 echo "This xfstests run started at:  ${start_date}"
 echo "xfstests run completed at:     $(date)"
