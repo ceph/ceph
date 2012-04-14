@@ -4575,6 +4575,7 @@ void FileStore::_inject_failure()
     dout(5) << "_inject_failure " << (final+1) << " -> " << final << dendl;
     if (final == 0) {
       derr << "_inject_failure KILLING" << dendl;
+      g_ceph_context->_log->flush();
       _exit(1);
     }
   }
