@@ -744,8 +744,8 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, s
   comp->wait_for_complete();
   int r = comp->get_return_value();
   printf("return value is: %d\n", r);
-  assert(r == TEST_IO_SIZE - 1);
-  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE - 1) == 0);
+  assert(r == TEST_IO_SIZE);
+  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE) == 0);
   printf("finished read\n");
   comp->release();
 }
@@ -781,15 +781,15 @@ TEST(LibRBD, TestIOPP)
     ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
 
-    char test_data[TEST_IO_SIZE];
+    char test_data[TEST_IO_SIZE + 1];
     char zero_data[TEST_IO_SIZE + 1];
     int i;
     
     srand(time(0));
-    for (i = 0; i < TEST_IO_SIZE - 1; ++i) {
+    for (i = 0; i < TEST_IO_SIZE; ++i) {
       test_data[i] = (char) (rand() % (126 - 33) + 33);
     }
-    test_data[TEST_IO_SIZE - 1] = '\0';
+    test_data[TEST_IO_SIZE] = '\0';
     memset(zero_data, 0, sizeof(zero_data));
 
     for (i = 0; i < 5; ++i)
@@ -841,7 +841,7 @@ TEST(LibRBD, TestIOToSnapshot)
   char orig_data[TEST_IO_TO_SNAP_SIZE + 1];
   char test_data[TEST_IO_TO_SNAP_SIZE + 1];
 
-  for (i = 0; i < TEST_IO_TO_SNAP_SIZE - 1; ++i)
+  for (i = 0; i < TEST_IO_TO_SNAP_SIZE; ++i)
     test_data[i] = (char) (i + 48);
   test_data[TEST_IO_TO_SNAP_SIZE] = '\0';
   orig_data[TEST_IO_TO_SNAP_SIZE] = '\0';
