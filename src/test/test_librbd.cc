@@ -821,6 +821,8 @@ TEST(LibRBD, TestIOToSnapshot)
   ASSERT_EQ(r, 0);
   write_test_data(image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
 
+  rbd_flush(image);
+
   printf("opening testimg@orig\n");
   ASSERT_EQ(0, rbd_open(ioctx, name, &image_at_snap, "orig"));
   read_test_data(image_at_snap, orig_data, 0, TEST_IO_TO_SNAP_SIZE);

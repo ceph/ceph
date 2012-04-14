@@ -12,14 +12,18 @@
  *
  */
 
+#include <errno.h>
+#include <inttypes.h>
+
 #include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/snap_types.h"
+#include "include/Context.h"
 #include "include/rbd/librbd.hpp"
+#include "osdc/ObjectCacher.h"
 
-#include <errno.h>
-#include <inttypes.h>
+#include "librbd/LibrbdWriteback.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -34,7 +38,6 @@ namespace librbd {
 
   // raw callbacks
   void rados_cb(rados_completion_t cb, void *arg);
-  void rados_buffered_cb(rados_completion_t cb, void *arg);
   void rados_aio_sparse_read_cb(rados_completion_t cb, void *arg);
 
   class WatchCtx;
@@ -47,7 +50,7 @@ namespace librbd {
 
   struct AioCompletion;
 
-  struct AioBlockCompletion {
+  struct AioBlockCompletion : Context {
     CephContext *cct;
     struct AioCompletion *completion;
     uint64_t ofs;
@@ -60,19 +63,8 @@ namespace librbd {
 		       uint64_t _ofs, size_t _len, char *_buf)
       : cct(cct_), completion(aio_completion),
 	ofs(_ofs), len(_len), buf(_buf) {}
-    void complete(ssize_t r);
-  };
-
-  struct ImageCtx;
-
-  struct AioBufferedCompletion {
-    ImageCtx *ictx;
-    AioBlockCompletion *block_completion;
-    uint64_t len;
-    list<AioBufferedCompletion*>::iterator pos;
-    
-    AioBufferedCompletion(ImageCtx *i, AioBlockCompletion *bc, uint64_t l)
-      : ictx(i), block_completion(bc), len(l) {}
+    virtual ~AioBlockCompletion() {}
+    virtual void finish(int r);
   };
 
   struct ImageCtx {
@@ -89,11 +81,11 @@ namespace librbd {
     bool needs_refresh;
     Mutex refresh_lock;
     Mutex lock; // protects access to snapshot and header information
+    Mutex cache_lock; // used as client_lock for the ObjectCacher
 
-    list<AioBufferedCompletion*> tx_queue;
-    list<AioBufferedCompletion*>::iterator tx_next;  // next uncompleted item
-    uint64_t tx_unsafe_bytes, tx_pending_bytes, tx_window;
-    int tx_rval;
+    ObjectCacher *object_cacher;
+    LibrbdWriteback *writeback_handler;
+    ObjectCacher::ObjectSet *object_set;
 
     ImageCtx(std::string imgname, IoCtx& p)
       : cct((CephContext*)p.cct()), snapid(CEPH_NOSNAP),
@@ -101,15 +93,35 @@ namespace librbd {
 	needs_refresh(true),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
 	lock("librbd::ImageCtx::lock"),
-	tx_next(tx_queue.end()),
-	tx_unsafe_bytes(0), tx_pending_bytes(0), tx_window(0), tx_rval(0)
+	cache_lock("librbd::ImageCtx::cache_lock"),
+	object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
     {
       md_ctx.dup(p);
       data_ctx.dup(p);
+      if (cct->_conf->rbd_cache_enabled) {
+	Mutex::Locker l(cache_lock);
+	ldout(cct, 20) << "enabling writback caching..." << dendl;
+	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
+	object_cacher = new ObjectCacher(cct, *writeback_handler, cache_lock,
+					 NULL, NULL);
+	object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
+	object_cacher->start();
+      }
     }
 
     ~ImageCtx() {
-      assert(tx_queue.empty());
+      if (object_cacher) {
+	delete object_cacher;
+	object_cacher = NULL;
+      }
+      if (writeback_handler) {
+	delete writeback_handler;
+	writeback_handler = NULL;
+      }
+      if (object_set) {
+	delete object_set;
+	object_set = NULL;
+      }
     }
 
     int snap_set(std::string snap_name)
@@ -172,62 +184,92 @@ namespace librbd {
       }
     }
 
-    librados::AioCompletion *get_buffered_tx_completion(uint64_t len, AioBlockCompletion *abc) {
-      assert(lock.is_locked());
-      if (tx_window > 0) {
-	tx_pending_bytes += len;
-	AioBufferedCompletion *bc = new AioBufferedCompletion(this, abc, len);
-	tx_queue.push_back(bc);
-	bc->pos = tx_queue.end();
-	bc->pos--;
-	if (tx_next == tx_queue.end())
-	  tx_next = bc->pos;
-	ldout(cct, 20) << "get_buffered_tx " << bc << dendl;
-	return Rados::aio_create_completion(bc, NULL, rados_buffered_cb);
-      } else {
-	return Rados::aio_create_completion(abc, NULL, rados_cb);
+    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
+			     uint64_t off, Context *onfinish) {
+      lock.Lock();
+      ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snapid, bl, 0);
+      lock.Unlock();
+      ObjectExtent extent(o, off, len);
+      extent.oloc.pool = data_ctx.get_id();
+      extent.buffer_extents[0] = len;
+      rd->extents.push_back(extent);
+      cache_lock.Lock();
+      int r = object_cacher->readx(rd, object_set, onfinish);
+      cache_lock.Unlock();
+      if (r > 0)
+	onfinish->complete(r);
+    }
+
+    void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off) {
+      lock.Lock();
+      ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
+								utime_t(), 0);
+      lock.Unlock();
+      ObjectExtent extent(o, off, len);
+      extent.oloc.pool = data_ctx.get_id();
+      extent.buffer_extents[0] = len;
+      wr->extents.push_back(extent);
+      {
+	Mutex::Locker l(cache_lock);
+	object_cacher->wait_for_write(len, cache_lock);
+	object_cacher->writex(wr, object_set);
       }
     }
 
-    void finish_buffered_tx(AioBufferedCompletion *bc, int rval) {
-      ldout(cct, 20) << "finish_buffered_tx " << bc << dendl;
-      assert(lock.is_locked());
-      if (bc->pos == tx_next)
-	tx_next++;
-      if (bc->block_completion) {
-	bc->block_completion->complete(0);
-	delete bc->block_completion;
-	tx_pending_bytes -= bc->len;
-	tx_queue.erase(bc->pos);      
-      } else {
-	tx_unsafe_bytes -= bc->len;
-	tx_queue.erase(bc->pos);
-	do_buffered_tx_completions();
-      }
-      if (rval < 0)
-	tx_rval = rval;  // user will see this on next flush().
+    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off) {
+      int r;
+      Mutex mylock("librbd::ImageCtx::read_from_cache");
+      Cond cond;
+      bool done;
+      Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
+      aio_read_from_cache(o, bl, len, off, onfinish);
+      mylock.Lock();
+      while (!done)
+	cond.Wait(mylock);
+      mylock.Unlock();
+      return r;
     }
 
-    void do_buffered_tx_completions() {
-      assert(lock.is_locked());
-      ldout(cct, 20) << "do_buffered_tx_completions unsafe " << tx_unsafe_bytes 
-		    << " tx_pending " << tx_pending_bytes
-		    << " window " << tx_window
-		    << dendl;
-      while (tx_unsafe_bytes < tx_window && tx_next != tx_queue.end()) {
-	AioBufferedCompletion *bc = *tx_next;
-	tx_unsafe_bytes += bc->len;
-	tx_pending_bytes -= bc->len;
-
-	ldout(cct, 20) << "do_buffered_tx_completion " << bc << dendl;
-	bc->block_completion->complete(0);
-	delete bc->block_completion;
-	bc->block_completion = NULL;
-    
-	tx_next++;
+    void flush_cache() {
+      int r;
+      Mutex mylock("librbd::ImageCtx::flush_cache");
+      Cond cond;
+      bool done;
+      Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
+      cache_lock.Lock();
+      bool already_flushed = object_cacher->commit_set(object_set, onfinish);
+      cache_lock.Unlock();
+      if (!already_flushed) {
+	mylock.Lock();
+	while (!done) {
+	  ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
+	  cond.Wait(mylock);
+	}
+	mylock.Unlock();
+	ldout(cct, 20) << "finished flushing cache" << dendl;
       }
     }
 
+    void shutdown_cache() {
+      lock.Lock();
+      invalidate_cache();
+      lock.Unlock();
+      object_cacher->stop();
+    }
+
+    void invalidate_cache() {
+      assert(lock.is_locked());
+      if (!object_cacher)
+	return;
+      cache_lock.Lock();
+      object_cacher->release_set(object_set);
+      cache_lock.Unlock();
+      flush_cache();
+      cache_lock.Lock();
+      bool unclean = object_cacher->release_set(object_set);
+      cache_lock.Unlock();
+      assert(!unclean);
+    }
   };
 
   class WatchCtx : public librados::WatchCtx {
@@ -392,6 +434,7 @@ namespace librbd {
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
                char *buf, AioCompletion *c);
   int flush(ImageCtx *ictx);
+  int _flush(ImageCtx *ictx);
 
   ssize_t handle_sparse_read(CephContext *cct,
 			     bufferlist data_bl,
@@ -950,6 +993,11 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
     return r;
 
   Mutex::Locker l(ictx->lock);
+  if (size < ictx->header.image_size && ictx->object_cacher) {
+    // need to invalidate since we're deleting objects, and
+    // ObjectCacher doesn't track non-existent objects
+    ictx->invalidate_cache();
+  }
   resize_helper(ictx, size, prog_ctx);
 
   ldout(cct, 2) << "done." << dendl;
@@ -1073,6 +1121,13 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
     return r;
   }
 
+  std::map<snap_t, std::string> old_snap_ids;
+  for (std::map<std::string, struct SnapInfo>::iterator it =
+	 ictx->snaps_by_name.begin(); it != ictx->snaps_by_name.end(); ++it) {
+    old_snap_ids[it->second.id] = it->first;
+  }
+  bool new_snap = false;
+
   ictx->snaps.clear();
   ictx->snapc.snaps.clear();
   ictx->snaps_by_name.clear();
@@ -1088,6 +1143,15 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
     ::decode(image_size, iter);
     ::decode(s, iter);
     ictx->add_snap(s, id, image_size);
+    std::map<snap_t, std::string>::const_iterator it = old_snap_ids.find(id);
+    if (it == old_snap_ids.end()) {
+      new_snap = true;
+      ldout(cct, 20) << "new snapshot " << s << " size " << image_size << dendl;
+    }
+  }
+
+  if (new_snap) {
+    _flush(ictx);
   }
 
   if (!ictx->snapc.is_valid()) {
@@ -1160,6 +1224,11 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
     lderr(cct) << "No such snapshot found." << dendl;
     return -ENOENT;
   }
+
+  // need to flush any pending writes before resizing and rolling back -
+  // writes might create new snapshots. Rolling back will replace
+  // the current version, so we have to invalidate that too.
+  ictx->invalidate_cache();
 
   uint64_t new_size = ictx->get_image_size();
   ictx->get_snap_size(snap_name, &new_size);
@@ -1271,11 +1340,8 @@ int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap
   CephContext *cct = (CephContext *)io_ctx.cct();
   string sn = snap_name ? snap_name : "NULL";
   ldout(cct, 20) << "open_image " << &io_ctx << " ictx =  " << ictx
-	   << " name =  " << name << " snap_name = " << (snap_name ? snap_name : "NULL") << dendl;
-  
-  // set buffered write / writeback window size
-  if (cct->_conf->rbd_writeback_window > 0)
-    ictx->tx_window = cct->_conf->rbd_writeback_window;
+		 << " name =  " << name << " snap_name = "
+		 << (snap_name ? snap_name : "NULL") << dendl;
 
   ictx->lock.Lock();
   int r = ictx_refresh(ictx, snap_name);
@@ -1295,7 +1361,10 @@ int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap
 void close_image(ImageCtx *ictx)
 {
   ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
-  flush(ictx);
+  if (ictx->object_cacher)
+    ictx->shutdown_cache(); // implicitly flushes
+  else
+    flush(ictx);
   ictx->lock.Lock();
   ictx->wctx->invalidate();
   ictx->md_ctx.unwatch(ictx->md_oid(), ictx->wctx->cookie);
@@ -1334,22 +1403,37 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
+    uint64_t bytes_read;
 
-    map<uint64_t, uint64_t> m;
-    r = ictx->data_ctx.sparse_read(oid, m, bl, read_len, block_ofs);
-    if (r < 0 && r == -ENOENT)
-      r = 0;
+    if (ictx->object_cacher) {
+      r = ictx->read_from_cache(oid, &bl, read_len, block_ofs);
+      if (r < 0 && r != -ENOENT)
+	return r;
+
+      if (r == -ENOENT)
+	r = cb(total_read, read_len, NULL, arg);
+      else
+	r = cb(total_read, read_len, bl.c_str(), arg);
+
+      bytes_read = read_len; // ObjectCacher pads with zeroes at end of object
+    } else {
+      map<uint64_t, uint64_t> m;
+      r = ictx->data_ctx.sparse_read(oid, m, bl, read_len, block_ofs);
+      if (r < 0 && r == -ENOENT)
+	r = 0;
+      if (r < 0) {
+	return r;
+      }
+
+      r = handle_sparse_read(ictx->cct, bl, block_ofs, m, total_read, read_len, cb, arg);
+      bytes_read = r;
+    }
     if (r < 0) {
       return r;
     }
 
-    r = handle_sparse_read(ictx->cct, bl, block_ofs, m, total_read, read_len, cb, arg);
-    if (r < 0) {
-      return r;
-    }
-
-    total_read += r;
-    left -= r;
+    total_read += bytes_read;
+    left -= bytes_read;
   }
   ret = total_read;
 
@@ -1393,8 +1477,12 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   uint64_t start_block = get_block_num(ictx->header, off);
   uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
+  snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
+
+  if (snap != CEPH_NOSNAP)
+    return -EROFS;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
@@ -1404,11 +1492,15 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
-    r = ictx->data_ctx.write(oid, bl, write_len, block_ofs);
-    if (r < 0)
-      return r;
-    if ((uint64_t)r != write_len)
-      return -EIO;
+    if (ictx->object_cacher) {
+      ictx->write_to_cache(oid, bl, write_len, block_ofs);
+    } else {
+      r = ictx->data_ctx.write(oid, bl, write_len, block_ofs);
+      if (r < 0)
+	return r;
+      if ((uint64_t)r != write_len)
+	return -EIO;
+    }
     total_write += write_len;
     left -= write_len;
   }
@@ -1476,9 +1568,9 @@ ssize_t handle_sparse_read(CephContext *cct,
   return buf_len;
 }
 
-void AioBlockCompletion::complete(ssize_t r)
+void AioBlockCompletion::finish(int r)
 {
-  ldout(cct, 10) << "AioBlockCompletion::complete()" << dendl;
+  ldout(cct, 10) << "AioBlockCompletion::finish()" << dendl;
   if ((r >= 0 || r == -ENOENT) && buf) { // this was a sparse_read operation
     ldout(cct, 10) << "ofs=" << ofs << " len=" << len << dendl;
     r = handle_sparse_read(cct, data_bl, ofs, m, 0, len, simple_read_cb, buf);
@@ -1509,17 +1601,8 @@ void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t
 void rados_cb(rados_completion_t c, void *arg)
 {
   AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
-  block_completion->complete(rados_aio_get_return_value(c));
+  block_completion->finish(rados_aio_get_return_value(c));
   delete block_completion;
-}
-
-void rados_buffered_cb(rados_completion_t c, void *arg)
-{
-  AioBufferedCompletion *bc = (AioBufferedCompletion *)arg;
-  bc->ictx->lock.Lock();
-  bc->ictx->finish_buffered_tx(bc, rados_aio_get_return_value(c));
-  bc->ictx->lock.Unlock();
-  delete bc;
 }
 
 int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
@@ -1542,13 +1625,19 @@ int flush(ImageCtx *ictx)
   if (r < 0)
     return r;
 
-  // flush any outstanding writes
-  r = ictx->data_ctx.aio_flush();
+  return _flush(ictx);
+}
 
-  // collect any errors from buffered writes
-  if (ictx->tx_rval < 0) {
-    r =  ictx->tx_rval;
-    ictx->tx_rval = 0;
+int _flush(ImageCtx *ictx)
+{
+  CephContext *cct = ictx->cct;
+  int r;
+  // flush any outstanding writes
+  if (ictx->object_cacher) {
+    ictx->flush_cache();
+    r = 0;
+  } else {
+    r = ictx->data_ctx.aio_flush();
   }
 
   if (r)
@@ -1575,6 +1664,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   uint64_t start_block = get_block_num(ictx->header, off);
   uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
+  snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1582,35 +1672,38 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   if (r < 0)
     return r;
 
+  if (snap != CEPH_NOSNAP)
+    return -EROFS;
+
   c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
-    AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
-    c->add_block_completion(block_completion);
-
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
     uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
-    librados::AioCompletion *rados_completion = ictx->get_buffered_tx_completion(len, block_completion);
     ictx->lock.Unlock();
 
     uint64_t write_len = min(block_size - block_ofs, left);
     bufferlist bl;
     bl.append(buf + total_write, write_len);
-    r = ictx->data_ctx.aio_write(oid, rados_completion, bl, write_len, block_ofs);
-    rados_completion->release();
-    if (r < 0)
-      goto done;
+    if (ictx->object_cacher) {
+      // may block
+      ictx->write_to_cache(oid, bl, write_len, block_ofs);
+    } else {
+      AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
+      c->add_block_completion(block_completion);
+      librados::AioCompletion *rados_completion =
+	Rados::aio_create_completion(block_completion, NULL, rados_cb);
+      r = ictx->data_ctx.aio_write(oid, rados_completion, bl, write_len, block_ofs);
+      rados_completion->release();
+      if (r < 0)
+	goto done;
+    }
     total_write += write_len;
     left -= write_len;
   }
-  r = 0;
 done:
   c->finish_adding_completions();
   c->put();
-
-  ictx->lock.Lock();
-  ictx->do_buffered_tx_completions();
-  ictx->lock.Unlock();
 
   /* FIXME: cleanup all the allocated stuff */
   return r;
@@ -1619,7 +1712,7 @@ done:
 void rados_aio_sparse_read_cb(rados_completion_t c, void *arg)
 {
   AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
-  block_completion->complete(rados_aio_get_return_value(c));
+  block_completion->finish(rados_aio_get_return_value(c));
   delete block_completion;
 }
 
@@ -1662,18 +1755,25 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 	new AioBlockCompletion(ictx->cct, c, block_ofs, read_len, buf + total_read);
     c->add_block_completion(block_completion);
 
-    librados::AioCompletion *rados_completion =
-      Rados::aio_create_completion(block_completion, rados_aio_sparse_read_cb, NULL);
-    r = ictx->data_ctx.aio_sparse_read(oid, rados_completion,
-				       &block_completion->m, &block_completion->data_bl,
-				       read_len, block_ofs);
-    rados_completion->release();
-    if (r < 0 && r == -ENOENT)
-      r = 0;
-    if (r < 0) {
-      ret = r;
-      goto done;
+    if (ictx->object_cacher) {
+      block_completion->m[block_ofs] = read_len;
+      ictx->aio_read_from_cache(oid, &block_completion->data_bl,
+				read_len, block_ofs, block_completion);
+    } else {
+      librados::AioCompletion *rados_completion =
+	Rados::aio_create_completion(block_completion, rados_aio_sparse_read_cb, NULL);
+      r = ictx->data_ctx.aio_sparse_read(oid, rados_completion,
+					 &block_completion->m, &block_completion->data_bl,
+					 read_len, block_ofs);
+      rados_completion->release();
+      if (r < 0 && r == -ENOENT)
+	r = 0;
+      if (r < 0) {
+	ret = r;
+	goto done;
+      }
     }
+
     total_read += read_len;
     left -= read_len;
   }

@@ -3,8 +3,7 @@
 
 #include "msg/Messenger.h"
 #include "ObjectCacher.h"
-#include "Objecter.h"
-
+#include "WritebackHandler.h"
 
 
 /*** ObjectCacher::BufferHead ***/
@@ -14,12 +13,13 @@
 
 #define dout_subsys ceph_subsys_objectcacher
 #undef dout_prefix
-#define dout_prefix *_dout << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define dout_prefix *_dout << "objectcacher.object(" << oid << ") "
 
 ObjectCacher::
-ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l, flush_set_callback_t flush_callback,
+ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
+	     flush_set_callback_t flush_callback,
 	     void *flush_callback_arg) : 
-    cct(cct_), objecter(o), filer(o), lock(l),
+    cct(cct_), writeback_handler(wb), lock(l),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
@@ -421,7 +421,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 /*** ObjectCacher ***/
 
 #undef dout_prefix
-#define dout_prefix *_dout << objecter->messenger->get_myname() << ".objectcacher "
+#define dout_prefix *_dout << "objectcacher "
 
 /* private */
 
@@ -451,21 +451,26 @@ void ObjectCacher::bh_read(BufferHead *bh)
   ObjectSet *oset = bh->ob->oset;
 
   // go
-  objecter->read_trunc(bh->ob->get_oid(), bh->ob->get_oloc(), 
-		 bh->start(), bh->length(), bh->ob->get_snap(),
-		 &onfinish->bl, 0,
-		 oset->truncate_size, oset->truncate_seq,
-		 onfinish);
+  writeback_handler.read(bh->ob->get_oid(), bh->ob->get_oloc(),
+			 bh->start(), bh->length(), bh->ob->get_snap(),
+			 &onfinish->bl, oset->truncate_size, oset->truncate_seq,
+			 onfinish);
 }
 
-void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start, uint64_t length, bufferlist &bl)
+void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
+				  uint64_t length, bufferlist &bl, int r)
 {
-  //lock.Lock();
+  assert(lock.is_locked());
   ldout(cct, 7) << "bh_read_finish " 
-          << oid
-          << " " << start << "~" << length
-	  << " (bl is " << bl.length() << ")"
-          << dendl;
+		<< oid
+		<< " " << start << "~" << length
+		<< " (bl is " << bl.length() << ")"
+		<< " returned " << r
+		<< dendl;
+
+  if (r < 0) {
+    // TODO: fix bad read case
+  }
 
   if (bl.length() < length) {
     bufferptr bp(length - bl.length());
@@ -530,7 +535,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start, u
       ob->try_merge_bh(bh);
     }
   }
-  //lock.Unlock();
 }
 
 
@@ -545,11 +549,11 @@ void ObjectCacher::bh_write(BufferHead *bh)
   ObjectSet *oset = bh->ob->oset;
 
   // go
-  tid_t tid = objecter->write_trunc(bh->ob->get_oid(), bh->ob->get_oloc(),
-			      bh->start(), bh->length(),
-			      bh->snapc, bh->bl, bh->last_write, 0,
-			      oset->truncate_size, oset->truncate_seq,
-				    NULL, oncommit);
+  tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(),
+				      bh->start(), bh->length(),
+				      bh->snapc, bh->bl, bh->last_write,
+				      oset->truncate_size, oset->truncate_seq,
+				      oncommit);
 
   // set bh last_write_tid
   oncommit->tid = tid;
@@ -621,15 +625,19 @@ void ObjectCacher::lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid)
   }
 }
 
-void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
+void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
+				   uint64_t length, tid_t tid, int r)
 {
-  //lock.Lock();
-  
+  assert(lock.is_locked());
   ldout(cct, 7) << "bh_write_commit " 
-          << oid 
-          << " tid " << tid
-          << " " << start << "~" << length
-          << dendl;
+		<< oid 
+		<< " tid " << tid
+		<< " " << start << "~" << length
+		<< dendl;
+  if (r < 0) {
+    // TODO: handle write error
+  }
+
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
   } else {
@@ -691,7 +699,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start, 
       flush_set_callback(flush_set_callback_arg, oset);      
     }
   }
-  //lock.Unlock();
 }
 
 void ObjectCacher::flush(loff_t amount)
@@ -778,6 +785,7 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, sna
  */
 int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 {
+  assert(lock.is_locked());
   bool success = true;
   list<BufferHead*> hit_ls;
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
@@ -920,6 +928,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
 {
+  assert(lock.is_locked());
   utime_t now = ceph_clock_now(cct);
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
@@ -1069,7 +1078,9 @@ void ObjectCacher::rdlock(Object *o)
     
     commit->tid = 
       ack->tid = 
-      o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), CEPH_OSD_OP_RDLOCK, 0, ack, commit);
+      o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+						 CEPH_OSD_OP_RDLOCK, 0,
+						 ack, commit);
   }
   
   // stake our claim.
@@ -1114,7 +1125,8 @@ void ObjectCacher::wrlock(Object *o)
     
     commit->tid = 
       ack->tid = 
-      o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), op, 0, ack, commit);
+      o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+						 op, 0, ack, commit);
   }
   
   // stake our claim.
@@ -1159,7 +1171,9 @@ void ObjectCacher::rdunlock(Object *o)
                                             o->get_soid(), 0, 0);
   commit->tid = 
     lockack->tid = 
-    o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), CEPH_OSD_OP_RDUNLOCK, 0, lockack, commit);
+    o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+					       CEPH_OSD_OP_RDUNLOCK, 0,
+					       lockack, commit);
 }
 
 void ObjectCacher::wrunlock(Object *o)
@@ -1192,7 +1206,8 @@ void ObjectCacher::wrunlock(Object *o)
                                             o->get_soid(), 0, 0);
   commit->tid = 
     lockack->tid = 
-    o->last_write_tid = objecter->lock(o->get_oid(), o->get_oloc(), op, 0, lockack, commit);
+    o->last_write_tid = writeback_handler.lock(o->get_oid(), o->get_oloc(),
+					       op, 0, lockack, commit);
 }
 
 
@@ -1327,6 +1342,9 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
 
   if (oset->objects.empty()) {
     ldout(cct, 10) << "commit_set on " << oset << " dne" << dendl;
+    // need to delete this here, since this is what C_GatherBuilder does
+    // if no subs were registered
+    delete onfinish;
     return true;
   }
 
@@ -1348,8 +1366,7 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
                << " will finish on commit tid " << ob->last_write_tid
                << dendl;
       safe = false;
-      if (onfinish != NULL)
-        ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
+      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
   gather.activate();
@@ -1527,51 +1544,6 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
       were_dirty && oset->dirty_or_tx == 0)
     flush_set_callback(flush_set_callback_arg, oset);
 }
-
-
-void ObjectCacher::kick_sync_writers(ObjectSet *oset)
-{
-  if (oset->objects.empty()) {
-    ldout(cct, 10) << "kick_sync_writers on " << oset << " dne" << dendl;
-    return;
-  }
-
-  ldout(cct, 10) << "kick_sync_writers on " << oset << dendl;
-
-  list<Context*> ls;
-
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-    
-    ls.splice(ls.begin(), ob->waitfor_wr);
-  }
-
-  finish_contexts(cct, ls);
-}
-
-void ObjectCacher::kick_sync_readers(ObjectSet *oset)
-{
-  if (oset->objects.empty()) {
-    ldout(cct, 10) << "kick_sync_readers on " << oset << " dne" << dendl;
-    return;
-  }
-
-  ldout(cct, 10) << "kick_sync_readers on " << oset << dendl;
-
-  list<Context*> ls;
-
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-    
-    ls.splice(ls.begin(), ob->waitfor_rd);
-  }
-
-  finish_contexts(cct, ls);
-}
-
-
 
 void ObjectCacher::verify_stats() const
 {

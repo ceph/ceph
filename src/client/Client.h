@@ -65,7 +65,7 @@ class InodeStat;
 
 class Filer;
 class Objecter;
-class ObjectCacher;
+class WritebackHandler;
 
 class PerfCounters;
 
@@ -264,7 +264,8 @@ protected:
   Filer                 *filer;     
   ObjectCacher          *objectcacher;
   Objecter              *objecter;     // (non-blocking) osd interface
-  
+  WritebackHandler      *writeback_handler;
+
   // cache
   hash_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;

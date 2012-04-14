@@ -58,8 +58,7 @@ using namespace std;
 #include "mon/MonMap.h"
 
 #include "osdc/Filer.h"
-#include "osdc/Objecter.h"
-#include "osdc/ObjectCacher.h"
+#include "osdc/WritebackHandler.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -81,6 +80,7 @@ using namespace std;
 #include "Fh.h"
 #include "MetaSession.h"
 #include "MetaRequest.h"
+#include "ObjecterWriteback.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
@@ -150,7 +150,8 @@ Client::Client(Messenger *m, MonClient *mc)
   mdsmap = new MDSMap;
   objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
-  objectcacher = new ObjectCacher(cct, objecter, client_lock, 
+  writeback_handler = new ObjecterWriteback(objecter);
+  objectcacher = new ObjectCacher(cct, *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this);
   filer = new Filer(objecter);
@@ -166,6 +167,11 @@ Client::~Client()
   if (objectcacher) { 
     delete objectcacher; 
     objectcacher = 0; 
+  }
+
+  if (writeback_handler) {
+    delete writeback_handler;
+    writeback_handler = NULL;
   }
 
   if (filer) { delete filer; filer = 0; }
@@ -2312,7 +2318,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
 
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
-    filer->file_to_extents(in->ino, &in->layout, off, len, ls);
+    Filer::file_to_extents(cct, in->ino, &in->layout, off, len, ls);
     objectcacher->truncate_set(&in->oset, ls);
   }
   
@@ -6816,7 +6822,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
 
   // which object?
   vector<ObjectExtent> extents;
-  filer->file_to_extents(in->ino, &in->layout, offset, 1, extents);
+  Filer::file_to_extents(cct, in->ino, &in->layout, offset, 1, extents);
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
@@ -6844,7 +6850,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  filer->file_to_extents(in->ino, &in->layout, offset, length, result);
+  Filer::file_to_extents(cct, in->ino, &in->layout, offset, length, result);
 
   ldout(cct, 3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;

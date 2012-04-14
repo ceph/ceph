@@ -15,7 +15,7 @@
 #include "Filer.h"
 
 class CephContext;
-class Objecter;
+class WritebackHandler;
 
 class ObjectCacher {
  public:
@@ -267,11 +267,9 @@ class ObjectCacher {
 
   // ******* ObjectCacher *********
   // ObjectCacher fields
- public:
-  Objecter *objecter;
-  Filer filer;
-
  private:
+  WritebackHandler& writeback_handler;
+
   Mutex& lock;
   
   flush_set_callback_t flush_set_callback;
@@ -464,8 +462,10 @@ class ObjectCacher {
   void wrunlock(Object *o);
 
  public:
-  void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
-  void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
+  void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset,
+		      uint64_t length, bufferlist &bl, int r);
+  void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset,
+		       uint64_t length, tid_t t, int r);
   void lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
@@ -479,7 +479,7 @@ class ObjectCacher {
     C_ReadFinish(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
       oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_read_finish(poolid, oid, start, length, bl);
+      oc->bh_read_finish(poolid, oid, start, length, bl, r);
     }
   };
 
@@ -494,7 +494,7 @@ class ObjectCacher {
     C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s, uint64_t l) :
       oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_write_commit(poolid, oid, start, length, tid);
+      oc->bh_write_commit(poolid, oid, start, length, tid, r);
     }
   };
 
@@ -514,8 +514,7 @@ class ObjectCacher {
 
 
 
- public:
-  ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l,
+  ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg);
   ~ObjectCacher() {
@@ -575,7 +574,6 @@ class ObjectCacher {
   void flush_all(Context *onfinish=0);
 
   bool commit_set(ObjectSet *oset, Context *oncommit);
-  void commit_all(Context *oncommit=0);
 
   void purge_set(ObjectSet *oset);
 
@@ -584,17 +582,13 @@ class ObjectCacher {
 
   void truncate_set(ObjectSet *oset, vector<ObjectExtent>& ex);
 
-  void kick_sync_writers(ObjectSet *oset);
-  void kick_sync_readers(ObjectSet *oset);
-
-
   // file functions
 
   /*** async+caching (non-blocking) file interface ***/
   int file_is_cached(ObjectSet *oset, ceph_file_layout *layout, snapid_t snapid,
 		     loff_t offset, uint64_t len) {
     vector<ObjectExtent> extents;
-    filer.file_to_extents(oset->ino, layout, offset, len, extents);
+    Filer::file_to_extents(cct, oset->ino, layout, offset, len, extents);
     return is_cached(oset, extents, snapid);
   }
 
@@ -604,7 +598,7 @@ class ObjectCacher {
 		int flags,
                 Context *onfinish) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
-    filer.file_to_extents(oset->ino, layout, offset, len, rd->extents);
+    Filer::file_to_extents(cct, oset->ino, layout, offset, len, rd->extents);
     return readx(rd, oset, onfinish);
   }
 
@@ -612,7 +606,7 @@ class ObjectCacher {
                  loff_t offset, uint64_t len, 
                  bufferlist& bl, utime_t mtime, int flags) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(oset->ino, layout, offset, len, wr->extents);
+    Filer::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
     return writex(wr, oset);
   }
 };
@@ -622,6 +616,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 {
   out << "bh["
       << bh.start() << "~" << bh.length()
+      << " " << bh.ob
       << " (" << bh.bl.length() << ")"
       << " v " << bh.last_write_tid;
   if (bh.is_tx()) out << " tx";

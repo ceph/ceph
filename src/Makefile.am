@@ -319,10 +319,13 @@ lib_LTLIBRARIES += librgw.la
 endif
 
 # librbd
-librbd_la_SOURCES = librbd.cc
+librbd_la_SOURCES = \
+	librbd.cc \
+	librbd/LibrbdWriteback.cc \
+	osdc/ObjectCacher.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
-librbd_la_LIBADD = librados.la 
+librbd_la_LIBADD = librados.la
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
@@ -686,6 +689,11 @@ test_librbd_SOURCES = test/test_librbd.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
+
+test_librbd_fsx_SOURCES = test/rbd/fsx.c
+test_librbd_fsx_LDADD =  librbd.la librados.la
+test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
+bin_DEBUGPROGRAMS += test_librbd_fsx
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
@@ -1137,7 +1145,7 @@ libclient_la_SOURCES = \
 	client/Inode.cc \
 	client/MetaRequest.cc \
 	client/Trace.cc
-libclient_la_LIBADD = libcommon.la $(LIBEDIT_LIBS)
+libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
 noinst_LTLIBRARIES += libclient.la
 
 dist-hook:
@@ -1185,6 +1193,7 @@ noinst_HEADERS = \
         client/fuse_ll.h\
 	client/ioctl.h\
         client/hadoop/CephFSInterface.h\
+	client/ObjecterWriteback.h\
 	cls_acl.cc\
 	cls_crypto.cc\
 	common/BackTrace.h\
@@ -1320,6 +1329,7 @@ noinst_HEADERS = \
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
+	librbd/LibrbdWriteback.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
 	json_spirit/json_spirit_error_position.h\
@@ -1545,6 +1555,7 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
+	osdc/WritebackHandler.h\
         perfglue/cpu_profiler.h\
         perfglue/heap_profiler.h\
 	rgw/rgw_acl.h\
