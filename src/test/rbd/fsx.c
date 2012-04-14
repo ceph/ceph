@@ -96,6 +96,7 @@ char	*good_buf;			/* a pointer to the correct data */
 char	*temp_buf;			/* a pointer to the current data */
 char	*pool;				/* name of the pool our test image is in */
 char	*iname;				/* name of our test image */
+rados_t		cluster;		/* cluster handle */
 rados_ioctx_t	ioctx;			/* handle for our test pool */
 rbd_image_t	image;			/* handle for our test image */
 
@@ -434,7 +435,6 @@ int
 create_image()
 {
 	int r;
-	rados_t cluster;
 	int order = 0;
 	r = rados_create(&cluster, NULL);
 	if (r < 0) {
@@ -460,7 +460,7 @@ create_image()
 	r = rados_ioctx_create(cluster, pool, &ioctx);
 	if (r < 0) {
 		simple_err("Error creating ioctx", r);
-		goto failed_shutdown;
+		goto failed_pool;
 	}
 	r = rbd_create(ioctx, iname, 0, &order);
 	if (r < 0) {
@@ -472,11 +472,26 @@ create_image()
 
  failed_open:
 	rados_ioctx_destroy(ioctx);
+ failed_pool:
+	rados_pool_delete(cluster, pool);
  failed_shutdown:
 	rados_shutdown(cluster);
 	return r;
 }
 
+void delete_image()
+{
+	rbd_remove(ioctx, iname);
+	rados_ioctx_destroy(ioctx);
+	rados_pool_delete(cluster, pool);
+	rados_shutdown(cluster);
+}
+
+void cleanup_image()
+{
+	rbd_close(image);
+	delete_image();
+}
 
 void
 doread(unsigned offset, unsigned size)
@@ -1013,8 +1028,11 @@ main(int argc, char **argv)
 	ret = rbd_open(ioctx, iname, &image, NULL);
 	if (ret < 0) {
 		simple_err("Error opening image", ret);
+		delete_image();
 		exit(91);
 	}
+	atexit(cleanup_image);
+
 	strncat(goodfile, iname, 256);
 	strcat (goodfile, ".fsxgood");
 	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
@@ -1055,10 +1073,6 @@ main(int argc, char **argv)
 	while (numops == -1 || numops--)
 		test();
 
-	if ((ret = rbd_close(image)) < 0) {
-		prterrcode("rbd_close", ret);
-		report_failure(99);
-	}
 	prt("All operations completed A-OK!\n");
 
 	exit(0);
