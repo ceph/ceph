@@ -317,7 +317,10 @@ public:
    * @param fd open file descriptor for the file/object
    * @param spos sequencer position of the last operation we should not replay
    */
-  void _set_replay_guard(int fd, const SequencerPosition& spos);
+  void _set_replay_guard(int fd, const SequencerPosition& spos, bool in_progress=false);
+
+  /// close a replay guard opened with in_progress=true
+  void _close_replay_guard(int fd, const SequencerPosition& spos);
 
   /**
    * check replay guard xattr on given file
@@ -333,11 +336,11 @@ public:
    *
    * @param fd open fd on the file/object in question
    * @param spos sequencerposition for an operation we could apply/replay
-   * @return true if we can apply (maybe replay) this operation, false if spos has already been applied
+   * @return 1 if we can apply (maybe replay) this operation, -1 if spos has already been applied, 0 if it was in progress
    */
-  bool _check_replay_guard(int fd, const SequencerPosition& spos);
-  bool _check_replay_guard(coll_t cid, const SequencerPosition& spos);
-  bool _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
+  int _check_replay_guard(int fd, const SequencerPosition& spos);
+  int _check_replay_guard(coll_t cid, const SequencerPosition& spos);
+  int _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
 
   // ------------------
   // objects
