@@ -140,18 +140,25 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   if (rc < 0 && rc != -ENOENT)
     return rc;
 
+  struct rgw_bucket_dir_entry entry;
+
+  bool noent = (rc == -ENOENT);
+
   rc = 0;
 
-  struct rgw_bucket_dir_entry entry;
-  if (rc != -ENOENT) {
+  if (!noent) {
     try {
       bufferlist::iterator biter = cur_value.begin();
       ::decode(entry, biter);
     } catch (buffer::error& err) {
       CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode entry\n");
       /* ignoring error */
+
+      noent = true;
     }
-  } else { // no entry, initialize fields
+  }
+
+  if (noent) { // no entry, initialize fields
     entry.name = op.name;
     entry.epoch = 0;
     entry.exists = false;
@@ -243,7 +250,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   bufferlist op_bl;
-
   if (cancel) {
     if (op.tag.size()) {
       bufferlist new_key_bl;
