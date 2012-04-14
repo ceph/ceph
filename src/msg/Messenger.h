@@ -47,14 +47,33 @@ protected:
   bool started;
 
 public:
+  /**
+   *  The CephContext this Messenger uses. Many other components initialize themselves
+   *  from this value.
+   */
   CephContext *cct;
 
+  /**
+   * A Policy describes the rules of a Connection. Is there a limit on how
+   * much data this Connection can have locally? When the underlying connection
+   * experiences an error, does the Connection disappear? Can this Messenger
+   * re-establish the underlying connection?
+   */
   struct Policy {
+    /// If true, the Connection is tossed out on errors.
     bool lossy;
+    /// If true, the underlying connection can't be re-established from this end.
     bool server;
+    /**
+     *  The throttler is used to limit how much data is held by Messages from
+     *  the associated Connection(s). When reading in a new Message, the Messenger
+     *  will call throttler->throttle() for the size of the new Message.
+     */
     Throttle *throttler;
 
+    /// Specify features supported locally by the endpoint.
     uint64_t features_supported;
+    /// Specify features any remotes must have to talk to this endpoint.
     uint64_t features_required;
 
     Policy()
@@ -80,6 +99,11 @@ public:
     }
   };
 
+  /**
+   * Messenger constructor. Call this from your implementation.
+   * Messenger users should construct full implementations directly,
+   * or use the create() function.
+   */
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
@@ -204,20 +228,95 @@ public:
   virtual int shutdown() { started = false; return 0; }
 
   // send message
+  /**
+   * Queue the given Message for the given entity.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message. Other guarantees may be provided based
+   * on the Connection policy associated with the dest.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0 on success, or -errno on failure.
+   */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
+  /**
+   * Queue the given Message to send out on the given Connection.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message. Other guarantees may be provided based
+   * on the Connection policy.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param con The Connection to send the Message out on.
+   *
+   * @return 0 on success, or -errno on failure.
+   */
   virtual int send_message(Message *m, Connection *con) = 0;
+  /**
+   * Lazily queue the given Message for the given entity. Unlike with
+   * send_message(), lazy_send_message() will not establish a
+   * Connection if none exists, re-establish the connection if it
+   * has broken, or queue the Message if the connection is broken.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0.
+   */
   virtual int lazy_send_message(Message *m, const entity_inst_t& dest) = 0;
+  /**
+   * Lazily queue the given Message for the given Connection. Unlike with
+   * send_message(), lazy_send_message() does not necessarily re-establish
+   * the connection if it has broken, or even queue the Message if the
+   * connection is broken.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0.
+   */
   virtual int lazy_send_message(Message *m, Connection *con) = 0;
+  /**
+   * Send a "keepalive" ping to the given dest, if it has a working Connection.
+   * If the Messenger doesn't already have a Connection, or if the underlying
+   * connection has broken, this function does nothing.
+   *
+   * @param dest The entity to send the keepalive to.
+   * @return 0. TODO: should it return error codes for nonexistent/broken ones?
+   */
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
+  /**
+   * Send a "keepalive" ping along the given Connection, if it's working.
+   * If the underlying connection has broken, this function does nothing.
+   *
+   * @param dest The entity to send the keepalive to.
+   * @return 0. TODO: should it return error codes for broken ones?
+   */
   virtual int send_keepalive(Connection *con) = 0;
   /**
-   * Mark down a connection to a remote. This will cause us to
+   * Mark down a Connection to a remote. This will cause us to
    * discard our outgoing queue for them, and if they try
    * to reconnect they will discard their queue when we
-   * inform them of the session reset.
-   * It does not generate any notifications to he Dispatcher.
+   * inform them of the session reset. If there is no
+   * Connection to the given dest, it is a no-op.
+   * It does not generate any notifications to the Dispatcher.
+   *
+   * @param a The address to mark down.
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
+  /**
+   * Mark down the given Connection. This will cause us to
+   * discard its outgoing queue, and if the endpoint tries
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset.
+   * It does not generate any notifications to the Dispatcher.
+   *
+   * @param con The Connection to mark down.
+   */
   virtual void mark_down(Connection *con) = 0;
   /**
    * Unlike mark_down, this function will try and deliver
@@ -226,22 +325,66 @@ public:
    * all been sent out the Connection will be closed and
    * generate an ms_handle_reset notification to the
    * Dispatcher.
+   * TODO: Probably this shouldn't generate a Dispatcher
+   * notification, since the mark_down was requested.
+   *
+   * @param con The Connection to mark down.
    */
   virtual void mark_down_on_empty(Connection *con) = 0;
+  /**
+   * Mark a Connection as "disposable", setting it to lossy
+   * (regardless of initial Policy). Unlike mark_down_on_empty()
+   * this does not immediately close the Connection once
+   * Messages have been delivered.
+   *
+   * TODO: There's some odd stuff going on in our SimpleMessenger
+   * implementation during connect that looks unused; is there
+   * more of a contract that that's enforcing?
+   *
+   * @param con The Connection to mark as disposable.
+   */
   virtual void mark_disposable(Connection *con) = 0;
+  /**
+   * Mark all the existing Connections down. This is equivalent
+   * to iterating over all Connections and calling mark_down()
+   * on each.
+   */
   virtual void mark_down_all() = 0;
 
   /**
    * Get the Connection object associated with a given entity. If a
    * Connection does not exist, create one and establish a logical connection.
+   * The caller owns a reference when this returns. Call ->put() when you're
+   * done!
    *
    * @param dest The entity to get a connection for.
    */
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
-
-  virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
-
+  /**
+   * Bind the Messenger to a specific address. If bind_addr
+   * is not completely filled in the system will use the
+   * valid portions and cycle through the unset ones (eg, the port)
+   * in an unspecified order.
+   *
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 on error, or -errno if
+   * we can be more specific about the failure.
+   */
   virtual int bind(entity_addr_t bind_addr) = 0;
+  /**
+   * This is an optional function for implementations
+   * to override. For those implementations that do
+   * implement it, this function shall perform a full
+   * restart of the Messenger component, whatever that means.
+   * Other entities who connect to this Messenger post-rebind()
+   * should perceive it as a new entity which they have not
+   * previously contacted, and it MUST bind to a different
+   * address than it did previously. If avoid_port is non-zero
+   * it must additionally avoid that port.
+   *
+   * @param avoid_port An additional port to avoid binding to.
+   */
+  virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
 
   /**
    * Set the cluster protocol in use by this daemon.
