@@ -12,22 +12,22 @@ echo kill at $killat
 to=1000000000
 
 rm -fr a a.fail a.recover
-./test_filestore_idempotent_sequence run-sequence-to $to a a/journal \
+test_filestore_idempotent_sequence run-sequence-to $to a a/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat \
     --log-file a.fail --debug-filestore 20 || true
 
-stop=`./test_filestore_idempotent_sequence get-last-op a a/journal --filestore-xattr-use-omap \
+stop=`test_filestore_idempotent_sequence get-last-op a a/journal --filestore-xattr-use-omap \
     --log-file a.recover --debug-filestore 20`
 
 echo stopped at $stop
 
 rm -rf b b.clean
-./test_filestore_idempotent_sequence run-sequence-to $stop b b/journal \
+test_filestore_idempotent_sequence run-sequence-to $stop b b/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --log-file b.clean --debug-filestore 20
 
-if ./test_filestore_idempotent_sequence diff a a/journal b b/journal \
+if test_filestore_idempotent_sequence diff a a/journal b b/journal \
     --filestore-xattr-use-omap; then
     echo OK
     exit 0
