@@ -406,7 +406,7 @@ check_size(void)
 	if ((ret = rbd_stat(image, &statbuf, sizeof(statbuf))) < 0) {
 		prterrcode("check_size: fstat", ret);
 	}
-	if (file_size != statbuf.size) {
+	if ((unsigned)file_size != statbuf.size) {
 		prt("Size error: expected 0x%llx stat 0x%llx\n",
 		    (unsigned long long)file_size,
 		    (unsigned long long)statbuf.size);
@@ -526,7 +526,7 @@ doread(unsigned offset, unsigned size)
 		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 	ret = rbd_read(image, offset, size, temp_buf);
-	if (ret != size) {
+	if (ret != (int)size) {
 		if (ret < 0)
 			prterrcode("doread: read", ret);
 		else
@@ -733,7 +733,7 @@ test(void)
 	testcalls++;
 
 	if (closeprob)
-		closeopen = (rv >> 3) < (1 << 28) / closeprob;
+		closeopen = (rv >> 3) < (1ul << 28) / closeprob;
 
 	if (debugstart > 0 && testcalls >= debugstart)
 		debug = 1;
@@ -770,7 +770,7 @@ test(void)
 					offset %= file_size;
 				else
 					offset = 0;
-				if (offset + size > file_size)
+				if (offset + size > (unsigned long)file_size)
 					size = file_size - offset;
 				if (op != 0)
 					exit(183);
@@ -1048,7 +1048,7 @@ main(int argc, char **argv)
 		exit(93);
 	}
 	original_buf = (char *) malloc(maxfilelen);
-	for (i = 0; i < maxfilelen; i++)
+	for (i = 0; i < (int)maxfilelen; i++)
 		original_buf[i] = random() % 256;
 	good_buf = (char *) malloc(maxfilelen);
 	memset(good_buf, '\0', maxfilelen);
@@ -1058,7 +1058,7 @@ main(int argc, char **argv)
 		ssize_t written;
 
 		written = rbd_write(image, 0, (size_t)maxfilelen, good_buf);
-		if (written != maxfilelen) {
+		if (written != (int)maxfilelen) {
 			if (written < 0) {
 				prterrcode(iname, written);
 				warn("main: error on write");
