@@ -1,4 +1,6 @@
 import logging
+from ..orchestra import run
+import random
 
 from teuthology import misc as teuthology
 
@@ -27,31 +29,46 @@ def task(ctx, config):
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
 
     dir = '/tmp/cephtest/data/test.%s' % client
-    journal = '/tmp/cephtest/data/test.journal.%s' % client
 
-    remote.run(args=['mkdir', dir])
-    remote.run(args=['dd', 'if=/dev/zero', 'of=%s' % journal, 'bs=1M',
-                     'count=100'])
+    seed = str(int(random.uniform(1,100)))
 
-    log.info('writing some data and simulating a failure')
-    remote.run(
-        args=[
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/binary/usr/local/bin/test_filestore_idempotent',
-            '-c', '/tmp/cephtest/ceph.conf',
-            'write', dir, journal
-            ])
+    try:
+        log.info('creating a working dir')
+        remote.run(args=['mkdir', dir])
+        remote.run(
+            args=[
+                'cd', dir,
+                run.Raw('&&'),
+                'wget','-q', '-Orun_seed_to.sh',
+                'http://ceph.newdream.net/git/?p=ceph.git;a=blob_plain;f=src/test/filestore_test/run_seed_to.sh;hb=HEAD',
+                run.Raw('&&'),
+                'wget','-q', '-Orun_seed_to_range.sh',
+                'http://ceph.newdream.net/git/?p=ceph.git;a=blob_plain;f=src/test/filestore_test/run_seed_to_range.sh;hb=HEAD',
+                run.Raw('&&'),
+                'chmod', '+x', 'run_seed_to.sh', 'run_seed_to_range.sh',
+                ]);
 
-    log.info('verifying journal replay gives the correct result')
-    remote.run(
-        args=[
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/binary/usr/local/bin/test_filestore_idempotent',
-            '-c', '/tmp/cephtest/ceph.conf',
-            'verify', dir, journal
-            ])
+        log.info('running a series of tests')
+        proc = remote.run(
+            args=[
+                'cd', dir,
+                run.Raw('&&'),
+                run.Raw('PATH="/tmp/cephtest/binary/usr/local/bin:$PATH"'),
+                './run_seed_to_range.sh', seed, '50', '300',
+                ],
+            wait=False,
+            check_status=False)
+        result = proc.exitstatus.get();
+    
+        if result != 0:
+            remote.run(
+                args=[
+                    'cp', '-a', dir, '/tmp/cephtest/archive/idempotent_failure',
+                    ])
+            raise Exception("./run_seed_to_range.sh errored out")
 
+    finally:
+        remote.run(args=[
+                'rm', '-rf', '--', dir
+                ])
+        
