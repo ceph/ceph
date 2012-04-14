@@ -547,6 +547,13 @@ int librados::IoCtx::get_auid(uint64_t *auid_)
   return rados_ioctx_pool_get_auid(io_ctx_impl, auid_);
 }
 
+std::string librados::IoCtx::get_pool_name()
+{
+  std::string s;
+  io_ctx_impl->client->pool_get_name(get_id(), &s);
+  return s;
+}
+
 int librados::IoCtx::create(const std::string& oid, bool exclusive)
 {
   object_t obj(oid);

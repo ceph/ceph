@@ -90,6 +90,16 @@ int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *a
   return 0;
 }
 
+int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
+{
+  Mutex::Locker l(lock);
+  const char *str = osdmap.get_pool_name(pool_id);
+  if (!s)
+    return -ENOENT;
+  *s = str;
+  return 0;
+}
+
 int librados::RadosClient::connect()
 {
   common_init_finish(cct);
