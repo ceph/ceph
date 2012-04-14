@@ -275,6 +275,7 @@ class ObjectCacher {
  private:
   WritebackHandler& writeback_handler;
 
+  string name;
   Mutex& lock;
   
   flush_set_callback_t flush_set_callback;
@@ -429,7 +430,7 @@ class ObjectCacher {
 
 
 
-  ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
+  ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg);
   ~ObjectCacher();

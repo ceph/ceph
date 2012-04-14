@@ -15,6 +15,9 @@
 #define dout_subsys ceph_subsys_objectcacher
 #undef dout_prefix
 #define dout_prefix *_dout << "objectcacher.object(" << oid << ") "
+
+
+
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t off)
 {
   ldout(oc->cct, 20) << "split " << *left << " at " << off << dendl;
@@ -413,16 +416,16 @@ void ObjectCacher::Object::truncate(loff_t s)
 #define dout_prefix *_dout << "objectcacher "
 
 
-ObjectCacher::
-ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
-             flush_set_callback_t flush_callback,
-             void *flush_callback_arg) :
-    perfcounter(NULL),
-    cct(cct_), writeback_handler(wb), lock(l),
+ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
+			   flush_set_callback_t flush_callback,
+			   void *flush_callback_arg)
+  : perfcounter(NULL),
+    cct(cct_), writeback_handler(wb), name(name), lock(l),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
-    stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
+    stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0)
+{
   perf_start();
 }
 
@@ -441,7 +444,8 @@ ObjectCacher::~ObjectCacher()
 
 void ObjectCacher::perf_start()
 {
-  PerfCountersBuilder plb(cct, "objectcacher", l_objectcacher_first, l_objectcacher_last);
+  string n = "objectcacher-" + name;
+  PerfCountersBuilder plb(cct, n, l_objectcacher_first, l_objectcacher_last);
 
   plb.add_u64_counter(l_objectcacher_cache_ops_hit, "cache_ops_hit");
   plb.add_u64_counter(l_objectcacher_cache_ops_miss, "cache_ops_miss");

@@ -151,7 +151,7 @@ Client::Client(Messenger *m, MonClient *mc)
   objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   writeback_handler = new ObjecterWriteback(objecter);
-  objectcacher = new ObjectCacher(cct, *writeback_handler, client_lock,
+  objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this);
   filer = new Filer(objecter);
