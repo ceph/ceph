@@ -48,7 +48,7 @@ void usage(const char *name, std::string command = "") {
   }
   std::cout << "usage: " << name << " " << more << " [options]" << std::endl;
 
-  std::cout << "\
+  std::cout << "\n\
 Commands:\n\
   " << diff << "\n\
   " << get_last_op << "\n\
@@ -64,6 +64,8 @@ Global Options:\n\
 Test-specific Options:\n\
   --test-seed VAL                     Seed to run the test\n\
   --test-status-file PATH             Path to keep the status file\n\
+  --test-num-colls VAL                Number of collections to create on init\n\
+  --test-num-objs VAL                 Number of objects to create on init\n\
 " << std::endl;
 }
 
