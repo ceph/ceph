@@ -2731,7 +2731,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
        {
 	coll_t cid = i.get_cid();
 	hobject_t oid = i.get_oid();
-	if (_check_replay_guard(cid, spos) > 0)
+	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _collection_remove(cid, oid);
        }
       break;
@@ -2744,7 +2744,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t oid = i.get_oid();
 	r = _collection_add(ocid, ncid, oid, spos);
 	if (r == 0 &&
-	    _check_replay_guard(ocid, oid, spos))
+	    (_check_replay_guard(ocid, oid, spos) > 0))
 	  r = _collection_remove(ocid, oid);
       }
       break;
