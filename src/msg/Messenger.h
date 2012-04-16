@@ -116,12 +116,30 @@ public:
   virtual void destroy() {}
 
   /**
-   * Retrieve the Messenger's name.
+   * create a new messenger
    *
-   * @return A const reference to the name this Messenger
+   * Create a new messenger instance, with whatever implementation is
+   * available or specified via the configuration in cct.
+   *
+   * @param cct context
+   * @param name entity name to register
+   * @param nonce nonce value to uniquely identify this instance on the current host
+   */
+  static Messenger *create(CephContext *cct,
+                           entity_name_t name,
+                           uint64_t nonce);
+
+  /**
+   * @defgroup Accessors
+   * @{
+   */
+  /**
+   * Retrieve the Messenger's instance.
+   *
+   * @return A const reference to the instance this Messenger
    * currently believes to be its own.
    */
-  const entity_name_t& get_myname() { return my_inst.name; }
+  const entity_inst_t& get_myinst() { return my_inst; }
   /**
    * Retrieve the Messenger's address.
    *
@@ -129,6 +147,20 @@ public:
    * currently believes to be its own.
    */
   const entity_addr_t& get_myaddr() { return my_inst.addr; }
+  /**
+   * Retrieve the Messenger's name.
+   *
+   * @return A const reference to the name this Messenger
+   * currently believes to be its own.
+   */
+  const entity_name_t& get_myname() { return my_inst.name; }  /**
+   * Set the name of the local entity. The name is reported to others and
+   * can be changed while the system is running, but doing so at incorrect
+   * times may have bad results.
+   *
+   * @param m The name to set.
+   */
+  void set_myname(const entity_name_t m) { my_inst.name = m; }
   /**
    * Set the unknown address components for this Messenger.
    * This is useful if the Messenger doesn't know its full address just by
@@ -139,21 +171,59 @@ public:
    * @param addr The address to use as a template.
    */
   virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
+  /// Get the default send priority.
+  int get_default_send_priority() { return default_send_priority; }
   /**
-   * Retrieve the Messenger's instance.
-   *
-   * @return A const reference to the instance this Messenger
-   * currently believes to be its own.
+   * Get the number of Messages which the Messenger has received
+   * but not yet dispatched.
    */
-  const entity_inst_t& get_myinst() { return my_inst; }
+  virtual int get_dispatch_queue_len() = 0;
   /**
-   * Set the name of the local entity. The name is reported to others and
-   * can be changed while the system is running, but doing so at incorrect
-   * times may have bad results.
-   *
-   * @param m The name to set.
+   * @} // Accessors
    */
-  void set_myname(const entity_name_t m) { my_inst.name = m; }
+
+  /**
+   * @defgroup Configuration
+   * @{
+   */
+  /**
+   * Set the cluster protocol in use by this daemon.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  virtual void set_cluster_protocol(int p) = 0;
+  /**
+   * Set a policy which is applied to all peers who do not have a type-specific
+   * Policy.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The Policy to apply.
+   */
+  virtual void set_default_policy(Policy p) = 0;
+  /**
+   * Set a policy which is applied to all peers of the given type.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this policy applies to.
+   * @param p The policy to apply.
+   */
+  virtual void set_policy(int type, Policy p) = 0;
+  /**
+   * Set a Throttler which is applied to all Messages from the given
+   * type of peer.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param type The peer type this Throttler will apply to.
+   * @param t The Throttler to apply. SimpleMessenger does not take
+   * ownership of this pointer, but you must not destroy it before
+   * you destroy SimpleMessenger.
+   */
+  virtual void set_policy_throttler(int type, Throttle *t) = 0;
   /**
    * Set the default send priority
    * This is an init-time function and must be called *before* calling
@@ -165,15 +235,6 @@ public:
     assert(!started);
     default_send_priority = p;
   }
-  /// Get the default send priority.
-  int get_default_send_priority() { return default_send_priority; }
-  
-  /**
-   * Get the number of Messages which the Messenger has received
-   * but not yet dispatched.
-   */
-  virtual int get_dispatch_queue_len() = 0;
-
   /**
    * Add a new Dispatcher to the front of the list. If you add
    * a Dispatcher which is already included, it will get a duplicate
@@ -200,8 +261,39 @@ public:
     if (first)
       ready();
   }
+  /**
+   * Bind the Messenger to a specific address. If bind_addr
+   * is not completely filled in the system will use the
+   * valid portions and cycle through the unset ones (eg, the port)
+   * in an unspecified order.
+   *
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 on error, or -errno if
+   * we can be more specific about the failure.
+   */
+  virtual int bind(entity_addr_t bind_addr) = 0;
+  /**
+   * This is an optional function for implementations
+   * to override. For those implementations that do
+   * implement it, this function shall perform a full
+   * restart of the Messenger component, whatever that means.
+   * Other entities who connect to this Messenger post-rebind()
+   * should perceive it as a new entity which they have not
+   * previously contacted, and it MUST bind to a different
+   * address than it did previously. If avoid_port is non-zero
+   * it must additionally avoid that port.
+   *
+   * @param avoid_port An additional port to avoid binding to.
+   */
+  virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
+  /**
+   * @} // Configuration
+   */
 
-  // setup
+  /**
+   * @defgroup Startup/Shutdown
+   * @{
+   */
   /**
    * Perform any resource allocation, thread startup, etc
    * that is required before attempting to connect to other
@@ -226,8 +318,14 @@ public:
    * @return 0 on success, -errno otherwise.
    */
   virtual int shutdown() { started = false; return 0; }
+  /**
+   * @} // Startup/Shutdown
+   */
 
-  // send message
+  /**
+   * @defgroup Messaging
+   * @{
+   */
   /**
    * Queue the given Message for the given entity.
    * Success in this function does not guarantee Message delivery, only
@@ -280,6 +378,23 @@ public:
    * @return 0.
    */
   virtual int lazy_send_message(Message *m, Connection *con) = 0;
+
+  /**
+   * @} // Messaging
+   */
+  /**
+   * @defgroup Connection Management
+   * @{
+   */
+  /**
+   * Get the Connection object associated with a given entity. If a
+   * Connection does not exist, create one and establish a logical connection.
+   * The caller owns a reference when this returns. Call ->put() when you're
+   * done!
+   *
+   * @param dest The entity to get a connection for.
+   */
+  virtual Connection *get_connection(const entity_inst_t& dest) = 0;
   /**
    * Send a "keepalive" ping to the given dest, if it has a working Connection.
    * If the Messenger doesn't already have a Connection, or if the underlying
@@ -350,104 +465,26 @@ public:
    * on each.
    */
   virtual void mark_down_all() = 0;
-
   /**
-   * Get the Connection object associated with a given entity. If a
-   * Connection does not exist, create one and establish a logical connection.
-   * The caller owns a reference when this returns. Call ->put() when you're
-   * done!
-   *
-   * @param dest The entity to get a connection for.
+   * @} // Connection Management
    */
-  virtual Connection *get_connection(const entity_inst_t& dest) = 0;
-  /**
-   * Bind the Messenger to a specific address. If bind_addr
-   * is not completely filled in the system will use the
-   * valid portions and cycle through the unset ones (eg, the port)
-   * in an unspecified order.
-   *
-   * @param bind_addr The address to bind to.
-   * @return 0 on success, or -1 on error, or -errno if
-   * we can be more specific about the failure.
-   */
-  virtual int bind(entity_addr_t bind_addr) = 0;
-  /**
-   * This is an optional function for implementations
-   * to override. For those implementations that do
-   * implement it, this function shall perform a full
-   * restart of the Messenger component, whatever that means.
-   * Other entities who connect to this Messenger post-rebind()
-   * should perceive it as a new entity which they have not
-   * previously contacted, and it MUST bind to a different
-   * address than it did previously. If avoid_port is non-zero
-   * it must additionally avoid that port.
-   *
-   * @param avoid_port An additional port to avoid binding to.
-   */
-  virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
-
-  /**
-   * Set the cluster protocol in use by this daemon.
-   * This is an init-time function and cannot be called after calling
-   * start() or bind().
-   *
-   * @param p The cluster protocol to use. Defined externally.
-   */
-  virtual void set_cluster_protocol(int p) = 0;
-
-  /**
-   * Set a policy which is applied to all peers who do not have a type-specific
-   * Policy.
-   * This is an init-time function and cannot be called after calling
-   * start() or bind().
-   *
-   * @param p The Policy to apply.
-   */
-  virtual void set_default_policy(Policy p) = 0;
-
-  /**
-   * Set a policy which is applied to all peers of the given type.
-   * This is an init-time function and cannot be called after calling
-   * start() or bind().
-   *
-   * @param type The peer type this policy applies to.
-   * @param p The policy to apply.
-   */
-  virtual void set_policy(int type, Policy p) = 0;
-
-  /**
-   * Set a Throttler which is applied to all Messages from the given
-   * type of peer.
-   * This is an init-time function and cannot be called after calling
-   * start() or bind().
-   *
-   * @param type The peer type this Throttler will apply to.
-   * @param t The Throttler to apply. SimpleMessenger does not take
-   * ownership of this pointer, but you must not destroy it before
-   * you destroy SimpleMessenger.
-   */
-  virtual void set_policy_throttler(int type, Throttle *t) = 0;
-
-  /**
-   * create a new messenger
-   *
-   * Create a new messenger instance, with whatever implementation is
-   * available or specified via the configuration in cct.
-   *
-   * @param cct context
-   * @param name entity name to register
-   * @param nonce nonce value to uniquely identify this instance on the current host
-   */
-  static Messenger *create(CephContext *cct,
-                           entity_name_t name,
-                           uint64_t nonce);
 protected:
+  /**
+   * @defgroup Subclass Interfacing
+   * @{
+   */
   /**
    * A courtesy function for Messenger implementations which
    * will be called when we receive our first Dispatcher.
    */
   virtual void ready() { }
-
+  /**
+   * @} // Subclass Interfacing
+   */
+  /**
+   * @defgroup Dispatcher Interfacing
+   * @{
+   */
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
@@ -548,6 +585,9 @@ protected:
 	return true;
     return false;
   }
+  /**
+   * @} // Dispatcher Interfacing
+   */
 };
 
 
