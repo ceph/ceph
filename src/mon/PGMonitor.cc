@@ -307,6 +307,8 @@ void PGMonitor::create_pending()
 {
   pending_inc = PGMap::Incremental();
   pending_inc.version = pg_map.version + 1;
+  pending_inc.full_ratio = pg_map.full_ratio;
+  pending_inc.nearfull_ratio = pg_map.nearfull_ratio;
   dout(10) << "create_pending v " << pending_inc.version << dendl;
 }
 
