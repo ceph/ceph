@@ -45,10 +45,6 @@ using namespace __gnu_cxx;
  *    message handler and handles queuing and ordering of pipes. Each
  *    pipe maintains its own message ordering, but the SimpleMessenger
  *    decides what order pipes get to deliver messages in.
- *
- * This class should only be created on the heap, and it should be destroyed
- * via a call to destroy(). Making it on the stack or otherwise calling
- * the destructor will lead to badness.
  */
 
 class SimpleMessenger : public Messenger {

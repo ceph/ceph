@@ -113,8 +113,6 @@ public:
   }
   virtual ~Messenger() {}
 
-  virtual void destroy() {}
-
   /**
    * create a new messenger
    *
@@ -219,9 +217,9 @@ public:
    * start() or bind().
    *
    * @param type The peer type this Throttler will apply to.
-   * @param t The Throttler to apply. SimpleMessenger does not take
+   * @param t The Throttler to apply. The Messenger does not take
    * ownership of this pointer, but you must not destroy it before
-   * you destroy SimpleMessenger.
+   * you destroy the Messenger.
    */
   virtual void set_policy_throttler(int type, Throttle *t) = 0;
   /**
