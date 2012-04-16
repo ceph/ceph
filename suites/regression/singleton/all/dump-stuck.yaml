@@ -5,6 +5,8 @@ roles:
 - - osd.1
 tasks:
 - ceph:
+    log-whitelist:
+    - wrongly marked me down or wrong addr
     conf:
       mon:
         mon_osd_report_timeout: 90
