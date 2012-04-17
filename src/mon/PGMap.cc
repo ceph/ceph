@@ -226,9 +226,9 @@ void PGMap::redo_full_sets()
        i != osd_stat.end();
        ++i) {
     float ratio = ((float)i->second.kb_used) / ((float)i->second.kb);
-    if ( ratio > full_ratio )
+    if (full_ratio > 0 && ratio > full_ratio)
       full_osds.insert(i->first);
-    else if ( ratio > nearfull_ratio )
+    else if (nearfull_ratio > 0 && ratio > nearfull_ratio)
       nearfull_osds.insert(i->first);
   }
 }
