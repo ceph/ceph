@@ -399,6 +399,9 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, string key)
   to_rm.insert(key);
 
   ::encode(to_rm, update_bl);
+
+  op.op.op = CEPH_OSD_OP_OMAPRMKEYS;
+
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 

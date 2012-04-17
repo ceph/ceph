@@ -598,6 +598,8 @@ public:
 
     utime_t stamp;
 
+    bool precalc_pgid;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, eversion_t *ov) :
       session(NULL), session_item(this), incarnation(0),
@@ -607,7 +609,7 @@ public:
       outbl(NULL),
       flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
-      paused(false), objver(ov), reply_epoch(NULL) {
+      paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
