@@ -1628,6 +1628,16 @@ extern "C" int64_t rados_ioctx_get_id(rados_ioctx_t io)
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->get_id();
 }
+
+extern "C" int rados_ioctx_get_pool_name(rados_ioctx_t io, char *s, unsigned maxlen)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  if (ctx->pool_name.length() >= maxlen)
+    return -ERANGE;
+  strcpy(s, ctx->pool_name.c_str());
+  return ctx->pool_name.length();
+}
+
 // snaps
 
 extern "C" int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname)
