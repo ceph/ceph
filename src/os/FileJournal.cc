@@ -847,7 +847,7 @@ void FileJournal::queue_completions_thru(uint64_t seq)
 int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes)
 {
   // grab next item
-  write_item next_write = peek_write();
+  write_item &next_write = peek_write();
   uint64_t seq = next_write.seq;
   bufferlist &ebl = next_write.bl;
   unsigned head_size = sizeof(entry_header_t);
@@ -1441,14 +1441,16 @@ bool FileJournal::writeq_empty()
   return writeq.empty();
 }
 
-FileJournal::write_item FileJournal::peek_write()
+FileJournal::write_item &FileJournal::peek_write()
 {
+  assert(write_lock.is_locked());
   Mutex::Locker locker(queue_lock);
   return writeq.front();
 }
 
 void FileJournal::pop_write()
 {
+  assert(write_lock.is_locked());
   Mutex::Locker locker(queue_lock);
   writeq.pop_front();
   if (writeq.empty())
@@ -1525,12 +1527,11 @@ void FileJournal::committed_thru(uint64_t seq)
   }
 
   // committed but unjournaled items
-  write_item qitem;
-  while (!writeq_empty() && (qitem = peek_write()).seq <= seq) {
-    dout(15) << " dropping committed but unwritten seq " << writeq.front().seq 
-	     << " len " << writeq.front().bl.length()
+  while (!writeq_empty() && peek_write().seq <= seq) {
+    dout(15) << " dropping committed but unwritten seq " << peek_write().seq 
+	     << " len " << peek_write().bl.length()
 	     << dendl;
-    put_throttle(1, qitem.bl.length());
+    put_throttle(1, peek_write().bl.length());
     pop_write();
   }
   

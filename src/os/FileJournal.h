@@ -65,7 +65,7 @@ public:
   deque<write_item> writeq;
   deque<completion_item> completions;
   bool writeq_empty();
-  write_item peek_write();
+  write_item &peek_write();
   void pop_write();
   void flush_queue();
   void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
