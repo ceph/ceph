@@ -326,7 +326,7 @@ public:
    * on each.
    */
   virtual void mark_down_all();
-  /** @} // Connection Mangement */
+  /** @} // Connection Management */
 protected:
   /**
    * @defgroup Messenger Interfaces
@@ -678,35 +678,59 @@ private:
   void dispatch_throttle_release(uint64_t msize);
 
   // SimpleMessenger stuff
+  /// overall lock used for SimpleMessenger data structures
   Mutex lock;
-  Cond  wait_cond;  // for wait()
+  /// This Cond is slept on by wait() and signaled by dispatch_entry()
+  Cond  wait_cond;
+  /**
+   *  false; set to true if the SimpleMessenger bound to a specific address;
+   *  and set false again by Accepter::stop(). This isn't lock-protected
+   *  since you shouldn't be able to race the only writers.
+   */
   bool did_bind;
+  /// Throttle preventing us from building up a big backlog waiting for dispatch
   Throttle dispatch_throttler;
 
-  // where i listen
+  /// true, specifying we haven't learned our addr; set false when we find it.
+  // maybe this should be protected by the lock?
   bool need_addr;
+  /// approximately unique ID set by the Constructor for use in entity_addr_t
   uint64_t nonce;
   
-  // local
+  /// flag set true when all the threads need to shut down
   bool destination_stopped;
   
-  // remote
+  /// hash map of addresses to Pipes
   hash_map<entity_addr_t, Pipe*> rank_pipe;
- 
+  /// the peer type of our endpoint
   int my_type;
 
 
   // --- policy ---
+  /// the default Policy we use for Pipes
   Policy default_policy;
+  /// map specifying different Policies for specific peer types
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
   // --- pipes ---
+  /// a set of all the Pipes we have which are somehow active
   set<Pipe*>      pipes;
+  /// a list of Pipes we want to tear down
   list<Pipe*>     pipe_reap_queue;
 
+  /// lock to protect the global_seq TODO: this should probably be a spinlock
   Mutex global_seq_lock;
+  /// counter for the global seq our connection protocol uses TODO: or else make this atomic_t
   __u32 global_seq;
 public:
+  /**
+   * Get the Policy associated with a type of peer.
+   * TODO: This is public so Pipe can use it, and most users
+   * are const -- but not set_policy_throttler.
+   * @param t The peer type to get the default policy for.
+   *
+   * @return A Policy reference.
+   */
   Policy& get_policy(int t) {
     if (policy_map.count(t))
       return policy_map[t];
@@ -714,10 +738,26 @@ public:
       return default_policy;
   }
 
+  /**
+   * Create a Pipe associated with the given entity (of the given type).
+   * Initiate the connection. (This function returning does not guarantee
+   * connection success.)
+   *
+   * TODO: this should be a private function; nobody else calls it.
+   *
+   * @param addr The address of the entity to connect to.
+   * @param type The peer type of the entity at the address.
+   *
+   * @return a pointer to the newly-created Pipe. Caller does not own a
+   * reference; take one if you need it.
+   */
   Pipe *connect_rank(const entity_addr_t& addr, int type);
 
 
-  // reaper
+  /**
+   * A thread used to tear down Pipes when they're complete.
+   * TODO: reaper stuff should all be private; nobody else needs access.
+   */
   class ReaperThread : public Thread {
     SimpleMessenger *msgr;
   public:
@@ -731,8 +771,27 @@ public:
   bool reaper_started, reaper_stop;
   Cond reaper_cond;
 
+  /**
+   * This function is used by the reaper thread. As long as nobody
+   * has set reaper_stop, it calls the reaper function, then
+   * waits to be signaled when it needs to reap again (or when it needs
+   * to stop).
+   */
   void reaper_entry();
+  /**
+   * Look through the pipes in the pipe_reap_queue and tear them down.
+   * TODO: This should be private; it's called from reaper_entry() and wait().
+   */
   void reaper();
+  /**
+   * Add a pipe to the pipe_reap_queue, to be torn down on
+   * the next call to reaper().
+   * It should really only be the Pipe calling this, in our current
+   * implementation.
+   *
+   * @param pipe A Pipe which has stopped its threads and is
+   * ready to be torn down.
+   */
   void queue_reap(Pipe *pipe);
 
   /***********************/
@@ -748,6 +807,19 @@ private:
     }
   } dispatch_thread;
 
+  /**
+   * This function is used by the dispatch thread. It runs continuously
+   * until dispatch_queue.stop is set to true, choosing what order the Pipes
+   * get to deliver in, and sending out their chosen Message via the
+   * ms_deliver_* functions.
+   * It should really only by dispatch_thread calling this, in our
+   * current implementation.
+   *
+   * TODO: huh, right now this is private but dispatch_thread can still
+   * access it (see http://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#45
+   * which gcc apparently implements). Make all these inner classes
+   * friends and declare the functions private to make things consistent?
+   */
   void dispatch_entry();
 
   SimpleMessenger *msgr; //hack to make dout macro work, will fix
@@ -756,9 +828,22 @@ private:
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
+  /**
+   * Get the protocol version we support for the given peer type: either
+   * a peer protocol (if it matches our own), the protocol version for the
+   * peer (if we're connecting), or our protocol version (if we're accepting).
+   */
   int get_proto_version(int peer_type, bool connect);
 
 public:
+  /**
+   * Initialize the SimpleMessenger!
+   *
+   * @param cct The CephContext to use
+   * @param name The name to assign ourselves
+   * _nonce A unique ID to use for this SimpleMessenger. It should not
+   * be a value that will be repeated if the daemon restarts.
+   */
   SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
     Messenger(cct, name),
     accepter(this),
@@ -775,10 +860,20 @@ public:
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
     init_local_pipe();
   }
+  /**
+   * Destroy the SimpleMessenger. Pretty simple since all the work is done
+   * elsewhere.
+   * TODO: do some validity checks that the proper shutdown sequence has
+   * been followed?
+   */
   virtual ~SimpleMessenger() {
     delete dispatch_queue.local_pipe;
   }
-
+  /**
+   * Increment the global sequence for this SimpleMessenger and return it.
+   *
+   * @return a global sequence ID that nobody else has seen.
+   */
   __u32 get_global_seq(__u32 old=0) {
     Mutex::Locker l(global_seq_lock);
     if (old > global_seq)
@@ -786,14 +881,49 @@ public:
     return ++global_seq;
   }
 
+  /**
+   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
+   */
   AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
+  /**
+   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
+   */
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
 			 bool& isvalid);
 
+  /**
+   * Queue up a Message for delivery to the entity specified
+   * by addr and dest_type.
+   * TODO: this should be private.
+   *
+   * @param m The Message to queue up. This function eats a reference.
+   * @param addr The address to send the Message to.
+   * @param dest_type The peer type of the address we're sending to
+   * @param lazy If true, do not establish or fix a Connection to send the Message;
+   * just drop silently under failure.
+   */
   void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
+  /**
+   * Queue up a Message for delivery along the specified Pipe.
+   * TODO: this should be private.
+   *
+   * @param m The Message to queue up. This function eats a reference.
+   * @param pipe The Pipe to send the Message out on.
+   */
   void submit_message(Message *m, Pipe *pipe);
-
+  /**
+   * Tell the SimpleMessenger its full IP address.
+   *
+   * This is used by Pipes when connecting to other endpoints, and
+   * probably shouldn't be called by anybody else.
+   */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
+  /**
+   * Fill in the address and peer type for the local pipe, which
+   * is used for delivering messages back to ourself (whether actual Messages
+   * submitted by the endpoint, or interrupts we use to process things like
+   * dead Pipes in a fair order).
+   */
   void init_local_pipe();
 
 } ;
