@@ -88,8 +88,12 @@ namespace librados
     int set_safe_callback(void *cb_arg, callback_t cb);
     int wait_for_complete();
     int wait_for_safe();
+    int wait_for_complete_and_cb();
+    int wait_for_safe_and_cb();
     bool is_complete();
     bool is_safe();
+    bool is_complete_and_cb();
+    bool is_safe_and_cb();
     int get_return_value();
     int get_version();
     void release();

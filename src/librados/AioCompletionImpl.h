@@ -92,6 +92,32 @@ struct librados::AioCompletionImpl {
     lock.Unlock();
     return r;
   }
+  int wait_for_complete_and_cb() {
+    lock.Lock();
+    while (!ack || callback_complete)
+      cond.Wait(lock);
+    lock.Unlock();
+    return 0;
+  }
+  int wait_for_safe_and_cb() {
+    lock.Lock();
+    while (!safe || callback_safe)
+      cond.Wait(lock);
+    lock.Unlock();
+    return 0;
+  }
+  int is_complete_and_cb() {
+    lock.Lock();
+    int r = ack && !callback_complete;
+    lock.Unlock();
+    return r;
+  }
+  int is_safe_and_cb() {
+    lock.Lock();
+    int r = safe && !callback_safe;
+    lock.Unlock();
+    return r;
+  }
   int get_return_value() {
     lock.Lock();
     int r = rval;
@@ -142,7 +168,11 @@ struct C_AioComplete : public Context {
     rados_callback_t cb = c->callback_complete;
     void *cb_arg = c->callback_arg;
     cb(c, cb_arg);
-    c->put();
+
+    c->lock.Lock();
+    c->callback_complete = NULL;
+    c->cond.Signal();
+    c->put_unlock();
   }
 };
 
@@ -157,7 +187,11 @@ struct C_AioSafe : public Context {
     rados_callback_t cb = c->callback_safe;
     void *cb_arg = c->callback_arg;
     cb(c, cb_arg);
-    c->put();
+
+    c->lock.Lock();
+    c->callback_safe = NULL;
+    c->cond.Signal();
+    c->put_unlock();
   }
 };
 

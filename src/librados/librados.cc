@@ -460,6 +460,30 @@ bool librados::AioCompletion::AioCompletion::is_safe()
   return c->is_safe();
 }
 
+int librados::AioCompletion::AioCompletion::wait_for_complete_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->wait_for_complete_and_cb();
+}
+
+int librados::AioCompletion::AioCompletion::wait_for_safe_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->wait_for_safe_and_cb();
+}
+
+bool librados::AioCompletion::AioCompletion::is_complete_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->is_complete_and_cb();
+}
+
+bool librados::AioCompletion::AioCompletion::is_safe_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->is_safe_and_cb();
+}
+
 int librados::AioCompletion::AioCompletion::get_return_value()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
@@ -1971,6 +1995,26 @@ extern "C" int rados_aio_is_complete(rados_completion_t c)
 extern "C" int rados_aio_is_safe(rados_completion_t c)
 {
   return ((librados::AioCompletionImpl*)c)->is_safe();
+}
+
+extern "C" int rados_aio_wait_for_complete_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->wait_for_complete_and_cb();
+}
+
+extern "C" int rados_aio_wait_for_safe_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->wait_for_safe_and_cb();
+}
+
+extern "C" int rados_aio_is_complete_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->is_complete_and_cb();
+}
+
+extern "C" int rados_aio_is_safe_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->is_safe_and_cb();
 }
 
 extern "C" int rados_aio_get_return_value(rados_completion_t c)

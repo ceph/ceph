@@ -1227,6 +1227,46 @@ int rados_aio_is_complete(rados_completion_t c);
 int rados_aio_is_safe(rados_completion_t c);
 
 /**
+ * Block until an operation completes and callback completes
+ *
+ * This means it is in memory on all replicas and can be read.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+int rados_aio_wait_for_complete_and_cb(rados_completion_t c);
+
+/**
+ * Block until an operation is safe and callback has completed
+ *
+ * This means it is on stable storage on all replicas.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+int rados_aio_wait_for_safe_and_cb(rados_completion_t c);
+
+/**
+ * Has an asynchronous operation and callback completed
+ *
+ * @param c async operation to inspect
+ * @returns whether c is complete
+ */
+int rados_aio_is_complete_and_cb(rados_completion_t c);
+
+/**
+ * Is an asynchronous operation safe and has the callback completed
+ *
+ * @param c async operation to inspect
+ * @returns whether c is safe
+ */
+int rados_aio_is_safe_and_cb(rados_completion_t c);
+
+/**
  * Get the return value of an asychronous operation
  *
  * The return value is set when the operation is complete or safe,
