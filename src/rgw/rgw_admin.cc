@@ -723,8 +723,14 @@ int main(int argc, char **argv)
 
     if (opt_cmd == OPT_USER_CREATE) {
       if (found) {
-        cerr << "error: user already exists" << std::endl;
-        return 1;
+        if (info.display_name.compare(display_name) != 0 ||
+            info.user_email.compare(user_email) != 0) {
+          cerr << "error: user already exists with different display_name/email" << std::endl;
+          return 1;
+        }
+        /* turn into OPT_USER_MODIFY */
+        opt_cmd = OPT_USER_MODIFY;
+        user_modify_op = true;
       }
     } else if (!found) {
       cerr << "error reading user info, aborting" << std::endl;
