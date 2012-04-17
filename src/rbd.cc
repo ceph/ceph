@@ -28,6 +28,7 @@
 #include "include/intarith.h"
 
 #include "include/compat.h"
+#include "common/blkdev.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -405,7 +406,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 {
   int fd = open(path, O_RDONLY);
   int r;
-  uint64_t size;
+  int64_t size = 0;
   struct stat stat_buf;
   string md_oid;
   struct fiemap *fiemap;
@@ -424,6 +425,13 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     return r;
   }
   size = (uint64_t)stat_buf.st_size;
+  if (!size) {
+    r = get_block_device_size(fd, &size);
+    if (r < 0) {
+      cerr << "unable to get size of file/block device: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
 
   assert(imgname);
 
