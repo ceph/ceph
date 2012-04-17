@@ -1011,6 +1011,7 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
+	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \
 	common/ceph_argparse.cc \
@@ -1204,6 +1205,7 @@ noinst_HEADERS = \
 	common/ceph_argparse.h\
 	common/ceph_context.h\
 	common/xattr.h\
+	common/blkdev.h\
 	common/compiler_extensions.h\
 	common/debug.h\
 	common/dout.h\

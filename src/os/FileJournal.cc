@@ -29,9 +29,7 @@
 #include <sys/stat.h>
 #include <sys/mount.h>
 
-#if defined(__FreeBSD__)
-#include <sys/disk.h>
-#endif
+#include "common/blkdev.h"
 
 
 #define dout_subsys ceph_subsys_journal
@@ -124,23 +122,8 @@ int FileJournal::_open(bool forwrite, bool create)
 
 int FileJournal::_open_block_device()
 {
-  int ret = 0;
   int64_t bdev_sz = 0;
-#if defined(__FreeBSD__)
-  ret = ::ioctl(fd, DIOCGMEDIASIZE, &bdev_sz);
-#elif defined(__linux__)
-#ifdef BLKGETSIZE64
-  // ioctl block device
-  ret = ::ioctl(fd, BLKGETSIZE64, &bdev_sz);
-#elif BLKGETSIZE
-  // hrm, try the 32 bit ioctl?
-  unsigned long sectors = 0;
-  ret = ::ioctl(fd, BLKGETSIZE, &sectors);
-  bdev_sz = sectors * 512ULL;
-#endif
-#else
-#error "Compile error: we don't know how to get the size of a raw block device."
-#endif /* !__FreeBSD__ */
+  int ret = get_block_device_size(fd, &bdev_sz);
   if (ret) {
     dout(0) << __func__ << ": failed to read block device size." << dendl;
     return -EIO;
