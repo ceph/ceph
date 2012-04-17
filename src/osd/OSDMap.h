@@ -553,6 +553,9 @@ public:
     return -ENOENT;
   }
 
+  int64_t get_pool_max() const {
+    return pool_max;
+  }
   const map<int64_t,pg_pool_t>& get_pools() const {
     return pools;
   }

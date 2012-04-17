@@ -833,6 +833,7 @@ void OSDMap::dump(Formatter *f) const
   f->dump_stream("modified") << get_modified();
   f->dump_string("flags", get_flag_string());
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
+  f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
 
   f->open_array_section("pools");
