@@ -99,7 +99,7 @@ namespace librbd {
     {
       md_ctx.dup(p);
       data_ctx.dup(p);
-      if (cct->_conf->rbd_cache_enabled) {
+      if (cct->_conf->rbd_cache) {
 	Mutex::Locker l(cache_lock);
 	ldout(cct, 20) << "enabling writback caching..." << dendl;
 	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
