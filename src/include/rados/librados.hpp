@@ -326,6 +326,8 @@ namespace librados
     // get pool auid
     int get_auid(uint64_t *auid_);
 
+    std::string get_pool_name();
+
     // create an object
     int create(const std::string& oid, bool exclusive);
     int create(const std::string& oid, bool exclusive, const std::string& category);

@@ -103,7 +103,12 @@ namespace librbd {
 	Mutex::Locker l(cache_lock);
 	ldout(cct, 20) << "enabling writback caching..." << dendl;
 	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
-	object_cacher = new ObjectCacher(cct, *writeback_handler, cache_lock,
+	string ocname = string("librbd-") + data_ctx.get_pool_name() + string("/") + name;
+	if (snapname.length()) {
+	  ocname += "@";
+	  ocname += snapname;
+	}
+	object_cacher = new ObjectCacher(cct, name, *writeback_handler, cache_lock,
 					 NULL, NULL);
 	object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
 	object_cacher->start();

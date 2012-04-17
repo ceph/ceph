@@ -16,8 +16,31 @@
 
 class CephContext;
 class WritebackHandler;
+class PerfCounters;
+
+enum {
+  l_objectcacher_first = 25000,
+
+  l_objectcacher_cache_ops_hit, // ops we satisfy completely from cache
+  l_objectcacher_cache_ops_miss, // ops we don't satisfy completely from cache
+
+  l_objectcacher_cache_bytes_hit, // bytes read directly from cache
+  l_objectcacher_cache_bytes_miss, // bytes we couldn't read directly from cache
+
+  l_objectcacher_data_read, // total bytes read out
+  l_objectcacher_data_written, // bytes written to cache
+  l_objectcacher_data_flushed, // bytes flushed to WritebackHandler
+  l_objectcacher_overwritten_in_flush, // bytes overwritten while flushing is in progress
+
+  l_objectcacher_write_ops_blocked, // total write ops we delayed due to dirty limits
+  l_objectcacher_write_bytes_blocked, // total number of write bytes we delayed due to dirty limits
+  l_objectcacher_write_time_blocked, // total time in seconds spent blocking a write due to dirty limits
+
+  l_objectcacher_last,
+};
 
 class ObjectCacher {
+  PerfCounters *perfcounter;
  public:
   CephContext *cct;
   class Object;
@@ -202,27 +225,9 @@ class ObjectCacher {
     }
 
     // bh
+    // add to my map
     void add_bh(BufferHead *bh) {
-      // add to my map
       assert(data.count(bh->start()) == 0);
-      
-      if (0) {  // sanity check     FIXME DEBUG
-        //cout << "add_bh " << bh->start() << "~" << bh->length() << endl;
-        map<loff_t,BufferHead*>::iterator p = data.lower_bound(bh->start());
-        if (p != data.end()) {
-          //cout << " after " << *p->second << endl;
-          //cout << " after starts at " << p->first << endl;
-          assert(p->first >= bh->end());
-        }
-        if (p != data.begin()) {
-          p--;
-          //cout << " before starts at " << p->second->start() 
-          //<< " and ends at " << p->second->end() << endl;
-          //cout << " before " << *p->second << endl;
-          assert(p->second->end() <= bh->start());
-        }
-      }
-
       data[bh->start()] = bh;
     }
     void remove_bh(BufferHead *bh) {
@@ -270,6 +275,7 @@ class ObjectCacher {
  private:
   WritebackHandler& writeback_handler;
 
+  string name;
   Mutex& lock;
   
   flush_set_callback_t flush_set_callback;
@@ -303,20 +309,8 @@ class ObjectCacher {
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, ObjectSet *oset, object_locator_t &l) {
-    // have it?
-    if ((uint32_t)l.pool < objects.size()) {
-      if (objects[l.pool].count(oid))
-        return objects[l.pool][oid];
-    } else {
-      objects.resize(l.pool+1);
-    }
-
-    // create it.
-    Object *o = new Object(this, oid, oset, l);
-    objects[l.pool][oid] = o;
-    return o;
-  }
+  Object *get_object(sobject_t oid, ObjectSet *oset,
+                     object_locator_t &l);
   void close_object(Object *ob);
 
   // bh stats
@@ -331,53 +325,8 @@ class ObjectCacher {
 
   void verify_stats() const;
 
-  void bh_stat_add(BufferHead *bh) {
-    switch (bh->get_state()) {
-    case BufferHead::STATE_MISSING:
-      stat_missing += bh->length();
-      break;
-    case BufferHead::STATE_CLEAN:
-      stat_clean += bh->length();
-      break;
-    case BufferHead::STATE_DIRTY: 
-      stat_dirty += bh->length(); 
-      bh->ob->dirty_or_tx += bh->length();
-      bh->ob->oset->dirty_or_tx += bh->length();
-      break;
-    case BufferHead::STATE_TX: 
-      stat_tx += bh->length(); 
-      bh->ob->dirty_or_tx += bh->length();
-      bh->ob->oset->dirty_or_tx += bh->length();
-      break;
-    case BufferHead::STATE_RX:
-      stat_rx += bh->length();
-      break;
-    }
-    if (stat_waiter) stat_cond.Signal();
-  }
-  void bh_stat_sub(BufferHead *bh) {
-    switch (bh->get_state()) {
-    case BufferHead::STATE_MISSING:
-      stat_missing -= bh->length();
-      break;
-    case BufferHead::STATE_CLEAN: 
-      stat_clean -= bh->length();
-      break;
-    case BufferHead::STATE_DIRTY: 
-      stat_dirty -= bh->length(); 
-      bh->ob->dirty_or_tx -= bh->length();
-      bh->ob->oset->dirty_or_tx -= bh->length();
-      break;
-    case BufferHead::STATE_TX: 
-      stat_tx -= bh->length(); 
-      bh->ob->dirty_or_tx -= bh->length();
-      bh->ob->oset->dirty_or_tx -= bh->length();
-      break;
-    case BufferHead::STATE_RX:
-      stat_rx -= bh->length();
-      break;
-    }
-  }
+  void bh_stat_add(BufferHead *bh);
+  void bh_stat_sub(BufferHead *bh);
   loff_t get_stat_tx() { return stat_tx; }
   loff_t get_stat_rx() { return stat_rx; }
   loff_t get_stat_dirty() { return stat_dirty; }
@@ -391,25 +340,7 @@ class ObjectCacher {
   }
 
   // bh states
-  void bh_set_state(BufferHead *bh, int s) {
-    // move between lru lists?
-    if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
-      lru_rest.lru_remove(bh);
-      lru_dirty.lru_insert_top(bh);
-      dirty_bh.insert(bh);
-    }
-    if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
-      lru_dirty.lru_remove(bh);
-      lru_rest.lru_insert_top(bh);
-      dirty_bh.erase(bh);
-    }
-
-    // set state
-    bh_stat_sub(bh);
-    bh->set_state(s);
-    bh_stat_add(bh);
-  }      
-
+  void bh_set_state(BufferHead *bh, int s);
   void copy_bh_state(BufferHead *bh1, BufferHead *bh2) { 
     bh_set_state(bh2, bh1->get_state());
   }
@@ -424,26 +355,8 @@ class ObjectCacher {
     //bh->set_dirty_stamp(ceph_clock_now(g_ceph_context));
   };
 
-  void bh_add(Object *ob, BufferHead *bh) {
-    ob->add_bh(bh);
-    if (bh->is_dirty()) {
-      lru_dirty.lru_insert_top(bh);
-      dirty_bh.insert(bh);
-    } else {
-      lru_rest.lru_insert_top(bh);
-    }
-    bh_stat_add(bh);
-  }
-  void bh_remove(Object *ob, BufferHead *bh) {
-    ob->remove_bh(bh);
-    if (bh->is_dirty()) {
-      lru_dirty.lru_remove(bh);
-      dirty_bh.erase(bh);
-    } else {
-      lru_rest.lru_remove(bh);
-    }
-    bh_stat_sub(bh);
-  }
+  void bh_add(Object *ob, BufferHead *bh);
+  void bh_remove(Object *ob, BufferHead *bh);
 
   // io
   void bh_read(BufferHead *bh);
@@ -512,21 +425,15 @@ class ObjectCacher {
     }
   };
 
+  void perf_start();
+  void perf_stop();
 
 
-  ObjectCacher(CephContext *cct_, WritebackHandler& wb, Mutex& l,
+
+  ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg);
-  ~ObjectCacher() {
-    // we should be empty.
-    for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
-        i != objects.end();
-        ++i)
-      assert(!i->size());
-    assert(lru_rest.lru_get_size() == 0);
-    assert(lru_dirty.lru_get_size() == 0);
-    assert(dirty_bh.empty());
-  }
+  ~ObjectCacher();
 
   void start() {
     flusher_thread.create();

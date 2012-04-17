@@ -71,6 +71,10 @@ TEST(LibRadosStat, PoolStat) {
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  char actual_pool_name[80];
+  unsigned l = rados_ioctx_get_pool_name(ioctx, actual_pool_name, sizeof(actual_pool_name));
+  ASSERT_EQ(strlen(actual_pool_name), l);
+  ASSERT_EQ(0, strcmp(actual_pool_name, pool_name.c_str()));
   memset(buf, 0xff, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   struct rados_pool_stat_t stats;
@@ -86,6 +90,8 @@ TEST(LibRadosStat, PoolStatPP) {
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
+  std::string n = ioctx.get_pool_name();
+  ASSERT_EQ(n, pool_name);
   char buf[128];
   memset(buf, 0xff, sizeof(buf));
   bufferlist bl1;
