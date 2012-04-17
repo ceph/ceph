@@ -334,7 +334,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   __u8 op;
   rgw_bucket_dir_entry cur_change;
   rgw_bucket_dir_entry cur_disk;
-  bufferlist cur_disk_bl;
   bufferlist op_bl;
 
   while (!in_iter.end()) {
@@ -346,7 +345,11 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       return -EINVAL;
     }
 
-    cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
+    bufferlist cur_disk_bl;
+    int ret = cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
+    if (ret < 0 && ret != -ENOENT)
+      return -EINVAL;
+
     if (cur_disk_bl.length()) {
       bufferlist::iterator cur_disk_iter = cur_disk_bl.begin();
       try {
@@ -366,8 +369,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         }
       }
     }
-
-    int ret = 0;
 
     if (cur_disk.pending_map.empty()) {
       struct rgw_bucket_category_stats& stats =
