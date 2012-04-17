@@ -974,7 +974,7 @@ int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
-  if (op->oid.name.length()) {
+  if (!op->precalc_pgid) {
     int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
@@ -1349,6 +1349,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   o->reply_epoch = &onack->epoch;
 
   o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
+  o->precalc_pgid = true;
 
   op_submit(o);
 }
