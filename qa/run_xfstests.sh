@@ -45,7 +45,7 @@ TESTS="-g auto"	# The "auto" group is supposed to be "known good"
 TESTS="1-9 11-15 17 19-21 26-28 31-34 41 45-48 51-54 56 61-70 75-76"
 TESTS="${TESTS} 79 84 88-89 91-92 103 108 116 118-120 130"
 TESTS="${TESTS} 135 137-141 166 169 179 182-183 188-190 194"
-TESTS="${TESTS} 196 199 201 203 219-226 232 234 238 244 253"
+TESTS="${TESTS} 196 199 201 203 219-226 234 238 244 253"
 TESTS="${TESTS} 262 269 273-275"
 # 275 was the highest available test as of 4/10/12.
 
@@ -54,13 +54,15 @@ TESTS="${TESTS} 262 269 273-275"
 #
 # Test 049 was pulled because it caused a kernel fault.
 #	http://tracker.newdream.net/issues/2260
+# Test 232 was pulled because it caused an XFS error
+#	http://tracker.newdream.net/issues/2302
 #
 # These were not run for one (anticipated) reason or another:
 # 010 016 030 035 040 044 057 058 059 060 072 077 090 093 094
 # 095 097 098 099 104 112 113 122 123 125 128 142 143 144 145 146 147
 # 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 168
 # 175 176 177 178 180 185 191 193 195 197 207 208 209 210 211 212 213
-# 217 228 230 231 233 235 239 254 256 260 264 265 266 270 271 272^
+# 217 228 230 231-233 235 239 254 256 260 264 265 266 270 271 272
 #
 # These tests all failed (produced output different from golden):
 # 029 042 050 073 074 078 083 085 086 087 096 100 105 109 110 117
