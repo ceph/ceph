@@ -21,6 +21,8 @@
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
+#include <boost/scoped_ptr.hpp>
+#include <tr1/memory>
 
 // re-include our assert to clobber boost's
 #include "include/assert.h" 
@@ -780,6 +782,31 @@ public:
 
   // -- recovery state --
 
+  struct StateMachineEvt {
+    virtual ~StateMachineEvt() {}
+  };
+  template < class T >
+  struct _StateMachineEvt : public boost::statechart::event< T >,
+			    public StateMachineEvt {
+    virtual ~_StateMachineEvt() {}
+  };
+
+  class CephPeeringEvt {
+    epoch_t epoch_sent;
+    epoch_t epoch_requested;
+    boost::scoped_ptr<StateMachineEvt> evt;
+  public:
+    CephPeeringEvt(epoch_t epoch_sent,
+		   epoch_t epoch_requested,
+		   StateMachineEvt *evt) :
+      epoch_sent(epoch_sent), epoch_requested(epoch_requested),
+      evt(evt) {}
+    epoch_t get_epoch_sent() { return epoch_sent; }
+    epoch_t get_epoch_requested() { return epoch_requested; }
+    StateMachineEvt &get_event() { return *evt; }
+  };
+  typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
+
   /* Encapsulates PG recovery process */
   class RecoveryState {
     void start_handle(RecoveryCtx *new_ctx) {
@@ -798,33 +825,33 @@ public:
       rctx = 0;
     }
 
-    struct QueryState : boost::statechart::event< QueryState > {
+    struct QueryState : _StateMachineEvt< QueryState > {
       Formatter *f;
       QueryState(Formatter *f) : f(f) {}
     };
 
-    struct MInfoRec : boost::statechart::event< MInfoRec > {
+    struct MInfoRec : _StateMachineEvt< MInfoRec > {
       int from;
       pg_info_t &info;
       MInfoRec(int from, pg_info_t &info) :
 	from(from), info(info) {}
     };
 
-    struct MLogRec : boost::statechart::event< MLogRec > {
+    struct MLogRec : _StateMachineEvt< MLogRec > {
       int from;
       MOSDPGLog *msg;
       MLogRec(int from, MOSDPGLog *msg) :
 	from(from), msg(msg) {}
     };
 
-    struct MNotifyRec : boost::statechart::event< MNotifyRec > {
+    struct MNotifyRec : _StateMachineEvt< MNotifyRec > {
       int from;
       pg_info_t &info;
       MNotifyRec(int from, pg_info_t &info) :
 	from(from), info(info) {}
     };
 
-    struct MQuery : boost::statechart::event< MQuery > {
+    struct MQuery : _StateMachineEvt< MQuery > {
       int from;
       const pg_query_t &query;
       epoch_t query_epoch;
@@ -832,7 +859,7 @@ public:
 	from(from), query(query), query_epoch(query_epoch) {}
     };
 
-    struct AdvMap : boost::statechart::event< AdvMap > {
+    struct AdvMap : _StateMachineEvt< AdvMap > {
       OSDMapRef osdmap;
       OSDMapRef lastmap;
       vector<int> newup, newacting;
@@ -840,26 +867,26 @@ public:
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
-    struct RecoveryComplete : boost::statechart::event< RecoveryComplete > {
-      RecoveryComplete() : boost::statechart::event< RecoveryComplete >() {}
+    struct RecoveryComplete : _StateMachineEvt< RecoveryComplete > {
+      RecoveryComplete() : _StateMachineEvt< RecoveryComplete >() {}
     };
-    struct ActMap : boost::statechart::event< ActMap > {
-      ActMap() : boost::statechart::event< ActMap >() {}
+    struct ActMap : _StateMachineEvt< ActMap > {
+      ActMap() : _StateMachineEvt< ActMap >() {}
     };
-    struct Activate : boost::statechart::event< Activate > {
-      Activate() : boost::statechart::event< Activate >() {}
+    struct Activate : _StateMachineEvt< Activate > {
+      Activate() : _StateMachineEvt< Activate >() {}
     };
-    struct Initialize : boost::statechart::event< Initialize > {
-      Initialize() : boost::statechart::event< Initialize >() {}
+    struct Initialize : _StateMachineEvt< Initialize > {
+      Initialize() : _StateMachineEvt< Initialize >() {}
     };
-    struct Load : boost::statechart::event< Load > {
-      Load() : boost::statechart::event< Load >() {}
+    struct Load : _StateMachineEvt< Load > {
+      Load() : _StateMachineEvt< Load >() {}
     };
-    struct GotInfo : boost::statechart::event< GotInfo > {
-      GotInfo() : boost::statechart::event< GotInfo >() {}
+    struct GotInfo : _StateMachineEvt< GotInfo > {
+      GotInfo() : _StateMachineEvt< GotInfo >() {}
     };
-    struct NeedUpThru : boost::statechart::event< NeedUpThru > {
-      NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
+    struct NeedUpThru : _StateMachineEvt< NeedUpThru > {
+      NeedUpThru() : _StateMachineEvt< NeedUpThru >() {};
     };
 
 
