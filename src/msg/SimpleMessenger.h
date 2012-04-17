@@ -48,6 +48,7 @@ using namespace __gnu_cxx;
  */
 
 class SimpleMessenger : public Messenger {
+  // First we have the public Messenger interface implementation...
 public:
   /** @defgroup Accessors
    * @{
@@ -63,18 +64,30 @@ public:
    */
   void set_addr_unknowns(entity_addr_t& addr);
   /**
-   * Retrieve the Connection for an endpoint.
-   *
-   * @param dest The endpoint you want to get a Connection for.
-   * @return The requested Connection, as a pointer whose reference you own.
+   * Get the number of Messages which the SimpleMessenger has received
+   * but not yet dispatched.
+   * @return The length of the Dispatch queue.
    */
-  virtual Connection *get_connection(const entity_inst_t& dest);
+  int get_dispatch_queue_len() {
+    return dispatch_queue.get_queue_len();
+  }
   /** @} Accessors */
 
   /**
    * @defgroup Configuration functions
    * @{
    */
+  /**
+   * Set the cluster protocol in use by this daemon.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  void set_cluster_protocol(int p) {
+    assert(!started && !did_bind);
+    cluster_protocol = p;
+  }
   /**
    * Set a policy which is applied to all peers who do not have a type-specific
    * Policy.
@@ -115,17 +128,215 @@ public:
     get_policy(type).throttler = t;
   }
   /**
-   * Set the cluster protocol in use by this daemon.
-   * This is an init-time function and cannot be called after calling
-   * start() or bind().
+   * Bind the SimpleMessenger to a specific address. If bind_addr
+   * is not completely filled in the system will use the
+   * valid portions and cycle through the unset ones (eg, the port)
+   * in an unspecified order.
    *
-   * @param p The cluster protocol to use. Defined externally.
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 if the SimpleMessenger is already running, or
+   * -errno if an error is returned from a system call.
    */
-  void set_cluster_protocol(int p) {
-    assert(!started && !did_bind);
-    cluster_protocol = p;
-  }
+  int bind(entity_addr_t bind_addr);
+  /**
+   * This function performs a full restart of the SimpleMessenger. It
+   * calls mark_down_all() and binds to a new port. (If avoid_port
+   * is set it additionally avoids that specific port.)
+   *
+   * @param avoid_port An additional port to avoid binding to.
+   */
+  int rebind(int avoid_port);
   /** @} Configuration functions */
+
+  /**
+   * @defgroup Startup/Shutdown
+   * @{
+   */
+  /**
+   * Start up the SimpleMessenger. Create worker threads as necessary.
+   * @return 0
+   */
+  virtual int start();
+  /**
+   * Wait until the SimpleMessenger is ready to shut down (triggered by a
+   * call to the shutdown() function), then handle
+   * stopping its threads and cleaning up Pipes and various queues.
+   * Once this function returns, the SimpleMessenger is fully shut down and
+   * can be deleted.
+   */
+  virtual void wait();
+  /**
+   * Tell the SimpleMessenger to shut down. This function does not
+   * complete the shutdown; it just triggers it.
+   *
+   * @return 0
+   */
+  virtual int shutdown();
+
+  /** @} // Startup/Shutdown */
+
+  /**
+   * @defgroup Messaging
+   * @{
+   */
+  /**
+   * Queue the given Message for the given entity.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message. Other guarantees may be provided based
+   * on the Connection policy associated with the dest.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0 on success, or -errno on failure.
+   */
+  virtual int send_message(Message *m, const entity_inst_t& dest);
+  /**
+   * Queue the given Message to send out on the given Connection.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message. Other guarantees may be provided based
+   * on the Connection policy.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param con The Connection to send the Message out on.
+   *
+   * @return 0 on success, or -errno on failure.
+   */
+  virtual int send_message(Message *m, Connection *con);
+  /**
+   * Lazily queue the given Message for the given entity. Unlike with
+   * send_message(), lazy_send_message() will not establish a
+   * Connection if none exists, re-establish the connection if it
+   * has broken, or queue the Message if the connection is broken.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0.
+   */
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
+  /**
+   * Lazily queue the given Message for the given Connection.
+   * TODO: Our implementation here is over-zealous: it is equivalent to send_message().
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0.
+   */
+  virtual int lazy_send_message(Message *m, Connection *con) {
+    return send_message(m, con);
+  }
+  /** @} // Messaging */
+
+  /**
+   * @defgroup Connection Management
+   * @{
+   */
+  /**
+   * Get the Connection object associated with a given entity. If a
+   * Connection does not exist, create one and establish a logical connection.
+   * The caller owns a reference when this returns. Call ->put() when you're
+   * done!
+   *
+   * @param dest The entity to get a connection for.
+   * @return The requested Connection, as a pointer whose reference you own.
+   */
+  virtual Connection *get_connection(const entity_inst_t& dest);
+  /**
+   * Send a "keepalive" ping to the given dest, if it has a working Connection.
+   * If the Messenger doesn't already have a Connection, or if the underlying
+   * connection has broken, this function does nothing.
+   *
+   *
+   * @param dest The entity to send the keepalive to.
+   * @return 0. TODO: should it return error codes for nonexistent/broken ones?
+   */
+  virtual int send_keepalive(const entity_inst_t& addr);
+  /**
+   * Send a "keepalive" ping along the given Connection, if it's working.
+   * If the underlying connection has broken, this function does nothing.
+   *
+   * @param dest The entity to send the keepalive to.
+   * @return 0. TODO: should it return error codes for broken ones?
+   */
+  virtual int send_keepalive(Connection *con);
+  /**
+   * Mark down a Connection to a remote. This will cause us to
+   * discard our outgoing queue for them, and if they try
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset. If there is no
+   * Connection to the given dest, it is a no-op.
+   * It does not generate any notifications to the Dispatcher.
+   *
+   * @param a The address to mark down.
+   */
+  virtual void mark_down(const entity_addr_t& addr);
+  /**
+   * Mark down the given Connection. This will cause us to
+   * discard its outgoing queue, and if the endpoint tries
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset.
+   * It does not generate any notifications to the Dispatcher.
+   *
+   * @param con The Connection to mark down.
+   */
+  virtual void mark_down(Connection *con);
+  /**
+   * Unlike mark_down, this function will try and deliver
+   * all messages before ending the connection. But the
+   * messages are not delivered reliably, and once they've
+   * all been sent out the Connection will be closed and
+   * generate an ms_handle_reset notification to the
+   * Dispatcher.
+   * This function means that you will get a best-effort delivery to
+   * endpoints that you don't necessarily care about any more, but have
+   * courtesy Messages for, and then the Connection will be cleaned up.
+   * TODO: Probably this shouldn't generate a Dispatcher
+   * notification, since the mark_down was requested. I
+   * think maybe we can just call stop() instead of
+   * fault().
+   *
+   * @param con The Connection to mark down.
+   */
+
+  virtual void mark_down_on_empty(Connection *con);
+  /**
+   * Mark a Connection as "disposable", setting it to lossy
+   * (regardless of initial Policy). Unlike mark_down_on_empty()
+   * this does not immediately close the Connection once
+   * Messages have been delivered, so as long as there are no errors you can
+   * continue to receive responses; but it will not attempt
+   * to reconnect for message delivery, either.
+   *
+   * TODO: There's some odd stuff going on with Pipe::disposable
+   * during connect that looks unused; is there more of a contract
+   * that that's enforcing?
+   *
+   * @param con The Connection to mark as disposable.
+   */
+  virtual void mark_disposable(Connection *con);
+  /**
+   * Mark all the existing Connections down. This is equivalent
+   * to iterating over all Connections and calling mark_down()
+   * on each.
+   */
+  virtual void mark_down_all();
+  /** @} // Connection Mangement */
+protected:
+  /**
+   * @defgroup Messenger Interfaces
+   * @{
+   */
+  /**
+   * Start up the DispatchQueue thread once we have somebody to dispatch to.
+   */
+  virtual void ready();
+  /** @} // Messenger Interfaces */
 private:
   class Pipe;
 
@@ -504,67 +715,7 @@ public:
   }
 
   Pipe *connect_rank(const entity_addr_t& addr, int type);
-  /**
-   * Mark down a Connection to a remote. This will cause us to
-   * discard our outgoing queue for them, and if they try
-   * to reconnect they will discard their queue when we
-   * inform them of the session reset. If there is no
-   * Connection to the given dest, it is a no-op.
-   * It does not generate any notifications to the Dispatcher.
-   *
-   * @param a The address to mark down.
-   */
-  virtual void mark_down(const entity_addr_t& addr);
-  /**
-   * Mark down the given Connection. This will cause us to
-   * discard its outgoing queue, and if the endpoint tries
-   * to reconnect they will discard their queue when we
-   * inform them of the session reset.
-   * It does not generate any notifications to the Dispatcher.
-   *
-   * @param con The Connection to mark down.
-   */
-  virtual void mark_down(Connection *con);
-  /**
-   * Unlike mark_down, this function will try and deliver
-   * all messages before ending the connection. But the
-   * messages are not delivered reliably, and once they've
-   * all been sent out the Connection will be closed and
-   * generate an ms_handle_reset notification to the
-   * Dispatcher.
-   * This function means that you will get a best-effort delivery to
-   * endpoints that you don't necessarily care about any more, but have
-   * courtesy Messages for, and then the Connection will be cleaned up.
-   * TODO: Probably this shouldn't generate a Dispatcher
-   * notification, since the mark_down was requested. I
-   * think maybe we can just call stop() instead of
-   * fault().
-   *
-   * @param con The Connection to mark down.
-   */
 
-  virtual void mark_down_on_empty(Connection *con);
-  /**
-   * Mark a Connection as "disposable", setting it to lossy
-   * (regardless of initial Policy). Unlike mark_down_on_empty()
-   * this does not immediately close the Connection once
-   * Messages have been delivered, so as long as there are no errors you can
-   * continue to receive responses; but it will not attempt
-   * to reconnect for message delivery, either.
-   *
-   * TODO: There's some odd stuff going on with Pipe::disposable
-   * during connect that looks unused; is there more of a contract
-   * that that's enforcing?
-   *
-   * @param con The Connection to mark as disposable.
-   */
-  virtual void mark_disposable(Connection *con);
-  /**
-   * Mark all the existing Connections down. This is equivalent
-   * to iterating over all Connections and calling mark_down()
-   * on each.
-   */
-  virtual void mark_down_all();
 
   // reaper
   class ReaperThread : public Thread {
@@ -583,67 +734,6 @@ public:
   void reaper_entry();
   void reaper();
   void queue_reap(Pipe *pipe);
-
-
-  /***** Messenger-required functions  **********/
-  int get_dispatch_queue_len() {
-    return dispatch_queue.get_queue_len();
-  }
-
-  virtual void ready();
-  virtual int shutdown();
-  /**
-   * Queue the given Message for the given entity.
-   * Success in this function does not guarantee Message delivery, only
-   * success in queueing the Message. Other guarantees may be provided based
-   * on the Connection policy associated with the dest.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0 on success, or -errno on failure.
-   */
-  virtual int send_message(Message *m, const entity_inst_t& dest);
-  /**
-   * Queue the given Message to send out on the given Connection.
-   * Success in this function does not guarantee Message delivery, only
-   * success in queueing the Message. Other guarantees may be provided based
-   * on the Connection policy.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param con The Connection to send the Message out on.
-   *
-   * @return 0 on success, or -errno on failure.
-   */
-  virtual int send_message(Message *m, Connection *con);
-  /**
-   * Lazily queue the given Message for the given entity. Unlike with
-   * send_message(), lazy_send_message() will not establish a
-   * Connection if none exists, re-establish the connection if it
-   * has broken, or queue the Message if the connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
-  /**
-   * Lazily queue the given Message for the given Connection.
-   * Our implementation here is over-zealous: it is equivalent to send_message().
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, Connection *con) {
-    return send_message(m, con);
-  }
 
   /***********************/
 
@@ -688,27 +778,6 @@ public:
   virtual ~SimpleMessenger() {
     delete dispatch_queue.local_pipe;
   }
-  /**
-   * Bind the Messenger to a specific address. If bind_addr
-   * is not completely filled in the system will use the
-   * valid portions and cycle through the unset ones (eg, the port)
-   * in an unspecified order.
-   *
-   * @param bind_addr The address to bind to.
-   * @return 0 on success, or -1 on error, or -errno if
-   * we can be more specific about the failure.
-   */
-  int bind(entity_addr_t bind_addr);
-  virtual int start();
-  virtual void wait();
-  /**
-   * This function performs a full restart of the SimpleMessenger. It
-   * calls mark_down_all() and binds to a new port. (If avoid_port
-   * is set it additionally avoids that specific port.)
-   *
-   * @param avoid_port An additional port to avoid binding to.
-   */
-  int rebind(int avoid_port);
 
   __u32 get_global_seq(__u32 old=0) {
     Mutex::Locker l(global_seq_lock);
@@ -723,25 +792,6 @@ public:
 
   void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
   void submit_message(Message *m, Pipe *pipe);
-		      
-  /**
-   * Send a "keepalive" ping to the given dest, if it has a working Connection.
-   * If the Messenger doesn't already have a Connection, or if the underlying
-   * connection has broken, this function does nothing.
-   *
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0. TODO: should it return error codes for nonexistent/broken ones?
-   */
-  virtual int send_keepalive(const entity_inst_t& addr);
-  /**
-   * Send a "keepalive" ping along the given Connection, if it's working.
-   * If the underlying connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0. TODO: should it return error codes for broken ones?
-   */
-  virtual int send_keepalive(Connection *con);
 
   void learned_addr(const entity_addr_t& peer_addr_for_me);
   void init_local_pipe();
