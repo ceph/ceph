@@ -532,6 +532,9 @@ public:
    * all been sent out the Connection will be closed and
    * generate an ms_handle_reset notification to the
    * Dispatcher.
+   * This function means that you will get a best-effort delivery to
+   * endpoints that you don't necessarily care about any more, but have
+   * courtesy Messages for, and then the Connection will be cleaned up.
    * TODO: Probably this shouldn't generate a Dispatcher
    * notification, since the mark_down was requested. I
    * think maybe we can just call stop() instead of
@@ -545,7 +548,9 @@ public:
    * Mark a Connection as "disposable", setting it to lossy
    * (regardless of initial Policy). Unlike mark_down_on_empty()
    * this does not immediately close the Connection once
-   * Messages have been delivered.
+   * Messages have been delivered, so as long as there are no errors you can
+   * continue to receive responses; but it will not attempt
+   * to reconnect for message delivery, either.
    *
    * TODO: There's some odd stuff going on with Pipe::disposable
    * during connect that looks unused; is there more of a contract
