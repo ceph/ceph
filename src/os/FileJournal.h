@@ -29,8 +29,14 @@ using std::deque;
 # include <libaio.h>
 #endif
 
+/**
+ * Implements journaling on top of block device or file.
+ *
+ * Lock ordering is write_lock > aio_lock > queue_lock > flush_lock
+ */
 class FileJournal : public Journal {
 public:
+  /// Protected by queue_lock
   struct completion_item {
     uint64_t seq;
     Context *finish;
@@ -65,6 +71,7 @@ public:
   void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef());
+  /// End protected by queue_lock
 
   /*
    * journal header
@@ -157,9 +164,11 @@ public:
 private:
   string fn;
 
+  /// Protected by flush_lock
   Mutex flush_lock;
   Cond write_empty_cond;
   bool writing;
+  /// End protected by flush_lock
 
   char *zero_buf;
 
@@ -173,6 +182,7 @@ private:
 
 #ifdef HAVE_LIBAIO
   /// state associated with an in-flight aio request
+  /// Protected by aio_lock
   struct aio_info {
     struct iocb iocb;
     bufferlist bl;
@@ -195,6 +205,7 @@ private:
   io_context_t aio_ctx;
   list<aio_info> aio_queue;
   int aio_num, aio_bytes;
+  /// End protected by aio_lock
 #endif
 
   uint64_t last_committed_seq;
