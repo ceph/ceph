@@ -78,10 +78,12 @@ public:
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
    * elsewhere.
-   * TODO: do some validity checks that the proper shutdown sequence has
-   * been followed?
    */
   virtual ~SimpleMessenger() {
+    assert(destination_stopped); // we've been marked as stopped
+    assert(!did_bind); // either we didn't bind or we shut down the Accepter
+    assert(rank_pipe.empty()); // we don't have any running Pipes.
+    assert(reaper_stop && !reaper_started); // the reaper thread is stopped
     delete dispatch_queue.local_pipe;
   }
   /** @defgroup Accessors
