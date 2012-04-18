@@ -5,6 +5,9 @@
 #include <iostream>
 #include "common/debug.h"
 #include "common/config.h"
+#include "msg/Message.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDSubOp.h"
 
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix
@@ -91,21 +94,40 @@ bool OpTracker::check_ops_in_flight(ostream &out)
 
 void OpTracker::mark_event(OpRequest *op, const string &dest)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
   utime_t now = ceph_clock_now(g_ceph_context);
-  dout(1) << "seq: " << op->seq << ", time: " << now << ", event: " << dest
-	  << " " << *op->request << dendl;
+  return _mark_event(op, dest, now);
+}
+
+void OpTracker::_mark_event(OpRequest *op, const string &evt,
+			    utime_t time)
+{
+  Mutex::Locker locker(ops_in_flight_lock);
+  dout(5) << "reqid: " << op->get_reqid() << ", seq: " << op->seq
+	  << ", time: " << time << ", event: " << evt
+	  << ", request: " << *op->request << dendl;
 }
 
 void OpTracker::RemoveOnDelete::operator()(OpRequest *op) {
+  op->mark_event("done");
   tracker->unregister_inflight_op(&(op->xitem));
   delete op;
 }
 
 OpRequestRef OpTracker::create_request(Message *ref)
 {
-  return OpRequestRef(new OpRequest(ref, this),
+  OpRequestRef retval(new OpRequest(ref, this),
 		      RemoveOnDelete(this));
+
+  if (ref->get_type() == CEPH_MSG_OSD_OP) {
+    retval->reqid = static_cast<MOSDOp*>(ref)->get_reqid();
+  } else if (ref->get_type() == MSG_OSD_SUBOP) {
+    retval->reqid = static_cast<MOSDSubOp*>(ref)->reqid;
+  }
+  _mark_event(retval.get(), "header_read", ref->get_recv_stamp());
+  _mark_event(retval.get(), "throttled", ref->get_throttle_stamp());
+  _mark_event(retval.get(), "all_read", ref->get_recv_complete_stamp());
+  _mark_event(retval.get(), "dispatched", ref->get_dispatch_stamp());
+  return retval;
 }
 
 void OpRequest::mark_event(const string &event)
