@@ -131,11 +131,11 @@ void PGMap::apply_incremental(const Incremental& inc)
   assert(inc.version == version+1);
   version++;
   bool ratios_changed = false;
-  if (inc.full_ratio != 0 && inc.full_ratio != full_ratio) {
+  if (inc.full_ratio != full_ratio) {
     full_ratio = inc.full_ratio;
     ratios_changed = true;
   }
-  if (inc.nearfull_ratio != 0 && inc.nearfull_ratio != nearfull_ratio) {
+  if (inc.nearfull_ratio != nearfull_ratio) {
     nearfull_ratio = inc.nearfull_ratio;
     ratios_changed = true;
   }
