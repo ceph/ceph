@@ -4405,20 +4405,19 @@ void OSD::handle_pg_notify(OpRequestRef op)
     if (!pg)
       continue;
 
-    if (pg->old_peering_msg(m->get_epoch(), m->get_query_epoch())) {
-      dout(10) << "ignoring old peering message " << *m << dendl;
-      pg->unlock();
-      delete t;
-      delete fin;
-      continue;
-    }
-
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
     pg->handle_notify(m->get_epoch(), m->get_query_epoch(), from, *it, &rctx);
     pg->write_if_dirty(*t);
 
-    int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
+    if (!t->empty()) {
+      int tr = store->queue_transaction(
+	&pg->osr,
+	t, new ObjectStore::C_DeleteTransaction(t), fin);
+      assert(tr == 0);
+    } else {
+      delete t;
+      delete fin;
+    }
     pg->unlock();
   }
   
@@ -4454,14 +4453,6 @@ void OSD::handle_pg_log(OpRequestRef op)
     return;
   }
 
-  if (pg->old_peering_msg(m->get_epoch(), m->get_query_epoch())) {
-    dout(10) << "ignoring old peering message " << *m << dendl;
-    pg->unlock();
-    delete t;
-    delete fin;
-    return;
-  }
-
   op->mark_started();
 
   map< int, map<pg_t,pg_query_t> > query_map;
@@ -4473,9 +4464,15 @@ void OSD::handle_pg_log(OpRequestRef op)
   do_queries(query_map);
   do_infos(info_map);
 
-  int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-  assert(!tr);
-
+  if (!t->empty()) {
+    int tr = store->queue_transaction(
+      &pg->osr,
+      t, new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(!tr);
+  } else {
+    delete t;
+    delete fin;
+  }
   maybe_update_heartbeat_peers();
 }
 
@@ -4512,22 +4509,18 @@ void OSD::handle_pg_info(OpRequestRef op)
     if (!pg)
       continue;
 
-    if (pg->old_peering_msg(m->get_epoch(), m->get_epoch())) {
-      dout(10) << "ignoring old peering message " << *m << dendl;
-      pg->unlock();
-      delete t;
-      delete fin;
-      continue;
-    }
-
     PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
 
     pg->handle_info(m->get_epoch(), m->get_epoch(), from, *p, &rctx);
     pg->write_if_dirty(*t);
 
-    int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(!tr);
-
+    if (!t->empty()) {
+      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+      assert(!tr);
+    } else {
+      delete t;
+      delete fin;
+    }
     pg->unlock();
   }
 
