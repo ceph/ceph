@@ -1780,9 +1780,14 @@ void OSD::tick()
 
 void OSD::check_ops_in_flight()
 {
-  stringstream ss;
-  if (op_tracker.check_ops_in_flight(ss))
-    clog.warn(ss);
+  vector<string> warnings;
+  if (op_tracker.check_ops_in_flight(warnings)) {
+    for (vector<string>::iterator i = warnings.begin();
+        i != warnings.end();
+        ++i) {
+      clog.warn() << *i;
+    }
+  }
   return;
 }
 

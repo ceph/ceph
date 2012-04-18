@@ -64,7 +64,7 @@ void OpTracker::unregister_inflight_op(xlist<OpRequest*>::item *i)
   i->remove_myself();
 }
 
-bool OpTracker::check_ops_in_flight(ostream &out)
+bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
   Mutex::Locker locker(ops_in_flight_lock);
   if (!ops_in_flight.size())
@@ -73,23 +73,27 @@ bool OpTracker::check_ops_in_flight(ostream &out)
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t too_old = now;
   too_old -= g_conf->osd_op_complaint_time;
-  
+
   dout(10) << "ops_in_flight.size: " << ops_in_flight.size()
-	   << "; oldest is " << now - ops_in_flight.front()->received_time
-	   << " seconds old" << dendl;
+           << "; oldest is " << now - ops_in_flight.front()->received_time
+           << " seconds old" << dendl;
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
+  warning_vector.reserve(ops_in_flight.size());
+  int warning_num = 0;
   while (!i.end() && (*i)->received_time < too_old) {
     // exponential backoff of warning intervals
     if ( ( (*i)->received_time +
-	   (g_conf->osd_op_complaint_time *
-	    (*i)->warn_interval_multiplier) )< now) {
-      out << "old request " << *((*i)->request) << " received at "
-	  << (*i)->received_time << " currently " << (*i)->state_string();
+           (g_conf->osd_op_complaint_time *
+            (*i)->warn_interval_multiplier) )< now) {
+      stringstream ss;
+      ss << "old request " << *((*i)->request) << " received at "
+          << (*i)->received_time << " currently " << (*i)->state_string();
       (*i)->warn_interval_multiplier *= 2;
+      warning_vector[warning_num++] = ss.str();
     }
     ++i;
   }
-  return !i.end();
+  return warning_num;
 }
 
 void OpTracker::mark_event(OpRequest *op, const string &dest)
