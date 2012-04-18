@@ -729,37 +729,35 @@ void OSDMap::decode(bufferlist::iterator& p)
   ::decode(created, p);
   ::decode(modified, p);
 
-  int32_t max_pools = 0;
-  if (v < 4) {
-    ::decode(max_pools, p);
-  }
   if (v < 6) {
+    if (v < 4) {
+      int32_t max_pools = 0;
+      ::decode(max_pools, p);
+      pool_max = max_pools;
+    }
     pools.clear();
     ::decode(n, p);
     while (n--) {
       ::decode(t, p);
       ::decode(pools[t], p);
     }
+    if (v == 4) {
+      ::decode(n, p);
+      pool_max = n;
+    } else if (v == 5) {
+      pool_name.clear();
+      ::decode(n, p);
+      while (n--) {
+	::decode(t, p);
+	::decode(pool_name[t], p);
+      }
+      ::decode(n, p);
+      pool_max = n;
+    }
   } else {
     ::decode(pools, p);
-  }
-  if (v == 5) {
-    pool_name.clear();
-    ::decode(n, p);
-    while (n--) {
-      ::decode(t, p);
-      ::decode(pool_name[t], p);
-    }
-  } else if (v >= 6) {
     ::decode(pool_name, p);
-  }
-  if (v == 4 || v == 5) {
-    ::decode(n, p);
-    pool_max = n;
-  } else if (v >= 6) {
     ::decode(pool_max, p);
-  } else {
-    pool_max = max_pools;
   }
   // kludge around some old bug that zeroed out pool_max (#2307)
   if (pools.size() && pool_max < pools.rbegin()->first) {
