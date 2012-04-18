@@ -1,5 +1,9 @@
 tasks:
 - ceph:
+    conf:
+      client:
+        debug client: 1/20
+        debug ms: 0/10
 - ceph-fuse:
 - workunit:
     all:
