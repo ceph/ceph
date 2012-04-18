@@ -3863,13 +3863,21 @@ ostream& operator<<(ostream& out, const PG& pg)
   return out;
 }
 
+void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
+{
+  if (old_peering_evt(evt))
+    return;
+  assert(!deleting);
+  recovery_state.handle_event(evt, rctx);
+}
+
 void PG::handle_notify(epoch_t msg_epoch,
 		       epoch_t query_epoch,
 		       int from, pg_info_t& i,
 		       RecoveryCtx *rctx)
 {
   dout(10) << "handle_notify " << i << " from osd." << from << dendl;
-  recovery_state.handle_event(
+  handle_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 new MNotifyRec(from, i))),
     rctx);
@@ -3881,7 +3889,7 @@ void PG::handle_info(epoch_t msg_epoch,
 		     RecoveryCtx *rctx)
 {
   dout(10) << "handle_info " << i << " from osd." << from << dendl;
-  recovery_state.handle_event(
+  handle_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 new MInfoRec(from, i))),
     rctx);
@@ -3894,7 +3902,7 @@ void PG::handle_log(epoch_t msg_epoch,
 		    RecoveryCtx *rctx)
 {
   dout(10) << "handle_log " << *msg << " from osd." << from << dendl;
-  recovery_state.handle_event(
+  handle_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 new MLogRec(from, msg))),
     rctx);
@@ -3906,7 +3914,7 @@ void PG::handle_query(epoch_t msg_epoch,
 		      RecoveryCtx *rctx)
 {
   dout(10) << "handle_query " << q << " from osd." << from << dendl;
-  recovery_state.handle_event(
+  handle_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 new MQuery(from, q, query_epoch))),
     rctx);

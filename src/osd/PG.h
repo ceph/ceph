@@ -1359,8 +1359,12 @@ public:
   void fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
+  bool old_peering_evt(CephPeeringEvtRef evt) {
+    return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
+  }
 
   // recovery bits
+  void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
   void handle_notify(epoch_t msg_epoch, epoch_t query_epoch,
 		     int from, pg_info_t& i, RecoveryCtx *rctx);
   void handle_info(epoch_t msg_epoch, epoch_t query_epoch,
