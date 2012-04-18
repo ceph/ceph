@@ -131,11 +131,11 @@ void PGMap::apply_incremental(const Incremental& inc)
   assert(inc.version == version+1);
   version++;
   bool ratios_changed = false;
-  if (inc.full_ratio != 0) {
+  if (inc.full_ratio != full_ratio) {
     full_ratio = inc.full_ratio;
     ratios_changed = true;
   }
-  if (inc.nearfull_ratio != 0) {
+  if (inc.nearfull_ratio != nearfull_ratio) {
     nearfull_ratio = inc.nearfull_ratio;
     ratios_changed = true;
   }
@@ -226,9 +226,9 @@ void PGMap::redo_full_sets()
        i != osd_stat.end();
        ++i) {
     float ratio = ((float)i->second.kb_used) / ((float)i->second.kb);
-    if ( ratio > full_ratio )
+    if (full_ratio > 0 && ratio > full_ratio)
       full_osds.insert(i->first);
-    else if ( ratio > nearfull_ratio )
+    else if (nearfull_ratio > 0 && ratio > nearfull_ratio)
       nearfull_osds.insert(i->first);
   }
 }

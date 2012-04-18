@@ -39,6 +39,7 @@
 #include "osd/PG.h"  // yuck
 
 #include "common/config.h"
+#include "common/errno.h"
 #include <sstream>
 
 #define dout_subsys ceph_subsys_mon
@@ -50,40 +51,12 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon, const PGMap& pg
 		<< ").pg v" << pg_map.version << " ";
 }
 
-class RatioMonitor : public md_config_obs_t {
-  PGMonitor *mon;
-public:
-  RatioMonitor(PGMonitor *pgmon) : mon(pgmon) {}
-  virtual ~RatioMonitor() {}
-  virtual const char **get_tracked_conf_keys() const {
-    static const char *KEYS[] = { "mon_osd_full_ratio",
-				  "mon_osd_nearfull_ratio",
-				  NULL };
-    return KEYS;
-  }
-  virtual void handle_conf_change(const md_config_t *conf,
-				  const std::set<std::string>& changed) {
-    mon->update_full_ratios(conf->mon_osd_full_ratio,
-			    conf->mon_osd_nearfull_ratio);
-  }
-};
-
 PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
   : PaxosService(mn, p),
-    ratio_lock("PGMonitor::ratio_lock"),
-    need_full_ratio_update(false),
-    need_nearfull_ratio_update(false),
     need_check_down_pgs(false)
-{
-  ratio_monitor = new RatioMonitor(this);
-  g_conf->add_observer(ratio_monitor);
-}
+{ }
 
-PGMonitor::~PGMonitor()
-{
-  g_conf->remove_observer(ratio_monitor);
-  delete ratio_monitor;
-}
+PGMonitor::~PGMonitor() {}
 
 /*
  Tick function to update the map based on performance every N seconds
@@ -139,26 +112,6 @@ void PGMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_num_bytes, pg_map.pg_sum.stats.sum.num_bytes);
 }
 
-void PGMonitor::update_full_ratios(float full_ratio, float nearfull_ratio)
-{
-  Mutex::Locker l(ratio_lock);
-
-  if (full_ratio > 1.0)
-    full_ratio /= 100.0;
-  if (nearfull_ratio > 1.0)
-    nearfull_ratio /= 100.0;
-
-  dout(10) << "update_full_ratios full " << full_ratio << " nearfull " << nearfull_ratio << dendl;
-  if (full_ratio != 0) {
-    new_full_ratio = full_ratio;
-    need_full_ratio_update = true;
-  }
-  if (nearfull_ratio != 0) {
-    new_nearfull_ratio = nearfull_ratio;
-    need_nearfull_ratio_update = true;
-  }
-}
-
 void PGMonitor::tick() 
 {
   if (!paxos->is_active()) return;
@@ -167,25 +120,7 @@ void PGMonitor::tick()
   handle_osd_timeouts();
 
   if (mon->is_leader()) {
-    ratio_lock.Lock();
     bool propose = false;
-    if (need_full_ratio_update) {
-      dout(10) << "tick need full ratio update " << new_full_ratio << dendl;
-      need_full_ratio_update = false;
-      if (pg_map.full_ratio != new_full_ratio) {
-	pending_inc.full_ratio = new_full_ratio;
-	propose = true;
-      }
-    }
-    if (need_nearfull_ratio_update) {
-      dout(10) << "tick need nearfull ratio update " << new_nearfull_ratio << dendl;
-      need_nearfull_ratio_update = false;
-      if (pg_map.nearfull_ratio != new_nearfull_ratio) {
-	pending_inc.nearfull_ratio = new_nearfull_ratio;
-	propose = true;
-      }
-    }
-    ratio_lock.Unlock();
     
     if (need_check_down_pgs && check_down_pgs())
       propose = true;
@@ -307,6 +242,8 @@ void PGMonitor::create_pending()
 {
   pending_inc = PGMap::Incremental();
   pending_inc.version = pg_map.version + 1;
+  pending_inc.full_ratio = pg_map.full_ratio;
+  pending_inc.nearfull_ratio = pg_map.nearfull_ratio;
   dout(10) << "create_pending v " << pending_inc.version << dendl;
 }
 
@@ -1095,44 +1032,75 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
+  int r = -EINVAL;
   string rs;
 
-  if (m->cmd.size() <= 1 || m->cmd[1] != "force_create_pg") {
-    // nothing here yet
-    ss << "unrecognized command";
-    goto out;
+  if (m->cmd.size() >= 1 && m->cmd[1] == "force_create_pg") {
+    if (m->cmd.size() <= 2) {
+      ss << "usage: pg force_create_pg <pg>";
+      goto out;
+    }
+    if (!pgid.parse(m->cmd[2].c_str())) {
+      ss << "pg " << m->cmd[2] << " invalid";
+      goto out;
+    }
+    if (!pg_map.pg_stat.count(pgid)) {
+      ss << "pg " << pgid << " dne";
+      goto out;
+    }
+    if (pg_map.creating_pgs.count(pgid)) {
+      ss << "pg " << pgid << " already creating";
+      goto out;
+    }
+    {
+      pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
+      s.state = PG_STATE_CREATING;
+      s.created = epoch;
+      s.last_change = ceph_clock_now(g_ceph_context);
+    }
+    ss << "pg " << m->cmd[2] << " now creating, ok";
+    getline(ss, rs);
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    return true;
   }
-  if (m->cmd.size() <= 2) {
-    ss << "usage: pg force_create_pg <pg>";
-    goto out;
+  else if (m->cmd.size() > 1 && m->cmd[1] == "set_full_ratio") {
+    if (m->cmd.size() != 3) {
+      ss << "set_full_ratio takes exactly one argument: the new full ratio";
+      goto out;
+    }
+    const char *start = m->cmd[1].c_str();
+    char *end = (char *)start;
+    float n = strtof(start, &end);
+    if (*end != '\0') { // conversion didn't work
+      ss << "could not convert " << m->cmd[2] << "to a float";
+      goto out;
+    }
+    pending_inc.full_ratio = n;
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    return true;
   }
-  if (!pgid.parse(m->cmd[2].c_str())) {
-    ss << "pg " << m->cmd[2] << " invalid";
-    goto out;
+  else if (m->cmd.size() > 1 && m->cmd[1] == "set_nearfull_ratio") {
+    if (m->cmd.size() != 3) {
+      ss << "set_nearfull_ratio takes exactly one argument: the new nearfull ratio";
+      goto out;
+    }
+    const char *start = m->cmd[1].c_str();
+    char *end = (char *)start;
+    float n = strtof(start, &end);
+    if (*end != '\0') { // conversion didn't work
+      ss << "could not convert " << m->cmd[2] << "to a float";
+      goto out;
+    }
+    pending_inc.nearfull_ratio = n;
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    return true;
   }
-  if (!pg_map.pg_stat.count(pgid)) {
-    ss << "pg " << pgid << " dne";
-    goto out;
-  }
-  if (pg_map.creating_pgs.count(pgid)) {
-    ss << "pg " << pgid << " already creating";
-    goto out;
-  }
-  {
-    pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
-    s.state = PG_STATE_CREATING;
-    s.created = epoch;
-    s.last_change = ceph_clock_now(g_ceph_context);
-  }
-  ss << "pg " << m->cmd[2] << " now creating, ok";
-  getline(ss, rs);
-  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-  return true;
 
  out:
-  int err = -EINVAL;
   getline(ss, rs);
-  mon->reply_command(m, err, rs, paxos->get_version());
+  if (r < 0 && rs.length() == 0)
+    rs = cpp_strerror(r);
+  mon->reply_command(m, r, rs, paxos->get_version());
   return false;
 }
 
