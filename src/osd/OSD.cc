@@ -2841,7 +2841,8 @@ void OSD::dispatch_op(OpRequestRef op)
     handle_pg_trim(op);
     break;
   case MSG_OSD_PG_MISSING:
-    handle_pg_missing(op);
+    assert(0 ==
+	   "received MOSDPGMissing; this message is supposed to be unused!?!");
     break;
   case MSG_OSD_PG_SCAN:
     handle_pg_scan(op);
@@ -4674,41 +4675,6 @@ bool OSD::backfill_is_queueable(PG *pg, OpRequestRef op)
   }
 
   return true;
-}
-
-
-
-void OSD::handle_pg_missing(OpRequestRef op)
-{
-  MOSDPGMissing *m = (MOSDPGMissing *)op->request;
-  assert(m->get_header().type == MSG_OSD_PG_MISSING);
-  assert(0); // MOSDPGMissing is fantastical
-#if 0
-  dout(7) << __func__  << " " << *m << " from " << m->get_source() << dendl;
-
-  if (!require_osd_peer(op))
-    return;
-
-  int from = m->get_source().num();
-  if (!require_same_or_newer_map(op, m->get_epoch()))
-    return;
-
-  if (m->pgid.preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->pgid << dendl;
-    return;
-  }
-
-  op->mark_started();
-
-  map< int, map<pg_t,pg_query_t> > query_map;
-  PG::Log empty_log;
-  int created = 0;
-  _pro-cess_pg_info(m->get_epoch(), from, m->info, //misspelling added to prevent erroneous finds
-		   empty_log, &m->missing, query_map, NULL, created);
-  do_queries(query_map);
-
-  maybe_update_heartbeat_peers();
-#endif
 }
 
 /** PGQuery

@@ -631,7 +631,6 @@ protected:
   bool require_same_or_newer_map(OpRequestRef op, epoch_t e);
 
   void handle_pg_query(OpRequestRef op);
-  void handle_pg_missing(OpRequestRef op);
   void handle_pg_notify(OpRequestRef op);
   void handle_pg_log(OpRequestRef op);
   void handle_pg_info(OpRequestRef op);
