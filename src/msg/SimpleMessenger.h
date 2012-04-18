@@ -64,12 +64,13 @@ public:
     lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
     nonce(_nonce), destination_stopped(false), my_type(name.type()),
-    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
+    global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false),
     dispatch_thread(this), msgr(this),
     timeout(0),
     cluster_protocol(0)
   {
+    pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
     init_local_pipe();
@@ -750,9 +751,9 @@ private:
   /// a list of Pipes we want to tear down
   list<Pipe*>     pipe_reap_queue;
 
-  /// lock to protect the global_seq TODO: this should probably be a spinlock
-  Mutex global_seq_lock;
-  /// counter for the global seq our connection protocol uses TODO: or else make this atomic_t
+  /// lock to protect the global_seq
+  pthread_spinlock_t global_seq_lock;
+  /// counter for the global seq our connection protocol uses
   __u32 global_seq;
 
   /**
@@ -850,10 +851,12 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    Mutex::Locker l(global_seq_lock);
+    pthread_spin_lock(&global_seq_lock);
     if (old > global_seq)
       global_seq = old;
-    return ++global_seq;
+    __u32 ret = ++global_seq;
+    pthread_spin_unlock(&global_seq_lock);
+    return ret;
   }
   /**
    * Get the protocol version we support for the given peer type: either
