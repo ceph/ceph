@@ -1063,6 +1063,38 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
     return true;
   }
+  else if (m->cmd.size() > 1 && m->cmd[1] == "set_full_ratio") {
+    if (m->cmd.size() != 3) {
+      ss << "set_full_ratio takes exactly one argument: the new full ratio";
+      goto out;
+    }
+    const char *start = m->cmd[1].c_str();
+    char *end = (char *)start;
+    float n = strtof(start, &end);
+    if (*end != '\0') { // conversion didn't work
+      ss << "could not convert " << m->cmd[2] << "to a float";
+      goto out;
+    }
+    pending_inc.full_ratio = n;
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    return true;
+  }
+  else if (m->cmd.size() > 1 && m->cmd[1] == "set_nearfull_ratio") {
+    if (m->cmd.size() != 3) {
+      ss << "set_nearfull_ratio takes exactly one argument: the new nearfull ratio";
+      goto out;
+    }
+    const char *start = m->cmd[1].c_str();
+    char *end = (char *)start;
+    float n = strtof(start, &end);
+    if (*end != '\0') { // conversion didn't work
+      ss << "could not convert " << m->cmd[2] << "to a float";
+      goto out;
+    }
+    pending_inc.nearfull_ratio = n;
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    return true;
+  }
 
  out:
   getline(ss, rs);
