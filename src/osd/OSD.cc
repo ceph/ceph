@@ -4738,39 +4738,6 @@ void OSD::handle_pg_query(OpRequestRef op)
     }
 
     pg = _lookup_lock_pg(pgid);
-    if (m->get_epoch() < pg->info.history.same_interval_since) {
-      dout(10) << *pg << " handle_pg_query changed in "
-	       << pg->info.history.same_interval_since
-	       << " (msg from " << m->get_epoch() << ")" << dendl;
-      pg->unlock();
-      continue;
-    }
-
-    if (pg->old_peering_msg(m->get_epoch(), m->get_epoch())) {
-      dout(10) << "ignoring old peering message " << *m << dendl;
-      pg->unlock();
-      continue;
-    }
-
-    if (pg->deleting) {
-      /*
-       * We cancel deletion on pg change.  And the primary will never
-       * query anything it already asked us to delete.  So the only
-       * reason we would ever get a query on a deleting pg is when we
-       * get an old query from an old primary.. which we can safely
-       * ignore.
-       */
-      dout(0) << *pg << " query on deleting pg" << dendl;
-      assert(0 == "this should not happen");
-      pg->unlock();
-      continue;
-    }
-
-    /* FIXME: do not do this unless/until we also write any modified history to disk.
-    unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-    pg->info.history.merge(it->second.history);
-    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-    */
 
     // ok, process query!
     PG::RecoveryCtx rctx(0, 0, &notify_list, 0, 0);
