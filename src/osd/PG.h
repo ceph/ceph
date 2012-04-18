@@ -21,6 +21,7 @@
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
+#include <boost/statechart/event_base.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <tr1/memory>
 
@@ -782,30 +783,85 @@ public:
 
   // -- recovery state --
 
-  struct StateMachineEvt {
-    virtual ~StateMachineEvt() {}
-  };
-  template < class T >
-  struct _StateMachineEvt : public boost::statechart::event< T >,
-			    public StateMachineEvt {
-    virtual ~_StateMachineEvt() {}
-  };
-
   class CephPeeringEvt {
     epoch_t epoch_sent;
     epoch_t epoch_requested;
-    boost::scoped_ptr<StateMachineEvt> evt;
+    boost::statechart::event_base *evt;
   public:
     CephPeeringEvt(epoch_t epoch_sent,
 		   epoch_t epoch_requested,
-		   StateMachineEvt *evt) :
+		   boost::statechart::event_base *evt) :
       epoch_sent(epoch_sent), epoch_requested(epoch_requested),
       evt(evt) {}
     epoch_t get_epoch_sent() { return epoch_sent; }
     epoch_t get_epoch_requested() { return epoch_requested; }
-    StateMachineEvt &get_event() { return *evt; }
+    boost::statechart::event_base &get_event() { return *evt; }
   };
   typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
+
+  struct QueryState : boost::statechart::event< QueryState > {
+    Formatter *f;
+    QueryState(Formatter *f) : f(f) {}
+  };
+
+  struct MInfoRec : boost::statechart::event< MInfoRec > {
+    int from;
+    pg_info_t &info;
+    MInfoRec(int from, pg_info_t &info) :
+      from(from), info(info) {}
+  };
+
+  struct MLogRec : boost::statechart::event< MLogRec > {
+    int from;
+    MOSDPGLog *msg;
+    MLogRec(int from, MOSDPGLog *msg) :
+      from(from), msg(msg) {}
+  };
+
+  struct MNotifyRec : boost::statechart::event< MNotifyRec > {
+    int from;
+    pg_info_t &info;
+    MNotifyRec(int from, pg_info_t &info) :
+      from(from), info(info) {}
+  };
+
+  struct MQuery : boost::statechart::event< MQuery > {
+    int from;
+    const pg_query_t &query;
+    epoch_t query_epoch;
+    MQuery(int from, const pg_query_t &query, epoch_t query_epoch):
+      from(from), query(query), query_epoch(query_epoch) {}
+  };
+
+  struct AdvMap : boost::statechart::event< AdvMap > {
+    OSDMapRef osdmap;
+    OSDMapRef lastmap;
+    vector<int> newup, newacting;
+    AdvMap(OSDMapRef osdmap, OSDMapRef lastmap, vector<int>& newup, vector<int>& newacting):
+      osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
+  };
+
+  struct RecoveryComplete : boost::statechart::event< RecoveryComplete > {
+    RecoveryComplete() : boost::statechart::event< RecoveryComplete >() {}
+  };
+  struct ActMap : boost::statechart::event< ActMap > {
+    ActMap() : boost::statechart::event< ActMap >() {}
+  };
+  struct Activate : boost::statechart::event< Activate > {
+    Activate() : boost::statechart::event< Activate >() {}
+  };
+  struct Initialize : boost::statechart::event< Initialize > {
+    Initialize() : boost::statechart::event< Initialize >() {}
+  };
+  struct Load : boost::statechart::event< Load > {
+    Load() : boost::statechart::event< Load >() {}
+  };
+  struct GotInfo : boost::statechart::event< GotInfo > {
+    GotInfo() : boost::statechart::event< GotInfo >() {}
+  };
+  struct NeedUpThru : boost::statechart::event< NeedUpThru > {
+    NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
+  };
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
@@ -824,71 +880,6 @@ public:
       machine.event_count++;
       rctx = 0;
     }
-
-    struct QueryState : _StateMachineEvt< QueryState > {
-      Formatter *f;
-      QueryState(Formatter *f) : f(f) {}
-    };
-
-    struct MInfoRec : _StateMachineEvt< MInfoRec > {
-      int from;
-      pg_info_t &info;
-      MInfoRec(int from, pg_info_t &info) :
-	from(from), info(info) {}
-    };
-
-    struct MLogRec : _StateMachineEvt< MLogRec > {
-      int from;
-      MOSDPGLog *msg;
-      MLogRec(int from, MOSDPGLog *msg) :
-	from(from), msg(msg) {}
-    };
-
-    struct MNotifyRec : _StateMachineEvt< MNotifyRec > {
-      int from;
-      pg_info_t &info;
-      MNotifyRec(int from, pg_info_t &info) :
-	from(from), info(info) {}
-    };
-
-    struct MQuery : _StateMachineEvt< MQuery > {
-      int from;
-      const pg_query_t &query;
-      epoch_t query_epoch;
-      MQuery(int from, const pg_query_t &query, epoch_t query_epoch):
-	from(from), query(query), query_epoch(query_epoch) {}
-    };
-
-    struct AdvMap : _StateMachineEvt< AdvMap > {
-      OSDMapRef osdmap;
-      OSDMapRef lastmap;
-      vector<int> newup, newacting;
-      AdvMap(OSDMapRef osdmap, OSDMapRef lastmap, vector<int>& newup, vector<int>& newacting):
-	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
-    };
-
-    struct RecoveryComplete : _StateMachineEvt< RecoveryComplete > {
-      RecoveryComplete() : _StateMachineEvt< RecoveryComplete >() {}
-    };
-    struct ActMap : _StateMachineEvt< ActMap > {
-      ActMap() : _StateMachineEvt< ActMap >() {}
-    };
-    struct Activate : _StateMachineEvt< Activate > {
-      Activate() : _StateMachineEvt< Activate >() {}
-    };
-    struct Initialize : _StateMachineEvt< Initialize > {
-      Initialize() : _StateMachineEvt< Initialize >() {}
-    };
-    struct Load : _StateMachineEvt< Load > {
-      Load() : _StateMachineEvt< Load >() {}
-    };
-    struct GotInfo : _StateMachineEvt< GotInfo > {
-      GotInfo() : _StateMachineEvt< GotInfo >() {}
-    };
-    struct NeedUpThru : _StateMachineEvt< NeedUpThru > {
-      NeedUpThru() : _StateMachineEvt< NeedUpThru >() {};
-    };
-
 
     /* States */
     struct Initial;
@@ -1233,22 +1224,19 @@ public:
       machine.initiate();
     }
 
-    void handle_notify(int from, pg_info_t& i, RecoveryCtx *ctx);
-    void handle_info(int from, pg_info_t& i, RecoveryCtx *ctx);
-    void handle_log(int from,
-		    MOSDPGLog *msg,
-		    RecoveryCtx *ctx);
-    void handle_query(int from, const pg_query_t& q,
-		      epoch_t query_epoch,
-		      RecoveryCtx *ctx);
-    void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
-			    vector<int>& newup, vector<int>& newacting, 
-			    RecoveryCtx *ctx);
-    void handle_activate_map(RecoveryCtx *ctx);
-    void handle_recovery_complete(RecoveryCtx *ctx);
-    void handle_create(RecoveryCtx *ctx);
-    void handle_loaded(RecoveryCtx *ctx);
-    void handle_query_state(Formatter *f);
+    void handle_event(boost::statechart::event_base &evt,
+		      RecoveryCtx *rctx) {
+      start_handle(rctx);
+      machine.process_event(evt);
+      end_handle();
+    }
+
+    void handle_event(CephPeeringEvtRef evt,
+		      RecoveryCtx *rctx) {
+      start_handle(rctx);
+      machine.process_event(evt->get_event());
+      end_handle();
+    }
   } recovery_state;
 
 
@@ -1373,39 +1361,24 @@ public:
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
 
   // recovery bits
-  void handle_notify(int from, pg_info_t& i, RecoveryCtx *rctx) {
-    recovery_state.handle_notify(from, i, rctx);
-  }
-  void handle_info(int from, pg_info_t& i, RecoveryCtx *rctx) {
-    recovery_state.handle_info(from, i, rctx);
-  }
-  void handle_log(int from,
+  void handle_notify(epoch_t msg_epoch, epoch_t query_epoch,
+		     int from, pg_info_t& i, RecoveryCtx *rctx);
+  void handle_info(epoch_t msg_epoch, epoch_t query_epoch,
+		   int from, pg_info_t& i, RecoveryCtx *rctx);
+  void handle_log(epoch_t msg_epoch, epoch_t query_epoch, int from,
 		  MOSDPGLog *msg,
-		  RecoveryCtx *rctx) {
-    recovery_state.handle_log(from, msg, rctx);
-  }
-  void handle_query(int from, const pg_query_t& q,
-		    epoch_t query_epoch,
-		    RecoveryCtx *rctx) {
-    recovery_state.handle_query(from, q, query_epoch, rctx);
-  }
+		  RecoveryCtx *rctx);
+  void handle_query(epoch_t msg_epoch, epoch_t query_epoch,
+		    int from, const pg_query_t& q,
+		    RecoveryCtx *rctx);
   void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			  vector<int>& newup, vector<int>& newacting,
-			  RecoveryCtx *rctx) {
-    recovery_state.handle_advance_map(osdmap, lastmap, newup, newacting, rctx);
-  }
-  void handle_activate_map(RecoveryCtx *rctx) {
-    recovery_state.handle_activate_map(rctx);
-  }
-  void handle_recovery_complete(RecoveryCtx *rctx) {
-    recovery_state.handle_recovery_complete(rctx);
-  }
-  void handle_create(RecoveryCtx *rctx) {
-    recovery_state.handle_create(rctx);
-  }
-  void handle_loaded(RecoveryCtx *rctx) {
-    recovery_state.handle_loaded(rctx);
-  }
+			  RecoveryCtx *rctx);
+  void handle_activate_map(RecoveryCtx *rctx);
+  void handle_recovery_complete(RecoveryCtx *rctx);
+  void handle_create(RecoveryCtx *rctx);
+  void handle_loaded(RecoveryCtx *rctx);
+  void handle_query_state(Formatter *f);
 
   void on_removal();
 
