@@ -158,7 +158,8 @@ public:
    */
   void set_policy_throttler(int type, Throttle *t) {
     assert (!started && !did_bind);
-    get_policy(type).throttler = t;
+    assert(policy_map.count(type));
+    policy_map[type].throttler = t;
   }
   /**
    * Bind the SimpleMessenger to a specific address. If bind_addr
@@ -877,13 +878,11 @@ public:
 
   /**
    * Get the Policy associated with a type of peer.
-   * TODO: This is public so Pipe can use it, and most users
-   * are const -- but not set_policy_throttler.
    * @param t The peer type to get the default policy for.
    *
-   * @return A Policy reference.
+   * @return A const Policy reference.
    */
-  Policy& get_policy(int t) {
+  const Policy& get_policy(int t) {
     if (policy_map.count(t))
       return policy_map[t];
     else
