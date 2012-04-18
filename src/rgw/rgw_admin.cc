@@ -744,7 +744,7 @@ int main(int argc, char **argv)
     map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
     subuser_found = (iter != info.subusers.end());
 
-    if (!subuser_found && opt_cmd != OPT_SUBUSER_CREATE) {
+    if (!subuser_found && opt_cmd != OPT_SUBUSER_CREATE && opt_cmd != OPT_USER_CREATE) {
       cerr << "subuser specified but was not found, aborting" << std::endl;
       return 1;
     }
