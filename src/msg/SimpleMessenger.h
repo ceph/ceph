@@ -289,9 +289,9 @@ public:
    * If the Messenger doesn't already have a Connection, or if the underlying
    * connection has broken, this function does nothing.
    *
-   *
    * @param dest The entity to send the keepalive to.
-   * @return 0. TODO: should it return error codes for nonexistent/broken ones?
+   * @return 0, or -EINVAL if we don't already have a Connection, or
+   * -EPIPE if a Pipe for the dest doesn't exist.
    */
   virtual int send_keepalive(const entity_inst_t& addr);
   /**
@@ -299,7 +299,7 @@ public:
    * If the underlying connection has broken, this function does nothing.
    *
    * @param dest The entity to send the keepalive to.
-   * @return 0. TODO: should it return error codes for broken ones?
+   * @return 0, or -EPIPE if the Connection doesn't have a running Pipe.
    */
   virtual int send_keepalive(Connection *con);
   /**

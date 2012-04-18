@@ -399,7 +399,7 @@ public:
    * connection has broken, this function does nothing.
    *
    * @param dest The entity to send the keepalive to.
-   * @return 0. TODO: should it return error codes for nonexistent/broken ones?
+   * @return 0, or implementation-defined error numbers.
    */
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
   /**
@@ -407,7 +407,7 @@ public:
    * If the underlying connection has broken, this function does nothing.
    *
    * @param dest The entity to send the keepalive to.
-   * @return 0. TODO: should it return error codes for broken ones?
+   * @return 0, or implementation-defined error numbers.
    */
   virtual int send_keepalive(Connection *con) = 0;
   /**

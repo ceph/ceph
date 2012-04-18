@@ -2532,6 +2532,7 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 {
   const entity_addr_t dest_addr = dest.addr;
   entity_addr_t dest_proc_addr = dest_addr;
+  int ret = 0;
 
   lock.Lock();
   {
@@ -2548,22 +2549,27 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 	  pipe->unregister_pipe();
 	  pipe->pipe_lock.Unlock();
 	  pipe = 0;
+	  ret = -EPIPE;
 	} else {
 	  ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
 	  pipe->_send_keepalive();
 	  pipe->pipe_lock.Unlock();
 	}
+      } else {
+        ret = -EINVAL;
       }
-      if (!pipe)
+      if (!pipe) {
 	ldout(cct,20) << "send_keepalive no pipe for " << dest_addr << ", doing nothing." << dendl;
+      }
     }
   }
   lock.Unlock();
-  return 0;
+  return ret;
 }
 
 int SimpleMessenger::send_keepalive(Connection *con)
 {
+  int ret = 0;
   SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
   if (pipe) {
     ldout(cct,20) << "send_keepalive con " << con << ", have pipe." << dendl;
@@ -2574,8 +2580,9 @@ int SimpleMessenger::send_keepalive(Connection *con)
     pipe->put();
   } else {
     ldout(cct,0) << "send_keepalive con " << con << ", no pipe." << dendl;
+    ret = -EPIPE;
   }
-  return 0;
+  return ret;
 }
 
 
