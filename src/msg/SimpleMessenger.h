@@ -50,6 +50,39 @@ using namespace __gnu_cxx;
 class SimpleMessenger : public Messenger {
   // First we have the public Messenger interface implementation...
 public:
+  /**
+   * Initialize the SimpleMessenger!
+   *
+   * @param cct The CephContext to use
+   * @param name The name to assign ourselves
+   * _nonce A unique ID to use for this SimpleMessenger. It should not
+   * be a value that will be repeated if the daemon restarts.
+   */
+  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
+    Messenger(cct, name),
+    accepter(this),
+    lock("SimpleMessenger::lock"), did_bind(false),
+    dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
+    nonce(_nonce), destination_stopped(false), my_type(name.type()),
+    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
+    reaper_thread(this), reaper_started(false), reaper_stop(false),
+    dispatch_thread(this), msgr(this),
+    timeout(0),
+    cluster_protocol(0)
+  {
+    // for local dmsg delivery
+    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
+    init_local_pipe();
+  }
+  /**
+   * Destroy the SimpleMessenger. Pretty simple since all the work is done
+   * elsewhere.
+   * TODO: do some validity checks that the proper shutdown sequence has
+   * been followed?
+   */
+  virtual ~SimpleMessenger() {
+    delete dispatch_queue.local_pipe;
+  }
   /** @defgroup Accessors
    * @{
    */
@@ -675,8 +708,6 @@ private:
     }
   } dispatch_queue;
 
-  void dispatch_throttle_release(uint64_t msize);
-
   // SimpleMessenger stuff
   /// overall lock used for SimpleMessenger data structures
   Mutex lock;
@@ -722,7 +753,128 @@ private:
   Mutex global_seq_lock;
   /// counter for the global seq our connection protocol uses TODO: or else make this atomic_t
   __u32 global_seq;
+
+  /**
+   * Create a Pipe associated with the given entity (of the given type).
+   * Initiate the connection. (This function returning does not guarantee
+   * connection success.)
+   *
+   * @param addr The address of the entity to connect to.
+   * @param type The peer type of the entity at the address.
+   *
+   * @return a pointer to the newly-created Pipe. Caller does not own a
+   * reference; take one if you need it.
+   */
+  Pipe *connect_rank(const entity_addr_t& addr, int type);
+  /**
+   * Queue up a Message for delivery to the entity specified
+   * by addr and dest_type.
+   *
+   * @param m The Message to queue up. This function eats a reference.
+   * @param addr The address to send the Message to.
+   * @param dest_type The peer type of the address we're sending to
+   * @param lazy If true, do not establish or fix a Connection to send the Message;
+   * just drop silently under failure.
+   */
+  void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
+  /**
+   * Queue up a Message for delivery along the specified Pipe.
+   *
+   * @param m The Message to queue up. This function eats a reference.
+   * @param pipe The Pipe to send the Message out on.
+   */
+  void submit_message(Message *m, Pipe *pipe);
+
+
+  /**
+   * A thread used to tear down Pipes when they're complete.
+   */
+  class ReaperThread : public Thread {
+    SimpleMessenger *msgr;
+  public:
+    ReaperThread(SimpleMessenger *m) : msgr(m) {}
+    void *entry() {
+      msgr->reaper_entry();
+      return 0;
+    }
+  } reaper_thread;
+
+  bool reaper_started, reaper_stop;
+  Cond reaper_cond;
+
+
+  /**
+   * Look through the pipes in the pipe_reap_queue and tear them down.
+   */
+  void reaper();
+
+  /***********************/
+
+  class DispatchThread : public Thread {
+    SimpleMessenger *msgr;
+  public:
+    DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
+    void *entry() {
+      msgr->dispatch_entry();
+      return 0;
+    }
+  } dispatch_thread;
+
+  SimpleMessenger *msgr; //hack to make dout macro work, will fix
+  int timeout;
+  
+  /// internal cluster protocol version, if any, for talking to entities of the same type.
+  int cluster_protocol;
+
 public:
+  /**
+   * @defgroup SimpleMessenger internals
+   * @{
+   */
+
+  /**
+   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
+   */
+  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
+  /**
+   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
+   */
+  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
+                         bool& isvalid);
+  /**
+   * Increment the global sequence for this SimpleMessenger and return it.
+   * This is for the connect protocol, although it doesn't hurt if somebody
+   * else calls it.
+   *
+   * @return a global sequence ID that nobody else has seen.
+   */
+  __u32 get_global_seq(__u32 old=0) {
+    Mutex::Locker l(global_seq_lock);
+    if (old > global_seq)
+      global_seq = old;
+    return ++global_seq;
+  }
+  /**
+   * Get the protocol version we support for the given peer type: either
+   * a peer protocol (if it matches our own), the protocol version for the
+   * peer (if we're connecting), or our protocol version (if we're accepting).
+   */
+  int get_proto_version(int peer_type, bool connect);
+
+  /**
+   * Fill in the address and peer type for the local pipe, which
+   * is used for delivering messages back to ourself (whether actual Messages
+   * submitted by the endpoint, or interrupts we use to process things like
+   * dead Pipes in a fair order).
+   */
+  void init_local_pipe();  /**
+   * Tell the SimpleMessenger its full IP address.
+   *
+   * This is used by Pipes when connecting to other endpoints, and
+   * probably shouldn't be called by anybody else.
+   */
+  void learned_addr(const entity_addr_t& peer_addr_for_me);
+
   /**
    * Get the Policy associated with a type of peer.
    * TODO: This is public so Pipe can use it, and most users
@@ -739,37 +891,20 @@ public:
   }
 
   /**
-   * Create a Pipe associated with the given entity (of the given type).
-   * Initiate the connection. (This function returning does not guarantee
-   * connection success.)
-   *
-   * TODO: this should be a private function; nobody else calls it.
-   *
-   * @param addr The address of the entity to connect to.
-   * @param type The peer type of the entity at the address.
-   *
-   * @return a pointer to the newly-created Pipe. Caller does not own a
-   * reference; take one if you need it.
+   * This function is used by the dispatch thread. It runs continuously
+   * until dispatch_queue.stop is set to true, choosing what order the Pipes
+   * get to deliver in, and sending out their chosen Message via the
+   * ms_deliver_* functions.
+   * It should really only by dispatch_thread calling this, in our
+   * current implementation.
    */
-  Pipe *connect_rank(const entity_addr_t& addr, int type);
-
-
+  void dispatch_entry();
   /**
-   * A thread used to tear down Pipes when they're complete.
-   * TODO: reaper stuff should all be private; nobody else needs access.
+   * Release memory accounting back to the dispatch throttler.
+   *
+   * @param msize The amount of memory to release.
    */
-  class ReaperThread : public Thread {
-    SimpleMessenger *msgr;
-  public:
-    ReaperThread(SimpleMessenger *m) : msgr(m) {}
-    void *entry() {
-      msgr->reaper_entry();
-      return 0;
-    }
-  } reaper_thread;
-
-  bool reaper_started, reaper_stop;
-  Cond reaper_cond;
+  void dispatch_throttle_release(uint64_t msize);
 
   /**
    * This function is used by the reaper thread. As long as nobody
@@ -778,11 +913,6 @@ public:
    * to stop).
    */
   void reaper_entry();
-  /**
-   * Look through the pipes in the pipe_reap_queue and tear them down.
-   * TODO: This should be private; it's called from reaper_entry() and wait().
-   */
-  void reaper();
   /**
    * Add a pipe to the pipe_reap_queue, to be torn down on
    * the next call to reaper().
@@ -793,139 +923,9 @@ public:
    * ready to be torn down.
    */
   void queue_reap(Pipe *pipe);
-
-  /***********************/
-
-private:
-  class DispatchThread : public Thread {
-    SimpleMessenger *msgr;
-  public:
-    DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
-    void *entry() {
-      msgr->dispatch_entry();
-      return 0;
-    }
-  } dispatch_thread;
-
   /**
-   * This function is used by the dispatch thread. It runs continuously
-   * until dispatch_queue.stop is set to true, choosing what order the Pipes
-   * get to deliver in, and sending out their chosen Message via the
-   * ms_deliver_* functions.
-   * It should really only by dispatch_thread calling this, in our
-   * current implementation.
-   *
-   * TODO: huh, right now this is private but dispatch_thread can still
-   * access it (see http://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#45
-   * which gcc apparently implements). Make all these inner classes
-   * friends and declare the functions private to make things consistent?
+   * @} // SimpleMessenger Internals
    */
-  void dispatch_entry();
-
-  SimpleMessenger *msgr; //hack to make dout macro work, will fix
-  int timeout;
-  
-  /// internal cluster protocol version, if any, for talking to entities of the same type.
-  int cluster_protocol;
-
-  /**
-   * Get the protocol version we support for the given peer type: either
-   * a peer protocol (if it matches our own), the protocol version for the
-   * peer (if we're connecting), or our protocol version (if we're accepting).
-   */
-  int get_proto_version(int peer_type, bool connect);
-
-public:
-  /**
-   * Initialize the SimpleMessenger!
-   *
-   * @param cct The CephContext to use
-   * @param name The name to assign ourselves
-   * _nonce A unique ID to use for this SimpleMessenger. It should not
-   * be a value that will be repeated if the daemon restarts.
-   */
-  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
-    Messenger(cct, name),
-    accepter(this),
-    lock("SimpleMessenger::lock"), did_bind(false),
-    dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    nonce(_nonce), destination_stopped(false), my_type(name.type()),
-    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
-    reaper_thread(this), reaper_started(false), reaper_stop(false), 
-    dispatch_thread(this), msgr(this),
-    timeout(0),
-    cluster_protocol(0)
-  {
-    // for local dmsg delivery
-    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
-    init_local_pipe();
-  }
-  /**
-   * Destroy the SimpleMessenger. Pretty simple since all the work is done
-   * elsewhere.
-   * TODO: do some validity checks that the proper shutdown sequence has
-   * been followed?
-   */
-  virtual ~SimpleMessenger() {
-    delete dispatch_queue.local_pipe;
-  }
-  /**
-   * Increment the global sequence for this SimpleMessenger and return it.
-   *
-   * @return a global sequence ID that nobody else has seen.
-   */
-  __u32 get_global_seq(__u32 old=0) {
-    Mutex::Locker l(global_seq_lock);
-    if (old > global_seq)
-      global_seq = old;
-    return ++global_seq;
-  }
-
-  /**
-   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
-  /**
-   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
-   */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
-			 bool& isvalid);
-
-  /**
-   * Queue up a Message for delivery to the entity specified
-   * by addr and dest_type.
-   * TODO: this should be private.
-   *
-   * @param m The Message to queue up. This function eats a reference.
-   * @param addr The address to send the Message to.
-   * @param dest_type The peer type of the address we're sending to
-   * @param lazy If true, do not establish or fix a Connection to send the Message;
-   * just drop silently under failure.
-   */
-  void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
-  /**
-   * Queue up a Message for delivery along the specified Pipe.
-   * TODO: this should be private.
-   *
-   * @param m The Message to queue up. This function eats a reference.
-   * @param pipe The Pipe to send the Message out on.
-   */
-  void submit_message(Message *m, Pipe *pipe);
-  /**
-   * Tell the SimpleMessenger its full IP address.
-   *
-   * This is used by Pipes when connecting to other endpoints, and
-   * probably shouldn't be called by anybody else.
-   */
-  void learned_addr(const entity_addr_t& peer_addr_for_me);
-  /**
-   * Fill in the address and peer type for the local pipe, which
-   * is used for delivering messages back to ourself (whether actual Messages
-   * submitted by the endpoint, or interrupts we use to process things like
-   * dead Pipes in a fair order).
-   */
-  void init_local_pipe();
-
 } ;
 
 #endif
