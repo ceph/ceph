@@ -761,6 +761,12 @@ void OSDMap::decode(bufferlist::iterator& p)
   } else {
     pool_max = max_pools;
   }
+  // kludge around some old bug that zeroed out pool_max (#2307)
+  if (pools.size() && pool_max < pools.rbegin()->first) {
+    pool_max = pools.rbegin()->first;
+    if (cct)
+      ldout(cct, 0) << "kludging bad pool_max to " << pool_max << dendl;
+  }
 
   ::decode(flags, p);
 
