@@ -39,6 +39,7 @@
 #include "osd/PG.h"  // yuck
 
 #include "common/config.h"
+#include "common/errno.h"
 #include <sstream>
 
 #define dout_subsys ceph_subsys_mon
@@ -1031,44 +1032,43 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
+  int r = -EINVAL;
   string rs;
 
-  if (m->cmd.size() <= 1 || m->cmd[1] != "force_create_pg") {
-    // nothing here yet
-    ss << "unrecognized command";
-    goto out;
+  if (m->cmd.size() >= 1 && m->cmd[1] == "force_create_pg") {
+    if (m->cmd.size() <= 2) {
+      ss << "usage: pg force_create_pg <pg>";
+      goto out;
+    }
+    if (!pgid.parse(m->cmd[2].c_str())) {
+      ss << "pg " << m->cmd[2] << " invalid";
+      goto out;
+    }
+    if (!pg_map.pg_stat.count(pgid)) {
+      ss << "pg " << pgid << " dne";
+      goto out;
+    }
+    if (pg_map.creating_pgs.count(pgid)) {
+      ss << "pg " << pgid << " already creating";
+      goto out;
+    }
+    {
+      pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
+      s.state = PG_STATE_CREATING;
+      s.created = epoch;
+      s.last_change = ceph_clock_now(g_ceph_context);
+    }
+    ss << "pg " << m->cmd[2] << " now creating, ok";
+    getline(ss, rs);
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    return true;
   }
-  if (m->cmd.size() <= 2) {
-    ss << "usage: pg force_create_pg <pg>";
-    goto out;
-  }
-  if (!pgid.parse(m->cmd[2].c_str())) {
-    ss << "pg " << m->cmd[2] << " invalid";
-    goto out;
-  }
-  if (!pg_map.pg_stat.count(pgid)) {
-    ss << "pg " << pgid << " dne";
-    goto out;
-  }
-  if (pg_map.creating_pgs.count(pgid)) {
-    ss << "pg " << pgid << " already creating";
-    goto out;
-  }
-  {
-    pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
-    s.state = PG_STATE_CREATING;
-    s.created = epoch;
-    s.last_change = ceph_clock_now(g_ceph_context);
-  }
-  ss << "pg " << m->cmd[2] << " now creating, ok";
-  getline(ss, rs);
-  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-  return true;
 
  out:
-  int err = -EINVAL;
   getline(ss, rs);
-  mon->reply_command(m, err, rs, paxos->get_version());
+  if (r < 0 && rs.length() == 0)
+    rs = cpp_strerror(r);
+  mon->reply_command(m, r, rs, paxos->get_version());
   return false;
 }
 
