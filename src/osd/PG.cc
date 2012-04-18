@@ -3863,6 +3863,101 @@ ostream& operator<<(ostream& out, const PG& pg)
   return out;
 }
 
+void PG::handle_notify(epoch_t msg_epoch,
+		       epoch_t query_epoch,
+		       int from, pg_info_t& i,
+		       RecoveryCtx *rctx)
+{
+  dout(10) << "handle_notify " << i << " from osd." << from << dendl;
+  recovery_state.handle_event(
+    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
+					 new MNotifyRec(from, i))),
+    rctx);
+}
+
+void PG::handle_info(epoch_t msg_epoch,
+		     epoch_t query_epoch,
+		     int from, pg_info_t& i,
+		     RecoveryCtx *rctx)
+{
+  dout(10) << "handle_info " << i << " from osd." << from << dendl;
+  recovery_state.handle_event(
+    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
+					 new MInfoRec(from, i))),
+    rctx);
+}
+
+void PG::handle_log(epoch_t msg_epoch,
+		    epoch_t query_epoch,
+		    int from,
+		    MOSDPGLog *msg,
+		    RecoveryCtx *rctx)
+{
+  dout(10) << "handle_log " << *msg << " from osd." << from << dendl;
+  recovery_state.handle_event(
+    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
+					 new MLogRec(from, msg))),
+    rctx);
+}
+
+void PG::handle_query(epoch_t msg_epoch,
+		      epoch_t query_epoch,
+		      int from, const pg_query_t& q,
+		      RecoveryCtx *rctx)
+{
+  dout(10) << "handle_query " << q << " from osd." << from << dendl;
+  recovery_state.handle_event(
+    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
+					 new MQuery(from, q, query_epoch))),
+    rctx);
+}
+
+void PG::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
+			    vector<int>& newup, vector<int>& newacting,
+			    RecoveryCtx *rctx)
+{
+  dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;
+  AdvMap evt(osdmap, lastmap, newup, newacting);
+  recovery_state.handle_event(evt, rctx);
+}
+
+void PG::handle_activate_map(RecoveryCtx *rctx)
+{
+  dout(10) << "handle_activate_map " << dendl;
+  ActMap evt;
+  recovery_state.handle_event(evt, rctx);
+}
+
+void PG::handle_recovery_complete(RecoveryCtx *rctx)
+{
+  dout(10) << "handle_recovery_complete" << dendl;
+  RecoveryComplete evt;
+  recovery_state.handle_event(evt, rctx);
+}
+
+void PG::handle_loaded(RecoveryCtx *rctx)
+{
+  dout(10) << "handle_loaded" << dendl;
+  Load evt;
+  recovery_state.handle_event(evt, rctx);
+}
+
+void PG::handle_create(RecoveryCtx *rctx)
+{
+  dout(10) << "handle_create" << dendl;
+  Initialize evt;
+  recovery_state.handle_event(evt, rctx);
+}
+
+void PG::handle_query_state(Formatter *f)
+{
+  dout(10) << "handle_query_state" << dendl;
+  QueryState q(f);
+  recovery_state.handle_event(q, 0);
+}
+
+
+
 std::ostream& operator<<(std::ostream& oss,
 			 const struct PG::PriorSet &prior)
 {
@@ -5062,98 +5157,6 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 				      event_count, event_time);
   event_count = 0;
   event_time = utime_t();
-}
-
-
-/*----RecoveryState Methods-----*/
-#undef dout_prefix
-#define dout_prefix *_dout << machine.pg->gen_prefix() 
-
-void PG::RecoveryState::handle_notify(int from, pg_info_t& i,
-				      RecoveryCtx *rctx)
-{
-  dout(10) << "handle_notify " << i << " from osd." << from << dendl;
-  start_handle(rctx);
-  machine.process_event(MNotifyRec(from, i));
-  end_handle();
-}
-
-void PG::RecoveryState::handle_info(int from, pg_info_t& i,
-				    RecoveryCtx *rctx)
-{
-  dout(10) << "handle_info " << i << " from osd." << from << dendl;
-  start_handle(rctx);
-  machine.process_event(MInfoRec(from, i));
-  end_handle();
-}
-
-void PG::RecoveryState::handle_log(int from,
-				   MOSDPGLog *msg,
-				   RecoveryCtx *rctx)
-{
-  dout(10) << "handle_log " << *msg << " from osd." << from << dendl;
-  start_handle(rctx);
-  machine.process_event(MLogRec(from, msg));
-  end_handle();
-}
-
-void PG::RecoveryState::handle_query(int from, const pg_query_t& q,
-				     epoch_t query_epoch,
-				     RecoveryCtx *rctx)
-{
-  dout(10) << "handle_query " << q << " from osd." << from << dendl;
-  start_handle(rctx);
-  machine.process_event(MQuery(from, q, query_epoch));
-  end_handle();
-}
-
-void PG::RecoveryState::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
-					   vector<int>& newup, vector<int>& newacting,
-					   RecoveryCtx *rctx)
-{
-  dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;
-  start_handle(rctx);
-  machine.process_event(AdvMap(osdmap, lastmap, newup, newacting));
-  end_handle();
-}
-
-void PG::RecoveryState::handle_activate_map(RecoveryCtx *rctx)
-{
-  dout(10) << "handle_activate_map " << dendl;
-  start_handle(rctx);
-  machine.process_event(ActMap());
-  end_handle();
-}
-
-void PG::RecoveryState::handle_recovery_complete(RecoveryCtx *rctx)
-{
-  dout(10) << "handle_recovery_complete" << dendl;
-  start_handle(rctx);
-  machine.process_event(RecoveryComplete());
-  end_handle();
-}
-
-void PG::RecoveryState::handle_loaded(RecoveryCtx *rctx)
-{
-  dout(10) << "handle_loaded" << dendl;
-  start_handle(rctx);
-  machine.process_event(Load());
-  end_handle();
-}
-
-void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
-{
-  dout(10) << "handle_create" << dendl;
-  start_handle(rctx);
-  machine.process_event(Initialize());
-  end_handle();
-}
-
-void PG::RecoveryState::handle_query_state(Formatter *f)
-{
-  dout(10) << "handle_query_state" << dendl;
-  QueryState q(f);
-  machine.process_event(q);
 }
 
 
