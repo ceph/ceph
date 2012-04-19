@@ -182,6 +182,28 @@ void RGWListBucket_REST_S3::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
+  CGI_PRINTF(s,"X-RGW-Object-Count: %s\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
+  CGI_PRINTF(s,"X-RGW-Bytes-Used: %s\n", buf);
+}
+
+void RGWStatBucket_REST_S3::send_response()
+{
+  if (ret >= 0) {
+    dump_bucket_metadata(s, bucket);
+  }
+
+  set_req_state_err(s, ret);
+  dump_errno(s);
+
+  end_header(s);
+  dump_start(s);
+}
+
 int RGWCreateBucket_REST_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -533,7 +555,10 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(bool get_data)
   if (s->args.exists("uploads"))
     return new RGWListBucketMultiparts_REST_S3;
 
-  return new RGWListBucket_REST_S3;
+  if (get_data)
+    return new RGWListBucket_REST_S3;
+  else
+    return new RGWStatBucket_REST_S3;
 }
 
 RGWOp *RGWHandler_REST_S3::get_retrieve_op(bool get_data)

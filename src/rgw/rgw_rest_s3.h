@@ -36,6 +36,14 @@ public:
   void send_response();
 };
 
+class RGWStatBucket_REST_S3 : public RGWStatBucket_REST {
+public:
+  RGWStatBucket_REST_S3() {}
+  ~RGWStatBucket_REST_S3() {}
+
+  void send_response();
+};
+
 class RGWCreateBucket_REST_S3 : public RGWCreateBucket_REST {
 public:
   RGWCreateBucket_REST_S3() {}
