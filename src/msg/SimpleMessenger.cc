@@ -423,7 +423,14 @@ int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
 	  << " " << m 
 	  << dendl;
 
-  submit_message(m, dest.addr, dest.name.type(), false);
+  if (dest.addr == entity_addr_t()) {
+    ldout(cct,0) << "send_message message " << *m << " with empty dest " << dest.addr << dendl;
+    m->put();
+    return -EINVAL;
+  }
+
+  Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
+  submit_message(m, pipe, dest.addr, dest.name.type(), false);
   return 0;
 }
 
@@ -435,19 +442,14 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
 
   SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
-  if (pipe) {
-    ldout(cct,1) << "--> " << con->get_peer_addr() << " -- " << *m
-            << " -- ?+" << m->get_data().length()
-            << " " << m << " con " << con
-            << dendl;
+  ldout(cct,1) << "--> " << con->get_peer_addr() << " -- " << *m
+      << " -- ?+" << m->get_data().length()
+      << " " << m << " con " << con
+      << dendl;
 
-    submit_message(m, pipe);
+  submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), false);
+  if (pipe) {
     pipe->put();
-  } else {
-    ldout(cct,0) << "send_message dropped message " << *m << " because of no pipe on con " << con
-	    << dendl;
-    // else we raced with reaper()
-    m->put();
   }
   return 0;
 }
@@ -466,7 +468,13 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
           << " " << m
           << dendl;
 
-  submit_message(m, dest.addr, dest.name.type(), true);
+  if (dest.addr == entity_addr_t()) {
+    ldout(cct,0) << "lazy_send_message message " << *m << " with empty dest " << dest.addr << dendl;
+    m->put();
+    return -EINVAL;
+  }
+  Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
+  submit_message(m, pipe, dest.addr, dest.name.type(), true);
   return 0;
 }
 
@@ -2406,29 +2414,6 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
 }
 
-void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
-{ 
-  assert(pipe->msgr == this);
-  lock.Lock();
-  if (pipe == dispatch_queue.local_pipe) {
-    ldout(cct,20) << "submit_message " << *m << " local" << dendl;
-    dispatch_queue.local_delivery(m, m->get_priority());
-  } else {
-    pipe->pipe_lock.Lock();
-    if (pipe->state == Pipe::STATE_CLOSED) {
-      ldout(cct,20) << "submit_message " << *m << " ignoring closed pipe " << pipe->peer_addr << dendl;
-      pipe->unregister_pipe();
-      pipe->pipe_lock.Unlock();
-      m->put();
-    } else {
-      ldout(cct,20) << "submit_message " << *m << " remote " << pipe->peer_addr << dendl;
-      pipe->_send(m);
-      pipe->pipe_lock.Unlock();
-    }
-  }
-  lock.Unlock();
-}
-
 Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
@@ -2458,23 +2443,12 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 }
 
 
-void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr, int dest_type, bool lazy)
+void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
-  // this is just to make sure that a changeset is working properly;
-  // if you start using the refcounting more and have multiple people
-  // hanging on to a message, ditch the assert!
-  assert(m->nref.read() == 1);
-
-  if (dest_addr == entity_addr_t()) {
-    ldout(cct,0) << "submit_message message " << *m << " with empty dest " << dest_addr << dendl;
-    m->put();
-    return;
-  }
-
   lock.Lock();
   {
     // local?
-    if (my_inst.addr == dest_addr) {
+    if (!pipe && my_inst.addr == dest_addr) {
       if (!destination_stopped) {
         // local
         ldout(cct,20) << "submit_message " << *m << " local" << dendl;
@@ -2486,9 +2460,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
       }
     } else {
       // remote pipe.
-      Pipe *pipe = 0;
-      if (rank_pipe.count(dest_addr)) {
-	pipe = rank_pipe[ dest_addr ];
+      if (pipe) {
 	pipe->pipe_lock.Lock();
 	if (pipe->state == Pipe::STATE_CLOSED) {
 	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;

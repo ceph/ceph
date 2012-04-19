@@ -230,7 +230,7 @@ public:
    * when you pass it in.
    * @param dest The entity to send the Message to.
    *
-   * @return 0 on success, or -errno on failure.
+   * @return 0 on success, or -EINVAL if the dest's address is empty.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest);
   /**
@@ -243,7 +243,7 @@ public:
    * when you pass it in.
    * @param con The Connection to send the Message out on.
    *
-   * @return 0 on success, or -errno on failure.
+   * @return 0 on success.
    */
   virtual int send_message(Message *m, Connection *con);
   /**
@@ -256,7 +256,7 @@ public:
    * when you pass it in.
    * @param dest The entity to send the Message to.
    *
-   * @return 0.
+   * @return 0 on success, or -EINVAL if the dest's address is empty.
    */
   virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
   /**
@@ -783,21 +783,20 @@ private:
   /**
    * Queue up a Message for delivery to the entity specified
    * by addr and dest_type.
+   * If there is already an established Pipe connected to the given
+   * addr you must pass it in to this function, regardless of the Pipe's
+   * current state. submit_message() is responsible for creating
+   * new Pipes (and closing old ones) as necessary.
    *
    * @param m The Message to queue up. This function eats a reference.
+   * @param pipe The existing Pipe to the given address.
    * @param addr The address to send the Message to.
    * @param dest_type The peer type of the address we're sending to
    * @param lazy If true, do not establish or fix a Connection to send the Message;
    * just drop silently under failure.
    */
-  void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
-  /**
-   * Queue up a Message for delivery along the specified Pipe.
-   *
-   * @param m The Message to queue up. This function eats a reference.
-   * @param pipe The Pipe to send the Message out on.
-   */
-  void submit_message(Message *m, Pipe *pipe);
+  void submit_message(Message *m, Pipe *pipe,
+                      const entity_addr_t& addr, int dest_type, bool lazy);
   /**
    * Look through the pipes in the pipe_reap_queue and tear them down.
    */
