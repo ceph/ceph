@@ -410,7 +410,64 @@ private:
    * to provide reliable Message delivery when it manages to reconnect.
    */
   class Pipe : public RefCountedObject {
+    /**
+     * The Reader thread handles all reads off the socket -- not just
+     * Messages, but also acks and other protocol bits (excepting startup,
+     * when the Writer does a couple of reads).
+     * All the work is implemented in Pipe itself, of course.
+     */
+    class Reader : public Thread {
+      Pipe *pipe;
+    public:
+      Reader(Pipe *p) : pipe(p) {}
+      void *entry() { pipe->reader(); return 0; }
+    } reader_thread;
+    friend class Reader;
+
+    /**
+     * The Writer thread handles all writes to the socket (after startup).
+     * All the work is implemented in Pipe itself, of course.
+     */
+    class Writer : public Thread {
+      Pipe *pipe;
+    public:
+      Writer(Pipe *p) : pipe(p) {}
+      void *entry() { pipe->writer(); return 0; }
+    } writer_thread;
+    friend class Writer;
+
   public:
+    Pipe(SimpleMessenger *r, int st) :
+      reader_thread(this), writer_thread(this),
+      msgr(r),
+      sd(-1),
+      peer_type(-1),
+      pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
+      state(st),
+      connection_state(new Connection),
+      reader_running(false), reader_joining(false), writer_running(false),
+      in_qlen(0), keepalive(false), halt_delivery(false),
+      close_on_empty(false), disposable(false),
+      connect_seq(0), peer_global_seq(0),
+      out_seq(0), in_seq(0), in_seq_acked(0) {
+      connection_state->pipe = get();
+      msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
+      if (msgr->timeout == 0)
+        msgr->timeout = -1;
+    }
+    ~Pipe() {
+      for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
+          i != queue_items.end();
+          ++i) {
+        assert(!i->second->is_on_list());
+        delete i->second;
+      }
+      assert(out_q.empty());
+      assert(sent.empty());
+      if (connection_state)
+        connection_state->put();
+    }
+
     SimpleMessenger *msgr;
     ostream& _pipe_prefix(std::ostream *_dout);
 
@@ -503,58 +560,9 @@ private:
       }
     }
 
-    // threads
-    class Reader : public Thread {
-      Pipe *pipe;
     public:
-      Reader(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->reader(); return 0; }
-    } reader_thread;
-    friend class Reader;
-
-    class Writer : public Thread {
-      Pipe *pipe;
-    public:
-      Writer(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->writer(); return 0; }
-    } writer_thread;
-    friend class Writer;
-    
-  public:
     Pipe(const Pipe& other);
     const Pipe& operator=(const Pipe& other);
-
-    Pipe(SimpleMessenger *r, int st) : 
-      msgr(r),
-      sd(-1),
-      peer_type(-1),
-      pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
-      state(st), 
-      connection_state(new Connection),
-      reader_running(false), reader_joining(false), writer_running(false),
-      in_qlen(0), keepalive(false), halt_delivery(false), 
-      close_on_empty(false), disposable(false),
-      connect_seq(0), peer_global_seq(0),
-      out_seq(0), in_seq(0), in_seq_acked(0),
-      reader_thread(this), writer_thread(this) {
-      connection_state->pipe = get();
-      msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
-      if (msgr->timeout == 0)
-        msgr->timeout = -1;
-    }
-    ~Pipe() {
-      for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
-	   i != queue_items.end();
-	   ++i) {
-	assert(!i->second->is_on_list());
-	delete i->second;
-      }
-      assert(out_q.empty());
-      assert(sent.empty());
-      if (connection_state)
-        connection_state->put();
-    }
-
 
     void start_reader() {
       assert(pipe_lock.is_locked());
