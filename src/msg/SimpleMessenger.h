@@ -63,14 +63,16 @@ public:
     accepter(this),
     reaper_thread(this),
     dispatch_thread(this),
-    lock("SimpleMessenger::lock"), did_bind(false),
-    dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
-    nonce(_nonce), destination_stopped(false), my_type(name.type()),
+    my_type(name.type()),
+    nonce(_nonce),
+    lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
+    destination_stopped(false),
+    cluster_protocol(0),
+    dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
-    msgr(this),
     timeout(0),
-    cluster_protocol(0)
+    msgr(this)
   {
     pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
     // for local dmsg delivery
@@ -784,57 +786,55 @@ private:
    */
 
   // SimpleMessenger stuff
+  /// the peer type of our endpoint
+  int my_type;
+  /// approximately unique ID set by the Constructor for use in entity_addr_t
+  uint64_t nonce;
   /// overall lock used for SimpleMessenger data structures
   Mutex lock;
-  /// This Cond is slept on by wait() and signaled by dispatch_entry()
-  Cond  wait_cond;
+  /// true, specifying we haven't learned our addr; set false when we find it.
+  // maybe this should be protected by the lock?
+  bool need_addr;
   /**
    *  false; set to true if the SimpleMessenger bound to a specific address;
    *  and set false again by Accepter::stop(). This isn't lock-protected
    *  since you shouldn't be able to race the only writers.
    */
   bool did_bind;
-  /// Throttle preventing us from building up a big backlog waiting for dispatch
-  Throttle dispatch_throttler;
-
-  /// true, specifying we haven't learned our addr; set false when we find it.
-  // maybe this should be protected by the lock?
-  bool need_addr;
-  /// approximately unique ID set by the Constructor for use in entity_addr_t
-  uint64_t nonce;
+  /// counter for the global seq our connection protocol uses
+  __u32 global_seq;
+  /// lock to protect the global_seq
+  pthread_spinlock_t global_seq_lock;
 
   /// flag set true when all the threads need to shut down
   bool destination_stopped;
 
   /// hash map of addresses to Pipes
   hash_map<entity_addr_t, Pipe*> rank_pipe;
-  /// the peer type of our endpoint
-  int my_type;
-
-
-  /// the default Policy we use for Pipes
-  Policy default_policy;
-  /// map specifying different Policies for specific peer types
-  map<int, Policy> policy_map; // entity_name_t::type -> Policy
-
   /// a set of all the Pipes we have which are somehow active
   set<Pipe*>      pipes;
   /// a list of Pipes we want to tear down
   list<Pipe*>     pipe_reap_queue;
 
-  /// lock to protect the global_seq
-  pthread_spinlock_t global_seq_lock;
-  /// counter for the global seq our connection protocol uses
-  __u32 global_seq;
+  /// internal cluster protocol version, if any, for talking to entities of the same type.
+  int cluster_protocol;
+  /// the default Policy we use for Pipes
+  Policy default_policy;
+  /// map specifying different Policies for specific peer types
+  map<int, Policy> policy_map; // entity_name_t::type -> Policy
+
+  /// Throttle preventing us from building up a big backlog waiting for dispatch
+  Throttle dispatch_throttler;
 
   bool reaper_started, reaper_stop;
   Cond reaper_cond;
 
-  SimpleMessenger *msgr; //hack to make dout macro work, will fix
+  /// This Cond is slept on by wait() and signaled by dispatch_entry()
+  Cond  wait_cond;
+
   int timeout;
-  
-  /// internal cluster protocol version, if any, for talking to entities of the same type.
-  int cluster_protocol;
+
+  SimpleMessenger *msgr; //hack to make dout macro work, will fix
 
 public:
   /**
