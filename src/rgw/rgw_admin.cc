@@ -1209,6 +1209,14 @@ next:
   }
   
   if (opt_cmd == OPT_USER_RM) {
+    RGWUserBuckets buckets;
+    if (rgw_read_user_buckets(user_id, buckets, false) >= 0) {
+      map<string, RGWBucketEnt>& m = buckets.get_buckets();
+      if (m.size() > 0) {
+        cerr << "user bucket list not empty, can't remove user" << std::endl;
+        return 1;
+      }
+    }
     rgw_delete_user(info);
   }
   
