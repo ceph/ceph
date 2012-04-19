@@ -2490,14 +2490,14 @@ void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t
 	  pipe = 0;
 	} else {
 	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-	  
+
 	  pipe->_send(m);
 	  pipe->pipe_lock.Unlock();
 	}
       }
       if (!pipe) {
 	const Policy& policy = get_policy(dest_type);
-	if (policy.lossy && policy.server) {
+	if (policy.server) {
 	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
 		   << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
 	  m->put();
