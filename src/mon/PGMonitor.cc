@@ -136,12 +136,6 @@ void PGMonitor::tick()
 void PGMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
-  pg_map.full_ratio = g_conf->mon_osd_full_ratio;
-  if (pg_map.full_ratio > 1.0)
-    pg_map.full_ratio /= 100.0;
-  pg_map.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
-  if (pg_map.nearfull_ratio > 1.0)
-    pg_map.nearfull_ratio /= 100.0;
 }
 
 void PGMonitor::update_from_paxos()
@@ -242,8 +236,18 @@ void PGMonitor::create_pending()
 {
   pending_inc = PGMap::Incremental();
   pending_inc.version = pg_map.version + 1;
-  pending_inc.full_ratio = pg_map.full_ratio;
-  pending_inc.nearfull_ratio = pg_map.nearfull_ratio;
+  if (pg_map.version == 0) {
+    // pull initial values from first leader mon's config
+    pending_inc.full_ratio = g_conf->mon_osd_full_ratio;
+    if (pending_inc.full_ratio > 1.0)
+      pending_inc.full_ratio /= 100.0;
+    pending_inc.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+    if (pending_inc.nearfull_ratio > 1.0)
+      pending_inc.nearfull_ratio /= 100.0;
+  } else {
+    pending_inc.full_ratio = pg_map.full_ratio;
+    pending_inc.nearfull_ratio = pg_map.nearfull_ratio;
+  }
   dout(10) << "create_pending v " << pending_inc.version << dendl;
 }
 
