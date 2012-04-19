@@ -1153,7 +1153,6 @@ dist-hook:
 	$(srcdir)/check_version $(srcdir)/.git_version
 
 python_PYTHON = pybind/rados.py \
-		pybind/rgw.py \
 		pybind/rbd.py
 
 # headers... and everything else we want to include in a 'make dist' 
