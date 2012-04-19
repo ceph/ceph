@@ -79,7 +79,6 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
            << " seconds old" << dendl;
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
   warning_vector.reserve(ops_in_flight.size());
-  int warning_num = 0;
   while (!i.end() && (*i)->received_time < too_old) {
     // exponential backoff of warning intervals
     if ( ( (*i)->received_time +
@@ -89,11 +88,11 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       ss << "old request " << *((*i)->request) << " received at "
           << (*i)->received_time << " currently " << (*i)->state_string();
       (*i)->warn_interval_multiplier *= 2;
-      warning_vector[warning_num++] = ss.str();
+      warning_vector.push_back(ss.str());
     }
     ++i;
   }
-  return warning_num;
+  return warning_vector.size();
 }
 
 void OpTracker::mark_event(OpRequest *op, const string &dest)
