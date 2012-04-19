@@ -1564,13 +1564,14 @@ ssize_t handle_sparse_read(CephContext *cct,
 			   bufferlist data_bl,
 			   uint64_t block_ofs,
 			   const map<uint64_t, uint64_t> &data_map,
-			   uint64_t buf_ofs,
-			   size_t buf_len,
+			   uint64_t buf_ofs,   // offset into buffer
+			   size_t buf_len,     // length in buffer (not size of buffer!)
 			   int (*cb)(uint64_t, size_t, const char *, void *),
 			   void *arg)
 {
   int r;
   uint64_t bl_ofs = 0;
+  size_t buf_left = buf_len;
 
   for (map<uint64_t, uint64_t>::const_iterator iter = data_map.begin();
        iter != data_map.end();
@@ -1584,18 +1585,26 @@ ssize_t handle_sparse_read(CephContext *cct,
 
     /* a hole? */
     if (extent_ofs > block_ofs) {
-      ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << extent_ofs << dendl;
-      r = cb(buf_ofs, extent_ofs - block_ofs, NULL, arg);
+      uint64_t gap = extent_ofs - block_ofs;
+      ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << gap << dendl;
+      r = cb(buf_ofs, gap, NULL, arg);
       if (r < 0) {
 	return r;
       }
+      buf_ofs += gap;
+      buf_left -= gap;
+      block_ofs = extent_ofs;
+    } else {
+      if (extent_ofs != block_ofs) {
+	assert(0 == "osd returned data prior to what we asked for");
+	return -EIO;
+      }
     }
 
-    if (bl_ofs + extent_len > buf_len) {
+    if (bl_ofs + extent_len > (buf_ofs + buf_left)) {
+      assert(0 == "osd returned more data than we asked for");
       return -EIO;
     }
-    buf_ofs += extent_ofs - block_ofs;
-    block_ofs = extent_ofs;
 
     /* data */
     ldout(cct, 10) << "<2>copying " << buf_ofs << "~" << extent_len
@@ -1606,13 +1615,15 @@ ssize_t handle_sparse_read(CephContext *cct,
     }
     bl_ofs += extent_len;
     buf_ofs += extent_len;
+    assert(buf_left >= extent_len);
+    buf_left -= extent_len;
     block_ofs += extent_len;
   }
 
   /* last hole */
-  if (buf_len > buf_ofs) {
-    ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_len - buf_ofs << dendl;
-    r = cb(buf_ofs, buf_len - buf_ofs, NULL, arg);
+  if (buf_left > 0) {
+    ldout(cct, 0) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
+    r = cb(buf_ofs, buf_left, NULL, arg);
     if (r < 0) {
       return r;
     }
