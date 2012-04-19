@@ -1538,12 +1538,22 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   ictx->lock.Unlock();
   uint64_t left = len;
 
+  vector<ObjectExtent> v;
+  if (ictx->object_cacher)
+    v.reserve(end_block - start_block + 1);
+
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
     uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
+
+    if (ictx->object_cacher) {
+      v.push_back(ObjectExtent(oid, block_ofs, write_len));
+      v.back().oloc.pool = ictx->data_ctx.get_id();
+    }
+
     librados::ObjectWriteOperation write_op;
     if (block_ofs == 0 && write_len == block_size)
       write_op.remove();
@@ -1557,6 +1567,10 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
     total_write += write_len;
     left -= write_len;
   }
+
+  if (ictx->object_cacher)
+    ictx->object_cacher->truncate_set(ictx->object_set, v);
+
   return total_write;
 }
 
@@ -1797,6 +1811,10 @@ int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
   if (r < 0)
     return r;
 
+  vector<ObjectExtent> v;
+  if (ictx->object_cacher)
+    v.reserve(end_block - start_block + 1);
+
   c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
@@ -1807,6 +1825,12 @@ int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
     AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
 
     uint64_t write_len = min(block_size - block_ofs, left);
+
+    if (ictx->object_cacher) {
+      v.push_back(ObjectExtent(oid, block_ofs, write_len));
+      v.back().oloc.pool = ictx->data_ctx.get_id();
+    }
+
     if (block_ofs == 0 && write_len == block_size)
       block_completion->write_op.remove();
     else if (block_ofs + write_len == block_size)
@@ -1827,6 +1851,9 @@ int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
   }
   r = 0;
 done:
+  if (ictx->object_cacher)
+    ictx->object_cacher->truncate_set(ictx->object_set, v);
+
   c->finish_adding_completions();
   c->put();
 
