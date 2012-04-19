@@ -570,11 +570,23 @@ void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t new
   uint64_t bsize = get_block_size(header);
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
-  ldout(cct, 2) << "trimming image data from " << numseg << " to " << start << " objects..." << dendl;
-  for (uint64_t i=start; i<numseg; i++) {
-    string oid = get_block_oid(header, i);
-    io_ctx.remove(oid);
-    prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
+
+  uint64_t block_ofs = get_block_ofs(header, newsize);
+  if (block_ofs) {
+    ldout(cct, 2) << "trim_image object " << numseg << " truncate to " << block_ofs << dendl;
+    string oid = get_block_oid(header, start);
+    librados::ObjectWriteOperation write_op;
+    write_op.truncate(block_ofs);
+    io_ctx.operate(oid, &write_op);
+    start++;
+  }
+  if (start < numseg) {
+    ldout(cct, 2) << "trim_image objects " << start << " to " << (numseg-1) << dendl;
+    for (uint64_t i=start; i<numseg; i++) {
+      string oid = get_block_oid(header, i);
+      io_ctx.remove(oid);
+      prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
+    }
   }
 }
 
