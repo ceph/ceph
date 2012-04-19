@@ -966,10 +966,10 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   }
 
   if (size > ictx->header.image_size) {
-    ldout(cct, 2) << "expanding image " << ictx->header.image_size << " -> " << size << " objects" << dendl;
+    ldout(cct, 2) << "expanding image " << ictx->header.image_size << " -> " << size << dendl;
     ictx->header.image_size = size;
   } else {
-    ldout(cct, 2) << "shrinking image " << ictx->header.image_size << " -> " << size << " objects" << dendl;
+    ldout(cct, 2) << "shrinking image " << ictx->header.image_size << " -> " << size << dendl;
     trim_image(ictx->data_ctx, ictx->header, size, prog_ctx);
     ictx->header.image_size = size;
   }
