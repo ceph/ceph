@@ -433,16 +433,13 @@ public:
   virtual void mark_down(Connection *con) = 0;
   /**
    * Unlike mark_down, this function will try and deliver
-   * all messages before ending the connection. But the
-   * messages are not delivered reliably, and once they've
+   * all messages before ending the connection, and it will use
+   * the Pipe's existing semantics to do so. Once the Messages
    * all been sent out the Connection will be closed and
    * generate an ms_handle_reset notification to the
    * Dispatcher.
-   * This function means that you will get a best-effort delivery to
-   * endpoints that you don't necessarily care about any more, but have
-   * courtesy Messages for, and then the Connection will be cleaned up.
-   * TODO: Probably this shouldn't generate a Dispatcher
-   * notification, since the mark_down was requested.
+   * This function means that you will get standard delivery to endpoints,
+   * and then the Connection will be cleaned up.
    *
    * @param con The Connection to mark down.
    */
@@ -453,7 +450,8 @@ public:
    * this does not immediately close the Connection once
    * Messages have been delivered, so as long as there are no errors you can
    * continue to receive responses; but it will not attempt
-   * to reconnect for message delivery, either.
+   * to reconnect for message delivery or preserve your old
+   * delivery semantics, either.
    *
    * TODO: There's some odd stuff going on in our SimpleMessenger
    * implementation during connect that looks unused; is there

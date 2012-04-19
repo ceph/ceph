@@ -1785,10 +1785,8 @@ void SimpleMessenger::Pipe::writer()
     }
     
     if (sent.empty() && close_on_empty) {
-      // this is slightly hacky
       ldout(msgr->cct,10) << "writer out and sent queues empty, closing" << dendl;
-      policy.lossy = true;
-      fault();
+      stop();
       continue;
     }
 

@@ -325,22 +325,16 @@ public:
   virtual void mark_down(Connection *con);
   /**
    * Unlike mark_down, this function will try and deliver
-   * all messages before ending the connection. But the
-   * messages are not delivered reliably, and once they've
-   * all been sent out the Connection will be closed and
-   * generate an ms_handle_reset notification to the
-   * Dispatcher.
-   * This function means that you will get a best-effort delivery to
-   * endpoints that you don't necessarily care about any more, but have
-   * courtesy Messages for, and then the Connection will be cleaned up.
-   * TODO: Probably this shouldn't generate a Dispatcher
-   * notification, since the mark_down was requested. I
-   * think maybe we can just call stop() instead of
-   * fault().
+   * all messages before ending the connection, and it will use
+   * the Pipe's existing semantics to do so. Once the Messages
+   * all been sent out (and acked, if using reliable delivery)
+   * the Connection will be closed.
+   * This function means that you will get standard delivery to endpoints,
+   * and then the Connection will be cleaned up. It does not
+   * generate any notifications to the Dispatcher.
    *
    * @param con The Connection to mark down.
    */
-
   virtual void mark_down_on_empty(Connection *con);
   /**
    * Mark a Connection as "disposable", setting it to lossy
@@ -348,11 +342,15 @@ public:
    * this does not immediately close the Connection once
    * Messages have been delivered, so as long as there are no errors you can
    * continue to receive responses; but it will not attempt
-   * to reconnect for message delivery, either.
+   * to reconnect for message delivery or preserve your old
+   * delivery semantics, either.
+   * You can compose this with mark_down, in which case the Pipe
+   * will make sure to send all Messages and wait for an ack before
+   * closing, but if there's a failure it will simply shut down.
    *
-   * TODO: There's some odd stuff going on with Pipe::disposable
-   * during connect that looks unused; is there more of a contract
-   * that that's enforcing?
+   * TODO: There's some odd stuff going on in our SimpleMessenger
+   * implementation during connect that looks unused; is there
+   * more of a contract that that's enforcing?
    *
    * @param con The Connection to mark as disposable.
    */
@@ -483,10 +481,8 @@ private:
       }
 
       if (sent.empty() && close_on_empty) {
-	// this is slightly hacky
 	lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
-	policy.lossy = true;
-	fault();
+	stop();
       }
     }
 
