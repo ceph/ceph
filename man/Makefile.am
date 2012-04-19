@@ -25,4 +25,4 @@ dist_man_MANS = \
 	cephfs.8 \
 	ceph-dencoder.8 \
 	ceph-rbdnamer.8 \
-	obsync.8
+	obsync.1

@@ -341,7 +341,7 @@ fi
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
-%{_mandir}/man8/obsync.8*
+%{_mandir}/man1/obsync.1*
 %{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-debugpack.8*
