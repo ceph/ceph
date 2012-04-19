@@ -350,11 +350,8 @@ public:
    * delivery semantics, either.
    * You can compose this with mark_down, in which case the Pipe
    * will make sure to send all Messages and wait for an ack before
-   * closing, but if there's a failure it will simply shut down.
-   *
-   * TODO: There's some odd stuff going on in our SimpleMessenger
-   * implementation during connect that looks unused; is there
-   * more of a contract that that's enforcing?
+   * closing, but if there's a failure it will simply shut down. It
+   * does not generate any notifications to the Dispatcher.
    *
    * @param con The Connection to mark as disposable.
    */
@@ -447,7 +444,7 @@ private:
       connection_state(new Connection),
       reader_running(false), reader_joining(false), writer_running(false),
       in_qlen(0), keepalive(false), halt_delivery(false),
-      close_on_empty(false), disposable(false),
+      close_on_empty(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0) {
       connection_state->pipe = get();
@@ -507,7 +504,6 @@ private:
     bool keepalive;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
     bool close_on_empty;
-    bool disposable;
     
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;

@@ -1286,9 +1286,7 @@ int SimpleMessenger::Pipe::connect()
 
       // hooray!
       peer_global_seq = reply.global_seq;
-      if (!disposable) {
-	policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
-      }
+      policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
       state = STATE_OPEN;
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
@@ -2738,7 +2736,6 @@ void SimpleMessenger::mark_disposable(Connection *con)
     assert(p->msgr == this);
     p->pipe_lock.Lock();
     p->policy.lossy = true;
-    p->disposable = true;
     p->pipe_lock.Unlock();
     p->put();
   } else {
