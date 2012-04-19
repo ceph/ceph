@@ -232,12 +232,14 @@ public:
    *
    * @return 0 on success, or -EINVAL if the dest's address is empty.
    */
-  virtual int send_message(Message *m, const entity_inst_t& dest);
+  virtual int send_message(Message *m, const entity_inst_t& dest) {
+    return _send_message(m, dest, false);
+  }
   /**
    * Queue the given Message to send out on the given Connection.
    * Success in this function does not guarantee Message delivery, only
-   * success in queueing the Message. Other guarantees may be provided based
-   * on the Connection policy.
+   * success in queueing the Message (or else a guaranteed-safe drop).
+   * Other guarantees may be provided based on the Connection policy.
    *
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
@@ -245,7 +247,9 @@ public:
    *
    * @return 0 on success.
    */
-  virtual int send_message(Message *m, Connection *con);
+  virtual int send_message(Message *m, Connection *con) {
+    return _send_message(m, con, false);
+  }
   /**
    * Lazily queue the given Message for the given entity. Unlike with
    * send_message(), lazy_send_message() will not establish a
@@ -258,7 +262,9 @@ public:
    *
    * @return 0 on success, or -EINVAL if the dest's address is empty.
    */
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) {
+    return _send_message(m, dest, true);
+  }
   /**
    * Lazily queue the given Message for the given Connection.
    *
@@ -268,7 +274,9 @@ public:
    *
    * @return 0.
    */
-  virtual int lazy_send_message(Message *m, Connection *con);
+  virtual int lazy_send_message(Message *m, Connection *con) {
+    return _send_message(m, con, true);
+  }
   /** @} // Messaging */
 
   /**
@@ -777,6 +785,16 @@ private:
    * reference; take one if you need it.
    */
   Pipe *connect_rank(const entity_addr_t& addr, int type);
+  /**
+   * Send a message, lazily or not.
+   * This just glues [lazy_]send_message together and passes
+   * the input on to submit_message.
+   */
+  int _send_message(Message *m, const entity_inst_t& dest, bool lazy);
+  /**
+   * Same as above, but for the Connection-based variants.
+   */
+  int _send_message(Message *m, Connection *con, bool lazy);
   /**
    * Queue up a Message for delivery to the entity specified
    * by addr and dest_type.

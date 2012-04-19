@@ -410,31 +410,33 @@ int SimpleMessenger::shutdown()
   return 0;
 }
 
-int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
+int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
+                                   bool lazy)
 {
   // set envelope
   m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  ldout(cct,1) << "--> " << dest.name << " " << dest.addr
-          << " -- " << *m
+  ldout(cct,1) << (lazy ? "lazy " : "") <<"--> " << dest.name << " "
+          << dest.addr << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
 	  << dendl;
 
   if (dest.addr == entity_addr_t()) {
-    ldout(cct,0) << "send_message message " << *m << " with empty dest " << dest.addr << dendl;
+    ldout(cct,0) << (lazy ? "lazy_" : "") << "send_message message " << *m
+                 << " with empty dest " << dest.addr << dendl;
     m->put();
     return -EINVAL;
   }
 
   Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
-  submit_message(m, pipe, dest.addr, dest.name.type(), false);
+  submit_message(m, pipe, dest.addr, dest.name.type(), lazy);
   return 0;
 }
 
-int SimpleMessenger::send_message(Message *m, Connection *con)
+int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
 {
   //set envelope
   m->get_header().src = get_myname();
@@ -442,57 +444,13 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
 
   SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
-  ldout(cct,1) << "--> " << con->get_peer_addr() << " -- " << *m
+  ldout(cct,1) << (lazy ? "lazy " : "") << "--> " << con->get_peer_addr()
+      << " -- " << *m
       << " -- ?+" << m->get_data().length()
       << " " << m << " con " << con
       << dendl;
 
-  submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), false);
-  if (pipe) {
-    pipe->put();
-  }
-  return 0;
-}
-
-int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
-{
-  // set envelope
-  m->get_header().src = get_myname();
-
-  if (!m->get_priority()) m->set_priority(get_default_send_priority());
- 
-  ldout(cct,1) << "lazy "
-	  << " --> " << dest.name << " " << dest.addr
-          << " -- " << *m
-    	  << " -- ?+" << m->get_data().length()
-          << " " << m
-          << dendl;
-
-  if (dest.addr == entity_addr_t()) {
-    ldout(cct,0) << "lazy_send_message message " << *m << " with empty dest " << dest.addr << dendl;
-    m->put();
-    return -EINVAL;
-  }
-  Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
-  submit_message(m, pipe, dest.addr, dest.name.type(), true);
-  return 0;
-}
-
-int SimpleMessenger::lazy_send_message(Message *m, Connection *con)
-{
-  //set envelope
-  m->get_header().src = get_myname();
-
-  if (!m->get_priority()) m->set_priority(get_default_send_priority());
-
-  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
-  ldout(cct,1) << "lazy "
-      << "--> " << con->get_peer_addr() << " -- " << *m
-      << " -- ?+" << m->get_data().length()
-      << " " << m << " con " << con
-      << dendl;
-
-  submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), true);
+  submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), lazy);
   if (pipe) {
     pipe->put();
   }
