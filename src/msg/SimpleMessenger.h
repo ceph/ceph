@@ -261,17 +261,14 @@ public:
   virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
   /**
    * Lazily queue the given Message for the given Connection.
-   * TODO: Our implementation here is over-zealous: it is equivalent to send_message().
    *
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
-   * @param dest The entity to send the Message to.
+   * @param con The Connection to send the Message out on.
    *
    * @return 0.
    */
-  virtual int lazy_send_message(Message *m, Connection *con) {
-    return send_message(m, con);
-  }
+  virtual int lazy_send_message(Message *m, Connection *con);
   /** @} // Messaging */
 
   /**

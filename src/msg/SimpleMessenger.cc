@@ -478,6 +478,27 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
   return 0;
 }
 
+int SimpleMessenger::lazy_send_message(Message *m, Connection *con)
+{
+  //set envelope
+  m->get_header().src = get_myname();
+
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
+
+  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
+  ldout(cct,1) << "lazy "
+      << "--> " << con->get_peer_addr() << " -- " << *m
+      << " -- ?+" << m->get_data().length()
+      << " " << m << " con " << con
+      << dendl;
+
+  submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), true);
+  if (pipe) {
+    pipe->put();
+  }
+  return 0;
+}
+
 /**
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
