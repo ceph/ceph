@@ -189,8 +189,6 @@ static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
   CGI_PRINTF(s,"X-RGW-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
   CGI_PRINTF(s,"X-RGW-Bytes-Used: %s\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
-  CGI_PRINTF(s,"X-RGW-Bytes-Used-Actual: %s\n", buf);
 }
 
 void RGWStatBucket_REST_S3::send_response()
