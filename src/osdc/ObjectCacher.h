@@ -249,7 +249,7 @@ class ObjectCacher {
     BufferHead *map_write(OSDWrite *wr);
     
     void truncate(loff_t s);
-
+    void discard(loff_t off, loff_t len);
   };
   
 

@@ -408,6 +408,40 @@ void ObjectCacher::Object::truncate(loff_t s)
   }
 }
 
+void ObjectCacher::Object::discard(loff_t off, loff_t len)
+{
+  ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len << dendl;
+
+  map<loff_t, BufferHead*>::iterator p = data.lower_bound(off);
+  if (p != data.begin() &&
+      (p == data.end() || p->first > off)) {
+    p--;     // might overlap!
+    if (p->first + p->second->length() <= off)
+      p++;   // doesn't overlap.
+  }
+
+  while (p != data.end()) {
+    BufferHead *bh = p->second;
+    if (bh->start() >= off + len)
+      break;
+
+    // split bh at truncation point?
+    if (bh->start() < off) {
+      split(bh, off);
+      p++;
+      continue;
+    }
+
+    assert(bh->start() >= off);
+    if (bh->end() > off + len) {
+      split(bh, off + len);
+    }
+
+    p++;
+    oc->bh_remove(this, bh);
+  }
+}
+
 
 
 /*** ObjectCacher ***/
