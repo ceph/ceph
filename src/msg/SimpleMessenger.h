@@ -61,12 +61,14 @@ public:
   SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
     Messenger(cct, name),
     accepter(this),
+    reaper_thread(this),
+    dispatch_thread(this),
     lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
     nonce(_nonce), destination_stopped(false), my_type(name.type()),
     global_seq(0),
-    reaper_thread(this), reaper_started(false), reaper_stop(false),
-    dispatch_thread(this), msgr(this),
+    reaper_started(false), reaper_stop(false),
+    msgr(this),
     timeout(0),
     cluster_protocol(0)
   {
@@ -373,8 +375,10 @@ protected:
   virtual void ready();
   /** @} // Messenger Interfaces */
 private:
-  class Pipe;
-
+  /**
+   * @defgroup Inner classes
+   * @{
+   */
   // incoming
   class Accepter : public Thread {
   public:
@@ -708,52 +712,39 @@ private:
     }
   } dispatch_queue;
 
-  // SimpleMessenger stuff
-  /// overall lock used for SimpleMessenger data structures
-  Mutex lock;
-  /// This Cond is slept on by wait() and signaled by dispatch_entry()
-  Cond  wait_cond;
   /**
-   *  false; set to true if the SimpleMessenger bound to a specific address;
-   *  and set false again by Accepter::stop(). This isn't lock-protected
-   *  since you shouldn't be able to race the only writers.
+   * A thread used to tear down Pipes when they're complete.
    */
-  bool did_bind;
-  /// Throttle preventing us from building up a big backlog waiting for dispatch
-  Throttle dispatch_throttler;
+  class ReaperThread : public Thread {
+    SimpleMessenger *msgr;
+  public:
+    ReaperThread(SimpleMessenger *m) : msgr(m) {}
+    void *entry() {
+      msgr->reaper_entry();
+      return 0;
+    }
+  } reaper_thread;
 
-  /// true, specifying we haven't learned our addr; set false when we find it.
-  // maybe this should be protected by the lock?
-  bool need_addr;
-  /// approximately unique ID set by the Constructor for use in entity_addr_t
-  uint64_t nonce;
-  
-  /// flag set true when all the threads need to shut down
-  bool destination_stopped;
-  
-  /// hash map of addresses to Pipes
-  hash_map<entity_addr_t, Pipe*> rank_pipe;
-  /// the peer type of our endpoint
-  int my_type;
+  /***********************/
 
+  class DispatchThread : public Thread {
+    SimpleMessenger *msgr;
+  public:
+    DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
+    void *entry() {
+      msgr->dispatch_entry();
+      return 0;
+    }
+  } dispatch_thread;
 
-  // --- policy ---
-  /// the default Policy we use for Pipes
-  Policy default_policy;
-  /// map specifying different Policies for specific peer types
-  map<int, Policy> policy_map; // entity_name_t::type -> Policy
+  /**
+   * @} // Inner classes
+   */
 
-  // --- pipes ---
-  /// a set of all the Pipes we have which are somehow active
-  set<Pipe*>      pipes;
-  /// a list of Pipes we want to tear down
-  list<Pipe*>     pipe_reap_queue;
-
-  /// lock to protect the global_seq
-  pthread_spinlock_t global_seq_lock;
-  /// counter for the global seq our connection protocol uses
-  __u32 global_seq;
-
+  /**
+   * @defgroup Utility functions
+   * @{
+   */
   /**
    * Create a Pipe associated with the given entity (of the given type).
    * Initiate the connection. (This function returning does not guarantee
@@ -784,41 +775,60 @@ private:
    * @param pipe The Pipe to send the Message out on.
    */
   void submit_message(Message *m, Pipe *pipe);
-
-
-  /**
-   * A thread used to tear down Pipes when they're complete.
-   */
-  class ReaperThread : public Thread {
-    SimpleMessenger *msgr;
-  public:
-    ReaperThread(SimpleMessenger *m) : msgr(m) {}
-    void *entry() {
-      msgr->reaper_entry();
-      return 0;
-    }
-  } reaper_thread;
-
-  bool reaper_started, reaper_stop;
-  Cond reaper_cond;
-
-
   /**
    * Look through the pipes in the pipe_reap_queue and tear them down.
    */
   void reaper();
+  /**
+   * @} // Utility functions
+   */
 
-  /***********************/
+  // SimpleMessenger stuff
+  /// overall lock used for SimpleMessenger data structures
+  Mutex lock;
+  /// This Cond is slept on by wait() and signaled by dispatch_entry()
+  Cond  wait_cond;
+  /**
+   *  false; set to true if the SimpleMessenger bound to a specific address;
+   *  and set false again by Accepter::stop(). This isn't lock-protected
+   *  since you shouldn't be able to race the only writers.
+   */
+  bool did_bind;
+  /// Throttle preventing us from building up a big backlog waiting for dispatch
+  Throttle dispatch_throttler;
 
-  class DispatchThread : public Thread {
-    SimpleMessenger *msgr;
-  public:
-    DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
-    void *entry() {
-      msgr->dispatch_entry();
-      return 0;
-    }
-  } dispatch_thread;
+  /// true, specifying we haven't learned our addr; set false when we find it.
+  // maybe this should be protected by the lock?
+  bool need_addr;
+  /// approximately unique ID set by the Constructor for use in entity_addr_t
+  uint64_t nonce;
+
+  /// flag set true when all the threads need to shut down
+  bool destination_stopped;
+
+  /// hash map of addresses to Pipes
+  hash_map<entity_addr_t, Pipe*> rank_pipe;
+  /// the peer type of our endpoint
+  int my_type;
+
+
+  /// the default Policy we use for Pipes
+  Policy default_policy;
+  /// map specifying different Policies for specific peer types
+  map<int, Policy> policy_map; // entity_name_t::type -> Policy
+
+  /// a set of all the Pipes we have which are somehow active
+  set<Pipe*>      pipes;
+  /// a list of Pipes we want to tear down
+  list<Pipe*>     pipe_reap_queue;
+
+  /// lock to protect the global_seq
+  pthread_spinlock_t global_seq_lock;
+  /// counter for the global seq our connection protocol uses
+  __u32 global_seq;
+
+  bool reaper_started, reaper_stop;
+  Cond reaper_cond;
 
   SimpleMessenger *msgr; //hack to make dout macro work, will fix
   int timeout;
