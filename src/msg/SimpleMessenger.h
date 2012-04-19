@@ -498,8 +498,8 @@ private:
       }
 
       if (sent.empty() && close_on_empty) {
-	lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
-	stop();
+        lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
+        stop();
       }
     }
 
@@ -570,7 +570,7 @@ private:
     }
     void join_reader() {
       if (!reader_running)
-	return;
+        return;
       assert(!reader_joining);
       reader_joining = true;
       cond.Signal();
@@ -593,7 +593,7 @@ private:
       // this is just to make sure that a changeset is working
       // properly; if you start using the refcounting more and have
       // multiple people hanging on to a message, ditch the assert!
-      assert(m->nref.read() == 1); 
+      assert(m->nref.read() == 1);
 
       queue_received(m, m->get_priority());
     }
@@ -606,7 +606,7 @@ private:
 
     void set_peer_addr(const entity_addr_t& a) {
       if (&peer_addr != &a)  // shut up valgrind
-	peer_addr = a;
+        peer_addr = a;
       connection_state->set_peer_addr(a);
     }
     void set_peer_type(int t) {
@@ -618,9 +618,9 @@ private:
     void unregister_pipe();
     void join() {
       if (writer_thread.is_started())
-	writer_thread.join();
+        writer_thread.join();
       if (reader_thread.is_started())
-	reader_thread.join();
+        reader_thread.join();
     }
     void stop();
 
@@ -628,7 +628,7 @@ private:
       pipe_lock.Lock();
       _send(m);
       pipe_lock.Unlock();
-    }    
+    }
     void _send(Message *m) {
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
@@ -640,13 +640,13 @@ private:
     Message *_get_next_outgoing() {
       Message *m = 0;
       while (!m && !out_q.empty()) {
-	map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
-	if (!p->second.empty()) {
-	  m = p->second.front();
-	  p->second.pop_front();
-	}
-	if (p->second.empty())
-	  out_q.erase(p->first);
+        map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
+        if (!p->second.empty()) {
+          m = p->second.front();
+          p->second.pop_front();
+        }
+        if (p->second.empty())
+          out_q.erase(p->first);
       }
       return m;
     }
