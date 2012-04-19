@@ -487,7 +487,7 @@ class ObjectCacher {
   loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
   uint64_t release_all();
 
-  void truncate_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+  void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
 
   // file functions
 

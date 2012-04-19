@@ -1569,7 +1569,7 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   }
 
   if (ictx->object_cacher)
-    ictx->object_cacher->truncate_set(ictx->object_set, v);
+    ictx->object_cacher->discard_set(ictx->object_set, v);
 
   return total_write;
 }
@@ -1852,7 +1852,7 @@ int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
   r = 0;
 done:
   if (ictx->object_cacher)
-    ictx->object_cacher->truncate_set(ictx->object_set, v);
+    ictx->object_cacher->discard_set(ictx->object_set, v);
 
   c->finish_adding_completions();
   c->put();

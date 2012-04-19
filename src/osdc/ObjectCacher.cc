@@ -1646,16 +1646,16 @@ uint64_t ObjectCacher::release_all()
 
 
 /**
- * Truncate an ObjectSet by removing the objects in exls from the in-memory oset.
+ * discard object extents from an ObjectSet by removing the objects in exls from the in-memory oset.
  */
-void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
+void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
 {
   if (oset->objects.empty()) {
-    ldout(cct, 10) << "truncate_set on " << oset << " dne" << dendl;
+    ldout(cct, 10) << "discard_set on " << oset << " dne" << dendl;
     return;
   }
   
-  ldout(cct, 10) << "truncate_set " << oset << dendl;
+  ldout(cct, 10) << "discard_set " << oset << dendl;
 
   bool were_dirty = oset->dirty_or_tx > 0;
 
@@ -1668,19 +1668,11 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
       continue;
     Object *ob = objects[oset->poolid][soid];
     
-    // purge or truncate?
-    if (ex.offset == 0) {
-      ldout(cct, 10) << "truncate_set purging " << *ob << dendl;
-      purge(ob);
-    } else {
-      // hrm, truncate object
-      ldout(cct, 10) << "truncate_set truncating " << *ob << " at " << ex.offset << dendl;
-      ob->truncate(ex.offset);
-      
-      if (ob->can_close()) {
-	ldout(cct, 10) << "truncate_set trimming " << *ob << dendl;
-	close_object(ob);
-      }
+    ob->discard(ex.offset, ex.length);
+
+    if (ob->can_close()) {
+      ldout(cct, 10) << " closing " << *ob << dendl;
+      close_object(ob);
     }
   }
 
