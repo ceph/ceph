@@ -41,7 +41,7 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
 
-    while manager.get_osd_status()['up'] < 3:
+    while len(manager.get_osd_status()['up']) < 3:
         manager.sleep(10)
     manager.wait_for_clean()
 

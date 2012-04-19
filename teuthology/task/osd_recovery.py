@@ -45,7 +45,7 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
 
-    while manager.get_osd_status()['up'] < 3:
+    while len(manager.get_osd_status()['up']) < 3:
         manager.sleep(10)
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
@@ -81,9 +81,9 @@ def task(ctx, config):
     # revive divergent osd
     manager.revive_osd(2)
 
-    while manager.get_osd_status()['up'] < 3:
+    while len(manager.get_osd_status()['up']) < 3:
         log.info('waiting a bit...')
-        manager.sleep(2)
+        time.sleep(2)
     log.info('3 are up!')
 
     # cluster must recover
