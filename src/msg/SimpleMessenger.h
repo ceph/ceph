@@ -381,7 +381,10 @@ private:
    * @defgroup Inner classes
    * @{
    */
-  // incoming
+  /**
+   * If the SimpleMessenger binds to a specific address, the Accepter runs
+   * and listens for incoming connections.
+   */
   class Accepter : public Thread {
   public:
     SimpleMessenger *msgr;
@@ -397,7 +400,15 @@ private:
     int start();
   } accepter;
 
-  // pipe
+  /**
+   * The Pipe is the most complex SimpleMessenger component. It gets
+   * two threads, one each for reading and writing on a socket it's handed
+   * at creation time, and is responsible for everything that happens on
+   * that socket. Besides message transmission, it's responsible for
+   * propagating socket errors to the SimpleMessenger and then sticking
+   * around in a state where it can provide enough data for the SimpleMessenger
+   * to provide reliable Message delivery when it manages to reconnect.
+   */
   class Pipe : public RefCountedObject {
   public:
     SimpleMessenger *msgr;
@@ -651,7 +662,12 @@ private:
     }
   };
 
-
+  /**
+   * The DispatchQueue contains all the Pipes which have Messages
+   * they want to be dispatched, carefully organized by Message priority
+   * and permitted to deliver in a round-robin fashion.
+   * See SimpleMessenger::dispatch_entry for details.
+   */
   struct DispatchQueue {
     Mutex lock;
     Cond cond;
@@ -727,8 +743,9 @@ private:
     }
   } reaper_thread;
 
-  /***********************/
-
+  /**
+   * The DispatchThread runs dispatch_entry to empty out the dispatch_queue.
+   */
   class DispatchThread : public Thread {
     SimpleMessenger *msgr;
   public:
