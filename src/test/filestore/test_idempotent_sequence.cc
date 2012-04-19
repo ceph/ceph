@@ -85,10 +85,10 @@ int run_diff(std::string& a_path, std::string& a_journal,
   FileStoreDiff fsd(a, b);
   int ret = 0;
   if (fsd.diff()) {
-    dout(0) << "diff looks okay!" << dendl;
-  } else {
-    dout(0) << "diff found an error." << dendl;
+    dout(0) << "diff found an difference" << dendl;
     ret = -1;
+  } else {
+    dout(0) << "no diff" << dendl;
   }
 
   return ret;
