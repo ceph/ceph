@@ -194,7 +194,6 @@ static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 void RGWStatBucket_REST_S3::send_response()
 {
   if (ret >= 0) {
-    ret = STATUS_NO_CONTENT;
     dump_bucket_metadata(s, bucket);
   }
 
