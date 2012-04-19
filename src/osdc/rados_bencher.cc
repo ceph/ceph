@@ -15,10 +15,9 @@
  * it will just loop forever.
  */
 #include "include/rados/librados.hpp"
-#include "common/config.h"
-#include "global/global_init.h"
 #include "common/Cond.h"
 #include "rados_bencher.h"
+
 #include <iostream>
 #include <fstream>
 

@@ -285,8 +285,7 @@ librados_SOURCES = \
 	librados/librados.cc \
 	librados/RadosClient.cc \
 	librados/IoCtxImpl.cc \
-	osdc/Objecter.cc \
-	osdc/rados_bencher.cc
+	osdc/Objecter.cc
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -319,7 +318,7 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
-rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc
+rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc osdc/rados_bencher.cc
 rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
