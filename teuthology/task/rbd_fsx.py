@@ -49,6 +49,7 @@ def _run_one_client(ctx, config, role):
             '/tmp/cephtest/binary/usr/local/bin/test_librbd_fsx',
             '-d',
             '-W', '-R', # mmap doesn't work with rbd
+            '-p', str(config.get('progress_interval', 100)),  # show progress
             '-P', '/tmp/cephtest/archive',
             '-t', '4194304',
             '-l', str(config.get('size', 1073741824)),
