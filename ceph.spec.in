@@ -479,6 +479,5 @@ fi
 %defattr(-,root,root,-)
 %{python_sitelib}/rados.py*
 %{python_sitelib}/rbd.py*
-%{python_sitelib}/rgw.py*
 
 %changelog
