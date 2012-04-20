@@ -576,8 +576,8 @@ extern "C" int ceph_set_default_file_replication(struct ceph_mount_info *cmount,
 
 extern "C" int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int osd)
 {
-  cmount->get_client()->set_default_preferred_pg(osd);
-  return 0;
+  // this option no longer exists
+  return -EOPNOTSUPP;
 }
 
 extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fh,
