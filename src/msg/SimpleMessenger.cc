@@ -431,8 +431,10 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
     return -EINVAL;
   }
 
+  lock.Lock();
   Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
   submit_message(m, pipe, dest.addr, dest.name.type(), lazy);
+  lock.Unlock();
   return 0;
 }
 
@@ -443,14 +445,16 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
 
-  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
   ldout(cct,1) << (lazy ? "lazy " : "") << "--> " << con->get_peer_addr()
       << " -- " << *m
       << " -- ?+" << m->get_data().length()
       << " " << m << " con " << con
       << dendl;
 
+  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
+  lock.Lock();
   submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), lazy);
+  lock.Unlock();
   if (pipe) {
     pipe->put();
   }
@@ -2424,7 +2428,6 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 
 void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
-  lock.Lock();
   // local?
   if (!pipe && my_inst.addr == dest_addr) {
     if (!destination_stopped) {
@@ -2469,7 +2472,6 @@ void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t
       }
     }
   }
-  lock.Unlock();
 }
 
 int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
