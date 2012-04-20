@@ -39,7 +39,9 @@
 
 #include "include/compat.h"
 
-#define dout_subsys ceph_subsys_
+#define dout_subsys ceph_subsys_asok
+#undef dout_prefix
+#define dout_prefix *_dout << "asok(" << (void*)m_cct << ") "
 
 using std::ostringstream;
 
@@ -141,6 +143,8 @@ std::string AdminSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
 
 std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 {
+  ldout(m_cct, 5) << "bind_and_listen " << sock_path << dendl;
+
   struct sockaddr_un address;
   if (sock_path.size() > sizeof(address.sun_path) - 1) {
     ostringstream oss;
@@ -202,6 +206,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 
 void* AdminSocket::entry()
 {
+  ldout(m_cct, 5) << "entry start" << dendl;
   while (true) {
     struct pollfd fds[2];
     memset(fds, 0, sizeof(fds));
@@ -230,6 +235,7 @@ void* AdminSocket::entry()
       return PFL_SUCCESS;
     }
   }
+  ldout(m_cct, 5) << "entry exit" << dendl;
 }
 
 
@@ -329,8 +335,10 @@ int AdminSocket::register_command(std::string command, AdminSocketHook *hook, st
   int ret;
   m_lock.Lock();
   if (m_hooks.count(command)) {
+    ldout(m_cct, 5) << "register_command " << command << " hook " << hook << " EEXIST" << dendl;
     ret = -EEXIST;
   } else {
+    ldout(m_cct, 5) << "register_command " << command << " hook " << hook << dendl;
     m_hooks[command] = hook;
     if (help.length())
       m_help[command] = help;
@@ -345,10 +353,12 @@ int AdminSocket::unregister_command(std::string command)
   int ret;
   m_lock.Lock();
   if (m_hooks.count(command)) {
+    ldout(m_cct, 5) << "unregister_command " << command << dendl;
     m_hooks.erase(command);
     m_help.erase(command);
     ret = 0;
   } else {
+    ldout(m_cct, 5) << "unregister_command " << command << " ENOENT" << dendl;
     ret = -ENOENT;
   }  
   m_lock.Unlock();
@@ -420,6 +430,8 @@ public:
 
 bool AdminSocket::init(const std::string &path)
 {
+  ldout(m_cct, 5) << "init " << path << dendl;
+
   /* Set up things for the new thread */
   std::string err;
   int pipe_rd = -1, pipe_wr = -1;
@@ -458,6 +470,8 @@ void AdminSocket::shutdown()
 {
   if (m_shutdown_wr_fd < 0)
     return;
+
+  ldout(m_cct, 5) << "shutdown" << dendl;
 
   // Send a byte to the shutdown pipe that the thread is listening to
   char buf[1] = { 0x0 };
