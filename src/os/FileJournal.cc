@@ -883,6 +883,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
 
   if (next_write.tracked_op)
     next_write.tracked_op->mark_event("write_thread_in_journal_buffer");
+
   // pop from writeq
   pop_write();
   journalq.push_back(pair<uint64_t,off64_t>(seq, queue_pos));
