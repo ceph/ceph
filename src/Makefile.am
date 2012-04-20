@@ -203,17 +203,7 @@ dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_idempotent2_SOURCES = test/filestore_test/test_idempotent.cc test/filestore_test/FileStoreTracker.cc test/common/ObjectContents.cc
-test_filestore_idempotent2_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_idempotent2_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
-bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent2
-
-test_filestore_idempotent_sequence_SOURCES = \
-     test/filestore_test/test_idempotent_sequence.cc \
-     test/filestore_test/DeterministicOpSequence.cc \
-     test/filestore_test/TestFileStoreState.cc 
-test_filestore_idempotent_sequence_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
+bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
@@ -760,6 +750,18 @@ test_filestore_workloadgen_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/li
 test_filestore_workloadgen_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_filestore_workloadgen
+
+test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
+test_filestore_idempotent_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_filestore_idempotent_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
+bin_DEBUGPROGRAMS += test_filestore_idempotent
+
+test_filestore_idempotent_sequence_SOURCES = \
+     test/filestore/test_idempotent_sequence.cc \
+     test/filestore/DeterministicOpSequence.cc \
+     test/filestore/TestFileStoreState.cc 
+test_filestore_idempotent_sequence_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
 
 xattr_bench_SOURCES = test/xattr_bench.cc
 xattr_bench_LDFLAGS = ${AM_LDFLAGS}
