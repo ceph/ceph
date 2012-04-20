@@ -1,6 +1,14 @@
 #!/bin/sh -ex
 
-job=$1
+if [ $1 = "-a" ]; then
+    shift
+    job=$1
+    log="--archive $job.out"
+else
+    job=$1
+    log=""
+fi
+
 test -e $1
 
 teuthology-nuke -t $job
@@ -11,11 +19,13 @@ title() {
 
 N=0
 title
-while teuthology $job $2 $3 $4
+[ -n "$log" ] && [ -d $job.out ] && rm -rf $job.out
+while teuthology $log $job $2 $3 $4 
 do
 	date
 	N=$(($N+1))
 	echo "$job: $N passes"
+	[ -n "$log" ] && rm -rf $job.out
 	title
 done
 echo "$job: $N passes, then failure."
