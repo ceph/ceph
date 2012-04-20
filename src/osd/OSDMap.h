@@ -462,16 +462,12 @@ private:
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
     {
-      int preferred = pg.preferred();
-      if (preferred >= max_osd || preferred >= crush.get_max_devices())
-	preferred = -1;
-
       assert(get_max_osd() >= crush.get_max_devices());
 
       // what crush rule?
       int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
       if (ruleno >= 0)
-	crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
+	crush.do_rule(ruleno, pps, osds, size, -1, osd_weight);
     }
   
     return osds.size();
