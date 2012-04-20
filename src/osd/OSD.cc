@@ -1211,6 +1211,12 @@ void OSD::load_pgs()
       continue;
     }
 
+    if (pgid.preferred() >= 0) {
+      dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
+      // FIXME: delete it too, eventually
+      continue;
+    }
+
     PG *pg = _open_lock_pg(pgid);
 
     // read pg state, log
@@ -4094,6 +4100,11 @@ void OSD::handle_pg_create(OpRequestRef op)
     int split_bits = p->second.split_bits;
     pg_t on = pgid;
 
+    if (pgid.preferred() >= 0) {
+      dout(20) << "ignoring localized pg " << pgid << dendl;
+      continue;
+    }
+
     if (split_bits) {
       on = parent;
       dout(20) << "mkpg " << pgid << " e" << created << " from parent " << parent
@@ -4275,6 +4286,11 @@ void OSD::handle_pg_notify(OpRequestRef op)
        it++) {
     PG *pg = 0;
 
+    if (it->pgid.preferred() >= 0) {
+      dout(20) << "ignoring localized pg " << it->pgid << dendl;
+      continue;
+    }
+
     ObjectStore::Transaction *t;
     C_Contexts *fin;
     pg = get_or_create_pg(*it, m->get_epoch(), from, created, true, &t, &fin);
@@ -4314,6 +4330,11 @@ void OSD::handle_pg_log(OpRequestRef op)
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->get_epoch())) return;
+
+  if (m->info.pgid.preferred() >= 0) {
+    dout(10) << "ignoring localized pg " << m->info.pgid << dendl;
+    return;
+  }
 
   int created = 0;
   ObjectStore::Transaction *t;
@@ -4369,6 +4390,11 @@ void OSD::handle_pg_info(OpRequestRef op)
   for (vector<pg_info_t>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) {
+    if (p->pgid.preferred() >= 0) {
+      dout(10) << "ignoring localized pg " << p->pgid << dendl;
+      continue;
+    }
+
     ObjectStore::Transaction *t = 0;
     C_Contexts *fin = 0;
     PG *pg = get_or_create_pg(*p, m->get_epoch(), 
@@ -4411,6 +4437,11 @@ void OSD::handle_pg_trim(OpRequestRef op)
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->epoch)) return;
+
+  if (m->pgid.preferred() >= 0) {
+    dout(10) << "ignoring localized pg " << m->pgid << dendl;
+    return;
+  }
 
   op->mark_started();
 
@@ -4456,6 +4487,11 @@ void OSD::handle_pg_scan(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->query_epoch))
     return;
 
+  if (m->pgid.preferred() >= 0) {
+    dout(10) << "ignoring localized pg " << m->pgid << dendl;
+    return;
+  }
+
   PG *pg;
   
   if (!_have_pg(m->pgid)) {
@@ -4495,6 +4531,11 @@ void OSD::handle_pg_backfill(OpRequestRef op)
     return;
   if (!require_same_or_newer_map(op, m->query_epoch))
     return;
+
+  if (m->pgid.preferred() >= 0) {
+    dout(10) << "ignoring localized pg " << m->pgid << dendl;
+    return;
+  }
 
   PG *pg;
   
@@ -4542,6 +4583,11 @@ void OSD::handle_pg_missing(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->get_epoch()))
     return;
 
+  if (m->pgid.preferred() >= 0) {
+    dout(10) << "ignoring localized pg " << m->pgid << dendl;
+    return;
+  }
+
   op->mark_started();
 
   map< int, map<pg_t,pg_query_t> > query_map;
@@ -4582,6 +4628,12 @@ void OSD::handle_pg_query(OpRequestRef op)
        it != m->pg_list.end();
        it++) {
     pg_t pgid = it->first;
+
+    if (pgid.preferred() >= 0) {
+      dout(10) << "ignoring localized pg " << pgid << dendl;
+      continue;
+    }
+
     PG *pg = 0;
 
     if (pg_map.count(pgid) == 0) {
@@ -4679,6 +4731,10 @@ void OSD::handle_pg_remove(OpRequestRef op)
        it != m->pg_list.end();
        it++) {
     pg_t pgid = *it;
+    if (pgid.preferred() >= 0) {
+      dout(10) << "ignoring localized pg " << pgid << dendl;
+      continue;
+    }
     
     if (pg_map.count(pgid) == 0) {
       dout(10) << " don't have pg " << pgid << dendl;
