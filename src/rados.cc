@@ -25,6 +25,7 @@ using namespace librados;
 #include "common/Cond.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/obj_bencher.h"
 #include "mds/inode_backtrace.h"
 #include "auth/Crypto.h"
 #include <iostream>
@@ -576,6 +577,64 @@ void LoadGen::cleanup()
       cerr << "couldn't remove obj: " << info.name << " ret=" << ret << std::endl;
   }
 }
+
+
+class RadosBencher : public ObjBencher {
+  librados::AioCompletion **completions;
+  librados::Rados& rados;
+  librados::IoCtx& io_ctx;
+protected:
+  int completions_init(int concurrentios) {
+    completions = new librados::AioCompletion *[concurrentios];
+    return 0;
+  }
+  void completions_done() {
+    delete[] completions;
+    completions = NULL;
+  }
+  int create_completion(int slot, void (*cb)(void *, void*), void *arg) {
+    completions[slot] = rados.aio_create_completion((void *) arg, 0, cb);
+
+    if (!completions[slot])
+      return -EINVAL;
+
+    return 0;
+  }
+  void release_completion(int slot) {
+    completions[slot]->release();
+    completions[slot] = 0;
+  }
+
+  int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len) {
+    return io_ctx.aio_read(oid, completions[slot], pbl, len, 0);
+  }
+
+  int aio_write(const std::string& oid, int slot, const bufferlist& bl, size_t len) {
+    return io_ctx.aio_write(oid, completions[slot], bl, len, 0);
+  }
+
+  int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
+    return io_ctx.read(oid, bl, len, 0);
+  }
+  int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
+    return io_ctx.write(oid, bl, len, 0);
+  }
+
+  bool completion_is_done(int slot) {
+    return completions[slot]->is_safe();
+  }
+
+  int completion_wait(int slot) {
+    return completions[slot]->wait_for_safe();
+  }
+  int completion_ret(int slot) {
+    return completions[slot]->get_return_value();
+  }
+
+public:
+  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i) {}
+  ~RadosBencher() { }
+};
 
 /**********************************************
 

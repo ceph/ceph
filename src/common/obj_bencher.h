@@ -9,16 +9,11 @@
  * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
  *
- * Series of functions to test your rados installation. Notice
- * that this code is not terribly robust -- for instance, if you
- * try and bench on a pool you don't have permission to access
- * it will just loop forever.
  */
 
-#ifndef CEPH_RADOS_BENCHER_H
-#define CEPH_RADOS_BENCHER_H
+#ifndef CEPH_OBJ_BENCHER_H
+#define CEPH_OBJ_BENCHER_H
 
-#include "include/rados/librados.hpp"
 #include "common/config.h"
 #include "common/Cond.h"
 
@@ -42,10 +37,9 @@ const int OP_WRITE     = 1;
 const int OP_SEQ_READ  = 2;
 const int OP_RAND_READ = 3;
 
-class RadosBencher {
+class ObjBencher {
+protected:
   Mutex lock;
-  librados::Rados& rados;
-  librados::IoCtx& io_ctx;
 
   static void *status_printer(void *bencher);
 
@@ -53,8 +47,24 @@ class RadosBencher {
 
   int write_bench(int secondsToRun, int concurrentios);
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
+
+  virtual int completions_init(int concurrentios) = 0;
+  virtual void completions_done() = 0;
+
+  virtual int create_completion(int i, void (*cb)(void *, void*), void *arg) = 0;
+  virtual void release_completion(int slot) = 0;
+
+  virtual bool completion_is_done(int slot) = 0;
+  virtual int completion_wait(int slot) = 0;
+  virtual int completion_ret(int slot) = 0;
+
+  virtual int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len) = 0;
+  virtual int aio_write(const std::string& oid, int slot, const bufferlist& bl, size_t len) = 0;
+  virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
+  virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
 public:
-  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : lock("RadosBencher::lock"), rados(_r), io_ctx(_i) {}
+  ObjBencher() : lock("ObjBencher::lock") {}
+  virtual ~ObjBencher() {}
   int aio_bench(int operation, int secondsToRun, int concurrentios, int op_size);
 };
 
