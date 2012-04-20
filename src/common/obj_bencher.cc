@@ -16,7 +16,7 @@
  */
 #include "include/rados/librados.hpp"
 #include "common/Cond.h"
-#include "rados_bencher.h"
+#include "obj_bencher.h"
 
 #include <iostream>
 #include <fstream>
