@@ -1988,9 +1988,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
             }
           }
         }
-        err = prepare_new_pool(m->cmd[3], CEPH_AUTH_UID_DEFAULT,
-                               -1, pg_num, pgp_num);
-        // that's the default auid owner (ie, none) and the default crush rule
+        err = prepare_new_pool(m->cmd[3], 0,  // auid=0 for admin created pool
+			       -1,            // default crush rule
+			       pg_num, pgp_num);
         if (err < 0) {
           if (err == -EEXIST)
             ss << "pool '" << m->cmd[3] << "' exists";
