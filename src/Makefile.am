@@ -749,12 +749,12 @@ test_libcephfs_readdir_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
 test_libcephfs_readdir_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_libcephfs_readdir
 
-test_store_SOURCES = test/store_test.cc
-test_store_LDFLAGS = ${AM_LDFLAGS}
-test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+test_filestore_SOURCES = test/filestore/store_test.cc
+test_filestore_LDFLAGS = ${AM_LDFLAGS}
+test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
-bin_DEBUGPROGRAMS += test_store
+bin_DEBUGPROGRAMS += test_filestore
 
 test_filestore_workloadgen_SOURCES = test/filestore/workload_generator.cc
 test_filestore_workloadgen_LDFLAGS = ${AM_LDFLAGS}
