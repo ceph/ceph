@@ -14,7 +14,6 @@
  * try and bench on a pool you don't have permission to access
  * it will just loop forever.
  */
-#include "include/rados/librados.hpp"
 #include "common/Cond.h"
 #include "obj_bencher.h"
 
@@ -46,8 +45,8 @@ static void sanitize_object_contents (bench_data *data, int length) {
   }
 }
 
-void *RadosBencher::status_printer(void *_bencher) {
-  RadosBencher *bencher = (RadosBencher *)_bencher;
+void *ObjBencher::status_printer(void *_bencher) {
+  ObjBencher *bencher = (ObjBencher *)_bencher;
   bench_data& data = bencher->data;
   Cond cond;
   int i = 0;
@@ -113,7 +112,7 @@ void *RadosBencher::status_printer(void *_bencher) {
   return NULL;
 }
 
-int RadosBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size) {
+int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size) {
   int object_size = op_size;
   int num_objects = 0;
   char* contentsChars = new char[op_size];
@@ -123,7 +122,7 @@ int RadosBencher::aio_bench(int operation, int secondsToRun, int concurrentios, 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
     bufferlist object_data;
-    r = io_ctx.read(BENCH_DATA, object_data, sizeof(int)*3, 0);
+    r = sync_read(BENCH_DATA, object_data, sizeof(int)*3);
     if (r <= 0) {
       delete[] contentsChars;
       if (r == -2)
@@ -185,12 +184,11 @@ void _aio_cb(void *cb, void *arg) {
   lc->lock->Unlock();
 }
 
-int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
+int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << data.object_size << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
 
-  librados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
   double total_latency = 0;
@@ -201,6 +199,8 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
   lock_cond lc(&lock);
   utime_t runtime;
   utime_t timePassed;
+
+  r = completions_init(concurrentios);
 
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
@@ -213,15 +213,16 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
 
   pthread_t print_thread;
 
-  pthread_create(&print_thread, NULL, RadosBencher::status_printer, (void *)this);
+  pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
   lock.Lock();
   data.start_time = ceph_clock_now(g_ceph_context);
   lock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
     start_times[i] = ceph_clock_now(g_ceph_context);
-    completions[i] = rados.aio_create_completion((void *) &lc, 0,
-						 &_aio_cb);
-    r = io_ctx.aio_write(name[i], completions[i], *contents[i], data.object_size, 0);
+    r = create_completion(i, _aio_cb, (void *)&lc);
+    if (r < 0)
+      goto ERR;
+    r = aio_write(name[i], i, *contents[i], data.object_size);
     if (r < 0) { //naughty, doesn't clean up heap
       goto ERR;
     }
@@ -244,7 +245,7 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
     lock.Lock();
     while (1) {
       for (slot = 0; slot < concurrentios; ++slot) {
-	if (completions[slot]->is_safe()) {
+	if (completion_is_done(slot)) {
 	  break;
 	}
       }
@@ -260,9 +261,9 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
     generate_object_name(newName, 128, data.started);
     snprintf(data.object_contents, data.object_size, "I'm the %dth object!", data.started);
     newContents->append(data.object_contents, data.object_size);
-    completions[slot]->wait_for_safe();
+    completion_wait(slot);
     lock.Lock();
-    r = completions[slot]->get_return_value();
+    r = completion_ret(slot);
     if (r != 0) {
       lock.Unlock();
       goto ERR;
@@ -275,15 +276,16 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
     lock.Unlock();
-    completions[slot]->release();
-    completions[slot] = 0;
+    release_completion(slot);
     timePassed = ceph_clock_now(g_ceph_context) - data.start_time;
 
-    //write new stuff to rados, then delete old stuff
+    //write new stuff to backend, then delete old stuff
     //and save locations of new stuff for later deletion
     start_times[slot] = ceph_clock_now(g_ceph_context);
-    completions[slot] = rados.aio_create_completion((void *) &lc, 0, &_aio_cb);
-    r = io_ctx.aio_write(newName, completions[slot], *newContents, data.object_size, 0);
+    r = create_completion(slot, _aio_cb, &lc);
+    if (r < 0)
+      goto ERR;
+    r = aio_write(newName, slot, *newContents, data.object_size);
     if (r < 0) {//naughty; doesn't clean up heap space.
       goto ERR;
     }
@@ -299,9 +301,9 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
 
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
-    completions[slot]->wait_for_safe();
+    completion_wait(slot);
     lock.Lock();
-    r = completions[slot]->get_return_value();
+    r = completion_ret(slot);
     if (r != 0) {
       lock.Unlock();
       goto ERR;
@@ -314,8 +316,7 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
     lock.Unlock();
-    completions[slot]->release();
-    completions[slot] = 0;
+    release_completion(slot);
     delete[] name[slot];
     delete contents[slot];
   }
@@ -345,7 +346,10 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
   ::encode(data.object_size, b_write);
   ::encode(data.finished, b_write);
   ::encode(getpid(), b_write);
-  io_ctx.write(BENCH_DATA, b_write, sizeof(int)*3, 0);
+  sync_write(BENCH_DATA, b_write, sizeof(int)*3);
+
+  completions_done();
+
   return 0;
 
  ERR:
@@ -356,11 +360,10 @@ int RadosBencher::write_bench(int secondsToRun, int concurrentios) {
   return -5;
 }
 
-int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid) {
+int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid) {
   data.finished = 0;
 
   lock_cond lc(&lock);
-  librados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
   int index[concurrentios];
@@ -374,6 +377,10 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
   utime_t runtime;
   sanitize_object_contents(&data, 128); //clean it up once; subsequent
   //changes will be safe because string length monotonically increases
+
+  r = completions_init(concurrentios);
+  if (r < 0)
+    return r;
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
@@ -393,8 +400,8 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
   for (int i = 0; i < concurrentios; ++i) {
     index[i] = i;
     start_times[i] = ceph_clock_now(g_ceph_context);
-    completions[i] = rados.aio_create_completion((void *) &lc, &_aio_cb, 0);
-    r = io_ctx.aio_read(name[i], completions[i], contents[i], data.object_size, 0);
+    create_completion(i, _aio_cb, (void *)&lc);
+    r = aio_read(name[i], i, contents[i], data.object_size);
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -415,7 +422,7 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
     lock.Lock();
     while (1) {
       for (slot = 0; slot < concurrentios; ++slot) {
-	if (completions[slot]->is_complete()) {
+	if (completion_is_done(slot)) {
 	  break;
 	}
       }
@@ -429,9 +436,9 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
     generate_object_name(newName, 128, data.started, pid);
     int current_index = index[slot];
     index[slot] = data.started;
-    completions[slot]->wait_for_complete();
+    completion_wait(slot);
     lock.Lock();
-    r = completions[slot]->get_return_value();
+    r = completion_ret(slot);
     if (r != 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
@@ -445,15 +452,14 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
     lock.Unlock();
-    completions[slot]->release();
-    completions[slot] = 0;
+    release_completion(slot);
     cur_contents = contents[slot];
 
     //start new read and check data if requested
     start_times[slot] = ceph_clock_now(g_ceph_context);
     contents[slot] = new bufferlist();
-    completions[slot] = rados.aio_create_completion((void *) &lc, &_aio_cb, 0);
-    r = io_ctx.aio_read(newName, completions[slot], contents[slot], data.object_size, 0);
+    create_completion(slot, _aio_cb, (void *)&lc);
+    r = aio_read(newName, slot, contents[slot], data.object_size);
     if (r < 0) {
       goto ERR;
     }
@@ -474,9 +480,9 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
   //wait for final reads to complete
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
-    completions[slot]->wait_for_complete();
+    completion_wait(slot);
     lock.Lock();
-    r = completions[slot]->get_return_value();
+    r = completion_ret(slot);
     if (r != 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
@@ -489,8 +495,7 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
     ++data.finished;
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
-    completions[slot]-> release();
-    completions[slot] = 0;
+    release_completion(slot);
     snprintf(data.object_contents, data.object_size, "I'm the %dth object!", index[slot]);
     lock.Unlock();
     if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
@@ -521,6 +526,8 @@ int RadosBencher::seq_read_bench(int seconds_to_run, int num_objects, int concur
        << "Average Latency:       " << data.avg_latency << std::endl
        << "Max latency:           " << data.max_latency << std::endl
        << "Min latency:           " << data.min_latency << std::endl;
+
+  completions_done();
 
   return 0;
 
