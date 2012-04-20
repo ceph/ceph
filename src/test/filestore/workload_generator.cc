@@ -34,12 +34,12 @@ const coll_t WorkloadGenerator::TEMP_COLL("temp");
 
 #define dout_subsys ceph_subsys_
 
-WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
-    m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
+WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
+  : m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
     m_num_colls(def_num_colls), m_num_obj_per_coll(def_num_obj_per_coll),
     m_store(0), m_nr_runs(0),
-    m_in_flight(0), m_lock("State Lock"), m_next_coll_nr(0) {
-
+    m_in_flight(0), m_lock("State Lock"), m_next_coll_nr(0)
+{
   int err = 0;
 
   init_args(args);
@@ -63,7 +63,8 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args) :
 
 }
 
-void WorkloadGenerator::init_args(vector<const char*> args) {
+void WorkloadGenerator::init_args(vector<const char*> args)
+{
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end();) {
     string val;
 
@@ -85,8 +86,8 @@ void WorkloadGenerator::init_args(vector<const char*> args) {
   }
 }
 
-void WorkloadGenerator::init() {
-
+void WorkloadGenerator::init()
+{
   dout(0) << "Initializing..." << dendl;
 
   ObjectStore::Transaction *t;
@@ -129,13 +130,14 @@ void WorkloadGenerator::init() {
   dout(0) << "Done initializing!" << dendl;
 }
 
-int WorkloadGenerator::get_uniform_random_value(int min, int max) {
+int WorkloadGenerator::get_uniform_random_value(int min, int max)
+{
   boost::uniform_int<> value(min, max);
   return value(m_rng);
 }
 
-WorkloadGenerator::coll_entry_t
-*WorkloadGenerator::get_rnd_coll_entry(bool erase = false) {
+WorkloadGenerator::coll_entry_t *WorkloadGenerator::get_rnd_coll_entry(bool erase = false)
+{
   set<WorkloadGenerator::coll_entry_t*>::iterator i = m_collections.begin();
   int index = get_uniform_random_value(0, m_collections.size()-1);
   for ( ; index > 0; --index, ++i) ;
@@ -146,15 +148,18 @@ WorkloadGenerator::coll_entry_t
   return entry;
 }
 
-int WorkloadGenerator::get_random_collection_nr() {
+int WorkloadGenerator::get_random_collection_nr()
+{
   return (rand() % m_num_colls);
 }
 
-int WorkloadGenerator::get_random_object_nr(int coll_nr) {
+int WorkloadGenerator::get_random_object_nr(int coll_nr)
+{
   return ((rand() % m_num_obj_per_coll) + (coll_nr * m_num_obj_per_coll));
 }
 
-coll_t WorkloadGenerator::get_collection_by_nr(int nr) {
+coll_t WorkloadGenerator::get_collection_by_nr(int nr)
+{
   char buf[100];
   memset(buf, 0, 100);
 
@@ -162,7 +167,8 @@ coll_t WorkloadGenerator::get_collection_by_nr(int nr) {
   return coll_t(buf);
 }
 
-hobject_t WorkloadGenerator::get_object_by_nr(int nr) {
+hobject_t WorkloadGenerator::get_object_by_nr(int nr)
+{
   char buf[100];
   memset(buf, 0, 100);
   snprintf(buf, 100, "%d", nr);
@@ -170,7 +176,8 @@ hobject_t WorkloadGenerator::get_object_by_nr(int nr) {
   return hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
 }
 
-hobject_t WorkloadGenerator::get_coll_meta_object(coll_t coll) {
+hobject_t WorkloadGenerator::get_coll_meta_object(coll_t coll)
+{
   char buf[100];
   memset(buf, 0, 100);
   snprintf(buf, 100, "pglog_%s", coll.c_str());
@@ -182,12 +189,14 @@ hobject_t WorkloadGenerator::get_coll_meta_object(coll_t coll) {
  * We'll generate a random amount of bytes, ranging from a single byte up to
  * a couple of MB.
  */
-size_t WorkloadGenerator::get_random_byte_amount(size_t min, size_t max) {
+size_t WorkloadGenerator::get_random_byte_amount(size_t min, size_t max)
+{
   size_t diff = max - min;
   return (size_t) (min + (rand() % diff));
 }
 
-void WorkloadGenerator::get_filled_byte_array(bufferlist& bl, size_t size) {
+void WorkloadGenerator::get_filled_byte_array(bufferlist& bl, size_t size)
+{
   static const char alphanum[] = "0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz";
@@ -201,8 +210,8 @@ void WorkloadGenerator::get_filled_byte_array(bufferlist& bl, size_t size) {
 }
 
 void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
-    coll_t coll, hobject_t obj) {
-
+					coll_t coll, hobject_t obj)
+{
   size_t bytes = get_random_byte_amount(min_write_bytes, max_write_bytes);
   bufferlist bl;
   get_filled_byte_array(bl, bytes);
@@ -210,8 +219,8 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
 }
 
 void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
-    coll_t coll, hobject_t obj) {
-
+					  coll_t coll, hobject_t obj)
+{
   size_t size;
   size = get_random_byte_amount(min_xattr_obj_bytes, max_xattr_obj_bytes);
 
@@ -221,8 +230,8 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
 }
 
 void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
-    coll_t coll) {
-
+					      coll_t coll)
+{
   size_t size;
   size = get_random_byte_amount(min_xattr_coll_bytes, max_xattr_coll_bytes);
 
@@ -232,8 +241,8 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
 }
 
 void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
-    coll_t coll) {
-
+				      coll_t coll)
+{
   bufferlist bl;
   get_filled_byte_array(bl, log_append_bytes);
   hobject_t log_obj = get_coll_meta_object(coll);
@@ -246,8 +255,8 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 }
 
 void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
-    WorkloadGenerator::coll_entry_t *entry) {
-
+					      WorkloadGenerator::coll_entry_t *entry)
+{  
   m_nr_runs = 0;
   entry->osr.flush();
   vector<hobject_t> ls;
@@ -264,12 +273,13 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   t->remove(META_COLL, entry->meta_obj);
 }
 
-void WorkloadGenerator::do_create_collection(ObjectStore::Transaction *t) {
+void WorkloadGenerator::do_create_collection(ObjectStore::Transaction *t)
+{
 
 }
 
-void WorkloadGenerator::run() {
-
+void WorkloadGenerator::run()
+{
   do {
     if (!m_collections.size()) {
       dout(0) << "We ran out of collections!" << dendl;
@@ -307,11 +317,13 @@ void WorkloadGenerator::run() {
   } while (true);
 }
 
-void WorkloadGenerator::print_results() {
+void WorkloadGenerator::print_results()
+{
 
 }
 
-void usage(const char *name) {
+void usage(const char *name)
+{
   if (name)
     cout << "usage: " << name << "[options]" << std::endl;
 
@@ -332,7 +344,8 @@ Test-specific Options:\n\
     " << std::endl;
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char *argv[])
+{
   vector<const char*> def_args;
   vector<const char*> args;
   def_args.push_back("--osd-journal-size");
