@@ -115,6 +115,8 @@ public:
 
   AuthSupported auth_supported;
 
+  CompatSet features;
+
 private:
   void new_tick();
   friend class C_Mon_Tick;
