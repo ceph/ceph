@@ -246,12 +246,9 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
   bufferlist bl;
   get_filled_byte_array(bl, log_append_bytes);
   hobject_t log_obj = get_coll_meta_object(coll);
-
-  struct stat st;
-  int err = m_store->stat(META_COLL, log_obj, &st);
-//  dout(0) << "stat return: " << err << dendl;
-  assert(err >= 0);
-  t->write(META_COLL, log_obj, st.st_size, bl.length(), bl);
+  uint64_t s = pg_log_size[coll];
+  t->write(META_COLL, log_obj, s, bl.length(), bl);
+  pg_log_size[coll] += bl.length();
 }
 
 void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,

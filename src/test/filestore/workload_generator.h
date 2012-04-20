@@ -77,6 +77,8 @@ private:
 
   rngen_t m_rng;
 
+  map<coll_t, uint64_t> pg_log_size;
+
   void wait_for_ready() {
     while (m_in_flight >= max_in_flight)
       m_cond.Wait(m_lock);
