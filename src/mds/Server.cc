@@ -2571,7 +2571,6 @@ void Server::handle_client_openc(MDRequest *mdr)
     layout.fl_stripe_count = req->head.args.open.stripe_count;
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
-  layout.fl_pg_preferred = req->head.args.open.preferred;
 
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
@@ -3237,8 +3236,6 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
     layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_pg_preferred != (__le32)-1)
-    layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
   if (req->head.args.setlayout.layout.fl_pg_pool > 0)
     layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
   if (!ceph_file_layout_is_valid(&layout)) {
@@ -3309,8 +3306,6 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
     layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_pg_preferred != (__le32)-1)
-    layout->layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
   if (req->head.args.setlayout.layout.fl_pg_pool > 0)
     layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
   if (!ceph_file_layout_is_valid(&layout->layout)) {

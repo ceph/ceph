@@ -6195,7 +6195,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_count = file_stripe_count;
   req->head.args.open.object_size = object_size;
   req->head.args.open.file_replication = file_replication;
-  req->head.args.open.preferred = -1;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
