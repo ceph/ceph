@@ -2425,53 +2425,50 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
   lock.Lock();
-  {
-    // local?
-    if (!pipe && my_inst.addr == dest_addr) {
-      if (!destination_stopped) {
-        // local
-        ldout(cct,20) << "submit_message " << *m << " local" << dendl;
-	dispatch_queue.local_delivery(m, m->get_priority());
-      } else {
-        ldout(cct,0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
-        assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
-        m->put();
-      }
+  // local?
+  if (!pipe && my_inst.addr == dest_addr) {
+    if (!destination_stopped) {
+      // local
+      ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+      dispatch_queue.local_delivery(m, m->get_priority());
     } else {
-      // remote pipe.
-      if (pipe) {
-	pipe->pipe_lock.Lock();
-	if (pipe->state == Pipe::STATE_CLOSED) {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
-	  pipe->unregister_pipe();
-	  pipe->pipe_lock.Unlock();
-	  pipe = 0;
-	} else {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
+      ldout(cct,0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
+      assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
+      m->put();
+    }
+  } else {
+    // remote pipe.
+    if (pipe) {
+      pipe->pipe_lock.Lock();
+      if (pipe->state == Pipe::STATE_CLOSED) {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
+        pipe->unregister_pipe();
+        pipe->pipe_lock.Unlock();
+        pipe = 0;
+      } else {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
 
-	  pipe->_send(m);
-	  pipe->pipe_lock.Unlock();
-	}
+        pipe->_send(m);
+        pipe->pipe_lock.Unlock();
       }
-      if (!pipe) {
-	const Policy& policy = get_policy(dest_type);
-	if (policy.server) {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
-		   << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
-	  m->put();
-	} else if (lazy) {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
-	  m->put();
-	} else {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-	  // not connected.
-	  pipe = connect_rank(dest_addr, dest_type);
-	  pipe->send(m);
-	}
+    }
+    if (!pipe) {
+      const Policy& policy = get_policy(dest_type);
+      if (policy.server) {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
+            << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
+        m->put();
+      } else if (lazy) {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
+        m->put();
+      } else {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
+        // not connected.
+        pipe = connect_rank(dest_addr, dest_type);
+        pipe->send(m);
       }
     }
   }
-
   lock.Unlock();
 }
 
