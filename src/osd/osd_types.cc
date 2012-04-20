@@ -51,8 +51,9 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
 
 void object_locator_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(pool, bl);
+  int32_t preferred = -1;  // tell old code there is no preferred osd (-1).
   ::encode(preferred, bl);
   ::encode(key, bl);
   ENCODE_FINISH(bl);
@@ -60,16 +61,16 @@ void object_locator_t::encode(bufferlist& bl) const
 
 void object_locator_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, p);
   if (struct_v < 2) {
     int32_t op;
     ::decode(op, p);
     pool = op;
     int16_t pref;
     ::decode(pref, p);
-    preferred = pref;
   } else {
     ::decode(pool, p);
+    int32_t preferred;
     ::decode(preferred, p);
   }
   ::decode(key, p);
@@ -79,7 +80,6 @@ void object_locator_t::decode(bufferlist::iterator& p)
 void object_locator_t::dump(Formatter *f) const
 {
   f->dump_int("pool", pool);
-  f->dump_int("preferred", preferred);
   f->dump_string("key", key);
 }
 
@@ -87,9 +87,8 @@ void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
 {
   o.push_back(new object_locator_t);
   o.push_back(new object_locator_t(123));
-  o.push_back(new object_locator_t(123, 456));
-  o.push_back(new object_locator_t(1234, -1, "key"));
-  o.push_back(new object_locator_t(12, 789, "key2"));
+  o.push_back(new object_locator_t(1234, "key"));
+  o.push_back(new object_locator_t(12, "key2"));
 }
 
 
@@ -1949,10 +1948,6 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
   else
     ps = ceph_str_hash(CEPH_STR_HASH_RJENKINS, oid.name.c_str(),
 		       oid.name.length());
-  // mix in preferred osd, so we don't get the same peers for
-  // all of the placement pgs (e.g. 0.0p*)
-  if (loc.get_preferred() >= 0)
-    ps += loc.get_preferred();
   return ps;
 }
 

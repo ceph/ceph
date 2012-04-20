@@ -100,28 +100,21 @@ namespace __gnu_cxx {
 // does it go in.
 struct object_locator_t {
   int64_t pool;
-  int32_t preferred;
   string key;
 
   explicit object_locator_t()
-    : pool(-1), preferred(-1) {}
+    : pool(-1) {}
   explicit object_locator_t(int64_t po)
-    : pool(po), preferred(-1) {}
-  explicit object_locator_t(int64_t po, int pre)
-    : pool(po), preferred(pre) {}
-  explicit object_locator_t(int64_t po, int pre, string s)
-    : pool(po), preferred(pre), key(s) {}
+    : pool(po) {}
+  explicit object_locator_t(int64_t po, string s)
+    : pool(po), key(s) {}
 
   int get_pool() const {
     return pool;
   }
-  int get_preferred() const {
-    return preferred;
-  }
 
   void clear() {
     pool = -1;
-    preferred = -1;
     key = "";
   }
 
@@ -133,7 +126,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
+  return l.pool == r.pool && l.key == r.key;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -142,8 +135,6 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
-  if (loc.preferred >= 0)
-    out << "p" << loc.preferred;
   if (loc.key.length())
     out << ":" << loc.key;
   return out;

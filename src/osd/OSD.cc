@@ -3972,7 +3972,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
   for (vector<hobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     hobject_t poid = *p;
-    object_locator_t oloc(parentid.pool(), parentid.preferred());
+    object_locator_t oloc(parentid.pool());
     if (poid.get_key().size())
       oloc.key = poid.get_key();
     pg_t rawpg = osdmap->object_locator_to_pg(poid.oid, oloc);
@@ -4020,7 +4020,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     list<pg_log_entry_t>::iterator cur = p;
     p++;
     hobject_t& poid = cur->soid;
-    object_locator_t oloc(parentid.pool(), parentid.preferred());
+    object_locator_t oloc(parentid.pool());
     if (poid.get_key().size())
       oloc.key = poid.get_key();
     pg_t rawpg = osdmap->object_locator_to_pg(poid.oid, oloc);
