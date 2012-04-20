@@ -17,7 +17,7 @@
 #include "include/rados/librados.hpp"
 using namespace librados;
 
-#include "osdc/rados_bencher.h"
+#include "common/obj_bencher.h"
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
