@@ -185,8 +185,12 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_stderr = (crash ? m_stderr_crash : m_stderr_log) >= e->m_prio;
 
     if (do_fd || do_syslog || do_stderr) {
-      int buflen = e->m_stamp.sprintf(buf, sizeof(buf));
-      buflen += sprintf(buf + buflen, " %lx %2d ",
+      int buflen = 0;
+
+      if (crash)
+	buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
+      buflen += e->m_stamp.sprintf(buf + buflen, sizeof(buf)-buflen);
+      buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
       // FIXME: this is slow
