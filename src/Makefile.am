@@ -203,12 +203,10 @@ dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_idempotent_SOURCES = test/test_filestore_idempotent.cc
-test_filestore_idempotent_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 test_filestore_idempotent2_SOURCES = test/filestore_test/test_idempotent.cc test/filestore_test/FileStoreTracker.cc test/common/ObjectContents.cc
 test_filestore_idempotent2_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 test_filestore_idempotent2_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
-bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent test_filestore_idempotent2
+bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent2
 
 test_filestore_idempotent_sequence_SOURCES = \
      test/filestore_test/test_idempotent_sequence.cc \
