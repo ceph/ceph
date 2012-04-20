@@ -1024,34 +1024,35 @@ void FileJournal::do_write(bufferlist& bl)
 
   write_lock.Lock();    
 
-  {
-    Mutex::Locker locker(flush_lock);
-    writing = false;
-    write_empty_cond.Signal();
-  }
-
   // wrap if we hit the end of the journal
   if (pos == header.max_size)
     pos = get_top();
   write_pos = pos;
   assert(write_pos % header.alignment == 0);
 
-  Mutex::Locker locker(queue_lock);
-  journaled_seq = writing_seq;
+  {
+    Mutex::Locker locker(queue_lock);
+    journaled_seq = writing_seq;
 
-  // kick finisher?  
-  //  only if we haven't filled up recently!
-  if (full_state != FULL_NOTFULL) {
-    dout(10) << "do_write NOT queueing finisher seq " << journaled_seq
-	     << ", full_commit_seq|full_restart_seq" << dendl;
-  } else {
-    if (plug_journal_completions) {
-      dout(20) << "do_write NOT queueing finishers through seq " << journaled_seq
-	       << " due to completion plug" << dendl;
+    // kick finisher?
+    //  only if we haven't filled up recently!
+    if (full_state != FULL_NOTFULL) {
+      dout(10) << "do_write NOT queueing finisher seq " << journaled_seq
+	       << ", full_commit_seq|full_restart_seq" << dendl;
     } else {
-      dout(20) << "do_write queueing finishers through seq " << journaled_seq << dendl;
-      queue_completions_thru(journaled_seq);
+      if (plug_journal_completions) {
+	dout(20) << "do_write NOT queueing finishers through seq " << journaled_seq
+		 << " due to completion plug" << dendl;
+      } else {
+	dout(20) << "do_write queueing finishers through seq " << journaled_seq << dendl;
+	queue_completions_thru(journaled_seq);
+      }
     }
+  }
+  {
+    Mutex::Locker locker(flush_lock);
+    writing = false;
+    write_empty_cond.Signal();
   }
 }
 
