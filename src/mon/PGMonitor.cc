@@ -698,18 +698,6 @@ bool PGMonitor::register_new_pgs()
       created++;
       register_pg(pool, pgid, pool.get_last_change(), new_pool);
     }
-
-    for (ps_t ps = 0; ps < pool.get_lpg_num(); ps++) {
-      for (int osd = 0; osd < osdmap->get_max_osd(); osd++) {
-	pg_t pgid(ps, poolid, osd);
-	if (pg_map.pg_stat.count(pgid)) {
-	  dout(20) << "register_new_pgs  have " << pgid << dendl;
-	  continue;
-	}
-	created++;
-	register_pg(pool, pgid, pool.get_last_change(), new_pool);
-      }
-    }
   }
 
   int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
