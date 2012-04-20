@@ -700,13 +700,12 @@ bool PGMonitor::register_new_pgs()
     }
   }
 
-  int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
   int removed = 0;
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
        p++) {
-    if (p->preferred() >= max) {
-      dout(20) << " removing creating_pg " << *p << " because preferred >= max osd or crush device" << dendl;
+    if (p->preferred() >= 0) {
+      dout(20) << " removing creating_pg " << *p << " because it is localized and obsolete" << dendl;
       pending_inc.pg_remove.insert(*p);
       removed++;
     }
@@ -721,8 +720,13 @@ bool PGMonitor::register_new_pgs()
   for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_map.pg_stat.begin();
        p != pg_map.pg_stat.end(); ++p) {
     if (!osdmap->have_pg_pool(p->first.pool())) {
-      dout(20) << " removing creating_pg " << p->first << " because "
+      dout(20) << " removing pg_stat " << p->first << " because "
 	       << "containing pool deleted" << dendl;
+      pending_inc.pg_remove.insert(p->first);
+      ++removed;
+    }
+    if (p->first.preferred() >= 0) {
+      dout(20) << " removing localized pg " << p->first << dendl;
       pending_inc.pg_remove.insert(p->first);
       ++removed;
     }
@@ -744,9 +748,6 @@ void PGMonitor::send_pg_creates()
   map<int, MOSDPGCreate*> msg;
   utime_t now = ceph_clock_now(g_ceph_context);
   
-  OSDMap *osdmap = &mon->osdmon()->osdmap;
-  int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
-
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
        p++) {
@@ -763,8 +764,8 @@ void PGMonitor::send_pg_creates()
     }
     int osd = acting[0];
 
-    // don't send creates for non-existant preferred osds!
-    if (pgid.preferred() >= max)
+    // don't send creates for localized pgs
+    if (pgid.preferred() >= 0)
       continue;
 
     // throttle?
