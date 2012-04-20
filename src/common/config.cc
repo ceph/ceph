@@ -283,6 +283,11 @@ void md_config_t::show_config(std::ostream& out)
 {
   out << "name = " << name << std::endl;
   out << "cluster = " << cluster << std::endl;
+  for (int o = 0; o < subsys.get_num(); o++) {
+    out << "debug_" << subsys.get_name(o)
+	<< " = " << subsys.get_log_level(o)
+	<< "/" << subsys.get_gather_level(o) << std::endl;
+  }
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     char *buf;
