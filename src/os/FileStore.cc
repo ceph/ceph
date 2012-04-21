@@ -1235,6 +1235,74 @@ bool FileStore::test_mount_in_use()
   return inuse;
 }
 
+int FileStore::_test_fiemap()
+{
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/fiemap_test", basedir.c_str());
+
+  int fd = ::open(fn, O_CREAT|O_RDWR|O_TRUNC, 0644);
+  if (fd < 0) {
+    fd = -errno;
+    derr << "_test_fiemap unable to create " << fn << ": " << cpp_strerror(fd) << dendl;
+    return fd;
+  }
+
+  // ext4 has a bug in older kernels where fiemap will return an empty
+  // result in some cases.  this is a file layout that triggers the bug
+  // on 2.6.34-rc5.
+  int v[] = {
+    0x0000000000016000, 0x0000000000007000,
+    0x000000000004a000, 0x0000000000007000,
+    0x0000000000060000, 0x0000000000001000,
+    0x0000000000061000, 0x0000000000008000,
+    0x0000000000069000, 0x0000000000007000,
+    0x00000000000a3000, 0x000000000000c000,
+    0x000000000024e000, 0x000000000000c000,
+    0x000000000028b000, 0x0000000000009000,
+    0x00000000002b1000, 0x0000000000003000,
+    0, 0
+  };
+  for (int i=0; v[i]; i++) {
+    int off = v[i++];
+    int len = v[i];
+
+    // write a large extent
+    char buf[len];
+    memset(buf, 1, sizeof(buf));
+    ::lseek(fd, off, SEEK_SET);
+    int r = safe_write(fd, buf, sizeof(buf));
+    if (r < 0) {
+      derr << "_test_fiemap failed to write to " << fn << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+  ::fsync(fd);
+
+  // fiemap an extent inside that
+  struct fiemap *fiemap;
+  int r = do_fiemap(fd, 2430421, 59284, &fiemap);
+  if (r == -EOPNOTSUPP) {
+    dout(0) << "mount FIEMAP ioctl is NOT supported" << dendl;
+    ioctl_fiemap = false;
+  } else {
+    if (fiemap->fm_mapped_extents == 0) {
+      dout(0) << "mount FIEMAP ioctl is supported, but buggy -- upgrade your kernel" << dendl;
+      ioctl_fiemap = false;
+    } else {
+      dout(0) << "mount FIEMAP ioctl is supported and appears to work" << dendl;
+      ioctl_fiemap = true;
+    }
+  }
+  if (!m_filestore_fiemap) {
+    dout(0) << "mount FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
+    ioctl_fiemap = false;
+  }
+  free(fiemap);
+
+  ::unlink(fn);
+  TEMP_FAILURE_RETRY(::close(fd));
+  return 0;
+}
 
 int FileStore::_detect_fs()
 {
@@ -1278,21 +1346,9 @@ int FileStore::_detect_fs()
   if (fd < 0)
     return -errno;
 
-  // fiemap?
-  struct fiemap *fiemap;
-  int r = do_fiemap(fd, 0, 1, &fiemap);
-  if (r == -EOPNOTSUPP) {
-    dout(0) << "mount FIEMAP ioctl is NOT supported" << dendl;
-    ioctl_fiemap = false;
-  } else {
-    dout(0) << "mount FIEMAP ioctl is supported" << dendl;
-    ioctl_fiemap = true;
-  }
-  if (!m_filestore_fiemap) {
-    dout(0) << "mount FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
-    ioctl_fiemap = false;
-  }
-  free(fiemap);
+  int r = _test_fiemap();
+  if (r < 0)
+    return -r;
 
   struct statfs st;
   r = ::fstatfs(fd, &st);
@@ -3026,7 +3082,7 @@ done:
   if (r >= 0)
     ::encode(exomap, bl);
 
-  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num extents=" << exomap.size() << dendl;
+  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << exomap.size() << " " << exomap << dendl;
   free(fiemap);
   return r;
 }

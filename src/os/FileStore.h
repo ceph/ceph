@@ -283,6 +283,7 @@ public:
   FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore");
   ~FileStore();
 
+  int _test_fiemap();
   int _detect_fs();
   int _sanity_check_fs();
   
