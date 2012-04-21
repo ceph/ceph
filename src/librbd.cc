@@ -19,6 +19,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/snap_types.h"
+#include "common/perf_counters.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
 #include "osdc/ObjectCacher.h"
@@ -30,6 +31,34 @@
 #define dout_prefix *_dout << "librbd: "
 
 namespace librbd {
+
+  enum {
+    l_librbd_first = 26000,
+
+    l_librbd_rd,               // read ops
+    l_librbd_rd_bytes,         // bytes read
+    l_librbd_wr,
+    l_librbd_wr_bytes,
+    l_librbd_discard,
+    l_librbd_discard_bytes,
+    l_librbd_flush,
+
+    l_librbd_aio_rd,               // read ops
+    l_librbd_aio_rd_bytes,         // bytes read
+    l_librbd_aio_wr,
+    l_librbd_aio_wr_bytes,
+    l_librbd_aio_discard,
+    l_librbd_aio_discard_bytes,
+
+    l_librbd_snap_create,
+    l_librbd_snap_remove,
+    l_librbd_snap_rollback,
+
+    l_librbd_notify,
+    l_librbd_resize,
+
+    l_librbd_last,
+  };
 
   using ceph::bufferlist;
   using librados::snap_t;
@@ -70,6 +99,7 @@ namespace librbd {
 
   struct ImageCtx {
     CephContext *cct;
+    PerfCounters *perfcounter;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
     vector<snap_t> snaps;
@@ -89,7 +119,9 @@ namespace librbd {
     ObjectCacher::ObjectSet *object_set;
 
     ImageCtx(std::string imgname, IoCtx& p)
-      : cct((CephContext*)p.cct()), snapid(CEPH_NOSNAP),
+      : cct((CephContext*)p.cct()),
+	perfcounter(NULL),
+	snapid(CEPH_NOSNAP),
 	name(imgname),
 	needs_refresh(true),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
@@ -99,16 +131,19 @@ namespace librbd {
     {
       md_ctx.dup(p);
       data_ctx.dup(p);
+
+      string pname = string("librbd-") + data_ctx.get_pool_name() + string("/") + name;
+      if (snapname.length()) {
+	pname += "@";
+	pname += snapname;
+      }
+      perf_start(pname);
+
       if (cct->_conf->rbd_cache) {
 	Mutex::Locker l(cache_lock);
 	ldout(cct, 20) << "enabling writback caching..." << dendl;
 	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
-	string ocname = string("librbd-") + data_ctx.get_pool_name() + string("/") + name;
-	if (snapname.length()) {
-	  ocname += "@";
-	  ocname += snapname;
-	}
-	object_cacher = new ObjectCacher(cct, name, *writeback_handler, cache_lock,
+	object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 					 NULL, NULL);
 	object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
 	object_cacher->start();
@@ -116,6 +151,7 @@ namespace librbd {
     }
 
     ~ImageCtx() {
+      perf_stop();
       if (object_cacher) {
 	delete object_cacher;
 	object_cacher = NULL;
@@ -128,6 +164,38 @@ namespace librbd {
 	delete object_set;
 	object_set = NULL;
       }
+    }
+
+    void perf_start(string name) {
+      PerfCountersBuilder plb(cct, name, l_librbd_first, l_librbd_last);
+
+      plb.add_u64_counter(l_librbd_rd, "rd");
+      plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes");
+      plb.add_u64_counter(l_librbd_wr, "wr");
+      plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes");
+      plb.add_u64_counter(l_librbd_discard, "discard");
+      plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes");
+      plb.add_u64_counter(l_librbd_flush, "flush");
+      plb.add_u64_counter(l_librbd_aio_rd, "aio_rd");
+      plb.add_u64_counter(l_librbd_aio_rd_bytes, "aio_rd_bytes");
+      plb.add_u64_counter(l_librbd_aio_wr, "aio_wr");
+      plb.add_u64_counter(l_librbd_aio_wr_bytes, "aio_wr_bytes");
+      plb.add_u64_counter(l_librbd_aio_discard, "aio_discard");
+      plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes");
+      plb.add_u64_counter(l_librbd_snap_create, "snap_create");
+      plb.add_u64_counter(l_librbd_snap_remove, "snap_remove");
+      plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
+      plb.add_u64_counter(l_librbd_notify, "notify");
+      plb.add_u64_counter(l_librbd_resize, "resize");
+
+      perfcounter = plb.create_perf_counters();
+      cct->get_perfcounters_collection()->add(perfcounter);
+    }
+
+    void perf_stop() {
+      assert(perfcounter);
+      cct->get_perfcounters_collection()->remove(perfcounter);
+      delete perfcounter;
     }
 
     int snap_set(std::string snap_name)
@@ -476,6 +544,7 @@ void WatchCtx::notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
   if (valid) {
     Mutex::Locker lictx(ictx->refresh_lock);
     ictx->needs_refresh = true;
+    ictx->perfcounter->inc(l_librbd_notify);
   }
 }
 
@@ -779,6 +848,7 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
 
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
+  ictx->perfcounter->inc(l_librbd_snap_create);
   return 0;
 }
 
@@ -806,6 +876,7 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
 
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
+  ictx->perfcounter->inc(l_librbd_snap_remove);
   return 0;
 }
 
@@ -1022,6 +1093,7 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 
   ldout(cct, 2) << "done." << dendl;
 
+  ictx->perfcounter->inc(l_librbd_resize);
   return 0;
 }
 
@@ -1274,6 +1346,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
 
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
+  ictx->perfcounter->inc(l_librbd_snap_rollback);
   return r;
 }
 
@@ -1457,6 +1530,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   }
   ret = total_read;
 
+  ictx->perfcounter->inc(l_librbd_rd);
+  ictx->perfcounter->inc(l_librbd_rd_bytes, len);
   return ret;
 }
 
@@ -1524,6 +1599,9 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
     total_write += write_len;
     left -= write_len;
   }
+
+  ictx->perfcounter->inc(l_librbd_wr);
+  ictx->perfcounter->inc(l_librbd_wr_bytes, total_write);
   return total_write;
 }
 
@@ -1583,6 +1661,8 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   if (ictx->object_cacher)
     ictx->object_cacher->discard_set(ictx->object_set, v);
 
+  ictx->perfcounter->inc(l_librbd_discard);
+  ictx->perfcounter->inc(l_librbd_discard_bytes, total_write);
   return total_write;
 }
 
@@ -1795,6 +1875,9 @@ done:
   c->finish_adding_completions();
   c->put();
 
+  ictx->perfcounter->inc(l_librbd_aio_wr);
+  ictx->perfcounter->inc(l_librbd_aio_wr_bytes, len);
+
   /* FIXME: cleanup all the allocated stuff */
   return r;
 }
@@ -1868,6 +1951,9 @@ done:
 
   c->finish_adding_completions();
   c->put();
+
+  ictx->perfcounter->inc(l_librbd_aio_discard);
+  ictx->perfcounter->inc(l_librbd_aio_discard_bytes, len);
 
   /* FIXME: cleanup all the allocated stuff */
   return r;
@@ -1945,6 +2031,10 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 done:
   c->finish_adding_completions();
   c->put();
+
+  ictx->perfcounter->inc(l_librbd_aio_rd);
+  ictx->perfcounter->inc(l_librbd_aio_rd_bytes, len);
+
   return ret;
 }
 
