@@ -925,7 +925,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     std::map<uint64_t,uint64_t> m;
     ret = io_ctx.mapext(oid, 0, -1, m);
     if (ret < 0) {
-      cerr << "mapext error on " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      cerr << "mapext error on " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       return 1;
     }
     std::map<uint64_t,uint64_t>::iterator iter;
@@ -1288,8 +1288,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     usage_exit();
   }
 
-  if (ret)
-    cerr << "error " << (-ret) << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+  if (ret < 0)
+    cerr << "error " << (-ret) << ": " << cpp_strerror(ret) << std::endl;
   return (ret < 0) ? 1 : 0;
 }
 
