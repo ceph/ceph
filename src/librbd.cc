@@ -1087,18 +1087,19 @@ int ictx_check(ImageCtx *ictx)
 
   if (needs_refresh) {
     Mutex::Locker l(ictx->lock);
-    const char *snap = NULL;
-    if (ictx->snapid != CEPH_NOSNAP)
-      snap = ictx->snapname.c_str();
 
-    int r = ictx_refresh(ictx, snap);
+    string snap;
+    if (ictx->snapid != CEPH_NOSNAP)
+      snap = ictx->snapname;
+
+    int r = ictx_refresh(ictx, snap.length() ? snap.c_str() : NULL);
     if (r < 0) {
       lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r) << dendl;
       return r;
     }
 
     // check if the snapshot at which we were reading was removed
-    if (snap && ictx->snapname != snap) {
+    if (ictx->snapname != snap) {
       lderr(cct) << "tried to read from a snapshot that no longer exists: " << snap << dendl;
       return -ENOENT;
     }
