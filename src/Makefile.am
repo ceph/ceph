@@ -322,6 +322,10 @@ rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/ob
 rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
+rest_bench_SOURCES = tools/rest_bench.cc common/obj_bencher.cc
+rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -ls3
+bin_PROGRAMS += rest-bench
+
 scratchtool_SOURCES = scratchtool.c
 scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 scratchtoolpp_SOURCES = scratchtoolpp.cc
