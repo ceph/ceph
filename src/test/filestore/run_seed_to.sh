@@ -15,16 +15,19 @@ rm -fr a a.fail a.recover
 test_filestore_idempotent_sequence run-sequence-to $to a a/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat \
+    --filestore-journal-sync-enabled 0 \
+    --debug-journal 20 \
     --log-file a.fail --debug-filestore 20 || true
 
 stop=`test_filestore_idempotent_sequence get-last-op a a/journal --filestore-xattr-use-omap \
-    --log-file a.recover --debug-filestore 20`
+    --log-file a.recover --debug-journal 20 --debug-filestore 20`
 
 echo stopped at $stop
 
 rm -rf b b.clean
 test_filestore_idempotent_sequence run-sequence-to $stop b b/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
+    --debug-journal 20 \
     --log-file b.clean --debug-filestore 20
 
 if test_filestore_idempotent_sequence diff a a/journal b b/journal \

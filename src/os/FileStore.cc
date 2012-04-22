@@ -4586,15 +4586,21 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
 {
   dout(15) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
   
-  int cmp = _check_replay_guard(c, o, spos);
-  if (cmp < 0)
+  int dstcmp = _check_replay_guard(c, o, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  // check the src name too; it might have a newer guard, and we don't
+  // want to clobber it
+  int srccmp = _check_replay_guard(oldcid, o, spos);
+  if (srccmp < 0)
     return 0;
 
   // open guard on object so we don't any previous operations on the
   // new name that will modify the source inode.
   int fd = lfn_open(oldcid, o, 0);
   assert(fd >= 0);
-  if (cmp > 0) {
+  if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
     _set_replay_guard(fd, spos, true);
   }
 

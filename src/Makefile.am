@@ -759,7 +759,8 @@ bin_DEBUGPROGRAMS += test_filestore_idempotent
 test_filestore_idempotent_sequence_SOURCES = \
      test/filestore/test_idempotent_sequence.cc \
      test/filestore/DeterministicOpSequence.cc \
-     test/filestore/TestFileStoreState.cc 
+     test/filestore/TestFileStoreState.cc \
+     test/filestore/FileStoreDiff.cc
 test_filestore_idempotent_sequence_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
 
