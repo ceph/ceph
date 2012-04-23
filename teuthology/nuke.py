@@ -218,6 +218,8 @@ def synch_clocks(remotes, log):
                 'sudo', 'hwclock', '--systohc', '--utc',
                 run.Raw('&&'),
                 'sudo', 'service', 'ntp', 'start',
+                run.Raw('||'),
+                'true',    # ignore errors; we may be racing with ntpd startup
                 ],
             wait=False,
             )
