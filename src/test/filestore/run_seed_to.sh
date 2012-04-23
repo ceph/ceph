@@ -15,7 +15,6 @@ rm -fr a a.fail a.recover
 test_filestore_idempotent_sequence run-sequence-to $to a a/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat \
-    --filestore-journal-sync-enabled 0 \
     --debug-journal 20 \
     --log-file a.fail --debug-filestore 20 || true
 
