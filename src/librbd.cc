@@ -1701,11 +1701,9 @@ ssize_t handle_sparse_read(CephContext *cct,
       buf_ofs += gap;
       buf_left -= gap;
       block_ofs = extent_ofs;
-    } else {
-      if (extent_ofs != block_ofs) {
-	assert(0 == "osd returned data prior to what we asked for");
-	return -EIO;
-      }
+    } else if (extent_ofs < block_ofs) {
+      assert(0 == "osd returned data prior to what we asked for");
+      return -EIO;
     }
 
     if (bl_ofs + extent_len > (buf_ofs + buf_left)) {
