@@ -408,6 +408,40 @@ void ObjectCacher::Object::truncate(loff_t s)
   }
 }
 
+void ObjectCacher::Object::discard(loff_t off, loff_t len)
+{
+  ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len << dendl;
+
+  map<loff_t, BufferHead*>::iterator p = data.lower_bound(off);
+  if (p != data.begin() &&
+      (p == data.end() || p->first > off)) {
+    p--;     // might overlap!
+    if (p->first + p->second->length() <= off)
+      p++;   // doesn't overlap.
+  }
+
+  while (p != data.end()) {
+    BufferHead *bh = p->second;
+    if (bh->start() >= off + len)
+      break;
+
+    // split bh at truncation point?
+    if (bh->start() < off) {
+      split(bh, off);
+      p++;
+      continue;
+    }
+
+    assert(bh->start() >= off);
+    if (bh->end() > off + len) {
+      split(bh, off + len);
+    }
+
+    p++;
+    oc->bh_remove(this, bh);
+  }
+}
+
 
 
 /*** ObjectCacher ***/
@@ -1612,16 +1646,16 @@ uint64_t ObjectCacher::release_all()
 
 
 /**
- * Truncate an ObjectSet by removing the objects in exls from the in-memory oset.
+ * discard object extents from an ObjectSet by removing the objects in exls from the in-memory oset.
  */
-void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
+void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
 {
   if (oset->objects.empty()) {
-    ldout(cct, 10) << "truncate_set on " << oset << " dne" << dendl;
+    ldout(cct, 10) << "discard_set on " << oset << " dne" << dendl;
     return;
   }
   
-  ldout(cct, 10) << "truncate_set " << oset << dendl;
+  ldout(cct, 10) << "discard_set " << oset << dendl;
 
   bool were_dirty = oset->dirty_or_tx > 0;
 
@@ -1634,19 +1668,11 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
       continue;
     Object *ob = objects[oset->poolid][soid];
     
-    // purge or truncate?
-    if (ex.offset == 0) {
-      ldout(cct, 10) << "truncate_set purging " << *ob << dendl;
-      purge(ob);
-    } else {
-      // hrm, truncate object
-      ldout(cct, 10) << "truncate_set truncating " << *ob << " at " << ex.offset << dendl;
-      ob->truncate(ex.offset);
-      
-      if (ob->can_close()) {
-	ldout(cct, 10) << "truncate_set trimming " << *ob << dendl;
-	close_object(ob);
-      }
+    ob->discard(ex.offset, ex.length);
+
+    if (ob->can_close()) {
+      ldout(cct, 10) << " closing " << *ob << dendl;
+      close_object(ob);
     }
   }
 

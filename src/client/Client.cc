@@ -2319,7 +2319,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
     Filer::file_to_extents(cct, in->ino, &in->layout, off, len, ls);
-    objectcacher->truncate_set(&in->oset, ls);
+    objectcacher->discard_set(&in->oset, ls);
   }
   
   if (ino_invalidate_cb)

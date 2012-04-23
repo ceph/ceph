@@ -680,7 +680,7 @@ bin_DEBUGPROGRAMS += test_librbd
 
 test_librbd_fsx_SOURCES = test/rbd/fsx.c
 test_librbd_fsx_LDADD =  librbd.la librados.la
-test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
+test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += test_librbd_fsx
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc

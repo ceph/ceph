@@ -249,7 +249,7 @@ class ObjectCacher {
     BufferHead *map_write(OSDWrite *wr);
     
     void truncate(loff_t s);
-
+    void discard(loff_t off, loff_t len);
   };
   
 
@@ -487,7 +487,7 @@ class ObjectCacher {
   loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
   uint64_t release_all();
 
-  void truncate_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+  void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
 
   // file functions
 

@@ -40,8 +40,17 @@ PerfCountersCollection::~PerfCountersCollection()
 void PerfCountersCollection::add(class PerfCounters *l)
 {
   Mutex::Locker lck(m_lock);
-  perf_counters_set_t::iterator i = m_loggers.find(l);
-  assert(i == m_loggers.end());
+
+  // make sure the name is unique
+  perf_counters_set_t::iterator i;
+  i = m_loggers.find(l);
+  while (i != m_loggers.end()) {
+    ostringstream ss;
+    ss << l->get_name() << "-" << (void*)l;
+    l->set_name(ss.str());
+    i = m_loggers.find(l);
+  }
+
   m_loggers.insert(l);
 }
 

@@ -1,57 +1,34 @@
 // -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
 /*
- * Copyright (c) 1998-2001 Apple Computer, Inc. All rights reserved.
- *
- * @APPLE_LICENSE_HEADER_START@
- *
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 2.0 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this file.
- *
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
- *
- * @APPLE_LICENSE_HEADER_END@
+ *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserverd.
  *
  *	File:	fsx.c
  *	Author:	Avadis Tevanian, Jr.
  *
  *	File system exerciser. 
  *
- *	Rewrite and enhancements 1998-2001 Conrad Minshall -- conrad@mac.com
+ *	Rewritten 8/98 by Conrad Minshall.
  *
- *	Various features from Joe Sokol, Pat Dirks, and Clark Warner.
- *
- *	Small changes to work under Linux -- davej@suse.de
- *
- *	Sundry porting patches from Guy Harris 12/2001
+ *	Small changes to work under Linux -- davej.
  *
  *	Checks for mmap last-page zero fill.
- *
- *	Updated license to APSL 2.0, 2004/7/27 - Jordan Hubbard
- *
- * $FreeBSD: src/tools/regression/fsx/fsx.c,v 1.6 2008/02/19 07:09:18 ru Exp $
- *
  */
 
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <fcntl.h>
-#include <sys/mman.h>
+#include <unistd.h>
 #include <limits.h>
+#include <time.h>
+#include <strings.h>
+#include <sys/file.h>
+#include <sys/mman.h>
+#ifdef HAVE_ERR_H
+#include <err.h>
+#endif
 #include <signal.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <math.h>
@@ -77,26 +54,58 @@ int			logptr = 0;	/* current position in log */
 int			logcount = 0;	/* total ops */
 
 /*
- *	Define operations
+ * The operation matrix is complex due to conditional execution of different
+ * features. Hence when we come to deciding what operation to run, we need to
+ * be careful in how we select the different operations. The active operations
+ * are mapped to numbers as follows:
+ *
+ *		lite	!lite
+ * READ:	0	0
+ * WRITE:	1	1
+ * MAPREAD:	2	2
+ * MAPWRITE:	3	3
+ * TRUNCATE:	-	4
+ * FALLOCATE:	-	5
+ * PUNCH HOLE:	-	6
+ *
+ * When mapped read/writes are disabled, they are simply converted to normal
+ * reads and writes. When fallocate/fpunch calls are disabled, they are
+ * converted to OP_SKIPPED. Hence OP_SKIPPED needs to have a number higher than
+ * the operation selction matrix, as does the OP_CLOSEOPEN which is an
+ * operation modifier rather than an operation in itself.
+ *
+ * Because of the "lite" version, we also need to have different "maximum
+ * operation" defines to allow the ops to be selected correctly based on the
+ * mode being run.
  */
 
-#define	OP_READ		1
-#define OP_WRITE	2
-#define OP_TRUNCATE	3
-#define OP_CLOSEOPEN	4
-#define OP_MAPREAD	5
-#define OP_MAPWRITE	6
-#define OP_SKIPPED	7
+/* common operations */
+#define	OP_READ		0
+#define OP_WRITE	1
+#define OP_MAPREAD	2
+#define OP_MAPWRITE	3
+#define OP_MAX_LITE	4
 
-int page_size;
-int page_mask;
+/* !lite operations */
+#define OP_TRUNCATE	4
+#define OP_FALLOCATE	5
+#define OP_PUNCH_HOLE	6
+#define OP_MAX_FULL	7
+
+/* operation modifiers */
+#define OP_CLOSEOPEN	100
+#define OP_SKIPPED	101
+
+#undef PAGE_SIZE
+#define PAGE_SIZE       getpagesize()
+#undef PAGE_MASK
+#define PAGE_MASK       (PAGE_SIZE - 1)
 
 char	*original_buf;			/* a pointer to the original data */
 char	*good_buf;			/* a pointer to the correct data */
 char	*temp_buf;			/* a pointer to the current data */
 char	*pool;				/* name of the pool our test image is in */
 char	*iname;				/* name of our test image */
-rados_t		cluster;		/* cluster handle */
 rados_ioctx_t	ioctx;			/* handle for our test pool */
 rbd_image_t	image;			/* handle for our test image */
 
@@ -109,6 +118,8 @@ unsigned long	simulatedopcount = 0;	/* -b flag */
 int	closeprob = 0;			/* -c flag */
 int	debug = 0;			/* -d flag */
 unsigned long	debugstart = 0;		/* -D flag */
+int	flush = 0;			/* -f flag */
+int	do_fsync = 0;			/* -y flag */
 unsigned long	maxfilelen = 256 * 1024;	/* -l flag */
 int	sizechecks = 1;			/* -n flag disables them */
 int	maxoplen = 64 * 1024;		/* -o flag */
@@ -116,6 +127,7 @@ int	quiet = 0;			/* -q flag */
 unsigned long progressinterval = 0;	/* -p flag */
 int	readbdy = 1;			/* -r flag */
 int	style = 0;			/* -s flag */
+int	prealloc = 0;			/* -x flag */
 int	truncbdy = 1;			/* -t flag */
 int	writebdy = 1;			/* -w flag */
 long	monitorstart = -1;		/* -m flag */
@@ -124,69 +136,79 @@ int	lite = 0;			/* -L flag */
 long	numops = -1;			/* -N flag */
 int	randomoplen = 1;		/* -O flag disables it */
 int	seed = 1;			/* -S flag */
-int     mapped_writes = 1;	      /* -W flag disables */
-int 	mapped_reads = 1;		/* -R flag disables it */
+int     mapped_writes = 0;              /* -W flag disables */
+int     fallocate_calls = 0;            /* -F flag disables */
+int     punch_hole_calls = 1;           /* -H flag disables */
+int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
+int	o_direct;			/* -Z */
+int	aio = 0;
+
+int page_size;
+int page_mask;
+int mmap_mask;
+#ifdef AIO
+int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
+#define READ 0
+#define WRITE 1
+#define fsxread(a,b,c,d)	aio_rw(READ, a,b,c,d)
+#define fsxwrite(a,b,c,d)	aio_rw(WRITE, a,b,c,d)
+#else
+#define fsxread(a,b,c,d)	read(a,b,c)
+#define fsxwrite(a,b,c,d)	write(a,b,c)
+#endif
+
 FILE *	fsxlogf = NULL;
 int badoff = -1;
 int closeopen = 0;
 
-
-void
-vwarnc(code, fmt, ap)
-	int code;
-	const char *fmt;
-	va_list ap;
+static void *round_ptr_up(void *ptr, unsigned long align, unsigned long offset)
 {
-	fprintf(stderr, "fsx: ");
-	if (fmt != NULL) {
-		vfprintf(stderr, fmt, ap);
-		fprintf(stderr, ": ");
-	}
-	fprintf(stderr, "%s\n", strerror(code));
+	unsigned long ret = (unsigned long)ptr;
+
+	ret = ((ret + align - 1) & ~(align - 1));
+	ret += offset;
+	return (void *)ret;
 }
 
 void
-warn(const char * fmt, ...)
-{
+vwarnc(int code, const char *fmt, va_list ap) {
+  fprintf(stderr, "fsx: ");
+  if (fmt != NULL) {
+	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, ": ");
+  }
+  fprintf(stderr, "%s\n", strerror(code));
+}
+
+void
+warn(const char * fmt, ...)  {
 	va_list ap;
 	va_start(ap, fmt);
 	vwarnc(errno, fmt, ap);
 	va_end(ap);
 }
 
-void
-simple_err(const char *msg, int err)
-{
-    fprintf(stderr, "%s: %s", msg, strerror(-err));
-}
+#define BUF_SIZE 1024
 
 void
 prt(char *fmt, ...)
 {
 	va_list args;
+	char buffer[BUF_SIZE];
 
 	va_start(args, fmt);
-	vfprintf(stdout, fmt, args);
+	vsnprintf(buffer, BUF_SIZE, fmt, args);
 	va_end(args);
-
-	if (fsxlogf) {
-		va_start(args, fmt);
-		vfprintf(fsxlogf, fmt, args);
-		va_end(args);
-	}
+	fprintf(stdout, buffer);
+	if (fsxlogf)
+		fprintf(fsxlogf, buffer);
 }
 
 void
 prterr(char *prefix)
 {
 	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(errno));
-}
-
-void
-prterrcode(char *prefix, int code)
-{
-	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(-code));
 }
 
 void
@@ -207,12 +229,18 @@ log4(int operation, int arg0, int arg1, int arg2)
 		logptr = 0;
 }
 
+void
+simple_err(const char *msg, int err)
+{
+    fprintf(stderr, "%s: %s", msg, strerror(-err));
+}
 
 void
 logdump(void)
 {
 	int	i, count, down;
 	struct log_entry	*lp;
+	char *falloc_type[3] = {"PAST_EOF", "EXTENDING", "INTERIOR"};
 
 	prt("LOG DUMP (%d total operations):\n", logcount);
 	if (logcount < LOGSIZE) {
@@ -226,14 +254,14 @@ logdump(void)
 		int opnum;
 
 		opnum = i+1 + (logcount/LOGSIZE)*LOGSIZE;
-		prt("%d(%d mod 256): ", opnum, opnum%256);
+		prt("%d(%3d mod 256): ", opnum, opnum%256);
 		lp = &oplog[i];
 		if ((closeopen = lp->operation < 0))
 			lp->operation = ~ lp->operation;
 			
 		switch (lp->operation) {
 		case OP_MAPREAD:
-			prt("MAPREAD\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("MAPREAD  0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (badoff >= lp->args[0] && badoff <
@@ -249,7 +277,7 @@ logdump(void)
 				prt("\t******WWWW");
 			break;
 		case OP_READ:
-			prt("READ\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("READ     0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (badoff >= lp->args[0] &&
@@ -257,7 +285,7 @@ logdump(void)
 				prt("\t***RRRR***");
 			break;
 		case OP_WRITE:
-			prt("WRITE\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("WRITE    0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (lp->args[0] > lp->args[2])
@@ -276,6 +304,23 @@ logdump(void)
 			    badoff < lp->args[!!down])
 				prt("\t******WWWW");
 			break;
+		case OP_FALLOCATE:
+			/* 0: offset 1: length 2: where alloced */
+			prt("FALLOC   0x%x thru 0x%x\t(0x%x bytes) %s",
+				lp->args[0], lp->args[0] + lp->args[1],
+				lp->args[1], falloc_type[lp->args[2]]);
+			if (badoff >= lp->args[0] &&
+			    badoff < lp->args[0] + lp->args[1])
+				prt("\t******FFFF");
+			break;
+		case OP_PUNCH_HOLE:
+			prt("PUNCH    0x%x thru 0x%x\t(0x%x bytes)",
+			    lp->args[0], lp->args[0] + lp->args[1] - 1,
+			    lp->args[1]);
+			if (badoff >= lp->args[0] && badoff <
+						     lp->args[0] + lp->args[1])
+				prt("\t******PPPP");
+			break;
 		case OP_SKIPPED:
 			prt("SKIPPED (no operation)");
 			break;
@@ -292,6 +337,11 @@ logdump(void)
 	}
 }
 
+void
+prterrcode(char *prefix, int code)
+{
+	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(-code));
+}
 
 void
 save_buffer(char *buffer, off_t bufferlength, int image)
@@ -305,16 +355,6 @@ save_buffer(char *buffer, off_t bufferlength, int image)
 	if (bufferlength > SSIZE_MAX) {
 		prt("fsx flaw: overflow in save_buffer\n");
 		exit(67);
-	}
-	if (lite) {
-		off_t size_by_seek = lseek(image, (off_t)0, SEEK_END);
-		if (size_by_seek == (off_t)-1)
-			prterr("save_buffer: lseek eof");
-		else if (bufferlength > size_by_seek) {
-			warn("save_buffer: .fsxgood file too short... will save 0x%llx bytes instead of 0x%llx\n", (unsigned long long)size_by_seek,
-			     (unsigned long long)bufferlength);
-			bufferlength = size_by_seek;
-		}
 	}
 
 	ret = lseek(image, (off_t)0, SEEK_SET);
@@ -352,7 +392,7 @@ report_failure(int status)
 
 
 #define short_at(cp) ((unsigned short)((*((unsigned char *)(cp)) << 8) | \
-					*(((unsigned char *)(cp)) + 1)))
+				        *(((unsigned char *)(cp)) + 1)))
 
 void
 check_buffers(unsigned offset, unsigned size)
@@ -364,18 +404,27 @@ check_buffers(unsigned offset, unsigned size)
 	unsigned bad = 0;
 
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
-		prt("READ BAD DATA: offset = 0x%x, size = 0x%x\n",
-		    offset, size);
+		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
+		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
 		while (size > 0) {
 			c = good_buf[offset];
 			t = temp_buf[i];
 			if (c != t) {
-				if (n == 0) {
+			        if (n < 16) {
 					bad = short_at(&temp_buf[i]);
-					prt("0x%5x\t0x%04x\t0x%04x", offset,
-					    short_at(&good_buf[offset]), bad);
+				        prt("0x%5x\t0x%04x\t0x%04x", offset,
+				            short_at(&good_buf[offset]), bad);
 					op = temp_buf[offset & 1 ? i+1 : i];
+				        prt("\t0x%5x\n", n);
+					if (op)
+						prt("operation# (mod 256) for "
+						  "the bad data may be %u\n",
+						((unsigned)op & 0xff));
+					else
+						prt("operation# (mod 256) for "
+						  "the bad data unknown, check"
+						  " HOLE and EXTEND ops\n");
 				}
 				n++;
 				badoff = offset;
@@ -384,14 +433,6 @@ check_buffers(unsigned offset, unsigned size)
 			i++;
 			size--;
 		}
-		if (n) {
-			prt("\t0x%5x\n", n);
-			if (bad)
-				prt("operation# (mod 256) for the bad data may be %u\n", ((unsigned)op & 0xff));
-			else
-				prt("operation# (mod 256) for the bad data unknown, check HOLE and EXTEND ops\n");
-		} else
-			prt("????????????????\n");
 		report_failure(110);
 	}
 }
@@ -406,7 +447,7 @@ check_size(void)
 	if ((ret = rbd_stat(image, &statbuf, sizeof(statbuf))) < 0) {
 		prterrcode("check_size: fstat", ret);
 	}
-	if ((unsigned)file_size != statbuf.size) {
+	if ((uint64_t)file_size != statbuf.size) {
 		prt("Size error: expected 0x%llx stat 0x%llx\n",
 		    (unsigned long long)file_size,
 		    (unsigned long long)statbuf.size);
@@ -424,17 +465,17 @@ check_trunc_hack(void)
 	rbd_resize(image, (off_t)100000);
 	rbd_stat(image, &statbuf, sizeof(statbuf));
 	if (statbuf.size != (off_t)100000) {
-		prt("no extend on truncate! not posix!\n");
-		exit(130);
-	}
+ 		prt("no extend on truncate! not posix!\n");
+ 		exit(130);
+ 	}
 	rbd_resize(image, (off_t)0);
 }
-
 
 int
 create_image()
 {
 	int r;
+	rados_t cluster;
 	int order = 0;
 	r = rados_create(&cluster, NULL);
 	if (r < 0) {
@@ -453,14 +494,14 @@ create_image()
 		goto failed_shutdown;
 	}
 	r = rados_pool_create(cluster, pool);
-	if (r < 0) {
+	if (r < 0 && r != -EEXIST) {
 		simple_err("Error creating pool", r);
 		goto failed_shutdown;
 	}
 	r = rados_ioctx_create(cluster, pool, &ioctx);
 	if (r < 0) {
 		simple_err("Error creating ioctx", r);
-		goto failed_pool;
+		goto failed_shutdown;
 	}
 	r = rbd_create(ioctx, iname, 0, &order);
 	if (r < 0) {
@@ -472,25 +513,18 @@ create_image()
 
  failed_open:
 	rados_ioctx_destroy(ioctx);
- failed_pool:
-	rados_pool_delete(cluster, pool);
  failed_shutdown:
 	rados_shutdown(cluster);
 	return r;
 }
 
-void delete_image()
+void
+doflush(unsigned offset, unsigned size)
 {
-	rbd_remove(ioctx, iname);
-	rados_ioctx_destroy(ioctx);
-	rados_pool_delete(cluster, pool);
-	rados_shutdown(cluster);
-}
+	if (o_direct == O_DIRECT)
+		return;
 
-void cleanup_image()
-{
-	rbd_close(image);
-	delete_image();
+	rbd_flush(image);
 }
 
 void
@@ -499,8 +533,10 @@ doread(unsigned offset, unsigned size)
 	int ret;
 
 	offset -= offset % readbdy;
+	if (o_direct)
+		size -= size % readbdy;
 	if (size == 0) {
-		if (!quiet && testcalls > simulatedopcount)
+		if (!quiet && testcalls > simulatedopcount && !o_direct)
 			prt("skipping zero size read\n");
 		log4(OP_SKIPPED, OP_READ, offset, size);
 		return;
@@ -517,12 +553,12 @@ doread(unsigned offset, unsigned size)
 	if (testcalls <= simulatedopcount)
 		return;
 
-	if (!quiet && ((progressinterval &&
-			testcalls % progressinterval == 0) ||
-		       (debug &&
-			(monitorstart == -1 ||
-			 (offset + size > monitorstart &&
-			  (monitorend == -1 || offset <= monitorend))))))
+	if (!quiet &&
+		((progressinterval && testcalls % progressinterval == 0)  ||
+		(debug &&
+		       (monitorstart == -1 ||
+			(offset + size > monitorstart &&
+			(monitorend == -1 || offset <= monitorend))))))
 		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 	ret = rbd_read(image, offset, size, temp_buf);
@@ -537,10 +573,11 @@ doread(unsigned offset, unsigned size)
 	check_buffers(offset, size);
 }
 
+
 void
 check_eofpage(char *s, unsigned offset, char *p, int size)
 {
-	uintptr_t last_page, should_be_zero;
+	unsigned long last_page, should_be_zero;
 
 	if (offset + size <= (file_size & ~page_mask))
 		return;
@@ -550,7 +587,7 @@ check_eofpage(char *s, unsigned offset, char *p, int size)
 	 * beyond the true end of the file mapping
 	 * (as required by mmap def in 1996 posix 1003.1)
 	 */
-	last_page = ((uintptr_t)p + (offset & page_mask) + size) & ~page_mask;
+	last_page = ((unsigned long)p + (offset & page_mask) + size) & ~page_mask;
 
 	for (should_be_zero = last_page + (file_size & page_mask);
 	     should_be_zero < last_page + page_size;
@@ -583,8 +620,10 @@ dowrite(unsigned offset, unsigned size)
 	off_t newsize;
 
 	offset -= offset % writebdy;
+	if (o_direct)
+		size -= size % writebdy;
 	if (size == 0) {
-		if (!quiet && testcalls > simulatedopcount)
+		if (!quiet && testcalls > simulatedopcount && !o_direct)
 			prt("skipping zero size write\n");
 		log4(OP_SKIPPED, OP_WRITE, offset, size);
 		return;
@@ -606,20 +645,18 @@ dowrite(unsigned offset, unsigned size)
 		if (ret < 0) {
 			prterrcode("dowrite: resize", ret);
 			report_failure(150);
-		} else {
-			prt("resized to 0x%x ", newsize);
 		}
 	}
 
 	if (testcalls <= simulatedopcount)
 		return;
 
-	if (!quiet && ((progressinterval &&
-			testcalls % progressinterval == 0) ||
+	if (!quiet &&
+		((progressinterval && testcalls % progressinterval == 0) ||
 		       (debug &&
-			(monitorstart == -1 ||
-			 (offset + size > monitorstart &&
-			  (monitorend == -1 || offset <= monitorend))))))
+		       (monitorstart == -1 ||
+			(offset + size > monitorstart &&
+			(monitorend == -1 || offset <= monitorend))))))
 		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
@@ -631,6 +668,9 @@ dowrite(unsigned offset, unsigned size)
 			prt("short write: 0x%x bytes instead of 0x%x\n",
 			    ret, size);
 		report_failure(151);
+	}
+	if (flush) {
+		doflush(offset, size);
 	}
 }
 
@@ -661,13 +701,61 @@ dotruncate(unsigned size)
 	
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
-		       size <= monitorend)))
+		      size <= monitorend)))
 		prt("%lu trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize, size);
 	if ((ret = rbd_resize(image, size)) < 0) {
 		prt("rbd_resize: %x\n", size);
 		prterrcode("dotruncate: ftruncate", ret);
 		report_failure(160);
 	}
+}
+
+void
+do_punch_hole(unsigned offset, unsigned length)
+{
+	unsigned end_offset;
+	int max_offset = 0;
+	int max_len = 0;
+	int ret;
+
+	if (length == 0) {
+		if (!quiet && testcalls > simulatedopcount)
+			prt("skipping zero length punch hole\n");
+			log4(OP_SKIPPED, OP_PUNCH_HOLE, offset, length);
+		return;
+	}
+
+	if (file_size <= (loff_t)offset) {
+		if (!quiet && testcalls > simulatedopcount)
+			prt("skipping hole punch off the end of the file\n");
+			log4(OP_SKIPPED, OP_PUNCH_HOLE, offset, length);
+		return;
+	}
+
+	end_offset = offset + length;
+
+	log4(OP_PUNCH_HOLE, offset, length, 0);
+
+	if (testcalls <= simulatedopcount)
+		return;
+
+	if ((progressinterval && testcalls % progressinterval == 0) ||
+	    (debug && (monitorstart == -1 || monitorend == -1 ||
+		      end_offset <= monitorend))) {
+		prt("%lu punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
+			offset, offset+length, length);
+	}
+	if ((ret = rbd_discard(image, offset, length)) < 0) {
+		prt("%punch hole: %x to %x\n", offset, length);
+		prterrcode("do_punch_hole: discard", ret);
+		report_failure(161);
+	}
+
+
+	max_offset = offset < file_size ? offset : file_size;
+	max_len = max_offset + length <= file_size ? length :
+			file_size - max_offset;
+	memset(good_buf + max_offset, '\0', max_len);
 }
 
 
@@ -697,6 +785,7 @@ void
 docloseopen(void)
 {
 	int ret;
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -713,6 +802,15 @@ docloseopen(void)
 	}
 }
 
+#define TRIM_OFF_LEN(off, len, size)	\
+do {					\
+	if (size)			\
+		(off) %= (size);	\
+	else				\
+		(off) = 0;		\
+	if ((unsigned)(off) + (unsigned)(len) > (unsigned)(size))	\
+		(len) = (size) - (off);	\
+} while (0)
 
 void
 test(void)
@@ -720,12 +818,7 @@ test(void)
 	unsigned long	offset;
 	unsigned long	size = maxoplen;
 	unsigned long	rv = random();
-	unsigned long	op = rv % (3 + !lite + mapped_writes);
-
-	/* turn off the map read if necessary */
-
-	if (op == 2 && !mapped_reads)
-	    op = 0;
+	unsigned long	op;
 
 	if (simulatedopcount > 0 && testcalls == simulatedopcount)
 		writefileimage();
@@ -733,7 +826,7 @@ test(void)
 	testcalls++;
 
 	if (closeprob)
-		closeopen = (rv >> 3) < (1ul << 28) / closeprob;
+		closeopen = (rv >> 3) < (1u << 28) / (unsigned)closeprob;
 
 	if (debugstart > 0 && testcalls >= debugstart)
 		debug = 1;
@@ -741,44 +834,77 @@ test(void)
 	if (!quiet && testcalls < simulatedopcount && testcalls % 100000 == 0)
 		prt("%lu...\n", testcalls);
 
-	/*
-	 * READ:	op = 0
-	 * WRITE:	op = 1
-	 * MAPREAD:     op = 2
-	 * TRUNCATE:	op = 3
-	 * MAPWRITE:    op = 3 or 4
-	 */
-	if (lite ? 0 : op == 3 && style == 0) /* vanilla truncate? */
-		dotruncate(random() % maxfilelen);
-	else {
-		if (randomoplen)
-			size = random() % (maxoplen+1);
-		if (lite ? 0 : op == 3)
-			dotruncate(size);
-		else {
-			offset = random();
-			if (op == 1 || op == (lite ? 3 : 4)) {
-				offset %= maxfilelen;
-				if (offset + size > maxfilelen)
-					size = maxfilelen - offset;
-				if (op != 1)
-					exit(182);
-				else
-					dowrite(offset, size);
-			} else {
-				if (file_size)
-					offset %= file_size;
-				else
-					offset = 0;
-				if (offset + size > (unsigned long)file_size)
-					size = file_size - offset;
-				if (op != 0)
-					exit(183);
-				else
-					doread(offset, size);
-			}
+	offset = random();
+	if (randomoplen)
+		size = random() % (maxoplen + 1);
+
+	/* calculate appropriate op to run */
+	if (lite)
+		op = rv % OP_MAX_LITE;
+	else
+		op = rv % OP_MAX_FULL;
+
+	switch (op) {
+	case OP_MAPREAD:
+		if (!mapped_reads)
+			op = OP_READ;
+		break;
+	case OP_MAPWRITE:
+		if (!mapped_writes)
+			op = OP_WRITE;
+		break;
+	case OP_FALLOCATE:
+		if (!fallocate_calls) {
+			log4(OP_SKIPPED, OP_FALLOCATE, offset, size);
+			goto out;
 		}
+		break;
+	case OP_PUNCH_HOLE:
+		if (!punch_hole_calls) {
+			log4(OP_SKIPPED, OP_PUNCH_HOLE, offset, size);
+			goto out;
+		}
+		break;
 	}
+
+	switch (op) {
+	case OP_READ:
+		TRIM_OFF_LEN(offset, size, file_size);
+		doread(offset, size);
+		break;
+
+	case OP_WRITE:
+		TRIM_OFF_LEN(offset, size, maxfilelen);
+		dowrite(offset, size);
+		break;
+
+	case OP_MAPREAD:
+		TRIM_OFF_LEN(offset, size, file_size);
+		exit(183);
+		break;
+
+	case OP_MAPWRITE:
+		TRIM_OFF_LEN(offset, size, maxfilelen);
+		exit(182);
+		break;
+
+	case OP_TRUNCATE:
+		if (!style)
+			size = random() % maxfilelen;
+		dotruncate(size);
+		break;
+
+	case OP_PUNCH_HOLE:
+		TRIM_OFF_LEN(offset, size, file_size);
+		do_punch_hole(offset, size);
+		break;
+	default:
+		prterr("test: unknown operation");
+		report_failure(42);
+		break;
+	}
+
+out:
 	if (sizechecks && testcalls > simulatedopcount)
 		check_size();
 	if (closeopen)
@@ -801,10 +927,11 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dnqLOW] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] iname\n\
+		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
+	-f flush and invalidate cache after I/O\n\
 	-l flen: the upper bound on file size (default 262144)\n\
 	-m startop:endop: monitor (print debug output) specified byte range (default 0:infinity)\n\
 	-n: no verifications of file size\n\
@@ -815,14 +942,25 @@ usage(void)
 	-s style: 1 gives smaller truncates (default 0)\n\
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
-	-D startingop: debug output starting at specified operation\n\
-	-L: fsxLite - no file creations & no file size changes\n\
+	-x: preallocate file space before starting, XFS only (default 0)\n\
+	-y synchronize changes to a file\n"
+
+#ifdef AIO
+"	-A: Use the AIO system calls\n"
+#endif
+"	-D startingop: debug output starting at specified operation\n"
+#ifdef FALLOCATE
+"	-F: Do not use fallocate (preallocation) calls\n"
+#endif
+"        -H: Do not use punch hole calls\n"
+"	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
-	-P dirpath: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
+	-P: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
 	-S seed: for random # generator (default 1) 0 gets timestamp\n\
 	-W: mapped write operations DISabled\n\
-	-R: mapped read operations DISabled)\n\
+        -R: read() system calls only (mapped reads disabled)\n\
+        -Z: O_DIRECT (use -R, -W, -r and -w too)\n\
 	poolname: this is REQUIRED (no default)\n\
 	imagename: this is REQUIRED (no default)\n");
 	exit(89);
@@ -832,7 +970,7 @@ usage(void)
 int
 getnum(char *s, char **e)
 {
-	int ret = -1;
+	int ret;
 
 	*e = (char *) 0;
 	ret = strtol(s, e, 0);
@@ -862,10 +1000,131 @@ getnum(char *s, char **e)
 	return (ret);
 }
 
+#ifdef AIO
+
+#define QSZ     1024
+io_context_t	io_ctx;
+struct iocb 	iocb;
+
+int aio_setup()
+{
+	int ret;
+	ret = io_queue_init(QSZ, &io_ctx);
+	if (ret != 0) {
+		fprintf(stderr, "aio_setup: io_queue_init failed: %s\n",
+                        strerror(ret));
+                return(-1);
+        }
+        return(0);
+}
+
+int
+__aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+{
+	struct io_event event;
+	static struct timespec ts;
+	struct iocb *iocbs[] = { &iocb };
+	int ret;
+	long res;
+
+	if (rw == READ) {
+		io_prep_pread(&iocb, fd, buf, len, offset);
+	} else {
+		io_prep_pwrite(&iocb, fd, buf, len, offset);
+	}
+
+	ts.tv_sec = 30;
+	ts.tv_nsec = 0;
+	ret = io_submit(io_ctx, 1, iocbs);
+	if (ret != 1) {
+		fprintf(stderr, "errcode=%d\n", ret);
+		fprintf(stderr, "aio_rw: io_submit failed: %s\n",
+				strerror(ret));
+		goto out_error;
+	}
+
+	ret = io_getevents(io_ctx, 1, 1, &event, &ts);
+	if (ret != 1) {
+		if (ret == 0)
+			fprintf(stderr, "aio_rw: no events available\n");
+		else {
+			fprintf(stderr, "errcode=%d\n", -ret);
+			fprintf(stderr, "aio_rw: io_getevents failed: %s\n",
+				 	strerror(-ret));
+		}
+		goto out_error;
+	}
+	if (len != event.res) {
+		/*
+		 * The b0rked libaio defines event.res as unsigned.
+		 * However the kernel strucuture has it signed,
+		 * and it's used to pass negated error value.
+		 * Till the library is fixed use the temp var.
+		 */
+		res = (long)event.res;
+		if (res >= 0)
+			fprintf(stderr, "bad io length: %lu instead of %u\n",
+					res, len);
+		else {
+			fprintf(stderr, "errcode=%ld\n", -res);
+			fprintf(stderr, "aio_rw: async io failed: %s\n",
+					strerror(-res));
+			ret = res;
+			goto out_error;
+		}
+
+	}
+	return event.res;
+
+out_error:
+	/*
+	 * The caller expects error return in traditional libc
+	 * convention, i.e. -1 and the errno set to error.
+	 */
+	errno = -ret;
+	return -1;
+}
+
+int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+{
+	int ret;
+
+	if (aio) {
+		ret = __aio_rw(rw, fd, buf, len, offset);
+	} else {
+		if (rw == READ)
+			ret = read(fd, buf, len);
+		else
+			ret = write(fd, buf, len);
+	}
+	return ret;
+}
+
+#endif
+
+void
+test_fallocate()
+{
+#ifdef FALLOCATE
+	if (!lite && fallocate_calls) {
+		if (fallocate(fd, 0, 0, 1) && errno == EOPNOTSUPP) {
+			if(!quiet)
+				warn("main: filesystem does not support fallocate, disabling\n");
+			fallocate_calls = 0;
+		} else {
+			ftruncate(fd, 0);
+		}
+	}
+#else /* ! FALLOCATE */
+	fallocate_calls = 0;
+#endif
+
+}
+
 int
 main(int argc, char **argv)
 {
-	int	i, ch, ret;
+	int	i, style, ch, ret;
 	char	*endp;
 	char goodfile[1024];
 	char logfile[1024];
@@ -875,11 +1134,13 @@ main(int argc, char **argv)
 
 	page_size = getpagesize();
 	page_mask = page_size - 1;
+	mmap_mask = page_mask;
+	
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dl:m:no:p:qr:s:t:w:D:LN:OP:RS:W"))
-	       != -1)
+	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:FHLN:OP:RS:WZ"))
+	       != EOF)
 		switch (ch) {
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
@@ -901,6 +1162,9 @@ main(int argc, char **argv)
 			break;
 		case 'd':
 			debug = 1;
+			break;
+		case 'f':
+			flush = 1;
 			break;
 		case 'l':
 			maxfilelen = getnum(optarg, &endp);
@@ -929,6 +1193,8 @@ main(int argc, char **argv)
 			break;
 		case 'p':
 			progressinterval = getnum(optarg, &endp);
+			if (progressinterval == 0)
+				usage();
 			break;
 		case 'q':
 			quiet = 1;
@@ -953,13 +1219,27 @@ main(int argc, char **argv)
 			if (writebdy <= 0)
 				usage();
 			break;
+		case 'x':
+			prealloc = 1;
+			break;
+		case 'y':
+			do_fsync = 1;
+			break;
+		case 'A':
+		        aio = 1;
+			break;
 		case 'D':
 			debugstart = getnum(optarg, &endp);
 			if (debugstart < 1)
 				usage();
 			break;
+		case 'F':
+			fallocate_calls = 0;
+			break;
+		case 'H':
+			punch_hole_calls = 0;
+			break;
 		case 'L':
-			lite = 1;
 			prt("lite mode not supported for rbd");
 			exit(1);
 			break;
@@ -977,11 +1257,11 @@ main(int argc, char **argv)
 			strncpy(logfile, optarg, sizeof(logfile));
 			strcat(logfile, "/");
 			break;
-		case 'R':
-			mapped_reads = 0;
-			break;
+                case 'R':
+                        mapped_reads = 0;
+                        break;
 		case 'S':
-			seed = getnum(optarg, &endp);
+                        seed = getnum(optarg, &endp);
 			if (seed == 0)
 				seed = time(0) % 10000;
 			if (!quiet)
@@ -990,11 +1270,13 @@ main(int argc, char **argv)
 				usage();
 			break;
 		case 'W':
-			mapped_writes = 0;
+		        mapped_writes = 0;
 			if (!quiet)
 				fprintf(stdout, "mapped writes DISABLED\n");
 			break;
-
+		case 'Z':
+			o_direct = O_DIRECT;
+			break;
 		default:
 			usage();
 			/* NOTREACHED */
@@ -1028,11 +1310,8 @@ main(int argc, char **argv)
 	ret = rbd_open(ioctx, iname, &image, NULL);
 	if (ret < 0) {
 		simple_err("Error opening image", ret);
-		delete_image();
 		exit(91);
 	}
-	atexit(cleanup_image);
-
 	strncat(goodfile, iname, 256);
 	strcat (goodfile, ".fsxgood");
 	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
@@ -1047,32 +1326,48 @@ main(int argc, char **argv)
 		prterr(logfile);
 		exit(93);
 	}
+
+#ifdef AIO
+	if (aio) 
+		aio_setup();
+#endif
+
 	original_buf = (char *) malloc(maxfilelen);
 	for (i = 0; i < (int)maxfilelen; i++)
 		original_buf[i] = random() % 256;
-	good_buf = (char *) malloc(maxfilelen);
+	good_buf = (char *) malloc(maxfilelen + writebdy);
+	good_buf = round_ptr_up(good_buf, writebdy, 0);
 	memset(good_buf, '\0', maxfilelen);
-	temp_buf = (char *) malloc(maxoplen);
+	temp_buf = (char *) malloc(maxoplen + readbdy);
+	temp_buf = round_ptr_up(temp_buf, readbdy, 0);
 	memset(temp_buf, '\0', maxoplen);
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
 
 		written = rbd_write(image, 0, (size_t)maxfilelen, good_buf);
-		if (written != (int)maxfilelen) {
+		if (written != (ssize_t)maxfilelen) {
 			if (written < 0) {
 				prterrcode(iname, written);
 				warn("main: error on write");
 			} else
-				warn("main: short write, 0x%x bytes instead of 0x%x\n",
-				     (unsigned)written, maxfilelen);
+				warn("main: short write, 0x%x bytes instead "
+					"of 0x%lx\n",
+					(unsigned)written,
+					maxfilelen);
 			exit(98);
 		}
 	} else 
 		check_trunc_hack();
 
+	//test_fallocate();
+
 	while (numops == -1 || numops--)
 		test();
 
+	if ((ret = rbd_close(image)) < 0) {
+		prterrcode("rbd_close", ret);
+		report_failure(99);
+	}
 	prt("All operations completed A-OK!\n");
 
 	exit(0);
