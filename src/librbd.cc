@@ -1192,6 +1192,10 @@ int ictx_refresh(ImageCtx *ictx)
 
   ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
 
+  ictx->refresh_lock.Lock();
+  ictx->needs_refresh = false;
+  ictx->refresh_lock.Unlock();
+
   int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
   if (r < 0) {
     lderr(cct) << "Error reading header: " << cpp_strerror(-r) << dendl;
@@ -1239,6 +1243,9 @@ int ictx_refresh(ImageCtx *ictx)
 
   if (!ictx->snapc.is_valid()) {
     lderr(cct) << "image snap context is invalid!" << dendl;
+    ictx->refresh_lock.Lock();
+    ictx->needs_refresh = true;
+    ictx->refresh_lock.Unlock();
     return -EIO;
   }
 
@@ -1250,10 +1257,6 @@ int ictx_refresh(ImageCtx *ictx)
   }
 
   ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-
-  ictx->refresh_lock.Lock();
-  ictx->needs_refresh = false;
-  ictx->refresh_lock.Unlock();
 
   return 0;
 }
