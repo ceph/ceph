@@ -1180,7 +1180,7 @@ void OSDMonitor::tick()
 
 
 void OSDMonitor::handle_osd_timeouts(const utime_t &now,
-			 const std::map<int,utime_t> &last_osd_report)
+				     std::map<int,utime_t> &last_osd_report)
 {
   utime_t timeo(g_conf->mon_osd_report_timeout, 0);
   int max_osd = osdmap.get_max_osd();
@@ -1194,12 +1194,9 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
       continue;
     const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
     if (t == last_osd_report.end()) {
-      derr << "OSDMonitor::handle_osd_timeouts: never got MOSDPGStat "
-	   << "info from osd " << i << ". Marking down!" << dendl;
-      pending_inc.new_state[i] = CEPH_OSD_UP;
-      new_down = true;
-    }
-    else {
+      // it wasn't in the map; start the timer.
+      last_osd_report[i] = ceph_clock_now(g_ceph_context);
+    } else {
       utime_t diff(now);
       diff -= t->second;
       if (diff > timeo) {
