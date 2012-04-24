@@ -5659,8 +5659,9 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     remove_repop(repop);
   }
 
-  if (requeue)
-    osd->push_waiters(rq);
+  if (requeue) {
+    op_waiters.splice(op_waiters.end(), rq);
+  }
 }
 
 void ReplicatedPG::on_shutdown()

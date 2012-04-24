@@ -445,6 +445,7 @@ private:
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   
+  void advance_pg(epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx);
   void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
   void activate_map(ObjectStore::Transaction& t, list<Context*>& tfin);
 
@@ -1134,8 +1135,8 @@ public:
   void handle_sub_op(OpRequestRef op);
   void handle_sub_op_reply(OpRequestRef op);
 
-  static bool op_is_discardable(class MOSDOp *m);
   /// check if we can throw out op from a disconnected client
+  static bool op_is_discardable(class MOSDOp *m);
   /// check if op has sufficient caps
   bool op_has_sufficient_caps(PG *pg, class MOSDOp *m);
   /// check if op should be (re)queued for processing
