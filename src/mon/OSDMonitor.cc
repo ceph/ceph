@@ -594,6 +594,13 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     return true;
   }
 
+  // noup?
+  if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
+    dout(7) << "preprocess_boot NOUP set, informing " << m->get_orig_source_inst() << dendl;
+    send_latest(m, m->sb.current_epoch+1);
+    return true;
+  }
+
   dout(10) << "preprocess_boot from " << m->get_orig_source_inst() << dendl;
   return false;
 
