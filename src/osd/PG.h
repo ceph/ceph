@@ -1363,12 +1363,24 @@ public:
 		    pair<int, pg_info_t> &notify_info);
   void fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
+
+  // OpRequest queueing
+  bool can_discard_op(OpRequestRef op);
+  bool can_discard_scan(OpRequestRef op);
+  bool can_discard_subop(OpRequestRef op);
+  bool can_discard_backfill(OpRequestRef op);
+  bool can_discard_request(OpRequestRef op);
+
+  bool must_delay_request(OpRequestRef op);
+  void queue_op(OpRequestRef op);
+
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
   }
 
   // recovery bits
+  void take_waiters();
   void queue_peering_event(CephPeeringEvtRef evt);
   void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
   void queue_notify(epoch_t msg_epoch, epoch_t query_epoch,

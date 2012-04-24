@@ -25,6 +25,8 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGBackfill.h"
 
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
@@ -1461,11 +1463,22 @@ void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
   do_pending_flush();
+  if (can_discard_request(op)) {
+    return;
+  } else if (must_delay_request(op)) {
+    op_waiters.push_back(op);
+    return;
+  } else if (!is_active()) {
+    waiting_for_active.push_back(op);
+    return;
+  } else if (is_replay()) {
+    waiting_for_active.push_back(op);
+    return;
+  }
 
   switch (op->request->get_type()) {
   case CEPH_MSG_OSD_OP:
-    if (!osd->op_is_discardable((MOSDOp*)op->request))
-      do_op(op); // do it now
+    do_op(op); // do it now
     break;
 
   case MSG_OSD_SUBOP:
@@ -3882,6 +3895,132 @@ ostream& operator<<(ostream& out, const PG& pg)
   return out;
 }
 
+bool PG::can_discard_op(OpRequestRef op)
+{
+  MOSDOp *m = (MOSDOp*)op->request;
+  if (OSD::op_is_discardable(m)) {
+    return true;
+  } else if (m->may_write() &&
+	     (!is_primary() ||
+	      !same_for_modify_since(m->get_map_epoch()))) {
+    return true;
+  } else if (m->may_read() &&
+	     !same_for_read_since(m->get_map_epoch())) {
+    return true;
+  } else if (is_replay()) {
+    if (m->get_version().version > 0) {
+      dout(7) << " queueing replay at " << m->get_version()
+	      << " for " << *m << dendl;
+      replay_queue[m->get_version()] = op;
+      op->mark_delayed();
+      return true;
+    }
+  }
+  return false;
+}
+
+bool PG::can_discard_subop(OpRequestRef op)
+{
+  MOSDSubOp *m = (MOSDSubOp *)op->request;
+  assert(m->get_header().type == MSG_OSD_SUBOP);
+
+  // same pg?
+  //  if pg changes _at all_, we reset and repeer!
+  if (old_peering_msg(m->map_epoch, m->map_epoch)) {
+    dout(10) << "handle_sub_op pg changed " << info.history
+	     << " after " << m->map_epoch
+	     << ", dropping" << dendl;
+    return true;
+  }
+  return false;
+}
+
+bool PG::can_discard_scan(OpRequestRef op)
+{
+  MOSDPGScan *m = (MOSDPGScan *)op->request;
+  assert(m->get_header().type == MSG_OSD_PG_SCAN);
+
+  if (old_peering_msg(m->map_epoch, m->query_epoch)) {
+    dout(10) << " got old scan, ignoring" << dendl;
+    return true;
+  }
+  return false;
+}
+
+bool PG::can_discard_backfill(OpRequestRef op)
+{
+  MOSDPGBackfill *m = (MOSDPGBackfill *)op->request;
+  assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
+
+  if (old_peering_msg(m->map_epoch, m->query_epoch)) {
+    dout(10) << " got old backfill, ignoring" << dendl;
+    return true;
+  }
+
+  return false;
+
+}
+
+bool PG::can_discard_request(OpRequestRef op)
+{
+  switch (op->request->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    return can_discard_op(op);
+  case MSG_OSD_SUBOP:
+    return can_discard_subop(op);
+  case MSG_OSD_SUBOPREPLY:
+    return false;
+  case MSG_OSD_PG_SCAN:
+    return can_discard_scan(op);
+
+  case MSG_OSD_PG_BACKFILL:
+    return can_discard_backfill(op);
+  }
+  return true;
+}
+
+bool PG::must_delay_request(OpRequestRef op)
+{
+  switch (op->request->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    return !require_same_or_newer_map(
+      static_cast<MOSDOp*>(op->request)->get_map_epoch());
+
+  case MSG_OSD_SUBOP:
+    return !require_same_or_newer_map(
+      static_cast<MOSDSubOp*>(op->request)->map_epoch);
+
+  case MSG_OSD_SUBOPREPLY:
+    return !require_same_or_newer_map(
+      static_cast<MOSDSubOpReply*>(op->request)->map_epoch);
+
+  case MSG_OSD_PG_SCAN:
+    return !require_same_or_newer_map(
+      static_cast<MOSDPGScan*>(op->request)->map_epoch);
+
+  case MSG_OSD_PG_BACKFILL:
+    return !require_same_or_newer_map(
+      static_cast<MOSDPGBackfill*>(op->request)->map_epoch);
+  }
+  assert(0);
+  return false;
+}
+
+void PG::queue_op(OpRequestRef op)
+{
+  if (can_discard_op(op))
+    return;
+  // TODO: deal with osd queueing
+  op_queue.push_back(op);
+}
+
+void PG::take_waiters()
+{
+  list<OpRequestRef> ls;
+  ls.swap(op_waiters);
+  ls.splice(ls.end(), op_queue);
+}
+
 void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
 {
   if (old_peering_evt(evt))
@@ -4120,6 +4259,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
   }
 
   pg->update_heartbeat_peers();
+  pg->take_waiters();
 
   return transit< Started >();
 }
