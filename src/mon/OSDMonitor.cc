@@ -663,8 +663,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	(g_conf->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
 	(g_conf->mon_osd_auto_mark_in)) {
       pending_inc.new_weight[from] = CEPH_OSD_IN;
-      down_pending_out.erase(from);  // if any
     }
+
+    down_pending_out.erase(from);  // if any
 
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
