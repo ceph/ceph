@@ -1594,13 +1594,16 @@ librados::WatchContext::~WatchContext()
   io_ctx_impl->put();
 }
 
-void librados::WatchContext::notify(uint8_t opcode,
+void librados::WatchContext::notify(Mutex *client_lock,
+                                    uint8_t opcode,
 				    uint64_t ver,
 				    uint64_t notify_id,
 				    bufferlist& payload)
 {
   ctx->notify(opcode, ver, payload);
   if (opcode != WATCH_NOTIFY_COMPLETE) {
+    client_lock->Lock();
     io_ctx_impl->_notify_ack(oid, notify_id, ver);
+    client_lock->Unlock();
   }
 }

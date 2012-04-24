@@ -168,6 +168,69 @@ struct RefCountedObject {
   }
 };
 
+struct RefCountedCond : public RefCountedObject {
+  Mutex lock;
+  Cond cond;
+  atomic_t complete;
+
+  RefCountedCond() : lock("RefCountedCond") {}
+
+  void wait() {
+    Mutex::Locker l(lock);
+    while (!complete.read())
+      cond.Wait(lock);
+  }
+
+  void done() {
+    Mutex::Locker l(lock);
+    cond.SignalAll();
+    complete.set(1);
+  }
+};
+
+struct RefCountedWaitObject {
+  atomic_t nref;
+  RefCountedCond *c;
+
+  RefCountedWaitObject() : nref(1) {
+    c = new RefCountedCond;
+  }
+  virtual ~RefCountedWaitObject() {
+    c->put();
+  }
+
+  RefCountedWaitObject *get() {
+    nref.inc();
+    return this;
+  }
+
+  bool put() {
+    bool ret = false;
+    RefCountedCond *cond = c;
+    cond->get();
+    if (nref.dec() == 0) {
+      cond->done();
+      delete this;
+      ret = true;
+    }
+    cond->put();
+    return ret;
+  }
+
+  void put_wait() {
+    RefCountedCond *cond = c;
+
+    cond->get();
+    if (nref.dec() == 0) {
+      cond->done();
+      delete this;
+    } else {
+      cond->wait();
+    }
+    cond->put();
+  }
+};
+
 struct Connection : public RefCountedObject {
   Mutex lock;
   RefCountedObject *priv;

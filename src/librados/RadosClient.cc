@@ -447,10 +447,35 @@ void librados::RadosClient::unregister_watcher(uint64_t cookie)
     WatchContext *ctx = iter->second;
     if (ctx->linger_id)
       objecter->unregister_linger(ctx->linger_id);
-    delete ctx;
+
     watchers.erase(iter);
+    lock.Unlock();
+    ldout(cct, 10) << "unregister_watcher, dropping reference, waiting ctx=" << (void *)ctx << dendl;
+    ctx->put_wait();
+    ldout(cct, 10) << "unregister_watcher, done ctx=" << (void *)ctx << dendl;
+    lock.Lock();
   }
 }
+
+
+class C_WatchNotify : public Context {
+  librados::WatchContext *ctx;
+  Mutex *client_lock;
+  uint8_t opcode;
+  uint64_t ver;
+  uint64_t notify_id;
+  bufferlist bl;
+
+public:
+  C_WatchNotify(librados::WatchContext *_ctx, Mutex *_client_lock,
+                uint8_t _o, uint64_t _v, uint64_t _n, bufferlist& _bl) : 
+                ctx(_ctx), client_lock(_client_lock), opcode(_o), ver(_v), notify_id(_n), bl(_bl) {}
+
+  void finish(int r) {
+    ctx->notify(client_lock, opcode, ver, notify_id, bl);
+    ctx->put();
+  }
+};
 
 void librados::RadosClient::watch_notify(MWatchNotify *m)
 {
@@ -463,7 +488,7 @@ void librados::RadosClient::watch_notify(MWatchNotify *m)
   if (!wc)
     return;
 
-  wc->notify(m->opcode, m->ver, m->notify_id, m->bl);
-
+  wc->get();
+  finisher.queue(new C_WatchNotify(wc, &lock, m->opcode, m->ver, m->notify_id, m->bl));
   m->put();
 }
