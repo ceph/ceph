@@ -468,11 +468,18 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
       send_incremental(m, m->get_epoch()+1);
     goto didit;
   }
+
   // already reported?
   if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dup: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m, m->get_epoch()+1);
+    goto didit;
+  }
+
+  // NODOWN?
+  if (osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
+    dout(5) << "preprocess_failure NODOWN flag set, ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
     goto didit;
   }
 
@@ -1203,7 +1210,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     if (t == last_osd_report.end()) {
       // it wasn't in the map; start the timer.
       last_osd_report[i] = now;
-    } else {
+    } else if (!osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
