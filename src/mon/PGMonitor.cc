@@ -1072,7 +1072,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       ss << "set_full_ratio takes exactly one argument: the new full ratio";
       goto out;
     }
-    const char *start = m->cmd[1].c_str();
+    const char *start = m->cmd[2].c_str();
     char *end = (char *)start;
     float n = strtof(start, &end);
     if (*end != '\0') { // conversion didn't work
@@ -1088,7 +1088,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       ss << "set_nearfull_ratio takes exactly one argument: the new nearfull ratio";
       goto out;
     }
-    const char *start = m->cmd[1].c_str();
+    const char *start = m->cmd[2].c_str();
     char *end = (char *)start;
     float n = strtof(start, &end);
     if (*end != '\0') { // conversion didn't work
