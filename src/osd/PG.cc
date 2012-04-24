@@ -4049,6 +4049,15 @@ void PG::queue_log(epoch_t msg_epoch,
 					 MLogRec(from, msg))));
 }
 
+void PG::queue_null(epoch_t msg_epoch,
+		    epoch_t query_epoch)
+{
+  dout(10) << "handle_null" << dendl;
+  queue_peering_event(
+    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
+					 NullEvt())));
+}
+
 void PG::queue_query(epoch_t msg_epoch,
 		     epoch_t query_epoch,
 		     int from, const pg_query_t& q)

@@ -868,6 +868,9 @@ public:
   struct NeedUpThru : boost::statechart::event< NeedUpThru > {
     NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
   };
+  struct NullEvt : boost::statechart::event< NullEvt > {
+    NullEvt() : boost::statechart::event< NullEvt >() {};
+  };
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
@@ -966,12 +969,16 @@ public:
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
+      boost::statechart::result react(const NullEvt&) {
+	return discard_event();
+      }
     };
 
     struct Reset : boost::statechart::state< Reset, RecoveryMachine >, NamedState {
@@ -982,11 +989,15 @@ public:
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
+      boost::statechart::result react(const NullEvt&) {
+	return discard_event();
+      }
     };
 
     struct Start;
@@ -998,10 +1009,14 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
+      boost::statechart::result react(const NullEvt&) {
+	return discard_event();
+      }
     };
 
     struct MakePrimary : boost::statechart::event< MakePrimary > {
@@ -1400,6 +1415,7 @@ public:
 		 MOSDPGLog *msg);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   int from, const pg_query_t& q);
+  void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
   void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			  vector<int>& newup, vector<int>& newacting,
 			  RecoveryCtx *rctx);
