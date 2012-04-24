@@ -1502,6 +1502,28 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   return 0;
 }
 
+bool OSDMonitor::prepare_set_flag(MMonCommand *m, int flag)
+{
+  ostringstream ss;
+  if (pending_inc.new_flags < 0)
+    pending_inc.new_flags = osdmap.get_flags();
+  pending_inc.new_flags |= flag;
+  ss << "set " << OSDMap::get_flag_string(flag);
+  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, ss.str(), paxos->get_version()));
+  return true;
+}
+
+bool OSDMonitor::prepare_unset_flag(MMonCommand *m, int flag)
+{
+  ostringstream ss;
+  if (pending_inc.new_flags < 0)
+    pending_inc.new_flags = osdmap.get_flags();
+  pending_inc.new_flags &= ~flag;
+  ss << "unset " << OSDMap::get_flag_string(flag);
+  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, ss.str(), paxos->get_version()));
+  return true;
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;
@@ -1666,22 +1688,34 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return true;
     }
     else if (m->cmd[1] == "pause") {
-      if (pending_inc.new_flags < 0)
-	pending_inc.new_flags = osdmap.get_flags();
-      pending_inc.new_flags |= CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR;
-      ss << "pause rd+wr";
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      return prepare_set_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     }
     else if (m->cmd[1] == "unpause") {
-      if (pending_inc.new_flags < 0)
-	pending_inc.new_flags = osdmap.get_flags();
-      pending_inc.new_flags &= ~(CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
-      ss << "unpause rd+wr";
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      return prepare_unset_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "pause") {
+      return prepare_set_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "pause") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noup") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOUP);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noup") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOUP);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "nodown") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NODOWN);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "nodown") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NODOWN);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noout") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOOUT);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noout") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOOUT);
     }
     else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
       pending_inc.cluster_snapshot = m->cmd[2];

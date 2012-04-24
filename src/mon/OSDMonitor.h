@@ -104,6 +104,9 @@ private:
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num);
   int prepare_new_pool(MPoolOp *m);
+  
+  bool prepare_set_flag(MMonCommand *m, int flag);
+  bool prepare_unset_flag(MMonCommand *m, int flag);
 
   void _pool_op_reply(MPoolOp *m, int ret, epoch_t epoch, bufferlist *blp=NULL);
 
