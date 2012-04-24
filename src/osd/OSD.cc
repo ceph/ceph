@@ -4567,20 +4567,6 @@ void OSD::handle_pg_scan(OpRequestRef op)
   pg->put();
 }
 
-bool OSD::scan_is_queueable(PG *pg, OpRequestRef op)
-{
-  MOSDPGScan *m = (MOSDPGScan *)op->request;
-  assert(m->get_header().type == MSG_OSD_PG_SCAN);
-  assert(pg->is_locked());
-
-  if (m->query_epoch < pg->info.history.same_interval_since) {
-    dout(10) << *pg << " got old scan, ignoring" << dendl;
-    return false;
-  }
-
-  return true;
-}
-
 void OSD::handle_pg_backfill(OpRequestRef op)
 {
   MOSDPGBackfill *m = (MOSDPGBackfill*)op->request;
@@ -4612,19 +4598,6 @@ void OSD::handle_pg_backfill(OpRequestRef op)
   pg->put();
 }
 
-bool OSD::backfill_is_queueable(PG *pg, OpRequestRef op)
-{
-  MOSDPGBackfill *m = (MOSDPGBackfill *)op->request;
-  assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
-  assert(pg->is_locked());
-
-  if (m->query_epoch < pg->info.history.same_interval_since) {
-    dout(10) << *pg << " got old backfill, ignoring" << dendl;
-    return false;
-  }
-
-  return true;
-}
 
 /** PGQuery
  * from primary to replica | stray
@@ -5247,7 +5220,22 @@ void OSD::handle_op(OpRequestRef op)
       handle_misdirected_op(NULL, op);
     }
     return;
+  } else if (m->may_write() &&
+	     (!pg->is_primary() ||
+	      !pg->same_for_modify_since(m->get_map_epoch()))) {
+    handle_misdirected_op(pg, op);
+    pg->unlock();
+    return;
+  } else if (m->may_read() &&
+	     !pg->same_for_read_since(m->get_map_epoch())) {
+    handle_misdirected_op(pg, op);
+    pg->unlock();
+    return;
+  } else if (!op_has_sufficient_caps(pg, m)) {
+    pg->unlock();
+    return;
   }
+
 
   pg->get();
   enqueue_op(pg, op);
@@ -5363,92 +5351,9 @@ bool OSD::op_is_discardable(MOSDOp *op)
   // want to do what we can to apply it.
   if (!op->get_connection()->is_connected() &&
       op->get_version().version == 0) {
-    dout(10) << " sender " << op->get_connection()->get_peer_addr()
-	     << " not connected, dropping " << *op << dendl;
     return true;
   }
   return false;
-}
-
-/*
- * Determine if we can queue the op right now; if not this deals with it.
- * If it's not queueable, we deal with it in one of a few ways:
- * dropping the request, putting it into a wait list for later, or
- * telling the sender that the request was misdirected.
- *
- * @return true if the op is queueable; false otherwise.
- */
-bool OSD::op_is_queueable(PG *pg, OpRequestRef op)
-{
-  assert(pg->is_locked());
-  MOSDOp *m = (MOSDOp*)op->request;
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
-
-  if (!op_has_sufficient_caps(pg, m)) {
-    reply_op_error(op, -EPERM);
-    return false;
-  }
-
-  if (op_is_discardable(m)) {
-    return false;
-  }
-
-  // misdirected?
-  if (m->may_write()) {
-    if (!pg->is_primary() ||
-	!pg->same_for_modify_since(m->get_map_epoch())) {
-      handle_misdirected_op(pg, op);
-      return false;
-    }
-  } else {
-    if (!pg->same_for_read_since(m->get_map_epoch())) {
-      handle_misdirected_op(pg, op);
-      return false;
-    }
-  }
-
-  if (!pg->is_active()) {
-    dout(7) << *pg << " not active (yet)" << dendl;
-    pg->waiting_for_active.push_back(op);
-    op->mark_delayed();
-    return false;
-  }
-
-  if (pg->is_replay()) {
-    if (m->get_version().version > 0) {
-      dout(7) << *pg << " queueing replay at " << m->get_version()
-	      << " for " << *m << dendl;
-      pg->replay_queue[m->get_version()] = op;
-      op->mark_delayed();
-    } else {
-      dout(7) << *pg << " waiting until after replay for " << *m << dendl;
-      pg->waiting_for_active.push_back(op);
-    }
-    return false;
-  }
-
-  return true;
-}
-
-/*
- * discard operation, or return true.  no side-effects.
- */
-bool OSD::subop_is_queueable(PG *pg, OpRequestRef op)
-{
-  MOSDSubOp *m = (MOSDSubOp *)op->request;
-  assert(m->get_header().type == MSG_OSD_SUBOP);
-  assert(pg->is_locked());
-
-  // same pg?
-  //  if pg changes _at all_, we reset and repeer!
-  if (m->map_epoch < pg->info.history.same_interval_since) {
-    dout(10) << "handle_sub_op pg changed " << pg->info.history
-	     << " after " << m->map_epoch
-	     << ", dropping" << dendl;
-    return false;
-  }
-
-  return true;
 }
 
 /*
@@ -5459,42 +5364,7 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
   dout(15) << *pg << " enqueue_op " << op->request << " "
            << *(op->request) << dendl;
   assert(pg->is_locked());
-
-  switch (op->request->get_type()) {
-  case CEPH_MSG_OSD_OP:
-    if (!op_is_queueable(pg, op))
-      return;
-    break;
-
-  case MSG_OSD_SUBOP:
-    if (!subop_is_queueable(pg, op))
-      return;
-    break;
-
-  case MSG_OSD_SUBOPREPLY:
-    // don't care.
-    break;
-
-  case MSG_OSD_PG_SCAN:
-    if (!scan_is_queueable(pg, op))
-      return;
-    break;
-
-  case MSG_OSD_PG_BACKFILL:
-    if (!backfill_is_queueable(pg, op))
-      return;
-    break;
-
-  default:
-    assert(0 == "enqueued an illegal message type");
-  }
-
-  // add to pg's op_queue
-  pg->op_queue.push_back(op);
-  
-  op_wq.queue(pg);
-
-  op->mark_queued_for_pg();
+  pg->queue_op(op);
 }
 
 bool OSD::OpWQ::_enqueue(PG *pg)
