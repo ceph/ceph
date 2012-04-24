@@ -662,7 +662,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if ((g_conf->mon_osd_auto_mark_auto_out_in && (oldstate & CEPH_OSD_AUTOOUT)) ||
 	(g_conf->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
 	(g_conf->mon_osd_auto_mark_in)) {
-      pending_inc.new_weight[from] = CEPH_OSD_IN;
+      if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
+	dout(7) << "prepare_boot NOIN set, will not mark in " << m->get_orig_source_addr() << dendl;
+      } else {
+	pending_inc.new_weight[from] = CEPH_OSD_IN;
+      }
     }
 
     down_pending_out.erase(from);  // if any
