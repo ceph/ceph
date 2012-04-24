@@ -1076,7 +1076,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     char *end = (char *)start;
     float n = strtof(start, &end);
     if (*end != '\0') { // conversion didn't work
-      ss << "could not convert " << m->cmd[2] << "to a float";
+      ss << "could not convert " << m->cmd[2] << " to a float";
       goto out;
     }
     pending_inc.full_ratio = n;
@@ -1092,7 +1092,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     char *end = (char *)start;
     float n = strtof(start, &end);
     if (*end != '\0') { // conversion didn't work
-      ss << "could not convert " << m->cmd[2] << "to a float";
+      ss << "could not convert " << m->cmd[2] << " to a float";
       goto out;
     }
     pending_inc.nearfull_ratio = n;
