@@ -1098,33 +1098,38 @@ void OSDMonitor::tick()
 
   // mark down osds out?
   utime_t now = ceph_clock_now(g_ceph_context);
-  map<int,utime_t>::iterator i = down_pending_out.begin();
-  while (i != down_pending_out.end()) {
-    int o = i->first;
-    utime_t down = now;
-    down -= i->second;
-    i++;
 
-    if (osdmap.is_down(o) && osdmap.is_in(o)) {
-      if (g_conf->mon_osd_down_out_interval > 0 &&
-	  down.sec() >= g_conf->mon_osd_down_out_interval) {
-	dout(10) << "tick marking osd." << o << " OUT after " << down
-		 << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
-	pending_inc.new_weight[o] = CEPH_OSD_OUT;
+  if (!osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
+    map<int,utime_t>::iterator i = down_pending_out.begin();
+    while (i != down_pending_out.end()) {
+      int o = i->first;
+      utime_t down = now;
+      down -= i->second;
+      i++;
 
-	// set the AUTOOUT bit.
-	if (pending_inc.new_state.count(o) == 0)
-	  pending_inc.new_state[o] = 0;
-	pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+      if (osdmap.is_down(o) && osdmap.is_in(o)) {
+	if (g_conf->mon_osd_down_out_interval > 0 &&
+	    down.sec() >= g_conf->mon_osd_down_out_interval) {
+	  dout(10) << "tick marking osd." << o << " OUT after " << down
+		   << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
+	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
 
-	do_propose = true;
+	  // set the AUTOOUT bit.
+	  if (pending_inc.new_state.count(o) == 0)
+	    pending_inc.new_state[o] = 0;
+	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
+	  do_propose = true;
 	
-	mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
-      } else
-	continue;
-    }
+	  mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
+	} else
+	  continue;
+      }
 
-    down_pending_out.erase(o);
+      down_pending_out.erase(o);
+    }
+  } else {
+    dout(10) << "tick NOOUT flag set, not checking down osds" << dendl;
   }
 
   // expire blacklisted items?
