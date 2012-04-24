@@ -904,22 +904,35 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   delete cct;
 }
 
-string OSDMap::get_flag_string() const
+string OSDMap::get_flag_string(unsigned f)
 {
   string s;
-  if (test_flag(CEPH_OSDMAP_NEARFULL))
+  if ( f& CEPH_OSDMAP_NEARFULL)
     s += ",nearfull";
-  if (test_flag(CEPH_OSDMAP_FULL))
+  if (f & CEPH_OSDMAP_FULL)
     s += ",full";
-  if (test_flag(CEPH_OSDMAP_PAUSERD))
+  if (f & CEPH_OSDMAP_PAUSERD)
     s += ",pauserd";
-  if (test_flag(CEPH_OSDMAP_PAUSEWR))
+  if (f & CEPH_OSDMAP_PAUSEWR)
     s += ",pausewr";
-  if (test_flag(CEPH_OSDMAP_PAUSEREC))
+  if (f & CEPH_OSDMAP_PAUSEREC)
     s += ",pauserec";
+  if (f & CEPH_OSDMAP_NOUP)
+    s += ",no-up";
+  if (f & CEPH_OSDMAP_NODOWN)
+    s += ",no-down";
+  if (f & CEPH_OSDMAP_NOOUT)
+    s += ",no-out";
+  if (f & CEPH_OSDMAP_NOIN)
+    s += ",no-in";
   if (s.length())
     s = s.erase(0, 1);
   return s;
+}
+
+string OSDMap::get_flag_string() const
+{
+  return get_flag_string(flags);
 }
 
 struct qi {

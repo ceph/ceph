@@ -681,6 +681,7 @@ public:
   void print_tree(ostream& out) const;
 
   string get_flag_string() const;
+  static string get_flag_string(unsigned flags);
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
