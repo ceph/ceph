@@ -3250,43 +3250,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     map_in_progress = true;
   }
 
-  osd_lock.Unlock();
-
-  op_tp.pause();
-  disk_tp.pause();
-
-  // requeue under osd_lock to preserve ordering of _dispatch() wrt incoming messages
-  osd_lock.Lock();  
-
-  op_wq.lock();
-
-  list<OpRequestRef> rq;
-  while (true) {
-    PG *pg = op_wq._dequeue();
-    if (!pg)
-      break;
-
-    // op_wq is inside pg->lock
-    op_wq.unlock();
-    pg->lock();
-    op_wq.lock();
-
-    // we should still have something in op_queue, unless a racing
-    // thread did something very strange :/
-    assert(!pg->op_queue.empty());
-
-    OpRequestRef op = pg->op_queue.front();
-    pg->op_queue.pop_front();
-    pg->unlock();
-    pg->put();
-    dout(15) << " will requeue " << *op->request << dendl;
-    rq.push_back(op);
-  }
-  push_waiters(rq);  // requeue under osd_lock!
-  op_wq.unlock();
-
-  recovery_tp.pause();
-
   ObjectStore::Transaction t;
 
   // store new maps: queue for disk and put in the osdmap cache
@@ -3346,6 +3309,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     assert(0 == "MOSDMap lied about what maps it had?");
   }
 
+/*
+  // TODOSAM: find strategy for cluster snaps
   // check for cluster snapshot
   string cluster_snap;
   for (epoch_t cur = start; cur <= last && cluster_snap.length() == 0; cur++) {
@@ -3368,6 +3333,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   osd_lock.Lock();
 
   assert(osd_lock.is_locked());
+  */
 
   if (superblock.oldest_map) {
     for (epoch_t e = superblock.oldest_map; e < m->oldest_map; ++e) {
@@ -3383,7 +3349,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   superblock.newest_map = last;
 
  
-  // finally, take map_lock _after_ we do this flush, to avoid deadlock
   map_lock.get_write();
 
   C_Contexts *fin = new C_Contexts(g_ceph_context);
@@ -3517,8 +3482,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  map_lock.put_write();
   clear_map_bl_cache_pins();
+  map_lock.put_write();
 
   /*
    * wait for this to be stable.
@@ -3537,10 +3502,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     ucond.Wait(ulock);
   ulock.Unlock();
   osd_lock.Lock();
-
-  op_tp.unpause();
-  recovery_tp.unpause();
-  disk_tp.unpause();
 
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
@@ -3563,6 +3524,26 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(15) << "unlocking map_in_progress" << dendl;
     map_in_progress_cond->Signal();
   }
+}
+
+void OSD::advance_pg(epoch_t osd_epoch, PG *pg, PG::RecoveryCtx *rctx)
+{
+  assert(pg->is_locked());
+  epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
+  OSDMapRef lastmap = pg->get_osdmap();
+
+  for (;
+       next_epoch <= osd_epoch;
+       ++next_epoch) {
+    OSDMapRef nextmap = get_map(next_epoch);
+    vector<int> newup, newacting;
+    nextmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
+    pg->handle_advance_map(lastmap, nextmap, newup, newacting, rctx);
+    lastmap = nextmap;
+  }
+  pg->handle_activate_map(rctx);
+  if (pg->dirty_info)
+    pg->write_info(*rctx->transaction);
 }
 
 
@@ -3655,48 +3636,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     }
   }
 
-  // do splits?
-  for (map<int64_t,int>::iterator p = pool_resize.begin(); p != pool_resize.end(); p++) {
-    dout(10) << " processing pool " << p->first << " resize" << dendl;
-    clog.error() << "ignoring pool " << p->first << " resize; not fully implemented\n";
-    if (false) {
-      for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-	   it != pg_map.end();
-	   it++) {
-	pg_t pgid = it->first;
-	PG *pg = it->second;
-	set<pg_t> children;
-	if (pgid.is_split(p->second, pg->pool->info.get_pg_num(), &children)) {
-	  do_split(pg, children, t, tfin);
-	}
-      }
-    }
-  }
-
-  // if we skipped a discontinuity and are the first epoch, we won't have a previous map.
-  OSDMapRef lastmap;
-  if (osdmap->get_epoch() > superblock.oldest_map)
-    lastmap = get_map(osdmap->get_epoch() - 1);
-
-  // scan existing pg's
-  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-       it != pg_map.end();
-       it++) {
-    PG *pg = it->second;
-
-    vector<int> newup, newacting;
-    osdmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
-
-    //pg->lock_with_map_lock_held();
-
-    // update pg's osdmap ref, assert lock is held
-    pg->reassert_lock_with_map_lock_held();
-
-    dout(10) << "Scanning pg " << *pg << dendl;
-    pg->handle_advance_map(osdmap, lastmap, newup, newacting, 0);
-    //pg->unlock();
-  }
-
   // scan pgs with waiters
   map<pg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
   while (p != waiting_for_pg.end()) {
@@ -3737,8 +3676,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it != pg_map.end();
        it++) {
     PG *pg = it->second;
-    //pg->lock_with_map_lock_held();
-
+    pg->lock_with_map_lock_held();
     if (pg->is_primary())
       num_pg_primary++;
     else if (pg->is_replica())
@@ -3748,25 +3686,17 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
     if (pg->is_primary() && pg->info.history.last_epoch_clean < oldest_last_clean)
       oldest_last_clean = pg->info.history.last_epoch_clean;
-    
+
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       queue_pg_for_deletion(pg);
       //pg->unlock();
       continue;
+    } else {
+      pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
     }
-
-    PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin, &t);
-    pg->handle_activate_map(&rctx);
-
-    //pg->write_if_dirty(t);
-    
-    //pg->unlock();
+    pg->unlock();
   }  
-
-  do_notifies(notify_list, osdmap->get_epoch());  // notify? (residual|replica)
-  do_queries(query_map);
-  do_infos(info_map);
 
   logger->set(l_osd_pg, pg_map.size());
   logger->set(l_osd_pg_primary, num_pg_primary);
@@ -3775,8 +3705,10 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   maybe_update_heartbeat_peers();
-
-  send_pg_temp();
+/*
+  // TODOSAM: solve map_cache trimming problem
+  trim_map_cache(oldest_last_clean);
+  */
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
@@ -5397,19 +5329,24 @@ void OSD::process_peering_event(PG *pg)
   map< int, map<pg_t, pg_query_t> > query_map;
   map< int, vector<pair<pg_info_t, pg_interval_map_t> > > notify_list;
   map<int,MOSDPGInfo*> info_map;  // peer -> message
+  OSDMapRef curmap;
+  {
+    map_lock.get_read();
+    curmap = osdmap;
+    map_lock.put_read();
+  }
   {
     pg->lock();
-    if (pg->peering_queue.empty()) {
-      pg->unlock();
-      return;
-    }
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *pfin = new C_Contexts(g_ceph_context);
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list,
 			 &pfin->contexts, t);
-    PG::CephPeeringEvtRef evt = pg->peering_queue.front();
-    pg->peering_queue.pop_front();
-    pg->handle_peering_event(evt, &rctx);
+    advance_pg(curmap->get_epoch(), pg, &rctx);
+    if (!pg->peering_queue.empty()) {
+      PG::CephPeeringEvtRef evt = pg->peering_queue.front();
+      pg->peering_queue.pop_front();
+      pg->handle_peering_event(evt, &rctx);
+    }
     if (!t->empty()) {
       int tr = store->queue_transaction(
 	&pg->osr,
@@ -5432,7 +5369,7 @@ void OSD::process_peering_event(PG *pg)
   do_infos(info_map);
   {
     Mutex::Locker l(osd_lock);
-    maybe_update_heartbeat_peers();
+    send_pg_temp();
   }
 }
 
