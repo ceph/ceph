@@ -1026,7 +1026,11 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
     }
     trim_image(io_ctx, header, 0, prog_ctx);
     ldout(cct, 2) << "removing header..." << dendl;
-    io_ctx.remove(md_oid);
+    r = io_ctx.remove(md_oid);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   ldout(cct, 2) << "removing rbd image from directory..." << dendl;
