@@ -42,6 +42,13 @@ def parse_args():
         default=False,
         help='synchronize clocks on all machines',
         )
+    parser.add_argument(
+        '-u', '--unlock',
+        action='store_true',
+        default=False,
+        help='Unlock each successfully nuked machine, and output targets that'
+        'could not be nuked.'
+        )
     args = parser.parse_args()
     return args
 
@@ -255,9 +262,52 @@ def main():
         from teuthology.misc import get_user
         ctx.owner = get_user()
 
-    nuke(ctx, log)
+    nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all)
 
-def nuke(ctx, log):
+
+def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
+    from teuthology.parallel import parallel
+    total_unnuked = {}
+    with parallel() as p:
+        for target, hostkey in ctx.config['targets'].iteritems():
+            p.spawn(
+                nuke_one,
+                ctx,
+                {target: hostkey},
+                log,
+                should_unlock,
+                sync_clocks,
+                reboot_all,
+                )
+        for unnuked in p:
+            if unnuked:
+                total_unnuked.update(unnuked)
+    if total_unnuked:
+        log.error('Could not nuke the following targets:\n' + '\n  '.join(['targets:', ] + yaml.safe_dump(total_unnuked, default_flow_style=False).splitlines()))
+
+def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all):
+    from teuthology.lock import unlock
+    ret = None
+    ctx = argparse.Namespace(
+        config=dict(targets=targets),
+        owner=ctx.owner,
+        synch_clocks=synch_clocks,
+        reboot_all=reboot_all,
+        teuthology_config=ctx.teuthology_config,
+        )
+    try:
+        nuke_helper(ctx, log)
+    except:
+        log.exception('Could not nuke all targets in %s', targets)
+        # not re-raising the so that parallel calls aren't killed
+        ret = targets
+    else:
+        if should_unlock:
+            for target in targets.keys():
+                unlock(ctx, target, ctx.owner)
+    return ret
+
+def nuke_helper(ctx, log):
     from teuthology.task.internal import check_lock, connect
     check_lock(ctx, None)
     connect(ctx, None)

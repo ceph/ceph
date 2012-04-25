@@ -157,18 +157,9 @@ def main():
         run_tasks(tasks=ctx.config['tasks'], ctx=ctx)
     finally:
         if not ctx.summary.get('success') and ctx.config.get('nuke-on-error'):
-            from teuthology.parallel import parallel
-            with parallel() as p:
-                for target, hostkey in ctx.config['targets'].iteritems():
-                    p.spawn(
-                        nuke,
-                        targets={target: hostkey},
-                        owner=ctx.owner,
-                        log=log,
-                        teuth_config=ctx.teuthology_config,
-                        # only unlock if we locked them in the first place
-                        should_unlock=ctx.lock,
-                        )
+            from teuthology.nuke import nuke
+            # only unlock if we locked them in the first place
+            nuke(ctx, log, ctx.lock)
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
@@ -176,27 +167,6 @@ def main():
     if not ctx.summary.get('success', True):
         import sys
         sys.exit(1)
-
-def nuke(targets, owner, log, teuth_config, should_unlock,
-         synch_clocks=True, reboot_all=True):
-    from teuthology.nuke import nuke
-    from teuthology.lock import unlock
-    ctx = argparse.Namespace(
-        config=dict(targets=targets),
-        owner=owner,
-        synch_clocks=synch_clocks,
-        reboot_all=reboot_all,
-        teuthology_config=teuth_config,
-        )
-    try:
-        nuke(ctx, log)
-    except:
-        log.exception('Could not nuke all targets in %s', targets)
-        # not re-raising the so that parallel calls aren't killed
-    else:
-        if should_unlock:
-            for target in targets.keys():
-                unlock(ctx, target, owner)
 
 def schedule():
     parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
