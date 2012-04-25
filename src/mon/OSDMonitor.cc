@@ -196,6 +196,34 @@ bool OSDMonitor::thrash()
     dout(5) << "thrash_map osd." << o << " out" << dendl;
     pending_inc.new_weight[o] = CEPH_OSD_OUT;
   }
+
+  // generate some pg_temp entries.
+  // let's assume the hash_map iterates in a random-ish order.
+  int n = rand() % mon->pgmon()->pg_map.pg_stat.size();
+  hash_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
+  hash_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
+  while (n--)
+    p++;
+  for (int i=0; i<50; i++) {
+    vector<int> v;
+    for (int j=0; j<3; j++) {
+      o = rand() % osdmap.get_num_osds();
+      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end())
+	v.push_back(o);
+    }
+    if (v.size() < 3) {
+      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); q++)
+	if (std::find(v.begin(), v.end(), *q) == v.end())
+	  v.push_back(*q);
+    }
+    if (v.size())
+      pending_inc.new_pg_temp[p->first] = v;
+    dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
+
+    p++;
+    if (p == e)
+      p = mon->pgmon()->pg_map.pg_stat.begin();
+  }
   return true;
 }
 
