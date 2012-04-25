@@ -49,6 +49,12 @@ private:
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
   map<int,double> osd_weight;
+
+  // map thrashing
+  int thrash_map;
+  int thrash_last_up_osd;
+  bool thrash();
+
   // svc
 public:  
   void create_initial();

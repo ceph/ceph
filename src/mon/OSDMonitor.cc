@@ -58,7 +58,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 
 /************ MAPS ****************/
 OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p)
-  : PaxosService(mn, p)
+  : PaxosService(mn, p),
+    thrash_map(0), thrash_last_up_osd(-1)
 {
   // we need to trim this too
   p->add_extra_state_dir("osdmap_full");
@@ -149,9 +150,61 @@ void OSDMonitor::update_from_paxos()
   update_logger();
 }
 
+bool OSDMonitor::thrash()
+{
+  if (!thrash_map)
+    return false;
+
+  thrash_map--;
+  int o;
+
+  // mark a random osd up_thru.. 
+  if (rand() % 4 == 0 || thrash_last_up_osd < 0)
+    o = rand() % osdmap.get_num_osds();
+  else
+    o = thrash_last_up_osd;
+  if (osdmap.is_up(o)) {
+    dout(5) << "thrash_map osd." << o << " up_thru" << dendl;
+    pending_inc.new_up_thru[o] = osdmap.get_epoch();
+  }
+
+  // mark a random osd up/down
+  o = rand() % osdmap.get_num_osds();
+  if (osdmap.is_up(o)) {
+    dout(5) << "thrash_map osd." << o << " down" << dendl;
+    pending_inc.new_state[o] = CEPH_OSD_UP;
+  } else if (osdmap.exists(o)) {
+    dout(5) << "thrash_map osd." << o << " up" << dendl;
+    pending_inc.new_state[o] = CEPH_OSD_UP;
+    pending_inc.new_up_client[o] = entity_addr_t();
+    pending_inc.new_up_internal[o] = entity_addr_t();
+    pending_inc.new_hb_up[o] = entity_addr_t();
+    pending_inc.new_weight[o] = CEPH_OSD_IN;
+    thrash_last_up_osd = o;
+  }
+
+  // mark a random osd in
+  o = rand() % osdmap.get_num_osds();
+  if (osdmap.exists(o)) {
+    dout(5) << "thrash_map osd." << o << " in" << dendl;
+    pending_inc.new_weight[o] = CEPH_OSD_IN;
+  }
+
+  // mark a random osd out
+  o = rand() % osdmap.get_num_osds();
+  if (osdmap.exists(o)) {
+    dout(5) << "thrash_map osd." << o << " out" << dendl;
+    pending_inc.new_weight[o] = CEPH_OSD_OUT;
+  }
+  return true;
+}
+
 void OSDMonitor::on_active()
 {
   update_logger();
+
+  if (thrash_map && thrash())
+    propose_pending();
 }
 
 void OSDMonitor::update_logger()
@@ -1607,6 +1660,7 @@ bool OSDMonitor::prepare_unset_flag(MMonCommand *m, int flag)
 
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
+  bool ret = false;
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -2289,6 +2343,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
       }
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "thrash") {
+      thrash_map = atoi(m->cmd[2].c_str());
+      ss << "will thrash map for " << thrash_map << " epochs";
+      ret = thrash();
+      err = 0;
+    }
     else {
       ss << "unknown command " << m->cmd[1];
     }
@@ -2300,7 +2360,7 @@ out:
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
   mon->reply_command(m, err, rs, paxos->get_version());
-  return false;
+  return ret;
 }
 
 bool OSDMonitor::preprocess_pool_op(MPoolOp *m) 
