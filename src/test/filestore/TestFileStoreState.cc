@@ -83,21 +83,56 @@ TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id)
   return (new coll_entry_t(id, buf, meta_buf));
 }
 
-TestFileStoreState::coll_entry_t *TestFileStoreState::get_coll_at(int pos)
+TestFileStoreState::coll_entry_t*
+TestFileStoreState::get_coll(int key, bool erase)
 {
-  dout(5) << "get_coll_at pos " << pos << dendl;
+  dout(5) << "get_coll id " << key << dendl;
 
   coll_entry_t *entry = NULL;
-  map<int, coll_entry_t*>::iterator it = m_collections.find(pos);
-  if (it != m_collections.end())
+  map<int, coll_entry_t*>::iterator it = m_collections.find(key);
+  if (it != m_collections.end()) {
     entry = it->second;
+    if (erase)
+      m_collections.erase(it);
+  }
 
-  dout(5) << "get_coll_at pos " << pos;
+  dout(5) << "get_coll id " << key;
   if (!entry)
     *_dout << " non-existent";
   else
     *_dout << " name " << entry->m_coll.to_str();
   *_dout << dendl;
+  return entry;
+}
+
+TestFileStoreState::coll_entry_t*
+TestFileStoreState::get_coll_at(int pos, bool erase)
+{
+  dout(5) << "get_coll_at pos " << pos << dendl;
+
+  if (m_collections.empty())
+    return NULL;
+
+  coll_entry_t *entry = NULL;
+  map<int, coll_entry_t*>::iterator it = m_collections.begin();
+  for (int i = 0; it != m_collections.end(); it++, i++) {
+    if (i == pos) {
+      entry = it->second;
+      break;
+    }
+  }
+
+  if (entry == NULL) {
+    dout(5) << "get_coll_at pos " << pos << " non-existent" << dendl;
+    return NULL;
+  }
+
+  if (erase)
+    m_collections.erase(it);
+
+  dout(5) << "get_coll_at pos " << pos << ": "
+      << entry->m_coll << "(removed: " << erase << ")" << dendl;
+
   return entry;
 }
 

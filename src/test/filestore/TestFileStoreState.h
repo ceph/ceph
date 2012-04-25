@@ -81,7 +81,8 @@ public:
     m_num_objs_per_coll = val;
   }
 
-  coll_entry_t *get_coll_at(int pos);
+  coll_entry_t *get_coll(int key, bool erase = false);
+  coll_entry_t *get_coll_at(int pos, bool erase = false);
 
  private:
   static const int m_default_num_colls = 30;
