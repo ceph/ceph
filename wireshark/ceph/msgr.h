@@ -1,6 +1,10 @@
 #ifndef CEPH_MSGR_H
 #define CEPH_MSGR_H
 
+#ifdef __cplusplus
+#include <sys/socket.h> // for struct sockaddr_storage
+#endif
+
 /*
  * Data types for message passing layer used by Ceph.
  */
@@ -21,7 +25,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v022"
+#define CEPH_BANNER "ceph v027"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -46,32 +50,24 @@ struct ceph_entity_name {
 	__le64 num;
 } __attribute__ ((packed));
 
-#define CEPH_ENTITY_TYPE_MON    1
-#define CEPH_ENTITY_TYPE_MDS    2
-#define CEPH_ENTITY_TYPE_OSD    3
-#define CEPH_ENTITY_TYPE_CLIENT 4
+#define CEPH_ENTITY_TYPE_MON    0x01
+#define CEPH_ENTITY_TYPE_MDS    0x02
+#define CEPH_ENTITY_TYPE_OSD    0x04
+#define CEPH_ENTITY_TYPE_CLIENT 0x08
+#define CEPH_ENTITY_TYPE_AUTH   0x20
+
+#define CEPH_ENTITY_TYPE_ANY    0xFF
+
+extern const char *ceph_entity_type_name(int type);
 
 /*
  * entity_addr -- network address
  */
 struct ceph_entity_addr {
-	__le32 erank;  /* entity's rank in process */
+	__le32 type;
 	__le32 nonce;  /* unique id for process (e.g. pid) */
 	struct sockaddr_storage in_addr;
 } __attribute__ ((packed));
-
-static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
-					     const struct ceph_entity_addr *b)
-{
-	return a->nonce == b->nonce &&
-		memcmp(&a->in_addr, &b->in_addr, sizeof(a->in_addr)) == 0;
-}
-
-static inline bool ceph_entity_addr_equal(const struct ceph_entity_addr *a,
-					  const struct ceph_entity_addr *b)
-{
-	return memcmp(a, b, sizeof(*a)) == 0;
-}
 
 struct ceph_entity_inst {
 	struct ceph_entity_name name;
@@ -93,24 +89,32 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_ACK           8  /* message ack */
 #define CEPH_MSGR_TAG_KEEPALIVE     9  /* just a keepalive byte! */
 #define CEPH_MSGR_TAG_BADPROTOVER  10  /* bad protocol version */
+#define CEPH_MSGR_TAG_BADAUTHORIZER 11 /* bad authorizer */
+#define CEPH_MSGR_TAG_FEATURES      12 /* insufficient features */
+#define CEPH_MSGR_TAG_SEQ           13 /* 64-bit int follows with seen seq number */
 
 
 /*
  * connection negotiation
  */
 struct ceph_msg_connect {
+	__le64 features;     /* supported feature bits */
 	__le32 host_type;    /* CEPH_ENTITY_TYPE_* */
 	__le32 global_seq;   /* count connections initiated by this host */
 	__le32 connect_seq;  /* count connections initiated in this session */
 	__le32 protocol_version;
+	__le32 authorizer_protocol;
+	__le32 authorizer_len;
 	__u8  flags;         /* CEPH_MSG_CONNECT_* */
 } __attribute__ ((packed));
 
 struct ceph_msg_connect_reply {
 	__u8 tag;
+	__le64 features;     /* feature bits for this session */
 	__le32 global_seq;
 	__le32 connect_seq;
 	__le32 protocol_version;
+	__le32 authorizer_len;
 	__u8 flags;
 } __attribute__ ((packed));
 
@@ -120,8 +124,9 @@ struct ceph_msg_connect_reply {
 /*
  * message header
  */
-struct ceph_msg_header {
+struct ceph_msg_header_old {
 	__le64 seq;       /* message seq# for this session */
+	__le64 tid;       /* transaction id */
 	__le16 type;      /* message type */
 	__le16 priority;  /* priority.  higher value == higher priority */
 	__le16 version;   /* version of message encoding */
@@ -133,9 +138,29 @@ struct ceph_msg_header {
 			     receiver: mask against ~PAGE_MASK */
 
 	struct ceph_entity_inst src, orig_src;
-	__le32 dst_erank;
+	__le32 reserved;
 	__le32 crc;       /* header crc32c */
 } __attribute__ ((packed));
+
+
+struct ceph_msg_header {
+	__le64 seq;       /* message seq# for this session */
+	__le64 tid;       /* transaction id */
+	__le16 type;      /* message type */
+	__le16 priority;  /* priority.  higher value == higher priority */
+	__le16 version;   /* version of message encoding */
+
+	__le32 front_len; /* bytes in main payload */
+	__le32 middle_len;/* bytes in middle payload */
+	__le32 data_len;  /* bytes of data payload */
+	__le16 data_off;  /* sender: include full offset;
+			     receiver: mask against ~PAGE_MASK */
+
+	struct ceph_entity_name src;
+	__le32 reserved;
+	__le32 crc;       /* header crc32c */
+} __attribute__ ((packed));
+
 
 #define CEPH_MSG_PRIO_LOW     64
 #define CEPH_MSG_PRIO_DEFAULT 127

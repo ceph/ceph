@@ -26,24 +26,14 @@ Index: plugins/Makefile.nmake
 ===================================================================
 --- plugins/Makefile.nmake	(revision 29691)
 +++ plugins/Makefile.nmake	(working copy)
-@@ -33,6 +33,9 @@
- 	cd asn1
- 	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
- 	cd ..
-+	cd ceph
-+	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
-+	cd ..
- 	cd docsis
- 	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
- 	cd ..
-@@ -86,6 +89,7 @@
- !IFDEF ENABLE_LIBWIRESHARK
- 	cd..
- 	xcopy plugins\asn1\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
-+	xcopy plugins\ceph\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
- 	xcopy plugins\docsis\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
- 	xcopy plugins\ethercat\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
- 	xcopy plugins\giop\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
+@@ -8,6 +8,7 @@
+ 
+ PLUGIN_LIST = \
+	asn1        \
++	ceph        \
+	docsis      \
+	ethercat    \
+	giop        \
 Index: plugins/Makefile.am
 ===================================================================
 --- plugins/Makefile.am	(revision 29691)

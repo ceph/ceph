@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-uint32_t crc32c_le(uint32_t crc, unsigned char const *data, unsigned length);
+uint32_t ceph_crc32c_le(uint32_t crc, unsigned char const *data, unsigned length);
 
 #ifdef __cplusplus
 }
