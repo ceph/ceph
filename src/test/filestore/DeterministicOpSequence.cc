@@ -142,6 +142,7 @@ void DeterministicOpSequence::do_touch(rngen_t& gen)
   int obj_id = _gen_obj_id(gen);
 
   coll_entry_t *entry = get_coll_at(coll_id);
+  ceph_assert(entry != NULL);
   hobject_t *obj = entry->touch_obj(obj_id);
 
   dout(0) << "do_touch " << entry->m_coll.to_str() << "/" << obj->oid.name << dendl;
@@ -155,6 +156,7 @@ void DeterministicOpSequence::do_remove(rngen_t& gen)
   int obj_id = _gen_obj_id(gen);
 
   coll_entry_t *entry = get_coll_at(coll_id);
+  ceph_assert(entry != NULL);
   hobject_t *obj = entry->touch_obj(obj_id);
 
   // ENOENT ok here.
