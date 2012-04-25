@@ -31,6 +31,7 @@ depend on the following:
 - ``libexpat1-dev``
 - ``libgtkmm-2.4-dev``
 - ``pkg-config``
+- ``libcurl4-gnutls-dev``
 
 On Ubuntu, execute ``sudo apt-get install`` for each dependency that isn't installed on your host. ::
 

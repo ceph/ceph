@@ -23,7 +23,6 @@ using NFS or Samba re-exports.
    start/index
    install/index
    create_cluster/index
-   configure/index
    ops/index
    rec/index
    config
