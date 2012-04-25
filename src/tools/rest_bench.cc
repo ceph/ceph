@@ -47,8 +47,11 @@ struct req_context {
   S3RequestContext *ctx;
   void (*cb)(void *, void *);
   void *arg;
+  bufferlist *in_bl;
+  bufferlist out_bl;
+  uint64_t off;
 
-  req_context() : status(S3StatusOK), ctx(NULL), cb(NULL), arg(NULL) {}
+  req_context() : status(S3StatusOK), ctx(NULL), cb(NULL), arg(NULL), in_bl(NULL), off(0) {}
   ~req_context() {
     if (ctx) {
       S3_destroy_request_context(ctx);
@@ -62,6 +65,13 @@ struct req_context {
       return -EINVAL;
     }
 
+    return 0;
+  }
+
+  int ret() {
+    if (status != S3StatusOK) {
+      return -EINVAL;
+    }
     return 0;
   }
 };
@@ -85,12 +95,77 @@ static void complete_callback(S3Status status, const S3ErrorDetails *details, vo
   }
 }
 
-static S3ResponseHandler response_cb;
+static S3Status get_obj_callback(int size, const char *buf,
+                                 void *cb_data)
+{
+  if (!cb_data)
+    return S3StatusOK;
+
+  struct req_context *ctx = (struct req_context *)cb_data;
+
+  ctx->in_bl->append(buf, size);
+
+  return S3StatusOK;
+}
+
+static int put_obj_callback(int size, char *buf,
+                            void *cb_data)
+{
+  if (!cb_data)
+    return 0;
+
+  struct req_context *ctx = (struct req_context *)cb_data;
+
+  int chunk = ctx->out_bl.length() - ctx->off;
+  if (!chunk)
+    return 0;
+
+  if (chunk > size)
+    chunk = size;
+
+  memcpy(buf, ctx->out_bl.c_str() + ctx->off, chunk);
+
+  ctx->off += chunk;
+
+  return chunk;
+}
 
 class RESTBencher : public ObjBencher {
   struct req_context **completions;
+  S3BucketContext bucket_ctx;
+  string user_agent;
+  string host;
   string bucket;
+  S3Protocol protocol;
+  string access_key;
+  string secret;
+
+  S3ResponseHandler response_handler;
+  S3GetObjectHandler get_obj_handler;
+  S3PutObjectHandler put_obj_handler;
+
 protected:
+
+  int rest_init() {
+    S3Status status = S3_initialize(user_agent.c_str(), S3_INIT_ALL, host.c_str());
+    if (status != S3StatusOK) {
+      cerr << "failed to init: " << S3_get_status_name(status) << std::endl;
+      return -EINVAL;
+    }
+
+    response_handler.propertiesCallback = properties_callback;
+    response_handler.completeCallback = complete_callback;
+
+    get_obj_handler.responseHandler = response_handler;
+    get_obj_handler.getObjectDataCallback = get_obj_callback;
+
+    put_obj_handler.responseHandler = response_handler;
+    put_obj_handler.putObjectDataCallback = put_obj_callback;
+
+    return 0;
+  }
+
+
   int completions_init(int concurrentios) {
     completions = new req_context *[concurrentios];
     return 0;
@@ -121,24 +196,51 @@ protected:
   }
 
   int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len) {
-    S3_get_object(bucket_ctx, oid.c_str, NULL, 0, len, completions[slot]->ctx, 
-                  &response_cb, completions[slot]);
+    struct req_context *ctx = completions[slot];
+    ctx->in_bl = pbl;
+    S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, ctx->ctx,
+                  &get_obj_handler, ctx);
+
     return 0;
   }
 
   int aio_write(const std::string& oid, int slot, const bufferlist& bl, size_t len) {
-    /* void S3_put_object(const S3BucketContext *bucketContext, const char *key,
-                   uint64_t contentLength,
-                   const S3PutProperties *putProperties,
-                   S3RequestContext *requestContext,
-                   const S3PutObjectHandler *handler, void *callbackData); */
+    struct req_context *ctx = completions[slot];
+    ctx->out_bl = bl;
+    S3_put_object(&bucket_ctx, oid.c_str(),
+                  bl.length(),
+                  NULL,
+                  ctx->ctx,
+                  &put_obj_handler, ctx);
+    return 0;
   }
 
   int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
-    S3_get_object(&bucket_ctx, oid.c_str, NULL, 0, len, completions[slot]->ctx, 
-                  &response_cb, completions[slot]);
+    struct req_context ctx;
+    int ret = ctx.init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+    ctx.in_bl = &bl;
+    S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, NULL,
+                  &get_obj_handler, &ctx);
+
+    return ctx.ret();
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
+    struct req_context ctx;
+    int ret = ctx.init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+    ctx.out_bl = bl;
+    S3_put_object(&bucket_ctx, oid.c_str(),
+                  bl.length(),
+                  NULL,
+                  NULL,
+                  &put_obj_handler, &ctx);
+
+    return ctx.ret();
   }
 
   bool completion_is_done(int slot) {
@@ -159,21 +261,43 @@ protected:
 public:
   RESTBencher(string _bucket) : completions(NULL), bucket(_bucket) {}
   ~RESTBencher() { }
-};
 
-static int rest_init(string& user_agent, string& host)
-{
-  S3Status status = S3_initialize(user_agent.c_str(), S3_INIT_ALL, host.c_str());
-  if (status != S3StatusOK) {
-    cerr << "failed to init: " << S3_get_status_name(status) << std::endl;
-    return -EINVAL;
+  int init(string& _agent, string& _host, string& _bucket, S3Protocol _protocol,
+           string& _access_key, string& _secret) {
+    user_agent = _agent;
+    host = _host;
+    bucket = _bucket;
+    protocol = _protocol;
+    access_key = _access_key;
+    secret = _secret;
+
+    bucket_ctx.hostName = host.c_str();
+    bucket_ctx.bucketName = bucket.c_str();
+    bucket_ctx.protocol =  protocol;
+    bucket_ctx.accessKeyId = access_key.c_str();
+    bucket_ctx.secretAccessKey = secret.c_str();
+    
+    struct req_context ctx;
+
+    int ret = rest_init();
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = ctx.init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+
+    S3_create_bucket(protocol, access_key.c_str(), secret.c_str(), NULL,
+                     bucket.c_str(), S3CannedAclPrivate,
+                     NULL, /* locationConstraint */
+                     NULL, /* requestContext */
+                     &response_handler, /* handler */
+                     (void *)&ctx  /* callbackData */);
+    return 0;
   }
-
-  response_cb.propertiesCallback = properties_callback;
-  response_cb.completeCallback = complete_callback;
-
-  return 0;
-}
+};
 
 int main(int argc, const char **argv)
 {
@@ -245,25 +369,13 @@ int main(int argc, const char **argv)
   if (user_agent.empty())
     user_agent = DEFAULT_USER_AGENT;
 
-  int ret = rest_init(user_agent, host);
-  if (ret < 0) {
-    exit(1);
-  }
-
   RESTBencher bencher(bucket);
 
-  struct req_context ctx;
-
-  ret = ctx.init_ctx();
+  int ret = bencher.init(user_agent, host, bucket, protocol, access_key, secret);
   if (ret < 0) {
     exit(1);
   }
 
-  S3_create_bucket(protocol, access_key.c_str(), secret.c_str(), NULL,
-                   bucket.c_str(), S3CannedAclPrivate,
-                   NULL, /* locationConstraint */
-                   NULL, /* requestContext */
-                   &response_cb, /* handler */
-                   (void *)&ctx  /* callbackData */);
+  return 0;
 }
 
