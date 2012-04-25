@@ -36,19 +36,25 @@ void usage(ostream& out)
   out <<					\
 "usage: rest_bench [options] <seconds> <write|seq>\n"
 "BENCHMARK OPTIONS\n"
+"   -t concurrent_operations\n"
 "   --concurrent-ios=concurrent_operations\n"
-"   --t concurrent_operations\n"
 "        select bucket by name\n"
 "   -b op-size\n"
 "   --block-size=op-size\n"
 "        set the size of write ops for put or benchmarking\n"
 "REST CONFIG OPTIONS\n"
+"   --api-host=bhost\n"
+"        host name\n"
 "   --bucket=bucket\n"
 "        select bucket by name\n"
 "   --access-key=access_key\n"
 "        access key to RESTful storage provider\n"
 "   --secret=secret_key\n"
-"        secret key for the specified access key\n";
+"        secret key for the specified access key\n"
+"   --protocol=<http|https>\n"
+"        protocol to be used (default: http)\n"
+"   --uri_style=<path|vhost>\n"
+"        uri style in requests (default: path)\n";
 }
 
 static void usage_exit()
@@ -58,7 +64,7 @@ static void usage_exit()
 }
 
 struct req_context {
-  atomic_t complete;
+  bool complete;
   S3Status status;
   S3RequestContext *ctx;
   void (*cb)(void *, void *);
@@ -69,7 +75,7 @@ struct req_context {
   Mutex lock;
   Cond cond;
 
-  req_context() : status(S3StatusOK), ctx(NULL), cb(NULL), arg(NULL), in_bl(NULL), off(0),
+  req_context() : complete(false), status(S3StatusOK), ctx(NULL), cb(NULL), arg(NULL), in_bl(NULL), off(0),
                   lock("req_context") {}
   ~req_context() {
     if (ctx) {
@@ -155,12 +161,21 @@ public:
   void queue(req_context *ctx) {
     req_wq.queue(ctx);
   }
+
+  void start() {
+    m_tp.start();
+  }
 };
 
 void RESTDispatcher::process_context(req_context *ctx)
 {
   S3Status status = S3_runall_request_context(ctx->ctx);
-  generic_dout(0) << "processed request, status=" << status << dendl;
+
+  if (status != S3StatusOK) {
+    cerr << "ERROR: S3_runall_request_context() returned " << S3_get_status_name(status) << std::endl;
+  } else if (ctx->status != S3StatusOK) {
+    cerr << "ERROR: " << S3_get_status_name(ctx->status) << std::endl;
+  }
 
   Mutex::Locker l(ctx->lock);
   ctx->cond.SignalAll();
@@ -177,8 +192,11 @@ static void complete_callback(S3Status status, const S3ErrorDetails *details, vo
     return;
 
   struct req_context *ctx = (struct req_context *)cb_data;
-  ctx->complete.set(1);
+
+  ctx->lock.Lock();
+  ctx->complete = true;
   ctx->status = status;
+  ctx->lock.Unlock();
 
   if (ctx->cb) {
     ctx->cb((void *)ctx->cb, ctx->arg);
@@ -320,7 +338,7 @@ protected:
     S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, NULL,
                   &get_obj_handler, &ctx);
 
-    return ctx.ret();
+    return bl.length();
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
     struct req_context ctx;
@@ -329,6 +347,7 @@ protected:
       return ret;
     }
     ctx.out_bl = bl;
+
     S3_put_object(&bucket_ctx, oid.c_str(),
                   bl.length(),
                   NULL,
@@ -339,8 +358,7 @@ protected:
   }
 
   bool completion_is_done(int slot) {
-    int val = completions[slot]->complete.read();
-    return (val != 0);
+    return completions[slot]->complete;
   }
 
   int completion_wait(int slot) {
@@ -348,24 +366,28 @@ protected:
 
     Mutex::Locker l(ctx->lock);
 
-    ctx->cond.Wait(ctx->lock);
+    while (!ctx->complete) {
+      ctx->cond.Wait(ctx->lock);
+    }
 
     return 0;
   }
 
   int completion_ret(int slot) {
     S3Status status = completions[slot]->status;
-    if (status >= 200 && status < 300)
-      return 0;
-    return -EIO;
+    if (status != S3StatusOK)
+      return -EIO;
+    return 0;
   }
 
 public:
-  RESTBencher(RESTDispatcher *_dispatcher) : dispatcher(_dispatcher), completions(NULL) {}
+  RESTBencher(RESTDispatcher *_dispatcher) : dispatcher(_dispatcher), completions(NULL) {
+    dispatcher->start();
+  }
   ~RESTBencher() { }
 
   int init(string& _agent, string& _host, string& _bucket, S3Protocol _protocol,
-           string& _access_key, string& _secret) {
+           S3UriStyle uri_style, string& _access_key, string& _secret) {
     user_agent = _agent;
     host = _host;
     bucket = _bucket;
@@ -378,6 +400,7 @@ public:
     bucket_ctx.protocol =  protocol;
     bucket_ctx.accessKeyId = access_key.c_str();
     bucket_ctx.secretAccessKey = secret.c_str();
+    bucket_ctx.uriStyle = uri_style;
     
     struct req_context ctx;
 
@@ -397,6 +420,13 @@ public:
                      NULL, /* requestContext */
                      &response_handler, /* handler */
                      (void *)&ctx  /* callbackData */);
+
+    ret = ctx.ret();
+    if (ret < 0) {
+      cerr << "ERROR: failed to create bucket: " << S3_get_status_name(ctx.status) << std::endl;
+      return ret;
+    }
+
     return 0;
   }
 };
@@ -412,13 +442,14 @@ int main(int argc, const char **argv)
 
   std::map < std::string, std::string > opts;
   std::vector<const char*>::iterator i;
-  std::string val;
   std::string host;
+  std::string val;
   std::string user_agent;
   std::string access_key;
   std::string secret;
   std::string bucket = DEFAULT_BUCKET;
   S3Protocol protocol = S3ProtocolHTTP;
+  S3UriStyle uri_style = S3UriStylePath;
   std::string proto_str;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
@@ -438,6 +469,9 @@ int main(int argc, const char **argv)
       /* nothing */
     } else if (ceph_argparse_witharg(args, i, &bucket, "--bucket", (char*)NULL)) {
       /* nothing */
+    } else if (ceph_argparse_witharg(args, i, &host, "--api-host", (char*)NULL)) {
+      cerr << "host=" << host << std::endl;
+      /* nothing */
     } else if (ceph_argparse_witharg(args, i, &proto_str, "--protocol", (char*)NULL)) {
       if (strcasecmp(proto_str.c_str(), "http") == 0) {
         protocol = S3ProtocolHTTP;
@@ -448,6 +482,15 @@ int main(int argc, const char **argv)
         usage_exit();
       }
       /* nothing */
+    } else if (ceph_argparse_witharg(args, i, &proto_str, "--uri-style", (char*)NULL)) {
+      if (strcasecmp(proto_str.c_str(), "vhost") == 0) {
+        uri_style = S3UriStyleVirtualHost;
+      } else if (strcasecmp(proto_str.c_str(), "path") == 0) {
+        uri_style = S3UriStylePath;
+      } else {
+        cerr << "bad protocol" << std::endl;
+        usage_exit();
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       concurrent_ios = strtol(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--block-size", (char*)NULL)) {
@@ -460,7 +503,7 @@ int main(int argc, const char **argv)
   }
 
   if (bucket.empty()) {
-    cerr << "bucket not specified" << std::endl;
+    cerr << "rest-bench: bucket not specified" << std::endl;
     usage_exit();
   }
   if (args.size() < 2)
@@ -476,10 +519,8 @@ int main(int argc, const char **argv)
   else
     usage_exit();
 
-  host = g_conf->host;
-
   if (host.empty()) {
-    cerr << "rest-bench: host not provided." << std::endl;
+    cerr << "rest-bench: api host not provided." << std::endl;
     usage_exit();
   }
 
@@ -495,12 +536,13 @@ int main(int argc, const char **argv)
   if (user_agent.empty())
     user_agent = DEFAULT_USER_AGENT;
 
-  RESTDispatcher dispatcher(g_ceph_context, g_conf->rgw_thread_pool_size);
+  RESTDispatcher dispatcher(g_ceph_context, concurrent_ios);
 
   RESTBencher bencher(&dispatcher);
 
-  int ret = bencher.init(user_agent, host, bucket, protocol, access_key, secret);
+  int ret = bencher.init(user_agent, host, bucket, protocol, uri_style, access_key, secret);
   if (ret < 0) {
+    cerr << "failed initializing benchmark" << std::endl;
     exit(1);
   }
 
