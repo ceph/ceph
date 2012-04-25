@@ -496,6 +496,13 @@ bool OSDMonitor::can_mark_down(int i)
     dout(5) << "can_mark_down NODOWN flag set, will not mark osd." << i << " down" << dendl;
     return false;
   }
+  float up_ratio = (float)osdmap.get_num_up_osds() / (float)osdmap.get_num_osds();
+  if (up_ratio < g_conf->mon_osd_min_up_ratio) {
+    dout(5) << "can_mark_down current up_ratio " << up_ratio << " < min "
+	    << g_conf->mon_osd_min_up_ratio
+	    << ", will not mark osd." << i << " down" << dendl;
+    return false;
+  }
   return true;
 }
 
@@ -514,6 +521,19 @@ bool OSDMonitor::can_mark_out(int i)
     dout(5) << "can_mark_out NOOUT flag set, will not mark osds out" << dendl;
     return false;
   }
+  float in_ratio = (float)osdmap.get_num_in_osds() / (float)osdmap.get_num_osds();
+  if (in_ratio < g_conf->mon_osd_min_in_ratio) {
+    if (i >= 0)
+      dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
+	      << g_conf->mon_osd_min_in_ratio
+	      << ", will not mark osd." << i << " out" << dendl;
+    else
+      dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
+	      << g_conf->mon_osd_min_in_ratio
+	      << ", will not mark osds out" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -1142,7 +1162,9 @@ void OSDMonitor::tick()
       down -= i->second;
       i++;
 
-      if (osdmap.is_down(o) && osdmap.is_in(o)) {
+      if (osdmap.is_down(o) &&
+	  osdmap.is_in(o) &&
+	  can_mark_out(o)) {
 	if (g_conf->mon_osd_down_out_interval > 0 &&
 	    down.sec() >= g_conf->mon_osd_down_out_interval) {
 	  dout(10) << "tick marking osd." << o << " OUT after " << down
