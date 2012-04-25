@@ -1198,6 +1198,7 @@ noinst_HEADERS = \
 	cls_acl.cc\
 	cls_crypto.cc\
 	common/BackTrace.h\
+	common/RefCountedObj.h\
 	common/HeartbeatMap.h\
 	common/LogClient.h\
 	common/LogEntry.h\

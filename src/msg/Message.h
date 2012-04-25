@@ -141,7 +141,8 @@ using std::list;
 #include "include/buffer.h"
 #include "common/Throttle.h"
 #include "msg_types.h"
-#include "include/atomic.h"
+
+#include "common/RefCountedObj.h"
 
 #include "common/debug.h"
 
@@ -151,85 +152,6 @@ using std::list;
 
 // abstract Connection, for keeping per-connection state
 
-struct RefCountedObject {
-  atomic_t nref;
-  RefCountedObject() : nref(1) {}
-  virtual ~RefCountedObject() {}
-  
-  RefCountedObject *get() {
-    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
-    nref.inc();
-    return this;
-  }
-  void put() {
-    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
-    if (nref.dec() == 0)
-      delete this;
-  }
-};
-
-struct RefCountedCond : public RefCountedObject {
-  Mutex lock;
-  Cond cond;
-  atomic_t complete;
-
-  RefCountedCond() : lock("RefCountedCond") {}
-
-  void wait() {
-    Mutex::Locker l(lock);
-    while (!complete.read())
-      cond.Wait(lock);
-  }
-
-  void done() {
-    Mutex::Locker l(lock);
-    cond.SignalAll();
-    complete.set(1);
-  }
-};
-
-struct RefCountedWaitObject {
-  atomic_t nref;
-  RefCountedCond *c;
-
-  RefCountedWaitObject() : nref(1) {
-    c = new RefCountedCond;
-  }
-  virtual ~RefCountedWaitObject() {
-    c->put();
-  }
-
-  RefCountedWaitObject *get() {
-    nref.inc();
-    return this;
-  }
-
-  bool put() {
-    bool ret = false;
-    RefCountedCond *cond = c;
-    cond->get();
-    if (nref.dec() == 0) {
-      cond->done();
-      delete this;
-      ret = true;
-    }
-    cond->put();
-    return ret;
-  }
-
-  void put_wait() {
-    RefCountedCond *cond = c;
-
-    cond->get();
-    if (nref.dec() == 0) {
-      cond->done();
-      delete this;
-    } else {
-      cond->wait();
-    }
-    cond->put();
-  }
-};
 
 struct Connection : public RefCountedObject {
   Mutex lock;
