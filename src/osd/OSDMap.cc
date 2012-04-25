@@ -562,6 +562,42 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
   return -1;
 }
 
+void OSDMap::dedup(const OSDMap *o, OSDMap *n)
+{
+  if (o->epoch == n->epoch)
+    return;
+
+  int diff = 0;
+  if (o->max_osd != n->max_osd)
+    diff++;
+  for (int i = 0; i < o->max_osd && i < n->max_osd; i++) {
+    if ((o->epoch < n->epoch && n->osd_info[i].up_from <= o->epoch) ||
+	(o->epoch > n->epoch && o->osd_info[i].up_from <= n->epoch)) {
+      // same up interval, all should match... but let's be paranoid!
+      if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
+	  *n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i])
+	n->osd_addrs->client_addr[i] = o->osd_addrs->client_addr[i];
+      if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
+	  *n->osd_addrs->cluster_addr[i] == *o->osd_addrs->cluster_addr[i])
+	n->osd_addrs->cluster_addr[i] = o->osd_addrs->cluster_addr[i];
+      if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
+	  *n->osd_addrs->hb_addr[i] == *o->osd_addrs->hb_addr[i])
+	n->osd_addrs->hb_addr[i] = o->osd_addrs->hb_addr[i];
+    } else if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
+	       *n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i]) {
+      // client addr matches
+      n->osd_addrs->client_addr[i] = o->osd_addrs->client_addr[i];
+    } else {
+      diff++;
+    }
+  }
+
+  if (diff == 0) {
+    // zoinks, no differences at all!
+    n->osd_addrs = o->osd_addrs;
+  }
+}
+
 int OSDMap::apply_incremental(Incremental &inc)
 {
   if (inc.epoch == 1)

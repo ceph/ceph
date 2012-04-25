@@ -364,6 +364,9 @@ private:
 
   int apply_incremental(Incremental &inc);
 
+  /// try to re-use/reference addrs in oldmap from newmap
+  static void dedup(const OSDMap *oldmap, OSDMap *newmap);
+
   // serialize, unserialize
 private:
   void encode_client_old(bufferlist& bl) const;
