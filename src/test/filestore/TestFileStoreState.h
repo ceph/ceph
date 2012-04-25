@@ -92,7 +92,14 @@ public:
     m_max_in_flight(0), m_in_flight(0), m_finished_lock("Finished Lock") {
     m_store.reset(store);
   }
-  ~TestFileStoreState() { }
+  ~TestFileStoreState() { 
+    map<int, coll_entry_t*>::iterator it = m_collections.begin();
+    for (; it != m_collections.end(); it++) {
+	if (it->second)
+	    delete it->second;
+	m_collections.erase(it);
+    }
+  }
 
   void init(int colls, int objs);
   void init() {
