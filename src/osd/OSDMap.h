@@ -192,7 +192,7 @@ private:
   string cluster_snapshot;
 
  public:
-  CrushWrapper     crush;       // hierarchical map
+  std::tr1::shared_ptr<CrushWrapper> crush;       // hierarchical map
 
   friend class OSDMonitor;
   friend class PGMonitor;
@@ -204,7 +204,8 @@ private:
 	     flags(0),
 	     num_osd(0), max_osd(0),
 	     osd_addrs(new addrs_s),
-	     cluster_snapshot_epoch(0) { 
+	     cluster_snapshot_epoch(0),
+	     crush(new CrushWrapper) {
     memset(&fsid, 0, sizeof(fsid));
   }
 

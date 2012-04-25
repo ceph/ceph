@@ -676,7 +676,7 @@ bool PGMonitor::register_new_pgs()
     int64_t poolid = p->first;
     pg_pool_t &pool = p->second;
     int ruleno = pool.get_crush_ruleset();
-    if (!osdmap->crush.rule_exists(ruleno)) 
+    if (!osdmap->crush->rule_exists(ruleno)) 
       continue;
 
     if (pool.get_last_change() <= pg_map.last_pg_scan ||
@@ -712,7 +712,7 @@ bool PGMonitor::register_new_pgs()
     }
   }
 
-  int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
+  int max = MIN(osdmap->get_max_osd(), osdmap->crush->get_max_devices());
   int removed = 0;
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
@@ -757,7 +757,7 @@ void PGMonitor::send_pg_creates()
   utime_t now = ceph_clock_now(g_ceph_context);
   
   OSDMap *osdmap = &mon->osdmon()->osdmap;
-  int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
+  int max = MIN(osdmap->get_max_osd(), osdmap->crush->get_max_devices());
 
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();

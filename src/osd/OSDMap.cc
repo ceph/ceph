@@ -725,7 +725,8 @@ int OSDMap::apply_incremental(Incremental &inc)
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
     bufferlist::iterator blp = inc.crush.begin();
-    crush.decode(blp);
+    crush.reset(new CrushWrapper);
+    crush->decode(blp);
   }
 
   calc_num_osds();
@@ -772,15 +773,15 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
   unsigned size = pool.get_size();
   {
     int preferred = pg.preferred();
-    if (preferred >= max_osd || preferred >= crush.get_max_devices())
+    if (preferred >= max_osd || preferred >= crush->get_max_devices())
       preferred = -1;
 
-    assert(get_max_osd() >= crush.get_max_devices());
+    assert(get_max_osd() >= crush->get_max_devices());
 
     // what crush rule?
-    int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
+    int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
     if (ruleno >= 0)
-      crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
+      crush->do_rule(ruleno, pps, osds, size, preferred, osd_weight);
   }
   
   return osds.size();
@@ -938,7 +939,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
 
   // crush
   bufferlist cbl;
-  crush.encode(cbl);
+  crush->encode(cbl);
   ::encode(cbl, bl);
 }
 
@@ -973,7 +974,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   // crush
   bufferlist cbl;
-  crush.encode(cbl);
+  crush->encode(cbl);
   ::encode(cbl, bl);
 
   // extended
@@ -1062,7 +1063,7 @@ void OSDMap::decode(bufferlist::iterator& p)
   bufferlist cbl;
   ::decode(cbl, p);
   bufferlist::iterator cblp = cbl.begin();
-  crush.decode(cblp);
+  crush->decode(cblp);
 
   // extended
   __u16 ev = 0;
@@ -1298,10 +1299,10 @@ void OSDMap::print_tree(ostream& out) const
   out << "# id\tweight\ttype name\tup/down\treweight\n";
   set<int> touched;
   set<int> roots;
-  crush.find_roots(roots);
+  crush->find_roots(roots);
   for (set<int>::iterator p = roots.begin(); p != roots.end(); p++) {
     list<qi> q;
-    q.push_back(qi(*p, 0, crush.get_bucket_weight(*p) / (float)0x10000));
+    q.push_back(qi(*p, 0, crush->get_bucket_weight(*p) / (float)0x10000));
     while (!q.empty()) {
       int cur = q.front().item;
       int depth = q.front().depth;
@@ -1319,14 +1320,14 @@ void OSDMap::print_tree(ostream& out) const
 	continue;
       }
 
-      int type = crush.get_bucket_type(cur);
-      out << crush.get_type_name(type) << " " << crush.get_item_name(cur) << "\n";
+      int type = crush->get_bucket_type(cur);
+      out << crush->get_type_name(type) << " " << crush->get_item_name(cur) << "\n";
 
       // queue bucket contents...
-      int s = crush.get_bucket_size(cur);
+      int s = crush->get_bucket_size(cur);
       for (int k=s-1; k>=0; k--)
-	q.push_front(qi(crush.get_bucket_item(cur, k), depth+1,
-			(float)crush.get_bucket_item_weight(cur, k) / (float)0x10000));
+	q.push_front(qi(crush->get_bucket_item(cur, k), depth+1,
+			(float)crush->get_bucket_item_weight(cur, k) / (float)0x10000));
     }
   }
 
@@ -1398,7 +1399,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pool_name[pool] = p->second;
   }
 
-  build_simple_crush_map(cct, crush, rulesets, nosd);
+  build_simple_crush_map(cct, *crush, rulesets, nosd);
 
   for (int i=0; i<nosd; i++) {
     set_state(i, 0);
@@ -1514,7 +1515,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pool_name[pool] = p->second;
   }
 
-  build_simple_crush_map_from_conf(cct, crush, rulesets);
+  build_simple_crush_map_from_conf(cct, *crush, rulesets);
 
   for (int i=0; i<=maxosd; i++) {
     set_state(i, 0);

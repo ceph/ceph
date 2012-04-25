@@ -1497,7 +1497,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  ss << "got osdmap epoch " << p->get_epoch();
 	  r = 0;
 	} else if (cmd == "getcrushmap") {
-	  p->crush.encode(rdata);
+	  p->crush->encode(rdata);
 	  ss << "got crush map from osdmap epoch " << p->get_epoch();
 	  r = 0;
 	}
@@ -1752,7 +1752,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (pending_inc.crush.length())
 	  bl = pending_inc.crush;
 	else
-	  osdmap.crush.encode(bl);
+	  osdmap.crush->encode(bl);
 
 	CrushWrapper newcrush;
 	bufferlist::iterator p = bl.begin();
@@ -1783,7 +1783,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (pending_inc.crush.length())
 	  bl = pending_inc.crush;
 	else
-	  osdmap.crush.encode(bl);
+	  osdmap.crush->encode(bl);
 
 	CrushWrapper newcrush;
 	bufferlist::iterator p = bl.begin();
@@ -1812,7 +1812,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (pending_inc.crush.length())
 	  bl = pending_inc.crush;
 	else
-	  osdmap.crush.encode(bl);
+	  osdmap.crush->encode(bl);
 
 	CrushWrapper newcrush;
 	bufferlist::iterator p = bl.begin();
@@ -1839,10 +1839,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       int newmax = atoi(m->cmd[2].c_str());
-      if (newmax < osdmap.crush.get_max_devices()) {
+      if (newmax < osdmap.crush->get_max_devices()) {
 	err = -ERANGE;
 	ss << "cannot set max_osd to " << newmax << " which is < crush max_devices "
-	   << osdmap.crush.get_max_devices();
+	   << osdmap.crush->get_max_devices();
 	goto out;
       }
 
@@ -2301,7 +2301,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		return true;
 	      }
 	    } else if (m->cmd[4] == "crush_ruleset") {
-	      if (osdmap.crush.rule_exists(n)) {
+	      if (osdmap.crush->rule_exists(n)) {
 		if (pending_inc.new_pools.count(pool) == 0)
 		  pending_inc.new_pools[pool] = *p;
 		pending_inc.new_pools[pool].crush_ruleset = n;
