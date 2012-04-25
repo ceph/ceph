@@ -42,21 +42,6 @@ using namespace std;
 #include <ext/hash_set>
 using __gnu_cxx::hash_set;
 
-
-
-/*
- * some system constants
- */
-
-// pg roles
-#define PG_ROLE_STRAY   -1
-#define PG_ROLE_HEAD     0
-#define PG_ROLE_ACKER    1
-#define PG_ROLE_MIDDLE   2  // der.. misnomer
-//#define PG_ROLE_TAIL     2
-
-
-
 /*
  * we track up to two intervals during which the osd was alive and
  * healthy.  the most recent is [up_from,up_thru), where up_thru is

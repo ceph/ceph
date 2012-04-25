@@ -879,16 +879,7 @@ int OSDMap::calc_pg_role(int osd, vector<int>& acting, int nrep)
 {
   if (!nrep)
     nrep = acting.size();
-  int rank = calc_pg_rank(osd, acting, nrep);
-    
-  if (rank < 0)
-    return PG_ROLE_STRAY;
-  else if (rank == 0) 
-    return PG_ROLE_HEAD;
-  else if (rank == 1) 
-    return PG_ROLE_ACKER;
-  else
-    return PG_ROLE_MIDDLE;
+  return calc_pg_rank(osd, acting, nrep);
 }
 
 

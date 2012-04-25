@@ -1315,7 +1315,7 @@ public:
   int        get_role() const { return role; }
   void       set_role(int r) { role = r; }
 
-  bool       is_primary() const { return role == PG_ROLE_HEAD; }
+  bool       is_primary() const { return role == 0; }
   bool       is_replica() const { return role > 0; }
 
   epoch_t get_last_peering_reset() const { return last_peering_reset; }
