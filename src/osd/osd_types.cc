@@ -504,6 +504,11 @@ bool pg_pool_t::is_pool_snaps_mode() const
   return removed_snaps.empty() && get_snap_seq() > 0;
 }
 
+bool pg_pool_t::is_unmanaged_snaps_mode() const
+{
+  return removed_snaps.size() && get_snap_seq() > 0;
+}
+
 bool pg_pool_t::is_removed_snap(snapid_t s) const
 {
   if (is_pool_snaps_mode())
@@ -540,7 +545,7 @@ snapid_t pg_pool_t::snap_exists(const char *s) const
 
 void pg_pool_t::add_snap(const char *n, utime_t stamp)
 {
-  assert(removed_snaps.empty());
+  assert(!is_unmanaged_snaps_mode());
   snapid_t s = get_snap_seq() + 1;
   snap_seq = s;
   snaps[s].snapid = s;
@@ -551,7 +556,7 @@ void pg_pool_t::add_snap(const char *n, utime_t stamp)
 void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
 {
   if (removed_snaps.empty()) {
-    assert(snaps.empty());
+    assert(!is_pool_snaps_mode());
     removed_snaps.insert(snapid_t(1));
     snap_seq = 1;
   }
@@ -567,7 +572,7 @@ void pg_pool_t::remove_snap(snapid_t s)
 
 void pg_pool_t::remove_unmanaged_snap(snapid_t s)
 {
-  assert(snaps.empty());
+  assert(is_unmanaged_snaps_mode());
   removed_snaps.insert(s);
   snap_seq = snap_seq + 1;
   removed_snaps.insert(get_snap_seq());

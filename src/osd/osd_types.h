@@ -667,8 +667,10 @@ struct pg_pool_t {
    *    - removal governed by removed_snaps
    *
    * we know which mode we're using based on whether removed_snaps is empty.
+   * If nothing has been created, both functions report false.
    */
   bool is_pool_snaps_mode() const;
+  bool is_unmanaged_snaps_mode() const;
   bool is_removed_snap(snapid_t s) const;
 
   /*
