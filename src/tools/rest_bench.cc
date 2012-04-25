@@ -34,9 +34,21 @@
 void usage(ostream& out)
 {
   out <<					\
-"usage: rest_bench [options] [commands]\n"
-"COMMANDS\n"
-"\n";
+"usage: rest_bench [options] <seconds> <write|seq>\n"
+"BENCHMARK OPTIONS\n"
+"   --concurrent-ios=concurrent_operations\n"
+"   --t concurrent_operations\n"
+"        select bucket by name\n"
+"   -b op-size\n"
+"   --block-size=op-size\n"
+"        set the size of write ops for put or benchmarking\n"
+"REST CONFIG OPTIONS\n"
+"   --bucket=bucket\n"
+"        select bucket by name\n"
+"   --access-key=access_key\n"
+"        access key to RESTful storage provider\n"
+"   --secret=secret_key\n"
+"        secret key for the specified access key\n";
 }
 
 static void usage_exit()
@@ -139,6 +151,10 @@ public:
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp)
       {}
   void process_context(req_context *ctx);
+
+  void queue(req_context *ctx) {
+    req_wq.queue(ctx);
+  }
 };
 
 void RESTDispatcher::process_context(req_context *ctx)
@@ -205,6 +221,7 @@ static int put_obj_callback(int size, char *buf,
 }
 
 class RESTBencher : public ObjBencher {
+  RESTDispatcher *dispatcher;
   struct req_context **completions;
   S3BucketContext bucket_ctx;
   string user_agent;
@@ -275,6 +292,8 @@ protected:
     S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, ctx->ctx,
                   &get_obj_handler, ctx);
 
+    dispatcher->queue(ctx);
+
     return 0;
   }
 
@@ -286,6 +305,8 @@ protected:
                   NULL,
                   ctx->ctx,
                   &put_obj_handler, ctx);
+
+    dispatcher->queue(ctx);
     return 0;
   }
 
@@ -340,7 +361,7 @@ protected:
   }
 
 public:
-  RESTBencher(string _bucket) : completions(NULL), bucket(_bucket) {}
+  RESTBencher(RESTDispatcher *_dispatcher) : dispatcher(_dispatcher), completions(NULL) {}
   ~RESTBencher() { }
 
   int init(string& _agent, string& _host, string& _bucket, S3Protocol _protocol,
@@ -399,6 +420,9 @@ int main(int argc, const char **argv)
   std::string bucket = DEFAULT_BUCKET;
   S3Protocol protocol = S3ProtocolHTTP;
   std::string proto_str;
+  int concurrent_ios = 16;
+  int op_size = 1 << 22;
+
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -424,12 +448,33 @@ int main(int argc, const char **argv)
         usage_exit();
       }
       /* nothing */
+    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
+      concurrent_ios = strtol(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--block-size", (char*)NULL)) {
+      op_size = strtol(val.c_str(), NULL, 10);
     } else {
       if (val[0] == '-')
         usage_exit();
       i++;
     }
   }
+
+  if (bucket.empty()) {
+    cerr << "bucket not specified" << std::endl;
+    usage_exit();
+  }
+  if (args.size() < 2)
+    usage_exit();
+  int seconds = atoi(args[0]);
+  int operation = 0;
+  if (strcmp(args[1], "write") == 0)
+    operation = OP_WRITE;
+  else if (strcmp(args[1], "seq") == 0)
+    operation = OP_SEQ_READ;
+  else if (strcmp(args[1], "rand") == 0)
+    operation = OP_RAND_READ;
+  else
+    usage_exit();
 
   host = g_conf->host;
 
@@ -450,11 +495,18 @@ int main(int argc, const char **argv)
   if (user_agent.empty())
     user_agent = DEFAULT_USER_AGENT;
 
-  RESTBencher bencher(bucket);
+  RESTDispatcher dispatcher(g_ceph_context, g_conf->rgw_thread_pool_size);
+
+  RESTBencher bencher(&dispatcher);
 
   int ret = bencher.init(user_agent, host, bucket, protocol, access_key, secret);
   if (ret < 0) {
     exit(1);
+  }
+
+  ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
+  if (ret != 0) {
+      cerr << "error during benchmark: " << ret << std::endl;
   }
 
   return 0;
