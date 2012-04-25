@@ -1,0 +1,96 @@
+============
+RADOS S3 API
+============
+
+Ceph supports a RESTful API that is compatible with the the basic data access model of the Amazon S3 API.
+
+API
+---
+
+- :doc:`Common Entities <s3/commons>`
+- :doc:`Authentication and ACLs <s3/authentication>`
+- :doc:`Service Operations <s3/serviceops>`
+- :doc:`Bucket Operations <s3/bucketops>`
+- :doc:`Object Operations <s3/objectops>` 
+
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   Common <s3/commons>
+   Authentication <s3/authentication>
+   Service Ops <s3/serviceops>
+   Bucket Ops <s3/bucketops>
+   Object Ops <s3/objectops>
+    
+
+Features Support
+----------------
+
+The following table describes the support status for current Amazon S3 functional features:
+
++---------------------------------+-----------------+----------------------------------------+
+| Feature                         | Status          | Remarks                                |
++=================================+=================+========================================+
+| **List Buckets**                | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Delete Bucket**               | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Create Bucket**               | Supported       | Different set of canned ACLs           |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Lifecycle**            | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Policy (Buckets, Objects)**   | Not Supported   | ACLs are supported                     |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Website**              | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket ACLs (Get, Put)**      | Supported       | Different set of canned ACLs           |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Location**             | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Notification**         | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Object Versions**      | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Get Bucket Info (HEAD)**      | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Request Payment**      | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Put Object**                  | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Delete Object**               | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Get Object**                  | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Object ACLs (Get, Put)**      | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Get Object Info (HEAD)**      | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **POST Object**                 | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Copy Object**                 | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Multipart Uploads**           | Supported       | (missing Copy Part)                    |
++---------------------------------+-----------------+----------------------------------------+
+
+Unsupported Header Fields
+-------------------------
+
+The following common request header fields are not supported:
+
++----------------------------+------------+
+| Name                       | Type       |
++============================+============+
+| **x-amz-security-token**   | Request    |
++----------------------------+------------+
+| **Server**                 | Response   |
++----------------------------+------------+
+| **x-amz-delete-marker**    | Response   |
++----------------------------+------------+
+| **x-amz-id-2**             | Response   |
++----------------------------+------------+
+| **x-amz-request-id**       | Response   |
++----------------------------+------------+
+| **x-amz-version-id**       | Response   |
++----------------------------+------------+
