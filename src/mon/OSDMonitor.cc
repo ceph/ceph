@@ -2466,7 +2466,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
   case POOL_OP_DELETE_SNAP:
-    if (!pp.removed_snaps.empty()) {
+    if (pp.is_unmanaged_snaps_mode()) {
       ret = -EINVAL;
       goto out;
     }
@@ -2474,7 +2474,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 
   case POOL_OP_CREATE_UNMANAGED_SNAP:
   case POOL_OP_DELETE_UNMANAGED_SNAP:
-    if (!pp.snaps.empty()) {
+    if (pp.is_pool_snaps_mode()) {
       ret = -EINVAL;
       goto out;
     }
