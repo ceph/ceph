@@ -443,6 +443,15 @@ void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
 // ----------------------------------
 // OSDMap
 
+void OSDMap::set_epoch(epoch_t e)
+{
+  epoch = e;
+  for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
+       p != pools.end();
+       p++)
+    p->second.last_change = e;
+}
+
 bool OSDMap::is_blacklisted(const entity_addr_t& a) const
 {
   if (blacklist.empty())
@@ -477,7 +486,6 @@ void OSDMap::set_max_osd(int m)
   calc_num_osds();
 }
 
-
 int OSDMap::calc_num_osds()
 {
   num_osd = 0;
@@ -485,6 +493,42 @@ int OSDMap::calc_num_osds()
     if (osd_state[i] & CEPH_OSD_EXISTS)
       num_osd++;
   return num_osd;
+}
+
+void OSDMap::get_all_osds(set<int32_t>& ls) const
+{
+  for (int i=0; i<max_osd; i++)
+    if (exists(i))
+      ls.insert(i);
+}
+
+int OSDMap::get_num_up_osds() const
+{
+  int n = 0;
+  for (int i=0; i<max_osd; i++)
+    if (osd_state[i] & CEPH_OSD_EXISTS &&
+	osd_state[i] & CEPH_OSD_UP) n++;
+  return n;
+}
+
+int OSDMap::get_num_in_osds() const
+{
+  int n = 0;
+  for (int i=0; i<max_osd; i++)
+    if (osd_state[i] & CEPH_OSD_EXISTS &&
+	get_weight(i) != CEPH_OSD_OUT) n++;
+  return n;
+}
+
+void OSDMap::calc_state_set(int state, set<string>& st)
+{
+  unsigned t = state;
+  for (unsigned s = 1; t; s <<= 1) {
+    if (t & s) {
+      t &= ~s;
+      st.insert(ceph_osd_state_name(s));
+    }
+  }
 }
 
 void OSDMap::adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const
@@ -500,6 +544,22 @@ void OSDMap::adjust_osd_weights(const map<int,double>& weights, Incremental& inc
        p != weights.end(); ++p) {
     inc.new_weight[p->first] = (unsigned)((p->second / max) * CEPH_OSD_IN);
   }
+}
+
+int OSDMap::identify_osd(const entity_addr_t& addr) const
+{
+  for (unsigned i=0; i<osd_addr.size(); i++)
+    if ((osd_addr[i] == addr) || (osd_cluster_addr[i] == addr))
+      return i;
+  return -1;
+}
+
+bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
+{
+  for (unsigned i=0; i<osd_addr.size(); i++)
+    if (osd_addr[i].is_same_host(ip) || osd_cluster_addr[i].is_same_host(ip))
+      return i;
+  return -1;
 }
 
 int OSDMap::apply_incremental(Incremental &inc)
@@ -635,6 +695,156 @@ int OSDMap::apply_incremental(Incremental &inc)
   calc_num_osds();
   return 0;
 }
+
+
+// mapping
+int OSDMap::object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const
+{
+  // calculate ps (placement seed)
+  const pg_pool_t *pool = get_pg_pool(loc.get_pool());
+  if (!pool)
+    return -ENOENT;
+  ps_t ps;
+  if (loc.key.length())
+    ps = ceph_str_hash(pool->object_hash, loc.key.c_str(), loc.key.length());
+  else
+    ps = ceph_str_hash(pool->object_hash, oid.name.c_str(), oid.name.length());
+  // mix in preferred osd, so we don't get the same peers for
+  // all of the placement pgs (e.g. 0.0p*)
+  if (loc.get_preferred() >= 0)
+    ps += loc.get_preferred();
+  pg = pg_t(ps, loc.get_pool(), loc.get_preferred());
+  return 0;
+}
+
+ceph_object_layout OSDMap::make_object_layout(object_t oid, int pg_pool, int preferred) const
+{
+  object_locator_t loc(pg_pool);
+  loc.preferred = preferred;
+
+  ceph_object_layout ol;
+  pg_t pgid = object_locator_to_pg(oid, loc);
+  ol.ol_pgid = pgid.get_old_pg().v;
+  ol.ol_stripe_unit = 0;
+  return ol;
+}
+
+int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
+{
+  // map to osds[]
+  ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
+  unsigned size = pool.get_size();
+  {
+    int preferred = pg.preferred();
+    if (preferred >= max_osd || preferred >= crush.get_max_devices())
+      preferred = -1;
+
+    assert(get_max_osd() >= crush.get_max_devices());
+
+    // what crush rule?
+    int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
+    if (ruleno >= 0)
+      crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
+  }
+  
+  return osds.size();
+}
+
+// pg -> (up osd list)
+void OSDMap::_raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const
+{
+  up.clear();
+  for (unsigned i=0; i<raw.size(); i++) {
+    if (!exists(raw[i]) || is_down(raw[i])) 
+      continue;
+    up.push_back(raw[i]);
+  }
+}
+  
+bool OSDMap::_raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const
+{
+  pg = pool.raw_pg_to_pg(pg);
+  map<pg_t,vector<int> >::const_iterator p = pg_temp.find(pg);
+  if (p != pg_temp.end()) {
+    temp.clear();
+    for (unsigned i=0; i<p->second.size(); i++) {
+      if (!exists(p->second[i]) || is_down(p->second[i]))
+	continue;
+      temp.push_back(p->second[i]);
+    }
+    return true;
+  }
+  return false;
+}
+
+int OSDMap::pg_to_osds(pg_t pg, vector<int>& raw) const
+{
+  const pg_pool_t *pool = get_pg_pool(pg.pool());
+  if (!pool)
+    return 0;
+  return _pg_to_osds(*pool, pg, raw);
+}
+
+int OSDMap::pg_to_acting_osds(pg_t pg, vector<int>& acting) const
+{
+  const pg_pool_t *pool = get_pg_pool(pg.pool());
+  if (!pool)
+    return 0;
+  vector<int> raw;
+  _pg_to_osds(*pool, pg, raw);
+  if (!_raw_to_temp_osds(*pool, pg, raw, acting))
+    _raw_to_up_osds(pg, raw, acting);
+  return acting.size();
+}
+
+void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up)
+{
+  const pg_pool_t *pool = get_pg_pool(pg.pool());
+  if (!pool)
+    return;
+  vector<int> raw;
+  _pg_to_osds(*pool, pg, raw);
+  _raw_to_up_osds(pg, raw, up);
+}
+  
+void OSDMap::pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const
+{
+  const pg_pool_t *pool = get_pg_pool(pg.pool());
+  if (!pool)
+    return;
+  vector<int> raw;
+  _pg_to_osds(*pool, pg, raw);
+  _raw_to_up_osds(pg, raw, up);
+  if (!_raw_to_temp_osds(*pool, pg, raw, acting))
+    acting = up;
+}
+
+int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
+{
+  if (!nrep)
+    nrep = acting.size();
+  for (int i=0; i<nrep; i++) 
+    if (acting[i] == osd)
+      return i;
+  return -1;
+}
+
+int OSDMap::calc_pg_role(int osd, vector<int>& acting, int nrep)
+{
+  if (!nrep)
+    nrep = acting.size();
+  int rank = calc_pg_rank(osd, acting, nrep);
+    
+  if (rank < 0)
+    return PG_ROLE_STRAY;
+  else if (rank == 0) 
+    return PG_ROLE_HEAD;
+  else if (rank == 1) 
+    return PG_ROLE_ACKER;
+  else
+    return PG_ROLE_MIDDLE;
+}
+
 
 // serialize, unserialize
 void OSDMap::encode_client_old(bufferlist& bl) const
