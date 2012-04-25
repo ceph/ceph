@@ -477,9 +477,8 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     goto didit;
   }
 
-  // NODOWN?
-  if (osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
-    dout(5) << "preprocess_failure NODOWN flag set, ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
+  if (!can_mark_down(badboy)) {
+    dout(5) << "preprocess_failure ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
     goto didit;
   }
 
@@ -488,6 +487,42 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
  didit:
   m->put();
+  return true;
+}
+
+bool OSDMonitor::can_mark_down(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
+    dout(5) << "can_mark_down NODOWN flag set, will not mark osd." << i << " down" << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool OSDMonitor::can_mark_up(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
+    dout(5) << "can_mark_up NOUP flag set, will not mark osd." << i << " up" << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool OSDMonitor::can_mark_out(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
+    dout(5) << "can_mark_out NOOUT flag set, will not mark osds out" << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool OSDMonitor::can_mark_in(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
+    dout(5) << "can_mark_in NOIN flag set, will not mark osd." << i << " in" << dendl;
+    return false;
+  }
   return true;
 }
 
@@ -602,8 +637,8 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   }
 
   // noup?
-  if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
-    dout(7) << "preprocess_boot NOUP set, informing " << m->get_orig_source_inst() << dendl;
+  if (!can_mark_up(from)) {
+    dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
     send_latest(m, m->sb.current_epoch+1);
     return true;
   }
@@ -662,10 +697,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if ((g_conf->mon_osd_auto_mark_auto_out_in && (oldstate & CEPH_OSD_AUTOOUT)) ||
 	(g_conf->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
 	(g_conf->mon_osd_auto_mark_in)) {
-      if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
-	dout(7) << "prepare_boot NOIN set, will not mark in " << m->get_orig_source_addr() << dendl;
-      } else {
+      if (can_mark_in(from)) {
 	pending_inc.new_weight[from] = CEPH_OSD_IN;
+      } else {
+	dout(7) << "prepare_boot NOIN set, will not mark in " << m->get_orig_source_addr() << dendl;
       }
     }
 
@@ -1099,7 +1134,7 @@ void OSDMonitor::tick()
   // mark down osds out?
   utime_t now = ceph_clock_now(g_ceph_context);
 
-  if (!osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
+  if (can_mark_out(-1)) {
     map<int,utime_t>::iterator i = down_pending_out.begin();
     while (i != down_pending_out.end()) {
       int o = i->first;
@@ -1220,7 +1255,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     if (t == last_osd_report.end()) {
       // it wasn't in the map; start the timer.
       last_osd_report[i] = now;
-    } else if (!osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
+    } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff

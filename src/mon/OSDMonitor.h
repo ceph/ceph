@@ -67,6 +67,11 @@ private:
   bool prepare_update(PaxosServiceMessage *m);
   bool should_propose(double &delay);
 
+  bool can_mark_down(int o);
+  bool can_mark_up(int o);
+  bool can_mark_out(int o);
+  bool can_mark_in(int o);
+
   // ...
   void send_to_waiting();     // send current map to waiters.
   MOSDMap *build_latest_full();
