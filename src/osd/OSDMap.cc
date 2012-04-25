@@ -479,9 +479,9 @@ void OSDMap::set_max_osd(int m)
     osd_weight[o] = CEPH_OSD_OUT;
   }
   osd_info.resize(m);
-  osd_addr.resize(m);
-  osd_cluster_addr.resize(m);
-  osd_hb_addr.resize(m);
+  osd_addrs->client_addr.resize(m);
+  osd_addrs->cluster_addr.resize(m);
+  osd_addrs->hb_addr.resize(m);
 
   calc_num_osds();
 }
@@ -548,16 +548,16 @@ void OSDMap::adjust_osd_weights(const map<int,double>& weights, Incremental& inc
 
 int OSDMap::identify_osd(const entity_addr_t& addr) const
 {
-  for (unsigned i=0; i<osd_addr.size(); i++)
-    if ((osd_addr[i] == addr) || (osd_cluster_addr[i] == addr))
+  for (int i=0; i<max_osd; i++)
+    if ((get_addr(i) == addr) || (get_cluster_addr(i) == addr))
       return i;
   return -1;
 }
 
 bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
-  for (unsigned i=0; i<osd_addr.size(); i++)
-    if (osd_addr[i].is_same_host(ip) || osd_cluster_addr[i].is_same_host(ip))
+  for (int i=0; i<max_osd; i++)
+    if (get_addr(i).is_same_host(ip) || get_cluster_addr(i).is_same_host(ip))
       return i;
   return -1;
 }
@@ -634,17 +634,17 @@ int OSDMap::apply_incremental(Incremental &inc)
        i != inc.new_up_client.end();
        i++) {
     osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
-    osd_addr[i->first] = i->second;
+    osd_addrs->client_addr[i->first].reset(new entity_addr_t(i->second));
     if (inc.new_hb_up.empty())
-      osd_hb_addr[i->first] = i->second;	//this is a backward-compatibility hack
+      osd_addrs->hb_addr[i->first].reset(new entity_addr_t(i->second)); //this is a backward-compatibility hack
     else
-      osd_hb_addr[i->first] = inc.new_hb_up[i->first];
+      osd_addrs->hb_addr[i->first].reset(new entity_addr_t(inc.new_hb_up[i->first]));
     osd_info[i->first].up_from = epoch;
   }
   for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
        i != inc.new_up_internal.end();
        i++)
-    osd_cluster_addr[i->first] = i->second;
+    osd_addrs->cluster_addr[i->first].reset(new entity_addr_t(i->second));
   // info
   for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
        i != inc.new_up_thru.end();
@@ -887,7 +887,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   ::encode(max_osd, bl);
   ::encode(osd_state, bl);
   ::encode(osd_weight, bl);
-  ::encode(osd_addr, bl);
+  ::encode(osd_addrs->client_addr, bl);
 
   // for ::encode(pg_temp, bl);
   n = pg_temp.size();
@@ -931,7 +931,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(max_osd, bl);
   ::encode(osd_state, bl);
   ::encode(osd_weight, bl);
-  ::encode(osd_addr, bl);
+  ::encode(osd_addrs->client_addr, bl);
 
   ::encode(pg_temp, bl);
 
@@ -943,10 +943,10 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   // extended
   __u16 ev = CEPH_OSDMAP_VERSION_EXT;
   ::encode(ev, bl);
-  ::encode(osd_hb_addr, bl);
+  ::encode(osd_addrs->hb_addr, bl);
   ::encode(osd_info, bl);
   ::encode(blacklist, bl);
-  ::encode(osd_cluster_addr, bl);
+  ::encode(osd_addrs->cluster_addr, bl);
   ::encode(cluster_snapshot_epoch, bl);
   ::encode(cluster_snapshot, bl);
 }
@@ -1009,7 +1009,7 @@ void OSDMap::decode(bufferlist::iterator& p)
   ::decode(max_osd, p);
   ::decode(osd_state, p);
   ::decode(osd_weight, p);
-  ::decode(osd_addr, p);
+  ::decode(osd_addrs->client_addr, p);
   if (v <= 5) {
     pg_temp.clear();
     ::decode(n, p);
@@ -1032,16 +1032,16 @@ void OSDMap::decode(bufferlist::iterator& p)
   __u16 ev = 0;
   if (v >= 5)
     ::decode(ev, p);
-  ::decode(osd_hb_addr, p);
+  ::decode(osd_addrs->hb_addr, p);
   ::decode(osd_info, p);
   if (v < 5)
     ::decode(pool_name, p);
 
   ::decode(blacklist, p);
   if (ev >= 6)
-    ::decode(osd_cluster_addr, p);
+    ::decode(osd_addrs->cluster_addr, p);
   else
-    osd_cluster_addr.resize(osd_addr.size());
+    osd_addrs->cluster_addr.resize(osd_addrs->client_addr.size());
 
   if (ev >= 7) {
     ::decode(cluster_snapshot_epoch, p);

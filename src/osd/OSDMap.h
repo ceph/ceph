@@ -170,9 +170,14 @@ private:
   int num_osd;         // not saved
   int32_t max_osd;
   vector<uint8_t> osd_state;
-  vector<entity_addr_t> osd_addr;
-  vector<entity_addr_t> osd_cluster_addr;
-  vector<entity_addr_t> osd_hb_addr;
+
+  struct addrs_s {
+    vector<std::tr1::shared_ptr<entity_addr_t> > client_addr;
+    vector<std::tr1::shared_ptr<entity_addr_t> > cluster_addr;
+    vector<std::tr1::shared_ptr<entity_addr_t> > hb_addr;
+  };
+  std::tr1::shared_ptr<addrs_s> osd_addrs;
+
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
   map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
@@ -198,6 +203,7 @@ private:
 	     pool_max(-1),
 	     flags(0),
 	     num_osd(0), max_osd(0),
+	     osd_addrs(new addrs_s),
 	     cluster_snapshot_epoch(0) { 
     memset(&fsid, 0, sizeof(fsid));
   }
@@ -307,34 +313,29 @@ private:
   }
   const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
-    return osd_addr[osd];
+    return *osd_addrs->client_addr[osd];
   }
   const entity_addr_t &get_cluster_addr(int osd) const {
     assert(exists(osd));
-    if (osd_cluster_addr[osd] == entity_addr_t())
+    if (*osd_addrs->cluster_addr[osd] == entity_addr_t())
       return get_addr(osd);
-    return osd_cluster_addr[osd];
+    return *osd_addrs->cluster_addr[osd];
   }
   const entity_addr_t &get_hb_addr(int osd) const {
     assert(exists(osd));
-    return osd_hb_addr[osd];
+    return *osd_addrs->hb_addr[osd];
   }
   entity_inst_t get_inst(int osd) const {
-    assert(exists(osd));
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), osd_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
   }
   entity_inst_t get_cluster_inst(int osd) const {
-    assert(exists(osd));
     assert(is_up(osd));
-    if (osd_cluster_addr[osd] == entity_addr_t())
-      return get_inst(osd);
-    return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), get_cluster_addr(osd));
   }
   entity_inst_t get_hb_inst(int osd) const {
-    assert(exists(osd));
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), osd_hb_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), get_hb_addr(osd));
   }
 
   const epoch_t& get_up_from(int osd) const {
