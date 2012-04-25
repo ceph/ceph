@@ -634,15 +634,45 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   {
     if (length() != other.length())
       return false;
-    bufferlist::iterator me = begin();
-    bufferlist::iterator him = other.begin();
-    while (!me.end()) {
-      if (*me != *him)
-        return false;
-      ++me;
-      ++him;
+
+    // buffer-wise comparison
+    if (true) {
+      std::list<ptr>::const_iterator a = _buffers.begin();
+      std::list<ptr>::const_iterator b = other._buffers.begin();
+      unsigned aoff = 0, boff = 0;
+      while (a != _buffers.end()) {
+	unsigned len = a->length() - aoff;
+	if (len > b->length() - boff)
+	  len = b->length() - boff;
+	if (memcmp(a->c_str() + aoff, b->c_str() + boff, len) != 0)
+	  return false;
+	aoff += len;
+	if (aoff == a->length()) {
+	  aoff = 0;
+	  a++;
+	}
+	boff += len;
+	if (boff == b->length()) {
+	  boff = 0;
+	  b++;
+	}
+      }
+      assert(b == other._buffers.end());
+      return true;
     }
-    return true;
+
+    // byte-wise comparison
+    if (false) {
+      bufferlist::iterator me = begin();
+      bufferlist::iterator him = other.begin();
+      while (!me.end()) {
+	if (*me != *him)
+	  return false;
+	++me;
+	++him;
+      }
+      return true;
+    }
   }
 
   bool buffer::list::is_page_aligned() const
