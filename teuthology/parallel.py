@@ -36,6 +36,7 @@ class parallel(object):
         self.results = gevent.queue.Queue()
         self.count = 0
         self.any_spawned = False
+        self.iteration_stopped = False
 
     def spawn(self, func, *args, **kwargs):
         self.count += 1
@@ -65,10 +66,12 @@ class parallel(object):
         return self
 
     def next(self):
-        if not self.any_spawned:
+        if not self.any_spawned or self.iteration_stopped:
             raise StopIteration()
         result = self.results.get()
         if isinstance(result, BaseException):
+            if isinstance(result, StopIteration):
+                self.iteration_stopped = True
             raise result
         return result
 
