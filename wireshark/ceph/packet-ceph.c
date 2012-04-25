@@ -18,18 +18,21 @@
 # include "config.h"
 #endif
 
+
 #include <stdio.h>
 #include <glib.h>
 #include <epan/packet.h>
+#include <epan/tvbuff.h>
+#include <epan/tvbuff-int.h>
+
 #include <epan/dissectors/packet-tcp.h>
 
 #include "types.h"
-
 #include "crc32c.h"
-
 #include <string.h>
 
 #define PROTO_TAG_CEPH	"CEPH"
+#define AUTH_LEN		174
 
 /* Wireshark ID of the CEPH protocol */
 static int proto_ceph = -1;
@@ -69,6 +72,14 @@ static guint32 global_ceph_max_mon_port = 6799;
 #define PROTO_ADD_TEXT(type, s, field, modifier)\
 	proto_tree_add_text(tree, tvb, offset + offsetof(type, field), sizeof(s->field), "" #field ": " modifier, s->field);
 
+#define PROTO_ADD_SIMPLE_TEXT(tree,getter,format,var)\
+	do { \
+	    var = getter(tvb,offset); \
+	    proto_tree_add_text(tree, tvb, offset, sizeof(var), format, var);\
+	    offset += sizeof(var); \
+	} while(0)
+
+
 #define PROTO_ADD_ITEM(tree, type, hf, s, field) \
 	proto_tree_add_item(tree, hf, tvb, offset + offsetof(type, field), sizeof(s->field), TRUE);
 
@@ -91,6 +102,11 @@ static const value_string packettypenames[] = {
 	{ 11, "Client Mount Ack" },
 	{ 12, "Client Unmount" },
 	{ 13, "Statfs" },
+	{ 14, "Statfs Reply" },
+	{ 15, "Mon Subscribe" },
+	{ 16, "Mon Subscribe Ack" },
+	{ 17, "Authentication" },
+	{ 18, "Authentication reply" },
 	{ 20, "MDS Get Map" },
 	{ 21, "MDS Map" },
 	{ 22, "Client Session" },
@@ -101,10 +117,14 @@ static const value_string packettypenames[] = {
 	{ 0x310, "Client Caps" },
 	{ 0x311, "Client Lease" },
 	{ 0x312, "Client Snap" },
+	{ 0x313, "Client Cap Release" },
 	{ 40, "OSD Get Map" },
 	{ 41, "OSD Map" },
 	{ 42, "OSD Op" },
 	{ 43, "OSD Op Reply" },
+	{ 44, "Watch Notify" },
+	{ 48, "Poolop Reply" },
+	{ 49, "Poolop" },
 	{ 0, NULL }
 };	
 
@@ -168,7 +188,11 @@ static gint hf_ceph_footer_flags = -1;
 static gint hf_ceph_footer_front_crc = -1;
 static gint hf_ceph_footer_middle_crc = -1;
 static gint hf_ceph_footer_data_crc = -1;
-
+static gint hf_ceph_monmap = -1;
+static gint hf_ceph_mdsmap = -1;
+static gint hf_ceph_mdsnode = -1;
+static gint hf_ceph_auth_reply = -1;
+static gint hf_ceph_pgpools = -1;
 
 /* These are the ids of the subtrees that we may be creating */
 static gint ett_ceph = -1;
@@ -181,6 +205,65 @@ static gint ett_ceph_text = -1;
 static gint ett_ceph_front = -1;
 static gint ett_ceph_data = -1;
 static gint ett_ceph_footer = -1;
+
+
+const char *ceph_cap_op_name(int op)
+{
+        char* plop = malloc(16*sizeof(char));
+        sprintf(plop,"%i",op);
+        switch (op) {
+        case CEPH_CAP_OP_GRANT: return "grant";
+        case CEPH_CAP_OP_REVOKE: return "revoke";
+        case CEPH_CAP_OP_TRUNC: return "trunc";
+        case CEPH_CAP_OP_EXPORT: return "export";
+        case CEPH_CAP_OP_IMPORT: return "import";
+        case CEPH_CAP_OP_UPDATE: return "update";
+        case CEPH_CAP_OP_DROP: return "drop";
+        case CEPH_CAP_OP_FLUSH: return "flush";
+        case CEPH_CAP_OP_FLUSH_ACK: return "flush_ack";
+        case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
+        case CEPH_CAP_OP_FLUSHSNAP_ACK: return "flushsnap_ack";
+        case CEPH_CAP_OP_RELEASE: return "release";
+        case CEPH_CAP_OP_RENEW: return "renew";
+        }
+        return plop;
+}
+
+const char *ceph_mds_op_name(int op)
+{
+  char* plop = malloc(16*sizeof(char));
+         sprintf(plop,"%i",op);
+        switch (op) {
+        case CEPH_MDS_OP_LOOKUP:  return "lookup";
+        case CEPH_MDS_OP_LOOKUPHASH:  return "lookuphash";
+        case CEPH_MDS_OP_LOOKUPPARENT:  return "lookupparent";
+        case CEPH_MDS_OP_LOOKUPINO:  return "lookupino";
+        case CEPH_MDS_OP_GETATTR:  return "getattr";
+        case CEPH_MDS_OP_SETXATTR: return "setxattr";
+        case CEPH_MDS_OP_SETATTR: return "setattr";
+        case CEPH_MDS_OP_RMXATTR: return "rmxattr";
+        case CEPH_MDS_OP_SETLAYOUT: return "setlayou";
+        case CEPH_MDS_OP_SETDIRLAYOUT: return "setdirlayout";
+        case CEPH_MDS_OP_READDIR: return "readdir";
+        case CEPH_MDS_OP_MKNOD: return "mknod";
+        case CEPH_MDS_OP_LINK: return "link";
+        case CEPH_MDS_OP_UNLINK: return "unlink";
+        case CEPH_MDS_OP_RENAME: return "rename";
+        case CEPH_MDS_OP_MKDIR: return "mkdir";
+        case CEPH_MDS_OP_RMDIR: return "rmdir";
+        case CEPH_MDS_OP_SYMLINK: return "symlink";
+        case CEPH_MDS_OP_CREATE: return "create";
+        case CEPH_MDS_OP_OPEN: return "open";
+        case CEPH_MDS_OP_LOOKUPSNAP: return "lookupsnap";
+        case CEPH_MDS_OP_LSSNAP: return "lssnap";
+        case CEPH_MDS_OP_MKSNAP: return "mksnap";
+        case CEPH_MDS_OP_RMSNAP: return "rmsnap";
+        case CEPH_MDS_OP_SETFILELOCK: return "setfilelock";
+        case CEPH_MDS_OP_GETFILELOCK: return "getfilelock";
+        }
+        return plop;
+}
+
 
 
 void proto_reg_handoff_ceph(void)
@@ -207,8 +290,23 @@ void proto_register_ceph (void)
 	*/
 	static hf_register_info hf[] = {
 		{ &hf_ceph,
-			{ "Data", "ceph.data", FT_NONE, BASE_NONE, NULL, 0x0,
+			{ "Data", "ceph.data", FT_NONE , BASE_NONE, NULL, 0,
 			"CEPH PDU", HFILL }},
+		{ &hf_ceph_pgpools,
+			{ "pgpools", "ceph.pgpools", FT_NONE , BASE_NONE, NULL, 0,
+			"CEPH PG Pools", HFILL }},
+		{ &hf_ceph_monmap,
+			{ "MON map", "ceph.monmap", FT_NONE , BASE_NONE, NULL, 0,
+			"CEPH MON map", HFILL }},
+		{ &hf_ceph_mdsmap,
+			{ "MDS map", "ceph.mdsmap", FT_NONE , BASE_NONE, NULL, 0,
+			"CEPH MDS map", HFILL }},
+		{ &hf_ceph_mdsnode,
+			{ "MDS node", "ceph.mdsnode", FT_NONE , BASE_NONE, NULL, 0,
+			"CEPH MDS node", HFILL }},
+		{ &hf_ceph_auth_reply,
+			{ "Authentication reply", "ceph.auth.reply", FT_NONE , BASE_NONE, NULL, 0,
+			"CEPH Authentication reply", HFILL }},
 		{ &hf_ceph_header,
 			{ "Header", "ceph.header", FT_NONE, BASE_NONE, NULL, 0x0,
 		 	"CEPH Header", HFILL }},
@@ -219,7 +317,7 @@ void proto_register_ceph (void)
 			{ "Ceph Entity Type", "ceph.entity.type", FT_UINT32, BASE_DEC, NULL, 0x0,
 			"Ceph Entity Type", HFILL }},
 		{ &hf_ceph_entity_num,
-			{ "Ceph Entity Num", "ceph.entity.num", FT_UINT32, BASE_DEC, NULL, 0x0,
+			{ "Ceph Entity Num", "ceph.entity.num", FT_UINT64, BASE_DEC, NULL, 0x0,
 			"Ceph Entity Num", HFILL }},
 		{ &hf_ceph_entity_addr,
 			{ "Ceph Entity Addr", "ceph.entity.addr", FT_NONE, BASE_NONE, NULL, 0x0,
@@ -339,10 +437,10 @@ void proto_register_ceph (void)
 			{ "Front", "ceph.front", FT_NONE, BASE_NONE, NULL, 0x0,
 		 	"Ceph Front", HFILL }},
 		{ &hf_ceph_data,
-			{ "Data", "ceph.data", FT_NONE, BASE_HEX, NULL, 0x0,
+			{ "Data", "ceph.data", FT_NONE, BASE_NONE, NULL, 0x0,
 		 	"Ceph Data", HFILL }},
 		{ &hf_ceph_footer,
-			{ "Footer", "ceph.footer", FT_NONE, BASE_HEX, NULL, 0x0,
+			{ "Footer", "ceph.footer", FT_NONE, BASE_NONE, NULL, 0x0,
 		 	"Ceph Footer", HFILL }},
 		{ &hf_ceph_footer_flags,
 			{ "flags", "ceph.footer.flags", FT_UINT32, BASE_HEX, NULL, 0x0,
@@ -367,7 +465,7 @@ void proto_register_ceph (void)
 		&ett_ceph_text,
 		&ett_ceph_data,
 		&ett_ceph_front,
-		&ett_ceph_footer
+		&ett_ceph_footer,
 	};
 	//if (proto_ceph == -1) { /* execute protocol initialization only once */
 	proto_ceph = proto_register_protocol ("CEPH Protocol", "CEPH", "ceph");
@@ -430,39 +528,29 @@ static guint32 dissect_ceph_entity_addr(tvbuff_t *tvb, proto_tree *tree, guint32
 
 static guint32 dissect_ceph_fsid(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
 {
-	proto_tree *ceph_entity_tree = NULL;
-	proto_item *ceph_sub_item = NULL;
-	struct ceph_fsid *fsid;
-
-	fsid = (struct ceph_fsid *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_fsid));
-
-	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_fsid, tvb, offset, sizeof(struct ceph_entity_addr), TRUE );
-	ceph_entity_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
-
-	proto_tree_add_item(ceph_entity_tree, hf_ceph_connect_erank, tvb, offset, 4, TRUE);
-	proto_tree_add_item(ceph_entity_tree, hf_ceph_connect_nonce, tvb, offset+4, 4, TRUE);
-
-	proto_tree_add_text(tree, tvb, 0, 
-				sizeof(struct ceph_fsid), "fsid: " FMT_INO "." FMT_INO, ((unsigned long long *)fsid->fsid)[0], ((unsigned long long *)fsid->fsid)[1]);
-	
+	struct ceph_fsid fsid;
+	guint32 * fsid_dec = NULL;
+	fsid_dec = malloc(4*sizeof(guint32));
+	fsid = *(struct ceph_fsid *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_fsid));
+	memcpy(fsid_dec,fsid.fsid,4*sizeof(guint32));
+	proto_tree_add_text(tree, tvb, offset,sizeof(struct ceph_fsid), "fsid: %x-%x-%x-%x",
+			ntohl(fsid_dec[0]),
+			ntohl(fsid_dec[1]),
+			ntohl(fsid_dec[2]),
+			ntohl(fsid_dec[3])
+			);
 	offset += sizeof(struct ceph_fsid);
-
 	return offset;
 }
 
-static guint32 dissect_ceph_entity_inst(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
+guint32 dissect_ceph_entity_name(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
 {
-	proto_tree *ceph_entity_tree = NULL;
-	proto_item *ceph_sub_item = NULL;
-
-	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_entity_addr, tvb, offset, sizeof(struct ceph_entity_addr), TRUE );
-	ceph_entity_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
-	proto_tree_add_item(ceph_entity_tree, hf_ceph_entity_type, tvb, offset, 4, TRUE);
-	proto_tree_add_item(ceph_entity_tree, hf_ceph_entity_num, tvb, offset+4, 4, TRUE);
-	offset += 8;
-	offset = dissect_ceph_entity_addr(tvb, ceph_entity_tree, offset);
+	proto_tree_add_item(tree, hf_ceph_entity_type, tvb, offset, 1, TRUE);
+	proto_tree_add_item(tree, hf_ceph_entity_num, tvb, offset+1, 8, TRUE);
+	offset += sizeof(struct ceph_entity_name);
 	return offset;
 }
+
 
 static guint32 dissect_ceph_footer(tvbuff_t *tvb, proto_tree *tree, guint32 offset, guint32 data_crc)
 {
@@ -472,13 +560,13 @@ static guint32 dissect_ceph_footer(tvbuff_t *tvb, proto_tree *tree, guint32 offs
 
 	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_footer, tvb, offset, sizeof(struct ceph_msg_footer), TRUE );
 	ceph_footer_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
-	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_flags, tvb, offset, 4, TRUE);
-	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_front_crc, tvb, offset+4, 4, TRUE);
-	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_middle_crc, tvb, offset+8, 4, TRUE);
-	data_crc_item = proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_data_crc, tvb, offset+12, 4, TRUE);
+	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_front_crc, tvb, offset, 4, TRUE);
+	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_middle_crc, tvb, offset+4, 4, TRUE);
+	data_crc_item = proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_data_crc, tvb, offset+8, 4, TRUE);
 	proto_item_append_text(data_crc_item, " (calculated %x)", data_crc);
+	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_flags, tvb, offset+12, 1, TRUE);
 
-	offset += 12;
+	offset += 13;
 	return offset;
 }
 
@@ -488,6 +576,7 @@ static guint32 dissect_ceph_client_connect(tvbuff_t *tvb, proto_tree *tree, guin
 	proto_item *ceph_sub_item = NULL;
 	proto_item *ceph_item = proto_tree_get_parent(tree);
 	struct ceph_msg_connect *msg;
+	guint32 auth_len = 0;
 
 	offset = dissect_ceph_banner(tvb, tree, offset);
 
@@ -507,12 +596,19 @@ static guint32 dissect_ceph_client_connect(tvbuff_t *tvb, proto_tree *tree, guin
 #endif
 
 	msg = (struct ceph_msg_connect *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_msg_connect));
+	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, features, "%lld");
 	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, host_type, "%d");
-	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, global_seq, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, connect_seq, "%d");
+	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, global_seq, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, protocol_version, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, flags, "%x");
-
+	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, authorizer_protocol, "%d");
+	PROTO_ADD_TEXT(struct ceph_msg_connect, msg, authorizer_len, "%d");
+	offset += sizeof(struct ceph_msg_connect);
+	auth_len = msg->authorizer_len;
+	auth_len = 174;
+	proto_tree_add_text(tree,tvb, offset, auth_len, "Authentication key");
+	offset += auth_len;
 	return offset;
 }
 
@@ -534,9 +630,11 @@ static guint32 dissect_ceph_server_connect(tvbuff_t *tvb, proto_tree *tree, guin
 	offset = dissect_ceph_entity_addr(tvb, ceph_header_tree, offset);
 	msg = (struct ceph_msg_connect_reply *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_msg_connect_reply));
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, tag, "%d");
+	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, features, "%lld");
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, global_seq, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, connect_seq, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, protocol_version, "%d");
+	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, authorizer_len, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, flags, "%x");
 
 	return offset;
@@ -594,7 +692,7 @@ static guint32 dissect_ceph_mon_statfs(tvbuff_t *tvb, proto_tree *tree, guint32 
 	req = (struct ceph_mon_statfs *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_mon_statfs));
 	
 	dissect_ceph_fsid(tvb, tree, offset + offsetof(struct ceph_mon_statfs, fsid));
-	PROTO_ADD_TEXT(struct ceph_mon_statfs, req, tid, "%lld");
+	PROTO_ADD_TEXT(struct ceph_mon_statfs, req, monhdr.session_mon_tid, "%lld");
 
 	return offset + sizeof(struct ceph_mon_statfs);
 }
@@ -606,7 +704,8 @@ static guint32 dissect_ceph_mon_statfs_reply(tvbuff_t *tvb, proto_tree *tree, gu
 	req = (struct ceph_mon_statfs_reply *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_mon_statfs_reply));
 	
 	dissect_ceph_fsid(tvb, tree, offset + offsetof(struct ceph_mon_statfs_reply, fsid));
-	PROTO_ADD_TEXT(struct ceph_mon_statfs_reply, req, tid, "%lld");
+	PROTO_ADD_TEXT(struct ceph_mon_statfs_reply, req, version, "%lld");
+
 	PROTO_ADD_TEXT(struct ceph_mon_statfs_reply, req, st.kb, "%lld");
 	PROTO_ADD_TEXT(struct ceph_mon_statfs_reply, req, st.kb_used, "%lld");
 	PROTO_ADD_TEXT(struct ceph_mon_statfs_reply, req, st.kb_avail, "%lld");
@@ -646,7 +745,7 @@ static guint32 dissect_ceph_client_mds_request(tvbuff_t *tvb, packet_info *pinfo
 
 	head = (struct ceph_mds_request_head *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_mds_request_head));
 	
-	PROTO_ADD_TEXT(struct ceph_mds_request_head, head, tid, "%lld");
+	//PROTO_ADD_TEXT(struct ceph_mds_request_head, head, tid, "%lld");
 	PROTO_ADD_TEXT(struct ceph_mds_request_head, head, oldest_client_tid, "%lld");
 	PROTO_ADD_TEXT(struct ceph_mds_request_head, head, mdsmap_epoch, "%d");
 	PROTO_ADD_TEXT(struct ceph_mds_request_head, head, num_retry, "%d");
@@ -695,6 +794,7 @@ static guint32 dissect_ceph_client_mds_request(tvbuff_t *tvb, packet_info *pinfo
 	case CEPH_MDS_OP_LSSNAP:
 	case CEPH_MDS_OP_MKSNAP:
 	case CEPH_MDS_OP_RMSNAP:
+	case CEPH_MDS_OP_CREATE:
 		break;
 	}
 
@@ -730,7 +830,7 @@ static guint32 dissect_ceph_client_mds_reply(tvbuff_t *tvb, packet_info *pinfo, 
 
 	head = (struct ceph_mds_reply_head *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_mds_reply_head));
 	
-	PROTO_ADD_TEXT(struct ceph_mds_reply_head, head, tid, "%lld");
+	//PROTO_ADD_TEXT(struct ceph_mds_reply_head, head, tid, "%lld");
 
 	proto_tree_add_text(tree, tvb, offsetof(struct ceph_mds_reply_head, op), 
 				sizeof(head->op), "op: %d (%s)", head->op, ceph_mds_op_name(head->op));
@@ -789,7 +889,7 @@ static guint32 dissect_ceph_client_mds_caps_request(tvbuff_t *tvb, packet_info *
 	PROTO_ADD_TEXT(struct ceph_mds_caps, head, snap_follows, "%llu");
 	PROTO_ADD_TEXT(struct ceph_mds_caps, head, snap_trace_len, "%d");
 
-#define CAPS_REQ_ADD_TIME(field) PROTO_ADD_TIME(tvb, tree, struct ceph_mds_caps, offset, head, field, field) 
+#define CAPS_REQ_ADD_TIME(field) PROTO_ADD_TIME(tvb, tree, struct ceph_mds_caps, offset, head, field, field)
 	CAPS_REQ_ADD_TIME(mtime);
 	CAPS_REQ_ADD_TIME(atime);
 	CAPS_REQ_ADD_TIME(ctime);
@@ -801,9 +901,163 @@ static guint32 dissect_ceph_client_mds_caps_request(tvbuff_t *tvb, packet_info *
 	return orig_ofs + sizeof(struct ceph_mds_caps);
 }
 
-static guint32 dissect_ceph_client_front(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, guint16 type)
+static guint32 dissect_ceph_auth_reply(tvbuff_t *tvb, proto_tree *tree, guint32 offset){
+	guint32 protocol, result, payload_len,str_len;
+	guint64 global_id;
+	proto_item *ceph_sub_item = NULL;
+	proto_item *ceph_item = proto_tree_get_parent(tree);
+    proto_tree *ceph_auth_reply_tree;
+
+    ceph_auth_reply_tree = proto_item_add_subtree(ceph_item, ett_ceph);
+	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_auth_reply, tvb, offset, 16, TRUE );
+    ceph_auth_reply_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
+
+    PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letohl,"protocol: %d",protocol);
+    PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letohl,"result: %d",result);
+    PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letoh64,"global_id: %lu", global_id);
+    PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letohl,"payload_len: %d",payload_len);
+
+    str_len = tvb_get_letohl(tvb,offset+payload_len);
+    proto_tree_add_text(ceph_auth_reply_tree, tvb, offset+payload_len, str_len,"%s",tvb_get_const_stringz(tvb,offset,&str_len));
+	return offset;
+}
+
+static guint32 dissect_ceph_pgpools(tvbuff_t *tvb, proto_tree *tree, guint32 offset){
+	guint32 n, i, pool;
+	proto_item *ceph_item = proto_tree_get_parent(tree);
+	proto_tree *ceph_pgpools_tree;
+	proto_item *ceph_sub_item = NULL;
+	ceph_pgpools_tree = proto_item_add_subtree(ceph_item, ett_ceph);
+	ceph_sub_item = proto_tree_add_item(tree, hf_ceph_pgpools, tvb, offset, -1, TRUE );
+	ceph_pgpools_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
+    PROTO_ADD_SIMPLE_TEXT(ceph_pgpools_tree,tvb_get_letohl," %d pool(s)",n);
+    for ( i = 0; i<n; i++){
+        PROTO_ADD_SIMPLE_TEXT(ceph_pgpools_tree,tvb_get_letohl,"data_pg_pool: %d",pool);
+        PROTO_ADD_SIMPLE_TEXT(ceph_pgpools_tree,tvb_get_letohl,"cas_pg_pool: %d",pool);
+    }
+	return offset;
+}
+static guint32 dissect_ceph_mdsmap_node(tvbuff_t *tvb, proto_tree *tree, guint32 offset){
+	guint8 infoversion;
+	guint32 field, num_export_targets, i;
+	guint64 global_id, field64;
+	proto_item *ceph_item = proto_tree_get_parent(tree);
+	proto_tree *ceph_mdsnode_tree;
+	proto_item *ceph_sub_item = NULL;
+	struct ceph_timespec *cephtime = NULL;
+	time_t time;
+	ceph_mdsnode_tree = proto_item_add_subtree(ceph_item, ett_ceph);
+	ceph_sub_item = proto_tree_add_item(tree, hf_ceph_mdsnode, tvb, offset, -1, TRUE );
+	ceph_mdsnode_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
+
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"Global ID: %ld",global_id);
+	infoversion = *tvb_get_ptr(tvb,offset,sizeof(infoversion));
+	offset++;
+	offset+=sizeof(guint64);
+    proto_tree_add_text(ceph_mdsnode_tree, tvb, offset, sizeof(infoversion), "version: %d", infoversion);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"Name length: %d",field);
+    proto_tree_add_text(ceph_mdsnode_tree, tvb, offset, field,"MDS name: %s",tvb_get_const_stringz(tvb,offset,&field));
+    offset+=field-1;
+    PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"mds: %d",field);
+    PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"inc: %d",field);
+    PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"state: %d",field);
+    PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"state seq: %ld",field64);
+	offset = dissect_ceph_entity_addr(tvb, ceph_mdsnode_tree, offset);
+	cephtime = (struct ceph_timespec *) tvb_get_ptr(tvb, offset, sizeof(struct ceph_timespec));
+	time = cephtime->tv_sec;
+	proto_tree_add_text(ceph_mdsnode_tree, tvb, offset, sizeof(time), "Time: %s (%d ns)", ctime(&time), cephtime->tv_nsec);
+	offset += sizeof(struct ceph_timespec);
+	offset += sizeof(guint32);
+	offset += tvb_get_letohl(tvb,offset);
+	offset += sizeof(guint32);
+	//offset ++;
+	if (infoversion >= 2 ){
+		PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"num_export_targets: %d",num_export_targets);
+	}
+	else{
+		num_export_targets = 0;
+	}
+	for ( i = 0; i < num_export_targets ; i++){
+		PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"export_target: %d",field);
+	}
+
+	return offset;
+}
+
+static guint32 dissect_ceph_mon_map(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
+{
+	guint32 epoch, num_mon, len, i;
+	guint16 version;
+	proto_item *ceph_item = proto_tree_get_parent(tree);
+	proto_tree *ceph_monmap_tree;
+	proto_item *ceph_sub_item = NULL;
+	ceph_monmap_tree = proto_item_add_subtree(ceph_item, ett_ceph);
+	len = tvb_get_letohl(tvb,offset);
+	ceph_sub_item = proto_tree_add_item(tree, hf_ceph_monmap, tvb, offset, len, TRUE );
+	ceph_monmap_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
+
+	PROTO_ADD_SIMPLE_TEXT(ceph_monmap_tree,tvb_get_letohl,"length: %i",len);
+	PROTO_ADD_SIMPLE_TEXT(ceph_monmap_tree,tvb_get_letohs,"version: %i",version);
+	offset = dissect_ceph_fsid(tvb, ceph_monmap_tree, offset);
+	PROTO_ADD_SIMPLE_TEXT(ceph_monmap_tree,tvb_get_letohl,"epoch: %i",epoch);
+	PROTO_ADD_SIMPLE_TEXT(ceph_monmap_tree,tvb_get_letohl,"%i monitor",num_mon);
+	for (i = 0; i < num_mon; i++)
+		offset = dissect_ceph_entity_name(tvb, ceph_monmap_tree, offset);
+		offset = dissect_ceph_entity_addr(tvb, ceph_monmap_tree, offset);
+
+	return offset;
+}
+
+static guint32 dissect_ceph_mds_map(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
+{
+	guint16 version;
+	guint32 epoch, map_len, len, plop, i;
+	guint64 max_filesize;
+	proto_item *ceph_item = proto_tree_get_parent(tree);
+	proto_tree *ceph_mdsmap_tree;
+	proto_item *ceph_sub_item = NULL;
+	ceph_mdsmap_tree = proto_item_add_subtree(ceph_item, ett_ceph);
+	len = tvb_get_letohl(tvb,offset);
+	ceph_sub_item = proto_tree_add_item(tree, hf_ceph_mdsmap, tvb, offset, len, TRUE );
+	ceph_mdsmap_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
+	offset = dissect_ceph_fsid(tvb, ceph_mdsmap_tree, offset);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"epoch: %i",epoch);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"map length: %i",map_len);
+
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"version: %i",version);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_epoch: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_client_epoch: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_last_failure: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_root: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_session_timeout: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_session_autoclose: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letoh64,"m_maxfile_size: %ld",max_filesize);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_max_mds: %i",plop);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"n: %i",len);
+
+
+	for (i = 0; i < len; i++){
+		 offset = dissect_ceph_mdsmap_node(tvb, ceph_mdsmap_tree, offset);
+	}
+	offset = dissect_ceph_pgpools(tvb, ceph_mdsmap_tree, offset);
+	return offset;
+}
+
+static guint32 dissect_ceph_front(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, guint16 type)
 {
 	switch (type) {
+/*	case CEPH_MSG_AUTH:
+		offset = dissect_ceph_auth();
+		break;*/
+	case CEPH_MSG_AUTH_REPLY:
+		offset = dissect_ceph_auth_reply(tvb, tree, offset);
+		break;
+	case CEPH_MSG_MON_MAP:
+		offset = dissect_ceph_mon_map(tvb, tree, offset);
+		break;
+	case CEPH_MSG_MDS_MAP:
+		offset = dissect_ceph_mds_map(tvb, tree, offset);
+		break;
 	case CEPH_MSG_STATFS:
 		offset = dissect_ceph_mon_statfs(tvb, tree, offset);
 		break;
@@ -835,18 +1089,23 @@ static guint32 dissect_ceph_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	proto_item *ceph_item = proto_tree_get_parent(tree);
 	guint32 front_len, middle_len, data_len;
 	guint8 tag;
+	guint32 hlen;
 	guint32 orig_ofs = offset;
 	guint16 type;
 	guint64 seq;
 	struct ceph_msg_header *header;
     unsigned int data_crc = 0;
 
+    tag = tvb_get_guint8(tvb, offset);
+    hlen = ( tag == CEPH_MSGR_TAG_ACK ) ? ACK_MSG_SIZE:0;
+    hlen += sizeof(struct ceph_msg_header);
+    hlen++;
+
 	ceph_header_tree = proto_item_add_subtree(ceph_item, ett_ceph);
 
-	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_header, tvb, offset, -1, TRUE );
+	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_header, tvb, offset, hlen, TRUE );
 	ceph_header_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
 
-	tag = tvb_get_guint8(tvb, offset);
 
 	if (tag == CEPH_MSGR_TAG_ACK) {
 		proto_tree_add_item(ceph_header_tree, hf_ceph_hdr_tag, tvb, offset, 1, TRUE);
@@ -867,23 +1126,22 @@ static guint32 dissect_ceph_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	PROTO_ADD_ITEM(ceph_header_tree, struct ceph_msg_header, hf_ceph_hdr_middle_len, header, middle_len);
 	PROTO_ADD_ITEM(ceph_header_tree, struct ceph_msg_header, hf_ceph_hdr_data_off, header, data_off);
 	PROTO_ADD_ITEM(ceph_header_tree, struct ceph_msg_header, hf_ceph_hdr_data_len, header, data_len);
-	dissect_ceph_entity_inst(tvb, ceph_header_tree, offset + offsetof(struct ceph_msg_header, src));
-	dissect_ceph_entity_inst(tvb, ceph_header_tree, offset + offsetof(struct ceph_msg_header, orig_src));
 	PROTO_ADD_ITEM(ceph_header_tree, struct ceph_msg_header, hf_ceph_hdr_crc, header, crc);
-	
-	offset += sizeof(struct ceph_msg_header);
-	
+
+	// Bad location
+	dissect_ceph_entity_name(tvb, ceph_header_tree, offset + offsetof(struct ceph_msg_header, src));
+	//dissect_ceph_entity_inst(tvb, ceph_header_tree, offset + offsetof(struct ceph_msg_header, orig_src));
+
 	type = TVB_MSG_FIELD(tvb_get_letohl, tvb, orig_ofs, type);
 	seq = TVB_MSG_FIELD(tvb_get_letoh64, tvb, orig_ofs, seq);
 	front_len = TVB_MSG_FIELD(tvb_get_letohs, tvb, orig_ofs, front_len);
 	middle_len = TVB_MSG_FIELD(tvb_get_letohs, tvb, orig_ofs, middle_len);
 	data_len = TVB_MSG_FIELD(tvb_get_letohl, tvb, orig_ofs, data_len);
 
-	if (front_len) {
-	/*	ceph_sub_item = proto_tree_add_item( tree, hf_ceph_front, tvb, offset, front_len, TRUE );
-		offset += front_len; */
+	offset += sizeof(struct ceph_msg_header);
 
-		dissect_ceph_client_front(tvb, pinfo, tree, offset, type);
+	if (front_len) {
+		dissect_ceph_front(tvb, pinfo, tree, offset, type);
 		offset += front_len;
 	}
 
@@ -895,15 +1153,30 @@ static guint32 dissect_ceph_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 		char *data;
 		ceph_sub_item = proto_tree_add_item( tree, hf_ceph_data, tvb, offset, data_len, TRUE );
 	    data = (char *)tvb_get_ptr(tvb, offset, data_len);
-
-		data_crc = crc32c_le(0, data, data_len);
-
+		data_crc = ceph_crc32c_le(0, data, data_len);
 		offset += data_len;
 	}
-
 	offset = dissect_ceph_footer(tvb, tree, offset, data_crc);
-
 	return offset;
+}
+
+
+static const char *ceph_protocol_to_text(guint32 proto){
+	if ( proto == CEPH_OSD_PROTOCOL )
+		return "osd";
+	if ( proto == CEPH_MDS_PROTOCOL )
+		return "mds";
+	if ( proto == CEPH_MON_PROTOCOL )
+		return "mon";
+	if ( proto == CEPH_OSDC_PROTOCOL )
+		return "osd";
+	if ( proto == CEPH_MDSC_PROTOCOL )
+		return "mds";
+	if ( proto == CEPH_MONC_PROTOCOL )
+		return "mon";
+	else{
+		return "???";
+	}
 }
 
 static const char *entity_name_by_type(int type)
@@ -936,6 +1209,7 @@ dissect_ceph_client(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	proto_item *ceph_item = NULL;
 	proto_tree *ceph_tree = NULL;
 	guint16 type = 0;
+	guint32 proto = 0;
 	const guchar *ptr;
 	guint32 pos = 0;
 	int have_banner = 0;
@@ -955,7 +1229,8 @@ dissect_ceph_client(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
 	// This is not a good way of dissecting packets.  The tvb length should
 	// be sanity checked so we aren't going past the actual size of the buffer.
-	type = tvb_get_guint8( tvb, 4 ); // Get the type byte
+	type = tvb_get_guint8(tvb,4); // Get the type byte
+
 
 	if (check_col(pinfo->cinfo, COL_INFO)) {
 		const char *entity_str = NULL;
@@ -963,9 +1238,11 @@ dissect_ceph_client(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		if (have_banner) {
 			if (IS_MON(pinfo))
 				entity_str = MON_STR;
-			else 
-				entity_str = "???";
-
+			else{
+				// Guess communication type from "struct ceph_msg_connect"
+				proto = tvb_get_letohl(tvb,9 + sizeof(struct ceph_entity_addr) + 20);
+				entity_str = ceph_protocol_to_text(proto);
+			}
 			col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Connect Request", entity_str);
 		} else {
 			type = TVB_MSG_FIELD(tvb_get_letohl, tvb, 0, type);
@@ -1021,8 +1298,9 @@ dissect_ceph_server(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		const char *entity_str;
 			if (IS_MON(pinfo))
 				entity_str = MON_STR;
-			else 
+			else{
 				entity_str = "???";
+			}
 		if (have_banner) {
 			col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Connect Response", entity_str);
 		} else {
@@ -1084,19 +1362,19 @@ static guint get_ceph_message_len(packet_info *pinfo, tvbuff_t *tvb, int offset)
 	const char *ptr;
 	guint32 len;
 	guint32 pos = 0;
-
-	ptr = tvb_get_ptr(tvb, offset, /* sizeof(CEPH_BANNER) */tvb->length-offset);
+	guint32 tlen = (int) tvb->length;
+	ptr = tvb_get_ptr(tvb, offset, tlen - offset);
+	//ptr = tvb_get_ptr(tvb, offset, /* sizeof(CEPH_BANNER) */ (tvb->length)-offset);
 	if (ptr && memcmp(ptr, "ceph", 4) == 0) {
 		if (DEST_PORT_CEPH) {
 			len = sizeof(CEPH_BANNER) - 1 +
 				sizeof(struct ceph_entity_addr) +
-				sizeof(struct ceph_msg_connect);
+				sizeof(struct ceph_msg_connect) + AUTH_LEN;
 		} else
 			len = sizeof(CEPH_BANNER) - 1 +
 				sizeof(struct ceph_entity_addr) +
 				sizeof(struct ceph_entity_addr) +
 				sizeof(struct ceph_msg_connect_reply);
-
 		return len;
 	}
 
@@ -1114,18 +1392,39 @@ static guint get_ceph_message_len(packet_info *pinfo, tvbuff_t *tvb, int offset)
 }
 
 
-static void dissect_ceph(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
-{
+static void dissect_ceph(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree){
 	const char *ptr;
-
 	ptr = tvb_get_ptr(tvb, 0, 6);
-
-	if ((*ptr == CEPH_MSGR_TAG_MSG) || 
-            (memcmp(ptr, CEPH_BANNER, 4) == 0) || 
-	   ((ptr[0] == CEPH_MSGR_TAG_ACK) && (ptr[5] == CEPH_MSGR_TAG_MSG))
-	)  {
+	if(*ptr == CEPH_MSGR_TAG_RESETSESSION){
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CEPH);
+		col_add_fstr(pinfo->cinfo, COL_INFO, "Ceph reset session");
+	}
+	else if(*ptr == CEPH_MSGR_TAG_WAIT){
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CEPH);
+		col_add_fstr(pinfo->cinfo, COL_INFO, "Ceph I am waiting");
+	}
+	else if(*ptr == CEPH_MSGR_TAG_RETRY_SESSION){
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CEPH);
+		col_add_fstr(pinfo->cinfo, COL_INFO, "Ceph retry session");
+	}
+	else if(*ptr == CEPH_MSGR_TAG_RETRY_GLOBAL){
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CEPH);
+		col_add_fstr(pinfo->cinfo, COL_INFO, "Ceph retry global");
+	}
+	else if(*ptr == CEPH_MSGR_TAG_CLOSE){
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CEPH);
+		col_add_fstr(pinfo->cinfo, COL_INFO, "Ceph close");
+	}
+	else if(*ptr == CEPH_MSGR_TAG_KEEPALIVE){
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CEPH);
+		col_add_fstr(pinfo->cinfo, COL_INFO, "Ceph keep alive");
+	}
+	else if ((*ptr == CEPH_MSGR_TAG_MSG) ||
+			(memcmp(ptr, CEPH_BANNER, 4) == 0) ||
+			((ptr[0] == CEPH_MSGR_TAG_ACK) && (ptr[9] == CEPH_MSGR_TAG_MSG))
+	){
 		tcp_dissect_pdus(tvb, pinfo, tree, TRUE, TVB_MSG_HEADER_POS(src),
-			get_ceph_message_len, dissect_ceph_message);
+				get_ceph_message_len, dissect_ceph_message);
 	} else {
 		dissect_ceph_acks(tvb, pinfo, tree);
 	}

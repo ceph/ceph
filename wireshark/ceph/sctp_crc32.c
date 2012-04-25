@@ -31,15 +31,22 @@
 /* $KAME: sctp_crc32.c,v 1.12 2005/03/06 16:04:17 itojun Exp $	 */
 
 
-//#include <sys/cdefs.h>
-
-#include <glib.h>
-
-typedef guint8  uint8_t;
-typedef guint32 uint32_t;
-typedef unsigned long uintptr_t;
+#include <sys/cdefs.h>
+#if 0
+__FBSDID("$FreeBSD: src/sys/netinet/sctp_crc32.c,v 1.8 2007/05/08 17:01:10 rrs Exp $");
 
 
+#include <netinet/sctp_os.h>
+#include <netinet/sctp_crc32.h>
+#endif
+
+#include <stdint.h>
+
+#if defined(__FreeBSD__)
+#include <sys/endian.h>
+#else
+#include <endian.h>
+#endif
 
 #ifndef SCTP_USE_ADLER32
 
@@ -588,7 +595,7 @@ sctp_crc32c_sb8_64_bit(uint32_t crc,
  *
  *		none
  */
-uint32_t
+static uint32_t
 update_crc32(uint32_t crc32c,
     unsigned char const *buffer,
     unsigned int length)
@@ -672,7 +679,8 @@ uint32_t sctp_crc_c[256] = {
 
 #define SCTP_CRC32C(c,d) (c=(c>>8)^sctp_crc_c[(c^(d))&0xFF])
 
-uint32_t
+#if 0
+static uint32_t
 old_update_crc32(uint32_t crc32c,
     unsigned char const *buffer,
     unsigned int length)
@@ -686,7 +694,7 @@ old_update_crc32(uint32_t crc32c,
 }
 
 
-uint32_t
+static uint32_t
 sctp_csum_finalize(uint32_t crc32c)
 {
 	uint32_t result;
@@ -718,8 +726,9 @@ sctp_csum_finalize(uint32_t crc32c)
 #endif
 	return (crc32c);
 }
+#endif
 
-uint32_t crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
+uint32_t ceph_crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
 {
 	return update_crc32(crc, data, length);
 }
