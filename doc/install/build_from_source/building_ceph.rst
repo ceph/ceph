@@ -17,6 +17,10 @@ You can use ``make -j`` to execute multiple jobs depending upon your system. For
 
 	$ make -j4
 	
+To install Ceph locally, you may also use:: 
+
+	$ make install
+	
 Building Ceph Documentation
 ===========================
 Ceph utilizes Python’s Sphinx documentation tool. For details on the Sphinx documentation tool, refer to: `Sphinx <http://sphinx.pocoo.org>`_. To build the Ceph documentaiton, navigate to the Ceph repository and execute the build script::

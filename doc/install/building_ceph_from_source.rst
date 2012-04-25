@@ -5,12 +5,12 @@ Building Ceph from Source
 You can build Ceph from source by downloading a release or cloning the ``ceph`` repository at github. If you intend to build Ceph
 from source, please see the build pre-requisites first. Making sure you have all the pre-requisites will save you time.
 
-1. :doc:`Build Prerequisites <build_from_source/build_prerequisites>`
-2. Get Source Code
-	* :doc:`Downloading a Ceph Release <build_from_source/downloading_a_ceph_release>`
-	* :doc:`Cloning the Ceph Source Code Repository <build_from_source/cloning_the_ceph_source_code_repository>`
-3. :doc:`Building Ceph<build_from_source/building_ceph>`
-4. :doc:`Installing RADOS Processes and Daemons <build_from_source/installing_rados_processes_and_daemons>`
+- :doc:`Build Prerequisites <build_from_source/build_prerequisites>`
+- :doc:`Downloading a Ceph Release <build_from_source/downloading_a_ceph_release>`
+- :doc:`Cloning the Ceph Source Code Repository <build_from_source/cloning_the_ceph_source_code_repository>`
+- :doc:`Building Ceph<build_from_source/building_ceph>`
+- :doc:`Building Ceph Install Packages <build_from_source/build_packages>` 
+
 
 .. toctree::
    :hidden:
@@ -19,4 +19,4 @@ from source, please see the build pre-requisites first. Making sure you have all
    Get a Release <build_from_source/downloading_a_ceph_release>
    Clone the Source <build_from_source/cloning_the_ceph_source_code_repository>
    Build the Source <build_from_source/building_ceph>
-   Installation <build_from_source/installing_rados_processes_and_daemons>
+   Build a Package <build_from_source/build_packages>

@@ -17,7 +17,7 @@ repository. If you do not have SSH keys for ``github``, execute::
 
 	$ ssh-keygen -d
 	
-Get the key to add to your ``github`` account::
+Get the key to add to your ``github`` account (the following example assumes you used the default file path)::
 
 	$ cat .ssh/id_dsa.pub
 	
@@ -43,12 +43,20 @@ Once ``git clone`` executes, you should have a full copy of the Ceph repository.
 
 Clone the Submodules
 --------------------
-Before you can build Ceph, you must get the ``init`` submodule and the ``update`` submodule:: 
+Before you can build Ceph, you must navigate to your new repository and get the ``init`` submodule and the ``update`` submodule:: 
 
+	$ cd ceph	
 	$ git submodule init 
 	$ git submodule update 
 
 .. tip:: Make sure you maintain the latest copies of these submodules. Running ``git status`` will tell you if the submodules are out of date:: 
 
 	$ git status
-	
+
+Choose a Branch
+---------------
+Once you clone the source code and submodules, your Ceph repository will be on the ``master`` branch by default, which is the unstable development branch. You may choose other branches too. 
+
+- ``master``: The unstable development branch.
+- ``stable``: The bugfix branch.
+- ``next``: The release candidate branch.
