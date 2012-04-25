@@ -43,6 +43,7 @@ usage() {
   echo "  -b, --btrfs <VAL>    seq number for btrfs stores"
   echo "  --no-journal-test    don't perform journal replay tests"
   echo "  -e, --exit-on-error  exit with 1 on error"
+  echo "  -v, --valgrind       run commands through valgrind"
   echo
   echo "env vars:"
   echo "  OPTS_STORE           additional opts for both stores"
@@ -70,7 +71,7 @@ journal_test=1
 min_sync_interval="36000" # ten hours, yes.
 max_sync_interval="36001"
 exit_on_error=0
-
+v=""
 
 do_rm() {
   if [[ $on_btrfs -eq 0 ]]; then
@@ -119,6 +120,10 @@ do
       ;;
     -e | --exit-on-error)
       exit_on_error=1
+      shift
+      ;;
+    -v | --valgrind)
+      v="valgrind --leak-check=full"
       shift
       ;;
     --)
@@ -239,7 +244,7 @@ do
   fi
 
   do_rm $tmp_name_a $tmp_name_a.fail $tmp_name_a.recover
-  test_filestore_idempotent_sequence run-sequence-to $to \
+  $v test_filestore_idempotent_sequence run-sequence-to $to \
     $tmp_name_a $tmp_name_a/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat $tmp_opts_a \
@@ -258,12 +263,12 @@ do
   echo stopped at $stop_at
 
   do_rm $tmp_name_b $tmp_name_b.clean
-  test_filestore_idempotent_sequence run-sequence-to \
+  $v test_filestore_idempotent_sequence run-sequence-to \
     $stop_at $tmp_name_b $tmp_name_b/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --log-file $tmp_name_b.clean --debug-filestore 20 $tmp_opts_b
 
-  if test_filestore_idempotent_sequence diff \
+  if $v test_filestore_idempotent_sequence diff \
     $tmp_name_a $tmp_name_a/journal $tmp_name_b $tmp_name_b/journal \
     --filestore-xattr-use-omap; then
       echo OK
