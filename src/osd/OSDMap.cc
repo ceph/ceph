@@ -568,6 +568,8 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
     return;
 
   int diff = 0;
+
+  // do addrs match?
   if (o->max_osd != n->max_osd)
     diff++;
   for (int i = 0; i < o->max_osd && i < n->max_osd; i++) {
@@ -591,10 +593,17 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
       diff++;
     }
   }
-
   if (diff == 0) {
     // zoinks, no differences at all!
     n->osd_addrs = o->osd_addrs;
+  }
+
+  // does crush match?
+  bufferlist oc, nc;
+  ::encode(*o->crush, oc);
+  ::encode(*n->crush, nc);
+  if (oc.contents_equal(nc)) {
+    n->crush = o->crush;
   }
 }
 
