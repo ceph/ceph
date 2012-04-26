@@ -158,7 +158,7 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, concurrentios, num_objects, prevPid);
+    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
