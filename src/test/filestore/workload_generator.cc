@@ -36,6 +36,7 @@ boost::scoped_ptr<WorkloadGenerator> wrkldgen;
 
 WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
   : TestFileStoreState(NULL),
+    m_num_ops(-1),
     m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
     m_nr_runs(0),
     m_num_colls(def_num_colls),
@@ -83,6 +84,9 @@ void WorkloadGenerator::init_args(vector<const char*> args)
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-destroy-coll-per-N-trans", (char*) NULL)) {
       m_destroy_coll_every_nr_runs = strtoll(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val,
+        "--test-num-ops", (char*) NULL)) {
+      m_num_ops = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_flag(args, i, "--help", (char*) NULL)) {
       usage(NULL);
       exit(0);
@@ -224,8 +228,13 @@ TestFileStoreState::coll_entry_t
 
 void WorkloadGenerator::run()
 {
+  bool create_coll = false;
+  int ops_run = 0;
   do {
-    if (!m_collections.size()) {
+    if (m_num_ops && (ops_run == m_num_ops))
+      break;
+
+    if (!create_coll && !m_collections.size()) {
       dout(0) << "We ran out of collections!" << dendl;
       break;
     }
@@ -234,14 +243,31 @@ void WorkloadGenerator::run()
     wait_for_ready();
 
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-
-    bool destroy_collection = should_destroy_collection();
-    coll_entry_t *entry = get_rnd_coll_entry(destroy_collection);
-
     Context *c;
+    bool destroy_collection = false;
+    TestFileStoreState::coll_entry_t *entry = NULL;
+
+    if (create_coll) {
+      create_coll = false;
+
+      entry = do_create_collection(t);
+      if (!entry) {
+        dout(0) << __func__ << " something went terribly wrong creating coll" << dendl;
+        break;
+      }
+
+      c = new C_OnReadable(this, t);
+      goto queue_tx;
+    }
+
+    destroy_collection = should_destroy_collection();
+    entry = get_rnd_coll_entry(destroy_collection);
+
     if (destroy_collection) {
       do_destroy_collection(t, entry);
       c = new C_OnDestroyed(this, t, entry);
+      if (!m_num_ops)
+        create_coll = true;
     } else {
       hobject_t *obj = get_rnd_obj(entry);
 
@@ -253,9 +279,13 @@ void WorkloadGenerator::run()
       c = new C_OnReadable(this, t);
     }
 
+queue_tx:
     m_store->queue_transaction(&(entry->m_osr), t, c);
     m_in_flight++;
     m_lock.Unlock();
+
+    ops_run ++;
+
   } while (true);
 
   wait_for_done();
@@ -284,7 +314,9 @@ Test-specific Options:\n\
   --test-num-colls VAL                Set the number of collections\n\
   --test-num-objs-per-coll VAL        Set the number of objects per collection\n\
   --test-destroy-coll-per-N-trans VAL Set how many transactions to run before\n\
-                                      destroying a collection.\
+                                      destroying a collection.\n\
+  --test-num-ops VAL                  Run a certain number of operations\n\
+                                      (a VAL of 0 runs the test forever)\
     " << std::endl;
 }
 

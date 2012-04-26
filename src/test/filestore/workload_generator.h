@@ -43,6 +43,7 @@ public:
   static const size_t log_append_bytes = 1024;
 
 private:
+  int m_num_ops;
   int m_destroy_coll_every_nr_runs;
   int m_nr_runs;
 
