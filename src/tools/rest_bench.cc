@@ -76,10 +76,12 @@ struct req_context : public RefCountedObject {
   Mutex lock;
   Cond cond;
 
+  bool should_destroy_ctx;
+
   req_context() : complete(false), status(S3StatusOK), ctx(NULL), cb(NULL), arg(NULL), in_bl(NULL), off(0),
-                  lock("req_context") {}
+                  lock("req_context"), should_destroy_ctx(false) {}
   ~req_context() {
-    if (ctx) {
+    if (should_destroy_ctx) {
       S3_destroy_request_context(ctx);
     }
   }
@@ -90,6 +92,7 @@ struct req_context : public RefCountedObject {
       cerr << "failed to create context: " << S3_get_status_name(status) << std::endl;
       return -EINVAL;
     }
+    should_destroy_ctx = true;
 
     return 0;
   }
@@ -248,6 +251,7 @@ static int put_obj_callback(int size, char *buf,
 class RESTBencher : public ObjBencher {
   RESTDispatcher *dispatcher;
   struct req_context **completions;
+  struct S3RequestContext **handles;
   S3BucketContext bucket_ctx;
   string user_agent;
   string host;
@@ -255,6 +259,7 @@ class RESTBencher : public ObjBencher {
   S3Protocol protocol;
   string access_key;
   string secret;
+  int concurrentios;
 
   S3ResponseHandler response_handler;
   S3GetObjectHandler get_obj_handler;
@@ -282,21 +287,32 @@ protected:
   }
 
 
-  int completions_init(int concurrentios) {
+  int completions_init(int _concurrentios) {
+    concurrentios = _concurrentios;
     completions = new req_context *[concurrentios];
+    handles = new S3RequestContext *[concurrentios];
+    for (int i = 0; i < concurrentios; i++) {
+      completions[i] = NULL;
+      S3Status status = S3_create_request_context(&handles[i]);
+      if (status != S3StatusOK) {
+        cerr << "failed to create context: " << S3_get_status_name(status) << std::endl;
+        return -EINVAL;
+      }
+    }
     return 0;
   }
   void completions_done() {
     delete[] completions;
     completions = NULL;
+    for (int i = 0; i < concurrentios; i++) {
+      S3_destroy_request_context(handles[i]);
+    }
+    delete[] handles;
+    handles = NULL;
   }
   int create_completion(int slot, void (*cb)(void *, void*), void *arg) {
     struct req_context *ctx = new req_context;
-    int ret = ctx->init_ctx();
-    if (ret < 0) {
-      return ret;
-    }
-
+    ctx->ctx = handles[slot];
     ctx->cb = cb;
     ctx->arg = arg;
 
