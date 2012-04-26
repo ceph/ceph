@@ -137,6 +137,9 @@ public:
 
     string cluster_snapshot;
 
+    int get_net_marked_out(const OSDMap *previous) const;
+    int get_net_marked_down(const OSDMap *previous) const;
+
     void encode_client_old(bufferlist& bl) const;
     void encode(bufferlist& bl, uint64_t features=-1) const;
     void decode(bufferlist::iterator &p);

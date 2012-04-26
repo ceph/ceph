@@ -86,6 +86,36 @@ ostream& operator<<(ostream& out, const osd_info_t& info)
 // ----------------------------------
 // OSDMap::Incremental
 
+int OSDMap::Incremental::get_net_marked_out(const OSDMap *previous) const
+{
+  int n = 0;
+  for (map<int32_t,uint32_t>::const_iterator p = new_weight.begin();
+       p != new_weight.end();
+       ++p) {
+    if (p->second == CEPH_OSD_OUT && !previous->is_out(p->first))
+      n++;  // marked out
+    if (p->second != CEPH_OSD_OUT && previous->is_out(p->first))
+      n--;  // marked in
+  }
+  return n;
+}
+
+int OSDMap::Incremental::get_net_marked_down(const OSDMap *previous) const
+{
+  int n = 0;
+  for (map<int32_t,uint8_t>::const_iterator p = new_state.begin();
+       p != new_state.end();
+       ++p) {
+    if (p->second & CEPH_OSD_UP) {
+      if (previous->is_up(p->first))
+	n++;  // marked down
+      else
+	n--;  // marked up
+    }
+  }
+  return n;
+}
+
 void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
 {
   __u16 v = 5;
