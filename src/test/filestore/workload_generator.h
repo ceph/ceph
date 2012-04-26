@@ -45,16 +45,13 @@ public:
 private:
   int m_num_ops;
   int m_destroy_coll_every_nr_runs;
-  int m_nr_runs;
+  atomic_t m_nr_runs;
 
   int m_num_colls;
 
   rngen_t m_rng;
 
   map<coll_t, uint64_t> pg_log_size;
-
-  Mutex m_lock;
-  Cond m_cond;
 
   void init_args(vector<const char*> args);
 
@@ -76,7 +73,7 @@ private:
   void do_append_log(ObjectStore::Transaction *t, coll_entry_t *entry);
 
   bool should_destroy_collection() {
-    return (m_nr_runs >= m_destroy_coll_every_nr_runs);
+    return ((int)m_nr_runs.read() >= m_destroy_coll_every_nr_runs);
   }
   void do_destroy_collection(ObjectStore::Transaction *t, coll_entry_t *entry);
   coll_entry_t *do_create_collection(ObjectStore::Transaction *t);
@@ -98,8 +95,7 @@ public:
     void finish(int r)
     {
       TestFileStoreState::C_OnFinished::finish(r);
-      Mutex::Locker locker(wrkldgen_state->m_lock);
-      wrkldgen_state->m_nr_runs++;
+      wrkldgen_state->m_nr_runs.inc();
     }
   };
 

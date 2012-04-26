@@ -38,11 +38,11 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
   : TestFileStoreState(NULL),
     m_num_ops(-1),
     m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
-    m_nr_runs(0),
-    m_num_colls(def_num_colls),
-    m_lock("State Lock")
+    m_num_colls(def_num_colls)
 {
   int err = 0;
+
+  m_nr_runs.set(0);
 
   init_args(args);
   dout(0) << "data            = " << g_conf->osd_data << dendl;
@@ -150,6 +150,9 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   size_t bytes = get_random_byte_amount(min_write_bytes, max_write_bytes);
   bufferlist bl;
   get_filled_byte_array(bl, bytes);
+
+  dout(0) << __func__ << " " << coll << "/" << obj
+      << " size " << bl.length() << dendl;
   t->write(coll, obj, 0, bl.length(), bl);
 }
 
@@ -161,6 +164,8 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
+
+  dout(0) << __func__ << " " << coll << "/" << obj << " size " << size << dendl;
   t->setattr(coll, obj, "objxattr", bl);
 }
 
@@ -172,6 +177,7 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
+  dout(0) << __func__ << " coll " << coll << " size " << size << dendl;
   t->collection_setattr(coll, "collxattr", bl);
 }
 
@@ -182,8 +188,11 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 {
   bufferlist bl;
   get_filled_byte_array(bl, log_append_bytes);
-//  hobject_t log_obj = get_coll_meta_object(coll);
   hobject_t log_obj = entry->m_meta_obj;
+
+  dout(0) << __func__ << " coll " << entry->m_coll << " "
+      << META_COLL << " /" << log_obj << " (" << bl.length() << ")" << dendl;
+
   uint64_t s = pg_log_size[entry->m_coll];
   t->write(META_COLL, log_obj, s, bl.length(), bl);
   pg_log_size[entry->m_coll] += bl.length();
@@ -192,12 +201,12 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 					      coll_entry_t *entry)
 {  
-  m_nr_runs = 0;
+  m_nr_runs.set(0);
   entry->m_osr.flush();
   vector<hobject_t> ls;
   m_store->collection_list(entry->m_coll, ls);
-  dout(0) << "Destroying collection '" << entry->m_coll.to_str()
-      << "' (" << ls.size() << " objects)" << dendl;
+  dout(0) << __func__ << " coll " << entry->m_coll
+      << " (" << ls.size() << " objects)" << dendl;
 
   vector<hobject_t>::iterator it;
   for (it = ls.begin(); it < ls.end(); it++) {
@@ -239,7 +248,11 @@ void WorkloadGenerator::run()
       break;
     }
 
-    m_lock.Lock();
+    dout(5) << __func__
+        << " m_finished_lock is-locked: " << m_finished_lock.is_locked()
+        << " in-flight: " << m_in_flight.read()
+        << dendl;
+
     wait_for_ready();
 
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -281,14 +294,19 @@ void WorkloadGenerator::run()
 
 queue_tx:
     m_store->queue_transaction(&(entry->m_osr), t, c);
-    m_in_flight++;
-    m_lock.Unlock();
+
+    inc_in_flight();
 
     ops_run ++;
 
   } while (true);
 
+  dout(0) << __func__ << " waiting for "
+      << m_in_flight.read() << " in-flight transactions" << dendl;
+
   wait_for_done();
+
+  dout(0) << __func__ << " finishing" << dendl;
 }
 
 void WorkloadGenerator::print_results()
@@ -329,7 +347,7 @@ int main(int argc, const char *argv[])
   def_args.push_back("--osd-data");
   def_args.push_back("workload_gen_dir");
   def_args.push_back("--osd-journal");
-  def_args.push_back("workload_gen_journal");
+  def_args.push_back("workload_gen_dir/journal");
   argv_to_vec(argc, argv, args);
 
   global_init(&def_args, args,
