@@ -3727,12 +3727,14 @@ OSDMapRef OSD::add_map(OSDMap *o)
   if (map_cache.count(e) == 0) {
     dout(10) << "add_map " << e << " " << o << dendl;
 
-    // dedup against an existing map at nearby epoch
-    map<epoch_t,OSDMapRef>::iterator p = map_cache.lower_bound(e);
-    if (p == map_cache.end() && !map_cache.empty())
-      p--;
-    if (p != map_cache.end())
-      OSDMap::dedup(p->second.get(), o);
+    if (g_conf->osd_map_dedup) {
+      // dedup against an existing map at nearby epoch
+      map<epoch_t,OSDMapRef>::iterator p = map_cache.lower_bound(e);
+      if (p == map_cache.end() && !map_cache.empty())
+	p--;
+      if (p != map_cache.end())
+	OSDMap::dedup(p->second.get(), o);
+    }
 
     map_cache.insert(make_pair(e, OSDMapRef(o)));
   } else {

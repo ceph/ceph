@@ -268,6 +268,7 @@ OPTION(osd_pool_default_crush_rule, OPT_INT, 0)
 OPTION(osd_pool_default_size, OPT_INT, 2)
 OPTION(osd_pool_default_pg_num, OPT_INT, 8)
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8)
+OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_cache_max, OPT_INT, 250)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
