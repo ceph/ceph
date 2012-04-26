@@ -12,7 +12,7 @@
 
 void PGMap::Incremental::encode(bufferlist &bl) const
 {
-  __u8 v = 3;
+  __u8 v = 4;
   ::encode(v, bl);
   ::encode(version, bl);
   ::encode(pg_stat_updates, bl);
@@ -62,6 +62,12 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
     }
   } else {
     ::decode(pg_remove, bl);
+  }
+  if (v < 4 && full_ratio == 0) {
+    full_ratio = -1;
+  }
+  if (v < 4 && nearfull_ratio == 0) {
+    nearfull_ratio = -1;
   }
 }
 
@@ -131,11 +137,11 @@ void PGMap::apply_incremental(const Incremental& inc)
   assert(inc.version == version+1);
   version++;
   bool ratios_changed = false;
-  if (inc.full_ratio != full_ratio) {
+  if (inc.full_ratio != full_ratio && inc.full_ratio != -1) {
     full_ratio = inc.full_ratio;
     ratios_changed = true;
   }
-  if (inc.nearfull_ratio != nearfull_ratio) {
+  if (inc.nearfull_ratio != nearfull_ratio && inc.full_ratio != -1) {
     nearfull_ratio = inc.nearfull_ratio;
     ratios_changed = true;
   }
