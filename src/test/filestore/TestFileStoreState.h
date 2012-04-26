@@ -64,6 +64,7 @@ public:
   Cond m_finished_cond;
 
   void wait_for_ready() {
+    Mutex::Locker locker(m_finished_lock);
     while ((m_max_in_flight > 0) && (m_in_flight >= m_max_in_flight))
       m_finished_cond.Wait(m_finished_lock);
   }
@@ -110,10 +111,11 @@ public:
   coll_entry_t *coll_create(int id);
 
   class C_OnFinished: public Context {
+   protected:
     TestFileStoreState *m_state;
     ObjectStore::Transaction *m_tx;
 
-  public:
+   public:
     C_OnFinished(TestFileStoreState *state,
         ObjectStore::Transaction *t) : m_state(state), m_tx(t) { }
 
