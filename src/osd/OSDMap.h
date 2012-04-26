@@ -165,7 +165,7 @@ private:
 
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
-  map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  std::tr1::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
@@ -189,6 +189,7 @@ private:
 	     flags(0),
 	     num_osd(0), max_osd(0),
 	     osd_addrs(new addrs_s),
+	     pg_temp(new map<pg_t,vector<int> >),
 	     cluster_snapshot_epoch(0),
 	     crush(new CrushWrapper) {
     memset(&fsid, 0, sizeof(fsid));

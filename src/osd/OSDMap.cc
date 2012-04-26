@@ -707,9 +707,9 @@ int OSDMap::apply_incremental(Incremental &inc)
   // pg rebuild
   for (map<pg_t, vector<int> >::iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
     if (p->second.empty())
-      pg_temp.erase(p->first);
+      pg_temp->erase(p->first);
     else
-      pg_temp[p->first] = p->second;
+      (*pg_temp)[p->first] = p->second;
   }
 
   // blacklist
@@ -810,8 +810,8 @@ void OSDMap::_raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const
 bool OSDMap::_raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const
 {
   pg = pool.raw_pg_to_pg(pg);
-  map<pg_t,vector<int> >::const_iterator p = pg_temp.find(pg);
-  if (p != pg_temp.end()) {
+  map<pg_t,vector<int> >::const_iterator p = pg_temp->find(pg);
+  if (p != pg_temp->end()) {
     temp.clear();
     for (unsigned i=0; i<p->second.size(); i++) {
       if (!exists(p->second[i]) || is_down(p->second[i]))
@@ -927,10 +927,10 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   ::encode(osd_addrs->client_addr, bl);
 
   // for ::encode(pg_temp, bl);
-  n = pg_temp.size();
+  n = pg_temp->size();
   ::encode(n, bl);
-  for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp.begin();
-       p != pg_temp.end();
+  for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->begin();
+       p != pg_temp->end();
        ++p) {
     old_pg_t opg = p->first.get_old_pg();
     ::encode(opg, bl);
@@ -970,7 +970,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(osd_weight, bl);
   ::encode(osd_addrs->client_addr, bl);
 
-  ::encode(pg_temp, bl);
+  ::encode(*pg_temp, bl);
 
   // crush
   bufferlist cbl;
@@ -1048,15 +1048,15 @@ void OSDMap::decode(bufferlist::iterator& p)
   ::decode(osd_weight, p);
   ::decode(osd_addrs->client_addr, p);
   if (v <= 5) {
-    pg_temp.clear();
+    pg_temp->clear();
     ::decode(n, p);
     while (n--) {
       old_pg_t opg;
       ::decode_raw(opg, p);
-      ::decode(pg_temp[pg_t(opg)], p);
+      ::decode((*pg_temp)[pg_t(opg)], p);
     }
   } else {
-    ::decode(pg_temp, p);
+    ::decode(*pg_temp, p);
   }
 
   // crush
@@ -1148,8 +1148,8 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("pg_temp");
-  for (map<pg_t,vector<int> >::const_iterator p = pg_temp.begin();
-       p != pg_temp.end();
+  for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
+       p != pg_temp->end();
        p++) {
     f->open_array_section("osds");
     for (vector<int>::const_iterator q = p->second.begin(); q != p->second.end(); ++q)
@@ -1267,8 +1267,8 @@ void OSDMap::print(ostream& out) const
   }
   out << std::endl;
 
-  for (map<pg_t,vector<int> >::const_iterator p = pg_temp.begin();
-       p != pg_temp.end();
+  for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
+       p != pg_temp->end();
        p++)
     out << "pg_temp " << p->first << " " << p->second << "\n";
 

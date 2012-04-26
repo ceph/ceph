@@ -249,8 +249,8 @@ void OSDMonitor::remove_redundant_pg_temp()
 {
   dout(10) << "remove_redundant_pg_temp" << dendl;
 
-  for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp.begin();
-       p != osdmap.pg_temp.end();
+  for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp->begin();
+       p != osdmap.pg_temp->end();
        p++) {
     if (pending_inc.new_pg_temp.count(p->first) == 0) {
       vector<int> raw_up;
@@ -934,14 +934,14 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
 
   for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++) {
     dout(20) << " " << p->first
-	     << (osdmap.pg_temp.count(p->first) ? osdmap.pg_temp[p->first] : empty)
+	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
 	     << " -> " << p->second << dendl;
     // removal?
-    if (p->second.empty() && osdmap.pg_temp.count(p->first))
+    if (p->second.empty() && osdmap.pg_temp->count(p->first))
       return false;
     // change?
-    if (p->second.size() && (osdmap.pg_temp.count(p->first) == 0 ||
-			     osdmap.pg_temp[p->first] != p->second))
+    if (p->second.size() && (osdmap.pg_temp->count(p->first) == 0 ||
+			     (*osdmap.pg_temp)[p->first] != p->second))
       return false;
   }
 
@@ -2571,8 +2571,8 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
   pending_inc.old_pools.insert(pool);
 
   // remove any pg_temp mappings for this pool too
-  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp.begin();
-       p != osdmap.pg_temp.end();
+  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
+       p != osdmap.pg_temp->end();
        ++p)
     if (p->first.pool() == pool) {
       dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
