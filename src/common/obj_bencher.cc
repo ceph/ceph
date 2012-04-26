@@ -241,17 +241,24 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
 
   runtime.set_from_double(secondsToRun);
   stopTime = data.start_time + runtime;
+  slot = 0;
   while( ceph_clock_now(g_ceph_context) < stopTime ) {
     lock.Lock();
+    bool found = false;
     while (1) {
-      for (slot = 0; slot < concurrentios; ++slot) {
+      int old_slot = slot;
+      do {
 	if (completion_is_done(slot)) {
+          found = true;
 	  break;
 	}
-      }
-      if (slot < concurrentios) {
-	break;
-      }
+        slot++;
+        if (slot == concurrentios) {
+          slot = 0;
+        }
+      } while (slot != old_slot);
+      if (found)
+        break;
       lc.cond.Wait(lock);
     }
     lock.Unlock();
@@ -417,16 +424,24 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   char* newName;
   bufferlist *cur_contents;
 
+  slot = 0;
   while (seconds_to_run && (ceph_clock_now(g_ceph_context) < finish_time) &&
       num_objects > data.started) {
     lock.Lock();
+    int old_slot = slot;
+    bool found = false;
     while (1) {
-      for (slot = 0; slot < concurrentios; ++slot) {
+      do {
 	if (completion_is_done(slot)) {
+          found = true;
 	  break;
 	}
-      }
-      if (slot < concurrentios) {
+        slot++;
+        if (slot == concurrentios) {
+          slot = 0;
+        }
+      } while (slot != old_slot);
+      if (found) {
 	break;
       }
       lc.cond.Wait(lock);
