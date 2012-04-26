@@ -4366,6 +4366,9 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   pg->update_stats();
 
   get_infos();
+  if (peer_info_requested.empty() && !prior_set->pg_down) {
+    post_event(GotInfo());
+  }
 }
 
 void PG::RecoveryState::GetInfo::get_infos()
@@ -4393,10 +4396,6 @@ void PG::RecoveryState::GetInfo::get_infos()
       context< RecoveryMachine >().send_query(peer, pg_query_t(pg_query_t::INFO, pg->info.history));
       peer_info_requested.insert(peer);
     }
-  }
-  
-  if (peer_info_requested.empty() && !prior_set->pg_down) {
-    post_event(GotInfo());
   }
 }
 
