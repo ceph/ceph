@@ -502,7 +502,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       cerr << name[slot] << " is not correct!" << std::endl;
       ++errors;
     }
-    delete name[slot];
+    delete[] name[slot];
     delete contents[slot];
   }
 

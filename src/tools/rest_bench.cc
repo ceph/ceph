@@ -20,6 +20,7 @@
 #include "common/debug.h"
 #include "common/ceph_argparse.h"
 #include "common/WorkQueue.h"
+#include "msg/Message.h"
 #include "global/global_init.h"
 
 #include "libs3.h"
@@ -63,7 +64,7 @@ static void usage_exit()
   exit(1);
 }
 
-struct req_context {
+struct req_context : public RefCountedObject {
   bool complete;
   S3Status status;
   S3RequestContext *ctx;
@@ -112,7 +113,6 @@ class RESTDispatcher {
 
     bool _enqueue(req_context *req) {
       dispatcher->m_req_queue.push_back(req);
-      generic_dout(20) << "enqueued request req=" << hex << req << dec << dendl;
       _dump_queue();
       return true;
     }
@@ -127,7 +127,6 @@ class RESTDispatcher {
 	return NULL;
       req_context *req = dispatcher->m_req_queue.front();
       dispatcher->m_req_queue.pop_front();
-      generic_dout(20) << "dequeued request req=" << hex << req << dec << dendl;
       _dump_queue();
       return req;
     }
@@ -169,16 +168,22 @@ public:
 
 void RESTDispatcher::process_context(req_context *ctx)
 {
+  ctx->get();
+
   S3Status status = S3_runall_request_context(ctx->ctx);
 
   if (status != S3StatusOK) {
     cerr << "ERROR: S3_runall_request_context() returned " << S3_get_status_name(status) << std::endl;
+    ctx->status = status;
   } else if (ctx->status != S3StatusOK) {
     cerr << "ERROR: " << S3_get_status_name(ctx->status) << std::endl;
   }
 
-  Mutex::Locker l(ctx->lock);
+  ctx->lock.Lock();
   ctx->cond.SignalAll();
+  ctx->lock.Unlock();
+
+  ctx->put();
 }
 
 static S3Status properties_callback(const S3ResponseProperties *properties, void *cb_data)
@@ -201,6 +206,8 @@ static void complete_callback(S3Status status, const S3ErrorDetails *details, vo
   if (ctx->cb) {
     ctx->cb((void *)ctx->cb, ctx->arg);
   }
+
+  ctx->put();
 }
 
 static S3Status get_obj_callback(int size, const char *buf,
@@ -300,12 +307,14 @@ protected:
   void release_completion(int slot) {
     struct req_context *ctx = completions[slot];
 
-    delete ctx;
+    ctx->put();
     completions[slot] = 0;
   }
 
   int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len) {
     struct req_context *ctx = completions[slot];
+
+    ctx->get();
     ctx->in_bl = pbl;
     S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, ctx->ctx,
                   &get_obj_handler, ctx);
@@ -317,6 +326,7 @@ protected:
 
   int aio_write(const std::string& oid, int slot, const bufferlist& bl, size_t len) {
     struct req_context *ctx = completions[slot];
+    ctx->get();
     ctx->out_bl = bl;
     S3_put_object(&bucket_ctx, oid.c_str(),
                   bl.length(),
@@ -329,32 +339,35 @@ protected:
   }
 
   int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
-    struct req_context ctx;
-    int ret = ctx.init_ctx();
+    struct req_context *ctx = new req_context;
+    int ret = ctx->init_ctx();
     if (ret < 0) {
       return ret;
     }
-    ctx.in_bl = &bl;
-    S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, NULL,
-                  &get_obj_handler, &ctx);
+    ctx->in_bl = &bl;
+    ctx->get();
 
+    S3_get_object(&bucket_ctx, oid.c_str(), NULL, 0, len, NULL,
+                  &get_obj_handler, ctx);
+    ctx->put();
     return bl.length();
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
-    struct req_context ctx;
-    int ret = ctx.init_ctx();
+    struct req_context *ctx = new req_context;
+    int ret = ctx->init_ctx();
     if (ret < 0) {
       return ret;
     }
-    ctx.out_bl = bl;
-
+    ctx->out_bl = bl;
+    ctx->get();
     S3_put_object(&bucket_ctx, oid.c_str(),
                   bl.length(),
                   NULL,
                   NULL,
-                  &put_obj_handler, &ctx);
-
-    return ctx.ret();
+                  &put_obj_handler, ctx);
+    ret = ctx->ret();
+    ctx->put();
+    return ret;
   }
 
   bool completion_is_done(int slot) {
@@ -369,6 +382,8 @@ protected:
     while (!ctx->complete) {
       ctx->cond.Wait(ctx->lock);
     }
+//cerr << __FILE__ << ":" << __LINE__ << ": ctx->put() ctx=" << (void *)ctx << std::endl;
+//    ctx->put();
 
     return 0;
   }
@@ -395,37 +410,41 @@ public:
     access_key = _access_key;
     secret = _secret;
 
-    bucket_ctx.hostName = host.c_str();
+    bucket_ctx.hostName = NULL; // host.c_str();
     bucket_ctx.bucketName = bucket.c_str();
     bucket_ctx.protocol =  protocol;
     bucket_ctx.accessKeyId = access_key.c_str();
     bucket_ctx.secretAccessKey = secret.c_str();
     bucket_ctx.uriStyle = uri_style;
     
-    struct req_context ctx;
+    struct req_context *ctx = new req_context;
 
     int ret = rest_init();
     if (ret < 0) {
       return ret;
     }
 
-    ret = ctx.init_ctx();
+    ret = ctx->init_ctx();
     if (ret < 0) {
       return ret;
     }
+
+    ctx->get();
 
     S3_create_bucket(protocol, access_key.c_str(), secret.c_str(), NULL,
                      bucket.c_str(), S3CannedAclPrivate,
                      NULL, /* locationConstraint */
                      NULL, /* requestContext */
                      &response_handler, /* handler */
-                     (void *)&ctx  /* callbackData */);
+                     (void *)ctx  /* callbackData */);
 
-    ret = ctx.ret();
+    ret = ctx->ret();
     if (ret < 0) {
-      cerr << "ERROR: failed to create bucket: " << S3_get_status_name(ctx.status) << std::endl;
+      cerr << "ERROR: failed to create bucket: " << S3_get_status_name(ctx->status) << std::endl;
       return ret;
     }
+
+    ctx->put();
 
     return 0;
   }
