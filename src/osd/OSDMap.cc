@@ -605,6 +605,12 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
   if (oc.contents_equal(nc)) {
     n->crush = o->crush;
   }
+
+  // does pg_temp match?
+  if (o->pg_temp->size() == n->pg_temp->size()) {
+    if (*o->pg_temp == *n->pg_temp)
+      n->pg_temp = o->pg_temp;
+  }
 }
 
 int OSDMap::apply_incremental(Incremental &inc)
