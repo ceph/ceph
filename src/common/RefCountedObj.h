@@ -42,9 +42,9 @@ struct RefCountedObject {
  */
 
 struct RefCountedCond : public RefCountedObject {
+  bool complete;
   Mutex lock;
   Cond cond;
-  bool complete;
 
   RefCountedCond() : complete(false), lock("RefCountedCond") {}
 
