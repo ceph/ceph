@@ -1018,10 +1018,8 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
-      boost::statechart::result react(const MNotifyRec&) { return discard_event(); }
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
     };
