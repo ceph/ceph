@@ -40,9 +40,7 @@ static void generate_object_name(char *s, size_t size, int objnum, int pid = 0)
 }
 
 static void sanitize_object_contents (bench_data *data, int length) {
-  for (int i = 0; i < length; ++i) {
-    data->object_contents[i] = i % sizeof(char);
-  }
+  memset(data->object_contents, 'z', length);
 }
 
 void *ObjBencher::status_printer(void *_bencher) {
@@ -207,7 +205,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     name[i] = new char[128];
     contents[i] = new bufferlist();
     generate_object_name(name[i], 128, i);
-    snprintf(data.object_contents, data.object_size, "I'm the %dth object!", i);
+    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", i);
     contents[i]->append(data.object_contents, data.object_size);
   }
 
@@ -266,7 +264,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     newContents = new bufferlist();
     newName = new char[128];
     generate_object_name(newName, 128, data.started);
-    snprintf(data.object_contents, data.object_size, "I'm the %dth object!", data.started);
+    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", data.started);
     newContents->append(data.object_contents, data.object_size);
     completion_wait(slot);
     lock.Lock();
@@ -382,8 +380,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   double total_latency = 0;
   int r = 0;
   utime_t runtime;
-  sanitize_object_contents(&data, 128); //clean it up once; subsequent
-  //changes will be safe because string length monotonically increases
+  sanitize_object_contents(&data, data.object_size); //clean it up once; subsequent
+  //changes will be safe because string length should remain the same
 
   r = completions_init(concurrentios);
   if (r < 0)
@@ -481,7 +479,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     lock.Lock();
     ++data.started;
     ++data.in_flight;
-    snprintf(data.object_contents, data.object_size, "I'm the %dth object!", current_index);
+    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
     lock.Unlock();
     if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
       cerr << name[slot] << " is not correct!" << std::endl;
@@ -511,7 +509,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
     release_completion(slot);
-    snprintf(data.object_contents, data.object_size, "I'm the %dth object!", index[slot]);
+    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
     lock.Unlock();
     if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
       cerr << name[slot] << " is not correct!" << std::endl;
