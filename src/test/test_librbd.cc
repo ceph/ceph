@@ -879,11 +879,13 @@ TEST(LibRBD, TestIOToSnapshot)
   read_test_data(image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
 
   r = rbd_snap_rollback(image, "orig");
-  printf("rbd_snap_rollback returned %d\n", r);
-  ASSERT_GE(r, 0);
+  ASSERT_EQ(r, -EROFS);
 
   r = rbd_snap_set(image, NULL);
   ASSERT_EQ(r, 0);
+  r = rbd_snap_rollback(image, "orig");
+  ASSERT_EQ(r, 0);
+
   write_test_data(image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
 
   rbd_flush(image);
