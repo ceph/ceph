@@ -35,8 +35,10 @@
 void usage(ostream& out)
 {
   out <<					\
-"usage: rest_bench [options] <seconds> <write|seq>\n"
+"usage: rest-bench [options] <write|seq>\n"
 "BENCHMARK OPTIONS\n"
+"   --seconds\n"
+"        benchmak length (default: 60)\n"
 "   -t concurrent_operations\n"
 "   --concurrent-ios=concurrent_operations\n"
 "        select bucket by name\n"
@@ -488,6 +490,7 @@ int main(int argc, const char **argv)
   std::string proto_str;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
+  int seconds = 60;
 
 
   for (i = args.begin(); i != args.end(); ) {
@@ -528,6 +531,8 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       concurrent_ios = strtol(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val, "--seconds", (char*)NULL)) {
+      seconds = strtol(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--block-size", (char*)NULL)) {
       op_size = strtol(val.c_str(), NULL, 10);
     } else {
@@ -541,15 +546,14 @@ int main(int argc, const char **argv)
     cerr << "rest-bench: bucket not specified" << std::endl;
     usage_exit();
   }
-  if (args.size() < 2)
+  if (args.size() < 1)
     usage_exit();
-  int seconds = atoi(args[0]);
   int operation = 0;
-  if (strcmp(args[1], "write") == 0)
+  if (strcmp(args[0], "write") == 0)
     operation = OP_WRITE;
-  else if (strcmp(args[1], "seq") == 0)
+  else if (strcmp(args[0], "seq") == 0)
     operation = OP_SEQ_READ;
-  else if (strcmp(args[1], "rand") == 0)
+  else if (strcmp(args[0], "rand") == 0)
     operation = OP_RAND_READ;
   else
     usage_exit();
