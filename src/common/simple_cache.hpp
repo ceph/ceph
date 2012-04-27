@@ -27,6 +27,7 @@ class SimpleLRU {
   size_t max_size;
   map<K, typename list<pair<K, V> >::iterator> contents;
   list<pair<K, V> > lru;
+  map<K, V> pinned;
 
   void trim_cache() {
     while (lru.size() > max_size) {
@@ -35,8 +36,32 @@ class SimpleLRU {
     }
   }
 
+  void _add(K key, V value) {
+    lru.push_front(make_pair(key, value));
+    contents[key] = lru.begin();
+    trim_cache();
+  }
+
 public:
   SimpleLRU(size_t max_size) : lock("SimpleLRU::lock"), max_size(max_size) {}
+
+  void pin(K key, V val) {
+    Mutex::Locker l(lock);
+    pinned.insert(make_pair(key, val));
+  }
+
+  void clear_pinned() {
+    Mutex::Locker l(lock);
+    for (typename map<K, V>::iterator i = pinned.begin();
+	 i != pinned.end();
+	 ++i) {
+      if (!contents.count(i->first))
+	_add(i->first, i->second);
+      else
+	lru.splice(lru.begin(), lru, contents[i->first]);
+    }
+    pinned.clear();
+  }
 
   void set_size(size_t new_size) {
     Mutex::Locker l(lock);
@@ -53,14 +78,16 @@ public:
       lru.splice(lru.begin(), lru, loc);
       return true;
     }
+    if (pinned.count(key)) {
+      *out = pinned[key];
+      return true;
+    }
     return false;
   }
 
   void add(K key, V value) {
     Mutex::Locker l(lock);
-    lru.push_front(make_pair(key, value));
-    contents[key] = lru.begin();
-    trim_cache();
+    _add(key, value);
   }
 };
 
