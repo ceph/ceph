@@ -37,15 +37,6 @@ void crush_finalize(struct crush_map *map)
 			if (map->buckets[b]->items[i] >= map->max_devices)
 				map->max_devices = map->buckets[b]->items[i] + 1;
 	}
-
-	/* allocate arrays */
-	map->device_parents = malloc(sizeof(map->device_parents[0]) * map->max_devices);
-	memset(map->device_parents, 0, sizeof(map->device_parents[0]) * map->max_devices);
-	map->bucket_parents = malloc(sizeof(map->bucket_parents[0]) * map->max_buckets);
-	memset(map->bucket_parents, 0, sizeof(map->bucket_parents[0]) * map->max_buckets);
-
-	/* build parent maps */
-	crush_calc_parents(map);
 }
 
 
