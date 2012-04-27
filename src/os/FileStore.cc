@@ -1281,7 +1281,7 @@ int FileStore::_test_fiemap()
   // fiemap an extent inside that
   struct fiemap *fiemap;
   int r = do_fiemap(fd, 2430421, 59284, &fiemap);
-  if (r == -EOPNOTSUPP) {
+  if (r < 0) {
     dout(0) << "mount FIEMAP ioctl is NOT supported" << dendl;
     ioctl_fiemap = false;
   } else {
@@ -4599,6 +4599,14 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
   // open guard on object so we don't any previous operations on the
   // new name that will modify the source inode.
   int fd = lfn_open(oldcid, o, 0);
+  if (fd < 0) {
+    // the source collection/object does not exist. If we are replaying, we
+    // should be safe, so just return 0 and move on.
+    assert(replaying);
+    dout(10) << "collection_add " << c << "/" << o << " from "
+        << oldcid << "/" << o << " (dne, continue replay) " << dendl;
+    return 0;
+  }
   assert(fd >= 0);
   if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
     _set_replay_guard(fd, spos, true);
