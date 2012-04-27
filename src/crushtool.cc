@@ -204,12 +204,6 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_x(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--force", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
-      tester.set_force(x);
     } else if (ceph_argparse_withint(args, i, &x, &err, "--max_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;

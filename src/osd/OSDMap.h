@@ -395,7 +395,7 @@ private:
 
   /// pg -> (up osd list)
   void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const;
-  
+
   bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const;
 
 public:

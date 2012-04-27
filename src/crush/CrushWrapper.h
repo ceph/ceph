@@ -389,13 +389,12 @@ public:
     if (!crush) return -1;
     return crush_find_rule(crush, ruleset, type, size);
   }
-  void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
+  void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
-			       forcefeed, &weight[0]);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0]);
     if (numrep < 0)
-      numrep = 0;   // e.g., when forcefed device dne.
+      numrep = 0;
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
