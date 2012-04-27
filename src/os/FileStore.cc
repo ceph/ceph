@@ -1783,9 +1783,8 @@ int FileStore::mount()
 	struct stat st;
 	if (::stat(nosnapfn, &st) == 0) {
 	  if (!m_osd_use_stale_snap) {
-	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
-	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
-	    derr << "Force rollback to snapshotted version with 'osd use stale snap = true'" << dendl;
+	    derr << "ERROR: " << nosnapfn << " exists, not rolling back to avoid losing new data" << dendl;
+	    derr << "Force rollback to old snapshotted version with 'osd use stale snap = true'" << dendl;
 	    derr << "config option for --osd-use-stale-snap startup argument." << dendl;
 	    ret = -ENOTSUP;
 	    goto close_basedir_fd;
