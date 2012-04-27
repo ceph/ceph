@@ -3165,7 +3165,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
-      add_map_bl(e, bl);
+      pin_map_bl(e, bl);
       continue;
     }
 
@@ -3175,7 +3175,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       hobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, oid, 0, bl.length(), bl);
-      add_map_inc_bl(e, bl);
+      pin_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
       if (e > 1) {
@@ -3200,7 +3200,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
-      add_map_bl(e, fbl);
+      pin_map_bl(e, fbl);
       continue;
     }
 
@@ -3370,6 +3370,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   map_lock.put_write();
+  clear_map_bl_cache_pins();
 
   /*
    * wait for this to be stable.
@@ -3725,6 +3726,25 @@ void OSD::_add_map_inc_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_inc_bl " << e << " " << bl.length() << " bytes" << dendl;
   map_bl_inc_cache.add(e, bl);
+}
+
+void OSD::pin_map_inc_bl(epoch_t e, bufferlist &bl)
+{
+  Mutex::Locker l(map_cache_lock);
+  map_bl_inc_cache.pin(e, bl);
+}
+
+void OSD::pin_map_bl(epoch_t e, bufferlist &bl)
+{
+  Mutex::Locker l(map_cache_lock);
+  map_bl_cache.pin(e, bl);
+}
+
+void OSD::clear_map_bl_cache_pins()
+{
+  Mutex::Locker l(map_cache_lock);
+  map_bl_inc_cache.clear_pinned();
+  map_bl_cache.clear_pinned();
 }
 
 OSDMapRef OSD::_add_map(OSDMap *o)

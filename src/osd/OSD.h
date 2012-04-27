@@ -428,6 +428,7 @@ private:
     Mutex::Locker l(map_cache_lock);
     return _add_map_bl(e, bl);
   }
+  void pin_map_bl(epoch_t e, bufferlist &bl);
   void _add_map_bl(epoch_t e, bufferlist& bl);
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     Mutex::Locker l(map_cache_lock);
@@ -439,8 +440,11 @@ private:
     Mutex::Locker l(map_cache_lock);
     return _add_map_inc_bl(e, bl);
   }
+  void pin_map_inc_bl(epoch_t e, bufferlist &bl);
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
+
+  void clear_map_bl_cache_pins();
   
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
