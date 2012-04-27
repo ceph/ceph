@@ -1637,35 +1637,6 @@ int FileStore::mount()
     goto done;
   }
 
-  // test for btrfs, xattrs, etc.
-  ret = _detect_fs();
-  if (ret)
-    goto done;
-
-  uint32_t version_stamp;
-  ret = version_stamp_is_valid(&version_stamp);
-  if (ret < 0) {
-    derr << "FileStore::mount : error in version_stamp_is_valid: "
-	 << cpp_strerror(ret) << dendl;
-    goto done;
-  } else if (ret == 0) {
-    if (m_filestore_update_collections) {
-      derr << "FileStore::mount : stale version stamp detected: "
-	   << version_stamp 
-	   << ". Proceeding, m_filestore_update_collections "
-	   << "is set, DO NOT USE THIS OPTION IF YOU DO NOT KNOW WHAT IT DOES."
-	   << " More details can be found on the wiki."
-	   << dendl;
-    } else {
-      ret = -EINVAL;
-      derr << "FileStore::mount : stale version stamp " << version_stamp
-	   << ". Please run the FileStore update script before starting the "
-	   << "OSD."
-	   << dendl;
-      goto done;
-    }
-  }
-
   // get fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(buf, O_RDWR, 0644);
@@ -1690,6 +1661,35 @@ int FileStore::mount()
   }
 
   dout(10) << "mount fsid is " << fsid << dendl;
+
+  // test for btrfs, xattrs, etc.
+  ret = _detect_fs();
+  if (ret)
+    goto close_fsid_fd;
+
+  uint32_t version_stamp;
+  ret = version_stamp_is_valid(&version_stamp);
+  if (ret < 0) {
+    derr << "FileStore::mount : error in version_stamp_is_valid: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fsid_fd;
+  } else if (ret == 0) {
+    if (m_filestore_update_collections) {
+      derr << "FileStore::mount : stale version stamp detected: "
+	   << version_stamp 
+	   << ". Proceeding, m_filestore_update_collections "
+	   << "is set, DO NOT USE THIS OPTION IF YOU DO NOT KNOW WHAT IT DOES."
+	   << " More details can be found on the wiki."
+	   << dendl;
+    } else {
+      ret = -EINVAL;
+      derr << "FileStore::mount : stale version stamp " << version_stamp
+	   << ". Please run the FileStore update script before starting the "
+	   << "OSD."
+	   << dendl;
+      goto close_fsid_fd;
+    }
+  }
 
   // open some dir handles
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
