@@ -609,7 +609,7 @@ protected:
     return io_ctx.aio_read(oid, completions[slot], pbl, len, 0);
   }
 
-  int aio_write(const std::string& oid, int slot, const bufferlist& bl, size_t len) {
+  int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len) {
     return io_ctx.aio_write(oid, completions[slot], bl, len, 0);
   }
 

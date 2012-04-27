@@ -385,7 +385,7 @@ protected:
     return 0;
   }
 
-  int aio_write(const std::string& oid, int slot, const bufferlist& bl, size_t len) {
+  int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len) {
     struct req_context *ctx = completions[slot];
 
     ctx->get();
