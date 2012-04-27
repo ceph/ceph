@@ -1884,7 +1884,7 @@ done:
   return r;
 }
 
-int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
+int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
 {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = " << len << dendl;
@@ -2264,7 +2264,7 @@ int Image::aio_write(uint64_t off, size_t len, bufferlist& bl, RBD::AioCompletio
   return librbd::aio_write(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
 }
 
-int Image::aio_discard(uint64_t off, size_t len, RBD::AioCompletion *c)
+int Image::aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::aio_discard(ictx, off, len, (librbd::AioCompletion *)c->pc);
@@ -2535,7 +2535,7 @@ extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const 
   return librbd::aio_write(ictx, off, len, buf, (librbd::AioCompletion *)comp->pc);
 }
 
-extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, size_t len, rbd_completion_t c)
+extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len, rbd_completion_t c)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;

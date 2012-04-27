@@ -108,7 +108,7 @@ public:
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  int aio_discard(uint64_t off, size_t len, RBD::AioCompletion *c);
+  int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();
 
