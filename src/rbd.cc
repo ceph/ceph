@@ -1193,14 +1193,21 @@ int main(int argc, const char **argv)
   case OPT_RM:
     r = do_delete(rbd, io_ctx, imgname);
     if (r < 0) {
-      if (r == -EBUSY) {
+      if (r == -ENOTEMPTY) {
 	cerr << "delete error: image has snapshots - these must be deleted"
 	     << " with 'rbd snap purge' before the image can be removed."
+	     << std::endl;
+      } else if (r == -EBUSY) {
+	cerr << "delete error: image still has watchers"
+	     << std::endl
+	     << "This means the image is still open or the client using "
+	     << "it crashed. Try again after closing/unmapping it or "
+	     << "waiting 30s for the crashed client to timeout."
 	     << std::endl;
       } else {
 	cerr << "delete error: " << cpp_strerror(-r) << std::endl;
       }
-      exit(1);
+      exit(-r);
     }
     break;
 
