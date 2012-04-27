@@ -419,11 +419,7 @@ public:
       ps = ceph_str_hash(pool->object_hash, loc.key.c_str(), loc.key.length());
     else
       ps = ceph_str_hash(pool->object_hash, oid.name.c_str(), oid.name.length());
-    // mix in preferred osd, so we don't get the same peers for
-    // all of the placement pgs (e.g. 0.0p*)
-    if (loc.get_preferred() >= 0)
-      ps += loc.get_preferred();
-    pg = pg_t(ps, loc.get_pool(), loc.get_preferred());
+    pg = pg_t(ps, loc.get_pool(), -1);
     return 0;
   }
 
@@ -435,18 +431,16 @@ public:
   }
 
   static object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
-    return object_locator_t(layout.fl_pg_pool, layout.fl_pg_preferred);
+    return object_locator_t(layout.fl_pg_pool);
   }
 
   // oid -> pg
   ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) const {
-    return make_object_layout(oid, layout.fl_pg_pool,
-			      layout.fl_pg_preferred);
+    return make_object_layout(oid, layout.fl_pg_pool);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1) const {
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool) const {
     object_locator_t loc(pg_pool);
-    loc.preferred = preferred;
     
     ceph_object_layout ol;
     pg_t pgid = object_locator_to_pg(oid, loc);
@@ -488,16 +482,11 @@ private:
     // map to osds[]
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
-    {
-      int preferred = pg.preferred();
-      if (preferred >= max_osd || preferred >= crush.get_max_devices())
-	preferred = -1;
 
-      // what crush rule?
-      int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
-      if (ruleno >= 0)
-	crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
-    }
+    // what crush rule?
+    int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
+    if (ruleno >= 0)
+      crush.do_rule(ruleno, pps, osds, size, -1, osd_weight);
   
     _remove_nonexistent_osds(osds);
 
@@ -685,9 +674,9 @@ public:
    * handy helpers to build simple maps...
    */
   void build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-		    int num_osd, int pg_bits, int pgp_bits, int lpg_bits);
+		    int num_osd, int pg_bits, int pgp_bits);
   void build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-			      int pg_bits, int pgp_bits, int lpg_bits);
+			      int pg_bits, int pgp_bits);
   static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				     map<int, const char*>& poolsets, int num_osd);
   static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,

@@ -37,7 +37,7 @@ using namespace std;
 void usage();
 int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
                  int *stripe_unit, int *stripe_count,
-                 int *object_size, int64_t *pool, int* osd, int *file_offset, bool *dir);
+                 int *object_size, int64_t *pool, int *file_offset, bool *dir);
 int get_layout(int fd, struct ceph_ioctl_layout *layout);
 int get_location(int fd, struct ceph_ioctl_dataloc *location);
 
@@ -51,12 +51,11 @@ int main (int argc, char **argv) {
   int stripe_count = 0;
   int object_size = 0;
   int64_t pool = 0;
-  int osd = -1;
   int file_offset = 0;
   bool dir = false;
 
   if (init_options(argc, argv, &fd, &path, &cmd, &stripe_unit, &stripe_count,
-                   &object_size, &pool, &osd, &file_offset, &dir)){
+                   &object_size, &pool, &file_offset, &dir)){
     usage();
     return 0;
   }
@@ -77,7 +76,6 @@ int main (int argc, char **argv) {
       cout << "layout.object_size:   " << layout.object_size << endl;
       cout << "layout.stripe_unit:   " << layout.stripe_unit << endl;
       cout << "layout.stripe_count:  " << layout.stripe_count << endl;
-      cout << "layout.preferred_osd: " << layout.preferred_osd << endl;
     }
   } else if (CMD_SHOW_LOC == cmd) {
     struct ceph_ioctl_dataloc location;
@@ -103,7 +101,6 @@ int main (int argc, char **argv) {
     int ioctl_num = (dir ? CEPH_IOC_SET_LAYOUT_POLICY : CEPH_IOC_SET_LAYOUT);
     layout.data_pool = pool;
     layout.object_size = object_size;
-    layout.preferred_osd = osd;
     layout.stripe_count = stripe_count;
     layout.stripe_unit = stripe_unit;
     err = ioctl(fd, ioctl_num, (unsigned long)&layout);
@@ -135,7 +132,6 @@ void usage() {
   cerr << "   --stripe_count, -c: set the number of objects to stripe across" << endl;
   cerr << "   --object_size, -s:  set the size of the objects to stripe across" << endl;
   cerr << "   --pool, -p:         set the pool to use" << endl;
-  cerr << "   --osd, -o:          set the preferred osd to use as primary" << endl;
   cerr << endl;
   cerr << "   Useful for getting location data:" << endl;
   cerr << "   --offset, -l:       the offset to retrieve location data for" << endl;
@@ -144,7 +140,7 @@ void usage() {
 
 int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
                  int *stripe_unit, int *stripe_count,
-                 int *object_size, int64_t *pool, int* osd, int *file_offset,
+                 int *object_size, int64_t *pool, int *file_offset,
                  bool *dir) {
   // look through the options, make sure they're valid,
   // and set the variables from them
@@ -223,17 +219,6 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
       *pool= strtol(argv[i+1], NULL, 0);
       if (!*pool && errno) {
         cerr << "invalid value for pool" << endl;
-        return 1;
-      }
-    } else if (!strcmp(argv[i], "--osd") || argv[i][1] == 'o') {
-      if (*cmd != CMD_SET_LAYOUT) {
-        cerr << "Invalid option for command!" << endl;
-        return 1;
-      }
-      errno = 0;
-      *osd = strtol(argv[i+1], NULL, 0);
-      if (!*osd && errno) {
-        cerr << "invalid value for osd" << endl;
         return 1;
       }
     } else if (!strcmp(argv[i], "--offset") || argv[i][1] == 'l') {

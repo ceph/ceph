@@ -266,6 +266,19 @@ void Monitor::init()
     cluster_logger = pcb.create_perf_counters();
   }
 
+  // open compatset
+  {
+    bufferlist bl;
+    store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
+    if (bl.length()) {
+      bufferlist::iterator p = bl.begin();
+      ::decode(features, p);
+    } else {
+      features = get_ceph_mon_feature_compat_set();
+    }
+    dout(10) << "features " << features << dendl;
+  }
+
   // init paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos[i]->init();

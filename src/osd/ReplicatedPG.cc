@@ -3797,7 +3797,6 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
     // if the on-disk oloc is bad/undefined, set up the pool value
     if (oi.oloc.get_pool() < 0) {
       oi.oloc.pool = info.pgid.pool();
-      oi.oloc.preferred = info.pgid.preferred();
     }
 
     SnapSetContext *ssc = NULL;

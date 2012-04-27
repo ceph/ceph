@@ -899,7 +899,7 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
   o.push_back(new OSDMap);
   uuid_d fsid;
-  o.back()->build_simple(cct, 1, fsid, 16, 7, 8, 9);
+  o.back()->build_simple(cct, 1, fsid, 16, 7, 8);
   o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
   delete cct;
 }
@@ -1070,11 +1070,11 @@ void OSDMap::print_summary(ostream& out) const
 }
 
 void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-			  int nosd, int pg_bits, int pgp_bits, int lpg_bits)
+			  int nosd, int pg_bits, int pgp_bits)
 {
   ldout(cct, 10) << "build_simple on " << num_osd
 		 << " osds with " << pg_bits << " pg bits per osd, "
-		 << lpg_bits << " lpg bits" << dendl;
+		 << dendl;
   epoch = e;
   set_fsid(fsid);
   created = modified = ceph_clock_now(cct);
@@ -1101,8 +1101,6 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].pg_num = poolbase << pg_bits;
     pools[pool].pgp_num = poolbase << pgp_bits;
-    pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
-    pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
@@ -1167,11 +1165,11 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 }
 
 void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-				    int pg_bits, int pgp_bits, int lpg_bits)
+				    int pg_bits, int pgp_bits)
 {
   ldout(cct, 10) << "build_simple_from_conf with "
 		 << pg_bits << " pg bits per osd, "
-		 << lpg_bits << " lpg bits" << dendl;
+		 << dendl;
   epoch = e;
   set_fsid(fsid);
   created = modified = ceph_clock_now(cct);
@@ -1217,8 +1215,6 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].pg_num = (maxosd + 1) << pg_bits;
     pools[pool].pgp_num = (maxosd + 1) << pgp_bits;
-    pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
-    pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;

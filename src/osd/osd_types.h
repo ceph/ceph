@@ -100,28 +100,21 @@ namespace __gnu_cxx {
 // does it go in.
 struct object_locator_t {
   int64_t pool;
-  int32_t preferred;
   string key;
 
   explicit object_locator_t()
-    : pool(-1), preferred(-1) {}
+    : pool(-1) {}
   explicit object_locator_t(int64_t po)
-    : pool(po), preferred(-1) {}
-  explicit object_locator_t(int64_t po, int pre)
-    : pool(po), preferred(pre) {}
-  explicit object_locator_t(int64_t po, int pre, string s)
-    : pool(po), preferred(pre), key(s) {}
+    : pool(po) {}
+  explicit object_locator_t(int64_t po, string s)
+    : pool(po), key(s) {}
 
   int get_pool() const {
     return pool;
   }
-  int get_preferred() const {
-    return preferred;
-  }
 
   void clear() {
     pool = -1;
-    preferred = -1;
     key = "";
   }
 
@@ -133,7 +126,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
+  return l.pool == r.pool && l.key == r.key;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -142,8 +135,6 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
-  if (loc.preferred >= 0)
-    out << "p" << loc.preferred;
   if (loc.key.length())
     out << ":" << loc.key;
   return out;
@@ -606,7 +597,6 @@ struct pg_pool_t {
   __u8 crush_ruleset;       /// crush placement rule set
   __u8 object_hash;         /// hash mapping object name to ps
   __u32 pg_num, pgp_num;    /// number of pgs
-  __u32 lpg_num, lpgp_num;  /// number of localized pgs
   epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
   snapid_t snap_seq;        /// seq for per-pool snapshot
   epoch_t snap_epoch;       /// osdmap epoch of last snap
@@ -627,16 +617,16 @@ struct pg_pool_t {
    */
   interval_set<snapid_t> removed_snaps;
 
-  int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+  int pg_num_mask, pgp_num_mask;
 
   pg_pool_t()
     : flags(0), type(0), size(0), crush_ruleset(0), object_hash(0),
-      pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
+      pg_num(0), pgp_num(0),
       last_change(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
-      pg_num_mask(0), pgp_num_mask(0), lpg_num_mask(0), lpgp_num_mask(0) { }
+      pg_num_mask(0), pgp_num_mask(0) { }
 
   void dump(Formatter *f) const;
 
@@ -662,13 +652,9 @@ struct pg_pool_t {
 
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }
-  unsigned get_lpg_num() const { return lpg_num; }
-  unsigned get_lpgp_num() const { return lpgp_num; }
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
-  unsigned get_lpg_num_mask() const { return lpg_num_mask; }
-  unsigned get_lpgp_num_mask() const { return lpgp_num_mask; }
 
   static int calc_bits_of(int t);
   void calc_pg_masks();

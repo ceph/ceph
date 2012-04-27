@@ -78,7 +78,7 @@ void OSDMonitor::create_initial()
     newmap.set_fsid(mon->monmap->fsid);
   } else {
     newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0,
-			g_conf->osd_pg_bits, g_conf->osd_pgp_bits, g_conf->osd_lpg_bits);
+			g_conf->osd_pg_bits, g_conf->osd_pgp_bits);
   }
   newmap.set_epoch(1);
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
@@ -1494,8 +1494,6 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                         g_conf->osd_pool_default_pg_num);
   pending_inc.new_pools[pool].pgp_num = (pgp_num ? pgp_num :
                                          g_conf->osd_pool_default_pgp_num);
-  pending_inc.new_pools[pool].lpg_num = 0;
-  pending_inc.new_pools[pool].lpgp_num = 0;
   pending_inc.new_pools[pool].last_change = pending_inc.epoch;
   pending_inc.new_pools[pool].auid = auid;
   pending_inc.new_pool_names[pool] = name;
@@ -1985,9 +1983,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
             }
           }
         }
-        err = prepare_new_pool(m->cmd[3], CEPH_AUTH_UID_DEFAULT,
-                               -1, pg_num, pgp_num);
-        // that's the default auid owner (ie, none) and the default crush rule
+        err = prepare_new_pool(m->cmd[3], 0,  // auid=0 for admin created pool
+			       -1,            // default crush rule
+			       pg_num, pgp_num);
         if (err < 0) {
           if (err == -EEXIST)
             ss << "pool '" << m->cmd[3] << "' exists";
@@ -2009,26 +2007,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    ss << "pool '" << m->cmd[3] << "' deleted";
 	  getline(ss, rs);
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, ret, rs, paxos->get_version()));
-	  return true;
-	}
-      } else if (m->cmd.size() >= 5 &&
-		 m->cmd[2] == "disable_lpgs" &&
-		 m->cmd[4] == "--yes-i-really-mean-it") {
-	// semi-kludge to disable localized pgs for a pool
-	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
-	if (pool < 0) {
-	  ss << "unrecognized pool '" << m->cmd[3] << "'";
-	  err = -ENOENT;
-	} else {
-	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
-	  if (pending_inc.new_pools.count(pool) == 0)
-	    pending_inc.new_pools[pool] = *p;
-	  pending_inc.new_pools[pool].lpg_num = 0;
-	  pending_inc.new_pools[pool].lpgp_num = 0;
-	  pending_inc.new_pools[pool].last_change = pending_inc.epoch;
-	  ss << "disabled localized pgs for pool " << pool;
-	  getline(ss, rs);
-	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	  return true;
 	}
       } else if (m->cmd[2] == "set") {
@@ -2142,16 +2120,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
 	if (m->cmd[4] == "pgp_num") {
 	  ss << "PGP_NUM: " << p->get_pgp_num();
-	  err = 0;
-	  goto out;
-	}
-	if (m->cmd[4] == "lpg_num") {
-	  ss << "LPG_NUM: " << p->get_lpg_num();
-	  err = 0;
-	  goto out;
-	}
-	if (m->cmd[4] == "lpgp_num") {
-	  ss << "LPPG_NUM: " << p->get_lpgp_num();
 	  err = 0;
 	  goto out;
 	}

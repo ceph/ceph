@@ -121,7 +121,6 @@ Client::Client(Messenger *m, MonClient *mc)
     file_stripe_count(0),
     object_size(0),
     file_replication(0),
-    preferred_pg(-1),
     client_lock("Client::client_lock")
 {
   monclient->set_messenger(m);
@@ -6196,7 +6195,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_count = file_stripe_count;
   req->head.args.open.object_size = object_size;
   req->head.args.open.file_replication = file_replication;
-  req->head.args.open.preferred = preferred_pg;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -6221,7 +6219,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 	  << ' ' << file_stripe_count
 	  << ' ' << object_size
 	  << ' ' << file_replication
-	  << ' ' << preferred_pg
 	  <<") = " << res << dendl;
   return res;
 
@@ -6774,14 +6771,6 @@ void Client::set_default_file_replication(int replication)
 {
   if (replication >= 0)
     file_replication = replication;
-}
-
-void Client::set_default_preferred_pg(int pg)
-{
-  if (pg >= -1)
-    preferred_pg = pg;
-  else
-    ldout(cct, 5) << "Attempt to set preferred_pg " << pg << " < -1!" << dendl;
 }
 
 

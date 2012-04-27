@@ -256,7 +256,6 @@ OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // default to 200M
 OPTION(osd_stat_refresh_interval, OPT_DOUBLE, .5)
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
-OPTION(osd_lpg_bits, OPT_INT, 0)  // bits per osd
 OPTION(osd_pg_layout, OPT_INT, CEPH_PG_LAYOUT_CRUSH)
 OPTION(osd_min_rep, OPT_INT, 1)
 OPTION(osd_max_rep, OPT_INT, 10)
