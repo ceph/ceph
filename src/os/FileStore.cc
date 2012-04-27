@@ -1281,7 +1281,7 @@ int FileStore::_test_fiemap()
   // fiemap an extent inside that
   struct fiemap *fiemap;
   int r = do_fiemap(fd, 2430421, 59284, &fiemap);
-  if (r == -EOPNOTSUPP) {
+  if (r < 0) {
     dout(0) << "mount FIEMAP ioctl is NOT supported" << dendl;
     ioctl_fiemap = false;
   } else {
