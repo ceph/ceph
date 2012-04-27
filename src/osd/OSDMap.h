@@ -463,6 +463,27 @@ public:
 
   // pg -> (osd list)
 private:
+
+  /**
+   * remove any osds from the vector that do not exist in the map
+   *
+   * @param osds vector of osds to filter/modify
+   */
+  void _remove_nonexistent_osds(vector<int>& osds) const {
+    unsigned removed = 0;
+    for (unsigned i = 0; i < osds.size(); i++) {
+      if (!exists(osds[i])) {
+	removed++;
+	continue;
+      }
+      if (removed) {
+	osds[i - removed] = osds[i];
+      }
+    }
+    if (removed)
+      osds.resize(osds.size() - removed);
+  }
+
   int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const {
     // map to osds[]
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
@@ -472,14 +493,14 @@ private:
       if (preferred >= max_osd || preferred >= crush.get_max_devices())
 	preferred = -1;
 
-      assert(get_max_osd() >= crush.get_max_devices());
-
       // what crush rule?
       int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
       if (ruleno >= 0)
 	crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
     }
   
+    _remove_nonexistent_osds(osds);
+
     return osds.size();
   }
 
