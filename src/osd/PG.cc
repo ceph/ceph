@@ -698,8 +698,8 @@ void PG::generate_past_intervals()
 	       << stop << dendl;
       return;
     }
-    dout(10) << __func__ << " only have past intervals back to " << pif->first << ", recalculating" << dendl;
-    past_intervals.clear();
+    dout(10) << __func__ << " only have past intervals back to " << pif->first << dendl;
+    last_epoch = pif->first - 1;
   }
 
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
