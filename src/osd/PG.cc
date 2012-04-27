@@ -4421,7 +4421,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       while (p != peer_info_requested.end()) {
 	if (prior_set->probe.count(*p) == 0) {
 	  dout(20) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
-	  peer_info_requested.erase(++p);
+	  peer_info_requested.erase(p++);
 	} else {
 	  ++p;
 	}
