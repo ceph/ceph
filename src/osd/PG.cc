@@ -679,7 +679,7 @@ bool PG::needs_recovery() const
 void PG::generate_past_intervals()
 {
   // Do we already have the intervals we want?
-  map<epoch_t,Interval>::const_iterator pif = past_intervals.begin();
+  map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
   if (pif != past_intervals.end()) {
     if (pif->first <= info.history.last_epoch_clean) {
       dout(10) << __func__ << ": already have past intervals back to "
@@ -720,7 +720,7 @@ void PG::generate_past_intervals()
 	break;
     }
 
-    Interval &i = past_intervals[first_epoch];
+    pg_interval_t &i = past_intervals[first_epoch];
     i.first = first_epoch;
     i.last = last_epoch;
     i.up.swap(tup);
@@ -769,8 +769,8 @@ void PG::generate_past_intervals()
  */
 void PG::trim_past_intervals()
 {
-  std::map<epoch_t,Interval>::iterator pif = past_intervals.begin();
-  std::map<epoch_t,Interval>::iterator end = past_intervals.end();
+  std::map<epoch_t,pg_interval_t>::iterator pif = past_intervals.begin();
+  std::map<epoch_t,pg_interval_t>::iterator end = past_intervals.end();
   while (pif != end) {
     if (pif->second.last >= info.history.last_epoch_clean)
       return;
@@ -1137,10 +1137,10 @@ void PG::build_might_have_unfound()
   generate_past_intervals();
 
   // We need to decide who might have unfound objects that we need
-  std::map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
-  std::map<epoch_t,Interval>::const_reverse_iterator end = past_intervals.rend();
+  std::map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
+  std::map<epoch_t,pg_interval_t>::const_reverse_iterator end = past_intervals.rend();
   for (; p != end; ++p) {
-    const Interval &interval(p->second);
+    const pg_interval_t &interval(p->second);
     // We already have all the objects that exist at last_epoch_clean,
     // so there's no need to look at earlier intervals.
     if (interval.last < info.history.last_epoch_clean)
@@ -3356,10 +3356,10 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
 {
   bool crashed = false;
 
-  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+  for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        p++) {
-    const Interval &interval = p->second;
+    const pg_interval_t &interval = p->second;
     dout(10) << "may_need_replay " << interval << dendl;
 
     if (interval.last < info.history.last_epoch_started)
@@ -3512,7 +3512,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dirty_info = true;
   } else if (acting != oldacting || up != oldup) {
     // remember past interval
-    PG::Interval& i = past_intervals[info.history.same_interval_since];
+    pg_interval_t& i = past_intervals[info.history.same_interval_since];
     i.first = info.history.same_interval_since;
     i.last = osdmap->get_epoch() - 1;
     i.acting = oldacting;
@@ -4439,14 +4439,14 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
        * that interval.
        */
       if (pg->info.history.last_epoch_started) {
-	for (map<epoch_t,PG::Interval>::reverse_iterator p = pg->past_intervals.rbegin();
+	for (map<epoch_t,pg_interval_t>::reverse_iterator p = pg->past_intervals.rbegin();
 	     p != pg->past_intervals.rend();
 	     ++p) {
 	  if (p->first < pg->info.history.last_epoch_started)
 	    break;
 	  if (!p->second.maybe_went_rw)
 	    continue;
-	  Interval& interval = p->second;
+	  pg_interval_t& interval = p->second;
 	  dout(10) << " last maybe_went_rw interval was " << interval << dendl;
 	  OSDMapRef osdmap = pg->get_osdmap();
 
@@ -4969,7 +4969,7 @@ void PG::RecoveryState::handle_query_state(Formatter *f)
 #define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
 PG::PriorSet::PriorSet(const OSDMap &osdmap,
-		       const map<epoch_t, Interval> &past_intervals,
+		       const map<epoch_t, pg_interval_t> &past_intervals,
 		       const vector<int> &up,
 		       const vector<int> &acting,
 		       const pg_info_t &info,
@@ -5030,10 +5030,10 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
   for (unsigned i=0; i<up.size(); i++)
     probe.insert(up[i]);
 
-  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+  for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        p++) {
-    const Interval &interval = p->second;
+    const pg_interval_t &interval = p->second;
     dout(10) << "build_prior " << interval << dendl;
 
     if (interval.last < info.history.last_epoch_started)

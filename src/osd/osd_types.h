@@ -1037,6 +1037,28 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
 }
 
 
+/**
+ * pg_interval_t - information about a past interval
+ */
+struct pg_interval_t {
+  vector<int> up, acting;
+  epoch_t first, last;
+  bool maybe_went_rw;
+
+  pg_interval_t() : first(0), last(0), maybe_went_rw(false) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_interval_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_interval_t)
+
+ostream& operator<<(ostream& out, const pg_interval_t& i);
+
+typedef map<epoch_t, pg_interval_t> pg_interval_map_t;
+
+
 /** 
  * pg_query_t - used to ask a peer for information about a pg.
  *

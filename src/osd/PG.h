@@ -400,56 +400,6 @@ public:
   bool dirty_info, dirty_log;
 
 public:
-  struct Interval {
-    vector<int> up, acting;
-    epoch_t first, last;
-    bool maybe_went_rw;
-
-    Interval() : first(0), last(0), maybe_went_rw(false) {}
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(2, 2, bl);
-      ::encode(first, bl);
-      ::encode(last, bl);
-      ::encode(up, bl);
-      ::encode(acting, bl);
-      ::encode(maybe_went_rw, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(first, bl);
-      ::decode(last, bl);
-      ::decode(up, bl);
-      ::decode(acting, bl);
-      ::decode(maybe_went_rw, bl);
-      DECODE_FINISH(bl);
-    }
-    void dump(Formatter *f) const {
-      f->dump_unsigned("first", first);
-      f->dump_unsigned("last", last);
-      f->dump_int("maybe_went_rw", maybe_went_rw ? 1 : 0);
-      f->open_array_section("up");
-      for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
-	f->dump_int("osd", *p);
-      f->close_section();
-      f->open_array_section("acting");
-      for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
-	f->dump_int("osd", *p);
-      f->close_section();
-    }
-    static void generate_test_instances(list<Interval*>& o) {
-      o.push_back(new Interval);
-      o.push_back(new Interval);
-      o.back()->up.push_back(1);
-      o.back()->acting.push_back(2);
-      o.back()->acting.push_back(3);
-      o.back()->first = 4;
-      o.back()->last = 5;
-      o.back()->maybe_went_rw = true;
-    }
-  };
-  WRITE_CLASS_ENCODER(Interval)
 
   // pg state
   pg_info_t        info;
@@ -463,7 +413,7 @@ public:
   set<int> missing_loc_sources;           // superset of missing_loc locations
   
   interval_set<snapid_t> snap_collections;
-  map<epoch_t,Interval> past_intervals;
+  map<epoch_t,pg_interval_t> past_intervals;
 
   interval_set<snapid_t> snap_trimq;
 
@@ -505,7 +455,7 @@ public:
 
     bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
     PriorSet(const OSDMap &osdmap,
-	     const map<epoch_t, Interval> &past_intervals,
+	     const map<epoch_t, pg_interval_t> &past_intervals,
 	     const vector<int> &up,
 	     const vector<int> &acting,
 	     const pg_info_t &info,
@@ -1458,17 +1408,7 @@ public:
 				    utime_t expire) = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Interval& i)
-{
-  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
-  if (i.maybe_went_rw)
-    out << " maybe_went_rw";
-  out << ")";
-  return out;
-}
 
 ostream& operator<<(ostream& out, const PG& pg);
 

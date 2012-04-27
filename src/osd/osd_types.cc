@@ -1311,6 +1311,68 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
 }
 
 
+// -- pg_interval_t --
+
+void pg_interval_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(first, bl);
+  ::encode(last, bl);
+  ::encode(up, bl);
+  ::encode(acting, bl);
+  ::encode(maybe_went_rw, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_interval_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(first, bl);
+  ::decode(last, bl);
+  ::decode(up, bl);
+  ::decode(acting, bl);
+  ::decode(maybe_went_rw, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_interval_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("first", first);
+  f->dump_unsigned("last", last);
+  f->dump_int("maybe_went_rw", maybe_went_rw ? 1 : 0);
+  f->open_array_section("up");
+  for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+  f->open_array_section("acting");
+  for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+}
+
+void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
+{
+  o.push_back(new pg_interval_t);
+  o.push_back(new pg_interval_t);
+  o.back()->up.push_back(1);
+  o.back()->acting.push_back(2);
+  o.back()->acting.push_back(3);
+  o.back()->first = 4;
+  o.back()->last = 5;
+  o.back()->maybe_went_rw = true;
+}
+
+ostream& operator<<(ostream& out, const pg_interval_t& i)
+{
+  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
+  if (i.maybe_went_rw)
+    out << " maybe_went_rw";
+  out << ")";
+  return out;
+}
+
+
+
 // -- pg_query_t --
 
 void pg_query_t::dump(Formatter *f) const
