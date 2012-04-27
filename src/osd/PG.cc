@@ -3665,6 +3665,11 @@ ostream& operator<<(ostream& out, const PG& pg)
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
 
+  if (pg.past_intervals.size()) {
+    out << " pi=" << pg.past_intervals.begin()->first << "-" << pg.past_intervals.rbegin()->second.last
+	<< "/" << pg.past_intervals.size();
+  }
+
   if (pg.is_active() &&
       pg.last_update_ondisk != pg.info.last_update)
     out << " luod=" << pg.last_update_ondisk;
