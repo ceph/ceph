@@ -678,17 +678,6 @@ bool PG::needs_recovery() const
 
 void PG::generate_past_intervals()
 {
-  // Do we already have the intervals we want?
-  map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
-  if (pif != past_intervals.end()) {
-    if (pif->first <= info.history.last_epoch_clean) {
-      dout(10) << __func__ << ": already have past intervals back to "
-	       << info.history.last_epoch_clean << dendl;
-      return;
-    }
-    past_intervals.clear();
-  }
-
   epoch_t first_epoch = 0;
   epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
   if (stop < osd->superblock.oldest_map)
@@ -699,6 +688,18 @@ void PG::generate_past_intervals()
     dout(10) << __func__ << " last_epoch " << last_epoch << " < oldest " << stop
 	     << ", nothing to do" << dendl;
     return;
+  }
+
+  // Do we already have the intervals we want?
+  map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
+  if (pif != past_intervals.end()) {
+    if (pif->first <= stop) {
+      dout(10) << __func__ << " already have past intervals back to "
+	       << stop << dendl;
+      return;
+    }
+    dout(10) << __func__ << " only have past intervals back to " << pif->first << ", recalculating" << dendl;
+    past_intervals.clear();
   }
 
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
