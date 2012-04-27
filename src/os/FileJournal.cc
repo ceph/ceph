@@ -825,6 +825,7 @@ void FileJournal::queue_completions_thru(uint64_t seq)
       completions.front().tracked_op->mark_event("journaled_completion_queued");
     completions.pop_front();
   }
+  queue_cond.Signal();
 }
 
 int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes)
@@ -1049,22 +1050,15 @@ void FileJournal::do_write(bufferlist& bl)
       }
     }
   }
-  {
-    Mutex::Locker locker(flush_lock);
-    writing = false;
-    write_empty_cond.Signal();
-  }
 }
 
 void FileJournal::flush()
 {
-  flush_queue();
+  dout(5) << "waiting for completions to empty" << dendl;
   {
-    Mutex::Locker locker(flush_lock);
-    while (writing) {
-      dout(5) << "flush waiting for writeq to empty and writes to complete" << dendl;
-      write_empty_cond.Wait(flush_lock);
-    }
+    Mutex::Locker l(queue_lock);
+    while (!completions.empty())
+      queue_cond.Wait(queue_lock);
   }
   dout(5) << "flush waiting for finisher" << dendl;
   finisher->wait_for_empty();
@@ -1115,11 +1109,6 @@ void FileJournal::write_thread_entry()
     }
 #endif
 
-    {
-      Mutex::Locker locker(flush_lock);
-      writing = true;
-    }
-
     Mutex::Locker locker(write_lock);
     uint64_t orig_ops = 0;
     uint64_t orig_bytes = 0;
@@ -1145,8 +1134,6 @@ void FileJournal::write_thread_entry()
     put_throttle(orig_ops, orig_bytes);
   }
 
-  Mutex::Locker locker(flush_lock);
-  write_empty_cond.Signal();
   dout(10) << "write_thread_entry finish" << dendl;
 }
 
@@ -1367,15 +1354,6 @@ void FileJournal::check_aio_completion()
 
     // maybe write queue was waiting for aio count to drop?
     aio_cond.Signal();
-
-    // wake up flush?
-    if (aio_queue.empty()) {
-      Mutex::Locker locker(flush_lock);
-      writing = false;
-      write_empty_cond.Signal();
-      assert(aio_num == 0);
-      assert(aio_bytes == 0);
-    }
   }
 }
 #endif
@@ -1438,15 +1416,6 @@ void FileJournal::pop_write()
   assert(write_lock.is_locked());
   Mutex::Locker locker(queue_lock);
   writeq.pop_front();
-  if (writeq.empty())
-    queue_cond.Signal();
-}
-
-void FileJournal::flush_queue()
-{
-  Mutex::Locker locker(queue_lock);
-  while (!writeq.empty())
-    queue_cond.Wait(queue_lock);
 }
 
 void FileJournal::commit_start()
