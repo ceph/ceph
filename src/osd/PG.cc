@@ -1301,7 +1301,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
 	  if (activator_map->count(peer) == 0)
 	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
-	  (*activator_map)[peer]->pg_info.push_back(info);
+	  (*activator_map)[peer]->pg_list.push_back(make_pair(info, past_intervals));
 	} else {
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
@@ -1334,11 +1334,14 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	m->log.copy_after(log, pi.last_update);
       }
 
+      // share past_intervals if we are creating the pg on the replica
+      if (pi.dne())
+	m->past_intervals = past_intervals;
+
       if (pi.last_backfill != hobject_t::get_max())
 	state_set(PG_STATE_BACKFILL);
       else
 	active++;
-
 
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
@@ -1484,7 +1487,7 @@ void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
     MOSDPGInfo *m = new MOSDPGInfo(e);
     pg_info_t i = info;
     i.history.last_epoch_started = e;
-    m->pg_info.push_back(i);
+    m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, primary);
   }
   unlock();
@@ -1815,31 +1818,30 @@ void PG::clear_stats()
  * @param newup up set
  * @param newacting acting set
  * @param history pg history
+ * @param pi past_intervals
  * @param t transaction to write out our new state in
  */
 void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
-	      pg_interval_map_t *pim,
+	      pg_interval_map_t& pi,
 	      ObjectStore::Transaction *t)
 {
   dout(10) << "init role " << role << " up " << newup << " acting " << newacting
-	   << " history " << history << dendl;
+	   << " history " << history
+	   << " " << pi.size() << " past_intervals"
+	   << dendl;
 
   set_role(role);
   acting = newacting;
   up = newup;
 
   info.history = history;
+  past_intervals.swap(pi);
 
   info.stats.up = up;
   info.stats.acting = acting;
   info.stats.mapping_epoch = info.history.same_interval_since;
 
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-
-  if (pim) {
-    past_intervals.swap(*pim);
-    dout(10) << "init  got " << past_intervals.size() << " past intervals" << dendl;
-  }
 
   write_info(*t);
   write_log(*t);
@@ -3276,7 +3278,7 @@ void PG::share_pg_info()
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
-    m->pg_info.push_back(info);
+    m->pg_list.push_back(make_pair(info, pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
   }
 }

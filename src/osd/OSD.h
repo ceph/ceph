@@ -471,13 +471,12 @@ protected:
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false, bool hold_map_lock=false);
   PG   *_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
-			pg_interval_map_t *pim,
-			ObjectStore::Transaction& t);
+			pg_interval_map_t& pi, ObjectStore::Transaction& t);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 
-  PG *get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& pcreated, bool primary,
-		       pg_interval_map_t *ppi,
+  PG *get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
+		       epoch_t epoch, int from, int& pcreated, bool primary,
 		       ObjectStore::Transaction **pt,
 		       C_Contexts **pfin);
   

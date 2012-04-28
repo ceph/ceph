@@ -1113,7 +1113,7 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check, bool hold_map_lock)
 
 PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 			 int role, vector<int>& up, vector<int>& acting, pg_history_t history,
-			 pg_interval_map_t *pim,
+			 pg_interval_map_t& pi,
 			 ObjectStore::Transaction& t)
 {
   assert(osd_lock.is_locked());
@@ -1133,7 +1133,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
     history.last_epoch_started = history.epoch_created - 1;
   }
 
-  pg->init(role, up, acting, history, pim, &t);
+  pg->init(role, up, acting, history, pi, &t);
 
   dout(7) << "_create_lock_pg " << *pg << dendl;
   return pg;
@@ -1239,8 +1239,8 @@ void OSD::load_pgs()
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
  * hasn't changed since the given epoch and we are the primary.
  */
-PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& created,
-			  bool primary, pg_interval_map_t *ppi,
+PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
+			  epoch_t epoch, int from, int& created, bool primary,
 			  ObjectStore::Transaction **pt,
 			  C_Contexts **pfin)
 {
@@ -1289,7 +1289,7 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& c
     // ok, create PG locally using provided Info and History
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
-    pg = _create_lock_pg(info.pgid, create, false, role, up, acting, history, ppi, **pt);
+    pg = _create_lock_pg(info.pgid, create, false, role, up, acting, history, pi, **pt);
       
     created++;
     dout(10) << *pg << " is new" << dendl;
@@ -3896,8 +3896,9 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
     history.epoch_created = history.same_up_since =
       history.same_interval_since = history.same_primary_since =
       osdmap->get_epoch();
+    pg_interval_map_t pi;
     PG *pg = _create_lock_pg(*q, true, true,
-			     parent->get_role(), parent->up, parent->acting, history, NULL, t);
+			     parent->get_role(), parent->up, parent->acting, history, pi, t);
     children[*q] = pg;
     dout(10) << "  child " << *pg << dendl;
   }
@@ -4129,9 +4130,9 @@ void OSD::handle_pg_create(OpRequestRef op)
     if (can_create_pg(pgid)) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts(g_ceph_context);
-
+      pg_interval_map_t pi;
       PG *pg = _create_lock_pg(pgid, true, false,
-			       0, creating_pgs[pgid].acting, creating_pgs[pgid].acting, history, NULL,
+			       0, creating_pgs[pgid].acting, creating_pgs[pgid].acting, history, pi,
 			       *t);
       creating_pgs.erase(pgid);
 
@@ -4207,8 +4208,8 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
        ++p) { 
-    for (vector<pg_info_t>::iterator i = p->second->pg_info.begin();
-	 i != p->second->pg_info.end();
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator i = p->second->pg_list.begin();
+	 i != p->second->pg_list.end();
 	 ++i) {
       dout(20) << "Sending info " << *i << " to osd." << p->first << dendl;
     }
@@ -4250,7 +4251,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
     ObjectStore::Transaction *t;
     C_Contexts *fin;
-    pg = get_or_create_pg(it->first, m->get_epoch(), from, created, true, &it->second, &t, &fin);
+    pg = get_or_create_pg(it->first, it->second, m->get_epoch(), from, created, true, &t, &fin);
     if (!pg)
       continue;
 
@@ -4291,8 +4292,8 @@ void OSD::handle_pg_log(OpRequestRef op)
   int created = 0;
   ObjectStore::Transaction *t;
   C_Contexts *fin;  
-  PG *pg = get_or_create_pg(m->info, m->get_epoch(), 
-			    from, created, false, NULL, &t, &fin);
+  PG *pg = get_or_create_pg(m->info, m->past_intervals, m->get_epoch(), 
+			    from, created, false, &t, &fin);
   if (!pg) {
     return;
   }
@@ -4339,13 +4340,13 @@ void OSD::handle_pg_info(OpRequestRef op)
 
   int created = 0;
 
-  for (vector<pg_info_t>::iterator p = m->pg_info.begin();
-       p != m->pg_info.end();
+  for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
+       p != m->pg_list.end();
        ++p) {
     ObjectStore::Transaction *t = 0;
     C_Contexts *fin = 0;
-    PG *pg = get_or_create_pg(*p, m->get_epoch(), 
-			      from, created, false, NULL, &t, &fin);
+    PG *pg = get_or_create_pg(p->first, p->second, m->get_epoch(), 
+			      from, created, false, &t, &fin);
     if (!pg)
       continue;
 
@@ -4359,7 +4360,7 @@ void OSD::handle_pg_info(OpRequestRef op)
 
     PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
 
-    pg->handle_info(from, *p, &rctx);
+    pg->handle_info(from, p->first, &rctx);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(!tr);
