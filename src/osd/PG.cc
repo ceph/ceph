@@ -3310,18 +3310,6 @@ void PG::share_pg_log()
   }
 }
 
-void PG::fulfill_info(int from, const pg_query_t &query, 
-		      pair<pg_info_t, pg_interval_map_t> &notify_info)
-{
-  assert(!acting.empty());
-  assert(from == acting[0]);
-  assert(query.type == pg_query_t::INFO);
-
-  // info
-  dout(10) << "sending info" << dendl;
-  notify_info = make_pair(info, past_intervals);
-}
-
 void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 {
   assert(!acting.empty());
@@ -4334,9 +4322,11 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == pg_query_t::INFO) {
-    pair<pg_info_t,pg_interval_map_t> notify_info;
-    pg->fulfill_info(query.from, query.query, notify_info);
-    context< RecoveryMachine >().send_notify(query.from, notify_info.first, notify_info.second);
+    dout(10) << "sending info to osd." << query.from << dendl;
+    assert(!pg->acting.empty());
+    assert(query.from == pg->acting[0]);
+    assert(query.query.type == pg_query_t::INFO);
+    context< RecoveryMachine >().send_notify(query.from, pg->info, pg->past_intervals);
   } else {
     pg->fulfill_log(query.from, query.query, query.query_epoch);
   }
