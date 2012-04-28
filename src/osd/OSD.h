@@ -471,11 +471,13 @@ protected:
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false, bool hold_map_lock=false);
   PG   *_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
+			pg_interval_map_t *pim,
 			ObjectStore::Transaction& t);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 
   PG *get_or_create_pg(const pg_info_t& info, epoch_t epoch, int from, int& pcreated, bool primary,
+		       pg_interval_map_t *ppi,
 		       ObjectStore::Transaction **pt,
 		       C_Contexts **pfin);
   
@@ -617,7 +619,7 @@ protected:
 
 
   // -- generic pg peering --
-  void do_notifies(map< int, vector<pg_info_t> >& notify_list,
+  void do_notifies(map< int, vector<pair<pg_info_t,pg_interval_map_t> > >& notify_list,
 		   epoch_t query_epoch);
   void do_queries(map< int, map<pg_t,pg_query_t> >& query_map);
   void do_infos(map<int, MOSDPGInfo*>& info_map);

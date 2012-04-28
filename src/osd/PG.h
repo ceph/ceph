@@ -475,14 +475,14 @@ public:
     utime_t start_time;
     map< int, map<pg_t, pg_query_t> > *query_map;
     map< int, MOSDPGInfo* > *info_map;
-    map< int, vector<pg_info_t> > *notify_list;
+    map< int, vector<pair<pg_info_t,pg_interval_map_t> > > *notify_list;
     list< Context* > *context_list;
     ObjectStore::Transaction *transaction;
     RecoveryCtx() : query_map(0), info_map(0), notify_list(0),
 		    context_list(0), transaction(0) {}
     RecoveryCtx(map< int, map<pg_t, pg_query_t> > *query_map,
 		map< int, MOSDPGInfo* > *info_map,
-		map< int, vector<pg_info_t> > *notify_list,
+		map< int, vector<pair<pg_info_t,pg_interval_map_t> > > *notify_list,
 		list< Context* > *context_list,
 		ObjectStore::Transaction *transaction)
       : query_map(query_map), info_map(info_map), 
@@ -903,9 +903,9 @@ public:
 	return state->rctx->context_list;
       }
 
-      void send_notify(int to, const pg_info_t &info) {
+      void send_notify(int to, const pg_info_t& info, const pg_interval_map_t& pi) {
 	assert(state->rctx->notify_list);
-	(*state->rctx->notify_list)[to].push_back(info);
+	(*state->rctx->notify_list)[to].push_back(make_pair(info, pi));
       }
     };
     friend class RecoveryMachine;
@@ -1291,7 +1291,7 @@ public:
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
   void init(int role, vector<int>& up, vector<int>& acting, pg_history_t& history,
-	    ObjectStore::Transaction *t);
+	    pg_interval_map_t *pim, ObjectStore::Transaction *t);
 
   // pg on-disk state
   void do_pending_flush();
@@ -1332,7 +1332,7 @@ public:
   void set_last_peering_reset();
 
   void fulfill_info(int from, const pg_query_t &query, 
-		    pair<int, pg_info_t> &notify_info);
+		    pair<pg_info_t, pg_interval_map_t> &notify_info);
   void fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);

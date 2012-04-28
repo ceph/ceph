@@ -1815,6 +1815,7 @@ void PG::clear_stats()
  * @param t transaction to write out our new state in
  */
 void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
+	      pg_interval_map_t *pim,
 	      ObjectStore::Transaction *t)
 {
   dout(10) << "init role " << role << " up " << newup << " acting " << newacting
@@ -1831,6 +1832,11 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   info.stats.mapping_epoch = info.history.same_interval_since;
 
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+
+  if (pim) {
+    past_intervals.swap(*pim);
+    dout(10) << "init  got " << past_intervals.size() << " past intervals" << dendl;
+  }
 
   write_info(*t);
   write_log(*t);
@@ -3305,7 +3311,7 @@ void PG::share_pg_log()
 }
 
 void PG::fulfill_info(int from, const pg_query_t &query, 
-		      pair<int, pg_info_t> &notify_info)
+		      pair<pg_info_t, pg_interval_map_t> &notify_info)
 {
   assert(!acting.empty());
   assert(from == acting[0]);
@@ -3313,7 +3319,7 @@ void PG::fulfill_info(int from, const pg_query_t &query,
 
   // info
   dout(10) << "sending info" << dendl;
-  notify_info = make_pair(from, info);
+  notify_info = make_pair(info, past_intervals);
 }
 
 void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
@@ -3855,7 +3861,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
-					     pg->info);
+					     pg->info, pg->past_intervals);
   }
 
   pg->update_heartbeat_peers();
@@ -4243,7 +4249,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
-					     pg->info);
+					     pg->info, pg->past_intervals);
   }
   return discard_event();
 }
@@ -4328,9 +4334,9 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == pg_query_t::INFO) {
-    pair<int, pg_info_t> notify_info;
+    pair<pg_info_t,pg_interval_map_t> notify_info;
     pg->fulfill_info(query.from, query.query, notify_info);
-    context< RecoveryMachine >().send_notify(notify_info.first, notify_info.second);
+    context< RecoveryMachine >().send_notify(query.from, notify_info.first, notify_info.second);
   } else {
     pg->fulfill_log(query.from, query.query, query.query_epoch);
   }
@@ -4342,7 +4348,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
-					     pg->info);
+					     pg->info, pg->past_intervals);
   }
   return discard_event();
 }
