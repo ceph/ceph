@@ -3300,19 +3300,19 @@ void OSD::handle_osd_map(MOSDMap *m)
 	       !osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
       if (!osdmap->is_up(whoami))
 	clog.warn() << "map e" << osdmap->get_epoch()
-		    << " wrongly marked me down or wrong addr";
+		    << " wrongly marked me down";
       else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
-		    << " != my " << client_messenger->get_myaddr();
+		     << " != my " << client_messenger->get_myaddr() << ")";
       else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
-		    << " != my " << cluster_messenger->get_myaddr();
+		     << " != my " << cluster_messenger->get_myaddr() << ")";
       else if (!osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
-		    << " != my " << hbserver_messenger->get_myaddr();
+		     << " != my " << hbserver_messenger->get_myaddr() << ")";
       
       state = STATE_BOOTING;
       up_epoch = 0;
