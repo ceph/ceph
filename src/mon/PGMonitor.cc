@@ -676,7 +676,7 @@ bool PGMonitor::register_new_pgs()
     int64_t poolid = p->first;
     pg_pool_t &pool = p->second;
     int ruleno = pool.get_crush_ruleset();
-    if (!osdmap->crush.rule_exists(ruleno)) 
+    if (!osdmap->crush->rule_exists(ruleno)) 
       continue;
 
     if (pool.get_last_change() <= pg_map.last_pg_scan ||

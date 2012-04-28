@@ -65,6 +65,8 @@ int main(int argc, const char **argv)
   std::string export_crush, import_crush, test_map_pg, test_map_object;
   list<entity_addr_t> add, rm;
   bool test_crush = false;
+  int range_first = -1;
+  int range_last = -1;
 
   std::string val;
   std::ostringstream err;
@@ -109,6 +111,8 @@ int main(int argc, const char **argv)
       test_map_object = val;
     } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
       test_crush = true;
+    } else if (ceph_argparse_withint(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
+    } else if (ceph_argparse_withint(args, i, &range_last, &err, "--range_last", (char*)NULL)) {
     } else {
       ++i;
     }
@@ -122,6 +126,26 @@ int main(int argc, const char **argv)
     usage();
   }
   fn = args[0];
+
+  if (range_first >= 0 && range_last >= 0) {
+    set<OSDMap*> maps;
+    OSDMap *prev = NULL;
+    for (int i=range_first; i <= range_last; i++) {
+      ostringstream f;
+      f << fn << "/" << i;
+      bufferlist bl;
+      string error, s = f.str();
+      bl.read_file(s.c_str(), &error);
+      cout << s << " got " << bl.length() << " bytes" << std::endl;
+      OSDMap *o = new OSDMap;
+      o->decode(bl);
+      maps.insert(o);
+      if (prev)
+	OSDMap::dedup(prev, o);
+      prev = o;
+    }
+    exit(0);
+  }
   
   OSDMap osdmap;
   bufferlist bl;
@@ -202,7 +226,7 @@ int main(int argc, const char **argv)
 
   if (!export_crush.empty()) {
     bufferlist cbl;
-    osdmap.crush.encode(cbl);
+    osdmap.crush->encode(cbl);
     r = cbl.write_file(export_crush.c_str());
     if (r < 0) {
       cerr << me << ": error writing crush map to " << import_crush << std::endl;

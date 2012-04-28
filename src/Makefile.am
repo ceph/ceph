@@ -1228,6 +1228,8 @@ noinst_HEADERS = \
         common/perf_counters.h\
 	common/admin_socket.h \
 	common/admin_socket_client.h \
+	common/shared_cache.hpp \
+	common/simple_cache.hpp \
         common/MemoryModel.h\
         common/Mutex.h\
 	common/PrebufferedStreambuf.h\

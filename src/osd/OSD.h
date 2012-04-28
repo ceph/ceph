@@ -47,6 +47,8 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "OpRequest.h"
+#include "common/shared_cache.hpp"
+#include "common/simple_cache.hpp"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -409,22 +411,40 @@ private:
   void activate_map(ObjectStore::Transaction& t, list<Context*>& tfin);
 
   // osd map cache (past osd maps)
-  map<epoch_t,OSDMapRef > map_cache;
-  map<epoch_t,bufferlist> map_inc_bl;
-  map<epoch_t,bufferlist> map_bl;
   Mutex map_cache_lock;
+  SharedLRU<epoch_t, OSDMap> map_cache;
+  SimpleLRU<epoch_t, bufferlist> map_bl_cache;
+  SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
+
 
   OSDMapRef get_map(epoch_t e);
-  OSDMapRef add_map(OSDMap *o);
-  void add_map_bl(epoch_t e, bufferlist& bl);
-  void add_map_inc_bl(epoch_t e, bufferlist& bl);
-  void trim_map_cache(epoch_t oldest);
-  void trim_map_bl_cache(epoch_t oldest);
-  void clear_map_cache();
+  OSDMapRef add_map(OSDMap *o) {
+    Mutex::Locker l(map_cache_lock);
+    return _add_map(o);
+  }
+  OSDMapRef _add_map(OSDMap *o);
 
-  bool get_map_bl(epoch_t e, bufferlist& bl);
+  void add_map_bl(epoch_t e, bufferlist& bl) {
+    Mutex::Locker l(map_cache_lock);
+    return _add_map_bl(e, bl);
+  }
+  void pin_map_bl(epoch_t e, bufferlist &bl);
+  void _add_map_bl(epoch_t e, bufferlist& bl);
+  bool get_map_bl(epoch_t e, bufferlist& bl) {
+    Mutex::Locker l(map_cache_lock);
+    return _get_map_bl(e, bl);
+  }
+  bool _get_map_bl(epoch_t e, bufferlist& bl);
+
+  void add_map_inc_bl(epoch_t e, bufferlist& bl) {
+    Mutex::Locker l(map_cache_lock);
+    return _add_map_inc_bl(e, bl);
+  }
+  void pin_map_inc_bl(epoch_t e, bufferlist &bl);
+  void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
-  bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
+
+  void clear_map_bl_cache_pins();
   
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);

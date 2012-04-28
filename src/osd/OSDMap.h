@@ -42,21 +42,6 @@ using namespace std;
 #include <ext/hash_set>
 using __gnu_cxx::hash_set;
 
-
-
-/*
- * some system constants
- */
-
-// pg roles
-#define PG_ROLE_STRAY   -1
-#define PG_ROLE_HEAD     0
-#define PG_ROLE_ACKER    1
-#define PG_ROLE_MIDDLE   2  // der.. misnomer
-//#define PG_ROLE_TAIL     2
-
-
-
 /*
  * we track up to two intervals during which the osd was alive and
  * healthy.  the most recent is [up_from,up_thru), where up_thru is
@@ -170,12 +155,17 @@ private:
   int num_osd;         // not saved
   int32_t max_osd;
   vector<uint8_t> osd_state;
-  vector<entity_addr_t> osd_addr;
-  vector<entity_addr_t> osd_cluster_addr;
-  vector<entity_addr_t> osd_hb_addr;
+
+  struct addrs_s {
+    vector<std::tr1::shared_ptr<entity_addr_t> > client_addr;
+    vector<std::tr1::shared_ptr<entity_addr_t> > cluster_addr;
+    vector<std::tr1::shared_ptr<entity_addr_t> > hb_addr;
+  };
+  std::tr1::shared_ptr<addrs_s> osd_addrs;
+
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
-  map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  std::tr1::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
@@ -187,7 +177,7 @@ private:
   string cluster_snapshot;
 
  public:
-  CrushWrapper     crush;       // hierarchical map
+  std::tr1::shared_ptr<CrushWrapper> crush;       // hierarchical map
 
   friend class OSDMonitor;
   friend class PGMonitor;
@@ -198,7 +188,10 @@ private:
 	     pool_max(-1),
 	     flags(0),
 	     num_osd(0), max_osd(0),
-	     cluster_snapshot_epoch(0) { 
+	     osd_addrs(new addrs_s),
+	     pg_temp(new map<pg_t,vector<int> >),
+	     cluster_snapshot_epoch(0),
+	     crush(new CrushWrapper) {
     memset(&fsid, 0, sizeof(fsid));
   }
 
@@ -209,13 +202,7 @@ private:
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  void set_epoch(epoch_t e) {
-    epoch = e;
-    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
-	 p != pools.end();
-	 p++)
-      p->second.last_change = e;
-  }
+  void set_epoch(epoch_t e);
 
   /* stamps etc */
   const utime_t& get_created() const { return created; }
@@ -239,40 +226,17 @@ private:
   }
   int calc_num_osds();
 
-  void get_all_osds(set<int32_t>& ls) const {
-    for (int i=0; i<max_osd; i++)
-      if (exists(i))
-	ls.insert(i);
-  }
-  int get_num_up_osds() const {
-    int n = 0;
-    for (int i=0; i<max_osd; i++)
-      if (osd_state[i] & CEPH_OSD_EXISTS &&
-	  osd_state[i] & CEPH_OSD_UP) n++;
-    return n;
-  }
-  int get_num_in_osds() const {
-    int n = 0;
-    for (int i=0; i<max_osd; i++)
-      if (osd_state[i] & CEPH_OSD_EXISTS &&
-	  get_weight(i) != CEPH_OSD_OUT) n++;
-    return n;
-  }
+  void get_all_osds(set<int32_t>& ls) const;
+  int get_num_up_osds() const;
+  int get_num_in_osds() const;
 
   int get_flags() const { return flags; }
   int test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
-  static void calc_state_set(int state, set<string>& st) {
-    unsigned t = state;
-    for (unsigned s = 1; t; s <<= 1) {
-      if (t & s) {
-	t &= ~s;
-	st.insert(ceph_osd_state_name(s));
-      }
-    }
-  }
+  static void calc_state_set(int state, set<string>& st);
+
   int get_state(int o) const {
     assert(o < max_osd);
     return osd_state[o];
@@ -326,54 +290,39 @@ private:
     return exists(osd) && !is_out(osd);
   }
   
-  int identify_osd(const entity_addr_t& addr) const {
-    for (unsigned i=0; i<osd_addr.size(); i++)
-      if ((osd_addr[i] == addr) || (osd_cluster_addr[i] == addr))
-	return i;
-    return -1;
-  }
+  int identify_osd(const entity_addr_t& addr) const;
   bool have_addr(const entity_addr_t& addr) const {
     return identify_osd(addr) >= 0;
   }
-  bool find_osd_on_ip(const entity_addr_t& ip) const {
-    for (unsigned i=0; i<osd_addr.size(); i++)
-      if (osd_addr[i].is_same_host(ip) || osd_cluster_addr[i].is_same_host(ip))
-	return i;
-    return -1;
-  }
+  bool find_osd_on_ip(const entity_addr_t& ip) const;
   bool have_inst(int osd) const {
     return exists(osd) && is_up(osd); 
   }
   const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
-    return osd_addr[osd];
+    return *osd_addrs->client_addr[osd];
   }
   const entity_addr_t &get_cluster_addr(int osd) const {
     assert(exists(osd));
-    if (osd_cluster_addr[osd] == entity_addr_t())
+    if (*osd_addrs->cluster_addr[osd] == entity_addr_t())
       return get_addr(osd);
-    return osd_cluster_addr[osd];
+    return *osd_addrs->cluster_addr[osd];
   }
   const entity_addr_t &get_hb_addr(int osd) const {
     assert(exists(osd));
-    return osd_hb_addr[osd];
+    return *osd_addrs->hb_addr[osd];
   }
   entity_inst_t get_inst(int osd) const {
-    assert(exists(osd));
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), osd_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
   }
   entity_inst_t get_cluster_inst(int osd) const {
-    assert(exists(osd));
     assert(is_up(osd));
-    if (osd_cluster_addr[osd] == entity_addr_t())
-      return get_inst(osd);
-    return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), get_cluster_addr(osd));
   }
   entity_inst_t get_hb_inst(int osd) const {
-    assert(exists(osd));
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), osd_hb_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), get_hb_addr(osd));
   }
 
   const epoch_t& get_up_from(int osd) const {
@@ -402,6 +351,9 @@ private:
 
   int apply_incremental(Incremental &inc);
 
+  /// try to re-use/reference addrs in oldmap from newmap
+  static void dedup(const OSDMap *oldmap, OSDMap *newmap);
+
   // serialize, unserialize
 private:
   void encode_client_old(bufferlist& bl) const;
@@ -412,20 +364,7 @@ public:
 
 
   /****   mapping facilities   ****/
-  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const {
-    // calculate ps (placement seed)
-    const pg_pool_t *pool = get_pg_pool(loc.get_pool());
-    if (!pool)
-      return -ENOENT;
-    ps_t ps;
-    if (loc.key.length())
-      ps = ceph_str_hash(pool->object_hash, loc.key.c_str(), loc.key.length());
-    else
-      ps = ceph_str_hash(pool->object_hash, oid.name.c_str(), oid.name.length());
-    pg = pg_t(ps, loc.get_pool(), -1);
-    return 0;
-  }
-
+  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const;
   pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) const {
     pg_t pg;
     int ret = object_locator_to_pg(oid, loc, pg);
@@ -442,15 +381,7 @@ public:
     return make_object_layout(oid, layout.fl_pg_pool);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool) const {
-    object_locator_t loc(pg_pool);
-    
-    ceph_object_layout ol;
-    pg_t pgid = object_locator_to_pg(oid, loc);
-    ol.ol_pgid = pgid.get_old_pg().v;
-    ol.ol_stripe_unit = 0;
-    return ol;
-  }
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool) const;
 
   int get_pg_num(int pg_pool) const
   {
@@ -458,107 +389,20 @@ public:
     return pool->get_pg_num();
   }
 
-  // pg -> (osd list)
 private:
+  /// pg -> (raw osd list)
+  int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const;
 
-  /**
-   * remove any osds from the vector that do not exist in the map
-   *
-   * @param osds vector of osds to filter/modify
-   */
-  void _remove_nonexistent_osds(vector<int>& osds) const {
-    unsigned removed = 0;
-    for (unsigned i = 0; i < osds.size(); i++) {
-      if (!exists(osds[i])) {
-	removed++;
-	continue;
-      }
-      if (removed) {
-	osds[i - removed] = osds[i];
-      }
-    }
-    if (removed)
-      osds.resize(osds.size() - removed);
-  }
-
-  int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const {
-    // map to osds[]
-    ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
-    unsigned size = pool.get_size();
-
-    // what crush rule?
-    int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
-    if (ruleno >= 0)
-      crush.do_rule(ruleno, pps, osds, size, -1, osd_weight);
+  /// pg -> (up osd list)
+  void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const;
   
-    _remove_nonexistent_osds(osds);
-
-    return osds.size();
-  }
-
-  // pg -> (up osd list)
-  void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const {
-    up.clear();
-    for (unsigned i=0; i<raw.size(); i++) {
-      if (!exists(raw[i]) || is_down(raw[i])) 
-	continue;
-      up.push_back(raw[i]);
-    }
-  }
-  
-  bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const {
-    pg = pool.raw_pg_to_pg(pg);
-    map<pg_t,vector<int> >::const_iterator p = pg_temp.find(pg);
-    if (p != pg_temp.end()) {
-      temp.clear();
-      for (unsigned i=0; i<p->second.size(); i++) {
-	if (!exists(p->second[i]) || is_down(p->second[i]))
-	  continue;
-	temp.push_back(p->second[i]);
-      }
-      return true;
-    }
-    return false;
-  }
+  bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const;
 
 public:
-  int pg_to_osds(pg_t pg, vector<int>& raw) const {
-    const pg_pool_t *pool = get_pg_pool(pg.pool());
-    if (!pool)
-      return 0;
-    return _pg_to_osds(*pool, pg, raw);
-  }
-
-  int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {         // list of osd addr's
-    const pg_pool_t *pool = get_pg_pool(pg.pool());
-    if (!pool)
-      return 0;
-    vector<int> raw;
-    _pg_to_osds(*pool, pg, raw);
-    if (!_raw_to_temp_osds(*pool, pg, raw, acting))
-      _raw_to_up_osds(pg, raw, acting);
-    return acting.size();
-  }
-
-  void pg_to_raw_up(pg_t pg, vector<int>& up) {
-    const pg_pool_t *pool = get_pg_pool(pg.pool());
-    if (!pool)
-      return;
-    vector<int> raw;
-    _pg_to_osds(*pool, pg, raw);
-    _raw_to_up_osds(pg, raw, up);
-  }
-  
-  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const {
-    const pg_pool_t *pool = get_pg_pool(pg.pool());
-    if (!pool)
-      return;
-    vector<int> raw;
-    _pg_to_osds(*pool, pg, raw);
-    _raw_to_up_osds(pg, raw, up);
-    if (!_raw_to_temp_osds(*pool, pg, raw, acting))
-      acting = up;
-  }
+  int pg_to_osds(pg_t pg, vector<int>& raw) const;
+  int pg_to_acting_osds(pg_t pg, vector<int>& acting) const;
+  void pg_to_raw_up(pg_t pg, vector<int>& up);  
+  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const;
 
   int64_t lookup_pg_pool_name(const char *name) {
     if (name_pool.count(name))
@@ -630,28 +474,8 @@ public:
 
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
-  static int calc_pg_rank(int osd, vector<int>& acting, int nrep=0) {
-    if (!nrep)
-      nrep = acting.size();
-    for (int i=0; i<nrep; i++) 
-      if (acting[i] == osd)
-	return i;
-    return -1;
-  }
-  static int calc_pg_role(int osd, vector<int>& acting, int nrep=0) {
-    if (!nrep)
-      nrep = acting.size();
-    int rank = calc_pg_rank(osd, acting, nrep);
-    
-    if (rank < 0)
-      return PG_ROLE_STRAY;
-    else if (rank == 0) 
-      return PG_ROLE_HEAD;
-    else if (rank == 1) 
-      return PG_ROLE_ACKER;
-    else
-      return PG_ROLE_MIDDLE;
-  }
+  static int calc_pg_rank(int osd, vector<int>& acting, int nrep=0);
+  static int calc_pg_role(int osd, vector<int>& acting, int nrep=0);
   
   int get_pg_role(pg_t pg, int osd) const {
     vector<int> group;
