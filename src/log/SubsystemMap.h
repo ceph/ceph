@@ -52,19 +52,19 @@ public:
     m_subsys[subsys].gather_level = gather;
   }
 
-  int get_log_level(unsigned subsys) {
+  int get_log_level(unsigned subsys) const {
     if (subsys >= m_subsys.size())
       subsys = 0;
     return m_subsys[subsys].log_level;
   }
 
-  int get_gather_level(unsigned subsys) {
+  int get_gather_level(unsigned subsys) const {
     if (subsys >= m_subsys.size())
       subsys = 0;
     return m_subsys[subsys].gather_level;
   }
 
-  const string& get_name(unsigned subsys) {
+  const string& get_name(unsigned subsys) const {
     if (subsys >= m_subsys.size())
       subsys = 0;
     return m_subsys[subsys].name;

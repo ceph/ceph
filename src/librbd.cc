@@ -105,6 +105,7 @@ namespace librbd {
     vector<snap_t> snaps;
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
+    bool snap_exists; // false if our snapid was deleted
     std::string name;
     std::string snapname;
     IoCtx data_ctx, md_ctx;
@@ -118,10 +119,11 @@ namespace librbd {
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
 
-    ImageCtx(std::string imgname, IoCtx& p)
+    ImageCtx(std::string imgname, const char *snap, IoCtx& p)
       : cct((CephContext*)p.cct()),
 	perfcounter(NULL),
 	snapid(CEPH_NOSNAP),
+	snap_exists(true),
 	name(imgname),
 	needs_refresh(true),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
@@ -133,7 +135,8 @@ namespace librbd {
       data_ctx.dup(p);
 
       string pname = string("librbd-") + data_ctx.get_pool_name() + string("/") + name;
-      if (snapname.length()) {
+      if (snap) {
+	snapname = snap;
 	pname += "@";
 	pname += snapname;
       }
@@ -206,7 +209,6 @@ namespace librbd {
 	snapid = it->second.id;
 	return 0;
       }
-      snap_unset();
       return -ENOENT;
     }
 
@@ -253,7 +255,8 @@ namespace librbd {
 	return header.image_size;
       } else {
 	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snapname);
-	assert(p != snaps_by_name.end());
+	if (p == snaps_by_name.end())
+	  return 0;
 	return p->second.size;
       }
     }
@@ -467,10 +470,10 @@ namespace librbd {
   int add_snap(ImageCtx *ictx, const char *snap_name);
   int rm_snap(ImageCtx *ictx, const char *snap_name);
   int ictx_check(ImageCtx *ictx);
-  int ictx_refresh(ImageCtx *ictx, const char *snap_name);
+  int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx& srci, IoCtx& dest_md_ctx, const char *destname);
 
-  int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name);
+  int open_image(ImageCtx *ictx);
   void close_image(ImageCtx *ictx);
 
   void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
@@ -1176,36 +1179,26 @@ int ictx_check(ImageCtx *ictx)
   if (needs_refresh) {
     Mutex::Locker l(ictx->lock);
 
-    string snap;
-    if (ictx->snapid != CEPH_NOSNAP)
-      snap = ictx->snapname;
-
-    int r = ictx_refresh(ictx, snap.length() ? snap.c_str() : NULL);
+    int r = ictx_refresh(ictx);
     if (r < 0) {
       lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r) << dendl;
       return r;
-    }
-
-    // check if the snapshot at which we were reading was removed
-    if (ictx->snapname != snap) {
-      lderr(cct) << "tried to read from a snapshot that no longer exists: " << snap << dendl;
-      return -ENOENT;
     }
   }
   return 0;
 }
 
-int ictx_refresh(ImageCtx *ictx, const char *snap_name)
+int ictx_refresh(ImageCtx *ictx)
 {
   CephContext *cct = ictx->cct;
   assert(ictx->lock.is_locked());
   bufferlist bl, bl2;
 
-  if (snap_name) {
-    ldout(cct, 20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
-  } else {
-    ldout(cct, 20) << "ictx_refresh " << ictx << " no snap" << dendl;
-  }
+  ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
+
+  ictx->refresh_lock.Lock();
+  ictx->needs_refresh = false;
+  ictx->refresh_lock.Unlock();
 
   int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
   if (r < 0) {
@@ -1217,6 +1210,7 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
     lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
     return r;
   }
+  r = 0;
 
   std::map<snap_t, std::string> old_snap_ids;
   for (std::map<std::string, struct SnapInfo>::iterator it =
@@ -1253,23 +1247,20 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 
   if (!ictx->snapc.is_valid()) {
     lderr(cct) << "image snap context is invalid!" << dendl;
+    ictx->refresh_lock.Lock();
+    ictx->needs_refresh = true;
+    ictx->refresh_lock.Unlock();
     return -EIO;
   }
 
-  if (snap_name) {
-    r = ictx->snap_set(snap_name);
-    if (r < 0) {
-      lderr(cct) << "could not set snap to " << snap_name << ": " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    ictx->data_ctx.snap_set_read(ictx->snapid);
+  if (ictx->snapid != CEPH_NOSNAP &&
+      ictx->get_snapid(ictx->snapname) == CEPH_NOSNAP) {
+    lderr(cct) << "tried to read from a snapshot that no longer exists: "
+	       << ictx->snapname << dendl;
+    ictx->snap_exists = false;
   }
 
   ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-
-  ictx->refresh_lock.Lock();
-  ictx->needs_refresh = false;
-  ictx->refresh_lock.Unlock();
 
   return 0;
 }
@@ -1315,6 +1306,12 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
   if (r < 0)
     return r;
 
+  if (!ictx->snap_exists)
+    return -ENOENT;
+
+  if (ictx->snapid != CEPH_NOSNAP)
+    return -EROFS;
+
   Mutex::Locker l(ictx->lock);
   snap_t snapid = ictx->get_snapid(snap_name);
   if (snapid == CEPH_NOSNAP) {
@@ -1344,8 +1341,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
     return r;
   }
 
-  // refresh without setting the snapid we read from
-  ictx_refresh(ictx, NULL);
+  ictx_refresh(ictx);
   snap_t new_snapid = ictx->get_snapid(snap_name);
   ldout(cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
 
@@ -1391,9 +1387,9 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
     return r;
   }
 
-  cp.destictx = new librbd::ImageCtx(destname, dest_md_ctx);
+  cp.destictx = new librbd::ImageCtx(destname, NULL, dest_md_ctx);
   cp.src_size = src_size;
-  r = open_image(dest_md_ctx, cp.destictx, destname, NULL);
+  r = open_image(cp.destictx);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
@@ -1412,15 +1408,12 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
 
 int snap_set(ImageCtx *ictx, const char *snap_name)
 {
-  ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = " << (snap_name ? snap_name : "NULL") << dendl;
-
-  int r = ictx_check(ictx);
-  if (r < 0)
-    return r;
+  ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
+		       << (snap_name ? snap_name : "NULL") << dendl;
 
   Mutex::Locker l(ictx->lock);
   if (snap_name) {
-    r = ictx->snap_set(snap_name);
+    int r = ictx->snap_set(snap_name);
     if (r < 0) {
       return r;
     }
@@ -1428,24 +1421,26 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
     ictx->snap_unset();
   }
 
+  ictx->snap_exists = true;
   ictx->data_ctx.snap_set_read(ictx->snapid);
 
   return 0;
 }
 
-int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name)
+int open_image(ImageCtx *ictx)
 {
-  CephContext *cct = (CephContext *)io_ctx.cct();
-  string sn = snap_name ? snap_name : "NULL";
-  ldout(cct, 20) << "open_image " << &io_ctx << " ictx =  " << ictx
-		 << " name =  " << name << " snap_name = "
-		 << (snap_name ? snap_name : "NULL") << dendl;
+  ldout(ictx->cct, 20) << "open_image: ictx =  " << ictx
+		       << " name =  '" << ictx->name << "' snap_name = '"
+		       << ictx->snapname << "'" << dendl;
 
   ictx->lock.Lock();
-  int r = ictx_refresh(ictx, snap_name);
+  int r = ictx_refresh(ictx);
   ictx->lock.Unlock();
   if (r < 0)
     return r;
+
+  ictx->snap_set(ictx->snapname);
+  ictx->data_ctx.snap_set_read(ictx->snapid);
 
   WatchCtx *wctx = new WatchCtx(ictx);
   if (!wctx)
@@ -1705,11 +1700,9 @@ ssize_t handle_sparse_read(CephContext *cct,
       buf_ofs += gap;
       buf_left -= gap;
       block_ofs = extent_ofs;
-    } else {
-      if (extent_ofs != block_ofs) {
-	assert(0 == "osd returned data prior to what we asked for");
-	return -EIO;
-      }
+    } else if (extent_ofs < block_ofs) {
+      assert(0 == "osd returned data prior to what we asked for");
+      return -EIO;
     }
 
     if (bl_ofs + extent_len > (buf_ofs + buf_left)) {
@@ -1784,7 +1777,11 @@ int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
 {
   ictx->lock.Lock();
   uint64_t image_size = ictx->get_image_size();
+  bool snap_exists = ictx->snap_exists;
   ictx->lock.Unlock();
+
+  if (!snap_exists)
+    return -ENOENT;
 
   if ((uint64_t)(off + len) > image_size)
     return -EINVAL;
@@ -1887,7 +1884,7 @@ done:
   return r;
 }
 
-int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c)
+int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
 {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = " << len << dendl;
@@ -2066,11 +2063,11 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name)
 
 int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname)
 {
-  ImageCtx *ictx = new ImageCtx(name, io_ctx);
+  ImageCtx *ictx = new ImageCtx(name, snapname, io_ctx);
   if (!ictx)
     return -ENOMEM;
 
-  int r = librbd::open_image(io_ctx, ictx, name, snapname);
+  int r = librbd::open_image(ictx);
   if (r < 0)
     return r;
 
@@ -2267,7 +2264,7 @@ int Image::aio_write(uint64_t off, size_t len, bufferlist& bl, RBD::AioCompletio
   return librbd::aio_write(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
 }
 
-int Image::aio_discard(uint64_t off, size_t len, RBD::AioCompletion *c)
+int Image::aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::aio_discard(ictx, off, len, (librbd::AioCompletion *)c->pc);
@@ -2385,10 +2382,10 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image, c
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, io_ctx);
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, snap_name, io_ctx);
   if (!ictx)
     return -ENOMEM;
-  int r = librbd::open_image(io_ctx, ictx, name, snap_name);
+  int r = librbd::open_image(ictx);
   *image = (rbd_image_t)ictx;
   return r;
 }
@@ -2538,7 +2535,7 @@ extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const 
   return librbd::aio_write(ictx, off, len, buf, (librbd::AioCompletion *)comp->pc);
 }
 
-extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, size_t len, rbd_completion_t c)
+extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len, rbd_completion_t c)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;

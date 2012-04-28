@@ -32,7 +32,7 @@ using std::deque;
 /**
  * Implements journaling on top of block device or file.
  *
- * Lock ordering is write_lock > aio_lock > queue_lock > flush_lock
+ * Lock ordering is write_lock > aio_lock > queue_lock
  */
 class FileJournal : public Journal {
 public:
@@ -67,7 +67,6 @@ public:
   bool writeq_empty();
   write_item &peek_write();
   void pop_write();
-  void flush_queue();
   void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef());
@@ -163,12 +162,6 @@ public:
 
 private:
   string fn;
-
-  /// Protected by flush_lock
-  Mutex flush_lock;
-  Cond write_empty_cond;
-  bool writing;
-  /// End protected by flush_lock
 
   char *zero_buf;
 
@@ -302,8 +295,6 @@ private:
     journaled_seq(0),
     plug_journal_completions(false),
     fn(f),
-    flush_lock("FileJournal::flush_lock"),
-    writing(false),
     zero_buf(NULL),
     max_size(0), block_size(0),
     is_bdev(false), directio(dio), aio(ai),
