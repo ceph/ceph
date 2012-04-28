@@ -761,6 +761,9 @@ void PG::generate_past_intervals()
       dout(10) << "generate_past_intervals " << i << " : empty" << dendl;
     }
   }
+
+  // record our work.
+  dirty_info = true;
 }
 
 /*
