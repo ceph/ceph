@@ -573,25 +573,21 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
   if (o->max_osd != n->max_osd)
     diff++;
   for (int i = 0; i < o->max_osd && i < n->max_osd; i++) {
-    if ((o->epoch < n->epoch && n->osd_info[i].up_from <= o->epoch) ||
-	(o->epoch > n->epoch && o->osd_info[i].up_from <= n->epoch)) {
-      // same up interval, all should match... but let's be paranoid!
-      if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
-	  *n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i])
-	n->osd_addrs->client_addr[i] = o->osd_addrs->client_addr[i];
-      if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
-	  *n->osd_addrs->cluster_addr[i] == *o->osd_addrs->cluster_addr[i])
-	n->osd_addrs->cluster_addr[i] = o->osd_addrs->cluster_addr[i];
-      if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
-	  *n->osd_addrs->hb_addr[i] == *o->osd_addrs->hb_addr[i])
-	n->osd_addrs->hb_addr[i] = o->osd_addrs->hb_addr[i];
-    } else if (n->osd_addrs->client_addr[i] && o->osd_addrs->client_addr[i] &&
-	       *n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i]) {
-      // client addr matches
+    if ( n->osd_addrs->client_addr[i] &&  o->osd_addrs->client_addr[i] &&
+	*n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i])
       n->osd_addrs->client_addr[i] = o->osd_addrs->client_addr[i];
-    } else {
+    else
       diff++;
-    }
+    if ( n->osd_addrs->cluster_addr[i] &&  o->osd_addrs->cluster_addr[i] &&
+	*n->osd_addrs->cluster_addr[i] == *o->osd_addrs->cluster_addr[i])
+      n->osd_addrs->cluster_addr[i] = o->osd_addrs->cluster_addr[i];
+    else
+      diff++;
+    if ( n->osd_addrs->hb_addr[i] &&  o->osd_addrs->hb_addr[i] &&
+	*n->osd_addrs->hb_addr[i] == *o->osd_addrs->hb_addr[i])
+      n->osd_addrs->hb_addr[i] = o->osd_addrs->hb_addr[i];
+    else
+      diff++;
   }
   if (diff == 0) {
     // zoinks, no differences at all!
