@@ -59,18 +59,19 @@ public:
   int m_num_objs_per_coll;
 
   int m_max_in_flight;
-  int m_in_flight;
+  atomic_t m_in_flight;
   Mutex m_finished_lock;
   Cond m_finished_cond;
 
   void wait_for_ready() {
-    while ((m_max_in_flight > 0) && (m_in_flight >= m_max_in_flight))
+    Mutex::Locker locker(m_finished_lock);
+    while ((m_max_in_flight > 0) && ((int)m_in_flight.read() >= m_max_in_flight))
       m_finished_cond.Wait(m_finished_lock);
   }
 
   void wait_for_done() {
     Mutex::Locker locker(m_finished_lock);
-    while (m_in_flight)
+    while (m_in_flight.read())
       m_finished_cond.Wait(m_finished_lock);
   }
 
@@ -81,7 +82,8 @@ public:
     m_num_objs_per_coll = val;
   }
 
-  coll_entry_t *get_coll_at(int pos);
+  coll_entry_t *get_coll(int key, bool erase = false);
+  coll_entry_t *get_coll_at(int pos, bool erase = false);
 
  private:
   static const int m_default_num_colls = 30;
@@ -89,29 +91,46 @@ public:
  public:
   TestFileStoreState(FileStore *store) :
     m_next_coll_nr(0), m_num_objs_per_coll(10),
-    m_max_in_flight(0), m_in_flight(0), m_finished_lock("Finished Lock") {
+    m_max_in_flight(0), m_finished_lock("Finished Lock") {
+    m_in_flight.set(0);
     m_store.reset(store);
   }
-  ~TestFileStoreState() { }
+  ~TestFileStoreState() { 
+    map<int, coll_entry_t*>::iterator it = m_collections.begin();
+    for (; it != m_collections.end(); it++) {
+	if (it->second)
+	    delete it->second;
+	m_collections.erase(it);
+    }
+  }
 
   void init(int colls, int objs);
   void init() {
     init(m_default_num_colls, 0);
   }
 
+  int inc_in_flight() {
+    return ((int) m_in_flight.inc());
+  }
+
+  int dec_in_flight() {
+    return ((int) m_in_flight.dec());
+  }
+
   coll_entry_t *coll_create(int id);
 
   class C_OnFinished: public Context {
+   protected:
     TestFileStoreState *m_state;
     ObjectStore::Transaction *m_tx;
 
-  public:
+   public:
     C_OnFinished(TestFileStoreState *state,
         ObjectStore::Transaction *t) : m_state(state), m_tx(t) { }
 
     void finish(int r) {
       Mutex::Locker locker(m_state->m_finished_lock);
-      m_state->m_in_flight--;
+      m_state->dec_in_flight();
       m_state->m_finished_cond.Signal();
 
       delete m_tx;

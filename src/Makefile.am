@@ -744,11 +744,11 @@ test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_filestore
 
-test_filestore_workloadgen_SOURCES = test/filestore/workload_generator.cc
+test_filestore_workloadgen_SOURCES = \
+     test/filestore/workload_generator.cc \
+     test/filestore/TestFileStoreState.cc
 test_filestore_workloadgen_LDFLAGS = ${AM_LDFLAGS}
-test_filestore_workloadgen_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_workloadgen_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
+test_filestore_workloadgen_LDADD =  libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_filestore_workloadgen
 
 test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc

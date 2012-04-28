@@ -17,30 +17,14 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
-#include <set>
+#include <map>
+
+#include "TestFileStoreState.h"
 
 typedef boost::mt11213b rngen_t;
 
-class WorkloadGenerator {
+class WorkloadGenerator : public TestFileStoreState {
 public:
-  struct coll_entry_t {
-    int id;
-    coll_t coll;
-    hobject_t meta_obj;
-    ObjectStore::Sequencer osr;
-
-    coll_entry_t(int i, char *coll_buf, char *meta_obj_buf)
-    : id(i), coll(coll_buf),
-      meta_obj(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP)),
-      osr(coll_buf) {
-    }
-  };
-
-
-  /* kept in upper case for consistency with coll_t's */
-  static const coll_t META_COLL;
-  static const coll_t TEMP_COLL;
-
   static const int max_in_flight = 50;
 
   static const int def_destroy_coll_every_nr_runs = 100;
@@ -59,48 +43,23 @@ public:
   static const size_t log_append_bytes = 1024;
 
 private:
+  int m_num_ops;
   int m_destroy_coll_every_nr_runs;
+  atomic_t m_nr_runs;
+
   int m_num_colls;
-  int m_num_obj_per_coll;
-
-  boost::scoped_ptr<ObjectStore> m_store;
-
-  int m_nr_runs;
-  int m_in_flight;
-//  vector<ObjectStore::Sequencer> m_osr;
-
-  Mutex m_lock;
-  Cond m_cond;
-
-  set<coll_entry_t*> m_collections;
-  int m_next_coll_nr;
 
   rngen_t m_rng;
 
   map<coll_t, uint64_t> pg_log_size;
 
-  void wait_for_ready() {
-    while (m_in_flight >= max_in_flight)
-      m_cond.Wait(m_lock);
-  }
-
-  void wait_for_done() {
-    Mutex::Locker locker(m_lock);
-    while (m_in_flight)
-      m_cond.Wait(m_lock);
-  }
-
   void init_args(vector<const char*> args);
-  void init();
 
   int get_uniform_random_value(int min, int max);
   coll_entry_t *get_rnd_coll_entry(bool erase);
+  hobject_t *get_rnd_obj(coll_entry_t *entry);
   int get_random_collection_nr();
   int get_random_object_nr(int coll_nr);
-
-  coll_t get_collection_by_nr(int nr);
-  hobject_t get_object_by_nr(int nr);
-  hobject_t get_coll_meta_object(coll_t coll);
 
   size_t get_random_byte_amount(size_t min, size_t max);
   void get_filled_byte_array(bufferlist& bl, size_t size);
@@ -110,13 +69,14 @@ private:
   void do_setattr_object(ObjectStore::Transaction *t,
       coll_t coll, hobject_t obj);
   void do_setattr_collection(ObjectStore::Transaction *t, coll_t coll);
-  void do_append_log(ObjectStore::Transaction *t, coll_t coll);
+//  void do_append_log(ObjectStore::Transaction *t, coll_t coll);
+  void do_append_log(ObjectStore::Transaction *t, coll_entry_t *entry);
 
   bool should_destroy_collection() {
-    return (m_nr_runs >= m_destroy_coll_every_nr_runs);
+    return ((int)m_nr_runs.read() >= m_destroy_coll_every_nr_runs);
   }
   void do_destroy_collection(ObjectStore::Transaction *t, coll_entry_t *entry);
-  void do_create_collection(ObjectStore::Transaction *t);
+  coll_entry_t *do_create_collection(ObjectStore::Transaction *t);
 
 public:
   WorkloadGenerator(vector<const char*> args);
@@ -124,40 +84,31 @@ public:
     m_store->umount();
   }
 
-  class C_WorkloadGeneratorOnReadable: public Context {
-    WorkloadGenerator *m_state;
-    ObjectStore::Transaction *m_tx;
+  class C_OnReadable: public TestFileStoreState::C_OnFinished {
+    WorkloadGenerator *wrkldgen_state;
 
   public:
-    C_WorkloadGeneratorOnReadable(WorkloadGenerator *state,
-        ObjectStore::Transaction *t) :
-      m_state(state), m_tx(t) {
-    }
+    C_OnReadable(WorkloadGenerator *state,
+                                  ObjectStore::Transaction *t)
+     :TestFileStoreState::C_OnFinished(state, t), wrkldgen_state(state) { }
 
-    void finish(int r) {
-//      dout(0) << "Got one back!" << dendl;
-      Mutex::Locker locker(m_state->m_lock);
-      m_state->m_in_flight--;
-      m_state->m_nr_runs++;
-      m_state->m_cond.Signal();
-
-      delete m_tx;
+    void finish(int r)
+    {
+      TestFileStoreState::C_OnFinished::finish(r);
+      wrkldgen_state->m_nr_runs.inc();
     }
   };
 
-  class C_WorkloadGeneratorOnDestroyed: public C_WorkloadGeneratorOnReadable {
-//    WorkloadGenerator *m_state;
-//    ObjectStore::Transaction *m_tx;
+  class C_OnDestroyed: public C_OnReadable {
     coll_entry_t *m_entry;
 
   public:
-    C_WorkloadGeneratorOnDestroyed(WorkloadGenerator *state,
+    C_OnDestroyed(WorkloadGenerator *state,
         ObjectStore::Transaction *t, coll_entry_t *entry) :
-          C_WorkloadGeneratorOnReadable(state, t), m_entry(entry) {}
+          C_OnReadable(state, t), m_entry(entry) {}
 
     void finish(int r) {
-      C_WorkloadGeneratorOnReadable::finish(r);
-      //dout(0) << "Destroyed collection " << m_entry->coll.to_str() << dendl;
+      C_OnReadable::finish(r);
       delete m_entry;
     }
   };
@@ -168,7 +119,7 @@ public:
 
 bool operator<(const WorkloadGenerator::coll_entry_t& l,
     const WorkloadGenerator::coll_entry_t& r) {
-      return (l.id < r.id);
+      return (l.m_id < r.m_id);
 }
 
 #endif /* WORKLOAD_GENERATOR_H_ */

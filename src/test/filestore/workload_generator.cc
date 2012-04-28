@@ -26,21 +26,23 @@
 #include "workload_generator.h"
 #include "common/debug.h"
 
+#include "TestFileStoreState.h"
+
 void usage(const char *name);
 
 boost::scoped_ptr<WorkloadGenerator> wrkldgen;
-const coll_t WorkloadGenerator::META_COLL("meta");
-const coll_t WorkloadGenerator::TEMP_COLL("temp");
 
 #define dout_subsys ceph_subsys_
 
 WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
-  : m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
-    m_num_colls(def_num_colls), m_num_obj_per_coll(def_num_obj_per_coll),
-    m_store(0), m_nr_runs(0),
-    m_in_flight(0), m_lock("State Lock"), m_next_coll_nr(0)
+  : TestFileStoreState(NULL),
+    m_num_ops(-1),
+    m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
+    m_num_colls(def_num_colls)
 {
   int err = 0;
+
+  m_nr_runs.set(0);
 
   init_args(args);
   dout(0) << "data            = " << g_conf->osd_data << dendl;
@@ -55,10 +57,13 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
   err = m_store->mount();
   ceph_assert(err == 0);
 
-  init();
+  set_max_in_flight(max_in_flight);
+  set_num_objs_per_coll(def_num_obj_per_coll);
+
+  init(m_num_colls, 0);
 
   dout(0) << "#colls          = " << m_num_colls << dendl;
-  dout(0) << "#objs per coll  = " << m_num_obj_per_coll << dendl;
+  dout(0) << "#objs per coll  = " << m_num_objs_per_coll << dendl;
   dout(0) << "#txs per destr  = " << m_destroy_coll_every_nr_runs << dendl;
 
 }
@@ -75,59 +80,18 @@ void WorkloadGenerator::init_args(vector<const char*> args)
       m_num_colls = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-objs-per-coll", (char*) NULL)) {
-      m_num_obj_per_coll = strtoll(val.c_str(), NULL, 10);
+      m_num_objs_per_coll = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-destroy-coll-per-N-trans", (char*) NULL)) {
       m_destroy_coll_every_nr_runs = strtoll(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val,
+        "--test-num-ops", (char*) NULL)) {
+      m_num_ops = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_flag(args, i, "--help", (char*) NULL)) {
       usage(NULL);
       exit(0);
     }
   }
-}
-
-void WorkloadGenerator::init()
-{
-  dout(0) << "Initializing..." << dendl;
-
-  ObjectStore::Transaction *t;
-  t = new ObjectStore::Transaction;
-
-  t->create_collection(META_COLL);
-  t->create_collection(TEMP_COLL);
-  m_store->apply_transaction(*t);
-
-  wait_for_ready();
-
-  char buf[100];
-  char meta_buf[100];
-  for (int i = 0; i < m_num_colls; i++) {
-    memset(buf, 0, 100);
-    memset(meta_buf, 0, 100);
-    snprintf(buf, 100, "0.%d_head", i);
-    snprintf(meta_buf, 100, "pglog_0.%d_head", i);
-    coll_entry_t *entry = new coll_entry_t(i, buf, meta_buf);
-
-    dout(0) << "Creating collection " << entry->coll.to_str() << dendl;
-
-    t = new ObjectStore::Transaction;
-
-    t->create_collection(entry->coll);
-    t->touch(META_COLL, entry->meta_obj);
-
-    m_store->queue_transaction(&(entry->osr), t,
-        new C_WorkloadGeneratorOnReadable(this, t));
-    m_in_flight++;
-
-    m_collections.insert(entry);
-    m_next_coll_nr++;
-  }
-
-  dout(0) << "Currently in-flight collections: " << m_in_flight << dendl;
-
-  wait_for_done();
-  m_nr_runs = 0;
-  dout(0) << "Done initializing!" << dendl;
 }
 
 int WorkloadGenerator::get_uniform_random_value(int min, int max)
@@ -136,53 +100,24 @@ int WorkloadGenerator::get_uniform_random_value(int min, int max)
   return value(m_rng);
 }
 
-WorkloadGenerator::coll_entry_t *WorkloadGenerator::get_rnd_coll_entry(bool erase = false)
+TestFileStoreState::coll_entry_t *WorkloadGenerator::get_rnd_coll_entry(bool erase = false)
 {
-  set<WorkloadGenerator::coll_entry_t*>::iterator i = m_collections.begin();
   int index = get_uniform_random_value(0, m_collections.size()-1);
-  for ( ; index > 0; --index, ++i) ;
-
-  WorkloadGenerator::coll_entry_t *entry = *i;
-  if (erase)
-    m_collections.erase(i);
+  coll_entry_t *entry = get_coll_at(index, erase);
   return entry;
 }
 
-int WorkloadGenerator::get_random_collection_nr()
+hobject_t *WorkloadGenerator::get_rnd_obj(coll_entry_t *entry)
 {
-  return (rand() % m_num_colls);
-}
+  bool create =
+      (get_uniform_random_value(0,100) < 50 || !entry->m_objects.size());
 
-int WorkloadGenerator::get_random_object_nr(int coll_nr)
-{
-  return ((rand() % m_num_obj_per_coll) + (coll_nr * m_num_obj_per_coll));
-}
+  if (create && ((int) entry->m_objects.size() < m_num_objs_per_coll)) {
+    return (entry->touch_obj(entry->m_next_object_id++));
+  }
 
-coll_t WorkloadGenerator::get_collection_by_nr(int nr)
-{
-  char buf[100];
-  memset(buf, 0, 100);
-
-  snprintf(buf, 100, "0.%d_head", nr);
-  return coll_t(buf);
-}
-
-hobject_t WorkloadGenerator::get_object_by_nr(int nr)
-{
-  char buf[100];
-  memset(buf, 0, 100);
-  snprintf(buf, 100, "%d", nr);
-
-  return hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
-}
-
-hobject_t WorkloadGenerator::get_coll_meta_object(coll_t coll)
-{
-  char buf[100];
-  memset(buf, 0, 100);
-  snprintf(buf, 100, "pglog_%s", coll.c_str());
-
-  return hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
+  int idx = get_uniform_random_value(0, entry->m_objects.size()-1);
+  return entry->get_obj_at(idx);
 }
 
 /**
@@ -215,6 +150,9 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   size_t bytes = get_random_byte_amount(min_write_bytes, max_write_bytes);
   bufferlist bl;
   get_filled_byte_array(bl, bytes);
+
+  dout(0) << __func__ << " " << coll << "/" << obj
+      << " size " << bl.length() << dendl;
   t->write(coll, obj, 0, bl.length(), bl);
 }
 
@@ -226,6 +164,8 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
+
+  dout(0) << __func__ << " " << coll << "/" << obj << " size " << size << dendl;
   t->setattr(coll, obj, "objxattr", bl);
 }
 
@@ -237,81 +177,136 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
+  dout(0) << __func__ << " coll " << coll << " size " << size << dendl;
   t->collection_setattr(coll, "collxattr", bl);
 }
 
+//void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
+//				      coll_t coll)
 void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
-				      coll_t coll)
+                                      coll_entry_t *entry)
 {
   bufferlist bl;
   get_filled_byte_array(bl, log_append_bytes);
-  hobject_t log_obj = get_coll_meta_object(coll);
-  uint64_t s = pg_log_size[coll];
+  hobject_t log_obj = entry->m_meta_obj;
+
+  dout(0) << __func__ << " coll " << entry->m_coll << " "
+      << META_COLL << " /" << log_obj << " (" << bl.length() << ")" << dendl;
+
+  uint64_t s = pg_log_size[entry->m_coll];
   t->write(META_COLL, log_obj, s, bl.length(), bl);
-  pg_log_size[coll] += bl.length();
+  pg_log_size[entry->m_coll] += bl.length();
 }
 
 void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
-					      WorkloadGenerator::coll_entry_t *entry)
+					      coll_entry_t *entry)
 {  
-  m_nr_runs = 0;
-  entry->osr.flush();
+  m_nr_runs.set(0);
+  entry->m_osr.flush();
   vector<hobject_t> ls;
-  m_store->collection_list(entry->coll, ls);
-  dout(0) << "Destroying collection '" << entry->coll.to_str()
-      << "' (" << ls.size() << " objects)" << dendl;
+  m_store->collection_list(entry->m_coll, ls);
+  dout(0) << __func__ << " coll " << entry->m_coll
+      << " (" << ls.size() << " objects)" << dendl;
 
   vector<hobject_t>::iterator it;
   for (it = ls.begin(); it < ls.end(); it++) {
-    t->remove(entry->coll, *it);
+    t->remove(entry->m_coll, *it);
   }
 
-  t->remove_collection(entry->coll);
-  t->remove(META_COLL, entry->meta_obj);
+  t->remove_collection(entry->m_coll);
+  t->remove(META_COLL, entry->m_meta_obj);
 }
 
-void WorkloadGenerator::do_create_collection(ObjectStore::Transaction *t)
+TestFileStoreState::coll_entry_t
+*WorkloadGenerator::do_create_collection(ObjectStore::Transaction *t)
 {
+  coll_entry_t *entry = coll_create(m_next_coll_nr++);
+  if (!entry) {
+    dout(0) << __func__ << " failed to create coll id "
+        << m_next_coll_nr << dendl;
+    return NULL;
+  }
+  m_collections.insert(make_pair(entry->m_id, entry));
 
+  dout(0) << __func__ << " id " << entry->m_id << " coll " << entry->m_coll << dendl;
+  t->create_collection(entry->m_coll);
+  dout(0) << __func__ << " meta " << META_COLL << "/" << entry->m_meta_obj << dendl;
+  t->touch(META_COLL, entry->m_meta_obj);
+  return entry;
 }
 
 void WorkloadGenerator::run()
 {
+  bool create_coll = false;
+  int ops_run = 0;
   do {
-    if (!m_collections.size()) {
+    if (m_num_ops && (ops_run == m_num_ops))
+      break;
+
+    if (!create_coll && !m_collections.size()) {
       dout(0) << "We ran out of collections!" << dendl;
       break;
     }
 
-    m_lock.Lock();
+    dout(5) << __func__
+        << " m_finished_lock is-locked: " << m_finished_lock.is_locked()
+        << " in-flight: " << m_in_flight.read()
+        << dendl;
+
     wait_for_ready();
 
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-
-    bool destroy_collection = should_destroy_collection();
-    coll_entry_t *entry = get_rnd_coll_entry(destroy_collection);
-
     Context *c;
-    if (destroy_collection) {
-      do_destroy_collection(t, entry);
-      c = new C_WorkloadGeneratorOnDestroyed(this, t, entry);
-    } else {
-      int obj_nr = get_random_object_nr(entry->id);
-      hobject_t obj = get_object_by_nr(obj_nr);
+    bool destroy_collection = false;
+    TestFileStoreState::coll_entry_t *entry = NULL;
 
-      do_write_object(t, entry->coll, obj);
-      do_setattr_object(t, entry->coll, obj);
-      do_setattr_collection(t, entry->coll);
-      do_append_log(t, entry->coll);
-      c = new C_WorkloadGeneratorOnReadable(this, t);
+    if (create_coll) {
+      create_coll = false;
+
+      entry = do_create_collection(t);
+      if (!entry) {
+        dout(0) << __func__ << " something went terribly wrong creating coll" << dendl;
+        break;
+      }
+
+      c = new C_OnReadable(this, t);
+      goto queue_tx;
     }
 
-    m_store->queue_transaction(&(entry->osr), t, c);
+    destroy_collection = should_destroy_collection();
+    entry = get_rnd_coll_entry(destroy_collection);
 
-    m_in_flight++;
+    if (destroy_collection) {
+      do_destroy_collection(t, entry);
+      c = new C_OnDestroyed(this, t, entry);
+      if (!m_num_ops)
+        create_coll = true;
+    } else {
+      hobject_t *obj = get_rnd_obj(entry);
 
-    m_lock.Unlock();
+      do_write_object(t, entry->m_coll, *obj);
+      do_setattr_object(t, entry->m_coll, *obj);
+      do_setattr_collection(t, entry->m_coll);
+      do_append_log(t, entry);
+
+      c = new C_OnReadable(this, t);
+    }
+
+queue_tx:
+    m_store->queue_transaction(&(entry->m_osr), t, c);
+
+    inc_in_flight();
+
+    ops_run ++;
+
   } while (true);
+
+  dout(0) << __func__ << " waiting for "
+      << m_in_flight.read() << " in-flight transactions" << dendl;
+
+  wait_for_done();
+
+  dout(0) << __func__ << " finishing" << dendl;
 }
 
 void WorkloadGenerator::print_results()
@@ -337,7 +332,9 @@ Test-specific Options:\n\
   --test-num-colls VAL                Set the number of collections\n\
   --test-num-objs-per-coll VAL        Set the number of objects per collection\n\
   --test-destroy-coll-per-N-trans VAL Set how many transactions to run before\n\
-                                      destroying a collection.\
+                                      destroying a collection.\n\
+  --test-num-ops VAL                  Run a certain number of operations\n\
+                                      (a VAL of 0 runs the test forever)\
     " << std::endl;
 }
 
@@ -350,7 +347,7 @@ int main(int argc, const char *argv[])
   def_args.push_back("--osd-data");
   def_args.push_back("workload_gen_dir");
   def_args.push_back("--osd-journal");
-  def_args.push_back("workload_gen_journal");
+  def_args.push_back("workload_gen_dir/journal");
   argv_to_vec(argc, argv, args);
 
   global_init(&def_args, args,

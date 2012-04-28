@@ -62,12 +62,12 @@ void TestFileStoreState::init(int colls, int objs)
 
     m_store->queue_transaction(&(entry->m_osr), t,
         new C_OnFinished(this, t));
-    m_in_flight++;
+    inc_in_flight();
 
     m_collections.insert(make_pair(coll_id, entry));
     m_next_coll_nr++;
   }
-  dout(5) << "init has " << m_in_flight << "in-flight transactions" << dendl;
+  dout(5) << "init has " << m_in_flight.read() << "in-flight transactions" << dendl;
   wait_for_done();
   dout(5) << "init finished" << dendl;
 }
@@ -83,16 +83,20 @@ TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id)
   return (new coll_entry_t(id, buf, meta_buf));
 }
 
-TestFileStoreState::coll_entry_t *TestFileStoreState::get_coll_at(int pos)
+TestFileStoreState::coll_entry_t*
+TestFileStoreState::get_coll(int key, bool erase)
 {
-  dout(5) << "get_coll_at pos " << pos << dendl;
+  dout(5) << "get_coll id " << key << dendl;
 
   coll_entry_t *entry = NULL;
-  map<int, coll_entry_t*>::iterator it = m_collections.find(pos);
-  if (it != m_collections.end())
+  map<int, coll_entry_t*>::iterator it = m_collections.find(key);
+  if (it != m_collections.end()) {
     entry = it->second;
+    if (erase)
+      m_collections.erase(it);
+  }
 
-  dout(5) << "get_coll_at pos " << pos;
+  dout(5) << "get_coll id " << key;
   if (!entry)
     *_dout << " non-existent";
   else
@@ -101,20 +105,51 @@ TestFileStoreState::coll_entry_t *TestFileStoreState::get_coll_at(int pos)
   return entry;
 }
 
+TestFileStoreState::coll_entry_t*
+TestFileStoreState::get_coll_at(int pos, bool erase)
+{
+  dout(5) << "get_coll_at pos " << pos << dendl;
+
+  if (m_collections.empty())
+    return NULL;
+
+  coll_entry_t *entry = NULL;
+  map<int, coll_entry_t*>::iterator it = m_collections.begin();
+  for (int i = 0; it != m_collections.end(); it++, i++) {
+    if (i == pos) {
+      entry = it->second;
+      break;
+    }
+  }
+
+  if (entry == NULL) {
+    dout(5) << "get_coll_at pos " << pos << " non-existent" << dendl;
+    return NULL;
+  }
+
+  if (erase)
+    m_collections.erase(it);
+
+  dout(5) << "get_coll_at pos " << pos << ": "
+      << entry->m_coll << "(removed: " << erase << ")" << dendl;
+
+  return entry;
+}
+
 TestFileStoreState::coll_entry_t::~coll_entry_t()
 {
-  /*
   if (m_objects.size() > 0) {
-    for (set<hobject_t*>::iterator it = m_objects.begin();
-        it != m_objects.end(); it++) {
-      hobject_t *obj = *it;
+//    for (set<hobject_t*>::iterator it = m_objects.begin();
+//        it != m_objects.end(); it++) {
+    map<int, hobject_t*>::iterator it = m_objects.begin();
+    for (; it != m_objects.end(); it++) {
+      hobject_t *obj = it->second;
       m_objects.erase(it);
       if (obj) {
         delete obj;
       }
     }
   }
-  */
 }
 
 hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
