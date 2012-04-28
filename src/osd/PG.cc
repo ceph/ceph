@@ -3835,6 +3835,11 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
+
+  // make sure we have past_intervals filled in.  hopefully this will happen
+  // _before_ we are active.
+  pg->generate_past_intervals();
+
   pg->remove_down_peer_info(advmap.osdmap);
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
