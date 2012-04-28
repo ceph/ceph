@@ -49,6 +49,12 @@ private:
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
   map<int,double> osd_weight;
+
+  // map thrashing
+  int thrash_map;
+  int thrash_last_up_osd;
+  bool thrash();
+
   // svc
 public:  
   void create_initial();
@@ -66,6 +72,11 @@ private:
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
   bool should_propose(double &delay);
+
+  bool can_mark_down(int o);
+  bool can_mark_up(int o);
+  bool can_mark_out(int o);
+  bool can_mark_in(int o);
 
   // ...
   void send_to_waiting();     // send current map to waiters.
@@ -104,6 +115,9 @@ private:
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num);
   int prepare_new_pool(MPoolOp *m);
+  
+  bool prepare_set_flag(MMonCommand *m, int flag);
+  bool prepare_unset_flag(MMonCommand *m, int flag);
 
   void _pool_op_reply(MPoolOp *m, int ret, epoch_t epoch, bufferlist *blp=NULL);
 

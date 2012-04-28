@@ -58,7 +58,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 
 /************ MAPS ****************/
 OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p)
-  : PaxosService(mn, p)
+  : PaxosService(mn, p),
+    thrash_map(0), thrash_last_up_osd(-1)
 {
   // we need to trim this too
   p->add_extra_state_dir("osdmap_full");
@@ -149,9 +150,89 @@ void OSDMonitor::update_from_paxos()
   update_logger();
 }
 
+bool OSDMonitor::thrash()
+{
+  if (!thrash_map)
+    return false;
+
+  thrash_map--;
+  int o;
+
+  // mark a random osd up_thru.. 
+  if (rand() % 4 == 0 || thrash_last_up_osd < 0)
+    o = rand() % osdmap.get_num_osds();
+  else
+    o = thrash_last_up_osd;
+  if (osdmap.is_up(o)) {
+    dout(5) << "thrash_map osd." << o << " up_thru" << dendl;
+    pending_inc.new_up_thru[o] = osdmap.get_epoch();
+  }
+
+  // mark a random osd up/down
+  o = rand() % osdmap.get_num_osds();
+  if (osdmap.is_up(o)) {
+    dout(5) << "thrash_map osd." << o << " down" << dendl;
+    pending_inc.new_state[o] = CEPH_OSD_UP;
+  } else if (osdmap.exists(o)) {
+    dout(5) << "thrash_map osd." << o << " up" << dendl;
+    pending_inc.new_state[o] = CEPH_OSD_UP;
+    pending_inc.new_up_client[o] = entity_addr_t();
+    pending_inc.new_up_internal[o] = entity_addr_t();
+    pending_inc.new_hb_up[o] = entity_addr_t();
+    pending_inc.new_weight[o] = CEPH_OSD_IN;
+    thrash_last_up_osd = o;
+  }
+
+  // mark a random osd in
+  o = rand() % osdmap.get_num_osds();
+  if (osdmap.exists(o)) {
+    dout(5) << "thrash_map osd." << o << " in" << dendl;
+    pending_inc.new_weight[o] = CEPH_OSD_IN;
+  }
+
+  // mark a random osd out
+  o = rand() % osdmap.get_num_osds();
+  if (osdmap.exists(o)) {
+    dout(5) << "thrash_map osd." << o << " out" << dendl;
+    pending_inc.new_weight[o] = CEPH_OSD_OUT;
+  }
+
+  // generate some pg_temp entries.
+  // let's assume the hash_map iterates in a random-ish order.
+  int n = rand() % mon->pgmon()->pg_map.pg_stat.size();
+  hash_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
+  hash_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
+  while (n--)
+    p++;
+  for (int i=0; i<50; i++) {
+    vector<int> v;
+    for (int j=0; j<3; j++) {
+      o = rand() % osdmap.get_num_osds();
+      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end())
+	v.push_back(o);
+    }
+    if (v.size() < 3) {
+      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); q++)
+	if (std::find(v.begin(), v.end(), *q) == v.end())
+	  v.push_back(*q);
+    }
+    if (v.size())
+      pending_inc.new_pg_temp[p->first] = v;
+    dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
+
+    p++;
+    if (p == e)
+      p = mon->pgmon()->pg_map.pg_stat.begin();
+  }
+  return true;
+}
+
 void OSDMonitor::on_active()
 {
   update_logger();
+
+  if (thrash_map && thrash())
+    propose_pending();
 }
 
 void OSDMonitor::update_logger()
@@ -468,6 +549,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
       send_incremental(m, m->get_epoch()+1);
     goto didit;
   }
+
   // already reported?
   if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dup: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
@@ -476,11 +558,74 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     goto didit;
   }
 
+  if (!can_mark_down(badboy)) {
+    dout(5) << "preprocess_failure ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
+    goto didit;
+  }
+
   dout(10) << "preprocess_failure new: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
   return false;
 
  didit:
   m->put();
+  return true;
+}
+
+bool OSDMonitor::can_mark_down(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
+    dout(5) << "can_mark_down NODOWN flag set, will not mark osd." << i << " down" << dendl;
+    return false;
+  }
+  int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
+  float up_ratio = (float)up / (float)osdmap.get_num_osds();
+  if (up_ratio < g_conf->mon_osd_min_up_ratio) {
+    dout(5) << "can_mark_down current up_ratio " << up_ratio << " < min "
+	    << g_conf->mon_osd_min_up_ratio
+	    << ", will not mark osd." << i << " down" << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool OSDMonitor::can_mark_up(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
+    dout(5) << "can_mark_up NOUP flag set, will not mark osd." << i << " up" << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool OSDMonitor::can_mark_out(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
+    dout(5) << "can_mark_out NOOUT flag set, will not mark osds out" << dendl;
+    return false;
+  }
+  int in = osdmap.get_num_in_osds() - pending_inc.get_net_marked_out(&osdmap);
+  float in_ratio = (float)in / (float)osdmap.get_num_osds();
+  if (in_ratio < g_conf->mon_osd_min_in_ratio) {
+    if (i >= 0)
+      dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
+	      << g_conf->mon_osd_min_in_ratio
+	      << ", will not mark osd." << i << " out" << dendl;
+    else
+      dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
+	      << g_conf->mon_osd_min_in_ratio
+	      << ", will not mark osds out" << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+bool OSDMonitor::can_mark_in(int i)
+{
+  if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
+    dout(5) << "can_mark_in NOIN flag set, will not mark osd." << i << " in" << dendl;
+    return false;
+  }
   return true;
 }
 
@@ -594,6 +739,13 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     return true;
   }
 
+  // noup?
+  if (!can_mark_up(from)) {
+    dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
+    send_latest(m, m->sb.current_epoch+1);
+    return true;
+  }
+
   dout(10) << "preprocess_boot from " << m->get_orig_source_inst() << dendl;
   return false;
 
@@ -648,9 +800,14 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if ((g_conf->mon_osd_auto_mark_auto_out_in && (oldstate & CEPH_OSD_AUTOOUT)) ||
 	(g_conf->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
 	(g_conf->mon_osd_auto_mark_in)) {
-      pending_inc.new_weight[from] = CEPH_OSD_IN;
-      down_pending_out.erase(from);  // if any
+      if (can_mark_in(from)) {
+	pending_inc.new_weight[from] = CEPH_OSD_IN;
+      } else {
+	dout(7) << "prepare_boot NOIN set, will not mark in " << m->get_orig_source_addr() << dendl;
+      }
     }
+
+    down_pending_out.erase(from);  // if any
 
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
@@ -1083,33 +1240,40 @@ void OSDMonitor::tick()
 
   // mark down osds out?
   utime_t now = ceph_clock_now(g_ceph_context);
-  map<int,utime_t>::iterator i = down_pending_out.begin();
-  while (i != down_pending_out.end()) {
-    int o = i->first;
-    utime_t down = now;
-    down -= i->second;
-    i++;
 
-    if (osdmap.is_down(o) && osdmap.is_in(o)) {
-      if (g_conf->mon_osd_down_out_interval > 0 &&
-	  down.sec() >= g_conf->mon_osd_down_out_interval) {
-	dout(10) << "tick marking osd." << o << " OUT after " << down
-		 << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
-	pending_inc.new_weight[o] = CEPH_OSD_OUT;
+  if (can_mark_out(-1)) {
+    map<int,utime_t>::iterator i = down_pending_out.begin();
+    while (i != down_pending_out.end()) {
+      int o = i->first;
+      utime_t down = now;
+      down -= i->second;
+      i++;
 
-	// set the AUTOOUT bit.
-	if (pending_inc.new_state.count(o) == 0)
-	  pending_inc.new_state[o] = 0;
-	pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+      if (osdmap.is_down(o) &&
+	  osdmap.is_in(o) &&
+	  can_mark_out(o)) {
+	if (g_conf->mon_osd_down_out_interval > 0 &&
+	    down.sec() >= g_conf->mon_osd_down_out_interval) {
+	  dout(10) << "tick marking osd." << o << " OUT after " << down
+		   << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
+	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
 
-	do_propose = true;
+	  // set the AUTOOUT bit.
+	  if (pending_inc.new_state.count(o) == 0)
+	    pending_inc.new_state[o] = 0;
+	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
+	  do_propose = true;
 	
-	mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
-      } else
-	continue;
-    }
+	  mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
+	} else
+	  continue;
+      }
 
-    down_pending_out.erase(o);
+      down_pending_out.erase(o);
+    }
+  } else {
+    dout(10) << "tick NOOUT flag set, not checking down osds" << dendl;
   }
 
   // expire blacklisted items?
@@ -1200,7 +1364,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     if (t == last_osd_report.end()) {
       // it wasn't in the map; start the timer.
       last_osd_report[i] = now;
-    } else {
+    } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
@@ -1504,8 +1668,31 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   return 0;
 }
 
+bool OSDMonitor::prepare_set_flag(MMonCommand *m, int flag)
+{
+  ostringstream ss;
+  if (pending_inc.new_flags < 0)
+    pending_inc.new_flags = osdmap.get_flags();
+  pending_inc.new_flags |= flag;
+  ss << "set " << OSDMap::get_flag_string(flag);
+  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, ss.str(), paxos->get_version()));
+  return true;
+}
+
+bool OSDMonitor::prepare_unset_flag(MMonCommand *m, int flag)
+{
+  ostringstream ss;
+  if (pending_inc.new_flags < 0)
+    pending_inc.new_flags = osdmap.get_flags();
+  pending_inc.new_flags &= ~flag;
+  ss << "unset " << OSDMap::get_flag_string(flag);
+  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, ss.str(), paxos->get_version()));
+  return true;
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
+  bool ret = false;
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -1668,22 +1855,40 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return true;
     }
     else if (m->cmd[1] == "pause") {
-      if (pending_inc.new_flags < 0)
-	pending_inc.new_flags = osdmap.get_flags();
-      pending_inc.new_flags |= CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR;
-      ss << "pause rd+wr";
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      return prepare_set_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     }
     else if (m->cmd[1] == "unpause") {
-      if (pending_inc.new_flags < 0)
-	pending_inc.new_flags = osdmap.get_flags();
-      pending_inc.new_flags &= ~(CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
-      ss << "unpause rd+wr";
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      return prepare_unset_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "pause") {
+      return prepare_set_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "pause") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noup") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOUP);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noup") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOUP);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "nodown") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NODOWN);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "nodown") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NODOWN);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noout") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOOUT);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noout") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOOUT);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noin") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOIN);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "nion") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOIN);
     }
     else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
       pending_inc.cluster_snapshot = m->cmd[2];
@@ -2146,6 +2351,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
       }
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "thrash") {
+      thrash_map = atoi(m->cmd[2].c_str());
+      ss << "will thrash map for " << thrash_map << " epochs";
+      ret = thrash();
+      err = 0;
+    }
     else {
       ss << "unknown command " << m->cmd[1];
     }
@@ -2157,7 +2368,7 @@ out:
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
   mon->reply_command(m, err, rs, paxos->get_version());
-  return false;
+  return ret;
 }
 
 bool OSDMonitor::preprocess_pool_op(MPoolOp *m) 

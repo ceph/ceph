@@ -137,6 +137,9 @@ public:
 
     string cluster_snapshot;
 
+    int get_net_marked_out(const OSDMap *previous) const;
+    int get_net_marked_down(const OSDMap *previous) const;
+
     void encode_client_old(bufferlist& bl) const;
     void encode(bufferlist& bl, uint64_t features=-1) const;
     void decode(bufferlist::iterator &p);
@@ -691,6 +694,7 @@ public:
   void print_tree(ostream& out) const;
 
   string get_flag_string() const;
+  static string get_flag_string(unsigned flags);
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);

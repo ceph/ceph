@@ -303,7 +303,7 @@ public:
     int rc;
     string rs;
     version_t version;
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s, version_t v) :
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, version_t v) :
       mon(_mm), m(_m), rc(r), rs(s), version(v){}
     void finish(int r) {
       mon->reply_command(m, rc, rs, version);

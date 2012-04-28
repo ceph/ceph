@@ -1987,8 +1987,10 @@ void OSD::_got_boot_version(epoch_t oldest, epoch_t newest)
   dout(10) << "_got_boot_version mon has osdmaps " << oldest << ".." << newest << dendl;
 
   // if our map within recent history, try to add ourselves to the osdmap.
-  if (osdmap->get_epoch() >= oldest - 1 &&
-      osdmap->get_epoch() < newest + g_conf->osd_map_message_max) {
+  if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
+    dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
+  } else if (osdmap->get_epoch() >= oldest - 1 &&
+	     osdmap->get_epoch() < newest + g_conf->osd_map_message_max) {
     send_boot();
     return;
   }

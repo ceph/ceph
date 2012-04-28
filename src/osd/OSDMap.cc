@@ -86,6 +86,36 @@ ostream& operator<<(ostream& out, const osd_info_t& info)
 // ----------------------------------
 // OSDMap::Incremental
 
+int OSDMap::Incremental::get_net_marked_out(const OSDMap *previous) const
+{
+  int n = 0;
+  for (map<int32_t,uint32_t>::const_iterator p = new_weight.begin();
+       p != new_weight.end();
+       ++p) {
+    if (p->second == CEPH_OSD_OUT && !previous->is_out(p->first))
+      n++;  // marked out
+    if (p->second != CEPH_OSD_OUT && previous->is_out(p->first))
+      n--;  // marked in
+  }
+  return n;
+}
+
+int OSDMap::Incremental::get_net_marked_down(const OSDMap *previous) const
+{
+  int n = 0;
+  for (map<int32_t,uint8_t>::const_iterator p = new_state.begin();
+       p != new_state.end();
+       ++p) {
+    if (p->second & CEPH_OSD_UP) {
+      if (previous->is_up(p->first))
+	n++;  // marked down
+      else
+	n--;  // marked up
+    }
+  }
+  return n;
+}
+
 void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
 {
   __u16 v = 5;
@@ -904,22 +934,35 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   delete cct;
 }
 
-string OSDMap::get_flag_string() const
+string OSDMap::get_flag_string(unsigned f)
 {
   string s;
-  if (test_flag(CEPH_OSDMAP_NEARFULL))
+  if ( f& CEPH_OSDMAP_NEARFULL)
     s += ",nearfull";
-  if (test_flag(CEPH_OSDMAP_FULL))
+  if (f & CEPH_OSDMAP_FULL)
     s += ",full";
-  if (test_flag(CEPH_OSDMAP_PAUSERD))
+  if (f & CEPH_OSDMAP_PAUSERD)
     s += ",pauserd";
-  if (test_flag(CEPH_OSDMAP_PAUSEWR))
+  if (f & CEPH_OSDMAP_PAUSEWR)
     s += ",pausewr";
-  if (test_flag(CEPH_OSDMAP_PAUSEREC))
+  if (f & CEPH_OSDMAP_PAUSEREC)
     s += ",pauserec";
+  if (f & CEPH_OSDMAP_NOUP)
+    s += ",no-up";
+  if (f & CEPH_OSDMAP_NODOWN)
+    s += ",no-down";
+  if (f & CEPH_OSDMAP_NOOUT)
+    s += ",no-out";
+  if (f & CEPH_OSDMAP_NOIN)
+    s += ",no-in";
   if (s.length())
     s = s.erase(0, 1);
   return s;
+}
+
+string OSDMap::get_flag_string() const
+{
+  return get_flag_string(flags);
 }
 
 struct qi {
