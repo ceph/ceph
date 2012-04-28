@@ -1882,6 +1882,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noout") {
       return prepare_unset_flag(m, CEPH_OSDMAP_NOOUT);
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noin") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOIN);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "nion") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOIN);
+    }
     else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
       pending_inc.cluster_snapshot = m->cmd[2];
       ss << "creating cluster snap " << m->cmd[2];
