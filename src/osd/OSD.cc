@@ -2889,6 +2889,10 @@ void OSD::handle_scrub(MOSDScrub *m)
 bool OSD::scrub_should_schedule()
 {
   double loadavgs[1];
+
+  if (!is_active())
+    return false;
+
   if (getloadavg(loadavgs, 1) != 1) {
     dout(10) << "scrub_should_schedule couldn't read loadavgs\n" << dendl;
     return false;
