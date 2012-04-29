@@ -354,6 +354,9 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 
   for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); d++)
     merge_old_entry(t, *d);
+
+  dirty_info = true;
+  dirty_log = true;
 }
 
 void PG::merge_log(ObjectStore::Transaction& t,
@@ -407,6 +410,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
     rewind_divergent_log(t, olog.head);
+    changed = true;
   }
 
   // extend on head?
