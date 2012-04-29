@@ -940,20 +940,34 @@ struct pg_history_t {
       last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
       same_up_since(0), same_interval_since(0), same_primary_since(0) {}
   
-  void merge(const pg_history_t &other) {
+  bool merge(const pg_history_t &other) {
     // Here, we only update the fields which cannot be calculated from the OSDmap.
-    if (epoch_created < other.epoch_created)
+    bool modified = false;
+    if (epoch_created < other.epoch_created) {
       epoch_created = other.epoch_created;
-    if (last_epoch_started < other.last_epoch_started)
+      modified = true;
+    }
+    if (last_epoch_started < other.last_epoch_started) {
       last_epoch_started = other.last_epoch_started;
-    if (last_epoch_clean < other.last_epoch_clean)
+      modified = true;
+    }
+    if (last_epoch_clean < other.last_epoch_clean) {
       last_epoch_clean = other.last_epoch_clean;
-    if (last_epoch_split < other.last_epoch_started)
-      last_epoch_split = other.last_epoch_started;
-    if (other.last_scrub > last_scrub)
+      modified = true;
+    }
+    if (last_epoch_split < other.last_epoch_started) {
+      last_epoch_split = other.last_epoch_started; 
+      modified = true;
+    }
+    if (other.last_scrub > last_scrub) {
       last_scrub = other.last_scrub;
-    if (other.last_scrub_stamp > last_scrub_stamp)
+      modified = true;
+    }
+    if (other.last_scrub_stamp > last_scrub_stamp) {
       last_scrub_stamp = other.last_scrub_stamp;
+      modified = true;
+    }
+    return modified;
   }
 
   void encode(bufferlist& bl) const;

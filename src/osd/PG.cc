@@ -235,7 +235,8 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
   might_have_unfound.insert(from);
   
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-  info.history.merge(oinfo.history);
+  if (info.history.merge(oinfo.history))
+    dirty_info = true;
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   
   // stray?
@@ -3632,11 +3633,14 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
   assert(!is_primary());
   assert(is_stray() || is_active());
 
-  if (info.last_backfill.is_max())
+  if (info.last_backfill.is_max()) {
     info.stats = oinfo.stats;
+    dirty_info = true;
+  }
 
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-  info.history.merge(oinfo.history);
+  if (info.history.merge(oinfo.history))
+    dirty_info = true;
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
   // Handle changes to purged_snaps ONLY IF we have caught up
@@ -3651,7 +3655,7 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 	       << " removed " << p << dendl;
       adjust_local_snaps();
     }
-    write_info(t);
+    dirty_info = true;
   }
 }
 
