@@ -4634,9 +4634,11 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
+    /* FIXME: do not do this unless/until we also write any modified history to disk.
     unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
     pg->info.history.merge(it->second.history);
     reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+    */
 
     // ok, process query!
     PG::RecoveryCtx rctx(0, 0, &notify_list, 0, 0);
