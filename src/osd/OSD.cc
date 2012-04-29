@@ -4274,6 +4274,8 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
     pg->handle_notify(from, it->first, &rctx);
+    if (pg->dirty_info)
+      pg->write_info(*t);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
@@ -4321,6 +4323,8 @@ void OSD::handle_pg_log(OpRequestRef op)
   map< int, MOSDPGInfo* > info_map;
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
   pg->handle_log(from, m, &rctx);
+  if (pg->dirty_info)
+    pg->write_info(*t);
   pg->unlock();
   do_queries(query_map);
   do_infos(info_map);
@@ -4370,6 +4374,8 @@ void OSD::handle_pg_info(OpRequestRef op)
     PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
 
     pg->handle_info(from, p->first, &rctx);
+    if (pg->dirty_info)
+      pg->write_info(*t);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(!tr);
