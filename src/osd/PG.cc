@@ -1491,6 +1491,14 @@ void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
     m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, primary);
   }
+
+  if (dirty_info) {
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    write_info(*t);
+    int tr = osd->store->queue_transaction(&osr, t);
+    assert(tr == 0);
+  }
+
   unlock();
   put();
 }
@@ -1509,10 +1517,7 @@ void PG::all_activated_and_committed()
   info.history.last_epoch_started = get_osdmap()->get_epoch();
   share_pg_info();
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  write_info(*t);
-  int tr = osd->store->queue_transaction(&osr, t);
-  assert(tr == 0);
+  dirty_info = true;
 }
 
 void PG::queue_snap_trim()
