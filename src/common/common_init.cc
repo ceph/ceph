@@ -58,6 +58,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   case CODE_ENVIRONMENT_LIBRARY:
     conf->set_val_or_die("log_to_stderr", "false");
     conf->set_val_or_die("err_to_stderr", "false");
+    conf->set_val_or_die("log_flush_on_exit", "false");
     break;
 
   default:
@@ -102,6 +103,9 @@ void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
   cct->start_service_thread();
+
+  if (cct->_conf->log_flush_on_exit)
+    cct->_log->set_flush_on_exit();
 
   // Trigger callbacks on any config observers that were waiting for
   // it to become safe to start threads.

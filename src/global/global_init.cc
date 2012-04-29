@@ -107,6 +107,9 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   block_signals(siglist, NULL);
   install_standard_sighandlers();
 
+  if (g_conf->log_flush_on_exit)
+    g_ceph_context->_log->set_flush_on_exit();
+
   if (g_lockdep) {
     dout(1) << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(cct);
