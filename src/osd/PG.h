@@ -1299,6 +1299,8 @@ public:
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
 
+  void write_if_dirty(ObjectStore::Transaction& t);
+
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
 

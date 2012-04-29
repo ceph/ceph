@@ -1906,6 +1906,14 @@ void PG::write_log(ObjectStore::Transaction& t)
   dirty_log = false;
 }
 
+void PG::write_if_dirty(ObjectStore::Transaction& t)
+{
+  if (dirty_info)
+    write_info(t);
+  if (dirty_log)
+    write_log(t);
+}
+
 void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
 {
   // trim?

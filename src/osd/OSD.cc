@@ -3295,8 +3295,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	 i++) {
       PG *pg = i->second;
       pg->lock_with_map_lock_held();
-      if (pg->dirty_info)
-	pg->write_info(t);
+      pg->write_if_dirty(t);
       pg->unlock();
     }
   }
@@ -3613,8 +3612,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin, &t);
     pg->handle_activate_map(&rctx);
 
-    if (pg->dirty_info)
-      pg->write_info(t);
+    pg->write_if_dirty(t);
     
     pg->unlock();
   }  
@@ -3929,6 +3927,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
   for (map<pg_t,PG*>::iterator q = children.begin(); q != children.end(); q++) {
     PG *pg = q->second;
     pg->handle_create(&rctx);
+    pg->write_if_dirty(t);
     wake_pg_waiters(pg->info.pgid);
     pg->unlock();
   }
@@ -4148,6 +4147,7 @@ void OSD::handle_pg_create(OpRequestRef op)
       wake_pg_waiters(pg->info.pgid);
       PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
       pg->handle_create(&rctx);
+      pg->write_if_dirty(*t);
       pg->update_stats();
 
       int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -4274,8 +4274,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
     pg->handle_notify(from, it->first, &rctx);
-    if (pg->dirty_info)
-      pg->write_info(*t);
+    pg->write_if_dirty(*t);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
@@ -4323,8 +4322,7 @@ void OSD::handle_pg_log(OpRequestRef op)
   map< int, MOSDPGInfo* > info_map;
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
   pg->handle_log(from, m, &rctx);
-  if (pg->dirty_info)
-    pg->write_info(*t);
+  pg->write_if_dirty(*t);
   pg->unlock();
   do_queries(query_map);
   do_infos(info_map);
@@ -4374,8 +4372,7 @@ void OSD::handle_pg_info(OpRequestRef op)
     PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
 
     pg->handle_info(from, p->first, &rctx);
-    if (pg->dirty_info)
-      pg->write_info(*t);
+    pg->write_if_dirty(*t);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(!tr);
