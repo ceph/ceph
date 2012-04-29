@@ -3284,6 +3284,17 @@ void OSD::handle_osd_map(MOSDMap *m)
       
     // yay!
     activate_map(t, fin->contexts);
+  } else {
+    // write updated pg state to store
+    for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
+	 i != pg_map.end();
+	 i++) {
+      PG *pg = i->second;
+      pg->lock_with_map_lock_held();
+      if (pg->dirty_info)
+	pg->write_info(t);
+      pg->unlock();
+    }
   }
 
   bool do_shutdown = false;
@@ -3337,15 +3348,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // process waiters
   take_waiters(waiting_for_osdmap);
-
-  // write updated pg state to store
-  for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       i++) {
-    PG *pg = i->second;
-    if (pg->dirty_info)
-      pg->write_info(t);
-  }
 
   // note in the superblock that we were clean thru the prior epoch
   if (boot_epoch && boot_epoch >= superblock.mounted) {
@@ -3606,6 +3608,9 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin, &t);
     pg->handle_activate_map(&rctx);
+
+    if (pg->dirty_info)
+      pg->write_info(t);
     
     pg->unlock();
   }  
