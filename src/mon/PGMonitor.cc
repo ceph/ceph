@@ -36,7 +36,6 @@
 #include "common/perf_counters.h"
 
 #include "osd/osd_types.h"
-#include "osd/PG.h"  // yuck
 
 #include "common/config.h"
 #include "common/errno.h"
