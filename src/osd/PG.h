@@ -358,15 +358,14 @@ public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
   void lock(bool no_lockdep = false);
-  void unlock() {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    osdmap_ref.reset();
-    _lock.Unlock();
-  }
+  void unlock();
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
    * *_with_map_lock_held assume that the map_lock is already held */
   void lock_with_map_lock_held(bool no_lockdep = false);
+
+  // assert we still have lock held, and update our map ref
+  void reassert_lock_with_map_lock_held();
 
   void assert_locked() {
     assert(_lock.is_locked());

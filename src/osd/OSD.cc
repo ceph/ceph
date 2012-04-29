@@ -3254,6 +3254,14 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   C_Contexts *fin = new C_Contexts(g_ceph_context);
 
+  // lock all pgs
+  for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
+       i != pg_map.end();
+       i++) {
+    PG *pg = i->second;
+    pg->lock_with_map_lock_held(true);
+  }
+
   // advance through the new maps
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
@@ -3288,16 +3296,16 @@ void OSD::handle_osd_map(MOSDMap *m)
       
     // yay!
     activate_map(t, fin->contexts);
-  } else {
-    // write updated pg state to store
-    for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
-	 i != pg_map.end();
-	 i++) {
-      PG *pg = i->second;
-      pg->lock_with_map_lock_held();
-      pg->write_if_dirty(t);
-      pg->unlock();
-    }
+  }
+
+  // write and unlock pgs
+  for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
+       i != pg_map.end();
+       i++) {
+    PG *pg = i->second;
+    //pg->lock_with_map_lock_held();
+    pg->write_if_dirty(t);
+    pg->unlock();
   }
 
   bool do_shutdown = false;
@@ -3544,10 +3552,14 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     vector<int> newup, newacting;
     osdmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
 
-    pg->lock_with_map_lock_held();
+    //pg->lock_with_map_lock_held();
+
+    // update pg's osdmap ref, assert lock is held
+    pg->reassert_lock_with_map_lock_held();
+
     dout(10) << "Scanning pg " << *pg << dendl;
     pg->handle_advance_map(osdmap, lastmap, newup, newacting, 0);
-    pg->unlock();
+    //pg->unlock();
   }
 
   // scan pgs with waiters
@@ -3590,7 +3602,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it != pg_map.end();
        it++) {
     PG *pg = it->second;
-    pg->lock_with_map_lock_held();
+    //pg->lock_with_map_lock_held();
 
     if (pg->is_primary())
       num_pg_primary++;
@@ -3605,16 +3617,16 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       queue_pg_for_deletion(pg);
-      pg->unlock();
+      //pg->unlock();
       continue;
     }
 
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin, &t);
     pg->handle_activate_map(&rctx);
 
-    pg->write_if_dirty(t);
+    //pg->write_if_dirty(t);
     
-    pg->unlock();
+    //pg->unlock();
   }  
 
   do_notifies(notify_list, osdmap->get_epoch());  // notify? (residual|replica)

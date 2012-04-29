@@ -48,6 +48,12 @@ void PG::lock(bool no_lockdep)
   osd->map_lock.put_read();
   _lock.Lock(no_lockdep);
   osdmap_ref.swap(map);
+
+  // if we have unrecorded dirty state with the lock dropped, there is a bug
+  assert(!dirty_info);
+  assert(!dirty_log);
+
+  dout(30) << "lock" << dendl;
 }
 
 /*
@@ -58,6 +64,29 @@ void PG::lock_with_map_lock_held(bool no_lockdep)
 {
   _lock.Lock(no_lockdep);
   osdmap_ref = osd->osdmap;
+
+  // if we have unrecorded dirty state with the lock dropped, there is a bug
+  assert(!dirty_info);
+  assert(!dirty_log);
+
+  dout(30) << "lock_with_map_lock_held" << dendl;
+}
+
+void PG::reassert_lock_with_map_lock_held()
+{
+  assert(_lock.is_locked());
+  osdmap_ref = osd->osdmap;
+
+  dout(30) << "reassert_lock_with_map_lock_held" << dendl;
+}
+
+void PG::unlock()
+{
+  dout(30) << "unlock" << dendl;
+  assert(!dirty_info);
+  assert(!dirty_log);
+  osdmap_ref.reset();
+  _lock.Unlock();
 }
 
 std::string PG::gen_prefix() const
