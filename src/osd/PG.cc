@@ -485,8 +485,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
   dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
 
   if (changed) {
-    write_info(t);
-    write_log(t);
+    dirty_info = true;
+    dirty_log = true;
   }
 }
 
@@ -1227,8 +1227,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   need_up_thru = false;
 
   // write pg info, log
-  write_info(t);
-  write_log(t);
+  dirty_info = true;
+  dirty_log = true;
 
   // clean up stray objects
   clean_up_local(t); 
