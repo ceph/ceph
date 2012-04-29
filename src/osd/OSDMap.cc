@@ -549,7 +549,7 @@ void OSDMap::adjust_osd_weights(const map<int,double>& weights, Incremental& inc
 int OSDMap::identify_osd(const entity_addr_t& addr) const
 {
   for (int i=0; i<max_osd; i++)
-    if ((get_addr(i) == addr) || (get_cluster_addr(i) == addr))
+    if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr))
       return i;
   return -1;
 }
@@ -557,7 +557,7 @@ int OSDMap::identify_osd(const entity_addr_t& addr) const
 bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
   for (int i=0; i<max_osd; i++)
-    if (get_addr(i).is_same_host(ip) || get_cluster_addr(i).is_same_host(ip))
+    if (exists(i) && (get_addr(i).is_same_host(ip) || get_cluster_addr(i).is_same_host(ip)))
       return i;
   return -1;
 }
