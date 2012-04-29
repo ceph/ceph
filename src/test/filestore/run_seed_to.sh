@@ -71,11 +71,7 @@ journal_test=1
 min_sync_interval="36000" # ten hours, yes.
 max_sync_interval="36001"
 exit_on_error=0
-<<<<<<< HEAD
-
-=======
 v=""
->>>>>>> gh/wip-filestore-misc
 
 do_rm() {
   if [[ $on_btrfs -eq 0 ]]; then
@@ -126,13 +122,10 @@ do
       exit_on_error=1
       shift
       ;;
-<<<<<<< HEAD
-=======
     -v | --valgrind)
       v="valgrind --leak-check=full"
       shift
       ;;
->>>>>>> gh/wip-filestore-misc
     --)
       shift
       break
@@ -251,32 +244,11 @@ do
   fi
 
   do_rm $tmp_name_a $tmp_name_a.fail $tmp_name_a.recover
-<<<<<<< HEAD
-  test_filestore_idempotent_sequence run-sequence-to $to \
-=======
   $v test_filestore_idempotent_sequence run-sequence-to $to \
->>>>>>> gh/wip-filestore-misc
     $tmp_name_a $tmp_name_a/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat $tmp_opts_a \
     --log-file $tmp_name_a.fail --debug-filestore 20 || true
-<<<<<<< HEAD
-
-  stop_at=`test_filestore_idempotent_sequence get-last-op \
-    $tmp_name_a $tmp_name_a/journal \
-    --filestore-xattr-use-omap --log-file $tmp_name_a.recover \
-    --debug-filestore 20 --debug-journal 20`
-
-  if [[ "`expr $stop_at - $stop_at 2>/dev/null`" != "0" ]]; then
-    echo "error: get-last-op returned '$stop_at'"
-    exit 1
-  fi
-
-  echo stopped at $stop_at
-
-  do_rm $tmp_name_b $tmp_name_b.clean
-  test_filestore_idempotent_sequence run-sequence-to \
-=======
 
   stop_at=`test_filestore_idempotent_sequence get-last-op \
     $tmp_name_a $tmp_name_a/journal \
@@ -292,16 +264,11 @@ do
 
   do_rm $tmp_name_b $tmp_name_b.clean
   $v test_filestore_idempotent_sequence run-sequence-to \
->>>>>>> gh/wip-filestore-misc
     $stop_at $tmp_name_b $tmp_name_b/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --log-file $tmp_name_b.clean --debug-filestore 20 $tmp_opts_b
 
-<<<<<<< HEAD
-  if test_filestore_idempotent_sequence diff \
-=======
   if $v test_filestore_idempotent_sequence diff \
->>>>>>> gh/wip-filestore-misc
     $tmp_name_a $tmp_name_a/journal $tmp_name_b $tmp_name_b/journal \
     --filestore-xattr-use-omap; then
       echo OK
