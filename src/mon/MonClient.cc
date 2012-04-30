@@ -223,6 +223,7 @@ int MonClient::get_monmap_privately()
   if (!messenger) {
     messenger = smessenger = new SimpleMessenger(cct,
                                                  entity_name_t::CLIENT(-1),
+						 "temp_mon_client",
                                                  getpid());
     messenger->add_dispatcher_head(this);
     smessenger->start();

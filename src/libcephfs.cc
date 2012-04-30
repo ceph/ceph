@@ -77,7 +77,7 @@ public:
       goto fail;
 
     //network connection
-    messenger = Messenger::create(cct, entity_name_t::CLIENT(), msgr_nonce);
+    messenger = Messenger::create(cct, entity_name_t::CLIENT(), "client", msgr_nonce);
 
     //at last the client
     ret = -1002;

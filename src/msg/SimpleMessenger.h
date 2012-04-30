@@ -573,8 +573,8 @@ private:
   int get_proto_version(int peer_type, bool connect);
 
 public:
-  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
-    Messenger(cct, name),
+  SimpleMessenger(CephContext *cct, entity_name_t name, string mname, uint64_t _nonce) :
+    Messenger(cct, name, mname),
     accepter(this),
     lock("SimpleMessenger::lock"), did_bind(false),
     dispatch_throttler(cct, "dispatch_throttler", cct->_conf->ms_dispatch_throttle_bytes),
