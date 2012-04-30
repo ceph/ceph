@@ -2,12 +2,25 @@
 #include "common/Throttle.h"
 #include "common/dout.h"
 #include "common/ceph_context.h"
+#include "common/perf_counters.h"
 
 #define dout_subsys ceph_subsys_throttle
 
 #undef dout_prefix
 #define dout_prefix *_dout << "throttle(" << name << " " << (void*)this << ") "
 
+enum {
+  l_throttle_first = 532430,
+  l_throttle_get,
+  l_throttle_get_sum,
+  l_throttle_get_fail,
+  l_throttle_take,
+  l_throttle_take_sum,
+  l_throttle_put,
+  l_throttle_put_sum,
+  l_throttle_wait,
+  l_throttle_last,
+};
 
 Throttle::Throttle(CephContext *cct, std::string n, int64_t m)
   : cct(cct), name(n),
@@ -15,6 +28,19 @@ Throttle::Throttle(CephContext *cct, std::string n, int64_t m)
     lock("Throttle::lock")
 {
   assert(m >= 0);
+
+  PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
+  b.add_u64_counter(l_throttle_get, "get");
+  b.add_u64_counter(l_throttle_get_sum, "get_sum");
+  b.add_u64_counter(l_throttle_get_fail, "get_fail");
+  b.add_u64_counter(l_throttle_take, "take");
+  b.add_u64_counter(l_throttle_take_sum, "take_sum");
+  b.add_u64_counter(l_throttle_put, "put");
+  b.add_u64_counter(l_throttle_put_sum, "put_sum");
+  b.add_fl_avg(l_throttle_wait, "wait");
+
+  logger = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(logger);
 }
 
 Throttle::~Throttle()
@@ -24,23 +50,32 @@ Throttle::~Throttle()
     delete cv;
     cond.pop_front();
   }
+
+  cct->get_perfcounters_collection()->remove(logger);
+  delete logger;
 }
 
 bool Throttle::_wait(int64_t c)
 {
+  utime_t start;
   bool waited = false;
   if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
     Cond *cv = new Cond;
     cond.push_back(cv);
     do {
-      if (!waited)
+      if (!waited) {
 	ldout(cct, 2) << "_wait waiting..." << dendl;
+	start = ceph_clock_now(cct);
+      }
       waited = true;
       cv->Wait(lock);
     } while (_should_wait(c) || cv != cond.front());
 
-    if (waited)
+    if (waited) {
       ldout(cct, 3) << "_wait finished waiting" << dendl;
+      utime_t dur = ceph_clock_now(cct) - start;
+      logger->finc(l_throttle_wait, dur);
+    }
 
     delete cv;
     cond.pop_front();
@@ -68,6 +103,8 @@ int64_t Throttle::take(int64_t c)
   assert(c >= 0);
   Mutex::Locker l(lock);
   ldout(cct, 5) << "take " << c << dendl;
+  logger->inc(l_throttle_take);
+  logger->inc(l_throttle_take_sum, c);
   count += c;
   return count;
 }
@@ -82,6 +119,8 @@ bool Throttle::get(int64_t c, int64_t m)
     _reset_max(m);
   }
   bool waited = _wait(c);
+  logger->inc(l_throttle_get);
+  logger->inc(l_throttle_get_sum, c);
   count += c;
   return waited;
 }
@@ -95,10 +134,13 @@ bool Throttle::get_or_fail(int64_t c)
   Mutex::Locker l(lock);
   if (_should_wait(c) || !cond.empty()) {
     ldout(cct, 2) << "get_or_fail " << c << " failed" << dendl;
+    logger->inc(l_throttle_get_fail);
     return false;
   } else {
     ldout(cct, 5) << "get_or_fail " << c << " success (" << count << " -> " << (count + c) << ")" << dendl;
     count += c;
+    logger->inc(l_throttle_get);
+    logger->inc(l_throttle_get_sum, c);
     return true;
   }
 }
@@ -113,6 +155,8 @@ int64_t Throttle::put(int64_t c)
       cond.front()->SignalOne();
     count -= c;
     assert(count >= 0); //if count goes negative, we failed somewhere!
+    logger->inc(l_throttle_put);
+    logger->inc(l_throttle_put_sum, c);
   }
   return count;
 }
