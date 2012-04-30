@@ -308,6 +308,24 @@ AS_IF([test "x$with_system_leveldb" = xcheck],
 	    [AC_CHECK_LIB([leveldb], [leveldb_open], [with_system_leveldb=yes], [], [-lsnappy -lpthread])])
 AM_CONDITIONAL(WITH_SYSTEM_LEVELDB, [ test "$with_system_leveldb" = "yes" ])
 
+# use system libs3?
+AC_ARG_WITH([system-libs3],
+	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
+	,
+	[with_system_libs3=no])
+AS_IF([test "x$with_system_libs3" = xyes],
+            [AC_CHECK_LIB([s3], [S3_initialize], [true], [AC_MSG_FAILURE([libs3 not found])], [-lpthread])])
+AS_IF([test "x$with_system_libs3" = xcheck],
+            [AC_SEARCH_LIBS([S3_initialize], [s3], [with_system_libs3=yes], [true], [-lpthread])])
+AM_CONDITIONAL(WITH_SYSTEM_LIBS3, [ test "$with_system_libs3" = "yes" ])
+
+# rest-bench?
+AC_ARG_WITH([rest-bench],
+	    [AS_HELP_STRING([--with-rest-bench], [enables rest-bench])],
+	    [],
+	    [with_rest_bench=no])
+AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
+
 # use libaio?
 AC_ARG_WITH([libaio],
             [AS_HELP_STRING([--without-libaio], [disable libaio use by journal])],

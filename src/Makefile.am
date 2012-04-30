@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf
-DIST_SUBDIRS = gtest ocf leveldb
+SUBDIRS = ocf libs3
+DIST_SUBDIRS = gtest ocf leveldb libs3
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
@@ -322,9 +322,22 @@ rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/ob
 rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
+if WITH_REST_BENCH
+
 rest_bench_SOURCES = tools/rest_bench.cc common/obj_bencher.cc
-rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -ls3
+rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rest_bench_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += rest-bench
+
+if WITH_SYSTEM_LIBS3
+rest_bench_LDADD += -ls3
+else
+rest_bench_LDADD += libs3/build/lib/libs3.a -lcurl -lxml2
+rest_bench_CXXFLAGS += -I$(top_srcdir)/src/libs3/inc
+SUBDIRS += libs3
+endif
+
+endif
 
 scratchtool_SOURCES = scratchtool.c
 scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -1656,7 +1669,6 @@ uninstall-local: uninstall-coverage
 if WITH_DEBUG
 bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
 endif
-
 
 project.tgz: clean
 	cov-configure -co /usr/bin/gcc
