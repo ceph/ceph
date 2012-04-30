@@ -52,6 +52,16 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
     manager.wait_for_clean()
 
+    # test some osdmap flags
+    manager.raw_cluster_cmd('osd', 'set', 'noin')
+    manager.raw_cluster_cmd('osd', 'set', 'noout')
+    manager.raw_cluster_cmd('osd', 'set', 'noup')
+    manager.raw_cluster_cmd('osd', 'set', 'nodown')
+    manager.raw_cluster_cmd('osd', 'unset', 'noin')
+    manager.raw_cluster_cmd('osd', 'unset', 'noout')
+    manager.raw_cluster_cmd('osd', 'unset', 'noup')
+    manager.raw_cluster_cmd('osd', 'unset', 'nodown')
+
     # write some new data
     p = rados_start(mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '4096'])
 
