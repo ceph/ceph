@@ -1025,7 +1025,7 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   if (r >= 0) {
     if (has_snaps(io_ctx, md_oid)) {
       lderr(cct) << "image has snapshots - not removing" << dendl;
-      return -EBUSY;
+      return -ENOTEMPTY;
     }
     trim_image(io_ctx, header, 0, prog_ctx);
     ldout(cct, 2) << "removing header..." << dendl;
