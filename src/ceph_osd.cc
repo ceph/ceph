@@ -327,7 +327,8 @@ int main(int argc, const char **argv)
 		    "(no journal)" : g_conf->osd_journal)
        << std::endl;
 
-  Throttle client_throttler(g_conf->osd_client_message_size_cap);
+  Throttle client_throttler(g_ceph_context, "osd_client_bytes",
+			    g_conf->osd_client_message_size_cap);
 
   uint64_t supported =
     CEPH_FEATURE_UID | 
