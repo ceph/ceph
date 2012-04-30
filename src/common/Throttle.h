@@ -6,10 +6,12 @@
 #include <list>
 
 class CephContext;
+class PerfCounters;
 
 class Throttle {
   CephContext *cct;
   std::string name;
+  PerfCounters *logger;
   int64_t count, max;
   Mutex lock;
   list<Cond*> cond;
