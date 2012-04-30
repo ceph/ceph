@@ -81,8 +81,12 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   }
   else if (ret == -EINVAL) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
-      dout_emergency("global_init: unable to open config file.\n");
-      _exit(1);
+      if (conf_file_list.length()) {
+        dout_emergency("global_init: unable to open config file.\n");
+        _exit(1);
+      } else {
+        derr <<"did not load config file, using default settings." << dendl;
+      }
     }
   }
   else if (ret) {
@@ -100,7 +104,9 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   g_lockdep = cct->_conf->lockdep;
 
   // Now we're ready to complain about config file parse errors
-  complain_about_parse_errors(cct, &parse_errors);
+  if (conf_file_list.length()) {
+    complain_about_parse_errors(cct, &parse_errors);
+  }
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
