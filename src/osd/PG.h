@@ -399,7 +399,6 @@ public:
   bool dirty_info, dirty_log;
 
 public:
-
   // pg state
   pg_info_t        info;
   const coll_t coll;

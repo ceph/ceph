@@ -712,87 +712,59 @@ bool PG::needs_recovery() const
 
 void PG::generate_past_intervals()
 {
-  epoch_t first_epoch = 0;
-  epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
-  if (stop < osd->superblock.oldest_map)
-    stop = osd->superblock.oldest_map;   // this is a lower bound on last_epoch_clean cluster-wide.     
-  epoch_t last_epoch = info.history.same_interval_since - 1;
-
-  if (last_epoch < stop) {
-    dout(10) << __func__ << " last_epoch " << last_epoch << " < oldest " << stop
-	     << ", nothing to do" << dendl;
-    return;
-  }
-
+  epoch_t end_epoch = info.history.same_interval_since;
   // Do we already have the intervals we want?
   map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
   if (pif != past_intervals.end()) {
-    if (pif->first <= stop) {
-      dout(10) << __func__ << " already have past intervals back to "
-	       << stop << dendl;
+    if (pif->first <= info.history.last_epoch_clean) {
+      dout(10) << __func__ << ": already have past intervals back to "
+	       << info.history.last_epoch_clean << dendl;
       return;
     }
-    dout(10) << __func__ << " only have past intervals back to " << pif->first << dendl;
-    last_epoch = pif->first - 1;
+    end_epoch = past_intervals.begin()->first;
   }
 
-  dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
+  epoch_t cur_epoch = MAX(MAX(info.history.epoch_created,
+			      info.history.last_epoch_clean),
+			  osd->superblock.oldest_map);
+  OSDMapRef last_map, cur_map;
+  if (cur_epoch >= end_epoch) {
+    dout(10) << __func__ << " start epoch " << cur_epoch
+	     << " >= end epoch " << end_epoch
+	     << ", nothing to do" << dendl;
+    return;
+  }
+  vector<int> acting, up, old_acting, old_up;
 
-  OSDMapRef nextmap = osd->get_map(last_epoch);
-  for (;
-       last_epoch >= stop;
-       last_epoch = first_epoch - 1) {
-    OSDMapRef lastmap = nextmap;
-    vector<int> tup, tacting;
-    lastmap->pg_to_up_acting_osds(get_pgid(), tup, tacting);
-    
-    // calc first_epoch, first_map
-    for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
-      nextmap = osd->get_map(first_epoch-1);
-      vector<int> t;
-      nextmap->pg_to_acting_osds(get_pgid(), t);
-      if (t != tacting)
-	break;
-    }
+  cur_map = osd->get_map(cur_epoch);
+  cur_map->pg_to_up_acting_osds(get_pgid(), up, acting);
+  epoch_t same_interval_since = cur_epoch;
+  dout(10) << __func__ << " over epochs " << cur_epoch << "-"
+	   << end_epoch << dendl;
+  ++cur_epoch;
+  for (; cur_epoch <= end_epoch; ++cur_epoch) {
+    last_map.swap(cur_map);
+    old_up.swap(up);
+    old_acting.swap(acting);
 
-    pg_interval_t &i = past_intervals[first_epoch];
-    i.first = first_epoch;
-    i.last = last_epoch;
-    i.up.swap(tup);
-    i.acting.swap(tacting);
-    if (i.acting.size()) {
-      if (lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
-	  lastmap->get_up_from(i.acting[0]) <= first_epoch) {
-	i.maybe_went_rw = true;
-	dout(10) << "generate_past_intervals " << i
-		 << " : primary up " << lastmap->get_up_from(i.acting[0])
-		 << "-" << lastmap->get_up_thru(i.acting[0])
-		 << dendl;
-      } else if (info.history.last_epoch_clean >= first_epoch &&
-		 info.history.last_epoch_clean <= last_epoch) {
-	// If the last_epoch_clean is included in this interval, then
-	// the pg must have been rw (for recovery to have completed).
-	// This is important because we won't know the _real_
-	// first_epoch because we stop at last_epoch_clean, and we
-	// don't want the oldest interval to randomly have
-	// maybe_went_rw false depending on the relative up_thru vs
-	// last_epoch_clean timing.
-	i.maybe_went_rw = true;
-	dout(10) << "generate_past_intervals " << i
-		 << " : includes last_epoch_clean " << info.history.last_epoch_clean
-		 << " and presumed to have been rw"
-		 << dendl;
-      } else {
-	i.maybe_went_rw = false;
-	dout(10) << "generate_past_intervals " << i
-		 << " : primary up " << lastmap->get_up_from(i.acting[0])
-		 << "-" << lastmap->get_up_thru(i.acting[0])
-		 << " does not include interval"
-		 << dendl;
-      }
-    } else {
-      i.maybe_went_rw = false;
-      dout(10) << "generate_past_intervals " << i << " : empty" << dendl;
+    cur_map = osd->get_map(cur_epoch);
+    cur_map->pg_to_up_acting_osds(get_pgid(), up, acting);
+
+    std::stringstream debug;
+    bool new_interval = pg_interval_t::check_new_interval(
+      old_acting,
+      acting,
+      old_up,
+      up,
+      same_interval_since,
+      info.history.last_epoch_clean,
+      cur_map,
+      last_map,
+      &past_intervals,
+      &debug);
+    if (new_interval) {
+      dout(10) << debug.str() << dendl;
+      same_interval_since = cur_epoch;
     }
   }
 
@@ -3557,24 +3529,18 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   if (!lastmap) {
     dout(10) << " no lastmap" << dendl;
     dirty_info = true;
-  } else if (acting != oldacting || up != oldup) {
-    // remember past interval
-    pg_interval_t& i = past_intervals[info.history.same_interval_since];
-    i.first = info.history.same_interval_since;
-    i.last = osdmap->get_epoch() - 1;
-    i.acting = oldacting;
-    i.up = oldup;
-
-    if (i.acting.size()) {
-      i.maybe_went_rw =
-	lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	lastmap->get_up_from(i.acting[0]) <= i.first;
-    } else {
-      i.maybe_went_rw = 0;
+  } else {
+    bool new_interval = pg_interval_t::check_new_interval(
+      oldacting, newacting,
+      oldup, newup,
+      info.history.same_interval_since,
+      info.history.last_epoch_clean,
+      osdmap,
+      lastmap, &past_intervals);
+    if (new_interval) {
+      dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
+      dirty_info = true;
     }
-
-    dout(10) << " noting past " << i << dendl;
-    dirty_info = true;
   }
 
   if (oldacting != acting || oldup != up) {
