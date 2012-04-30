@@ -577,7 +577,7 @@ public:
     Messenger(cct, name, mname),
     accepter(this),
     lock("SimpleMessenger::lock"), did_bind(false),
-    dispatch_throttler(cct, "dispatch_throttler", cct->_conf->ms_dispatch_throttle_bytes),
+    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     need_addr(true),
     nonce(_nonce), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
