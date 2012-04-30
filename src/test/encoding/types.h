@@ -26,7 +26,6 @@ TYPE(OSDMap::Incremental)
 TYPE(CrushWrapper)
 
 #include "osd/PG.h"
-TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
 #include "osd/osd_types.h"
@@ -44,6 +43,7 @@ TYPE(pg_stat_t)
 TYPE(pool_stat_t)
 TYPE(pg_history_t)
 TYPE(pg_info_t)
+TYPE(pg_interval_t)
 TYPE(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)

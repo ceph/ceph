@@ -29,7 +29,6 @@
 #include "auth/KeyRing.h"
 
 #include "osd/osd_types.h"
-#include "osd/PG.h"  // yuck
 
 #include "common/config.h"
 #include <sstream>

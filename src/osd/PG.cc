@@ -48,6 +48,12 @@ void PG::lock(bool no_lockdep)
   osd->map_lock.put_read();
   _lock.Lock(no_lockdep);
   osdmap_ref.swap(map);
+
+  // if we have unrecorded dirty state with the lock dropped, there is a bug
+  assert(!dirty_info);
+  assert(!dirty_log);
+
+  dout(30) << "lock" << dendl;
 }
 
 /*
@@ -58,6 +64,29 @@ void PG::lock_with_map_lock_held(bool no_lockdep)
 {
   _lock.Lock(no_lockdep);
   osdmap_ref = osd->osdmap;
+
+  // if we have unrecorded dirty state with the lock dropped, there is a bug
+  assert(!dirty_info);
+  assert(!dirty_log);
+
+  dout(30) << "lock_with_map_lock_held" << dendl;
+}
+
+void PG::reassert_lock_with_map_lock_held()
+{
+  assert(_lock.is_locked());
+  osdmap_ref = osd->osdmap;
+
+  dout(30) << "reassert_lock_with_map_lock_held" << dendl;
+}
+
+void PG::unlock()
+{
+  dout(30) << "unlock" << dendl;
+  assert(!dirty_info);
+  assert(!dirty_log);
+  osdmap_ref.reset();
+  _lock.Unlock();
 }
 
 std::string PG::gen_prefix() const
@@ -235,7 +264,8 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
   might_have_unfound.insert(from);
   
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-  info.history.merge(oinfo.history);
+  if (info.history.merge(oinfo.history))
+    dirty_info = true;
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   
   // stray?
@@ -353,6 +383,9 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 
   for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); d++)
     merge_old_entry(t, *d);
+
+  dirty_info = true;
+  dirty_log = true;
 }
 
 void PG::merge_log(ObjectStore::Transaction& t,
@@ -406,6 +439,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
     rewind_divergent_log(t, olog.head);
+    changed = true;
   }
 
   // extend on head?
@@ -484,8 +518,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
   dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
 
   if (changed) {
-    write_info(t);
-    write_log(t);
+    dirty_info = true;
+    dirty_log = true;
   }
 }
 
@@ -678,17 +712,6 @@ bool PG::needs_recovery() const
 
 void PG::generate_past_intervals()
 {
-  // Do we already have the intervals we want?
-  map<epoch_t,Interval>::const_iterator pif = past_intervals.begin();
-  if (pif != past_intervals.end()) {
-    if (pif->first <= info.history.last_epoch_clean) {
-      dout(10) << __func__ << ": already have past intervals back to "
-	       << info.history.last_epoch_clean << dendl;
-      return;
-    }
-    past_intervals.clear();
-  }
-
   epoch_t first_epoch = 0;
   epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
   if (stop < osd->superblock.oldest_map)
@@ -699,6 +722,18 @@ void PG::generate_past_intervals()
     dout(10) << __func__ << " last_epoch " << last_epoch << " < oldest " << stop
 	     << ", nothing to do" << dendl;
     return;
+  }
+
+  // Do we already have the intervals we want?
+  map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
+  if (pif != past_intervals.end()) {
+    if (pif->first <= stop) {
+      dout(10) << __func__ << " already have past intervals back to "
+	       << stop << dendl;
+      return;
+    }
+    dout(10) << __func__ << " only have past intervals back to " << pif->first << dendl;
+    last_epoch = pif->first - 1;
   }
 
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
@@ -720,7 +755,7 @@ void PG::generate_past_intervals()
 	break;
     }
 
-    Interval &i = past_intervals[first_epoch];
+    pg_interval_t &i = past_intervals[first_epoch];
     i.first = first_epoch;
     i.last = last_epoch;
     i.up.swap(tup);
@@ -760,6 +795,9 @@ void PG::generate_past_intervals()
       dout(10) << "generate_past_intervals " << i << " : empty" << dendl;
     }
   }
+
+  // record our work.
+  dirty_info = true;
 }
 
 /*
@@ -769,8 +807,8 @@ void PG::generate_past_intervals()
  */
 void PG::trim_past_intervals()
 {
-  std::map<epoch_t,Interval>::iterator pif = past_intervals.begin();
-  std::map<epoch_t,Interval>::iterator end = past_intervals.end();
+  std::map<epoch_t,pg_interval_t>::iterator pif = past_intervals.begin();
+  std::map<epoch_t,pg_interval_t>::iterator end = past_intervals.end();
   while (pif != end) {
     if (pif->second.last >= info.history.last_epoch_clean)
       return;
@@ -1137,10 +1175,10 @@ void PG::build_might_have_unfound()
   generate_past_intervals();
 
   // We need to decide who might have unfound objects that we need
-  std::map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
-  std::map<epoch_t,Interval>::const_reverse_iterator end = past_intervals.rend();
+  std::map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
+  std::map<epoch_t,pg_interval_t>::const_reverse_iterator end = past_intervals.rend();
   for (; p != end; ++p) {
-    const Interval &interval(p->second);
+    const pg_interval_t &interval(p->second);
     // We already have all the objects that exist at last_epoch_clean,
     // so there's no need to look at earlier intervals.
     if (interval.last < info.history.last_epoch_clean)
@@ -1222,8 +1260,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   need_up_thru = false;
 
   // write pg info, log
-  write_info(t);
-  write_log(t);
+  dirty_info = true;
+  dirty_log = true;
 
   // clean up stray objects
   clean_up_local(t); 
@@ -1297,7 +1335,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
 	  if (activator_map->count(peer) == 0)
 	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
-	  (*activator_map)[peer]->pg_info.push_back(info);
+	  (*activator_map)[peer]->pg_list.push_back(make_pair(info, past_intervals));
 	} else {
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
@@ -1330,11 +1368,14 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	m->log.copy_after(log, pi.last_update);
       }
 
+      // share past_intervals if we are creating the pg on the replica
+      if (pi.dne())
+	m->past_intervals = past_intervals;
+
       if (pi.last_backfill != hobject_t::get_max())
 	state_set(PG_STATE_BACKFILL);
       else
 	active++;
-
 
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
@@ -1480,9 +1521,17 @@ void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
     MOSDPGInfo *m = new MOSDPGInfo(e);
     pg_info_t i = info;
     i.history.last_epoch_started = e;
-    m->pg_info.push_back(i);
+    m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, primary);
   }
+
+  if (dirty_info) {
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    write_info(*t);
+    int tr = osd->store->queue_transaction(&osr, t);
+    assert(tr == 0);
+  }
+
   unlock();
   put();
 }
@@ -1501,10 +1550,7 @@ void PG::all_activated_and_committed()
   info.history.last_epoch_started = get_osdmap()->get_epoch();
   share_pg_info();
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  write_info(*t);
-  int tr = osd->store->queue_transaction(&osr, t);
-  assert(tr == 0);
+  dirty_info = true;
 }
 
 void PG::queue_snap_trim()
@@ -1811,19 +1857,24 @@ void PG::clear_stats()
  * @param newup up set
  * @param newacting acting set
  * @param history pg history
+ * @param pi past_intervals
  * @param t transaction to write out our new state in
  */
 void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
+	      pg_interval_map_t& pi,
 	      ObjectStore::Transaction *t)
 {
   dout(10) << "init role " << role << " up " << newup << " acting " << newacting
-	   << " history " << history << dendl;
+	   << " history " << history
+	   << " " << pi.size() << " past_intervals"
+	   << dendl;
 
   set_role(role);
   acting = newacting;
   up = newup;
 
   info.history = history;
+  past_intervals.swap(pi);
 
   info.stats.up = up;
   info.stats.acting = acting;
@@ -1891,6 +1942,14 @@ void PG::write_log(ObjectStore::Transaction& t)
   
   dout(10) << "write_log to " << ondisklog.tail << "~" << ondisklog.length() << dendl;
   dirty_log = false;
+}
+
+void PG::write_if_dirty(ObjectStore::Transaction& t)
+{
+  if (dirty_info)
+    write_info(t);
+  if (dirty_log)
+    write_log(t);
 }
 
 void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
@@ -3266,7 +3325,7 @@ void PG::share_pg_info()
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
-    m->pg_info.push_back(info);
+    m->pg_list.push_back(make_pair(info, pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
   }
 }
@@ -3301,18 +3360,6 @@ void PG::share_pg_log()
 
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
   }
-}
-
-void PG::fulfill_info(int from, const pg_query_t &query, 
-		      pair<int, pg_info_t> &notify_info)
-{
-  assert(!acting.empty());
-  assert(from == acting[0]);
-  assert(query.type == pg_query_t::INFO);
-
-  // info
-  dout(10) << "sending info" << dendl;
-  notify_info = make_pair(from, info);
 }
 
 void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
@@ -3356,10 +3403,10 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
 {
   bool crashed = false;
 
-  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+  for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        p++) {
-    const Interval &interval = p->second;
+    const pg_interval_t &interval = p->second;
     dout(10) << "may_need_replay " << interval << dendl;
 
     if (interval.last < info.history.last_epoch_started)
@@ -3512,7 +3559,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dirty_info = true;
   } else if (acting != oldacting || up != oldup) {
     // remember past interval
-    PG::Interval& i = past_intervals[info.history.same_interval_since];
+    pg_interval_t& i = past_intervals[info.history.same_interval_since];
     i.first = info.history.same_interval_since;
     i.last = osdmap->get_epoch() - 1;
     i.acting = oldacting;
@@ -3632,11 +3679,14 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
   assert(!is_primary());
   assert(is_stray() || is_active());
 
-  if (info.last_backfill.is_max())
+  if (info.last_backfill.is_max()) {
     info.stats = oinfo.stats;
+    dirty_info = true;
+  }
 
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-  info.history.merge(oinfo.history);
+  if (info.history.merge(oinfo.history))
+    dirty_info = true;
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
   // Handle changes to purged_snaps ONLY IF we have caught up
@@ -3651,7 +3701,7 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 	       << " removed " << p << dendl;
       adjust_local_snaps();
     }
-    write_info(t);
+    dirty_info = true;
   }
 }
 
@@ -3663,6 +3713,11 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << "/" << pg.acting;
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
+
+  if (pg.past_intervals.size()) {
+    out << " pi=" << pg.past_intervals.begin()->first << "-" << pg.past_intervals.rbegin()->second.last
+	<< "/" << pg.past_intervals.size();
+  }
 
   if (pg.is_active() &&
       pg.last_update_ondisk != pg.info.last_update)
@@ -3835,6 +3890,11 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
+
+  // make sure we have past_intervals filled in.  hopefully this will happen
+  // _before_ we are active.
+  pg->generate_past_intervals();
+
   pg->remove_down_peer_info(advmap.osdmap);
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
@@ -3849,7 +3909,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
-					     pg->info);
+					     pg->info, pg->past_intervals);
   }
 
   pg->update_heartbeat_peers();
@@ -4237,7 +4297,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
-					     pg->info);
+					     pg->info, pg->past_intervals);
   }
   return discard_event();
 }
@@ -4322,9 +4382,11 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == pg_query_t::INFO) {
-    pair<int, pg_info_t> notify_info;
-    pg->fulfill_info(query.from, query.query, notify_info);
-    context< RecoveryMachine >().send_notify(notify_info.first, notify_info.second);
+    dout(10) << "sending info to osd." << query.from << dendl;
+    assert(!pg->acting.empty());
+    assert(query.from == pg->acting[0]);
+    assert(query.query.type == pg_query_t::INFO);
+    context< RecoveryMachine >().send_notify(query.from, pg->info, pg->past_intervals);
   } else {
     pg->fulfill_log(query.from, query.query, query.query_epoch);
   }
@@ -4336,7 +4398,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
-					     pg->info);
+					     pg->info, pg->past_intervals);
   }
   return discard_event();
 }
@@ -4439,14 +4501,14 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
        * that interval.
        */
       if (pg->info.history.last_epoch_started) {
-	for (map<epoch_t,PG::Interval>::reverse_iterator p = pg->past_intervals.rbegin();
+	for (map<epoch_t,pg_interval_t>::reverse_iterator p = pg->past_intervals.rbegin();
 	     p != pg->past_intervals.rend();
 	     ++p) {
 	  if (p->first < pg->info.history.last_epoch_started)
 	    break;
 	  if (!p->second.maybe_went_rw)
 	    continue;
-	  Interval& interval = p->second;
+	  pg_interval_t& interval = p->second;
 	  dout(10) << " last maybe_went_rw interval was " << interval << dendl;
 	  OSDMapRef osdmap = pg->get_osdmap();
 
@@ -4969,7 +5031,7 @@ void PG::RecoveryState::handle_query_state(Formatter *f)
 #define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
 PG::PriorSet::PriorSet(const OSDMap &osdmap,
-		       const map<epoch_t, Interval> &past_intervals,
+		       const map<epoch_t, pg_interval_t> &past_intervals,
 		       const vector<int> &up,
 		       const vector<int> &acting,
 		       const pg_info_t &info,
@@ -5030,10 +5092,10 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
   for (unsigned i=0; i<up.size(); i++)
     probe.insert(up[i]);
 
-  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+  for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        p++) {
-    const Interval &interval = p->second;
+    const pg_interval_t &interval = p->second;
     dout(10) << "build_prior " << interval << dendl;
 
     if (interval.last < info.history.last_epoch_started)

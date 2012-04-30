@@ -358,15 +358,14 @@ public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
   void lock(bool no_lockdep = false);
-  void unlock() {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    osdmap_ref.reset();
-    _lock.Unlock();
-  }
+  void unlock();
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
    * *_with_map_lock_held assume that the map_lock is already held */
   void lock_with_map_lock_held(bool no_lockdep = false);
+
+  // assert we still have lock held, and update our map ref
+  void reassert_lock_with_map_lock_held();
 
   void assert_locked() {
     assert(_lock.is_locked());
@@ -400,56 +399,6 @@ public:
   bool dirty_info, dirty_log;
 
 public:
-  struct Interval {
-    vector<int> up, acting;
-    epoch_t first, last;
-    bool maybe_went_rw;
-
-    Interval() : first(0), last(0), maybe_went_rw(false) {}
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(2, 2, bl);
-      ::encode(first, bl);
-      ::encode(last, bl);
-      ::encode(up, bl);
-      ::encode(acting, bl);
-      ::encode(maybe_went_rw, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(first, bl);
-      ::decode(last, bl);
-      ::decode(up, bl);
-      ::decode(acting, bl);
-      ::decode(maybe_went_rw, bl);
-      DECODE_FINISH(bl);
-    }
-    void dump(Formatter *f) const {
-      f->dump_unsigned("first", first);
-      f->dump_unsigned("last", last);
-      f->dump_int("maybe_went_rw", maybe_went_rw ? 1 : 0);
-      f->open_array_section("up");
-      for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
-	f->dump_int("osd", *p);
-      f->close_section();
-      f->open_array_section("acting");
-      for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
-	f->dump_int("osd", *p);
-      f->close_section();
-    }
-    static void generate_test_instances(list<Interval*>& o) {
-      o.push_back(new Interval);
-      o.push_back(new Interval);
-      o.back()->up.push_back(1);
-      o.back()->acting.push_back(2);
-      o.back()->acting.push_back(3);
-      o.back()->first = 4;
-      o.back()->last = 5;
-      o.back()->maybe_went_rw = true;
-    }
-  };
-  WRITE_CLASS_ENCODER(Interval)
 
   // pg state
   pg_info_t        info;
@@ -463,7 +412,7 @@ public:
   set<int> missing_loc_sources;           // superset of missing_loc locations
   
   interval_set<snapid_t> snap_collections;
-  map<epoch_t,Interval> past_intervals;
+  map<epoch_t,pg_interval_t> past_intervals;
 
   interval_set<snapid_t> snap_trimq;
 
@@ -505,7 +454,7 @@ public:
 
     bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
     PriorSet(const OSDMap &osdmap,
-	     const map<epoch_t, Interval> &past_intervals,
+	     const map<epoch_t, pg_interval_t> &past_intervals,
 	     const vector<int> &up,
 	     const vector<int> &acting,
 	     const pg_info_t &info,
@@ -525,14 +474,14 @@ public:
     utime_t start_time;
     map< int, map<pg_t, pg_query_t> > *query_map;
     map< int, MOSDPGInfo* > *info_map;
-    map< int, vector<pg_info_t> > *notify_list;
+    map< int, vector<pair<pg_info_t,pg_interval_map_t> > > *notify_list;
     list< Context* > *context_list;
     ObjectStore::Transaction *transaction;
     RecoveryCtx() : query_map(0), info_map(0), notify_list(0),
 		    context_list(0), transaction(0) {}
     RecoveryCtx(map< int, map<pg_t, pg_query_t> > *query_map,
 		map< int, MOSDPGInfo* > *info_map,
-		map< int, vector<pg_info_t> > *notify_list,
+		map< int, vector<pair<pg_info_t,pg_interval_map_t> > > *notify_list,
 		list< Context* > *context_list,
 		ObjectStore::Transaction *transaction)
       : query_map(query_map), info_map(info_map), 
@@ -953,9 +902,9 @@ public:
 	return state->rctx->context_list;
       }
 
-      void send_notify(int to, const pg_info_t &info) {
+      void send_notify(int to, const pg_info_t& info, const pg_interval_map_t& pi) {
 	assert(state->rctx->notify_list);
-	(*state->rctx->notify_list)[to].push_back(info);
+	(*state->rctx->notify_list)[to].push_back(make_pair(info, pi));
       }
     };
     friend class RecoveryMachine;
@@ -1341,13 +1290,15 @@ public:
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
   void init(int role, vector<int>& up, vector<int>& acting, pg_history_t& history,
-	    ObjectStore::Transaction *t);
+	    pg_interval_map_t& pim, ObjectStore::Transaction *t);
 
   // pg on-disk state
   void do_pending_flush();
 
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
+
+  void write_if_dirty(ObjectStore::Transaction& t);
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
@@ -1381,8 +1332,6 @@ public:
 			      const vector<int>& newacting);
   void set_last_peering_reset();
 
-  void fulfill_info(int from, const pg_query_t &query, 
-		    pair<int, pg_info_t> &notify_info);
   void fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
@@ -1458,17 +1407,7 @@ public:
 				    utime_t expire) = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Interval)
 WRITE_CLASS_ENCODER(PG::OndiskLog)
-
-inline ostream& operator<<(ostream& out, const PG::Interval& i)
-{
-  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
-  if (i.maybe_went_rw)
-    out << " maybe_went_rw";
-  out << ")";
-  return out;
-}
 
 ostream& operator<<(ostream& out, const PG& pg);
 
