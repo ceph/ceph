@@ -160,6 +160,7 @@ private:
     vector<std::tr1::shared_ptr<entity_addr_t> > client_addr;
     vector<std::tr1::shared_ptr<entity_addr_t> > cluster_addr;
     vector<std::tr1::shared_ptr<entity_addr_t> > hb_addr;
+    entity_addr_t blank;
   };
   std::tr1::shared_ptr<addrs_s> osd_addrs;
 
@@ -300,17 +301,17 @@ private:
   }
   const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
-    return *osd_addrs->client_addr[osd];
+    return osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank;
   }
   const entity_addr_t &get_cluster_addr(int osd) const {
     assert(exists(osd));
-    if (*osd_addrs->cluster_addr[osd] == entity_addr_t())
+    if (!osd_addrs->cluster_addr[osd] || *osd_addrs->cluster_addr[osd] == entity_addr_t())
       return get_addr(osd);
     return *osd_addrs->cluster_addr[osd];
   }
   const entity_addr_t &get_hb_addr(int osd) const {
     assert(exists(osd));
-    return *osd_addrs->hb_addr[osd];
+    return osd_addrs->hb_addr[osd] ? *osd_addrs->hb_addr[osd] : osd_addrs->blank;
   }
   entity_inst_t get_inst(int osd) const {
     assert(is_up(osd));
