@@ -14,6 +14,8 @@
 
 #include "osd_types.h"
 #include "include/ceph_features.h"
+#include "PG.h"
+#include "OSDMap.h"
 
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
@@ -1356,6 +1358,70 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
   o.back()->first = 4;
   o.back()->last = 5;
   o.back()->maybe_went_rw = true;
+}
+
+bool pg_interval_t::check_new_interval(
+  const vector<int> &old_acting,
+  const vector<int> &new_acting,
+  const vector<int> &old_up,
+  const vector<int> &new_up,
+  epoch_t same_interval_since,
+  epoch_t last_epoch_clean,
+  OSDMapRef osdmap,
+  OSDMapRef lastmap,
+  map<epoch_t, pg_interval_t> *past_intervals,
+  std::ostream *out)
+{
+  // remember past interval
+  if (new_acting != old_acting || new_up != old_up) {
+    pg_interval_t& i = (*past_intervals)[same_interval_since];
+    i.first = same_interval_since;
+    i.last = osdmap->get_epoch() - 1;
+    i.acting = old_acting;
+    i.up = old_up;
+
+    if (i.acting.size()) {
+      if (lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	  lastmap->get_up_from(i.acting[0]) <= i.first) {
+	i.maybe_went_rw = true;
+	if (out)
+	  *out << "generate_past_intervals " << i
+	       << " : primary up " << lastmap->get_up_from(i.acting[0])
+	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << std::endl;
+      } else if (last_epoch_clean >= i.first &&
+		 last_epoch_clean <= i.last) {
+	// If the last_epoch_clean is included in this interval, then
+	// the pg must have been rw (for recovery to have completed).
+	// This is important because we won't know the _real_
+	// first_epoch because we stop at last_epoch_clean, and we
+	// don't want the oldest interval to randomly have
+	// maybe_went_rw false depending on the relative up_thru vs
+	// last_epoch_clean timing.
+	i.maybe_went_rw = true;
+	if (out)
+	  *out << "generate_past_intervals " << i
+	       << " : includes last_epoch_clean " << last_epoch_clean
+	       << " and presumed to have been rw"
+	       << std::endl;
+      } else {
+	i.maybe_went_rw = false;
+	if (out)
+	  *out << "generate_past_intervals " << i
+	       << " : primary up " << lastmap->get_up_from(i.acting[0])
+	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << " does not include interval"
+	       << std::endl;
+      }
+    } else {
+      i.maybe_went_rw = false;
+      if (out)
+	*out << "generate_past_intervals " << i << " : empty" << std::endl;
+    }
+    return true;
+  } else {
+    return false;
+  }
 }
 
 ostream& operator<<(ostream& out, const pg_interval_t& i)

@@ -18,6 +18,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <stdexcept>
+#include <memory>
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -1042,6 +1043,7 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
 /**
  * pg_interval_t - information about a past interval
  */
+class OSDMap;
 struct pg_interval_t {
   vector<int> up, acting;
   epoch_t first, last;
@@ -1053,6 +1055,23 @@ struct pg_interval_t {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_interval_t*>& o);
+
+  /**
+   * Integrates a new map into *past_intervals, returns true
+   * if an interval was closed out.
+   */
+  static bool check_new_interval(
+    const vector<int> &old_acting,              ///< [in] acting as of lastmap
+    const vector<int> &new_acting,              ///< [in] acting as of osdmap
+    const vector<int> &old_up,                  ///< [in] up as of lastmap
+    const vector<int> &new_up,                  ///< [in] up as of osdmap
+    epoch_t same_interval_since,                ///< [in] as of osdmap
+    epoch_t last_epoch_clean,                   ///< [in] current
+    std::tr1::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    std::tr1::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
+    ostream *out = 0                            ///< [out] debug ostream
+    );
 };
 WRITE_CLASS_ENCODER(pg_interval_t)
 
