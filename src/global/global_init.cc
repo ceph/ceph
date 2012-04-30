@@ -183,7 +183,7 @@ void global_init_daemonize(CephContext *cct, int flags)
 	 << err << dendl;
     exit(1);
   }
-  if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
+  if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
     ret = global_init_shutdown_stderr(cct);
     if (ret) {
       derr << "global_init_daemonize: global_init_shutdown_stderr failed with "
