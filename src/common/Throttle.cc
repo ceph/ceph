@@ -15,7 +15,8 @@ enum {
   l_throttle_max,
   l_throttle_get,
   l_throttle_get_sum,
-  l_throttle_get_fail,
+  l_throttle_get_or_fail_fail,
+  l_throttle_get_or_fail_success,
   l_throttle_take,
   l_throttle_take_sum,
   l_throttle_put,
@@ -36,7 +37,8 @@ Throttle::Throttle(CephContext *cct, std::string n, int64_t m)
   b.add_u64_counter(l_throttle_max, "max");
   b.add_u64_counter(l_throttle_get, "get");
   b.add_u64_counter(l_throttle_get_sum, "get_sum");
-  b.add_u64_counter(l_throttle_get_fail, "get_fail");
+  b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail");
+  b.add_u64_counter(l_throttle_get_or_fail_success, "get_or_fail_success");
   b.add_u64_counter(l_throttle_take, "take");
   b.add_u64_counter(l_throttle_take_sum, "take_sum");
   b.add_u64_counter(l_throttle_put, "put");
@@ -149,11 +151,12 @@ bool Throttle::get_or_fail(int64_t c)
   Mutex::Locker l(lock);
   if (_should_wait(c) || !cond.empty()) {
     ldout(cct, 2) << "get_or_fail " << c << " failed" << dendl;
-    logger->inc(l_throttle_get_fail);
+    logger->inc(l_throttle_get_or_fail_fail);
     return false;
   } else {
     ldout(cct, 5) << "get_or_fail " << c << " success (" << count << " -> " << (count + c) << ")" << dendl;
     count += c;
+    logger->inc(l_throttle_get_or_fail_success);
     logger->inc(l_throttle_get);
     logger->inc(l_throttle_get_sum, c);
     logger->set(l_throttle_val, count);
