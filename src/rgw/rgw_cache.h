@@ -484,7 +484,10 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     return -EIO;
   }
 
-  string name = normal_name(info.obj);
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(info.obj.bucket, info.obj.object, bucket, oid);
+  string name = normal_name(bucket, oid);
 
   switch (info.op) {
   case UPDATE_OBJ:
