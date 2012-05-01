@@ -75,6 +75,7 @@ acconfig.h
 /dumpjournal
 /gceph
 /init-ceph
+/ceph-kdump-copy
 /librados-config
 /rbd
 /psim
