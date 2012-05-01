@@ -308,6 +308,8 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
+    throttle_ops(g_ceph_context, "filestore_ops"),
+    throttle_bytes(g_ceph_context, "filestore_bytes"),
     write_lock("FileJournal::write_lock"),
     write_stop(false),
     write_thread(this),
