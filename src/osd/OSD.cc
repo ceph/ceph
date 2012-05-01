@@ -424,13 +424,13 @@ int OSD::write_meta(const std::string &base, const std::string &file,
   fd = ::open(tmp, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd < 0) {
     ret = errno;
-    derr << "OSD::write_meta: error opening '" << tmp << "': "
+    derr << "write_meta: error opening '" << tmp << "': "
 	 << cpp_strerror(ret) << dendl;
     return -ret;
   }
   ret = safe_write(fd, val, vallen);
   if (ret) {
-    derr << "OSD::write_meta: failed to write to '" << tmp << "': "
+    derr << "write_meta: failed to write to '" << tmp << "': "
 	 << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
     return ret;
@@ -440,14 +440,14 @@ int OSD::write_meta(const std::string &base, const std::string &file,
   TEMP_FAILURE_RETRY(::close(fd));
   if (ret) {
     ::unlink(tmp);
-    derr << "OSD::write_meta: failed to fsync to '" << tmp << "': "
+    derr << "write_meta: failed to fsync to '" << tmp << "': "
 	 << cpp_strerror(ret) << dendl;
     return ret;
   }
   ret = ::rename(tmp, fn);
   if (ret) {
     ::unlink(tmp);
-    derr << "OSD::write_meta: failed to rename '" << tmp << "' to '" << fn << "': "
+    derr << "write_meta: failed to rename '" << tmp << "' to '" << fn << "': "
 	 << cpp_strerror(ret) << dendl;
     return ret;
   }
@@ -455,7 +455,7 @@ int OSD::write_meta(const std::string &base, const std::string &file,
   fd = ::open(base.c_str(), O_RDONLY);
   if (fd < 0) {
     ret = errno;
-    derr << "OSD::write_meta: failed to open dir '" << base << "': "
+    derr << "write_meta: failed to open dir '" << base << "': "
 	 << cpp_strerror(ret) << dendl;
     return -ret;
   }
