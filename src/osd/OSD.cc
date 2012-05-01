@@ -275,6 +275,10 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       ret = -ENOENT;
       goto out;
     }
+
+    // if we are fed a uuid for this osd, use it.
+    store->set_fsid(g_conf->osd_uuid);
+
     ret = store->mkfs();
     if (ret) {
       derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
