@@ -107,9 +107,9 @@ int main(int argc, const char **argv)
       dump_journal = true;
     } else if (ceph_argparse_flag(args, i, "--get-cluster-fsid", (char*)NULL)) {
       get_cluster_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", "--get-osd-uuid", (char*)NULL)) {
       get_osd_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
       get_journal_fsid = true;
     } else {
       ++i;
