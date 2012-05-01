@@ -523,9 +523,12 @@ protected:
 
 
   /* heartbeat peers */
+  void set_probe_targets(const set<int> &probe_set);
+  void clear_probe_targets();
 public:
   Mutex heartbeat_peer_lock;
   set<int> heartbeat_peers;
+  set<int> probe_targets;
 
 protected:
   /**
