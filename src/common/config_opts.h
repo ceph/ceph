@@ -325,6 +325,7 @@ OPTION(osd_kill_backfill_at, OPT_INT, 0)
 OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in the pg log when trimming it
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
+OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 // Use omap for xattrs for attrs over
