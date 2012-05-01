@@ -2133,8 +2133,6 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
   logger->inc(l_os_ops);
   logger->inc(l_os_bytes, o->bytes);
-  logger->set(l_os_oq_ops, op_queue_len);
-  logger->set(l_os_oq_bytes, op_queue_bytes);
 
   op_tp.unlock();
 
@@ -2178,6 +2176,9 @@ void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
 
   op_queue_len++;
   op_queue_bytes += o->bytes;
+
+  logger->set(l_os_oq_ops, op_queue_len);
+  logger->set(l_os_oq_bytes, op_queue_bytes);
 }
 
 void FileStore::_op_queue_release_throttle(Op *o)
@@ -2186,6 +2187,9 @@ void FileStore::_op_queue_release_throttle(Op *o)
   op_queue_len--;
   op_queue_bytes -= o->bytes;
   op_throttle_cond.Signal();
+
+  logger->set(l_os_oq_ops, op_queue_len);
+  logger->set(l_os_oq_bytes, op_queue_bytes);
 }
 
 void FileStore::_do_op(OpSequencer *osr)
