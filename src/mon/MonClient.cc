@@ -130,7 +130,9 @@ int MonClient::build_initial_monmap(CephContext *cct, MonMap &monmap)
           n[1] = 0;
           if (addrs[i].get_port() == 0)
             addrs[i].set_port(CEPH_MON_PORT);
-          monmap.add(n, addrs[i]);
+	  string name = "noname-";
+	  name += n;
+          monmap.add(name, addrs[i]);
         }
         return 0;
       } else cerr << "couldn't parse_ip_port_vec on " << hosts << std::endl;
