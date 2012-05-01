@@ -75,14 +75,16 @@ private:
 protected:
   /// the "name" of the local daemon. eg client.99
   entity_inst_t my_inst;
+  /// the name for the messenger in the context of this process (e.g., "client", "backend", "heartbeat")
+  string name;
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
 
  public:
   CephContext *cct;
-  Messenger(CephContext *cct_, entity_name_t w)
-    : my_inst(),
+  Messenger(CephContext *cct_, entity_name_t w, string name)
+    : my_inst(), name(name),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
       cct(cct_)
   {
@@ -342,11 +344,13 @@ protected:
    * available or specified via the configuration in cct.
    *
    * @param cct context
-   * @param name entity name to register
+   * @param ename entity name to register
+   * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    */
   static Messenger *create(CephContext *cct,
 			   entity_name_t name,
+			   string lname,
 			   uint64_t nonce);
 };
 

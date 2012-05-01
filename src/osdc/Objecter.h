@@ -922,8 +922,8 @@ public:
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
-    op_throttle_bytes(cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct->_conf->objecter_inflight_ops)
+    op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
+    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
   { }
   ~Objecter() {
     assert(!tick_event);

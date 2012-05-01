@@ -180,7 +180,7 @@ class RGWProcess {
 public:
   RGWProcess(CephContext *cct, int num_threads)
     : m_tp(cct, "RGWProcess::m_tp", num_threads),
-      req_throttle(num_threads * 2),
+      req_throttle(cct, "rgw_ops", num_threads * 2),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}

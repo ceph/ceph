@@ -573,11 +573,12 @@ private:
   int get_proto_version(int peer_type, bool connect);
 
 public:
-  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
-    Messenger(cct, name),
+  SimpleMessenger(CephContext *cct, entity_name_t name, string mname, uint64_t _nonce) :
+    Messenger(cct, name, mname),
     accepter(this),
     lock("SimpleMessenger::lock"), did_bind(false),
-    dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes), need_addr(true),
+    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
+    need_addr(true),
     nonce(_nonce), destination_stopped(false), my_type(name.type()),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 

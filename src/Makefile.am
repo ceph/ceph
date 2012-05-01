@@ -983,6 +983,7 @@ libcommon_files = \
 	common/admin_socket_client.cc \
 	common/escape.c \
 	common/Clock.cc \
+	common/Throttle.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/environment.cc\
