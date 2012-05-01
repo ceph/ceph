@@ -11,6 +11,8 @@
 
 enum {
   l_throttle_first = 532430,
+  l_throttle_val,
+  l_throttle_max,
   l_throttle_get,
   l_throttle_get_sum,
   l_throttle_get_fail,
@@ -30,6 +32,8 @@ Throttle::Throttle(CephContext *cct, std::string n, int64_t m)
   assert(m >= 0);
 
   PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
+  b.add_u64_counter(l_throttle_val, "val");
+  b.add_u64_counter(l_throttle_max, "max");
   b.add_u64_counter(l_throttle_get, "get");
   b.add_u64_counter(l_throttle_get_sum, "get_sum");
   b.add_u64_counter(l_throttle_get_fail, "get_fail");
@@ -41,6 +45,7 @@ Throttle::Throttle(CephContext *cct, std::string n, int64_t m)
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
+  logger->set(l_throttle_max, max);
 }
 
 Throttle::~Throttle()
@@ -53,6 +58,14 @@ Throttle::~Throttle()
 
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
+}
+
+void Throttle::_reset_max(int64_t m)
+{
+  if (m < max && !cond.empty())
+    cond.front()->SignalOne();
+  max = m;
+  logger->set(l_throttle_max, max);
 }
 
 bool Throttle::_wait(int64_t c)
@@ -103,9 +116,10 @@ int64_t Throttle::take(int64_t c)
   assert(c >= 0);
   Mutex::Locker l(lock);
   ldout(cct, 5) << "take " << c << dendl;
+  count += c;
   logger->inc(l_throttle_take);
   logger->inc(l_throttle_take_sum, c);
-  count += c;
+  logger->set(l_throttle_val, count);
   return count;
 }
 
@@ -119,9 +133,10 @@ bool Throttle::get(int64_t c, int64_t m)
     _reset_max(m);
   }
   bool waited = _wait(c);
+  count += c;
   logger->inc(l_throttle_get);
   logger->inc(l_throttle_get_sum, c);
-  count += c;
+  logger->set(l_throttle_val, count);
   return waited;
 }
 
@@ -141,6 +156,7 @@ bool Throttle::get_or_fail(int64_t c)
     count += c;
     logger->inc(l_throttle_get);
     logger->inc(l_throttle_get_sum, c);
+    logger->set(l_throttle_val, count);
     return true;
   }
 }
@@ -157,6 +173,7 @@ int64_t Throttle::put(int64_t c)
     assert(count >= 0); //if count goes negative, we failed somewhere!
     logger->inc(l_throttle_put);
     logger->inc(l_throttle_put_sum, c);
+    logger->set(l_throttle_val, count);
   }
   return count;
 }
