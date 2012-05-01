@@ -812,6 +812,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
 
+    // set uuid?
+    dout(10) << " setting osd." << from << " uuid to " << m->sb.osd_fsid << dendl;
+    if (osdmap.get_uuid(from) != m->sb.osd_fsid)
+      pending_inc.new_uuid[from] = m->sb.osd_fsid;
+
     // fresh osd?
     if (m->sb.newest_map == 0 && osdmap.exists(from)) {
       const osd_info_t& i = osdmap.get_info(from);
@@ -2048,6 +2053,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   done:
       dout(10) << " creating osd." << i << dendl;
       pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+      if (!uuid.is_zero())
+	pending_inc.new_uuid[i] = uuid;
       ss << i;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
