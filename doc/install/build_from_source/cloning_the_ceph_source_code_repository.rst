@@ -60,3 +60,8 @@ Once you clone the source code and submodules, your Ceph repository will be on t
 - ``master``: The unstable development branch.
 - ``stable``: The bugfix branch.
 - ``next``: The release candidate branch.
+
+::
+
+	git checkout master
+

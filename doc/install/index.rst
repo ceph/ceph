@@ -10,14 +10,17 @@ The following sections provide guidance for configuring a storage cluster and in
 
 1. :doc:`Hardware Recommendations <hardware_recommendations>`
 2. :doc:`File System Recommendations <file_system_recommendations>`
-3. :doc:`Download Ceph Packages <download_packages>`
-4. :doc:`Building Ceph from Source <building_ceph_from_source>`
-
+3. :doc:`Host Recommendations <host_recommendations>`
+4. :doc:`Download Ceph Packages <download_packages>`
+5. :doc:`Building Ceph from Source <building_ceph_from_source>`
+6. :doc:`Installing Packages <installing_packages>`
 
 .. toctree::
    :hidden:
 
    Hardware Recs <hardware_recommendations>
    File System Recs <file_system_recommendations>
+   Host Recs <host_recommendations>
    Download Packages <download_packages>
    Build From Source <building_ceph_from_source>
+   Install Packages <installing_packages>
