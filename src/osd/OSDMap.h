@@ -115,6 +115,7 @@ public:
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
     map<int32_t,epoch_t> new_lost;
+    map<int32_t,uuid_d> new_uuid;
 
     map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
@@ -124,6 +125,7 @@ public:
 
     int get_net_marked_out(const OSDMap *previous) const;
     int get_net_marked_down(const OSDMap *previous) const;
+    int identify_osd(uuid_d u) const;
 
     void encode_client_old(bufferlist& bl) const;
     void encode(bufferlist& bl, uint64_t features=-1) const;
@@ -172,6 +174,8 @@ private:
   map<int64_t,string> pool_name;
   map<string,int64_t> name_pool;
 
+  std::tr1::shared_ptr< vector<uuid_d> > osd_uuid;
+
   hash_map<entity_addr_t,utime_t> blacklist;
 
   epoch_t cluster_snapshot_epoch;
@@ -191,6 +195,7 @@ private:
 	     num_osd(0), max_osd(0),
 	     osd_addrs(new addrs_s),
 	     pg_temp(new map<pg_t,vector<int> >),
+	     osd_uuid(new vector<uuid_d>),
 	     cluster_snapshot_epoch(0),
 	     crush(new CrushWrapper) {
     memset(&fsid, 0, sizeof(fsid));
@@ -292,6 +297,8 @@ private:
   }
   
   int identify_osd(const entity_addr_t& addr) const;
+  int identify_osd(const uuid_d& u) const;
+
   bool have_addr(const entity_addr_t& addr) const {
     return identify_osd(addr) >= 0;
   }
@@ -324,6 +331,11 @@ private:
   entity_inst_t get_hb_inst(int osd) const {
     assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd), get_hb_addr(osd));
+  }
+
+  const uuid_d& get_uuid(int osd) const {
+    assert(exists(osd));
+    return (*osd_uuid)[osd];
   }
 
   const epoch_t& get_up_from(int osd) const {
