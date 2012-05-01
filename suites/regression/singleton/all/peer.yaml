@@ -1,10 +1,10 @@
 roles:
 - - mon.0
+  - mon.1
+  - mon.2
   - mds.a
   - osd.0
-- - mon.1
   - osd.1
-- - mon.2
   - osd.2
 tasks:
 - ceph:
