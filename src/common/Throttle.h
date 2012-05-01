@@ -21,11 +21,7 @@ public:
   ~Throttle();
 
 private:
-  void _reset_max(int64_t m) {
-    if (m < max && !cond.empty())
-      cond.front()->SignalOne();
-    max = m;
-  }
+  void _reset_max(int64_t m);
   bool _should_wait(int64_t c) {
     return
       max &&
