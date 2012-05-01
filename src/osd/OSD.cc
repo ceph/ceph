@@ -287,12 +287,6 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
       goto free_store;
     }
-    store->sync_and_flush();
-    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
-    if (ret) {
-      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
-      goto umount_store;
-    }
 
     // age?
     if (g_conf->osd_age_time != 0) {
@@ -352,6 +346,21 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
 	goto umount_store;
       }
     }
+
+    store->sync_and_flush();
+
+    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
+    if (ret) {
+      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+      goto umount_store;
+    }
+
+    ret = write_meta(dev, "ready", "ready\n", 6);
+    if (ret) {
+      derr << "OSD::mkfs: failed to write ready file: error " << ret << dendl;
+      goto umount_store;
+    }
+
   }
   catch (const std::exception &se) {
     derr << "OSD::mkfs: caught exception " << se.what() << dendl;
