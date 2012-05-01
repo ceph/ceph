@@ -2008,32 +2008,29 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "create") {
-      int i;
-      if (m->cmd.size() > 2) {
-	i = atoi(m->cmd[2].c_str());
+      int i = -1;
+      uuid_d uuid;
+      if (m->cmd.size() > 2 &&
+	  uuid.parse(m->cmd[2].c_str())) {
+	dout(10) << "got uuid " << uuid << dendl;
+	// see if osd already exists
+	i = osdmap.identify_osd(uuid);
 	if (i < 0) {
-	  ss << i << " is not a valid osd id";
-	  err = -ERANGE;
-	  goto out;
+	  i = pending_inc.identify_osd(uuid);
+	  if (i >= 0) {
+	    paxos->wait_for_commit(new C_RetryMessage(this, m));
+	    return true;
+	  }
 	}
-	if (osdmap.exists(i)) {
-	  ss << i << " already exists";
-	  err = -EEXIST;
-	  goto out;
-	}
-	if (i >= osdmap.get_max_osd()) {
-	  if (i >= pending_inc.new_max_osd)
-	    pending_inc.new_max_osd = i + 1;
-	}
-	if (pending_inc.new_up_client.count(i) ||
-	    (pending_inc.new_state.count(i) &&
-	     (pending_inc.new_state[i] & CEPH_OSD_EXISTS))) {
-	  ss << i << " already exists";
+	if (i >= 0) {
+	  ss << i;
 	  getline(ss, rs);
-	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, -EEXIST, rs, paxos->get_version()));
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	  return true;
 	}
-      } else {
+	// fall-thru to create one below.
+      }
+      if (i < 0) {
 	// allocate a new id
 	for (i=0; i < osdmap.get_max_osd(); i++) {
 	  if (!osdmap.exists(i) &&
