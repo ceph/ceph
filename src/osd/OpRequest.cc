@@ -3,6 +3,7 @@
 #include "OpRequest.h"
 #include "common/Formatter.h"
 #include <iostream>
+#include <vector>
 #include "common/debug.h"
 #include "common/config.h"
 #include "msg/Message.h"
@@ -74,24 +75,55 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   utime_t too_old = now;
   too_old -= g_conf->osd_op_complaint_time;
 
+  utime_t oldest_secs = now - ops_in_flight.front()->received_time;
+
   dout(10) << "ops_in_flight.size: " << ops_in_flight.size()
-           << "; oldest is " << now - ops_in_flight.front()->received_time
+           << "; oldest is " << oldest_secs
            << " seconds old" << dendl;
+
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
-  warning_vector.reserve(ops_in_flight.size());
+  warning_vector.reserve(g_conf->osd_op_log_threshold + 1);
+  warning_vector.push_back("");
+
+  int total = 0, skipped = 0;
+
   while (!i.end() && (*i)->received_time < too_old) {
     // exponential backoff of warning intervals
     if ( ( (*i)->received_time +
            (g_conf->osd_op_complaint_time *
             (*i)->warn_interval_multiplier) )< now) {
+
+      if (total++ >= g_conf->osd_op_log_threshold)
+        break;
+
       stringstream ss;
-      ss << "old request " << *((*i)->request) << " received at "
-          << (*i)->received_time << " currently " << (*i)->state_string();
-      (*i)->warn_interval_multiplier *= 2;
+      ss << "received at " << (*i)->received_time
+          << ": " << *((*i)->request) << " currently " << (*i)->state_string();
       warning_vector.push_back(ss.str());
+      // only those that have been shown will backoff
+      (*i)->warn_interval_multiplier *= 2;
+    } else {
+      skipped++;
     }
     ++i;
   }
+
+  stringstream ss;
+  ss << "there are " << ops_in_flight.size()
+      << " ops in flight; the oldest is blocked for >"
+      << oldest_secs << " secs";
+
+  if (total) {
+    ss << "; these are ";
+    if (!skipped)
+      ss << "the " << warning_vector.size()-1 << " oldest:";
+    else {
+      ss << warning_vector.size()-1 << " amongst the oldest ("
+          << skipped << " precedes them):";
+    }
+  }
+  warning_vector[0] = ss.str();
+
   return warning_vector.size();
 }
 
