@@ -1090,6 +1090,13 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
+  if ((opt_cmd == OPT_RENAME) && (strcmp(poolname, dest_poolname) != 0)) {
+    cerr << "error: mv/rename across pools not supported" << std::endl;
+    cerr << "source pool: " << poolname << " dest pool: " << dest_poolname
+      << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   bool talk_to_cluster = (opt_cmd != OPT_MAP &&
 			  opt_cmd != OPT_UNMAP &&
 			  opt_cmd != OPT_SHOWMAPPED);
