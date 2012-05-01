@@ -117,6 +117,10 @@ appropriate. All hostnames *must* be short form (no domain).
 Note how the ``host`` variables dictate what node runs what
 services. See :doc:`/config` for more information.
 
+It is **very important** that you only run a single monitor on each node. If
+you attempt to run more than one monitor on a node, you reduce your reliability
+and the procedures in this documentation will not behave reliably.
+
 .. todo:: More specific link for host= convention.
 
 .. todo:: Point to cluster design docs, once they are ready.
