@@ -20,6 +20,9 @@ You can use ``make -j`` to execute multiple jobs depending upon your system. For
 To install Ceph locally, you may also use:: 
 
 	$ make install
+
+If you install Ceph locally, ``make`` will place the executables in ``usr/local/bin``. 
+You may add the ``ceph.conf`` file to the ``usr/local/bin`` directory to run an evaluation environment of Ceph from a single directory.
 	
 Building Ceph Documentation
 ===========================
