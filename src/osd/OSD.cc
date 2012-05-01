@@ -1485,6 +1485,11 @@ void OSD::maybe_update_heartbeat_peers()
 	 ++p)
       if (osdmap->is_up(*p))
 	_add_heartbeat_peer(*p);
+    for (set<int>::iterator p = pg->probe_targets.begin();
+	 p != pg->probe_targets.end();
+	 ++p)
+      if (osdmap->is_up(*p))
+	_add_heartbeat_peer(*p);
     pg->heartbeat_peer_lock.Unlock();
   }
 

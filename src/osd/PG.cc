@@ -881,6 +881,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
 	     << ", all is well" << dendl;
     need_up_thru = false;
   }
+  set_probe_targets(prior_set->probe);
 }
 
 void PG::clear_primary_state()
@@ -1703,6 +1704,18 @@ void PG::purge_strays()
   // (more) stray content
   peer_log_requested.clear();
   peer_missing_requested.clear();
+}
+
+void PG::set_probe_targets(const set<int> &probe_set)
+{
+  Mutex::Locker l(heartbeat_peer_lock);
+  probe_targets = probe_set;
+}
+
+void PG::clear_probe_targets()
+{
+  Mutex::Locker l(heartbeat_peer_lock);
+  probe_targets.clear();
 }
 
 void PG::update_heartbeat_peers()
@@ -4024,6 +4037,7 @@ void PG::RecoveryState::Peering::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_PEERING);
+  pg->clear_probe_targets();
 }
 
 /*---------Active---------*/
