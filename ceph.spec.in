@@ -315,6 +315,7 @@ fi
 %{_bindir}/boto_tool
 %{_bindir}/ceph-coverage
 %{_bindir}/obsync
+%{_bindir}/ceph-kdump-copy
 %{_initrddir}/ceph
 %dir %{_libdir}/rados-classes
 /sbin/mkcephfs

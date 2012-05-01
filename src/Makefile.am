@@ -807,7 +807,11 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs ceph-debugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile ceph-debugpack.in ceph-coverage.in
+shell_scripts = init-ceph mkcephfs ceph-debugpack ceph-coverage ceph-kdump-copy
+
+$(shell_scripts): Makefile
+
+$(shell_scripts): %: %.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -821,13 +825,11 @@ bin_SCRIPTS += obsync/obsync
 bin_SCRIPTS += obsync/boto_tool
 bin_SCRIPTS += ceph-coverage
 
-CLEANFILES += \
-	ceph-debugpack \
-	ceph_ver.h \
-	init-ceph \
-	mkcephfs \
-	sample.fetch_config \
-	ceph-coverage
+bin_SCRIPTS += ceph-kdump-copy
+
+CLEANFILES += $(shell_scripts)
+
+CLEANFILES += ceph_ver.h sample.fetch_config
 
 ##
 
@@ -860,16 +862,16 @@ endif
 
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
-	ceph-run $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
+	ceph-run $(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
-	$(srcdir)/ceph-debugpack.in \
-	$(srcdir)/ceph-coverage.in \
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(ceph_tool_gui_DATA) \
 	$(srcdir)/test/encoding/readable.sh \
 	$(srcdir)/test/encoding/check-generated.sh
+
+EXTRA_DIST += $(srcdir)/$(shell_scripts: %=%.in)
 
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
