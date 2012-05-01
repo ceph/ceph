@@ -20,7 +20,7 @@ endif
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += --with-ocf
+extraopts += --with-ocf --with-rest-bench
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
@@ -117,6 +117,7 @@ binary-arch: build install
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pgceph --dbg-package=gceph-dbg
 	dh_strip -plibrgw1 --dbg-package=librgw1-dbg
+	dh_strip -prest-bench --dbg-package=rest-bench-dbg
 
 	dh_compress
 	dh_fixperms
