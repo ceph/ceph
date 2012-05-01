@@ -3161,16 +3161,17 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     r = bl.length();
 
   // flush?
+  if (
 #ifdef HAVE_SYNC_FILE_RANGE
-  if (!m_filestore_flusher ||
-      !queue_flusher(fd, offset, len)) {
+      !m_filestore_flusher || !queue_flusher(fd, offset, len)
+#else
+      true
+#endif
+      ) {
     if (m_filestore_sync_flush)
       ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
     TEMP_FAILURE_RETRY(::close(fd));
   }
-#else
-  TEMP_FAILURE_RETRY(::close(fd));
-#endif
 
  out:
   dout(10) << "write " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << dendl;
@@ -4703,7 +4704,9 @@ const char** FileStore::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "filestore_min_sync_interval",
     "filestore_max_sync_interval",
+    "filestore_flusher",
     "filestore_flusher_max_fds",
+    "filestore_sync_flush",
     "filestore_commit_timeout",
     "filestore_dump_file",
     "filestore_kill_at",
@@ -4722,7 +4725,9 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
+    m_filestore_flusher = conf->filestore_flusher;
     m_filestore_flusher_max_fds = conf->filestore_flusher_max_fds;
+    m_filestore_sync_flush = conf->filestore_sync_flush;
     m_filestore_kill_at.set(conf->filestore_kill_at);
   }
   if (changed.count("filestore_commit_timeout")) {
