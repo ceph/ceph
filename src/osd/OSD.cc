@@ -1334,13 +1334,14 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
     vector<int> acting;
     oldmap->pg_to_acting_osds(pgid, acting);
     dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
-    int added = 0;
+    int up = 0;
     for (unsigned i=0; i<acting.size(); i++)
-      if (acting[i] != whoami && osdmap->is_up(acting[i])) {
-	pset.insert(acting[i]);
-	added++;
+      if (osdmap->is_up(acting[i])) {
+	if (acting[i] != whoami)
+	  pset.insert(acting[i]);
+	up++;
       }
-    if (!added && acting.size()) {
+    if (!up && acting.size()) {
       // sucky.  add down osds, even tho we can't reach them right now.
       for (unsigned i=0; i<acting.size(); i++)
 	if (acting[i] != whoami)
