@@ -387,6 +387,8 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'DEBUG: fsize',  # xfs_fsr
                     run.Raw('|'),
+                    'grep', '-v', 'CRON',  # ignore cron noise
+                    run.Raw('|'),
                     'head', '-n', '1',
                     ],
                 stdout=StringIO(),
