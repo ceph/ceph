@@ -63,6 +63,9 @@ void usage()
   cout << "   -i mapfn --add-item id weight name [--loc type name ...]\n";
   cout << "                         insert an item into the hierarchy at the\n";
   cout << "                         given location\n";
+  cout << "   -i mapfn --update-item id weight name [--loc type name ...]\n";
+  cout << "                         insert or move an item into the hierarchy at the\n";
+  cout << "                         given location\n";
   cout << "   -i mapfn --remove-item name\n"
        << "                         remove the given item\n";
   cout << "   -i mapfn --reweight-item name weight\n";
@@ -103,6 +106,7 @@ int main(int argc, const char **argv)
 
   bool reweight = false;
   int add_item = -1;
+  bool update_item = false;
   float add_weight = 0;
   map<string,string> add_loc;
   float reweight_weight = 0;
@@ -146,6 +150,20 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
     } else if (ceph_argparse_withint(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      if (i == args.end())
+	usage();
+      add_weight = atof(*i);
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      add_name.assign(*i);
+      i = args.erase(i);
+    } else if (ceph_argparse_withint(args, i, &add_item, &err, "--update_item", (char*)NULL)) {
+      update_item = true;
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -467,12 +485,15 @@ int main(int argc, const char **argv)
     }
   }
   if (add_item >= 0) {
-    cout << me << " adding item " << add_item << " weight " << add_weight
-	 << " at " << add_loc << std::endl;
-    int r = crush.insert_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
-    if (r == 0)
+    int r;
+    if (update_item) {
+      r = crush.update_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
+    } else {
+      r = crush.insert_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
+    }
+    if (r >= 0) {
       modified = true;
-    else {
+    } else {
       cerr << me << " " << cpp_strerror(r) << std::endl;
       return r;
     }
