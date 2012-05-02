@@ -23,7 +23,7 @@ OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
 OPTION(lockdep, OPT_BOOL, false)
-OPTION(admin_socket, OPT_STR, "/var/run/ceph/$cluster.name.asok")
+OPTION(admin_socket, OPT_STR, "/var/run/ceph/$cluster.$name.asok")
 
 OPTION(daemonize, OPT_BOOL, false)
 OPTION(pid_file, OPT_STR, "")
