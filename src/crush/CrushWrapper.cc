@@ -119,7 +119,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
 }
 
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
-				map<string,string>& loc)  // typename -> bucketname
+			      map<string,string>& loc)  // typename -> bucketname
 {
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
@@ -182,6 +182,42 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
   ldout(cct, 1) << "error: didn't find anywhere to add item " << item << " in " << loc << dendl;
   return -EINVAL;
+}
+
+int CrushWrapper::update_item(CephContext *cct, int item, float weight, string name,
+			      map<string,string>& loc)  // typename -> bucketname
+{
+  ldout(cct, 5) << "update_item item " << item << " weight " << weight
+		<< " name " << name << " loc " << loc << dendl;
+  int ret = 0;
+
+  weight = quantize_weight(weight);
+
+  float old_weight;
+  if (check_item_loc(cct, item, loc, &old_weight)) {
+    ldout(cct, 5) << "update_item " << item << " already at " << loc << dendl;
+    if (old_weight != weight) {
+      ldout(cct, 5) << "update_item " << item << " adjusting weight "
+		    << old_weight << " -> " << weight << dendl;
+      adjust_item_weightf(cct, item, weight);
+      ret = 1;
+    }
+    if (get_item_name(item) != name) {
+      ldout(cct, 5) << "update_item setting " << item << " name to " << name << dendl;
+      set_item_name(item, name.c_str());
+      ret = 1;
+    }
+  } else {
+    if (item_exists(item)) {
+      remove_item(cct, item);
+    }
+    ldout(cct, 5) << "update_item adding " << item << " weight " << weight
+		  << " at " << loc << dendl;
+    int r = insert_item(cct, item, weight, name.c_str(), loc);
+    if (r == 0)
+      ret = 1;
+  }
+  return ret;
 }
 
 int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
