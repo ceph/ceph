@@ -5,7 +5,7 @@ from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
-                 ImageBusy)
+                 ImageBusy, ImageHasSnapshots)
 
 
 rados = None
@@ -195,8 +195,11 @@ class TestImage(object):
 
     def test_remove_with_snap(self):
         self.image.create_snap('snap1')
-        assert_raises(ImageBusy, remove_image)
+        assert_raises(ImageHasSnapshots, remove_image)
         self.image.remove_snap('snap1')
+
+    def test_remove_with_watcher(self):
+        assert_raises(ImageBusy, remove_image)
 
     def test_rollback_to_snap(self):
         self.image.write('\0' * 256, 0)
