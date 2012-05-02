@@ -2,13 +2,14 @@
 Hardware Recommendations
 ========================
 Ceph runs on commodity hardware and a Linux operating system over a TCP/IP network. The hardware 
-recommendations for different processes/daemons differ considerably. Ceph OSDs run on commodity hardware 
-and a Linux operating system over a TCP/IP network. OSD hosts should have ample data storage in the form of 
-a hard drive or a RAID. Ceph OSDs run the RADOS service, calculate data placement with CRUSH, and maintain their
-own copy of the cluster map. So OSDs should have a reasonable amount of processing power. Ceph monitors require 
-enough disk space for the cluster map, but usually do not encounter heavy loads. Monitors do not need to be very powerful.
-Ceph metadata servers distribute their load. However, they must be capable of serving their data quickly. 
-Metadata servers should have strong processing capability and plenty of RAM.
+recommendations for different processes/daemons differ considerably. 
+
+OSD hosts should have ample data storage in the form of a hard drive or a RAID. Ceph OSDs run the RADOS service, calculate data placement with CRUSH, and maintain their
+own copy of the cluster map. Therefore, OSDs should have a reasonable amount of processing power. 
+
+Ceph monitors require enough disk space for the cluster map, but usually do not encounter heavy loads. Monitor hosts do not need to be very powerful.
+
+Ceph metadata servers distribute their load. However, metadata servers must be capable of serving their data quickly. Metadata servers should have strong processing capability and plenty of RAM.
 
 .. note:: If you are not using the Ceph File System, you do not need a meta data server.
 
