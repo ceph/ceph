@@ -164,6 +164,7 @@ public:
 
 
   void find_roots(set<int>& roots) const;
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight);
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
   int remove_item(CephContext *cct, int id);
   int adjust_item_weight(CephContext *cct, int id, int weight);

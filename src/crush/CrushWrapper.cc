@@ -65,6 +65,59 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
   return ret;
 }
 
+/**
+ * see if item is located where we think it is
+ *
+ * @param cct cct
+ * @param item item id
+ * @param loc location to check (map of type to bucket names)
+ */
+bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>& loc,
+				  float *weight)  // typename -> bucketname
+{
+  ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
+
+  int cur = item;
+  for (map<int,string>::const_iterator p = type_map.begin(); p != type_map.end(); p++) {
+    if (p->first == 0)
+      continue;
+
+    if (loc.count(p->second) == 0) {
+      ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
+		    << type_map << ")" << dendl;
+      continue;
+    }
+
+    int id = get_item_id(loc[p->second].c_str());
+    if (!id) {
+      ldout(cct, 5) << "check_item_loc bucket " << loc[p->second] << " of type " << p->second << " dne" << dendl;
+      return false;
+    }
+
+    if (id >= 0) {
+      ldout(cct, 5) << "check_item_loc requested " << loc[p->second] << " for type " << p->second
+		    << " is a device, not bucket" << dendl;
+      return false;
+    }
+
+    crush_bucket *b = get_bucket(id);
+    assert(b);
+
+    // make sure the item doesn't already exist in this bucket
+    for (unsigned j=0; j<b->size; j++)
+      if (b->items[j] == cur) {
+	ldout(cct, 2) << "check_item_loc " << cur << " exists in bucket " << b->id << dendl;
+	if (weight)
+	  *weight = (float)crush_get_bucket_item_weight(b, j) / (float)0x10000;
+	return true;
+      }
+    return false;
+  }
+  
+  ldout(cct, 1) << "check_item_loc item " << item << " loc " << loc << dendl;
+  return false;
+}
+
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
 				map<string,string>& loc)  // typename -> bucketname
 {
