@@ -23,7 +23,7 @@ Ceph takes advantage of these resources to create a unified storage system with 
 At the core of Ceph storage is a service entitled the Reliable Autonomic Distributed Object Store (RADOS). 
 RADOS revolutionizes Object Storage Devices (OSD)s by utilizing the CPU, memory and network interface of 
 the storage hosts to communicate with each other, replicate data, and redistribute data dynamically. RADOS 
-implements an algorithm that performs Controlled Replication Under Scalable Hashing, which we refer we refer to as CRUSH.
+implements an algorithm that performs Controlled Replication Under Scalable Hashing, which we refer to as CRUSH.
 CRUSH enables RADOS to plan and distribute the data automatically so that system administrators do not have to 
 do it manually. By utilizing each host's computing resources, RADOS increases scalability while simultaneously 
 eliminating both a performance bottleneck and a single point of failure common to systems that manage clusters centrally.
@@ -34,7 +34,7 @@ clusters by maintaining a master copy of the cluster map. For example, storage h
 the cluster for the purposes of providing data storage services; not connected via a network; powered off; or, suffering from 
 a malfunction. 
 
-Ceph provides a light-weight monitor process to address faults in the OSD clusters as they arise. Like OSDs, monitors 
+Ceph provides a lightweight monitor process to address faults in the OSD clusters as they arise. Like OSDs, monitors 
 should be replicated in large-scale systems so that if one monitor crashes, another monitor can serve in its place. 
 When the Ceph storage cluster employs multiple monitors, the monitors may get out of sync and have different versions 
 of the cluster map. Ceph utilizes an algorithm to resolve disparities among versions of the cluster map.
