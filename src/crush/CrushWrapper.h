@@ -164,9 +164,49 @@ public:
 
 
   void find_roots(set<int>& roots) const;
+
+  /**
+   * see if item is located where we think it is
+   *
+   * @param cct cct
+   * @param item item id
+   * @param loc location to check (map of type to bucket names)
+   */
   bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight);
+
+  /**
+   * insert an item into the map at a specific position
+   *
+   * If the item is already present in the map, we will return EEXIST or similar errors.
+   *
+   * @param cct cct
+   * @param id item id
+   * @param weight item weight
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   */
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+
+  /**
+   * add or update an item's position in the map
+   *
+   * This is analogous to insert_item, except we will move an item if
+   * it is already present.
+   *
+   * @param cct cct
+   * @param id item id
+   * @param weight item weight
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   */
   int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+
+  /**
+   * remove an item from the map
+   *
+   * @param cct cct
+   * @param id item id to remove
+   */
   int remove_item(CephContext *cct, int id);
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {

@@ -60,18 +60,11 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
     name_map.erase(item);
     have_rmaps = false;
     ret = 0;
-  }  
+  }
   
   return ret;
 }
 
-/**
- * see if item is located where we think it is
- *
- * @param cct cct
- * @param item item id
- * @param loc location to check (map of type to bucket names)
- */
 bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>& loc,
 				  float *weight)  // typename -> bucketname
 {
