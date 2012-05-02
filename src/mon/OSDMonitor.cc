@@ -1544,6 +1544,25 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	} else ss << "specify osd number or *";
       }
     }
+    else if (m->cmd[1] == "map" && m->cmd.size() == 4) {
+      int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[2].c_str());
+      if (pool < 0) {
+	ss << "pool " << m->cmd[2] << " dne";
+	r = -ENOENT;
+      } else {
+	object_locator_t oloc(pool);
+	object_t oid(m->cmd[3]);
+	pg_t pgid = osdmap.object_locator_to_pg(oid, oloc);
+	pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
+	vector<int> up, acting;
+	osdmap.pg_to_up_acting_osds(mpgid, up, acting);
+	ss << "osdmap e" << osdmap.get_epoch()
+	   << " pool '" << m->cmd[2] << "' (" << pool << ") object '" << oid << "' ->"
+	   << " pg " << pgid << " (" << mpgid << ")"
+	   << " -> up " << up << " acting " << acting;
+	r = 0;
+      }
+    }
     else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair")) {
       if (m->cmd.size() <= 2) {
 	r = -EINVAL;
