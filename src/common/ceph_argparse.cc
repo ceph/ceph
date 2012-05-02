@@ -357,7 +357,7 @@ CephInitParameters ceph_argparse_early_args
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
       *conf_file_list = val;
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--cluster", "-C", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--cluster", (char*)NULL)) {
       *cluster = val;
     }
     else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&
