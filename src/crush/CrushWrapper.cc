@@ -44,6 +44,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 	  }	    
 	  was_bucket = t;
 	}
+	adjust_item_weight(cct, item, 0);
 	ldout(cct, 5) << "remove_device removing item " << item << " from bucket " << b->id << dendl;
 	crush_bucket_remove_item(b, item);
 	ret = 0;
