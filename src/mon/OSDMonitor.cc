@@ -1736,53 +1736,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "add") {
-      do {
-	// osd crush add <id> <name> <weight> [<loc1> [<loc2> ...]]
-	int id = atoi(m->cmd[3].c_str());
-	string name = m->cmd[4];
-	float weight = atof(m->cmd[5].c_str());
-	map<string,string> loc;
-	for (unsigned i = 6; i < m->cmd.size(); ++i) {
-	  const char *s = m->cmd[i].c_str();
-	  const char *pos = strchr(s, '=');
-	  if (!pos)
-	    break;
-	  string key(s, 0, pos-s);
-	  string value(pos+1);
-	  loc[key] = value;
-	}
-
-	dout(0) << "adding crush item id " << id << " name '" << name << "' weight " << weight
-		<< " at location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
-	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
-
-	err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
-	if (err == 0) {
-	  if (newcrush.get_max_devices() > osdmap.get_max_osd()) {
-	    err = -ERANGE;
-	    ss << "crushmap max_devices " << newcrush.get_max_devices()
-	       << " > osdmap max_osd " << osdmap.get_max_osd();
-	    break;
-	  }
-	  pending_inc.crush.clear();
-	  newcrush.encode(pending_inc.crush);
-	  ss << "added item id " << id << " name '" << name << "' weight " << weight
-	     << " at location " << loc << " to crush map";
-	  getline(ss, rs);
-	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-	  return true;
-	}
-      } while (false);
-    }
     else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
 	// osd crush update <id> <name> <weight> [<loc1> [<loc2> ...]]
