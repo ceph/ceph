@@ -166,12 +166,18 @@ public:
   void find_roots(set<int>& roots) const;
   bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight);
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+  int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
   int remove_item(CephContext *cct, int id);
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   void reweight(CephContext *cct);
+
+  static float quantize_weight(float weight) {
+    int w = (int)(weight * (float)0x10000);
+    return (float)w / (float)0x10000;
+  }
 
 
   /*** devices ***/
