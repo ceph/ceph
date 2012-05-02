@@ -9,10 +9,10 @@ unified storage system (e.g., Amazon S3, Swift, FUSE, block devices, POSIX-compl
 need to build out a different storage system for each storage interface you support.
 
 Technical and personnel constraints also limit scalability. The performance profile of highly scaled systems 
-can very substantially. Ceph relieves system administrators of the complex burden of manual performance optimization
+can vary substantially. Ceph relieves system administrators of the complex burden of manual performance optimization
 by utilizing the storage system's computing resources to balance loads intelligently and rebalance the file system dynamically.
 Ceph replicates data automatically so that hardware failures do not result in data loss or cascading load spikes.
-Ceph fault tolerant, so complex fail-over scenarios are unnecessary. Ceph administrators can simply replace a failed host 
+Ceph is fault tolerant, so complex fail-over scenarios are unnecessary. Ceph administrators can simply replace a failed host 
 with new hardware. 
 
 With POSIX semantics for Unix/Linux-based operating systems, popular interfaces like Amazon S3 or Swift, block devices
