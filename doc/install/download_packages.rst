@@ -37,40 +37,10 @@ the release packages and updates and install them with ``apt``, you must add a
 	
 Open the file and add the following line::
 
-	deb http://ceph.newdream.net/debian/{BRANCH}/ {DISTRO} main
+	deb http://ceph.com/debian/ {DISTRO} main
 
-Remember to replace ``{BRANCH}`` with the branch you want to use and replace 
-``{DISTRO}`` with the Linux distribution for your host. Then, save the file.
-
-Adding Autobuild Packages to APT
---------------------------------
-We provide unstable release packages for Debian/Ubuntu, which contain the 
-latest code and bug fixes. The autobuild packages are signed signed with 
-the ``autobuild.asc`` key. To install an autobuild package, you must first 
-add an autobuild key::
-
-	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc \ | sudo apt-key add -
-
-.. warning:: The following commands make your computer trust any code
-   that makes it into ``ceph.git``, including work in progress
-   branches and versions of code with possible security issues (that
-   were fixed afterwards). Use at your own risk!
-
-For Debian/Ubuntu releases, we use the Advanced Package Tool (APT). To 
-retrieve the autobuild packages and updates and install them with ``apt``, 
-you must add a ``ceph.list`` file to your ``apt`` configuration with the 
-following path::
-
-	etc/apt/sources.list.d/ceph.list
-	
-Open the file and add the following lines::
-
-	deb http://ceph.newdream.net/debian-snapshot-amd64/{BRANCH}/ {DISTRO} main
-	deb-src http://ceph.newdream.net/debian-snapshot-amd64/{BRANCH}/ {DISTRO} main
-
-Remember to replace ``{BRANCH}`` with the branch you want to use and replace 
-``{DISTRO}`` with the Linux distribution for your host. Then, save the file.
-
+Remember to replace ``{DISTRO}`` with the Linux distribution for your host. 
+Then, save the file.
 
 Downloading Packages
 --------------------
