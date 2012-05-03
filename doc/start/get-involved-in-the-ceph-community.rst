@@ -34,8 +34,8 @@ These are exciting times in the Ceph community! Get involved!
 | **Support**     | If you have a very specific problem, an         | http://inktank.com                            |
 |                 | immediate need, or if your deployment requires  |                                               |
 |                 | significant help, consider commercial support_. |                                               |
-+-----------------+-------------------------------------------------+-----------------------------------------------+              
- 
++-----------------+-------------------------------------------------+-----------------------------------------------+
+
 
 
 .. _Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel

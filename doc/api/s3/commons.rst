@@ -7,7 +7,7 @@ Common Entities
 
 Bucket and Host Name
 --------------------
-There are two different modes of accessing the buckets. The first (preferred) method 
+There are two different modes of accessing the buckets. The first (preferred) method
 identifies the bucket as the top-level directory in the URI. ::
 
 	GET /mybucket HTTP/1.1

@@ -27,8 +27,8 @@ Building Ceph
 =============
 
 To prepare the source tree after it has been git cloned,
- 
-        $ git submodule update --init
+
+	$ git submodule update --init
 
 To build the server daemons, and FUSE client, execute the following:
 
@@ -72,19 +72,19 @@ Building the Documentation
 
 Prerequisites
 -------------
-To build the documentation, you must install the following: 
+To build the documentation, you must install the following:
 
-- python-dev 
-- python-pip 
-- python-virualenv 
-- doxygen 
+- python-dev
+- python-pip
+- python-virualenv
+- doxygen
 - ditaa
-- libxml2-dev 
-- libxslt-dev 
-- dot 
+- libxml2-dev
+- libxslt-dev
+- dot
 - graphviz
 
-For example: 
+For example:
 
 	sudo apt-get install python-dev python-pip python-virualenv doxygen ditaa libxml2-dev libxslt-dev dot graphviz
 
@@ -98,25 +98,23 @@ To build the documentation, ensure that you are in the top-level `/ceph director
 
 Build Prerequisites
 -------------------
-To build the source code, you must install the following: 
+To build the source code, you must install the following:
 
-- automake 
-- autoconf 
-- automake 
-- gcc 
-- g++ 
-- libboost-dev 
-- libedit-dev 
-- libssl-dev 
-- libtool 
-- libfcgi 
-- libfcgi-dev 
-- libfuse-dev 
-- linux-kernel-headers 
+- automake
+- autoconf
+- automake
+- gcc
+- g++
+- libboost-dev
+- libedit-dev
+- libssl-dev
+- libtool
+- libfcgi
+- libfcgi-dev
+- libfuse-dev
+- linux-kernel-headers
 - libcrypto++-dev
 
-For example: 
+For example:
 
 	$ apt-get install automake autoconf automake gcc g++ libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev
-
-

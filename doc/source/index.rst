@@ -2,9 +2,9 @@
  Ceph Source Code
 ==================
 
-You can build Ceph from source by downloading a release or cloning the ``ceph`` 
-repository at github. If you intend to build Ceph from source, please see the 
-build pre-requisites first. Making sure you have all the pre-requisites 
+You can build Ceph from source by downloading a release or cloning the ``ceph``
+repository at github. If you intend to build Ceph from source, please see the
+build pre-requisites first. Making sure you have all the pre-requisites
 will save you time.
 
 .. toctree::

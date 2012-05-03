@@ -334,7 +334,7 @@ Syntax
 
 ::
 
-    POST /{bucket}/{object}?uploadId= HTTP/1.1 
+    POST /{bucket}/{object}?uploadId= HTTP/1.1
 
 Request Entities
 ~~~~~~~~~~~~~~~~
@@ -377,5 +377,3 @@ Syntax
 ::
 
     DELETE /{bucket}/{object}?uploadId= HTTP/1.1
-
-

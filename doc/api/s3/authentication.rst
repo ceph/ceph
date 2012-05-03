@@ -1,8 +1,8 @@
 Authentication and ACLs
 =======================
-Requests to the RADOS Gateway (RGW) can be either authenticated or unauthenticated. 
-RGW assumes unauthenticated requests are sent by an anonymous user. RGW supports 
-canned ACLs. 
+Requests to the RADOS Gateway (RGW) can be either authenticated or unauthenticated.
+RGW assumes unauthenticated requests are sent by an anonymous user. RGW supports
+canned ACLs.
 
 Authentication
 --------------
@@ -22,7 +22,7 @@ approach. The HTTP header signing is similar to OAuth 1.0, but avoids the comple
 
 	Authorization: AWS {access-key}:{hash-of-header-and-secret}
 
-In the foregoing example, replace ``{access-key}`` with the value for your access key ID followed by 
+In the foregoing example, replace ``{access-key}`` with the value for your access key ID followed by
 a colon (``:``). Replace ``{hash-of-header-and-secret}`` with a hash of the header string and the secret
 corresponding to the access key ID.
 
@@ -32,13 +32,13 @@ To generate the hash of the header string and secret, you must:
 
 	str = "HTTP/1.1\nPUT /buckets/bucket/object.mpeg\nHost: cname.domain.com\n
 	Date: Mon, 2 Jan 2012 00:01:01 +0000\nContent-Length: 9999999\nContent-Encoding: mpeg";
-	
+
 	secret = "valueOfSecret";
 
 2. Generate an HMAC using a SHA-1 hashing algorithm. ::
-   
+
     hmac = object.hmac-sha1(str, secret);
-   
+
 3. Encode the ``hmac`` result using base-64. ::
 
     encodedHmac = someBase64Encoder.encode(hmac);

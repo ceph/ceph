@@ -10,11 +10,11 @@ create buckets as an anonymous user.
 
 Constraints
 ~~~~~~~~~~~
-In general, bucket names should follow domain name constraints. 
+In general, bucket names should follow domain name constraints.
 
 - Bucket names must be unique.
-- Bucket names must begin and end with a lowercase letter. 
-- Bucket names may contain a dash (-). 
+- Bucket names must begin and end with a lowercase letter.
+- Bucket names may contain a dash (-).
 
 Syntax
 ~~~~~~
@@ -24,7 +24,7 @@ Syntax
     PUT /{bucket} HTTP/1.1
     Host: cname.domain.com
     x-amz-acl: public-read-write
-    
+
     Authorization: AWS {access-key}:{hash-of-header-and-secret}
 
 Parameters
@@ -41,8 +41,8 @@ Parameters
 HTTP Response
 ~~~~~~~~~~~~~
 
-If the bucket name is unique, within constraints and unused, the operation will succeed. 
-If a bucket with the same name already exists and the user is the bucket owner, the operation will succeed. 
+If the bucket name is unique, within constraints and unused, the operation will succeed.
+If a bucket with the same name already exists and the user is the bucket owner, the operation will succeed.
 If the bucket name is already in use, the operation will fail.
 
 +---------------+-----------------------+----------------------------------------------------------+
@@ -63,7 +63,7 @@ Syntax
 
     DELETE /{bucket} HTTP/1.1
     Host: cname.domain.com
-    
+
     Authorization: AWS {access-key}:{hash-of-header-and-secret}
 
 HTTP Response
@@ -115,7 +115,7 @@ HTTP Response
 
 Bucket Response Entities
 ~~~~~~~~~~~~~~~~~~~~~~~~
-``GET /{bucket}`` returns a container for buckets with the following fields. 
+``GET /{bucket}`` returns a container for buckets with the following fields.
 
 +------------------------+-----------+----------------------------------------------------------------------------------+
 | Name                   | Type      | Description                                                                      |
@@ -238,7 +238,7 @@ List Bucket Multipart Uploads
 -----------------------------
 
 ``GET /?uploads`` returns a list of the current in-progress multipart uploads--i.e., the application initiates a multipart upload, but
-the service hasn't completed all the uploads yet. 
+the service hasn't completed all the uploads yet.
 
 Syntax
 ~~~~~~
@@ -266,7 +266,7 @@ You may specify parameters for ``GET /{bucket}?uploads``, but none of them are r
 | ``max-uploads``        | Integer   | The maximum number of multipart uploads. The range from 1-1000. The default is 1000. |
 +------------------------+-----------+--------------------------------------------------------------------------------------+
 | ``upload-id-marker``   | String    | Ignored if ``key-marker`` isn't specified. Specifies the ``ID`` of first             |
-|                        |           | upload to list in lexicographical order at or following the ``ID``.                  |      
+|                        |           | upload to list in lexicographical order at or following the ``ID``.                  |
 +------------------------+-----------+--------------------------------------------------------------------------------------+
 
 
