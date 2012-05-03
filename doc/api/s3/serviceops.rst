@@ -3,7 +3,7 @@ Service Operations
 
 List Buckets
 ------------
-``GET /`` returns a list of buckets created by the user making the request. ``GET /`` only 
+``GET /`` returns a list of buckets created by the user making the request. ``GET /`` only
 returns buckets created by an authenticated user. You cannot make an anonymous request.
 
 Syntax
@@ -12,7 +12,7 @@ Syntax
 
 	GET / HTTP/1.1
 	Host: cname.domain.com
-    
+
 	Authorization: AWS {access-key}:{hash-of-header-and-secret}
 
 Response Entities
@@ -37,4 +37,3 @@ Response Entities
 +----------------------------+-------------+-----------------------------------------------------------------+
 | ``DisplayName``            | String      | The bucket owner's display name.                                |
 +----------------------------+-------------+-----------------------------------------------------------------+
-	

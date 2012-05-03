@@ -13,26 +13,26 @@ Ceph provides ``automake`` and ``configure`` scripts to streamline the build pro
 	$ ./configure
 	$ make
 
-You can use ``make -j`` to execute multiple jobs depending upon your system. For example:: 
+You can use ``make -j`` to execute multiple jobs depending upon your system. For example::
 
 	$ make -j4
-	
-To install Ceph locally, you may also use:: 
+
+To install Ceph locally, you may also use::
 
 	$ make install
 
-If you install Ceph locally, ``make`` will place the executables in ``usr/local/bin``. 
+If you install Ceph locally, ``make`` will place the executables in ``usr/local/bin``.
 You may add the ``ceph.conf`` file to the ``usr/local/bin`` directory to run an evaluation environment of Ceph from a single directory.
-	
+
 Building Ceph Documentation
 ===========================
 Ceph utilizes Python’s Sphinx documentation tool. For details on the Sphinx documentation tool, refer to: `Sphinx <http://sphinx.pocoo.org>`_. To build the Ceph documentaiton, navigate to the Ceph repository and execute the build script::
 
 	$ cd ceph
 	$ admin/build-doc
-	
+
 Once you build the documentation set, you may navigate to the source directory to view it::
 
 	$ cd build-doc/output
-	
+
 There should be an ``/html`` directory and a ``/man`` directory containing documentation in HTML and manpage formats respectively.
