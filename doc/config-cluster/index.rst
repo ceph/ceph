@@ -23,7 +23,7 @@ instance (a single context).
 
 .. toctree::
 
-   file_system_recommendations
-   Configuration <ceph_conf>
-   Deploy Config <deploying_ceph_conf>
-   deploying_ceph_with_mkcephfs
+   file-system-recommendations
+   Configuration <ceph-conf>
+   Deploy Config <deploying-ceph-conf>
+   deploying-ceph-with-mkcephfs

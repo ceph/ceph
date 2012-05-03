@@ -4,7 +4,7 @@
 We automatically build Debian/Ubuntu packages for any branches or tags that 
 appear in the ``ceph.git`` `repository <http://github.com/ceph/ceph>`_. If you 
 want to build your own packages (*e.g.,* for RPM), see 
-`Build Ceph Packages <../../source/build_packages>`_.
+`Build Ceph Packages <../../source/build-packages>`_.
 
 When you download release packages, you will receive the latest package build, 
 which may be several weeks behind the current release or the most recent code. 

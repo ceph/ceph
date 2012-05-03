@@ -124,7 +124,7 @@ alphanumeric for monitors and metadata servers. ::
 
 ``host`` and ``addr`` Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The `Hardware Recommendations <../hardware_recommendations>`_ section 
+The `Hardware Recommendations <../hardware-recommendations>`_ section 
 provides some hardware guidelines for configuring the cluster. It is possible 
 for a single host to run multiple daemons. For example, a single host with 
 multiple disks or RAIDs may run one ``ceph-osd`` for each disk or RAID. 

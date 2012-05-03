@@ -6,5 +6,5 @@ get started:
 
 .. toctree::
 
-   Get Involved <get_involved_in_the_ceph_community>
-   quick_start
+   Get Involved <get-involved-in-the-ceph-community>
+   quick-start

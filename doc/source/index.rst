@@ -9,9 +9,9 @@ will save you time.
 
 .. toctree::
 
-   Prerequisites <build_prerequisites>
-   Get a Tarball <downloading_a_ceph_release>
-   Clone the Source <cloning_the_ceph_source_code_repository>
-   Build the Source <building_ceph>
-   Build a Package <build_packages>
+   Prerequisites <build-prerequisites>
+   Get a Tarball <downloading-a-ceph-release>
+   Clone the Source <cloning-the-ceph-source-code-repository>
+   Build the Source <building-ceph>
+   Build a Package <build-packages>
    Contributing Code <contributing>
