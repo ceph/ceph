@@ -1,16 +1,12 @@
 =========================
- Configuration reference
+ Configuration Reference
 =========================
 
 .. todo:: write me
 
-OSD (RADOS)
-===========
+.. toctree::
+   :maxdepth: 1
 
-Monitor
-=======
-
-MDS
-===
-
-
+   config-ref/mon-config
+   config-ref/osd-config
+   config-ref/mds-config
