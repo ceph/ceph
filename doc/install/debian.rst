@@ -16,9 +16,8 @@ Add our package repository to your system's list of APT sources::
 
 Replace ``{DISTRO}`` with the code name for Debian/Ubuntu distribution
 (*e.g.,* ``precise`` for Ubuntu ``12.04``).  See `the Debian
-repository <http://ceph.newdream.net/debian/dists>`_ for a full list
-of distributions supported.  Replace ``{ARCH}`` with either ``amd64``
-for 64-bit systems or ``i386`` for 32-bit systems.
+repository <http://ceph.com/debian/dists>`_ for a full list
+of distributions supported.
 
 Update APT's database::
 
