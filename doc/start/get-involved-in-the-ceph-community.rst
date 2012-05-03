@@ -6,7 +6,7 @@ These are exciting times in the Ceph community! Get involved!
 +-----------------+-------------------------------------------------+-----------------------------------------------+
 |Channel          | Description                                     | Contact Info                                  |
 +=================+=================================================+===============================================+
-| **Blog**        | Check the Ceph Blog_ periodically to keep track | http://ceph.newdream.net/news                 |
+| **Blog**        | Check the Ceph Blog_ periodically to keep track | http://ceph.com/community/blog/               |
 |                 | of Ceph progress and important announcements.   |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+
 | **IRC**         | As you delve into Ceph, you may have questions  |                                               |
