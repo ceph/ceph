@@ -12,7 +12,7 @@ Admin host and OSD Cluster hosts.
 Installing Packages with APT
 ----------------------------
 Once you download or build the packages and add your packages to APT 
-(see `Downloading Debian/Ubuntu Packages <../download_packages>`_), you may 
+(see `Downloading Debian/Ubuntu Packages <../download-packages>`_), you may 
 install them as follows::
 
 	$ sudo apt-get install ceph

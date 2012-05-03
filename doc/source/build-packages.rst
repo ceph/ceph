@@ -47,5 +47,5 @@ Build the RPM packages::
 For multi-processor CPUs use the ``-j`` option to accelerate the build.	
 
 
-.. _build prerequisites: ../build_prerequisites
-.. _Ceph: ../cloning_the_ceph_source_code_repository
+.. _build prerequisites: ../build-prerequisites
+.. _Ceph: ../cloning-the-ceph-source-code-repository

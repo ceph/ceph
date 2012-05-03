@@ -12,6 +12,6 @@ installing Ceph components:
 
 .. toctree::
 
-   Hardware Recommendations <hardware_recommendations>
-   Download Packages <download_packages>
-   Install Packages <installing_packages>
+   Hardware Recommendations <hardware-recommendations>
+   Download Packages <download-packages>
+   Install Packages <installing-packages>
