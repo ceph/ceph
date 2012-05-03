@@ -4,7 +4,7 @@
 Ceph is intended for large-scale deployments, but you may install Ceph on a
 single host. Quick start is intended for Debian/Ubuntu Linux distributions.
 
-#. `Install Ceph packages <../../install/download_packages>`
+#. `Install Ceph packages <../../install/debian>`_
 #. Create a ``ceph.conf`` file. 
    See `Ceph Configuration Files <../../config-cluster/ceph_conf>`_ for details.
 #. Create and start a Ceph cluster.
