@@ -13,5 +13,5 @@ installing Ceph components:
 .. toctree::
 
    Hardware Recommendations <hardware-recommendations>
-   Download Packages <download-packages>
-   Install Packages <installing-packages>
+   Installing Debian/Ubuntu Packages <debian>
+   Installing RPM Packages <rpm>
