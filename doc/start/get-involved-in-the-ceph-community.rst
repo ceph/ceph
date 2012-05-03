@@ -44,5 +44,5 @@ These are exciting times in the Ceph community! Get involved!
 .. _unsubscribing: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _Gmane: http://news.gmane.org/gmane.comp.file-systems.ceph.devel
 .. _Tracker: http://tracker.newdream.net/projects/ceph
-.. _Blog: http://ceph.newdream.net/news
+.. _Blog: http://ceph.com/community/blog/
 .. _support: http://inktank.com
