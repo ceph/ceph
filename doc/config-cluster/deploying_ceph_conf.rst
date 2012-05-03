@@ -1,8 +1,9 @@
-============================
-Deploying Ceph Configuration
-============================
-Ceph's current deployment script does not copy the configuration file you created from the Administration host
-to the OSD Cluster hosts. Copy the configuration file you created (*i.e.,* ``mycluster.conf`` in the example below) 
+==============================
+ Deploying Ceph Configuration
+==============================
+Ceph's current deployment script does not copy the configuration file you 
+created from the Administration host to the OSD Cluster hosts. Copy the 
+configuration file you created (*i.e.,* ``mycluster.conf`` in the example below) 
 from the Administration host to ``etc/ceph/ceph.conf`` on each OSD Cluster host.
 
 ::

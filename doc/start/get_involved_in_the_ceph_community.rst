@@ -1,6 +1,6 @@
-===================================
-Get Involved in the Ceph Community!
-===================================
+=====================================
+ Get Involved in the Ceph Community!
+=====================================
 These are exciting times in the Ceph community! Get involved!
 
 +-----------------+-------------------------------------------------+-----------------------------------------------+
@@ -31,7 +31,7 @@ These are exciting times in the Ceph community! Get involved!
 |                 | the very latest code for Ceph, you can get it   | - ``$git clone git@github.com:ceph/ceph.git`` |
 |                 | at http://github.com.                           |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+
-| **Support**     | If you have a very specific problem, an         | http://ceph.newdream.net/support              |
+| **Support**     | If you have a very specific problem, an         | http://inktank.com                            |
 |                 | immediate need, or if your deployment requires  |                                               |
 |                 | significant help, consider commercial support_. |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+              
@@ -45,4 +45,4 @@ These are exciting times in the Ceph community! Get involved!
 .. _Gmane: http://news.gmane.org/gmane.comp.file-systems.ceph.devel
 .. _Tracker: http://tracker.newdream.net/projects/ceph
 .. _Blog: http://ceph.newdream.net/news
-.. _support: http://ceph.newdream.net/support
+.. _support: http://inktank.com
