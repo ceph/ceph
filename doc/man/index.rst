@@ -7,3 +7,4 @@
    :glob:
 
    */index
+   1/obsync
