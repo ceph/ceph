@@ -20,7 +20,7 @@ system for:
 - RADOS Gateway Access Control Lists (ACLs). 
 
 Ceph OSDs rely heavily upon the stability and performance of the underlying file
- system. The underlying file system must provide sufficient capacity for XATTRs. 
+system. The underlying file system must provide sufficient capacity for XATTRs. 
 File system candidates for Ceph include B tree and B+ tree file systems such as: 
 
 - ``btrfs``
