@@ -3993,8 +3993,8 @@ void PG::queue_op(OpRequestRef op)
 {
   if (can_discard_request(op))
     return;
-  // TODO: deal with osd queueing
   op_queue.push_back(op);
+  osd->queue_for_op(this);
 }
 
 void PG::take_waiters()
