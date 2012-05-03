@@ -12,8 +12,13 @@ To run ``mkcephfs``, execute the following::
 
 	$ mkcephfs -a -c <path>/ceph.conf -k mycluster.keyring
 	
-The script adds an admin key to the ``mycluster.keyring``, which is analogous to a root password. Ceph should begin operating. 
-You can check on the health of your Ceph cluster with the following:: 
+The script adds an admin key to the ``mycluster.keyring``, which is analogous to a root password. 
 
-	ceph -k mycluster.keyring -c mycluster.conf health
+To start the cluster, execute the following:: 
+
+	/etc/init.d/ceph -a start
+
+Ceph should begin operating. You can check on the health of your Ceph cluster with the following:: 
+
+	ceph -k mycluster.keyring -c <path>/ceph.conf health
 
