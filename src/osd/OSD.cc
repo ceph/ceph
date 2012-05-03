@@ -5325,7 +5325,12 @@ PG *OSD::OpWQ::_dequeue()
 
 void OSD::queue_for_peering(PG *pg)
 {
-  peering_wq._enqueue(pg);
+  peering_wq.queue(pg);
+}
+
+void OSD:: queue_for_op(PG *pg)
+{
+  op_wq.queue(pg);
 }
 
 void OSD::process_peering_event(PG *pg)

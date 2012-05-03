@@ -415,6 +415,7 @@ private:
   } peering_wq;
 
   void queue_for_peering(PG *pg);
+  void queue_for_op(PG *pg);
   void process_peering_event(PG *pg);
 
   friend class PG;
