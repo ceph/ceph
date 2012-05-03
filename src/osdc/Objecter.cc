@@ -265,6 +265,13 @@ void Objecter::send_linger(LingerOp *info)
       }
     }
     op_submit(o, info->session);
+    OSDSession *s = o->session;
+    if (info->session != s) {
+      info->session_item.remove_myself();
+      info->session = s;
+      if (info->session)
+	s->linger_ops.push_back(&info->session_item);
+    }
     info->registering = true;
 
     logger->inc(l_osdc_linger_send);
@@ -780,6 +787,17 @@ void Objecter::tick()
       ++laggy_ops;
     }
   }
+  for (map<uint64_t,LingerOp*>::iterator p = linger_ops.begin();
+       p != linger_ops.end();
+       p++) {
+    LingerOp *op = p->second;
+    if (op->session) {
+      ldout(cct, 0) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      toping.insert(op->session);
+    } else {
+      ldout(cct, 0) << " lingering tid " << p->first << " does not have session" << dendl;
+    }
+  }
   logger->set(l_osdc_op_laggy, laggy_ops);
   logger->set(l_osdc_osd_laggy, toping.size());
 
@@ -791,8 +809,9 @@ void Objecter::tick()
     // (osd reply message policy is lossy)
     for (set<OSDSession*>::iterator i = toping.begin();
 	 i != toping.end();
-	 i++)
+	 i++) {
       messenger->send_message(new MPing, (*i)->con);
+    }
   }
     
   // reschedule
