@@ -168,6 +168,14 @@ public:
   /**
    * see if item is located where we think it is
    *
+   * This verifies that the given item is located at a particular
+   * location in the hierarchy.  However, that check is imprecise; we
+   * are actually verifying that the most specific location key/value
+   * is correct.  For example, if loc specifies that rack=foo and
+   * host=bar, it will verify that host=bar is correct; any placement
+   * above that level in the hierarchy is ignored.  This matches the
+   * semantics for insert_item().
+   *
    * @param cct cct
    * @param item item id
    * @param loc location to check (map of type to bucket names)
@@ -186,7 +194,25 @@ public:
   /**
    * insert an item into the map at a specific position
    *
-   * If the item is already present in the map, we will return EEXIST or similar errors.
+   * Add an item as a specific location of the hierarchy.
+   * Specifically, we look for the most specific location constriant
+   * for which a bucket already exists, and then create intervening
+   * buckets beneath that in order to place the item.
+   *
+   * Note that any location specifiers *above* the most specific match
+   * are ignored.  For example, if we specify that osd.12 goes in
+   * host=foo, rack=bar, and row=baz, and rack=bar is the most
+   * specific match, we will create host=foo beneath that point and
+   * put osd.12 inside it.  However, we will not verify that rack=bar
+   * is beneath row=baz or move it.
+   *
+   * In short, we will build out a hierarchy, and move leaves around,
+   * but not adjust the hierarchy's internal structure.  Yet.
+   *
+   * If the item is already present in the map, we will return EEXIST.
+   * If the location key/value pairs are nonsensical
+   * (rack=nameofdevice), or location specifies that do not attach us
+   * to any existing part of the hierarchy, we will return EINVAL.
    *
    * @param cct cct
    * @param id item id
