@@ -2009,43 +2009,42 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "create") {
       int i = -1;
+
+      // optional uuid provided?
       uuid_d uuid;
-      if (m->cmd.size() > 2 &&
-	  uuid.parse(m->cmd[2].c_str())) {
-	dout(10) << "got uuid " << uuid << dendl;
-	// see if osd already exists
+      if (m->cmd.size() > 2 && uuid.parse(m->cmd[2].c_str())) {
+	dout(10) << " osd create got uuid " << uuid << dendl;
 	i = osdmap.identify_osd(uuid);
-	if (i < 0) {
-	  i = pending_inc.identify_osd(uuid);
-	  if (i >= 0) {
-	    paxos->wait_for_commit(new C_RetryMessage(this, m));
-	    return true;
-	  }
-	}
 	if (i >= 0) {
+	  // osd already exists
+	  err = 0;
 	  ss << i;
 	  getline(ss, rs);
-	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  goto out;
+	}
+	i = pending_inc.identify_osd(uuid);
+	if (i >= 0) {
+	  // osd is about to exist
+	  paxos->wait_for_commit(new C_RetryMessage(this, m));
 	  return true;
 	}
-	// fall-thru to create one below.
       }
-      if (i < 0) {
-	// allocate a new id
-	for (i=0; i < osdmap.get_max_osd(); i++) {
-	  if (!osdmap.exists(i) &&
-	      pending_inc.new_up_client.count(i) == 0 &&
-	      (pending_inc.new_state.count(i) == 0 ||
-	       (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0))
-	    goto done;
-	}
-	// hrm.  raise max_osd
-	if (pending_inc.new_max_osd < 0)
-	  pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
-	else
-	  pending_inc.new_max_osd++;
-	i = pending_inc.new_max_osd - 1;
+
+      // allocate a new id
+      for (i=0; i < osdmap.get_max_osd(); i++) {
+	if (!osdmap.exists(i) &&
+	    pending_inc.new_up_client.count(i) == 0 &&
+	    (pending_inc.new_state.count(i) == 0 ||
+	     (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0))
+	  goto done;
       }
+
+      // raise max_osd
+      if (pending_inc.new_max_osd < 0)
+	pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
+      else
+	pending_inc.new_max_osd++;
+      i = pending_inc.new_max_osd - 1;
 
   done:
       dout(10) << " creating osd." << i << dendl;
