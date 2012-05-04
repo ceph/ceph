@@ -172,8 +172,16 @@ public:
    * @param item item id
    * @param loc location to check (map of type to bucket names)
    * @param weight optional pointer to weight of item at that location
+   * @return true if item is at specified location
    */
-  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight);
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, int *iweight);
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight) {
+    int iweight;
+    bool ret = check_item_loc(cct, item, loc, &iweight);
+    if (weight)
+      *weight = (float)iweight / (float)0x10000;
+    return ret;
+  }
 
   /**
    * insert an item into the map at a specific position
