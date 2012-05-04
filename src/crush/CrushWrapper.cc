@@ -66,7 +66,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 }
 
 bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>& loc,
-				  float *weight)
+				  int *weight)
 {
   ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
 
@@ -101,7 +101,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
       if (b->items[j] == cur) {
 	ldout(cct, 2) << "check_item_loc " << cur << " exists in bucket " << b->id << dendl;
 	if (weight)
-	  *weight = (float)crush_get_bucket_item_weight(b, j) / (float)0x10000;
+	  *weight = crush_get_bucket_item_weight(b, j);
 	return true;
       }
     }
@@ -185,15 +185,15 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
 		<< " name " << name << " loc " << loc << dendl;
   int ret = 0;
 
-  weight = quantize_weight(weight);
-
-  float old_weight;
-  if (check_item_loc(cct, item, loc, &old_weight)) {
+  // compare quantized (fixed-point integer) weights!  
+  int iweight = (int)(weight * (float)0x10000);
+  int old_iweight;
+  if (check_item_loc(cct, item, loc, &old_iweight)) {
     ldout(cct, 5) << "update_item " << item << " already at " << loc << dendl;
-    if (old_weight != weight) {
+    if (old_iweight != iweight) {
       ldout(cct, 5) << "update_item " << item << " adjusting weight "
-		    << old_weight << " -> " << weight << dendl;
-      adjust_item_weightf(cct, item, weight);
+		    << ((float)old_iweight/(float)0x10000) << " -> " << weight << dendl;
+      adjust_item_weight(cct, item, iweight);
       ret = 1;
     }
     if (get_item_name(item) != name) {
