@@ -814,7 +814,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
     // set uuid?
     dout(10) << " setting osd." << from << " uuid to " << m->sb.osd_fsid << dendl;
-    if (osdmap.get_uuid(from) != m->sb.osd_fsid)
+    if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid)
       pending_inc.new_uuid[from] = m->sb.osd_fsid;
 
     // fresh osd?
