@@ -315,13 +315,13 @@ class ObjectCacher {
 
   // bh stats
   Cond  stat_cond;
-  int   stat_waiter;
 
   loff_t stat_clean;
   loff_t stat_dirty;
   loff_t stat_rx;
   loff_t stat_tx;
   loff_t stat_missing;
+  loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
   void verify_stats() const;
 
@@ -330,6 +330,7 @@ class ObjectCacher {
   loff_t get_stat_tx() { return stat_tx; }
   loff_t get_stat_rx() { return stat_rx; }
   loff_t get_stat_dirty() { return stat_dirty; }
+  loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
   loff_t get_stat_clean() { return stat_clean; }
 
   void touch_bh(BufferHead *bh) {
