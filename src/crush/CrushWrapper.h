@@ -193,6 +193,7 @@ public:
    * @param weight item weight
    * @param name item name
    * @param loc location (map of type to bucket names)
+   * @return 0 for success, negative on error
    */
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
 
@@ -207,6 +208,7 @@ public:
    * @param weight item weight
    * @param name item name
    * @param loc location (map of type to bucket names)
+   * @return 0 for no change, 1 for successful change, negative on error
    */
   int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
 
@@ -215,6 +217,7 @@ public:
    *
    * @param cct cct
    * @param id item id to remove
+   * @return 0 on success, negative on error
    */
   int remove_item(CephContext *cct, int id);
   int adjust_item_weight(CephContext *cct, int id, int weight);
@@ -222,12 +225,6 @@ public:
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   void reweight(CephContext *cct);
-
-  static float quantize_weight(float weight) {
-    int w = (int)(weight * (float)0x10000);
-    return (float)w / (float)0x10000;
-  }
-
 
   /*** devices ***/
   int get_max_devices() const {
