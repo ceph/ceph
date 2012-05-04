@@ -42,38 +42,6 @@ void *Thread::_entry_func(void *arg) {
   return r;
 }
 
-/**
- * Return the number of threads in this process.
- * So a single-threaded program would have one thread; a program with a main
- * thread and one child thread would have two threads, etc.
- */
-int Thread::get_num_threads(void)
-{
-  std::ostringstream oss;
-  oss << "/proc/" << getpid() << "/task";
-  DIR *dir = opendir(oss.str().c_str());
-  if (!dir) {
-    int err = errno;
-    return -err;
-  }
-  int num_entries = 0;
-  while (true) {
-    struct dirent *e = readdir(dir);
-    if (!e)
-      break;
-    if ((strcmp(e->d_name, ".") == 0) ||
-        (strcmp(e->d_name, "..") == 0))
-      continue;
-    num_entries++;
-  }
-  ::closedir(dir);
-  if (num_entries == 0) {
-    // Shouldn't happen.
-    return -EINVAL;
-  }
-  return num_entries;
-}
-
 const pthread_t &Thread::get_thread_id()
 {
   return thread_id;
