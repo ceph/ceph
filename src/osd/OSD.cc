@@ -275,6 +275,10 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       ret = -ENOENT;
       goto out;
     }
+
+    // if we are fed a uuid for this osd, use it.
+    store->set_fsid(g_conf->osd_uuid);
+
     ret = store->mkfs();
     if (ret) {
       derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
@@ -286,12 +290,6 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
     if (ret) {
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
       goto free_store;
-    }
-    store->sync_and_flush();
-    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
-    if (ret) {
-      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
-      goto umount_store;
     }
 
     // age?
@@ -352,6 +350,21 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
 	goto umount_store;
       }
     }
+
+    store->sync_and_flush();
+
+    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
+    if (ret) {
+      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+      goto umount_store;
+    }
+
+    ret = write_meta(dev, "ready", "ready\n", 6);
+    if (ret) {
+      derr << "OSD::mkfs: failed to write ready file: error " << ret << dendl;
+      goto umount_store;
+    }
+
   }
   catch (const std::exception &se) {
     derr << "OSD::mkfs: caught exception " << se.what() << dendl;
@@ -407,29 +420,52 @@ int OSD::write_meta(const std::string &base, const std::string &file,
 {
   int ret;
   char fn[PATH_MAX];
+  char tmp[PATH_MAX];
   int fd;
 
   snprintf(fn, sizeof(fn), "%s/%s", base.c_str(), file.c_str());
-  fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  snprintf(tmp, sizeof(tmp), "%s/%s.tmp", base.c_str(), file.c_str());
+  fd = ::open(tmp, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd < 0) {
     ret = errno;
-    derr << "OSD::write_meta: error opening '" << fn << "': "
+    derr << "write_meta: error opening '" << tmp << "': "
 	 << cpp_strerror(ret) << dendl;
     return -ret;
   }
   ret = safe_write(fd, val, vallen);
   if (ret) {
-    derr << "OSD::write_meta: failed to write to '" << fn << "': "
+    derr << "write_meta: failed to write to '" << tmp << "': "
 	 << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
-  if (TEMP_FAILURE_RETRY(::close(fd)) < 0) {
-    ret = errno;
-    derr << "OSD::write_meta: close error writing to '" << fn << "': "
+
+  ret = ::fsync(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
+  if (ret) {
+    ::unlink(tmp);
+    derr << "write_meta: failed to fsync to '" << tmp << "': "
 	 << cpp_strerror(ret) << dendl;
     return ret;
   }
+  ret = ::rename(tmp, fn);
+  if (ret) {
+    ::unlink(tmp);
+    derr << "write_meta: failed to rename '" << tmp << "' to '" << fn << "': "
+	 << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  fd = ::open(base.c_str(), O_RDONLY);
+  if (fd < 0) {
+    ret = errno;
+    derr << "write_meta: failed to open dir '" << base << "': "
+	 << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  ::fsync(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
+
   return 0;
 }
 

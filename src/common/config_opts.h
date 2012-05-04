@@ -250,6 +250,7 @@ OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
 // If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
 OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
 
+OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
 OPTION(osd_journal_size, OPT_INT, 0)         // in mb

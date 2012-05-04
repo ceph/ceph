@@ -116,6 +116,16 @@ int OSDMap::Incremental::get_net_marked_down(const OSDMap *previous) const
   return n;
 }
 
+int OSDMap::Incremental::identify_osd(uuid_d u) const
+{
+  for (map<int32_t,uuid_d>::const_iterator p = new_uuid.begin();
+       p != new_uuid.end();
+       ++p)
+    if (p->second == u)
+      return p->first;
+  return -1;
+}
+
 void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
 {
   __u16 v = 5;
@@ -198,7 +208,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(new_pg_temp, bl);
 
   // extended
-  __u16 ev = CEPH_OSDMAP_INC_VERSION_EXT;
+  __u16 ev = 8;
   ::encode(ev, bl);
   ::encode(new_hb_up, bl);
   ::encode(new_up_thru, bl);
@@ -208,6 +218,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(old_blacklist, bl);
   ::encode(new_up_internal, bl);
   ::encode(cluster_snapshot, bl);
+  ::encode(new_uuid, bl);
 }
 
 void OSDMap::Incremental::decode(bufferlist::iterator &p)
@@ -295,6 +306,8 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
     ::decode(new_up_internal, p);
   if (ev >= 7)
     ::decode(cluster_snapshot, p);
+  if (ev >= 8)
+    ::decode(new_uuid, p);
 }
 
 void OSDMap::Incremental::dump(Formatter *f) const
@@ -433,6 +446,15 @@ void OSDMap::Incremental::dump(Formatter *f) const
 
   if (cluster_snapshot.size())
     f->dump_string("cluster_snapshot", cluster_snapshot);
+
+  f->open_array_section("new_uuid");
+  for (map<int32_t,uuid_d>::const_iterator p = new_uuid.begin(); p != new_uuid.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_int("osd", p->first);
+    f->dump_stream("uuid") << p->second;
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
@@ -482,6 +504,7 @@ void OSDMap::set_max_osd(int m)
   osd_addrs->client_addr.resize(m);
   osd_addrs->cluster_addr.resize(m);
   osd_addrs->hb_addr.resize(m);
+  osd_uuid->resize(m);
 
   calc_num_osds();
 }
@@ -554,6 +577,14 @@ int OSDMap::identify_osd(const entity_addr_t& addr) const
   return -1;
 }
 
+int OSDMap::identify_osd(const uuid_d& u) const
+{
+  for (int i=0; i<max_osd; i++)
+    if (exists(i) && get_uuid(i) == u)
+      return i;
+  return -1;
+}
+
 bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
   for (int i=0; i<max_osd; i++)
@@ -607,6 +638,11 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
     if (*o->pg_temp == *n->pg_temp)
       n->pg_temp = o->pg_temp;
   }
+
+  // do uuids match?
+  if (o->osd_uuid->size() == n->osd_uuid->size() &&
+      *o->osd_uuid == *n->osd_uuid)
+    n->osd_uuid = o->osd_uuid;
 }
 
 int OSDMap::apply_incremental(Incremental &inc)
@@ -675,6 +711,9 @@ int OSDMap::apply_incremental(Incremental &inc)
 	(s & CEPH_OSD_UP)) {
       osd_info[i->first].down_at = epoch;
     }
+    if ((osd_state[i->first] & CEPH_OSD_EXISTS) &&
+	(s & CEPH_OSD_EXISTS))
+      (*osd_uuid)[i->first] = uuid_d();
     osd_state[i->first] ^= s;
   }
   for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
@@ -692,6 +731,7 @@ int OSDMap::apply_incremental(Incremental &inc)
        i != inc.new_up_internal.end();
        i++)
     osd_addrs->cluster_addr[i->first].reset(new entity_addr_t(i->second));
+
   // info
   for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
        i != inc.new_up_thru.end();
@@ -705,6 +745,10 @@ int OSDMap::apply_incremental(Incremental &inc)
   }
   for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
     osd_info[p->first].lost_at = p->second;
+
+  // uuid
+  for (map<int32_t,uuid_d>::iterator p = inc.new_uuid.begin(); p != inc.new_uuid.end(); ++p) 
+    (*osd_uuid)[p->first] = p->second;
 
   // pg rebuild
   for (map<pg_t, vector<int> >::iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
@@ -968,7 +1012,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cbl, bl);
 
   // extended
-  __u16 ev = CEPH_OSDMAP_VERSION_EXT;
+  __u16 ev = 8;
   ::encode(ev, bl);
   ::encode(osd_addrs->hb_addr, bl);
   ::encode(osd_info, bl);
@@ -976,6 +1020,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(osd_addrs->cluster_addr, bl);
   ::encode(cluster_snapshot_epoch, bl);
   ::encode(cluster_snapshot, bl);
+  ::encode(*osd_uuid, bl);
 }
 
 void OSDMap::decode(bufferlist& bl)
@@ -1075,6 +1120,12 @@ void OSDMap::decode(bufferlist::iterator& p)
     ::decode(cluster_snapshot, p);
   }
 
+  if (ev >= 8) {
+    ::decode(*osd_uuid, p);
+  } else {
+    osd_uuid->resize(max_osd);
+  }
+
   // index pool names
   name_pool.clear();
   for (map<int64_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
@@ -1119,6 +1170,7 @@ void OSDMap::dump(Formatter *f) const
     if (exists(i)) {
       f->open_object_section("osd_info");
       f->dump_int("osd", i);
+      f->dump_stream("uuid") << get_uuid(i);
       f->dump_int("up", is_up(i));
       f->dump_int("in", is_in(i));
       get_info(i).dump(f);
@@ -1252,6 +1304,8 @@ void OSDMap::print(ostream& out) const
       set<string> st;
       get_state(i, st);
       out << " " << st;
+      if (!get_uuid(i).is_zero())
+	out << " " << get_uuid(i);
       out << "\n";
     }
   }
