@@ -144,13 +144,6 @@ void global_init_daemonize(CephContext *cct, int flags)
   // stop log thread
   g_ceph_context->_log->stop();
 
-  int num_threads = Thread::get_num_threads();
-  if (num_threads > 1) {
-    derr << "global_init_daemonize: BUG: there are " << num_threads - 1
-	 << " child threads already started that will now die!" << dendl;
-    exit(1);
-  }
-
   int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
