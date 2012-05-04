@@ -646,6 +646,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->is_read = true;
   c->io = this;
   c->pbl = pbl;
 
@@ -683,6 +684,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   Context *onack = new C_aio_Ack(c);
   eversion_t ver;
 
+  c->is_read = true;
   c->io = this;
   c->pbl = pbl;
 
@@ -698,6 +700,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->is_read = true;
   c->io = this;
   c->buf = buf;
   c->maxlen = len;
@@ -1010,6 +1013,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->is_read = true;
   c->io = this;
 
   Mutex::Locker l(*lock);
@@ -1489,6 +1493,8 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
   c->lock.Lock();
   c->rval = r;
   c->ack = true;
+  if (c->is_read)
+    c->safe = true;
   c->cond.Signal();
 
   if (c->buf && c->bl.length() > 0) {
@@ -1502,6 +1508,9 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
 
   if (c->callback_complete) {
     c->io->client->finisher.queue(new C_AioComplete(c));
+  }
+  if (c->is_read && c->callback_safe) {
+    c->io->client->finisher.queue(new C_AioSafe(c));
   }
 
   c->put_unlock();
