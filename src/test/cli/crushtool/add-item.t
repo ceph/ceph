@@ -10,3 +10,6 @@
   $ crushtool -i two --update-item 1 2.0 osd1 --loc host host1 --loc cluster cluster0 -o five > /dev/null
   $ crushtool -d five -o final
   $ cmp final "$TESTDIR/simple.template.five"
+  $ crushtool -i five --update-item 1 2.0 osd1 --loc host host1 --loc cluster cluster0 -o six > /dev/null
+  $ crushtool -d six -o final
+  $ cmp final "$TESTDIR/simple.template.five"
