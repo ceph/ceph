@@ -1092,22 +1092,35 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
   utime_t start = ceph_clock_now(cct);
   int ret = 0;
 
-  // wait for writeback?
-  //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
-  //  - do not wait for bytes other waiters are waiting on.  this means that
-  //    threads do not wait for each other.  this effectively allows the cache size
-  //    to balloon proportional to the data that is in flight.
-  while (get_stat_dirty() + get_stat_tx() >= conf->client_oc_max_dirty + get_stat_dirty_waiting()) {
-    ldout(cct, 10) << "wait_for_write waiting on " << len << ", dirty|tx " 
-		   << (get_stat_dirty() + get_stat_tx()) 
-		   << " >= max " << conf->client_oc_max_dirty << " + dirty_waiting " << get_stat_dirty_waiting()
-		   << dendl;
-    flusher_cond.Signal();
-    stat_dirty_waiting += len;
-    stat_cond.Wait(lock);
-    stat_dirty_waiting -= len;
-    blocked++;
-    ldout(cct, 10) << "wait_for_write woke up" << dendl;
+  if (conf->client_oc_max_dirty > 0) {
+    // wait for writeback?
+    //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
+    //  - do not wait for bytes other waiters are waiting on.  this means that
+    //    threads do not wait for each other.  this effectively allows the cache size
+    //    to balloon proportional to the data that is in flight.
+    while (get_stat_dirty() + get_stat_tx() >= conf->client_oc_max_dirty + get_stat_dirty_waiting()) {
+      ldout(cct, 10) << "wait_for_write waiting on " << len << ", dirty|tx " 
+		     << (get_stat_dirty() + get_stat_tx()) 
+		     << " >= max " << conf->client_oc_max_dirty << " + dirty_waiting " << get_stat_dirty_waiting()
+		     << dendl;
+      flusher_cond.Signal();
+      stat_dirty_waiting += len;
+      stat_cond.Wait(lock);
+      stat_dirty_waiting -= len;
+      blocked++;
+      ldout(cct, 10) << "wait_for_write woke up" << dendl;
+    }
+  } else {
+    // write-thru!  flush what we just wrote.
+    Cond cond;
+    bool done;
+    C_Cond *fin = new C_Cond(&cond, &done, &ret);
+    bool flushed = flush_set(oset, wr->extents, fin);
+    assert(!flushed);   // we just dirtied it, and didn't drop our lock!
+    ldout(cct, 10) << "wait_for_write waiting on write-thru of " << len << " bytes" << dendl;
+    while (!done)
+      cond.Wait(lock);
+    ldout(cct, 10) << "wait_for_write woke up, ret " << ret << dendl;
   }
 
   // start writeback anyway?
