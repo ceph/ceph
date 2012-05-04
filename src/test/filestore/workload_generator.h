@@ -18,13 +18,14 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <map>
+#include <sys/time.h>
 
 #include "TestFileStoreState.h"
 
 typedef boost::mt11213b rngen_t;
 
 class WorkloadGenerator : public TestFileStoreState {
-public:
+ public:
   static const int max_in_flight = 50;
 
   static const int def_destroy_coll_every_nr_runs = 100;
@@ -42,7 +43,21 @@ public:
 
   static const size_t log_append_bytes = 1024;
 
-private:
+  struct C_StatState {
+    struct timeval tv_start;
+    unsigned int written_data;
+    WorkloadGenerator *wrkldgen;
+
+    C_StatState(WorkloadGenerator *state, struct timeval start)
+      : tv_start(start), written_data(0), wrkldgen(state) { }
+  };
+
+  static unsigned long long _diff_tvs(struct timeval& a, struct timeval& b) {
+    return (((a.tv_sec*1000000)+a.tv_usec) - ((b.tv_sec*1000000)+b.tv_usec));
+  }
+
+
+ protected:
   int m_num_ops;
   int m_destroy_coll_every_nr_runs;
   atomic_t m_nr_runs;
@@ -53,6 +68,27 @@ private:
 
   map<coll_t, uint64_t> pg_log_size;
 
+  size_t m_write_data_bytes;
+  size_t m_write_xattr_obj_bytes;
+  size_t m_write_xattr_coll_bytes;
+  size_t m_write_pglog_bytes;
+
+  bool m_suppress_write_data;
+  bool m_suppress_write_xattr_obj;
+  bool m_suppress_write_xattr_coll;
+  bool m_suppress_write_log;
+
+  bool m_do_stats;
+
+  size_t m_stats_written_data;
+  unsigned long long m_stats_duration;
+  Mutex m_stats_lock;
+  int m_stats_show_secs;
+
+ private:
+
+  void _suppress_ops_or_die(std::string& val);
+  size_t _parse_size_or_die(std::string& val);
   void init_args(vector<const char*> args);
 
   int get_uniform_random_value(int min, int max);
@@ -65,18 +101,22 @@ private:
   void get_filled_byte_array(bufferlist& bl, size_t size);
 
   void do_write_object(ObjectStore::Transaction *t,
-      coll_t coll, hobject_t obj);
+      coll_t coll, hobject_t obj, C_StatState *stat);
   void do_setattr_object(ObjectStore::Transaction *t,
-      coll_t coll, hobject_t obj);
-  void do_setattr_collection(ObjectStore::Transaction *t, coll_t coll);
-//  void do_append_log(ObjectStore::Transaction *t, coll_t coll);
-  void do_append_log(ObjectStore::Transaction *t, coll_entry_t *entry);
+      coll_t coll, hobject_t obj, C_StatState *stat);
+  void do_setattr_collection(ObjectStore::Transaction *t, coll_t coll,
+      C_StatState *stat);
+  void do_append_log(ObjectStore::Transaction *t, coll_entry_t *entry,
+      C_StatState *stat);
 
   bool should_destroy_collection() {
-    return ((int)m_nr_runs.read() >= m_destroy_coll_every_nr_runs);
+    return ((m_destroy_coll_every_nr_runs > 0) &&
+        ((int)m_nr_runs.read() >= m_destroy_coll_every_nr_runs));
   }
-  void do_destroy_collection(ObjectStore::Transaction *t, coll_entry_t *entry);
-  coll_entry_t *do_create_collection(ObjectStore::Transaction *t);
+  void do_destroy_collection(ObjectStore::Transaction *t, coll_entry_t *entry,
+      C_StatState *stat);
+  coll_entry_t *do_create_collection(ObjectStore::Transaction *t,
+      C_StatState *stat);
 
 public:
   WorkloadGenerator(vector<const char*> args);
@@ -110,6 +150,33 @@ public:
     void finish(int r) {
       C_OnReadable::finish(r);
       delete m_entry;
+    }
+  };
+
+  class C_StatWrapper : public Context {
+    C_StatState *stat_state;
+    Context *ctx;
+
+   public:
+    C_StatWrapper(C_StatState *state, Context *context)
+      : stat_state(state), ctx(context) { }
+
+    void finish(int r) {
+      ctx->finish(r);
+
+      struct timeval tv_end;
+      int ret = gettimeofday(&tv_end, NULL);
+      if (ret < 0) {
+        cout << "error on gettimeofday" << std::endl;
+        _exit(1);
+      }
+
+      unsigned long long usec_taken = _diff_tvs(tv_end, stat_state->tv_start);
+
+      stat_state->wrkldgen->m_stats_lock.Lock();
+      stat_state->wrkldgen->m_stats_duration += usec_taken;
+      stat_state->wrkldgen->m_stats_written_data += stat_state->written_data;
+      stat_state->wrkldgen->m_stats_lock.Unlock();
     }
   };
 
