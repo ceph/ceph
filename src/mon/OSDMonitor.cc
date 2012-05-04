@@ -1755,9 +1755,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "add") {
+    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
-	// osd crush add <id> <name> <weight> [<loc1> [<loc2> ...]]
+	// osd crush update <id> <name> <weight> [<loc1> [<loc2> ...]]
 	int id = atoi(m->cmd[3].c_str());
 	string name = m->cmd[4];
 	float weight = atof(m->cmd[5].c_str());
@@ -1772,7 +1772,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  loc[key] = value;
 	}
 
-	dout(0) << "adding crush item id " << id << " name '" << name << "' weight " << weight
+	dout(0) << "adding/updating crush item id " << id << " name '" << name << "' weight " << weight
 		<< " at location " << loc << dendl;
 	bufferlist bl;
 	if (pending_inc.crush.length())
@@ -1784,17 +1784,16 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
-	err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
+	err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
 	if (err == 0) {
-	  if (newcrush.get_max_devices() > osdmap.get_max_osd()) {
-	    err = -ERANGE;
-	    ss << "crushmap max_devices " << newcrush.get_max_devices()
-	       << " > osdmap max_osd " << osdmap.get_max_osd();
-	    break;
-	  }
+	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	     << " at location " << loc << " to crush map";
+	  break;
+	}
+	if (err > 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
-	  ss << "added item id " << id << " name '" << name << "' weight " << weight
+	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  getline(ss, rs);
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));

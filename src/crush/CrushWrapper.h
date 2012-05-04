@@ -164,14 +164,67 @@ public:
 
 
   void find_roots(set<int>& roots) const;
+
+  /**
+   * see if item is located where we think it is
+   *
+   * @param cct cct
+   * @param item item id
+   * @param loc location to check (map of type to bucket names)
+   * @param weight optional pointer to weight of item at that location
+   * @return true if item is at specified location
+   */
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, int *iweight);
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight) {
+    int iweight;
+    bool ret = check_item_loc(cct, item, loc, &iweight);
+    if (weight)
+      *weight = (float)iweight / (float)0x10000;
+    return ret;
+  }
+
+  /**
+   * insert an item into the map at a specific position
+   *
+   * If the item is already present in the map, we will return EEXIST or similar errors.
+   *
+   * @param cct cct
+   * @param id item id
+   * @param weight item weight
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   * @return 0 for success, negative on error
+   */
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+
+  /**
+   * add or update an item's position in the map
+   *
+   * This is analogous to insert_item, except we will move an item if
+   * it is already present.
+   *
+   * @param cct cct
+   * @param id item id
+   * @param weight item weight
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   * @return 0 for no change, 1 for successful change, negative on error
+   */
+  int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+
+  /**
+   * remove an item from the map
+   *
+   * @param cct cct
+   * @param id item id to remove
+   * @return 0 on success, negative on error
+   */
   int remove_item(CephContext *cct, int id);
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   void reweight(CephContext *cct);
-
 
   /*** devices ***/
   int get_max_devices() const {
