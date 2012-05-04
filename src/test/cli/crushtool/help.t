@@ -17,6 +17,9 @@
      -i mapfn --add-item id weight name [--loc type name ...]
                            insert an item into the hierarchy at the
                            given location
+     -i mapfn --update-item id weight name [--loc type name ...]
+                           insert or move an item into the hierarchy at the
+                           given location
      -i mapfn --remove-item name
                            remove the given item
      -i mapfn --reweight-item name weight

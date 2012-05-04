@@ -364,7 +364,7 @@ EOF
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"
 	    $SUDO $CEPH_ADM osd create $uuid
-	    $SUDO $CEPH_ADM osd crush add $osd osd.$osd 1.0 host=localhost rack=localrack pool=default
+	    $SUDO $CEPH_ADM osd crush set $osd osd.$osd 1.0 host=localhost rack=localrack pool=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
 	    if [ "$cephx" -eq 1 ]; then
