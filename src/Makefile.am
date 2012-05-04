@@ -871,7 +871,7 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 	$(srcdir)/test/encoding/readable.sh \
 	$(srcdir)/test/encoding/check-generated.sh
 
-EXTRA_DIST += $(srcdir)/$(shell_scripts: %=%.in)
+EXTRA_DIST += $(srcdir)/$(shell_scripts:%=%.in)
 
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
