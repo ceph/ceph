@@ -81,6 +81,9 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
            << "; oldest is " << oldest_secs
            << " seconds old" << dendl;
 
+  if (oldest_secs < g_conf->osd_op_complaint_time)
+    return false;
+
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
   warning_vector.reserve(g_conf->osd_op_log_threshold + 1);
   warning_vector.push_back("");
