@@ -70,23 +70,24 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
 {
   ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
 
-  int cur = item;
   for (map<int,string>::const_iterator p = type_map.begin(); p != type_map.end(); p++) {
+    // ignore device
     if (p->first == 0)
       continue;
 
+    // ignore types that aren't specified in loc
     if (loc.count(p->second) == 0) {
       ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
     }
 
-    int id = get_item_id(loc[p->second].c_str());
-    if (!id) {
-      ldout(cct, 5) << "check_item_loc bucket " << loc[p->second] << " of type " << p->second << " dne" << dendl;
+    if (!name_exists(loc[p->second].c_str())) {
+      ldout(cct, 5) << "check_item_loc bucket " << loc[p->second] << " dne" << dendl;
       return false;
     }
 
+    int id = get_item_id(loc[p->second].c_str());
     if (id >= 0) {
       ldout(cct, 5) << "check_item_loc requested " << loc[p->second] << " for type " << p->second
 		    << " is a device, not bucket" << dendl;
@@ -98,8 +99,8 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
 
     // see if item exists in this bucket
     for (unsigned j=0; j<b->size; j++) {
-      if (b->items[j] == cur) {
-	ldout(cct, 2) << "check_item_loc " << cur << " exists in bucket " << b->id << dendl;
+      if (b->items[j] == item) {
+	ldout(cct, 2) << "check_item_loc " << item << " exists in bucket " << b->id << dendl;
 	if (weight)
 	  *weight = crush_get_bucket_item_weight(b, j);
 	return true;
@@ -129,27 +130,27 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   int cur = item;
 
   for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); p++) {
+    // ignore device type
     if (p->first == 0)
       continue;
 
+    // skip types that are unspecified
     if (loc.count(p->second) == 0) {
       ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
     }
 
-    int id = get_item_id(loc[p->second].c_str());
-    if (!id) {
-      // create the bucket
+    if (!name_exists(loc[p->second].c_str())) {
       ldout(cct, 5) << "insert_item creating bucket " << loc[p->second] << dendl;
       int empty = 0;
-      id = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
-      set_item_name(id, loc[p->second].c_str());
-      cur = id;
+      cur = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
+      set_item_name(cur, loc[p->second].c_str());
       continue;
     }
 
     // add to an existing bucket
+    int id = get_item_id(loc[p->second].c_str());
     if (!bucket_exists(id)) {
       ldout(cct, 1) << "insert_item don't have bucket " << id << dendl;
       return -EINVAL;
