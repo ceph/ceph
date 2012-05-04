@@ -19,8 +19,8 @@ TYPE(entity_addr_t)
 
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
-TYPE(OSDMap)
-TYPE(OSDMap::Incremental)
+TYPEWITHSTRAYDATA(OSDMap)
+TYPEWITHSTRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
 TYPE(CrushWrapper)

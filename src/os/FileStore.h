@@ -383,6 +383,9 @@ public:
 
   int dump_journal(ostream& out);
 
+  void set_fsid(uuid_d u) {
+    fsid = u;
+  }
   uuid_d get_fsid() { return fsid; }
 
   int snapshot(const string& name);

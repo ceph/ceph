@@ -984,7 +984,10 @@ int FileStore::mkfs()
   }
 
   // fsid
-  fsid.generate_random();
+  if (fsid.is_zero())
+    fsid.generate_random();
+  else
+    dout(1) << "mkfs using provided fsid " << fsid << dendl;
 
   char fsid_str[40];
   fsid.print(fsid_str);
