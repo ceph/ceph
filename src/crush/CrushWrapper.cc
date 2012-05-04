@@ -208,9 +208,9 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
     }
     ldout(cct, 5) << "update_item adding " << item << " weight " << weight
 		  << " at " << loc << dendl;
-    int r = insert_item(cct, item, weight, name.c_str(), loc);
-    if (r == 0)
-      ret = 1;
+    ret = insert_item(cct, item, weight, name.c_str(), loc);
+    if (ret == 0)
+      ret = 1;  // changed
   }
   return ret;
 }
