@@ -66,7 +66,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 }
 
 bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>& loc,
-				  float *weight)  // typename -> bucketname
+				  float *weight)
 {
   ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
 
@@ -96,14 +96,15 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
     crush_bucket *b = get_bucket(id);
     assert(b);
 
-    // make sure the item doesn't already exist in this bucket
-    for (unsigned j=0; j<b->size; j++)
+    // see if item exists in this bucket
+    for (unsigned j=0; j<b->size; j++) {
       if (b->items[j] == cur) {
 	ldout(cct, 2) << "check_item_loc " << cur << " exists in bucket " << b->id << dendl;
 	if (weight)
 	  *weight = (float)crush_get_bucket_item_weight(b, j) / (float)0x10000;
 	return true;
       }
+    }
     return false;
   }
   

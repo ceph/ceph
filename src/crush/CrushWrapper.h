@@ -171,6 +171,7 @@ public:
    * @param cct cct
    * @param item item id
    * @param loc location to check (map of type to bucket names)
+   * @param weight optional pointer to weight of item at that location
    */
   bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight);
 
