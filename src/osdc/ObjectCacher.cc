@@ -131,15 +131,7 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
  */
 bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
 {
-  map<loff_t, BufferHead*>::iterator p = data.lower_bound(cur);
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
-  
+  map<loff_t, BufferHead*>::iterator p = data_lower_bound(cur);
   while (left > 0) {
     if (p == data.end())
       return false;
@@ -179,19 +171,10 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
     ldout(oc->cct, 10) << "map_read " << ex_it->oid 
              << " " << ex_it->offset << "~" << ex_it->length << dendl;
     
-    map<loff_t, BufferHead*>::iterator p = data.lower_bound(ex_it->offset);
-    // p->first >= start
-    
     loff_t cur = ex_it->offset;
     loff_t left = ex_it->length;
-    
-    if (p != data.begin() && 
-        (p == data.end() || p->first > cur)) {
-      p--;     // might overlap!
-      if (p->first + p->second->length() <= cur) 
-        p++;   // doesn't overlap.
-    }
-    
+
+    map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex_it->offset);
     while (left > 0) {
       // at end?
       if (p == data.end()) {
@@ -264,33 +247,16 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ex_it++) {
-    
+
     if (ex_it->oid != oid.oid) continue;
-    
+
     ldout(oc->cct, 10) << "map_write oex " << ex_it->oid
              << " " << ex_it->offset << "~" << ex_it->length << dendl;
-    
-    map<loff_t, BufferHead*>::iterator p = data.lower_bound(ex_it->offset);
-    // p->first >= start
-    
+
     loff_t cur = ex_it->offset;
     loff_t left = ex_it->length;
-    
-    if (p != data.begin() && 
-        (p == data.end() || p->first > cur)) {
-      p--;     // might overlap or butt up!
 
-      /*// dirty and butts up?
-      if (p->first + p->second->length() == cur &&
-          p->second->is_dirty()) {
-        ldout(oc->cct, 10) << "map_write will append to tail of " << *p->second << dendl;
-        final = p->second;
-      }
-      */
-      if (p->first + p->second->length() <= cur) 
-        p++;   // doesn't overlap.
-    }    
-    
+    map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex_it->offset);
     while (left > 0) {
       loff_t max = left;
 
@@ -412,14 +378,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 {
   ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len << dendl;
 
-  map<loff_t, BufferHead*>::iterator p = data.lower_bound(off);
-  if (p != data.begin() &&
-      (p == data.end() || p->first > off)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= off)
-      p++;   // doesn't overlap.
-  }
-
+  map<loff_t, BufferHead*>::iterator p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
     if (bh->start() >= off + len)
@@ -1430,14 +1389,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
 {
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
-  map<loff_t,BufferHead*>::iterator p = ob->data.lower_bound(offset);
-  if (p != ob->data.begin() && 
-      (p == ob->data.end() || p->first > offset)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= offset) 
-      p++;   // doesn't overlap.
-  }
-  for ( ; p != ob->data.end(); p++) {
+  for (map<loff_t,BufferHead*>::iterator p = ob->data_lower_bound(offset); p != ob->data.end(); p++) {
     BufferHead *bh = p->second;
     ldout(cct, 20) << "flush  " << *bh << dendl;
     if (length && bh->start() > offset+length) {

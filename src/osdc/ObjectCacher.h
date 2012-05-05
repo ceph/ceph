@@ -224,6 +224,23 @@ class ObjectCacher {
 	dirty_or_tx == 0;
     }
 
+    /**
+     * find first buffer that includes or follows an offset
+     *
+     * @param offset object byte offset
+     * @return iterator pointing to buffer, or data.end()
+     */
+    map<loff_t,BufferHead*>::iterator data_lower_bound(loff_t offset) {
+      map<loff_t,BufferHead*>::iterator p = data.lower_bound(offset);
+      if (p != data.begin() &&
+	  (p == data.end() || p->first > offset)) {
+	p--;     // might overlap!
+	if (p->first + p->second->length() <= offset)
+	  p++;   // doesn't overlap.
+      }
+      return p;
+    }
+
     // bh
     // add to my map
     void add_bh(BufferHead *bh) {
