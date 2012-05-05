@@ -469,12 +469,14 @@ class ObjectCacher {
 
   // non-blocking.  async.
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
-  int writex(OSDWrite *wr, ObjectSet *oset);
+  int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
 
+private:
   // write blocking
-  bool wait_for_write(uint64_t len, Mutex& lock);
+  int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock);
   
+public:
   bool set_is_cached(ObjectSet *oset);
   bool set_is_dirty_or_committing(ObjectSet *oset);
 
@@ -512,10 +514,11 @@ class ObjectCacher {
 
   int file_write(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, uint64_t len, 
-                 bufferlist& bl, utime_t mtime, int flags) {
+                 bufferlist& bl, utime_t mtime, int flags,
+		 Mutex& wait_on_lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     Filer::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
-    return writex(wr, oset);
+    return writex(wr, oset, wait_on_lock);
   }
 };
 

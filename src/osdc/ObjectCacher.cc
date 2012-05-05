@@ -1048,7 +1048,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 }
 
 
-int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
+int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock)
 {
   assert(lock.is_locked());
   utime_t now = ceph_clock_now(cct);
@@ -1115,20 +1115,23 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
     }
   }
 
+  int r = _wait_for_write(wr, bytes_written, oset, wait_on_lock);
+
   delete wr;
 
   //verify_stats();
   trim();
-  return 0;
+  return r;
 }
  
 
 // blocking wait for write.
-bool ObjectCacher::wait_for_write(uint64_t len, Mutex& lock)
+int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock)
 {
   int blocked = 0;
   const md_config_t *conf = cct->_conf;
   utime_t start = ceph_clock_now(cct);
+  int ret = 0;
 
   // wait for writeback?
   //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
@@ -1160,7 +1163,7 @@ bool ObjectCacher::wait_for_write(uint64_t len, Mutex& lock)
     utime_t blocked = ceph_clock_now(cct) - start;
     perfcounter->finc(l_objectcacher_write_time_blocked, (double) blocked);
   }
-  return blocked;
+  return ret;
 }
 
 void ObjectCacher::flusher_entry()
