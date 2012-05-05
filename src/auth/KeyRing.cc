@@ -62,9 +62,15 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
 
   if (!conf->key.empty()) {
     EntityAuth ea;
-    ea.key.decode_base64(conf->key);
-    keyring->add(conf->name, ea);
-    found_key = true;
+    try {
+      ea.key.decode_base64(conf->key);
+      keyring->add(conf->name, ea);
+      found_key = true;
+    }
+    catch (buffer::error& e) {
+      lderr(cct) << "KeyRing::from_ceph_context: failed to decode key " << conf->key << dendl;
+      return -EINVAL;
+    }
   }
 
   if (!conf->keyfile.empty()) {
@@ -80,9 +86,15 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
       else {
 	string k = buf;
 	EntityAuth ea;
-	ea.key.decode_base64(k);
-	keyring->add(conf->name, ea);
-	found_key = true;
+	try {
+	  ea.key.decode_base64(k);
+	  keyring->add(conf->name, ea);
+	  found_key = true;
+	}
+	catch (buffer::error& e) {
+	  lderr(cct) << "KeyRing::from_ceph_context: failed to decode key " << k << dendl;
+	  return -EINVAL;
+	}
       }
       fclose(fp);
     } else {
