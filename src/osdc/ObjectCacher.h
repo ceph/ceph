@@ -295,6 +295,8 @@ class ObjectCacher {
   string name;
   Mutex& lock;
   
+  int64_t max_dirty, target_dirty, max_size;
+
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
 
@@ -520,6 +522,17 @@ public:
   uint64_t release_all();
 
   void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+
+  // cache sizes
+  void set_max_dirty(int64_t v) {
+    max_dirty = v;
+  }
+  void set_target_dirty(int64_t v) {
+    target_dirty = v;
+  }
+  void set_max_size(int64_t v) {
+    max_size = v;
+  }
 
   // file functions
 

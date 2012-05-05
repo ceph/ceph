@@ -414,6 +414,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb,
 			   void *flush_callback_arg)
   : perfcounter(NULL),
     cct(cct_), writeback_handler(wb), name(name), lock(l),
+    max_dirty(0), target_dirty(0), max_size(0),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0), stat_dirty_waiting(0)
@@ -764,7 +765,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 void ObjectCacher::flush(loff_t amount)
 {
   utime_t cutoff = ceph_clock_now(cct);
-  //cutoff.sec_ref() -= cct->_conf->client_oc_max_dirty_age;
 
   ldout(cct, 10) << "flush " << amount << dendl;
   
@@ -788,7 +788,7 @@ void ObjectCacher::flush(loff_t amount)
 void ObjectCacher::trim(loff_t max)
 {
   if (max < 0) 
-    max = cct->_conf->client_oc_size;
+    max = max_size;
   
   ldout(cct, 10) << "trim  start: max " << max 
            << "  clean " << get_stat_clean()
@@ -1088,20 +1088,19 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock)
 int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock)
 {
   int blocked = 0;
-  const md_config_t *conf = cct->_conf;
   utime_t start = ceph_clock_now(cct);
   int ret = 0;
 
-  if (conf->client_oc_max_dirty > 0) {
+  if (max_dirty > 0) {
     // wait for writeback?
     //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
     //  - do not wait for bytes other waiters are waiting on.  this means that
     //    threads do not wait for each other.  this effectively allows the cache size
     //    to balloon proportional to the data that is in flight.
-    while (get_stat_dirty() + get_stat_tx() >= conf->client_oc_max_dirty + get_stat_dirty_waiting()) {
+    while (get_stat_dirty() + get_stat_tx() >= max_dirty + get_stat_dirty_waiting()) {
       ldout(cct, 10) << "wait_for_write waiting on " << len << ", dirty|tx " 
 		     << (get_stat_dirty() + get_stat_tx()) 
-		     << " >= max " << conf->client_oc_max_dirty << " + dirty_waiting " << get_stat_dirty_waiting()
+		     << " >= max " << max_dirty << " + dirty_waiting " << get_stat_dirty_waiting()
 		     << dendl;
       flusher_cond.Signal();
       stat_dirty_waiting += len;
@@ -1124,9 +1123,9 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
   }
 
   // start writeback anyway?
-  if (get_stat_dirty() > conf->client_oc_target_dirty) {
+  if (get_stat_dirty() > target_dirty) {
     ldout(cct, 10) << "wait_for_write " << get_stat_dirty() << " > target "
-		   << conf->client_oc_target_dirty << ", nudging flusher" << dendl;
+		   << target_dirty << ", nudging flusher" << dendl;
     flusher_cond.Signal();
   }
   if (blocked && perfcounter) {
@@ -1140,29 +1139,28 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
 
 void ObjectCacher::flusher_entry()
 {
-  const md_config_t *conf = cct->_conf;
   ldout(cct, 10) << "flusher start" << dendl;
   lock.Lock();
   while (!flusher_stop) {
     while (!flusher_stop) {
       loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() + get_stat_dirty();
       ldout(cct, 11) << "flusher "
-               << all << " / " << conf->client_oc_size << ":  "
-               << get_stat_tx() << " tx, "
-               << get_stat_rx() << " rx, "
-               << get_stat_clean() << " clean, "
-               << get_stat_dirty() << " dirty ("
-	       << conf->client_oc_target_dirty << " target, "
-	       << conf->client_oc_max_dirty << " max)"
-               << dendl;
-      if (get_stat_dirty() + get_stat_dirty_waiting() > conf->client_oc_target_dirty) {
+		     << all << " / " << max_size << ":  "
+		     << get_stat_tx() << " tx, "
+		     << get_stat_rx() << " rx, "
+		     << get_stat_clean() << " clean, "
+		     << get_stat_dirty() << " dirty ("
+		     << target_dirty << " target, "
+		     << max_dirty << " max)"
+		     << dendl;
+      if (get_stat_dirty() + get_stat_dirty_waiting() > target_dirty) {
         // flush some dirty pages
         ldout(cct, 10) << "flusher " 
 		       << get_stat_dirty() << " dirty + " << get_stat_dirty_waiting()
 		       << " dirty_waiting > target "
-		       << conf->client_oc_target_dirty
+		       << target_dirty
 		       << ", flushing some dirty bhs" << dendl;
-        flush(get_stat_dirty() + get_stat_dirty_waiting() - conf->client_oc_target_dirty);
+        flush(get_stat_dirty() + get_stat_dirty_waiting() - target_dirty);
       }
       else {
         // check tail of lru for old dirty items
