@@ -93,7 +93,7 @@ def need_to_install(ctx, role, sha1):
 
 def install_firmware(ctx, config):
     # uri = 'git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
-    uri = 'git://ceph.newdream.net/git/linux-firmware.git'
+    uri = 'git://ceph.com/git/linux-firmware.git'
     fw_dir = '/lib/firmware/updates'
 
     for role in config.iterkeys():
