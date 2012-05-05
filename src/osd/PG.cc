@@ -1521,9 +1521,17 @@ void PG::all_activated_and_committed()
   assert(peer_activated.size() == acting.size());
 
   info.history.last_epoch_started = get_osdmap()->get_epoch();
-  share_pg_info();
-
   dirty_info = true;
+
+  // make sure CLEAN is marked if we've been clean in this interval
+  if (info.last_complete == info.last_update &&
+      !state_test(PG_STATE_BACKFILL) &&
+      !state_test(PG_STATE_RECOVERING)) {
+    mark_clean();
+  }
+
+  share_pg_info();
+  update_stats();
 }
 
 void PG::queue_snap_trim()
@@ -1555,30 +1563,38 @@ struct C_PG_FinishRecovery : public Context {
   }
 };
 
-void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
+void PG::mark_clean()
 {
-  dout(10) << "finish_recovery" << dendl;
-  state_clear(PG_STATE_BACKFILL);
-  state_clear(PG_STATE_RECOVERING);
-
   // only mark CLEAN if we have the desired number of replicas AND we
   // are not remapped.
   if (acting.size() == get_osdmap()->get_pg_size(info.pgid) &&
       up == acting)
     state_set(PG_STATE_CLEAN);
 
-  assert(info.last_complete == info.last_update);
-
   // NOTE: this is actually a bit premature: we haven't purged the
   // strays yet.
   info.history.last_epoch_clean = get_osdmap()->get_epoch();
-  share_pg_info();
-
-  clear_recovery_state();
 
   trim_past_intervals();
-  
-  write_info(t);
+
+  dirty_info = true;
+}
+
+void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
+{
+  dout(10) << "finish_recovery" << dendl;
+  assert(info.last_complete == info.last_update);
+
+  state_clear(PG_STATE_BACKFILL);
+  state_clear(PG_STATE_RECOVERING);
+
+  // only mark CLEAN if last_epoch_started is already stable.
+  if (info.history.last_epoch_started >= info.history.same_interval_since) {
+    mark_clean();
+    share_pg_info();
+  }
+
+  clear_recovery_state();
 
   /*
    * sync all this before purging strays.  but don't block!
