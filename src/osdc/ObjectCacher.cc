@@ -1427,6 +1427,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 {
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
+    delete onfinish;
     return true;
   }
 
@@ -1457,6 +1458,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
+    delete onfinish;
     return true;
   }
   return false;
@@ -1468,6 +1470,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
 {
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
+    delete onfinish;
     return true;
   }
 
@@ -1503,6 +1506,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
+    delete onfinish;
     return true;
   }
   return false;
