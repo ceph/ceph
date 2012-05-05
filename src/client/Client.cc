@@ -5313,10 +5313,8 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
     // async, caching, non-blocking.
     objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-			     offset, size, bl, ceph_clock_now(cct), 0);
-
-    // wait? (this may block!)
-    objectcacher->wait_for_write(size, client_lock);
+			     offset, size, bl, ceph_clock_now(cct), 0,
+			     client_lock);
 
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
   } else {

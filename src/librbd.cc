@@ -288,8 +288,7 @@ namespace librbd {
       wr->extents.push_back(extent);
       {
 	Mutex::Locker l(cache_lock);
-	object_cacher->writex(wr, object_set);
-	object_cacher->wait_for_write(len, cache_lock);
+	object_cacher->writex(wr, object_set, cache_lock);
       }
     }
 
