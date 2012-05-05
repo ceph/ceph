@@ -366,7 +366,18 @@ class ObjectCacher {
   void trim(loff_t max=-1);
   void flush(loff_t amount=0);
 
-  bool flush(Object *o);
+  /**
+   * flush a range of buffers
+   *
+   * Flush any buffers that intersect the specified extent.  If len==0,
+   * flush *all* buffers for the object.
+   *
+   * @param o object
+   * @param off start offset
+   * @param len extent length, or 0 for entire object
+   * @return true if object was already clean/flushed.
+   */
+  bool flush(Object *o, loff_t off, loff_t len);
   loff_t release(Object *o);
   void purge(Object *o);
 
@@ -481,6 +492,7 @@ public:
   bool set_is_dirty_or_committing(ObjectSet *oset);
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
+  bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
   bool commit_set(ObjectSet *oset, Context *oncommit);
