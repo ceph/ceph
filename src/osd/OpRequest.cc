@@ -86,46 +86,42 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
   warning_vector.reserve(g_conf->osd_op_log_threshold + 1);
-  warning_vector.push_back("");
 
-  int total = 0, skipped = 0;
-
+  int slow = 0;     // total slow
+  int warned = 0;   // total logged
   while (!i.end() && (*i)->received_time < too_old) {
-    // exponential backoff of warning intervals
-    if ( ( (*i)->received_time +
-           (g_conf->osd_op_complaint_time *
-            (*i)->warn_interval_multiplier) )< now) {
+    slow++;
 
-      if (total++ >= g_conf->osd_op_log_threshold)
+    // exponential backoff of warning intervals
+    if (((*i)->received_time +
+	 (g_conf->osd_op_complaint_time *
+	  (*i)->warn_interval_multiplier)) < now) {
+      // will warn
+      if (warning_vector.empty())
+	warning_vector.push_back("");
+      warned++;
+      if (warned > g_conf->osd_op_log_threshold)
         break;
 
       stringstream ss;
-      ss << "received at " << (*i)->received_time
+      ss << "slow request received at " << (*i)->received_time
           << ": " << *((*i)->request) << " currently " << (*i)->state_string();
       warning_vector.push_back(ss.str());
+
       // only those that have been shown will backoff
       (*i)->warn_interval_multiplier *= 2;
-    } else {
-      skipped++;
     }
     ++i;
   }
 
-  stringstream ss;
-  ss << "there are " << ops_in_flight.size()
-      << " ops in flight; the oldest is blocked for >"
-      << oldest_secs << " secs";
-
-  if (total) {
-    ss << "; these are ";
-    if (!skipped)
-      ss << "the " << warning_vector.size()-1 << " oldest:";
-    else {
-      ss << warning_vector.size()-1 << " amongst the oldest ("
-          << skipped << " precedes them):";
-    }
+  // only summarize if we warn about any.  if everything has backed
+  // off, we will stay silent.
+  if (warned > 0) {
+    stringstream ss;
+    ss << slow << " slow requests, " << warned << " included below; oldest blocked for > "
+       << oldest_secs << " secs";
+    warning_vector[0] = ss.str();
   }
-  warning_vector[0] = ss.str();
 
   return warning_vector.size();
 }
