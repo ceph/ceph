@@ -1,6 +1,26 @@
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS = ocf libs3
 DIST_SUBDIRS = gtest ocf leveldb libs3
+
+EXTRA_DIST = \
+	libs3/COPYING \
+	libs3/ChangeLog \
+	libs3/GNUmakefile \
+	libs3/GNUmakefile.mingw \
+	libs3/GNUmakefile.osx \
+	libs3/INSTALL \
+	libs3/LICENSE \
+	libs3/README \
+	libs3/TODO \
+	libs3/archlinux/ \
+	libs3/debian/ \
+	libs3/doxyfile \
+	libs3/inc/ \
+	libs3/libs3.spec \
+	libs3/mswin/ \
+	libs3/src/ \
+	libs3/test/
+
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
@@ -878,7 +898,8 @@ EXTRALIBS += -lgcov
 endif
 
 # extra bits
-EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
+EXTRA_DIST += \
+	$(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	ceph-run $(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
