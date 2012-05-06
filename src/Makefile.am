@@ -33,6 +33,21 @@ endif
 
 LIBGLOBAL_LDA = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
+LIBOS_LDA = libos.a leveldb/libleveldb.a
+
+if WITH_LIBAIO
+LIBOS_LDA += -laio
+endif
+
+if WITH_SYSTEM_LEVELDB
+LIBOS_LDA += -lleveldb -lsnappy
+else
+LIBOS_LDA += leveldb/libleveldb.a
+SUBDIRS += leveldb
+endif
+
+
+
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
@@ -43,16 +58,13 @@ bin_PROGRAMS += ceph-mon
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-ceph_osd_LDADD = libosd.a libos.la $(LIBGLOBAL_LDA)
+ceph_osd_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-osd
 
 if WITH_SYSTEM_LEVELDB
-ceph_osd_LDADD += -lleveldb -lsnappy
 else
-ceph_osd_LDADD += leveldb/libleveldb.a
 ceph_osd_CXXFLAGS += -I$(top_srcdir)/src/leveldb/include
-SUBDIRS += leveldb
 endif
 
 if LINUX
@@ -123,7 +135,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.a libmds.a libos.la libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.a libmds.a $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -200,13 +212,13 @@ test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+dupstore_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+streamtest_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_trans_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testrados_SOURCES = test/osd/TestRados.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
@@ -739,7 +751,7 @@ bin_DEBUGPROGRAMS += test_libcephfs_readdir
 
 test_filestore_SOURCES = test/filestore/store_test.cc
 test_filestore_LDFLAGS = ${AM_LDFLAGS}
-test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_filestore
@@ -748,11 +760,11 @@ test_filestore_workloadgen_SOURCES = \
      test/filestore/workload_generator.cc \
      test/filestore/TestFileStoreState.cc
 test_filestore_workloadgen_LDFLAGS = ${AM_LDFLAGS}
-test_filestore_workloadgen_LDADD =  libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_filestore_workloadgen_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_filestore_workloadgen
 
 test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
-test_filestore_idempotent_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_filestore_idempotent_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_filestore_idempotent_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_filestore_idempotent
 
@@ -761,19 +773,19 @@ test_filestore_idempotent_sequence_SOURCES = \
      test/filestore/DeterministicOpSequence.cc \
      test/filestore/TestFileStoreState.cc \
      test/filestore/FileStoreDiff.cc
-test_filestore_idempotent_sequence_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_filestore_idempotent_sequence_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
 
 xattr_bench_SOURCES = test/xattr_bench.cc
 xattr_bench_LDFLAGS = ${AM_LDFLAGS}
-xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += xattr_bench
 
 test_filejournal_SOURCES = test/test_filejournal.cc
 test_filejournal_LDFLAGS = ${AM_LDFLAGS}
-test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_filejournal_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_filejournal
 
@@ -785,14 +797,14 @@ bin_DEBUGPROGRAMS += test_stress_watch
 
 test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
 test_object_map_LDFLAGS = ${AM_LDFLAGS}
-test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_object_map
 
 test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc os/LevelDBStore.cc
 test_keyvaluedb_atomicity_LDFLAGS = ${AM_LDFLAGS}
-test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_keyvaluedb_atomicity
@@ -1103,7 +1115,7 @@ libmds_a_SOURCES = \
 	mds/MDLog.cc
 noinst_LIBRARIES += libmds.a
 
-libos_la_SOURCES = \
+libos_a_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
 	os/ObjectStore.cc \
@@ -1114,13 +1126,9 @@ libos_la_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc
-libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
+libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
-libos_la_LIBADD = libglobal.la
-if WITH_LIBAIO
-libos_la_LIBADD += -laio
-endif
-noinst_LTLIBRARIES += libos.la
+noinst_LIBRARIES += libos.a
 
 libosd_a_SOURCES = \
 	osd/PG.cc \
