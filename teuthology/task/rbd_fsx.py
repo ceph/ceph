@@ -51,7 +51,7 @@ def _run_one_client(ctx, config, role):
             '-W', '-R', # mmap doesn't work with rbd
             '-p', str(config.get('progress_interval', 100)),  # show progress
             '-P', '/tmp/cephtest/archive',
-            '-t', '4194304',
+            '-t', str(config.get('truncbdy',1)),
             '-l', str(config.get('size', 1073741824)),
             '-S', str(config.get('seed', 0)),
             '-N', str(config.get('ops', 1000)),
