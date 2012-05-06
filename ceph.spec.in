@@ -25,7 +25,6 @@ URL:		http://ceph.newdream.net/
 Source0:	http://ceph.newdream.net/download/%{name}-%{version}.tar.bz2
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
-Requires:	librgw1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
@@ -85,7 +84,6 @@ Group:		Development/Libraries
 License:	LGPLv2
 Requires:	%{name} = %{version}-%{release}
 Requires:	librados2 = %{version}
-Requires:	librgw1 = %{version}
 Requires:	librbd1 = %{version}
 Requires:	libcephfs1 = %{version}
 %description devel
@@ -165,15 +163,6 @@ RBD is a block device striped across multiple distributed objects in
 RADOS, a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to manage these block devices.
-
-%package -n librgw1
-Summary:	RGW distributed object store client library
-Group:		System Environment/Libraries
-License:	LGPLv2
-%description -n librgw1
-radosgw is a REST gateway for RADOS distributed object store. librgw
-contains support for reading and writing objects in the format expected
-by radosgw.
 
 %package -n libcephfs1
 Summary:	Ceph distributed file system client library
@@ -379,13 +368,11 @@ fi
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
-%{_includedir}/rados/librgw.h
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
-%{_libdir}/librgw.so
 %{_libdir}/librados.so
 
 #################################################################################
@@ -440,17 +427,6 @@ fi
 /sbin/ldconfig
 
 %postun -n librados2
-/sbin/ldconfig
-
-#################################################################################
-%files -n librgw1
-%defattr(-,root,root,-)
-%{_libdir}/librgw.so.*
-
-%post -n librgw1
-/sbin/ldconfig
-
-%postun -n librgw1
 /sbin/ldconfig
 
 #################################################################################
