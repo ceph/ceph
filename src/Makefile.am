@@ -1106,7 +1106,8 @@ libmds_a_SOURCES = \
 	mds/SnapServer.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
-	mds/MDLog.cc
+	mds/MDLog.cc \
+	osdc/Journaler.cc
 noinst_LIBRARIES += libmds.a
 
 libos_a_SOURCES = \
@@ -1139,8 +1140,7 @@ noinst_LIBRARIES += libosd.a
 libosdc_la_SOURCES = \
 	osdc/Objecter.cc \
 	osdc/ObjectCacher.cc \
-	osdc/Filer.cc \
-	osdc/Journaler.cc
+	osdc/Filer.cc
 libosdc_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libosdc_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libosdc.la
