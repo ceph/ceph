@@ -43,7 +43,7 @@ bin_PROGRAMS += ceph-mon
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA)
+ceph_osd_LDADD = libosd.a libos.la $(LIBGLOBAL_LDA)
 ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-osd
 
@@ -123,7 +123,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.a libmds.a libos.la libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -1122,7 +1122,7 @@ libos_la_LIBADD += -laio
 endif
 noinst_LTLIBRARIES += libos.la
 
-libosd_la_SOURCES = \
+libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
@@ -1131,9 +1131,8 @@ libosd_la_SOURCES = \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc
-libosd_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libosd_la_LIBADD = libglobal.la
-noinst_LTLIBRARIES += libosd.la
+libosd_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LIBRARIES += libosd.a
 
 libosdc_la_SOURCES = \
 	osdc/Objecter.cc \
