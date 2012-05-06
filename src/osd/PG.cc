@@ -4260,6 +4260,13 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   dout(10) << "In ReplicaActive, about to call activate" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   map< int, map< pg_t, pg_query_t> > query_map;
+
+  // we are replica; use current epoch as last_peering_reset to ensure
+  // that our info is not ignored by the primary later.  otherwise,
+  // our last_peering_reset may be earlier than the primary's, and
+  // they will ignore our message.
+  pg->last_peering_reset = pg->get_osdmap()->get_epoch();
+
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       *context< RecoveryMachine >().get_context_list(),
 	       query_map, NULL);
