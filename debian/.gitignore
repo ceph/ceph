@@ -21,9 +21,6 @@
 /librbd1
 /radosgw-dbg
 /radosgw
-/librgw-dev
-/librgw1
-/librgw1-dbg
 /gceph-dbg
 /gceph
 /obsync
