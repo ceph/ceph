@@ -23,7 +23,7 @@ overrides:
     btrfs: 1
     log-whitelist:
     - clocks not synchronized
-    - old request
+    - slow request
     branch: $ceph
 tasks:
 - chef:
