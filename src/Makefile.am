@@ -36,7 +36,7 @@ LIBGLOBAL_LDA = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
-ceph_mon_LDADD = libmon.la $(LIBGLOBAL_LDA)
+ceph_mon_LDADD = libmon.a $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-mon
 
@@ -123,7 +123,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.la
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -387,7 +387,7 @@ testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libmon.la $(LIBGLOBAL_LDA) 
+testkeys_LDADD = libmon.a $(LIBGLOBAL_LDA) 
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testkeys
 
@@ -1055,7 +1055,7 @@ endif
 
 
 
-libmon_la_SOURCES = \
+libmon_a_SOURCES = \
 	auth/cephx/CephxKeyServer.cc \
 	auth/cephx/CephxServiceHandler.cc \
 	auth/AuthServiceHandler.cc \
@@ -1071,9 +1071,8 @@ libmon_la_SOURCES = \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
-libmon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libmon_la_LIBADD = libglobal.la
-noinst_LTLIBRARIES += libmon.la
+libmon_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LIBRARIES += libmon.a
 
 libmds_a_SOURCES = \
 	mds/Dumper.cc \
