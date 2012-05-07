@@ -7,6 +7,8 @@ usr/bin/ceph-mon
 usr/bin/ceph-mds
 usr/bin/ceph-osd
 usr/bin/ceph-debugpack
+sbin/ceph-disk-prepare usr/sbin/
+sbin/ceph-disk-activate usr/sbin/
 sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 usr/lib/rados-classes/*
