@@ -41,6 +41,7 @@ boost::scoped_ptr<WorkloadGenerator> wrkldgen;
 
 WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
   : TestFileStoreState(NULL),
+    m_max_in_flight(def_max_in_flight),
     m_num_ops(-1),
     m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
     m_num_colls(def_num_colls),
@@ -69,7 +70,7 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
   err = m_store->mount();
   ceph_assert(err == 0);
 
-  set_max_in_flight(max_in_flight);
+  set_max_in_flight(m_max_in_flight);
   set_num_objs_per_coll(def_num_obj_per_coll);
 
   init(m_num_colls, 0);
@@ -152,6 +153,9 @@ void WorkloadGenerator::init_args(vector<const char*> args)
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-num-ops", (char*) NULL)) {
       m_num_ops = strtoll(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val,
+        "--test-max-in-flight", (char*) NULL)) {
+      m_max_in_flight = strtoll(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val,
         "--test-write-data-size", (char*) NULL)) {
       m_write_data_bytes = _parse_size_or_die(val);
@@ -519,6 +523,8 @@ Test-specific Options:\n\
                                       destroying a collection.\n\
   --test-num-ops VAL                  Run a certain number of operations\n\
                                       (a VAL of 0 runs the test forever)\n\
+   --test-max-in-flight VAL           Maximum number of in-flight transactions\n\
+                                      (default: 50)\n\
    --test-suppress-ops OPS            Suppress ops specified in OPS\n\
    --test-write-data-size SIZE        Specify SIZE for all data writes\n\
    --test-write-xattr-obj-size SIZE   Specify SIZE for all xattrs on objects\n\
@@ -556,7 +562,8 @@ int main(int argc, const char *argv[])
   argv_to_vec(argc, argv, args);
 
   global_init(&def_args, args,
-      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
