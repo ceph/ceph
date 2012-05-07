@@ -1217,7 +1217,6 @@ PG *OSD::_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
 
   PG *pg = _open_lock_pg(pgid, true, hold_map_lock);
 
-  assert(!store->collection_exists(coll_t(pgid)));
   t.create_collection(coll_t(pgid));
 
   if (newly_created) {
