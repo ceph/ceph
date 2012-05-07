@@ -700,6 +700,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_fiemap_threshold(g_conf->filestore_fiemap_threshold),
   m_filestore_sync_flush(g_conf->filestore_sync_flush),
   m_filestore_flusher_max_fds(g_conf->filestore_flusher_max_fds),
+  m_filestore_flush_min(g_conf->filestore_flush_min),
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   do_update(do_update),
@@ -3112,7 +3113,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     r = bl.length();
 
   // flush?
-  if (
+  if ((ssize_t)len < m_filestore_flush_min ||
 #ifdef HAVE_SYNC_FILE_RANGE
       !m_filestore_flusher || !queue_flusher(fd, offset, len)
 #else
@@ -4673,12 +4674,14 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("filestore_min_sync_interval") ||
       changed.count("filestore_max_sync_interval") ||
       changed.count("filestore_flusher_max_fds") ||
+      changed.count("filestore_flush_min") ||
       changed.count("filestore_kill_at")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
     m_filestore_flusher = conf->filestore_flusher;
     m_filestore_flusher_max_fds = conf->filestore_flusher_max_fds;
+    m_filestore_flush_min = conf->filestore_flush_min;
     m_filestore_sync_flush = conf->filestore_sync_flush;
     m_filestore_kill_at.set(conf->filestore_kill_at);
   }

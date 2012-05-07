@@ -485,6 +485,7 @@ private:
   int m_filestore_fiemap_threshold;
   bool m_filestore_sync_flush;
   int m_filestore_flusher_max_fds;
+  int m_filestore_flush_min;
   double m_filestore_max_sync_interval;
   double m_filestore_min_sync_interval;
   int do_update;
