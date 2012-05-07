@@ -50,8 +50,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this, osd->whoami, get_osdmap())
 static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMapRef osdmap) {
-  return *_dout << "osd." << whoami
-		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+  return *_dout << pg->gen_prefix();
 }
 
 
