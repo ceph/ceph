@@ -142,10 +142,6 @@ protected:
   PerfCounters      *logger;
   ObjectStore *store;
 
-  // cover OSDMap update data when using multiple msgrs
-  Cond *map_in_progress_cond;
-  bool map_in_progress;
-
   LogClient clog;
 
   int whoami;
@@ -442,7 +438,7 @@ private:
   
   void advance_pg(epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx);
   void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
-  void activate_map(ObjectStore::Transaction& t, list<Context*>& tfin);
+  void activate_map();
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
