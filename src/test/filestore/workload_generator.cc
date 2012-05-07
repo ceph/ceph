@@ -555,10 +555,10 @@ int main(int argc, const char *argv[])
 
   def_args.push_back("--osd-journal-size");
   def_args.push_back("400");
-  def_args.push_back("--osd-data");
-  def_args.push_back("workload_gen_dir");
-  def_args.push_back("--osd-journal");
-  def_args.push_back("workload_gen_dir/journal");
+//  def_args.push_back("--osd-data");
+//  def_args.push_back("workload_gen_dir");
+//  def_args.push_back("--osd-journal");
+//  def_args.push_back("workload_gen_dir/journal");
   argv_to_vec(argc, argv, args);
 
   global_init(&def_args, args,
