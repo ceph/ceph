@@ -26,7 +26,7 @@ typedef boost::mt11213b rngen_t;
 
 class WorkloadGenerator : public TestFileStoreState {
  public:
-  static const int max_in_flight = 50;
+  static const int def_max_in_flight = 50;
 
   static const int def_destroy_coll_every_nr_runs = 100;
   static const int def_num_obj_per_coll = 6000;
@@ -58,6 +58,7 @@ class WorkloadGenerator : public TestFileStoreState {
 
 
  protected:
+  int m_max_in_flight;
   int m_num_ops;
   int m_destroy_coll_every_nr_runs;
   atomic_t m_nr_runs;
