@@ -59,7 +59,6 @@ build-stamp: configure-stamp
 	  --sysconfdir=/etc $(extraopts) $(confflags)
 	$(MAKE)
 
-	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
 
@@ -104,6 +103,10 @@ binary-arch: build install
 	dh_install --sourcedir=$(DESTDIR) --list-missing
 	dh_installlogrotate
 	dh_installinit --no-start
+	# dh_installinit is only set up to handle one upstart script
+	# per package, so do this ourselves
+	install -d -m0755 debian/ceph/etc/init
+	install -m0644 src/upstart/*.conf debian/ceph/etc/init
 	dh_installman
 	dh_lintian
 	dh_link
