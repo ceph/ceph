@@ -1,6 +1,26 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf
-DIST_SUBDIRS = gtest ocf leveldb
+SUBDIRS = ocf libs3
+DIST_SUBDIRS = gtest ocf leveldb libs3
+
+EXTRA_DIST = \
+	libs3/COPYING \
+	libs3/ChangeLog \
+	libs3/GNUmakefile \
+	libs3/GNUmakefile.mingw \
+	libs3/GNUmakefile.osx \
+	libs3/INSTALL \
+	libs3/LICENSE \
+	libs3/README \
+	libs3/TODO \
+	libs3/archlinux \
+	libs3/debian \
+	libs3/doxyfile \
+	libs3/inc \
+	libs3/libs3.spec \
+	libs3/mswin \
+	libs3/src \
+	libs3/test
+
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
@@ -367,9 +387,26 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
-rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc
+rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/obj_bencher.cc
 rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
+
+if WITH_REST_BENCH
+
+rest_bench_SOURCES = tools/rest_bench.cc common/obj_bencher.cc
+rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rest_bench_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += rest-bench
+
+if WITH_SYSTEM_LIBS3
+rest_bench_LDADD += -ls3
+else
+rest_bench_LDADD += libs3/build/lib/libs3.a -lcurl -lxml2
+rest_bench_CXXFLAGS += -I$(top_srcdir)/src/libs3/inc
+SUBDIRS += libs3
+endif
+
+endif
 
 scratchtool_SOURCES = scratchtool.c
 scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -867,7 +904,8 @@ EXTRALIBS += -lgcov
 endif
 
 # extra bits
-EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
+EXTRA_DIST += \
+	$(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	ceph-run $(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
@@ -1221,6 +1259,7 @@ noinst_HEADERS = \
 	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
+	common/obj_bencher.h\
 	common/snap_types.h\
         common/Clock.h\
         common/Cond.h\
@@ -1557,7 +1596,6 @@ noinst_HEADERS = \
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\
-	osdc/rados_bencher.h\
         osdc/Blinker.h\
         osdc/Filer.h\
         osdc/Journaler.h\
@@ -1652,7 +1690,6 @@ uninstall-local: uninstall-coverage
 if WITH_DEBUG
 bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
 endif
-
 
 project.tgz: clean
 	cov-configure -co /usr/bin/gcc
