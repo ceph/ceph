@@ -5065,13 +5065,14 @@ void OSD::do_recovery(PG *pg)
 	recovery_wq.lock();
 	pg->recovery_item.remove_myself();	// sigh...
 	recovery_wq.unlock();
-
       }
     }
 
     do_notifies(notify_list, pg->get_osdmap()->get_epoch());  // notify? (residual|replica)
     do_queries(query_map);
     do_infos(info_map);
+
+    pg->write_if_dirty(*t);
 
     if (!t->empty()) {
       int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -5080,7 +5081,6 @@ void OSD::do_recovery(PG *pg)
       delete t;
       delete fin;
     }
-
     pg->unlock();
   }
   pg->put();
