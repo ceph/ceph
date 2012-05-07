@@ -12,14 +12,14 @@ EXTRA_DIST = \
 	libs3/LICENSE \
 	libs3/README \
 	libs3/TODO \
-	libs3/archlinux/ \
-	libs3/debian/ \
+	libs3/archlinux \
+	libs3/debian \
 	libs3/doxyfile \
-	libs3/inc/ \
+	libs3/inc \
 	libs3/libs3.spec \
-	libs3/mswin/ \
-	libs3/src/ \
-	libs3/test/
+	libs3/mswin \
+	libs3/src \
+	libs3/test
 
 CLEANFILES =
 bin_PROGRAMS =
