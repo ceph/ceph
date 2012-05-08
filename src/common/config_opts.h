@@ -375,9 +375,9 @@ OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= thi
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(rbd_cache, OPT_BOOL, false) // whether to enable writeback caching
-OPTION(rbd_cache_size, OPT_LONGLONG, 8<<20)         // cache size
-OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 6<<20)    // dirty limit
-OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 4<<20) // target dirty limit
+OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size
+OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit
+OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
