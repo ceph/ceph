@@ -411,10 +411,11 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 
 ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
 			   flush_set_callback_t flush_callback,
-			   void *flush_callback_arg)
+			   void *flush_callback_arg,
+			   uint64_t max_size, uint64_t max_dirty, uint64_t target_dirty, double max_dirty_age)
   : perfcounter(NULL),
     cct(cct_), writeback_handler(wb), name(name), lock(l),
-    max_dirty(0), target_dirty(0), max_size(0),
+    max_dirty(max_dirty), target_dirty(target_dirty), max_size(max_size), max_dirty_age(max_dirty_age),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0), stat_dirty_waiting(0)
@@ -1165,7 +1166,7 @@ void ObjectCacher::flusher_entry()
       else {
         // check tail of lru for old dirty items
         utime_t cutoff = ceph_clock_now(cct);
-        cutoff.sec_ref()--;
+	cutoff -= max_dirty_age;
         BufferHead *bh = 0;
         while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
                bh->last_write < cutoff) {

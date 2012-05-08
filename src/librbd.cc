@@ -147,10 +147,11 @@ namespace librbd {
 	ldout(cct, 20) << "enabling writback caching..." << dendl;
 	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
 	object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
-					 NULL, NULL);
-	object_cacher->set_max_size(cct->_conf->rbd_cache_size);
-	object_cacher->set_max_dirty(cct->_conf->rbd_cache_max_dirty);
-	object_cacher->set_target_dirty(cct->_conf->rbd_cache_target_dirty);
+					 NULL, NULL,
+					 cct->_conf->rbd_cache_size,
+					 cct->_conf->rbd_cache_max_dirty,
+					 cct->_conf->rbd_cache_target_dirty,
+					 cct->_conf->rbd_cache_max_dirty_age);
 	object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
 	object_cacher->start();
       }

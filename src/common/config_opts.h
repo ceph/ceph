@@ -153,6 +153,7 @@ OPTION(client_oc, OPT_BOOL, true)
 OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
 OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
 OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8) // target dirty (keep this smallish)
+OPTION(client_oc_max_dirty_age, OPT_DOUBLE, 5.0)      // max age in cache before writeback
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_big_writes, OPT_BOOL, true)
@@ -378,6 +379,7 @@ OPTION(rbd_cache, OPT_BOOL, false) // whether to enable writeback caching
 OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size
 OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit
+OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // age in cache before writeback starts
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
