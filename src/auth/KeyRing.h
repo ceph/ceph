@@ -22,7 +22,7 @@
 
 class md_config_t;
 
-class KeyRing {
+class KeyRing : public KeyStore {
   map<EntityName, EntityAuth> keys;
 
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
@@ -53,6 +53,10 @@ public:
       return false;
     secret = k->second.key;
     return true;
+  }
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id,
+			  CryptoKey& secret) const {
+    return false;
   }
 
   // modifiers
