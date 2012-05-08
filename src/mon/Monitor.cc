@@ -1923,8 +1923,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   auth_ticket_info.ticket.global_id = 0;
 
   CryptoKey secret;
-  if (!key_server.get_secret(name, secret)) {
-    dout(0) << " couldn't get secret for mon service" << dendl;
+  if (!keyring.get_secret(name, secret) &&
+      !key_server.get_secret(name, secret)) {
+    dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
     stringstream ss;
     key_server.list_secrets(ss);
     dout(0) << ss.str() << dendl;
@@ -1978,7 +1979,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(g_ceph_context, &key_server, iter,
+	int ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
 					  auth_ticket_info, authorizer_reply);
 	if (ret >= 0)
 	  isvalid = true;
