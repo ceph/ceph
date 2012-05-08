@@ -296,6 +296,7 @@ class ObjectCacher {
   Mutex& lock;
   
   int64_t max_dirty, target_dirty, max_size;
+  utime_t max_dirty_age;
 
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
@@ -463,7 +464,8 @@ class ObjectCacher {
 
   ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
-	       void *flush_callback_arg);
+	       void *flush_callback_arg,
+	       uint64_t max_size, uint64_t max_dirty, uint64_t target_dirty, double max_age);
   ~ObjectCacher();
 
   void start() {
@@ -532,6 +534,9 @@ public:
   }
   void set_max_size(int64_t v) {
     max_size = v;
+  }
+  void set_max_dirty_age(double a) {
+    max_dirty_age.set_from_double(a);
   }
 
   // file functions
