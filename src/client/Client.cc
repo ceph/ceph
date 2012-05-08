@@ -153,6 +153,9 @@ Client::Client(Messenger *m, MonClient *mc)
   objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this);
+  objectcacher->set_max_size(cct->_conf->client_oc_size);
+  objectcacher->set_max_dirty(cct->_conf->client_oc_max_dirty);
+  objectcacher->set_target_dirty(cct->_conf->client_oc_target_dirty);
   filer = new Filer(objecter);
 }
 
@@ -5311,12 +5314,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-    // wait? (this may block!)
-    objectcacher->wait_for_write(size, client_lock);
-    
     // async, caching, non-blocking.
     objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-			     offset, size, bl, ceph_clock_now(cct), 0);
+			     offset, size, bl, ceph_clock_now(cct), 0,
+			     client_lock);
 
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
   } else {

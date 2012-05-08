@@ -148,6 +148,9 @@ namespace librbd {
 	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
 	object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 					 NULL, NULL);
+	object_cacher->set_max_size(cct->_conf->rbd_cache_size);
+	object_cacher->set_max_dirty(cct->_conf->rbd_cache_max_dirty);
+	object_cacher->set_target_dirty(cct->_conf->rbd_cache_target_dirty);
 	object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
 	object_cacher->start();
       }
@@ -288,8 +291,7 @@ namespace librbd {
       wr->extents.push_back(extent);
       {
 	Mutex::Locker l(cache_lock);
-	object_cacher->wait_for_write(len, cache_lock);
-	object_cacher->writex(wr, object_set);
+	object_cacher->writex(wr, object_set, cache_lock);
       }
     }
 
