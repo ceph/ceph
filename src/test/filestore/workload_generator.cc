@@ -50,7 +50,7 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
     m_suppress_write_data(false), m_suppress_write_xattr_obj(false),
     m_suppress_write_xattr_coll(false), m_suppress_write_log(false),
     m_do_stats(false),
-    m_stats_written_data(0), m_stats_duration(0), m_stats_lock("Stats Lock"),
+    m_stats_written_data(0), m_stats_duration(), m_stats_lock("Stats Lock"),
     m_stats_show_secs(5)
 {
   int err = 0;
@@ -373,11 +373,8 @@ void WorkloadGenerator::run()
   bool create_coll = false;
   int ops_run = 0;
 
-  struct timeval time_elapsed;
-  if (gettimeofday(&time_elapsed, NULL) < 0) {
-    dout(0) << __func__ << " gettimeofday error: " << strerror(errno) << dendl;
-    exit(1);
-  }
+  utime_t stats_interval(m_stats_show_secs, 0);
+  utime_t stats_time = ceph_clock_now(NULL);
 
   do {
     C_StatState *stat_state = NULL;
@@ -402,45 +399,29 @@ void WorkloadGenerator::run()
     bool destroy_collection = false;
     TestFileStoreState::coll_entry_t *entry = NULL;
 
-    int ret;
-    struct timeval tv_begin;
-    ret = gettimeofday(&tv_begin, NULL);
-    if (ret < 0) {
-      dout(0) << __func__ << " gettimeofday error: " << strerror(errno) << dendl;
-      exit(1);
-    }
 
     if (m_do_stats) {
-      if (_diff_tvs(tv_begin, time_elapsed) > (m_stats_show_secs * 1000000)) {
+      utime_t now = ceph_clock_now(NULL);
+      utime_t elapsed = now - stats_time;
+      if (elapsed >= stats_interval) {
         m_stats_lock.Lock();
-        double duration = m_stats_duration / 1000000; // to secs
-        double throughput = (m_stats_written_data / duration);
 
-        dout(0) << __func__ << " written data: " << m_stats_written_data << " duration: " << m_stats_duration << dendl;
+        // when cast to double, a utime_t behaves properly
+        double throughput = (m_stats_written_data / ((double) m_stats_duration));
 
-        string unit;
+        dout(0) << __func__ << " written data: " << m_stats_written_data
+            << " duration: " << m_stats_duration << dendl;
+        dout(0) << "Throughput  " << prettybyte_t(throughput) << "/s" << dendl;
 
-        // this is a bit ugly. an alternative should be pursued.
-        if (throughput < (1 << 10)) {
-          unit = "B";
-        } else if (throughput < (1 << 20)) {
-          unit = "KB";
-          throughput /= (1 << 10);
-        } else {
-          unit = "MB";
-          throughput /= (1 << 20);
-        }
-
-        dout(0) << "Throughput  " << throughput << " " << unit << "/s" << dendl;
-
-        m_stats_written_data = m_stats_duration = 0;
+        m_stats_written_data = 0;
+        m_stats_duration = utime_t();
 
         m_stats_lock.Unlock();
 
-        gettimeofday(&time_elapsed, NULL);
+        stats_time = now;
       }
 
-      stat_state = new C_StatState(this, tv_begin);
+      stat_state = new C_StatState(this, now);
     }
 
     if (create_coll) {
