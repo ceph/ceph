@@ -154,7 +154,6 @@ OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
 OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
 OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8) // target dirty (keep this smallish)
 // note: the max amount of "in flight" dirty data is roughly (max - target)
-OPTION(client_oc_max_sync_write, OPT_U64, 128*1024)   // sync writes >= this use wrlock
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
@@ -376,6 +375,9 @@ OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= thi
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(rbd_cache, OPT_BOOL, false) // whether to enable writeback caching
+OPTION(rbd_cache_size, OPT_LONGLONG, 8<<20)         // cache size
+OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 6<<20)    // dirty limit
+OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 4<<20) // target dirty limit
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi

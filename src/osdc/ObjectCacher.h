@@ -224,6 +224,23 @@ class ObjectCacher {
 	dirty_or_tx == 0;
     }
 
+    /**
+     * find first buffer that includes or follows an offset
+     *
+     * @param offset object byte offset
+     * @return iterator pointing to buffer, or data.end()
+     */
+    map<loff_t,BufferHead*>::iterator data_lower_bound(loff_t offset) {
+      map<loff_t,BufferHead*>::iterator p = data.lower_bound(offset);
+      if (p != data.begin() &&
+	  (p == data.end() || p->first > offset)) {
+	p--;     // might overlap!
+	if (p->first + p->second->length() <= offset)
+	  p++;   // doesn't overlap.
+      }
+      return p;
+    }
+
     // bh
     // add to my map
     void add_bh(BufferHead *bh) {
@@ -278,6 +295,8 @@ class ObjectCacher {
   string name;
   Mutex& lock;
   
+  int64_t max_dirty, target_dirty, max_size;
+
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
 
@@ -315,13 +334,13 @@ class ObjectCacher {
 
   // bh stats
   Cond  stat_cond;
-  int   stat_waiter;
 
   loff_t stat_clean;
   loff_t stat_dirty;
   loff_t stat_rx;
   loff_t stat_tx;
   loff_t stat_missing;
+  loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
   void verify_stats() const;
 
@@ -330,6 +349,7 @@ class ObjectCacher {
   loff_t get_stat_tx() { return stat_tx; }
   loff_t get_stat_rx() { return stat_rx; }
   loff_t get_stat_dirty() { return stat_dirty; }
+  loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
   loff_t get_stat_clean() { return stat_clean; }
 
   void touch_bh(BufferHead *bh) {
@@ -365,7 +385,18 @@ class ObjectCacher {
   void trim(loff_t max=-1);
   void flush(loff_t amount=0);
 
-  bool flush(Object *o);
+  /**
+   * flush a range of buffers
+   *
+   * Flush any buffers that intersect the specified extent.  If len==0,
+   * flush *all* buffers for the object.
+   *
+   * @param o object
+   * @param off start offset
+   * @param len extent length, or 0 for entire object
+   * @return true if object was already clean/flushed.
+   */
+  bool flush(Object *o, loff_t off, loff_t len);
   loff_t release(Object *o);
   void purge(Object *o);
 
@@ -468,16 +499,19 @@ class ObjectCacher {
 
   // non-blocking.  async.
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
-  int writex(OSDWrite *wr, ObjectSet *oset);
+  int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
 
+private:
   // write blocking
-  bool wait_for_write(uint64_t len, Mutex& lock);
+  int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock);
   
+public:
   bool set_is_cached(ObjectSet *oset);
   bool set_is_dirty_or_committing(ObjectSet *oset);
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
+  bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
   bool commit_set(ObjectSet *oset, Context *oncommit);
@@ -488,6 +522,17 @@ class ObjectCacher {
   uint64_t release_all();
 
   void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+
+  // cache sizes
+  void set_max_dirty(int64_t v) {
+    max_dirty = v;
+  }
+  void set_target_dirty(int64_t v) {
+    target_dirty = v;
+  }
+  void set_max_size(int64_t v) {
+    max_size = v;
+  }
 
   // file functions
 
@@ -511,10 +556,11 @@ class ObjectCacher {
 
   int file_write(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, uint64_t len, 
-                 bufferlist& bl, utime_t mtime, int flags) {
+                 bufferlist& bl, utime_t mtime, int flags,
+		 Mutex& wait_on_lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     Filer::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
-    return writex(wr, oset);
+    return writex(wr, oset, wait_on_lock);
   }
 };
 
