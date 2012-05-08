@@ -152,10 +152,11 @@ Client::Client(Messenger *m, MonClient *mc)
   writeback_handler = new ObjecterWriteback(objecter);
   objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
-				  (void*)this);
-  objectcacher->set_max_size(cct->_conf->client_oc_size);
-  objectcacher->set_max_dirty(cct->_conf->client_oc_max_dirty);
-  objectcacher->set_target_dirty(cct->_conf->client_oc_target_dirty);
+				  (void*)this,
+				  cct->_conf->client_oc_size,
+				  cct->_conf->client_oc_max_dirty,
+				  cct->_conf->client_oc_target_dirty,
+				  cct->_conf->client_oc_max_dirty_age);
   filer = new Filer(objecter);
 }
 
