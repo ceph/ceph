@@ -44,17 +44,13 @@ class WorkloadGenerator : public TestFileStoreState {
   static const size_t log_append_bytes = 1024;
 
   struct C_StatState {
-    struct timeval tv_start;
+    utime_t start;
     unsigned int written_data;
     WorkloadGenerator *wrkldgen;
 
-    C_StatState(WorkloadGenerator *state, struct timeval start)
-      : tv_start(start), written_data(0), wrkldgen(state) { }
+    C_StatState(WorkloadGenerator *state, utime_t s)
+      : start(s), written_data(0), wrkldgen(state) { }
   };
-
-  static unsigned long long _diff_tvs(struct timeval& a, struct timeval& b) {
-    return (((a.tv_sec*1000000)+a.tv_usec) - ((b.tv_sec*1000000)+b.tv_usec));
-  }
 
 
  protected:
@@ -82,7 +78,7 @@ class WorkloadGenerator : public TestFileStoreState {
   bool m_do_stats;
 
   size_t m_stats_written_data;
-  unsigned long long m_stats_duration;
+  utime_t m_stats_duration;
   Mutex m_stats_lock;
   int m_stats_show_secs;
 
@@ -165,17 +161,11 @@ public:
     void finish(int r) {
       ctx->finish(r);
 
-      struct timeval tv_end;
-      int ret = gettimeofday(&tv_end, NULL);
-      if (ret < 0) {
-        cout << "error on gettimeofday" << std::endl;
-        _exit(1);
-      }
-
-      unsigned long long usec_taken = _diff_tvs(tv_end, stat_state->tv_start);
+      utime_t end = ceph_clock_now(NULL);
+      utime_t taken = end - stat_state->start;
 
       stat_state->wrkldgen->m_stats_lock.Lock();
-      stat_state->wrkldgen->m_stats_duration += usec_taken;
+      stat_state->wrkldgen->m_stats_duration += taken;
       stat_state->wrkldgen->m_stats_written_data += stat_state->written_data;
       stat_state->wrkldgen->m_stats_lock.Unlock();
     }
