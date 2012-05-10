@@ -54,9 +54,6 @@ public:
   utime_t(const struct timeval *v) {
     set_from_timeval(v);
   }
-  explicit utime_t(double d) {
-    set_from_double(d);
-  }
   void to_timespec(struct timespec *ts) const {
     ts->tv_sec = tv.tv_sec;
     ts->tv_nsec = tv.tv_nsec;
