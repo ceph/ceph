@@ -172,6 +172,12 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
     // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
     adjust_item_weightf(cct, item, weight);
+
+    if (item >= crush->max_devices) {
+      crush->max_devices = item + 1;
+      ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices << dendl;
+    }
+
     return 0;
   }
 
