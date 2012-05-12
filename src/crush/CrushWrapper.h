@@ -471,7 +471,7 @@ public:
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0]);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size());
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
