@@ -103,6 +103,7 @@ int main (int argc, char **argv) {
     layout.object_size = object_size;
     layout.stripe_count = stripe_count;
     layout.stripe_unit = stripe_unit;
+    layout.unused = -1;   /* used to be preferred_osd */
     err = ioctl(fd, ioctl_num, (unsigned long)&layout);
     if (err) {
       cerr << "Error setting layout: " 
