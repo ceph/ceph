@@ -474,7 +474,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  r = -ENOENT;
 	} else {
 	  keyring.add(entity, entity_auth);
-	  ::encode(keyring, rdata);
+	  keyring.encode_plaintext(rdata);
 	  ss << "exported keyring for " << m->cmd[2];
 	  r = 0;
 	}
