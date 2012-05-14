@@ -314,6 +314,7 @@ EOF
 			if [ $overwrite_conf -eq 1 ]; then
 				cat <<EOF >> $conf
 [mon.$f]
+        host = $HOSTNAME
         mon data = dev/mon.$f
         mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
@@ -352,6 +353,7 @@ if [ "$start_osd" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 		    cat <<EOF >> $conf
 [osd.$osd]
+        host = $HOSTNAME
         osd data = dev/osd$osd
         osd journal = dev/osd$osd.journal
         osd journal size = 100
@@ -396,6 +398,7 @@ if [ "$start_mds" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 	    	cat <<EOF >> $conf
 [mds.$name]
+        host = $HOSTNAME
 EOF
 		if [ "$cephx" -eq 1 ]; then
 	    	    cat <<EOF >> $conf
