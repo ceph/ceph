@@ -816,6 +816,22 @@ ceph_object_layout OSDMap::make_object_layout(object_t oid, int pg_pool) const
   return ol;
 }
 
+void OSDMap::_remove_nonexistent_osds(vector<int>& osds) const
+{
+  unsigned removed = 0;
+  for (unsigned i = 0; i < osds.size(); i++) {
+    if (!exists(osds[i])) {
+      removed++;
+      continue;
+    }
+    if (removed) {
+      osds[i - removed] = osds[i];
+    }
+  }
+  if (removed)
+    osds.resize(osds.size() - removed);
+}
+
 int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
 {
   // map to osds[]
@@ -826,7 +842,9 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
   int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
   if (ruleno >= 0)
     crush->do_rule(ruleno, pps, osds, size, osd_weight);
-  
+
+  _remove_nonexistent_osds(osds);
+
   return osds.size();
 }
 
