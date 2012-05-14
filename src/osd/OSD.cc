@@ -1236,7 +1236,8 @@ bool OSD::_have_pg(pg_t pgid)
 PG *OSD::_lookup_lock_pg(pg_t pgid)
 {
   assert(osd_lock.is_locked());
-  assert(pg_map.count(pgid));
+  if (!pg_map.count(pgid))
+    return NULL;
   PG *pg = pg_map[pgid];
   pg->lock();
   return pg;
