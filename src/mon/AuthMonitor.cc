@@ -431,8 +431,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
 	m->cmd[1] == "get-or-create" ||
-	m->cmd[1] == "caps" ||
-        m->cmd[1] == "list") {
+	m->cmd[1] == "caps") {
       return false;
     }
     else if (m->cmd[1] == "export") {
@@ -497,6 +496,11 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
       }
       ss << auth.key;
       r = 0;      
+    }
+    else if (m->cmd[1] == "list") {
+      mon->key_server.list_secrets(ss);
+      r = 0;
+      goto done;
     }
     else {
       auth_usage(ss);
@@ -709,11 +713,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
-    }
-    else if (m->cmd[1] == "list") {
-      mon->key_server.list_secrets(ss);
-      err = 0;
-      goto done;
     }
     else {
       auth_usage(ss);
