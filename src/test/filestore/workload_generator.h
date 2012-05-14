@@ -77,6 +77,7 @@ class WorkloadGenerator : public TestFileStoreState {
 
   bool m_do_stats;
 
+  int m_stats_finished_txs;
   size_t m_stats_written_data;
   utime_t m_stats_duration;
   Mutex m_stats_lock;
@@ -167,6 +168,7 @@ public:
       stat_state->wrkldgen->m_stats_lock.Lock();
       stat_state->wrkldgen->m_stats_duration += taken;
       stat_state->wrkldgen->m_stats_written_data += stat_state->written_data;
+      stat_state->wrkldgen->m_stats_finished_txs ++;
       stat_state->wrkldgen->m_stats_lock.Unlock();
     }
   };
