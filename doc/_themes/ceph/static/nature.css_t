@@ -36,8 +36,7 @@
 }
  
 body {
-    font-family: 12px/1.2 Helvetica, Arial, sans-serif;
-    font-size: 100%;
+    font: 12px/1.2 Helvetica, Arial, sans-serif;
     background-color: #E6E8E8;
     color: #37424A;
     margin: 0;
@@ -59,14 +58,14 @@ hr {
 }
  
 div.document {
-    background-color: #e6e8e8;
+    background-color: #ffffff;
 }
  
 div.body {
     background-color: #ffffff;
     color: #3E4349;
     padding: 0 30px 30px 30px;
-    font-size: 0.9em;
+    // font-size: 0.9em;
 }
  
 div.footer {
@@ -87,7 +86,7 @@ div.related {
     line-height: 32px;
     color: #37424A;
     // text-shadow: 0px 1px 0 #444;
-    font-size: 0.9em;
+    font-size: 100%;
     border-top: #9C4850 5px solid;
 }
  
@@ -102,12 +101,13 @@ div.related a:hover {
 }
  
 div.sphinxsidebar {
-    font-size: 0.75em;
+    font-size: 100%;
     line-height: 1.5em;
 }
 
 div.sphinxsidebarwrapper{
     padding: 20px 0;
+    background-color: #efefef;
 }
  
 div.sphinxsidebar h3,
@@ -119,7 +119,8 @@ div.sphinxsidebar h4 {
     margin: 0;
     padding: 5px 10px;
     background-color: #5e6a71;
-    // text-shadow: 1px 1px 0 white
+    // text-shadow: 1px 1px 0 white;
+    text-transform: uppercase;
 }
 
 div.sphinxsidebar h4{
@@ -187,11 +188,11 @@ div.body h6 {
     text-transform: uppercase;
 }
  
-div.body h1 { font-size: 18px/1.8; font-family: ApexSansBook; color: #37424A; border-top: 20px solid white; margin-top: 0; }
-div.body h2 { font-size: 14px/1.4; font-family: ApexSansMedium; color: #37424A; }
-div.body h3 { font-size: 14px/1.4; font-family: ApexSansMedium; color: #37424A; }
-div.body h4 { font-size: 14px/1.4; font-family: Helvetica, Arial, sans-serif;  color: #37424A; }
-div.body h5 { font-size: 12px/1.2; font-family: Helvetica, Arial, sans-serif;  color: #37424A; }
+div.body h1 { font: 18px/1.8 ApexSansBook; color: #37424A; border-top: 20px solid white; margin-top: 0; }
+div.body h2 { font: 14px/1.4 ApexSansMedium; color: #37424A; }
+div.body h3 { font: 14px/1.4 ApexSansMedium; color: #37424A; }
+div.body h4 { font: 14px/1.4 Helvetica, Arial, sans-serif;  color: #37424A; }
+div.body h5 { font: 12px/1.2 Helvetica, Arial, sans-serif;  color: #37424A; }
 div.body h6 { font-size: 100%; color: #37424A; }
 
 // div.body h2 { font-size: 150%; background-color: #E6E8E8; color: #37424A; }
