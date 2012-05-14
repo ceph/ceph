@@ -50,6 +50,7 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
     m_suppress_write_data(false), m_suppress_write_xattr_obj(false),
     m_suppress_write_xattr_coll(false), m_suppress_write_log(false),
     m_do_stats(false),
+    m_stats_finished_txs(0),
     m_stats_written_data(0), m_stats_duration(), m_stats_lock("WorldloadGenerator::m_stats_lock"),
     m_stats_show_secs(5)
 {
@@ -408,11 +409,14 @@ void WorkloadGenerator::run()
 
         // when cast to double, a utime_t behaves properly
         double throughput = (m_stats_written_data / ((double) m_stats_duration));
+        double tx_throughput (m_stats_finished_txs / ((double) m_stats_duration));
 
         dout(0) << __func__ << " written data: " << m_stats_written_data
             << " duration: " << m_stats_duration << dendl;
-        dout(0) << "Throughput  " << prettybyte_t(throughput) << "/s" << dendl;
+        dout(0) << "Throughput bandwidth " << prettybyte_t(throughput) << "/s"
+            << " transactions " << tx_throughput << "/s" << dendl;
 
+        m_stats_finished_txs = 0;
         m_stats_written_data = 0;
         m_stats_duration = utime_t();
 
