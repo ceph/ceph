@@ -1757,8 +1757,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
-	// osd crush update <id> <name> <weight> [<loc1> [<loc2> ...]]
+	// osd crush set <id> <name> <weight> [<loc1> [<loc2> ...]]
 	int id = atoi(m->cmd[3].c_str());
+	if (!osdmap.exists(id)) {
+	  err = -ENOENT;
+	  ss << "osd." << id << " does not exist.  create it before updating the crush map";
+	  goto out;
+	}
+
 	string name = m->cmd[4];
 	float weight = atof(m->cmd[5].c_str());
 	map<string,string> loc;
