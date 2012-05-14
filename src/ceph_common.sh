@@ -39,25 +39,28 @@ check_host() {
     rootssh=""
     sshdir=$PWD
     get_conf user "" "user"
-    if [ -n "$host" ]; then
-	#echo host for $name is $host, i am $hostname
-	if [ "$host" != "$hostname" ]; then
-	    # skip, unless we're starting remote daemons too
-	    if [ $allhosts -eq 0 ]; then
-		return 1
-	    fi
 
-	    # we'll need to ssh into that host
-	    if [ -z "$user" ]; then
-		ssh="ssh $host"
-	    else
-		ssh="ssh $user@$host"
-	    fi
-	    rootssh="ssh root@$host"
-	    get_conf sshdir "$sshdir" "ssh path"
+    #echo host for $name is $host, i am $hostname
+
+    # ignore all sections without 'host' defined
+    if [ -z "$host" ]; then
+	return 1
+    fi
+
+    if [ "$host" != "$hostname" ]; then
+	# skip, unless we're starting remote daemons too
+	if [ $allhosts -eq 0 ]; then
+	    return 1
 	fi
-    else
-	host=$hostname
+
+	# we'll need to ssh into that host
+	if [ -z "$user" ]; then
+	    ssh="ssh $host"
+	else
+	    ssh="ssh $user@$host"
+	fi
+	rootssh="ssh root@$host"
+	get_conf sshdir "$sshdir" "ssh path"
     fi
 
     echo "=== $type.$id === "
