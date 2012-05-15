@@ -63,6 +63,9 @@ public:
   void add(const EntityName& name, EntityAuth &a) {
     keys[name] = a;
   }
+  void remove(const EntityName& name) {
+    keys.erase(name);
+  }
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {
     keys[name].caps = caps;
   }

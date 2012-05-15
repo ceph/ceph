@@ -39,6 +39,7 @@
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthSupported.h"
+#include "auth/KeyRing.h"
 
 #include "perfglue/heap_profiler.h"
 
@@ -111,6 +112,7 @@ public:
   MonMap *monmap;
 
   LogClient clog;
+  KeyRing keyring;
   KeyServer key_server;
 
   AuthSupported auth_supported;
@@ -339,11 +341,13 @@ public:
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
+  void extract_save_mon_key(KeyRing& keyring);
+
  public:
   Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
 
-  void init();
+  int init();
   void shutdown();
   void tick();
 
