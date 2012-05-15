@@ -7,29 +7,31 @@
 
 #include "common/Formatter.h"
 
+#include "include/ceph_features.h"
+
 using ceph::Formatter;
 
-void MonMap::encode(bufferlist& blist) const
+void MonMap::encode(bufferlist& blist, uint64_t features) const
 {
+  if ((features & CEPH_FEATURE_MONNAMES) == 0) {
+    __u16 v = 1;
+    ::encode(v, blist);
+    ::encode_raw(fsid, blist);
+    ::encode(epoch, blist);
+    vector<entity_inst_t> mon_inst(mon_addr.size());
+    for (unsigned n = 0; n < mon_addr.size(); n++)
+      mon_inst[n] = get_inst(n);
+    ::encode(mon_inst, blist);
+    ::encode(last_changed, blist);
+    ::encode(created, blist);
+    return;
+  }
+
   __u16 v = 2;
   ::encode(v, blist);
   ::encode_raw(fsid, blist);
   ::encode(epoch, blist);
   ::encode(mon_addr, blist);
-  ::encode(last_changed, blist);
-  ::encode(created, blist);
-}
-
-void MonMap::encode_v1(bufferlist& blist) const
-{
-  __u16 v = 1;
-  ::encode(v, blist);
-  ::encode_raw(fsid, blist);
-  ::encode(epoch, blist);
-  vector<entity_inst_t> mon_inst(mon_addr.size());
-  for (unsigned n = 0; n < mon_addr.size(); n++)
-    mon_inst[n] = get_inst(n);
-  ::encode(mon_inst, blist);
   ::encode(last_changed, blist);
   ::encode(created, blist);
 }
@@ -72,7 +74,7 @@ int MonMap::write(const char *fn)
 {
   // encode
   bufferlist bl;
-  encode(bl);
+  encode(bl, -1);
   
   return bl.write_file(fn);
 }
