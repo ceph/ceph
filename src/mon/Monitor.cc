@@ -524,7 +524,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
   r->name = name;
   r->quorum = quorum;
-  monmap->encode(r->monmap_bl, -1);
+  monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
