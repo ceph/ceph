@@ -189,7 +189,7 @@ div.body h6 {
 }
  
 div.body h1 { font: 18px/1.8 ApexSansBook; color: #37424A; border-top: 20px solid white; margin-top: 0; }
-div.body h2 { font: 14px/1.4 ApexSansMedium; color: #37424A; }
+div.body h2 { font: 16px/1.6 ApexSansMedium; background-color: #5E6A71; color: #E6E8E8; padding: 5px 10px; }
 div.body h3 { font: 14px/1.4 ApexSansMedium; color: #37424A; }
 div.body h4 { font: 14px/1.4 Helvetica, Arial, sans-serif;  color: #37424A; }
 div.body h5 { font: 12px/1.2 Helvetica, Arial, sans-serif;  color: #37424A; }
@@ -259,7 +259,7 @@ pre {
     line-height: 1.2em;
     border: 1px solid #5e6a71;
     font-size: 1.1em;
-    margin: 1.5em 0 1.5em 0;
+    margin: 1.5em;
     -webkit-box-shadow: 1px 1px 1px #e6e8e8;
     -moz-box-shadow: 1px 1px 1px #e6e8e8;
 }
@@ -280,4 +280,8 @@ div.viewcode-block:target {
     background-color: #f4debf;
     border-top: 1px solid #ac9;
     border-bottom: 1px solid #ac9;
+}
+
+table.docutils {
+    margin: 1.5em;
 }
