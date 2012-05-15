@@ -524,7 +524,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
   r->name = name;
   r->quorum = quorum;
-  monmap->encode(r->monmap_bl);
+  monmap->encode(r->monmap_bl, -1);
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
@@ -1722,10 +1722,7 @@ void Monitor::check_sub(Subscription *sub)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
-  if (!con->has_feature(CEPH_FEATURE_MONNAMES))
-    monmap->encode_v1(bl);
-  else
-    monmap->encode(bl);
+  monmap->encode(bl, con->get_features());
   messenger->send_message(new MMonMap(bl), con);
 }
 
@@ -1828,7 +1825,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
-  monmap->encode(monmapbl);
+  monmap->encode(monmapbl, -1);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
