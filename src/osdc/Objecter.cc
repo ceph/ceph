@@ -246,7 +246,7 @@ void Objecter::shutdown()
   }
 }
 
-void Objecter::send_linger(LingerOp *info)
+void Objecter::send_linger(LingerOp *info, bool first_send)
 {
   if (!info->registering) {
     ldout(cct, 15) << "send_linger " << info->linger_id << dendl;
@@ -264,7 +264,13 @@ void Objecter::send_linger(LingerOp *info)
 	linger_check_for_latest_map(info);
       }
     }
-    op_submit(o, info->session);
+
+    if (first_send) {
+      op_submit(o, info->session);
+    } else {
+      _op_submit(o, info->session);
+    }
+
     OSDSession *s = o->session;
     if (info->session != s) {
       info->session_item.remove_myself();
@@ -342,7 +348,7 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
 
   logger->set(l_osdc_linger_active, linger_ops.size());
 
-  send_linger(info);
+  send_linger(info, true);
 
   return info->linger_id;
 }
@@ -544,7 +550,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     LingerOp *op = *p;
     if (op->session) {
       logger->inc(l_osdc_linger_resend);
-      send_linger(op);
+      send_linger(op, false);
     }
   }
 
@@ -749,7 +755,7 @@ void Objecter::kick_requests(OSDSession *session)
   // resend lingers
   for (xlist<LingerOp*>::iterator j = session->linger_ops.begin(); !j.end(); ++j) {
     logger->inc(l_osdc_linger_resend);
-    send_linger(*j);
+    send_linger(*j, false);
   }
 }
 
@@ -863,6 +869,11 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
 
+  return _op_submit(op, s);
+}
+
+tid_t Objecter::_op_submit(Op *op, OSDSession *s)
+{
   // pick tid
   tid_t mytid = ++last_tid;
   op->tid = mytid;
@@ -1288,7 +1299,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (!op->onack && !op->oncommit) {
     op->session_item.remove_myself();
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
-    put_op_budget(op);
+    if (op->budgeted)
+      put_op_budget(op);
     ops.erase(tid);
     logger->set(l_osdc_op_active, ops.size());
     if (op->con)
