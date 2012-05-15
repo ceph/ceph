@@ -319,8 +319,9 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
 	    p--;  // move iterator back to final
 	    assert(p->second == final);
             merge_left(final, bh);
-	  } else
+	  } else {
             final = bh;
+	  }
         }
         
         // keep going.
@@ -707,10 +708,8 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 		<< oid 
 		<< " tid " << tid
 		<< " " << start << "~" << length
+		<< " returned " << r
 		<< dendl;
-  if (r < 0) {
-    // TODO: handle write error
-  }
 
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
@@ -744,12 +743,19 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
         ldout(cct, 10) << "bh_write_commit newer tid on " << *bh << dendl;
         continue;
       }
-      
-      // ok!  mark bh clean.
-      mark_clean(bh);
-      ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
+
+      if (r >= 0) {
+	// ok!  mark bh clean and error-free
+	mark_clean(bh);
+	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
+      } else {
+	mark_dirty(bh);
+	ldout(cct, 10) << "bh_write_commit marking dirty again due to error "
+		       << *bh << " r = " << r << " " << cpp_strerror(-r)
+		       << dendl;
+      }
     }
-    
+
     // update last_commit.
     assert(ob->last_commit_tid < tid);
     ob->last_commit_tid = tid;
@@ -759,7 +765,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_commit[tid]);
       ob->waitfor_commit.erase(tid);
-      finish_contexts(cct, ls);
+      finish_contexts(cct, ls, r);
     }
 
     // is the entire object set now clean and fully committed?
