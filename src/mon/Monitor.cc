@@ -1141,7 +1141,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client = req->get_source_inst();
-    encode_message(req, -1, rr->request_bl);   // for my use only; use all features
+    encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
@@ -1207,7 +1207,7 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(m, -1, bl);  // fixme: assume peers have all features we do.
+  encode_message(m, CEPH_FEATURES_ALL, bl);  // fixme: assume peers have all features we do.
 
   messenger->send_message(m, to);
 
@@ -1825,7 +1825,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
-  monmap->encode(monmapbl, -1);
+  monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
