@@ -402,15 +402,20 @@ done_img:
 }
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, int *order, const char *path)
+		     const char *imgname, int *order, const char *path,
+		     int64_t size)
 {
-  int fd = open(path, O_RDONLY);
-  int r;
-  int64_t size = 0;
+  int fd, r;
   struct stat stat_buf;
   string md_oid;
   struct fiemap *fiemap;
   MyProgressContext pc("Importing image");
+
+  if (! strcmp(path, "-")) {
+    fd = 0;
+  } else {
+    fd = open(path, O_RDONLY);
+  }
 
   if (fd < 0) {
     r = -errno;
@@ -424,7 +429,9 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     cerr << "stat error " << path << std::endl;
     return r;
   }
-  size = (uint64_t)stat_buf.st_size;
+  if (stat_buf.st_size)
+    size = (uint64_t)stat_buf.st_size;
+
   if (!size) {
     r = get_block_device_size(fd, &size);
     if (r < 0) {
@@ -505,7 +512,12 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       while (cur_seg) {
         bufferptr p(cur_seg);
         //cerr << "reading " << cur_seg << " bytes at offset " << file_pos << std::endl;
-        ssize_t rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), cur_seg, file_pos));
+	ssize_t rval;
+	if(extent == 0 && fiemap->fm_extents[extent].fe_logical == 0) {
+	  rval = TEMP_FAILURE_RETRY(::read(fd, p.c_str(), cur_seg));
+	} else {
+	  rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), cur_seg, file_pos));
+	}
         if (rval < 0) {
           r = -errno;
           cerr << "error reading file: " << cpp_strerror(r) << std::endl;
@@ -1303,7 +1315,7 @@ int main(int argc, const char **argv)
       cerr << "pathname should be specified" << std::endl;
       exit(1);
     }
-    r = do_import(rbd, dest_io_ctx, destname, &order, path);
+    r = do_import(rbd, dest_io_ctx, destname, &order, path, size);
     if (r < 0) {
       cerr << "import failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
