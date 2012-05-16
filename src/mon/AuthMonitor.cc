@@ -480,7 +480,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	}
       }
     }
-    else if ((m->cmd[1] == "print-key" || m->cmd[1] == "print_key") &&
+    else if ((m->cmd[1] == "print-key" || m->cmd[1] == "print_key" || m->cmd[1] == "get-key") &&
 	     m->cmd.size() == 3) {
       EntityName ename;
       if (!ename.from_str(m->cmd[2])) {
