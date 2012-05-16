@@ -22,11 +22,11 @@ image::
 
     rbd_inst = rbd.RBD()
     size = 4 * 1024 * 1024  # 4 GiB
-    rbd_inst.create('myimage', 4)
+    rbd_inst.create(ioctx, 'myimage', 4)
 
 To perform I/O on the image, you instantiate an :class:rbd.Image object::
 
-    image = rbd.Image('myimage')
+    image = rbd.Image(ioctx, 'myimage')
     data = 'foo' * 200
     image.write(data, 0)
 
@@ -49,8 +49,8 @@ block::
         try:
             rbd_inst = rbd.RBD()
             size = 4 * 1024 * 1024  # 4 GiB
-            rbd_inst.create('myimage', 4)
-            image = rbd.Image('myimage')
+            rbd_inst.create(ioctx, 'myimage', 4)
+            image = rbd.Image(ioctx, 'myimage')
             try:
                 data = 'foo' * 200
                 image.write(data, 0)
@@ -69,8 +69,8 @@ classes can be used as context managers that close/shutdown automatically (see
         with cluster.open_ioctx('mypool') as ioctx:
             rbd_inst = rbd.RBD()
             size = 4 * 1024 * 1024  # 4 GiB
-            rbd_inst.create('myimage', 4)
-            with rbd.Image('myimage') is image:
+            rbd_inst.create(ioctx, 'myimage', 4)
+            with rbd.Image(ioctx, 'myimage') as image:
                 data = 'foo' * 200
                 image.write(data, 0)
 
