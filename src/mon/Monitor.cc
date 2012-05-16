@@ -1858,7 +1858,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     return r;
   }
   bufferlist keyringbl;
-  ::encode(keyring, keyringbl);
+  keyring.encode_plaintext(keyringbl);
   store->put_bl_ss(keyringbl, "mkfs", "keyring");
 
   return 0;
