@@ -28,6 +28,8 @@
 #include "common/Mutex.h"
 #include "common/Clock.h"
 
+#include "include/ceph_features.h"
+
 #include "crush/CrushWrapper.h"
 
 #include "include/interval_set.h"
@@ -128,7 +130,7 @@ public:
     int identify_osd(uuid_d u) const;
 
     void encode_client_old(bufferlist& bl) const;
-    void encode(bufferlist& bl, uint64_t features=-1) const;
+    void encode(bufferlist& bl, uint64_t features=CEPH_FEATURES_ALL) const;
     void decode(bufferlist::iterator &p);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
@@ -371,7 +373,7 @@ private:
 private:
   void encode_client_old(bufferlist& bl) const;
 public:
-  void encode(bufferlist& bl, uint64_t features=-1) const;
+  void encode(bufferlist& bl, uint64_t features=CEPH_FEATURES_ALL) const;
   void decode(bufferlist& bl);
   void decode(bufferlist::iterator& p);
 

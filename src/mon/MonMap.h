@@ -171,9 +171,7 @@ class MonMap {
     return i;
   }
 
-  void encode(bufferlist& blist) const;
-  void encode_v1(bufferlist& blist) const;
-
+  void encode(bufferlist& blist, uint64_t features) const;
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
     decode(p);
@@ -194,7 +192,7 @@ class MonMap {
 
   static void generate_test_instances(list<MonMap*>& o);
 };
-WRITE_CLASS_ENCODER(MonMap)
+WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
 inline ostream& operator<<(ostream& out, MonMap& m) {
   m.print_summary(out);

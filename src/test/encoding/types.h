@@ -69,6 +69,9 @@ TYPE(SequencerPosition)
 #include "os/hobject.h"
 TYPE(hobject_t)
 
+#include "mon/AuthMonitor.h"
+TYPE(AuthMonitor::Incremental)
+
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
 TYPE(PGMap)

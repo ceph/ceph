@@ -278,7 +278,7 @@ int main(int argc, const char **argv)
       tmp.set_epoch(v);
     }
     bufferlist mapbl;
-    tmp.encode(mapbl);
+    tmp.encode(mapbl, CEPH_FEATURES_ALL);
     bufferlist final;
     ::encode(v, final);
     ::encode(mapbl, final);

@@ -12,8 +12,7 @@
 
 void PGMap::Incremental::encode(bufferlist &bl) const
 {
-  __u8 v = 4;
-  ::encode(v, bl);
+  ENCODE_START(5, 5, bl);
   ::encode(version, bl);
   ::encode(pg_stat_updates, bl);
   ::encode(osd_stat_updates, bl);
@@ -23,14 +22,14 @@ void PGMap::Incremental::encode(bufferlist &bl) const
   ::encode(full_ratio, bl);
   ::encode(nearfull_ratio, bl);
   ::encode(pg_remove, bl);
+  ENCODE_FINISH(bl);
 }
 
 void PGMap::Incremental::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
   ::decode(version, bl);
-  if (v < 3) {
+  if (struct_v < 3) {
     pg_stat_updates.clear();
     __u32 n;
     ::decode(n, bl);
@@ -47,11 +46,11 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   ::decode(osd_stat_rm, bl);
   ::decode(osdmap_epoch, bl);
   ::decode(pg_scan, bl);
-  if (v >= 2) {
+  if (struct_v >= 2) {
     ::decode(full_ratio, bl);
     ::decode(nearfull_ratio, bl);
   }
-  if (v < 3) {
+  if (struct_v < 3) {
     pg_remove.clear();
     __u32 n;
     ::decode(n, bl);
@@ -63,12 +62,13 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   } else {
     ::decode(pg_remove, bl);
   }
-  if (v < 4 && full_ratio == 0) {
+  if (struct_v < 4 && full_ratio == 0) {
     full_ratio = -1;
   }
-  if (v < 4 && nearfull_ratio == 0) {
+  if (struct_v < 4 && nearfull_ratio == 0) {
     nearfull_ratio = -1;
   }
+  DECODE_FINISH(bl);
 }
 
 void PGMap::Incremental::dump(Formatter *f) const
@@ -314,8 +314,7 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
 
 void PGMap::encode(bufferlist &bl) const
 {
-  __u8 v = 3;
-  ::encode(v, bl);
+  ENCODE_START(4, 4, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
   ::encode(osd_stat, bl);
@@ -323,14 +322,14 @@ void PGMap::encode(bufferlist &bl) const
   ::encode(last_pg_scan, bl);
   ::encode(full_ratio, bl);
   ::encode(nearfull_ratio, bl);
+  ENCODE_FINISH(bl);
 }
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
   ::decode(version, bl);
-  if (v < 3) {
+  if (struct_v < 3) {
     pg_stat.clear();
     __u32 n;
     ::decode(n, bl);
@@ -346,10 +345,11 @@ void PGMap::decode(bufferlist::iterator &bl)
   ::decode(osd_stat, bl);
   ::decode(last_osdmap_epoch, bl);
   ::decode(last_pg_scan, bl);
-  if (v >= 2) {
+  if (struct_v >= 2) {
     ::decode(full_ratio, bl);
     ::decode(nearfull_ratio, bl);
   }
+  DECODE_FINISH(bl);
 
   calc_stats();
 }
