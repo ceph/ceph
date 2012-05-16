@@ -65,7 +65,6 @@ int main(int argc, const char **argv)
   bool set_auid = false;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   map<string,bufferlist> caps;
-  bool bin_keyring = false;
   std::string fn;
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
@@ -108,8 +107,6 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       set_auid = true;
-    } else if (ceph_argparse_flag(args, i, "-b", "--bin", (char*)NULL)) {
-      bin_keyring = true;
     } else if (fn.empty()) {
       fn = *i++;
     } else {
@@ -264,11 +261,7 @@ int main(int argc, const char **argv)
   // write result?
   if (modified) {
     bufferlist bl;
-    if (bin_keyring) {
-      ::encode(keyring, bl);
-    } else {
-      keyring.encode_plaintext(bl);
-    }
+    keyring.encode_plaintext(bl);
     r = bl.write_file(fn.c_str(), 0600);
     if (r < 0) {
       cerr << "could not write " << fn << std::endl;
