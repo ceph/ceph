@@ -45,6 +45,8 @@ public:
     uint32_t auth_type;
     bufferlist auth_data;
 
+    Incremental() : inc_type(GLOBAL_ID), max_global_id(0), auth_type(0) {}
+
     void encode(bufferlist& bl) const {
       ENCODE_START(2, 2, bl);
       __u32 _type = (__u32)inc_type;
@@ -70,6 +72,22 @@ public:
 	::decode(auth_data, bl);
       }
       DECODE_FINISH(bl);
+    }
+    void dump(Formatter *f) const {
+      f->dump_int("type", inc_type);
+      f->dump_int("max_global_id", max_global_id);
+      f->dump_int("auth_type", auth_type);
+      f->dump_int("auth_data_len", auth_data.length());
+    }
+    static void generate_test_instances(list<Incremental*>& ls) {
+      ls.push_back(new Incremental);
+      ls.push_back(new Incremental);
+      ls.back()->inc_type = GLOBAL_ID;
+      ls.back()->max_global_id = 1234;
+      ls.push_back(new Incremental);
+      ls.back()->inc_type = AUTH_DATA;
+      ls.back()->auth_type = 12;
+      ls.back()->auth_data.append("foo");
     }
   };
 
