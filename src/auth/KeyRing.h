@@ -71,15 +71,16 @@ public:
   void import(CephContext *cct, KeyRing& other);
 
   // encoders
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(keys, bl);
-  }
   void decode(bufferlist::iterator& bl);
 
   void encode_plaintext(bufferlist& bl);
 };
-WRITE_CLASS_ENCODER(KeyRing)
+
+// don't use WRITE_CLASS_ENCODER macro because we don't have an encode
+// macro.  don't juse encode_plaintext in that case because it is not
+// wrappable; it assumes it gets the entire bufferlist.
+static inline void decode(KeyRing& kr, bufferlist::iterator& p) {
+  kr.decode(p);
+}
 
 #endif

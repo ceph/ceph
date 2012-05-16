@@ -302,11 +302,14 @@ public:
     MMonCommand *m;
     int rc;
     string rs;
+    bufferlist rdata;
     version_t version;
     C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, version_t v) :
       mon(_mm), m(_m), rc(r), rs(s), version(v){}
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, bufferlist rd, version_t v) :
+      mon(_mm), m(_m), rc(r), rs(s), rdata(rd), version(v){}
     void finish(int r) {
-      mon->reply_command(m, rc, rs, version);
+      mon->reply_command(m, rc, rs, rdata, version);
     }
   };
 
