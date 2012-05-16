@@ -103,8 +103,9 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       if (warned > g_conf->osd_op_log_threshold)
         break;
 
+      utime_t age = now - (*i)->received_time;
       stringstream ss;
-      ss << "slow request received at " << (*i)->received_time
+      ss << "slow request " << age << " seconds old, received at " << (*i)->received_time
           << ": " << *((*i)->request) << " currently " << (*i)->state_string();
       warning_vector.push_back(ss.str());
 
