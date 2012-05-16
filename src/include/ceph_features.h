@@ -24,7 +24,7 @@
 /*
  * Features supported.  Should be everything above.
  */
-#define CEPH_FEATURES_SUPPORTED_DEFAULT  \
+#define CEPH_FEATURES_ALL		 \
 	(CEPH_FEATURE_UID |		 \
 	 CEPH_FEATURE_NOSRCADDR |	 \
 	 CEPH_FEATURE_MONCLOCKCHECK |	 \
@@ -41,5 +41,7 @@
 	 CEPH_FEATURE_OSDENC |		 \
 	 CEPH_FEATURE_OMAP |		 \
 	 CEPH_FEATURE_MONENC)
+
+#define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
 
 #endif

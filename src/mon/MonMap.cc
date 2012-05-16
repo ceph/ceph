@@ -85,7 +85,7 @@ int MonMap::write(const char *fn)
 {
   // encode
   bufferlist bl;
-  encode(bl, -1);
+  encode(bl, CEPH_FEATURES_ALL);
   
   return bl.write_file(fn);
 }

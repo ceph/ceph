@@ -102,7 +102,7 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
-  pending_map.encode(bl, -1);
+  pending_map.encode(bl, CEPH_FEATURES_ALL);
 }
 
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
@@ -137,7 +137,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd.size() == 2 && m->cmd[1] == "getmap") {
-      mon->monmap->encode(rdata, -1);
+      mon->monmap->encode(rdata, CEPH_FEATURES_ALL);
       r = 0;
       ss << "got latest monmap";
     }
