@@ -406,6 +406,9 @@ class ObjectCacher {
   void wrlock(Object *o);
   void wrunlock(Object *o);
 
+  int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+	     bool external_call);
+
  public:
   void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset,
 		      uint64_t length, bufferlist &bl, int r);
@@ -489,7 +492,7 @@ class ObjectCacher {
   public:
     C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c) : oc(_oc), rd(r), oset(os), onfinish(c) {}
     void finish(int) {
-      int r = oc->readx(rd, oset, onfinish);
+      int r = oc->_readx(rd, oset, onfinish, false);
       if (r > 0 && onfinish) {
         onfinish->finish(r);
         delete onfinish;
