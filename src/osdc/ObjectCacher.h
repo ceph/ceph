@@ -503,6 +503,11 @@ class ObjectCacher {
 
 
   // non-blocking.  async.
+
+  /**
+   * @note total read size must be <= INT_MAX, since
+   * the return value is total bytes read
+   */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
   int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
