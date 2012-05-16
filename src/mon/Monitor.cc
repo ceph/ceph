@@ -527,7 +527,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
   r->name = name;
   r->quorum = quorum;
-  monmap->encode(r->monmap_bl);
+  monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
@@ -1147,7 +1147,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client = req->get_source_inst();
-    encode_message(req, -1, rr->request_bl);   // for my use only; use all features
+    encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
@@ -1213,7 +1213,7 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(m, -1, bl);  // fixme: assume peers have all features we do.
+  encode_message(m, CEPH_FEATURES_ALL, bl);  // fixme: assume peers have all features we do.
 
   messenger->send_message(m, to);
 
@@ -1728,10 +1728,7 @@ void Monitor::check_sub(Subscription *sub)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
-  if (!con->has_feature(CEPH_FEATURE_MONNAMES))
-    monmap->encode_v1(bl);
-  else
-    monmap->encode(bl);
+  monmap->encode(bl, con->get_features());
   messenger->send_message(new MMonMap(bl), con);
 }
 
@@ -1834,7 +1831,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
-  monmap->encode(monmapbl);
+  monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
