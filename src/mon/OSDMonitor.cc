@@ -389,7 +389,7 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 
   // encode
   assert(paxos->get_version() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, -1);
+  ::encode(pending_inc, bl, CEPH_FEATURES_ALL);
 }
 
 
