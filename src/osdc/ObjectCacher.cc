@@ -847,6 +847,12 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, sna
  */
 int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 {
+  return _readx(rd, oset, onfinish, true);
+}
+
+int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+			 bool external_call)
+{
   assert(lock.is_locked());
   bool success = true;
   list<BufferHead*> hit_ls;
@@ -964,7 +970,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
     touch_bh(*bhit);
   
   if (!success) {
-    if (perfcounter) {
+    if (perfcounter && external_call) {
       perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
       perfcounter->inc(l_objectcacher_cache_bytes_hit, bytes_in_cache);
       perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_not_in_cache);
@@ -972,7 +978,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
     }
     return 0;  // wait!
   }
-  if (perfcounter) {
+  if (perfcounter && external_call) {
     perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
     perfcounter->inc(l_objectcacher_cache_bytes_hit, bytes_in_cache);
     perfcounter->inc(l_objectcacher_cache_ops_hit);
