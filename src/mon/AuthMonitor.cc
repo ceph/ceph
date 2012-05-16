@@ -444,7 +444,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  if (keyring.get_auth(ename, eauth)) {
 	    KeyRing kr;
 	    kr.add(ename, eauth);
-	    ::encode(kr, rdata);
+	    kr.encode_plaintext(rdata);
 	    ss << "export " << eauth;
 	    r = 0;
 	  } else {
@@ -456,7 +456,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  r = -EINVAL;
 	}
       } else {
-	::encode(keyring, rdata);
+	keyring.encode_plaintext(rdata);
 	ss << "exported master keyring";
 	r = 0;
       }
