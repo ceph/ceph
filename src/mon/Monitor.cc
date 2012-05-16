@@ -400,8 +400,11 @@ void Monitor::bootstrap()
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddr());
   if (newrank < 0 && rank >= 0) {
-    dout(0) << " removed from monmap, suicide." << dendl;
-    exit(0);
+    // was i ever part of the quorum?
+    if (store->exists_bl_ss("joined")) {
+      dout(0) << " removed from monmap, suicide." << dendl;
+      exit(0);
+    }
   }
   if (newrank != rank) {
     dout(0) << " my rank is now " << newrank << " (was " << rank << ")" << dendl;
@@ -851,6 +854,9 @@ void Monitor::finish_election()
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
+
+  // make note of the fact that i was, once, part of the quorum.
+  store->put_int(1, "joined");
 } 
 
 
