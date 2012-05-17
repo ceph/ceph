@@ -1065,27 +1065,48 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
       sub_op_pull(op);
       return;
     case CEPH_OSD_OP_PUSH:
-      sub_op_push(op);
+      if (!is_active())
+	waiting_for_active.push_back(op);
+      else
+	sub_op_push(op);
       return;
     case CEPH_OSD_OP_DELETE:
-      sub_op_remove(op);
+      if (!is_active())
+	waiting_for_active.push_back(op);
+      else
+	sub_op_remove(op);
       return;
     case CEPH_OSD_OP_SCRUB_RESERVE:
-      sub_op_scrub_reserve(op);
+      if (!is_active())
+	waiting_for_active.push_back(op);
+      else
+	sub_op_scrub_reserve(op);
       return;
     case CEPH_OSD_OP_SCRUB_UNRESERVE:
-      sub_op_scrub_unreserve(op);
+      if (!is_active())
+	waiting_for_active.push_back(op);
+      else
+	sub_op_scrub_unreserve(op);
       return;
     case CEPH_OSD_OP_SCRUB_STOP:
-      sub_op_scrub_stop(op);
+      if (!is_active())
+	waiting_for_active.push_back(op);
+      else
+	sub_op_scrub_stop(op);
       return;
     case CEPH_OSD_OP_SCRUB_MAP:
-      sub_op_scrub_map(op);
+      if (!is_active())
+	waiting_for_active.push_back(op);
+      else
+	sub_op_scrub_map(op);
       return;
     }
   }
 
-  sub_op_modify(op);
+  if (!is_active())
+    waiting_for_active.push_back(op);
+  else
+    sub_op_modify(op);
 }
 
 void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
