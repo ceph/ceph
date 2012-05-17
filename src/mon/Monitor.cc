@@ -93,6 +93,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   messenger(m),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
   clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
@@ -278,6 +279,9 @@ int Monitor::init()
     dout(10) << "features " << features << dendl;
   }
 
+  // have we ever joined a quorum?
+  has_ever_joined = store->exists_bl_ss("joined");
+
   // init paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos[i]->init();
@@ -420,7 +424,7 @@ void Monitor::bootstrap()
   int newrank = monmap->get_rank(messenger->get_myaddr());
   if (newrank < 0 && rank >= 0) {
     // was i ever part of the quorum?
-    if (store->exists_bl_ss("joined")) {
+    if (has_ever_joined) {
       dout(0) << " removed from monmap, suicide." << dendl;
       exit(0);
     }
@@ -882,9 +886,6 @@ void Monitor::finish_election()
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
-
-  // make note of the fact that i was, once, part of the quorum.
-  store->put_int(1, "joined");
 } 
 
 
