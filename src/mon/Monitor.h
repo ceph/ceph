@@ -115,6 +115,8 @@ public:
 
   MonMap *monmap;
 
+  set<entity_addr_t> extra_probe_peers;
+
   LogClient clog;
   KeyRing keyring;
   KeyServer key_server;
