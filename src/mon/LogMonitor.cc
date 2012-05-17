@@ -171,6 +171,8 @@ void LogMonitor::update_from_paxos()
   unsigned max = g_conf->mon_max_log_epochs;
   if (mon->is_leader() && paxosv > max)
     paxos->trim_to(paxosv - max);
+
+  check_subs();
 }
 
 void LogMonitor::create_pending()
@@ -260,7 +262,8 @@ bool LogMonitor::prepare_log(MLog *m)
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
   if (m->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid 
+	    << dendl;
     m->put();
     return false;
   }
@@ -272,9 +275,9 @@ bool LogMonitor::prepare_log(MLog *m)
     if (!pending_summary.contains(p->key())) {
       pending_summary.add(*p);
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
+
     }
   }
-
   paxos->wait_for_commit(new C_Log(this, m));
   return true;
 }
@@ -283,6 +286,7 @@ void LogMonitor::_updated_log(MLog *m)
 {
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
   mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
+
   m->put();
 }
 
@@ -317,3 +321,156 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   mon->reply_command(m, err, rs, paxos->get_version());
   return false;
 }
+
+
+void LogMonitor::check_subs()
+{
+  dout(10) << __func__ << dendl;
+
+  map<string, xlist<Subscription*>*>::iterator subs_map_it;
+  subs_map_it = mon->session_map.subs.begin();
+
+  for (; subs_map_it != mon->session_map.subs.end(); subs_map_it++) {
+
+    xlist<Subscription*> *subs_lst = subs_map_it->second;
+    xlist<Subscription*>::iterator subs_lst_it = subs_lst->begin();
+
+    for (; !subs_lst_it.end(); ++subs_lst_it)
+      check_sub(*subs_lst_it);
+  }
+}
+
+void LogMonitor::check_sub(Subscription *s)
+{
+  dout(10) << __func__ << " client wants " << s->type << " ver " << s->next << dendl;
+
+  map<string, int> types;
+  types["log-debug"]  = CLOG_DEBUG;
+  types["log-info"]   = CLOG_INFO;
+  types["log-sec"]    = CLOG_SEC;
+  types["log-warn"]   = CLOG_WARN;
+  types["log-error"]  = CLOG_ERROR;
+
+  if (!types.count(s->type)) {
+    dout(1) << __func__ << " sub " << s->type << " not log type " << dendl;
+    return;
+  }
+
+  version_t summary_version = summary.version;
+
+  if (s->next > summary_version) {
+    dout(10) << __func__ << " client " << s->session->inst 
+	    << " requested version (" << s->next << ") is greater than ours (" 
+	    << summary_version << "), which means we already sent him" 
+	    << " everything we have." << dendl;
+    return;
+  } 
+ 
+  int sub_level = types[s->type];
+  bool ret = true;
+  MLog *mlog = new MLog(mon->monmap->fsid);
+
+  if (s->next == 0) { 
+    /* First timer, heh? */
+    ret = _create_sub_summary(mlog, sub_level);
+  } else {
+    /* let us send you an incremental log... */
+    ret = _create_sub_incremental(mlog, sub_level, s->next);
+  }
+
+  if (!ret) {
+    dout(1) << __func__ << " ret = " << ret << dendl;
+    mlog->put();
+    return;
+  }
+
+  dout(1) << __func__ << " sending message to " << s->session->inst 
+	  << " with " << mlog->entries.size() << " entries"
+	  << " (version " << mlog->version << ")" << dendl;
+  
+  mon->messenger->send_message(mlog, s->session->inst);
+  if (s->onetime)
+    mon->session_map.remove_sub(s);
+  else
+    s->next = summary_version+1;
+}
+
+/**
+ * Create a log message containing only the last message in the summary.
+ *
+ * @param mlog	Log message we'll send to the client.
+ * @param level Maximum log level the client is interested in.
+ * @return	'true' if we consider we successfully populated @mlog;
+ *		'false' otherwise.
+ */
+bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
+{
+  dout(10) << __func__ << dendl;
+
+  assert(mlog != NULL);
+
+  if (!summary.tail.size())
+    return false;
+
+  list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
+  for (; it != summary.tail.rend(); it++) {
+    LogEntry e = *it;
+    if (e.type > level)
+      continue;
+
+    mlog->entries.push_back(e);
+    mlog->version = summary.version;
+    break;
+  }
+
+  return true;
+}
+
+/**
+ * Create an incremental log message from version @sv to @summary.version
+ *
+ * @param mlog	Log message we'll send to the client with the messages received
+ *		since version @sv, inclusive.
+ * @param level	The max log level of the messages the client is interested in.
+ * @param sv	The version the client is looking for.
+ * @return	'true' if we consider we successfully populated @mlog; 
+ *		'false' otherwise.
+ */
+bool LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
+{
+  dout(10) << __func__ << " level " << level << " ver " << sv 
+	  << " cur summary ver " << summary.version << dendl; 
+
+  bool success = true;
+  version_t summary_ver = summary.version;
+  while (sv <= summary_ver) {
+    bufferlist bl;
+    success = paxos->read(sv, bl);
+    if (!success) {
+      dout(10) << __func__ << " paxos->read() unsuccessful" << dendl;
+      break;
+    }
+    bufferlist::iterator p = bl.begin();
+    __u8 v;
+    ::decode(v,p);
+    while (!p.end()) {
+      LogEntry le;
+      le.decode(p);
+
+      if (level < le.type) {
+	dout(20) << __func__ << " requested " << level 
+		 << " entry " << le.type << dendl;
+	continue;
+      }
+
+      mlog->entries.push_back(le);
+    }
+    mlog->version = sv++;
+  }
+
+  dout(10) << __func__ << " incremental message ready (" 
+	  << mlog->entries.size() << " entries)" << dendl;
+
+  return success;
+}
+
