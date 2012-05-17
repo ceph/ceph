@@ -462,6 +462,16 @@ void Monitor::bootstrap()
       messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
 			      monmap->get_inst(i));
   }
+  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+       p != extra_probe_peers.end();
+       ++p) {
+    if (*p != messenger->get_myaddr()) {
+      entity_inst_t i;
+      i.name = entity_name_t::MON(-1);
+      i.addr = *p;
+      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined), i);
+    }
+  }
 }
 
 // called by bootstrap(), or on leader|peon -> electing
