@@ -680,6 +680,8 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
 
   Context *onack = new C_aio_Ack(c);
   eversion_t ver;
@@ -698,6 +700,9 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
   Context *onack = new C_aio_Ack(c);
 
   c->is_read = true;
@@ -719,6 +724,8 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 bufferlist *data_bl, size_t len,
 					 uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
 
   C_aio_sparse_read_Ack *onack = new C_aio_sparse_read_Ack(c);
   onack->m = m;
@@ -1028,12 +1035,16 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::read(const object_t& oid,
 			      bufferlist& bl, size_t len, uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
   Mutex mylock("IoCtxImpl::read::mylock");
   Cond cond;
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
+
 
   ::ObjectOperation op;
   ::ObjectOperation *pop = prepare_assert_ops(&op);
@@ -1101,6 +1112,9 @@ int librados::IoCtxImpl::sparse_read(const object_t& oid,
 				     bufferlist& data_bl, size_t len,
 				     uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
   bufferlist bl;
 
   Mutex mylock("IoCtxImpl::read::mylock");
