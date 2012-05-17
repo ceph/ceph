@@ -250,10 +250,6 @@ MESSAGE(MMonGlobalID)
 MESSAGE(MMonJoin)
 #include "messages/MMonMap.h"
 MESSAGE(MMonMap)
-#include "messages/MMonObserve.h"
-MESSAGE(MMonObserve)
-#include "messages/MMonObserveNotify.h"
-MESSAGE(MMonObserveNotify)
 #include "messages/MMonPaxos.h"
 MESSAGE(MMonPaxos)
 #include "messages/MMonProbe.h"

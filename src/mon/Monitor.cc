@@ -28,8 +28,6 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
-#include "messages/MMonObserve.h"
-#include "messages/MMonObserveNotify.h"
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
@@ -1328,25 +1326,6 @@ void Monitor::remove_session(MonSession *s)
 }
 
 
-void Monitor::handle_observe(MMonObserve *m)
-{
-  dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
-  // check that there are perms. Send a response back if they aren't sufficient,
-  // and delete the message (if it's not deleted for us, which happens when
-  // we own the connection to the requested observer).
-  MonSession *session = m->get_session();
-  if (!session || !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
-    send_reply(m, m);
-    return;
-  }
-  if (m->machine_id >= PAXOS_NUM) {
-    dout(0) << "register_observer: bad monitor id: " << m->machine_id << dendl;
-  } else {
-    paxos[m->machine_id]->register_observer(m->get_orig_source_inst(), m->ver);
-  }
-  messenger->send_message(m, m->get_orig_source_inst());
-}
-
 void Monitor::send_command(const entity_inst_t& inst,
 			   const vector<string>& com, version_t version)
 {
@@ -1561,10 +1540,6 @@ bool Monitor::_ms_dispatch(Message *m)
 	if (p->is_active())
 	  paxos_service[p->machine_id]->update_from_paxos();
       }
-      break;
-
-    case MSG_MON_OBSERVE:
-      handle_observe((MMonObserve *)m);
       break;
 
       // elector messages

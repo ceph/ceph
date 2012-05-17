@@ -80,8 +80,6 @@ OSDMap *osdmap = 0;
 
 #include "mon/mon_types.h"
 
-#include "messages/MMonObserve.h"
-#include "messages/MMonObserveNotify.h"
 #include "messages/MOSDMap.h"
 
 #include "messages/MCommand.h"
@@ -525,9 +523,6 @@ bool Admin::ms_dispatch(Message *m) {
 void Admin::ms_handle_connect(Connection *con) {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     ctx->lock.Lock();
-    if (ceph_tool_mode != CEPH_TOOL_MODE_CLI_INPUT) {
-//	send_observe_requests(ctx);
-    }
     if (pending_cmd.size())
       send_command(ctx);
     ctx->lock.Unlock();
