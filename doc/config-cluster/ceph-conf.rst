@@ -124,14 +124,15 @@ alphanumeric for monitors and metadata servers. ::
 
 ``host`` and ``addr`` Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The `Hardware Recommendations <../hardware-recommendations>`_ section
-provides some hardware guidelines for configuring the cluster. It is possible
-for a single host to run multiple daemons. For example, a single host with
-multiple disks or RAIDs may run one ``ceph-osd`` for each disk or RAID.
-Additionally, a host may run both a ``ceph-mon`` and an ``ceph-osd`` daemon
-on the same host. Ideally, you will have a host for a particular type of
-process. For example, one host may run ``ceph-osd`` daemons, another host
-may run a ``ceph-mds`` daemon, and other hosts may run ``ceph-mon`` daemons.
+The :doc:`/install/hardware-recommendations` section provides some hardware guidelines for
+configuring the cluster. It is possible for a single host to run
+multiple daemons. For example, a single host with multiple disks or
+RAIDs may run one ``ceph-osd`` for each disk or RAID.  Additionally, a
+host may run both a ``ceph-mon`` and an ``ceph-osd`` daemon on the
+same host. Ideally, you will have a host for a particular type of
+process. For example, one host may run ``ceph-osd`` daemons, another
+host may run a ``ceph-mds`` daemon, and other hosts may run
+``ceph-mon`` daemons.
 
 Each host has a name identified by the ``host`` setting, and a network
 location (i.e., domain name or IP address) identified by the ``addr``
