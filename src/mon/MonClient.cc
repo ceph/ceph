@@ -103,41 +103,9 @@ int MonClient::build_initial_monmap(CephContext *cct, MonMap &monmap)
 
   // -m foo?
   if (!conf->mon_host.empty()) {
-    vector<entity_addr_t> addrs;
-    if (parse_ip_port_vec(conf->mon_host.c_str(), addrs)) {
-      for (unsigned i=0; i<addrs.size(); i++) {
-	char n[2];
-	n[0] = 'a' + i;
-	n[1] = 0;
-	if (addrs[i].get_port() == 0)
-	  addrs[i].set_port(CEPH_MON_PORT);
-	string name = "noname-";
-	name += n;
-	monmap.add(name, addrs[i]);
-      }
-      return 0;
-    } else { //maybe they passed us a DNS-resolvable name
-      char *hosts = NULL;
-      hosts = resolve_addrs(conf->mon_host.c_str());
-      if (!hosts)
-        return -EINVAL;
-      bool success = parse_ip_port_vec(hosts, addrs);
-      free(hosts);
-      if (success) {
-        for (unsigned i=0; i<addrs.size(); i++) {
-          char n[2];
-          n[0] = 'a' + i;
-          n[1] = 0;
-          if (addrs[i].get_port() == 0)
-            addrs[i].set_port(CEPH_MON_PORT);
-	  string name = "noname-";
-	  name += n;
-          monmap.add(name, addrs[i]);
-        }
-        return 0;
-      } else cerr << "couldn't parse_ip_port_vec on " << hosts << std::endl;
-    }
-    cerr << "unable to parse addrs in '" << conf->mon_host << "'" << std::endl;
+    int r = monmap.build_from_host_list(conf->mon_host, "noname-");
+    if (r < 0)
+      cerr << "unable to parse addrs in '" << conf->mon_host << "'" << std::endl;
   }
 
   // What monitors are in the config file?

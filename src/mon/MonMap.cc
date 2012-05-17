@@ -8,6 +8,8 @@
 #include "common/Formatter.h"
 
 #include "include/ceph_features.h"
+#include "include/addr_parsing.h"
+#include "common/ceph_argparse.h"
 
 using ceph::Formatter;
 
@@ -140,4 +142,45 @@ void MonMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+}
+
+
+int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
+{
+  vector<entity_addr_t> addrs;
+  if (parse_ip_port_vec(hostlist.c_str(), addrs)) {
+    for (unsigned i=0; i<addrs.size(); i++) {
+      char n[2];
+      n[0] = 'a' + i;
+      n[1] = 0;
+      if (addrs[i].get_port() == 0)
+	addrs[i].set_port(CEPH_MON_PORT);
+      string name = prefix;
+      name += n;
+      add(name, addrs[i]);
+    }
+    return 0;
+  }
+
+  // maybe they passed us a DNS-resolvable name
+  char *hosts = NULL;
+  hosts = resolve_addrs(hostlist.c_str());
+  if (!hosts)
+    return -EINVAL;
+  bool success = parse_ip_port_vec(hosts, addrs);
+  free(hosts);
+  if (!success)
+    return -EINVAL;
+
+  for (unsigned i=0; i<addrs.size(); i++) {
+    char n[2];
+    n[0] = 'a' + i;
+    n[1] = 0;
+    if (addrs[i].get_port() == 0)
+      addrs[i].set_port(CEPH_MON_PORT);
+    string name = prefix;
+    name += n;
+    add(name, addrs[i]);
+  }
+  return 0;
 }
