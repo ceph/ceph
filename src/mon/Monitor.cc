@@ -281,6 +281,7 @@ int Monitor::init()
 
   // have we ever joined a quorum?
   has_ever_joined = store->exists_bl_ss("joined");
+  dout(10) << "has_ever_joined = " << (int)has_ever_joined << dendl;
 
   // init paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
@@ -458,7 +459,8 @@ void Monitor::bootstrap()
   dout(10) << "probing other monitors" << dendl;
   for (unsigned i = 0; i < monmap->size(); i++) {
     if ((int)i != rank)
-      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name), monmap->get_inst(i));
+      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
+			      monmap->get_inst(i));
   }
 }
 
@@ -547,7 +549,7 @@ void Monitor::handle_probe(MMonProbe *m)
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
@@ -686,7 +688,7 @@ void Monitor::slurp()
       if (!pax->is_slurping()) {
         pax->start_slurping();
       }
-      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name);
+      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name, has_ever_joined);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
       m->newest_version = pax->get_version();
@@ -700,7 +702,7 @@ void Monitor::slurp()
       if (!pax->is_slurping()) {
         pax->start_slurping();
       }
-      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
+      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name, has_ever_joined);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
       m->newest_version = pax->get_version();
@@ -723,7 +725,7 @@ void Monitor::slurp()
 
 MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
 {
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name, has_ever_joined);
   r->machine_name = m->machine_name;
   r->oldest_version = pax->get_first_committed();
   r->newest_version = pax->get_version();
