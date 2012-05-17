@@ -206,6 +206,12 @@ public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
+  set<string> get_quorum_names() {
+    set<string> q;
+    for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+      q.insert(monmap->get_name(*p));
+    return q;
+  }
 
   void bootstrap();
   void reset();
