@@ -568,17 +568,24 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     return;
   }
 
-  // newer map?
-  MonMap *newmap = new MonMap;
-  newmap->decode(m->monmap_bl);
-  if (newmap->get_epoch() > monmap->get_epoch()) {
-    dout(10) << " got new monmap epoch " << newmap->get_epoch()
-	     << " > my " << monmap->get_epoch() << dendl;
-    monmap->decode(m->monmap_bl);
-    m->put();
+  // newer map, or they've joined a quorum and we haven't?
+  bufferlist mybl;
+  monmap->encode(mybl, m->get_connection()->get_features());
+  // make sure it's actually different; the checks below err toward
+  // taking the other guy's map, which could cause us to loop.
+  if (!mybl.contents_equal(m->monmap_bl)) {
+    MonMap *newmap = new MonMap;
+    newmap->decode(m->monmap_bl);
+    if (m->has_ever_joined && (newmap->get_epoch() > monmap->get_epoch() ||
+			       !has_ever_joined)) {
+      dout(10) << " got newer/committed monmap epoch " << newmap->get_epoch()
+	       << ", mine was " << monmap->get_epoch() << dendl;
+      monmap->decode(m->monmap_bl);
+      m->put();
 
-    bootstrap();
-    return;
+      bootstrap();
+      return;
+    }
   }
 
   // rename peer?
