@@ -1667,10 +1667,17 @@ bool Monitor::_ms_dispatch(Message *m)
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
       }
-      if (!is_probing() && !is_slurping())
-	elector.dispatch(m);
-      else
+      if (!is_probing() && !is_slurping()) {
+	if (monmap->contains(m->get_source_addr())) {
+	  elector.dispatch(m);
+	} else {
+	  dout(1) << "discarding election message: " << m->get_source_addr() << " not in my monmap "
+		  << *monmap << dendl;
+	  m->put();
+	}
+      } else {
 	m->put();
+      }
       break;
 
     case MSG_FORWARD:
