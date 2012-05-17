@@ -724,7 +724,7 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 
   off64_t max = header.max_size - get_top();
   if (size > max)
-    dout(0) << "JOURNAL TOO SMALL: item " << size << " > journal " << max << " (usable)" << dendl;
+    dout(0) << "JOURNAL TOO SMALL: continuing, but slow: item " << size << " > journal " << max << " (usable)" << dendl;
 
   return -ENOSPC;
 }
