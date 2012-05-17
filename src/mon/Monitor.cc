@@ -1020,6 +1020,19 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "status") {
+      // reply with the status for all the components
+      stringstream ss;
+      ss << "   osdmap " << osdmon()->osdmap;
+      ss << "\n";
+      ss << "    pgmap " << pgmon()->pg_map;
+      ss << "\n";
+      ss << "   mdsmap " << mdsmon()->mdsmap;
+      ss << "\n";
+      ss << "   monmap " << *monmap;
+      rs = ss.str();
+      r = 0;
+    }
     if (m->cmd[0] == "quorum_status") {
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
@@ -1619,6 +1632,9 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       }
     } else if (p->first == "monmap") {
       check_sub(s->sub_map["monmap"]);
+    } else if ((p->first == "log-error") 
+	|| (p->first == "log-info") || (p->first == "log-warn")) {
+      logmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
