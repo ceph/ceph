@@ -310,8 +310,8 @@ namespace librbd {
       return r;
     }
 
-    void flush_cache() {
-      int r;
+    int flush_cache() {
+      int r = 0;
       Mutex mylock("librbd::ImageCtx::flush_cache");
       Cond cond;
       bool done;
@@ -328,6 +328,7 @@ namespace librbd {
 	mylock.Unlock();
 	ldout(cct, 20) << "finished flushing cache" << dendl;
       }
+      return r;
     }
 
     void shutdown_cache() {
@@ -344,11 +345,14 @@ namespace librbd {
       cache_lock.Lock();
       object_cacher->release_set(object_set);
       cache_lock.Unlock();
-      flush_cache();
+      int r = flush_cache();
+      if (r)
+	lderr(cct) << "flush_cache returned " << r << dendl;
       cache_lock.Lock();
       bool unclean = object_cacher->release_set(object_set);
       cache_lock.Unlock();
-      assert(!unclean);
+      if (unclean)
+	lderr(cct) << "could not release all objects from cache" << dendl;
     }
   };
 
@@ -1729,7 +1733,7 @@ ssize_t handle_sparse_read(CephContext *cct,
 
   /* last hole */
   if (buf_left > 0) {
-    ldout(cct, 0) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
+    ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
     r = cb(buf_ofs, buf_left, NULL, arg);
     if (r < 0) {
       return r;
@@ -1809,14 +1813,13 @@ int _flush(ImageCtx *ictx)
   int r;
   // flush any outstanding writes
   if (ictx->object_cacher) {
-    ictx->flush_cache();
-    r = 0;
+    r = ictx->flush_cache();
   } else {
     r = ictx->data_ctx.aio_flush();
   }
 
   if (r)
-    ldout(cct, 10) << "aio_flush " << ictx << " r = " << r << dendl;
+    lderr(cct) << "_flush " << ictx << " r = " << r << dendl;
 
   return r;
 }
