@@ -375,11 +375,11 @@ OPTION(journal_queue_max_bytes, OPT_INT, 100 << 20)
 OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
-OPTION(rbd_cache, OPT_BOOL, false) // whether to enable writeback caching
-OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size
-OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit
-OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit
-OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // age in cache before writeback starts
+OPTION(rbd_cache, OPT_BOOL, false) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
+OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
+OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
+OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
+OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
