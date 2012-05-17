@@ -286,6 +286,7 @@ int Monitor::init()
     // impose initial quorum restrictions?
     list<string> initial_members;
     get_str_list(g_conf->mon_initial_members, initial_members);
+
     if (initial_members.size()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
@@ -321,13 +322,13 @@ int Monitor::init()
 	}
       }
 
+      // (re)calc my rank, in case it changed
+      rank = monmap->get_rank(name);
+      messenger->set_myname(entity_name_t::MON(rank));
+      messenger->mark_down_all();
+
       dout(10) << " monmap is " << *monmap << dendl;
     }
-
-    // (re)calc my rank, in case it changed
-    rank = monmap->get_rank(name);
-    messenger->set_myname(entity_name_t::MON(rank));
-    messenger->mark_down_all();
   }
 
   // init paxos
