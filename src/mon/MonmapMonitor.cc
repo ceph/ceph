@@ -105,6 +105,19 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
   pending_map.encode(bl, CEPH_FEATURES_ALL);
 }
 
+void MonmapMonitor::on_active()
+{
+  if (paxos->get_version() >= 1 && !mon->has_ever_joined) {
+    // make note of the fact that i was, once, part of the quorum.
+    dout(10) << "noting that i was, once, part of an active quorum." << dendl;
+    mon->store->put_int(1, "joined");
+    mon->has_ever_joined = true;
+  }
+
+  if (mon->is_leader())
+    mon->clog.info() << "monmap " << *mon->monmap << "\n";
+}
+
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   switch (m->get_type()) {
@@ -261,12 +274,6 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
   }
 
   return false;
-}
-
-void MonmapMonitor::on_active() 
-{
-  if (mon->is_leader())
-    mon->clog.info() << "monmap " << *mon->monmap << "\n";
 }
 
 bool MonmapMonitor::prepare_command(MMonCommand *m)

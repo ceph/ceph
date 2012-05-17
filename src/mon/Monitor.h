@@ -102,6 +102,11 @@ public:
   Mutex lock;
   SafeTimer timer;
   
+  /// true if we have ever joined a quorum.  if false, we are either a
+  /// new cluster, a newly joining monitor, or a just-upgraded
+  /// monitor.
+  bool has_ever_joined;
+
   PerfCounters *logger, *cluster_logger;
   bool cluster_logger_registered;
 
