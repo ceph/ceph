@@ -49,6 +49,7 @@
 
 #include "include/color.h"
 #include "include/ceph_fs.h"
+#include "include/str_list.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -226,8 +227,6 @@ int Monitor::init()
 {
   lock.Lock();
 
-  rank = monmap->get_rank(messenger->get_myaddr());
-  
   dout(1) << "init fsid " << monmap->fsid << dendl;
   
   assert(!logger);
@@ -282,6 +281,54 @@ int Monitor::init()
   // have we ever joined a quorum?
   has_ever_joined = store->exists_bl_ss("joined");
   dout(10) << "has_ever_joined = " << (int)has_ever_joined << dendl;
+
+  if (!has_ever_joined) {
+    // impose initial quorum restrictions?
+    list<string> initial_members;
+    get_str_list(g_conf->mon_initial_members, initial_members);
+    if (initial_members.size()) {
+      dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
+
+      // remove non-initial members
+      unsigned i = 0;
+      while (i < monmap->size()) {
+	string n = monmap->get_name(i);
+	if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
+	  dout(1) << " keeping " << n << " " << monmap->get_addr(i) << dendl;
+	  i++;
+	  continue;
+	}
+
+	dout(1) << " removing " << monmap->get_name(i) << " " << monmap->get_addr(i) << dendl;
+	extra_probe_peers.insert(monmap->get_addr(i));
+	monmap->remove(n);
+	assert(!monmap->contains(n));
+      }
+
+      // add missing initial members
+      for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
+	if (!monmap->contains(*p)) {
+	  entity_addr_t a;
+	  a.set_family(AF_INET);
+	  for (int n=1; ; n++) {
+	    a.set_port(n);
+	    if (!monmap->contains(a))
+	      break;
+	  }
+	  dout(1) << " adding " << *p << " " << a << dendl;
+	  monmap->add(*p, a);
+	  assert(monmap->contains(*p));
+	}
+      }
+
+      dout(10) << " monmap is " << *monmap << dendl;
+    }
+
+    // (re)calc my rank, in case it changed
+    rank = monmap->get_rank(name);
+    messenger->set_myname(entity_name_t::MON(rank));
+    messenger->mark_down_all();
+  }
 
   // init paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
@@ -573,6 +620,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
 void Monitor::handle_probe_reply(MMonProbe *m)
 {
   dout(10) << "handle_probe_reply " << m->get_source_inst() << *m << dendl;
+  dout(10) << " monmap is " << *monmap << dendl;
 
   if (!is_probing()) {
     m->put();
