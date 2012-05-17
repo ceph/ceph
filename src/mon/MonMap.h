@@ -193,6 +193,8 @@ class MonMap {
   int write(const char *fn);
   int read(const char *fn);
 
+  int build_from_host_list(std::string hosts, std::string prefix);
+
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
