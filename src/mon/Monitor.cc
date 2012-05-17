@@ -575,6 +575,15 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     return;
   }
 
+  // rename peer?
+  string peer_name = monmap->get_name(m->get_source_addr());
+  if (peer_name.find("noname-") == 0) {
+    dout(10) << " renaming peer " << m->get_source_addr() << " "
+	     << peer_name << " -> " << m->name << " in my monmap"
+	     << dendl;
+    monmap->rename(peer_name, m->name);
+  }
+
   // is there an existing quorum?
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;

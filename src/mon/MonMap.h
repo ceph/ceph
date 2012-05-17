@@ -120,6 +120,13 @@ class MonMap {
     assert(n < rank_name.size());
     return rank_name[n];
   }
+  string get_name(entity_addr_t a) const {
+    map<entity_addr_t,string>::const_iterator p = addr_name.find(a);
+    if (p == addr_name.end())
+      return string();
+    else
+      return p->second;
+  }
 
   int get_rank(const string& n) {
     for (unsigned i=0; i<rank_name.size(); i++)
