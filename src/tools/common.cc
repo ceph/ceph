@@ -20,6 +20,7 @@ using namespace std;
 #include "acconfig.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MLog.h"
 #include "mon/MonClient.h"
 #include "mon/MonMap.h"
 #include "osd/OSDMap.h"
@@ -87,189 +88,6 @@ OSDMap *osdmap = 0;
 #include "messages/MCommandReply.h"
 
 static set<int> registered, seen;
-
-version_t map_ver[PAXOS_NUM];
-
-static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
-{
-  epoch_t e = m->get_first();
-  assert(m->maps.count(e));
-  ctx->lock.Lock();
-  delete osdmap;
-  osdmap = new OSDMap;
-  osdmap->decode(m->maps[e]);
-  cmd_cond.Signal();
-  ctx->lock.Unlock();
-  m->put();
-}
-
-static void handle_observe(CephToolCtx *ctx, MMonObserve *observe)
-{
-  dout(1) << observe->get_source() << " -> " << get_paxos_name(observe->machine_id)
-	  << " registered" << dendl;
-  ctx->lock.Lock();
-  registered.insert(observe->machine_id);  
-  ctx->lock.Unlock();
-  observe->put();
-}
-
-static void handle_notify(CephToolCtx *ctx, MMonObserveNotify *notify)
-{
-  utime_t now = ceph_clock_now(g_ceph_context);
-
-  dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
-	  << " v" << notify->ver
-	  << (notify->is_latest ? " (latest)" : "")
-	  << dendl;
-  
-  if (notify->fsid != ctx->mc.monmap.fsid) {
-    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != "
-	    << ctx->mc.monmap.fsid << dendl;
-    notify->put();
-    return;
-  }
-
-  if (map_ver[notify->machine_id] >= notify->ver)
-    return;
-
-  switch (notify->machine_id) {
-  case PAXOS_PGMAP:
-    {
-      bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_latest) {
-	ctx->pgmap.decode(p);
-      } else {
-	PGMap::Incremental inc;
-	inc.decode(p);
-	ctx->pgmap.apply_incremental(inc);
-      }
-      *ctx->log << now << "    pg " << ctx->pgmap << std::endl;
-      ctx->updates |= PG_MON_UPDATE;
-      break;
-    }
-
-  case PAXOS_MDSMAP:
-    ctx->mdsmap.decode(notify->bl);
-    *ctx->log << now << "   mds " << ctx->mdsmap << std::endl;
-    ctx->updates |= MDS_MON_UPDATE;
-    break;
-
-  case PAXOS_OSDMAP:
-    {
-      if (notify->is_latest) {
-	ctx->osdmap.decode(notify->bl);
-      } else {
-	OSDMap::Incremental inc(notify->bl);
-	ctx->osdmap.apply_incremental(inc);
-      }
-      *ctx->log << now << "   osd " << ctx->osdmap << std::endl;
-    }
-    ctx->updates |= OSD_MON_UPDATE;
-    break;
-
-  case PAXOS_LOG:
-    {
-      bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_latest) {
-	LogSummary summary;
-	::decode(summary, p);
-	// show last log message
-	if (!summary.tail.empty())
-	  *ctx->log << now << "   log " << summary.tail.back() << std::endl;
-      } else {
-	LogEntry le;
-	__u8 v;
-	::decode(v, p);
-	while (!p.end()) {
-	  le.decode(p);
-	  *ctx->log << le << std::endl;
-	}
-      }
-      break;
-    }
-
-  case PAXOS_AUTH:
-    {
-#if 0
-      bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_latest) {
-	KeyServerData ctx;
-	::decode(ctx, p);
-	*ctx->log << now << "   auth " << std::endl;
-      } else {
-	while (!p.end()) {
-	  AuthMonitor::Incremental inc;
-          inc.decode(p);
-	  *ctx->log << now << "   auth " << inc.name.to_str() << std::endl;
-	}
-      }
-#endif
-      /* ignoring auth incremental.. don't want to decode it */
-      break;
-    }
-
-  case PAXOS_MONMAP:
-    {
-      ctx->mc.monmap.decode(notify->bl);
-      *ctx->log << now << "   mon " << ctx->mc.monmap << std::endl;
-    }
-    break;
-
-  default:
-    *ctx->log << now << "  ignoring unknown machine id " << notify->machine_id << std::endl;
-  }
-
-  map_ver[notify->machine_id] = notify->ver;
-
-  // have we seen them all?
-  seen.insert(notify->machine_id);
-  switch (ceph_tool_mode) {
-    case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER:
-      if (seen.size() == PAXOS_NUM) {
-	messenger->shutdown();
-      }
-      break;
-    case CEPH_TOOL_MODE_GUI:
-      ctx->gui_cond.Signal();
-      break;
-    default:
-      // do nothing
-      break;
-  }
-
-  notify->put();
-}
-
-class C_ObserverRefresh : public Context {
-public:
-  bool newmon;
-  C_ObserverRefresh(bool n, CephToolCtx *ctx_) 
-    : newmon(n),
-      ctx(ctx_)
-  {
-  }
-  void finish(int r) {
-    send_observe_requests(ctx);
-  }
-private:
-  CephToolCtx *ctx;
-};
-
-void send_observe_requests(CephToolCtx *ctx)
-{
-  dout(1) << "send_observe_requests " << dendl;
-
-  for (int i=0; i<PAXOS_NUM; i++) {
-    MMonObserve *m = new MMonObserve(ctx->mc.monmap.fsid, i, map_ver[i]);
-    dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
-    ctx->mc.send_mon_message(m);
-  }
-
-  registered.clear();
-  float seconds = g_conf->paxos_observer_timeout/2;
-  dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-  ctx->timer.add_event_after(seconds, new C_ObserverRefresh(false, ctx));
-}
 
 static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
 {
@@ -385,66 +203,6 @@ static void send_command(CephToolCtx *ctx)
   reply = true;
 }
 
-class Admin : public Dispatcher {
-public:
-  Admin(CephToolCtx *ctx_)
-    : Dispatcher(g_ceph_context),
-      ctx(ctx_)
-  {
-  }
-
-  bool ms_dispatch(Message *m) {
-    switch (m->get_type()) {
-    case MSG_MON_COMMAND_ACK:
-      handle_ack(ctx, (MMonCommandAck*)m);
-      break;
-    case MSG_COMMAND_REPLY:
-      handle_ack(ctx, (MCommandReply*)m);
-      break;
-    case MSG_MON_OBSERVE_NOTIFY:
-      handle_notify(ctx, (MMonObserveNotify *)m);
-      break;
-    case MSG_MON_OBSERVE:
-      handle_observe(ctx, (MMonObserve *)m);
-      break;
-    case CEPH_MSG_MON_MAP:
-      m->put();
-      break;
-    case CEPH_MSG_OSD_MAP:
-      handle_osd_map(ctx, (MOSDMap *)m);
-      break;
-    default:
-      return false;
-    }
-    return true;
-  }
-
-  void ms_handle_connect(Connection *con) {
-    if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      ctx->lock.Lock();
-      if (ceph_tool_mode != CEPH_TOOL_MODE_CLI_INPUT) {
-	send_observe_requests(ctx);
-      }
-      if (pending_cmd.size())
-	send_command(ctx);
-      ctx->lock.Unlock();
-    }
-  }
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
-
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
-  {
-    if (dest_type == CEPH_ENTITY_TYPE_MON)
-      return true;
-    *authorizer = ctx->mc.auth->build_authorizer(dest_type);
-    return true;
-  }
-
-private:
-  CephToolCtx *ctx;
-};
-
 int do_command(CephToolCtx *ctx,
 	       vector<string>& cmd, bufferlist& bl, bufferlist& rbl)
 {
@@ -495,6 +253,17 @@ int do_command(CephToolCtx *ctx,
     cout << reply_rs << std::endl;
 
   return reply_rc;
+}
+
+void do_status(CephToolCtx *ctx, bool shutdown) {
+  vector<string> cmd;
+  cmd.push_back("status");
+  bufferlist bl;
+
+  do_command(ctx, cmd, bl, bl);
+
+  if (shutdown)
+    messenger->shutdown();
 }
 
 static const char *cli_prompt(EditLine *e)
@@ -705,3 +474,72 @@ int ceph_tool_common_shutdown(CephToolCtx *ctx)
   
   return 0;
 }
+
+void Subscriptions::handle_log(MLog *m) 
+{
+  dout(10) << __func__ << " received log msg ver " << m->version << dendl;
+
+  if (last_known_version >= m->version) {
+    dout(10) << __func__ 
+	    << " we have already received ver " << m->version 
+	    << " (highest received: " << last_known_version << ") " << dendl;
+    return;
+  }
+  last_known_version = m->version;
+
+  std::deque<LogEntry>::iterator it = m->entries.begin();
+  for (; it != m->entries.end(); it++) {
+    LogEntry e = *it;
+    cout << e.stamp << " " << e.seq << " " << e.who 
+	 << " " << e.type << " " << e.msg << std::endl;
+  }
+ 
+  version_t v = last_known_version+1;
+  dout(10) << __func__ << " wanting " << name << " ver " << v << dendl;
+  ctx->mc.sub_want(name, v, 0);
+}
+
+bool Admin::ms_dispatch(Message *m) {
+  switch (m->get_type()) {
+  case MSG_MON_COMMAND_ACK:
+    handle_ack(ctx, (MMonCommandAck*)m);
+    break;
+  case MSG_COMMAND_REPLY:
+    handle_ack(ctx, (MCommandReply*)m);
+    break;
+  case CEPH_MSG_MON_MAP:
+    m->put();
+    break;
+  case MSG_LOG:
+   {
+    MLog *mlog = (MLog*) m;
+    subs.handle_log(mlog);
+    break;
+   }
+  default:
+    return false;
+  }
+  return true;
+}
+
+void Admin::ms_handle_connect(Connection *con) {
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    ctx->lock.Lock();
+    if (ceph_tool_mode != CEPH_TOOL_MODE_CLI_INPUT) {
+//	send_observe_requests(ctx);
+    }
+    if (pending_cmd.size())
+      send_command(ctx);
+    ctx->lock.Unlock();
+  }
+}
+
+bool Admin::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, 
+			      bool force_new)
+{
+  if (dest_type == CEPH_ENTITY_TYPE_MON)
+    return true;
+  *authorizer = ctx->mc.auth->build_authorizer(dest_type);
+  return true;
+}
+
