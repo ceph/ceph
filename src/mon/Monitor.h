@@ -85,7 +85,6 @@ class AdminSocketHook;
 class MMonGetMap;
 class MMonGetVersion;
 class MMonProbe;
-class MMonObserve;
 class MMonSubscribe;
 class MAuthRotating;
 class MRoute;
@@ -266,7 +265,6 @@ public:
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
   void handle_command(class MMonCommand *m);
-  void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
