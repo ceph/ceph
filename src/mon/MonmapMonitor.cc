@@ -143,7 +143,8 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
       mon->monmap->print_summary(ss);
-      ss << ", election epoch " << mon->get_epoch() << ", quorum " << mon->get_quorum();
+      ss << ", election epoch " << mon->get_epoch() << ", quorum " << mon->get_quorum()
+	 << " " << mon->get_quorum_names();
       r = 0;
     }
     else if (m->cmd.size() == 2 && m->cmd[1] == "getmap") {
