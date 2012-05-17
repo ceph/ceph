@@ -1557,7 +1557,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
 
-  bool first_read = false;
+  bool first_read = true;
 
   ObjectStore::Transaction& t = ctx->op_t;
 
