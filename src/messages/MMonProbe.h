@@ -21,6 +21,9 @@
 
 class MMonProbe : public Message {
 public:
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
+
   enum {
     OP_PROBE = 1,
     OP_REPLY = 2,
@@ -46,15 +49,18 @@ public:
   set<int32_t> quorum;
   bufferlist monmap_bl;
   map<string, version_t> paxos_versions;
+  bool has_ever_joined;
 
   string machine_name;
   map<string, map<version_t,bufferlist> > paxos_values;
   bufferlist latest_value;
   version_t latest_version, newest_version, oldest_version;
 
-  MMonProbe() : Message(MSG_MON_PROBE) {}
-  MMonProbe(const uuid_d& f, int o, const string& n)
-    : Message(MSG_MON_PROBE), fsid(f), op(o), name(n),
+  MMonProbe()
+    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
+  MMonProbe(const uuid_d& f, int o, const string& n, bool hej)
+    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
+      fsid(f), op(o), name(n), has_ever_joined(hej),
       latest_version(0), newest_version(0), oldest_version(0) {}
 private:
   ~MMonProbe() {}
@@ -69,6 +75,8 @@ public:
       out << " versions " << paxos_versions;
     if (machine_name.length())
       out << " machine_name " << machine_name << " " << oldest_version << "-" << newest_version;
+    if (!has_ever_joined)
+      out << " new";
     out << ")";
   }
   
@@ -85,6 +93,7 @@ public:
     ::encode(paxos_values, payload);
     ::encode(latest_value, payload);
     ::encode(latest_version, payload);
+    ::encode(has_ever_joined, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -100,6 +109,10 @@ public:
     ::decode(paxos_values, p);
     ::decode(latest_value, p);
     ::decode(latest_version, p);
+    if (header.version >= 2)
+      ::decode(has_ever_joined, p);
+    else
+      has_ever_joined = false;
   }
 };
 
