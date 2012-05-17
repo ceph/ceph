@@ -260,7 +260,7 @@ OPTION(osd_shed_reads, OPT_INT, false)     // forward from primary to replica
 OPTION(osd_shed_reads_min_latency, OPT_DOUBLE, .01)       // min local latency
 OPTION(osd_shed_reads_min_latency_diff, OPT_DOUBLE, .01)  // min latency difference
 OPTION(osd_shed_reads_min_latency_ratio, OPT_DOUBLE, 1.5)  // 1.2 == 20% higher than peer
-OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // default to 200MB client data allowed in-memory
+OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
 OPTION(osd_stat_refresh_interval, OPT_DOUBLE, .5)
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
@@ -317,7 +317,7 @@ OPTION(osd_scrub_max_interval, OPT_FLOAT, 60*60*24)   // once a day
 OPTION(osd_auto_weight, OPT_BOOL, false)
 OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0)  // seconds
 OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0) // seconds
-OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes")
+OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
