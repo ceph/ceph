@@ -159,9 +159,6 @@ int main(int argc, const char **argv)
   if (!print && !modified)
     usage();
 
-  if (modified && !create)
-    monmap.epoch++;
-
   if (print) 
     monmap.print(cout);
 
