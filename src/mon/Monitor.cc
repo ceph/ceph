@@ -453,7 +453,8 @@ void Monitor::bootstrap()
   reset_probe_timeout();
 
   // i'm outside the quorum
-  outside_quorum.insert(name);
+  if (monmap->contains(name))
+    outside_quorum.insert(name);
 
   // probe monitors
   dout(10) << "probing other monitors" << dendl;
@@ -655,14 +656,21 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     }
   } else {
     // not part of a quorum
-    outside_quorum.insert(m->name);
+    if (monmap->contains(m->name))
+      outside_quorum.insert(m->name);
+    else
+      dout(10) << " mostly ignoring mon." << m->name << ", not part of monmap" << dendl;
 
     unsigned need = monmap->size() / 2 + 1;
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
 
     if (outside_quorum.size() >= need) {
-      dout(10) << " that's enough to form a new quorum, calling election" << dendl;
-      start_election();
+      if (outside_quorum.count(name)) {
+	dout(10) << " that's enough to form a new quorum, calling election" << dendl;
+	start_election();
+      } else {
+	dout(10) << " that's enough to form a new quorum, but it does not include me; waiting" << dendl;
+      }
     } else {
       dout(10) << " that's not yet enough for a new quorum, waiting" << dendl;
     }
