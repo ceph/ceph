@@ -39,11 +39,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
 
 void MonmapMonitor::create_initial()
 {
-  bufferlist bl;
-  mon->store->get_bl_ss(bl, "mkfs", "monmap");
-  pending_map.decode(bl);
-  dout(10) << "create_initial set fed epoch " << pending_map.epoch << dendl;
-  assert(pending_map.epoch == 0);   // fix mkfs()
+  dout(10) << "create_initial using current monmap" << dendl;
+  pending_map = *mon->monmap;
   pending_map.epoch = 1;
 }
 
