@@ -703,6 +703,23 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     monmap->rename(peer_name, m->name);
   }
 
+  // new initial peer?
+  if (monmap->contains(m->name)) {
+    entity_addr_t a = monmap->get_addr(m->name);
+    a.set_port(0);
+    entity_addr_t b;
+    b.set_family(AF_INET);
+    dout(1) << " a " << a <<" b " << b << dendl;
+    if (a == b) {
+      dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
+      monmap->set_addr(m->name, m->get_source_addr());
+      m->put();
+
+      bootstrap();
+      return;
+    }
+  }
+
   // is there an existing quorum?
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;

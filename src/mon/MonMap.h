@@ -162,6 +162,11 @@ class MonMap {
     assert(m < rank_addr.size());
     return rank_addr[m];
   }
+  void set_addr(const string& n, entity_addr_t a) {
+    assert(mon_addr.count(n));
+    mon_addr[n] = a;
+    calc_ranks();
+  }
   entity_inst_t get_inst(const string& n) {
     assert(mon_addr.count(n));
     int m = get_rank(n);
