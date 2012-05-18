@@ -269,6 +269,14 @@ public:
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
 
+  /**
+   * generate health report
+   *
+   * @param status one-line status summary
+   * @param detailbl optional bufferlist* to fill with a detailed report
+   */
+  void get_health(string& status, bufferlist *detailbl);
+
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
