@@ -299,11 +299,17 @@ bool AdminSocket::do_accept()
 
   bool rval = false;
 
+  string firstword;
+  if (c.find(" ") == string::npos)
+    firstword = c;
+  else
+    firstword = c.substr(0, c.find(" "));
+
   m_lock.Lock();
-  map<string,AdminSocketHook*>::iterator p = m_hooks.find(c);
+  map<string,AdminSocketHook*>::iterator p = m_hooks.find(firstword);
   bufferlist out;
   if (p == m_hooks.end()) {
-    lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
+    lderr(m_cct) << "AdminSocket: request '" << firstword << "' not defined" << dendl;
   } else {
     bool success = p->second->call(c, out);
     if (!success) {
