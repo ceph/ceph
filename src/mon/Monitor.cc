@@ -649,6 +649,13 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
+
+  // did we discover a peer here?
+  if (!monmap->contains(m->get_source_addr())) {
+    dout(1) << " adding peer " << m->get_source_addr() << " to list of hints" << dendl;
+    extra_probe_peers.insert(m->get_source_addr());
+  }
+
   m->put();
 }
 
