@@ -311,15 +311,20 @@ int Monitor::init()
       // add missing initial members
       for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
 	if (!monmap->contains(*p)) {
-	  entity_addr_t a;
-	  a.set_family(AF_INET);
-	  for (int n=1; ; n++) {
-	    a.set_port(n);
-	    if (!monmap->contains(a))
-	      break;
+	  if (*p == name) {
+	    dout(1) << " adding self " << *p << " " << messenger->get_myaddr() << dendl;
+	    monmap->add(*p, messenger->get_myaddr());
+	  } else {
+	    entity_addr_t a;
+	    a.set_family(AF_INET);
+	    for (int n=1; ; n++) {
+	      a.set_port(n);
+	      if (!monmap->contains(a))
+		break;
+	    }
+	    dout(1) << " adding " << *p << " " << a << dendl;
+	    monmap->add(*p, a);
 	  }
-	  dout(1) << " adding " << *p << " " << a << dendl;
-	  monmap->add(*p, a);
 	  assert(monmap->contains(*p));
 	}
       }
