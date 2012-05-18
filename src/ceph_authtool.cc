@@ -43,8 +43,8 @@ void usage()
        << "  --add-key                     will add an encoded key to the keyring\n"
        << "  --cap subsystem capability    will set the capability for given subsystem\n"
        << "  --caps capsfile               will set all of capabilities associated with a\n"
-       << "                                given key, for all subsystems\n"
-       << "  -b, --bin                     will create a binary formatted keyring" << std::endl;
+       << "                                given key, for all subsystems"
+       << std::endl;
   exit(1);
 }
 
