@@ -124,6 +124,9 @@ int main(int argc, const char **argv)
       }
       try {
 	monmap.decode(monmapbl);
+
+	// always mark seed/mkfs monmap as epoch 0
+	monmap.set_epoch(0);
       }
       catch (const buffer::error& e) {
 	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << std::endl;
