@@ -1473,8 +1473,6 @@ noinst_HEADERS = \
 	messages/MMonGlobalID.h\
 	messages/MMonJoin.h\
         messages/MMonMap.h\
-        messages/MMonObserve.h\
-        messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
         messages/MMonProbe.h\
         messages/MMonSubscribe.h\
