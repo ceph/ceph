@@ -212,6 +212,8 @@ void Monitor::do_admin_command(string command, ostream& ss)
     _mon_status(ss);
   else if (command == "quorum_status")
     _quorum_status(ss);
+  else if (command.find("add_bootstrap_peer_hint") == 0)
+    _add_bootstrap_peer_hint(command, ss);
   else
     assert(0 == "bad AdminSocket command binding");
 }
@@ -378,6 +380,9 @@ int Monitor::init()
   r = admin_socket->register_command("quorum_status", admin_hook,
 					 "show current quorum status");
   assert(r == 0);
+  r = admin_socket->register_command("add_bootstrap_peer_hint", admin_hook,
+				     "add peer address as potential bootstrap peer for cluster bringup");
+  assert(r == 0);
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
@@ -521,6 +526,35 @@ void Monitor::bootstrap()
       messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined), i);
     }
   }
+}
+
+void Monitor::_add_bootstrap_peer_hint(string cmd, ostream& ss)
+{
+  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "'" << dendl;
+
+  if (is_leader() || is_peon()) {
+    ss << "mon already active; ignoring bootstrap hint";
+    return;
+  }
+
+  size_t off = cmd.find(" ");
+  if (off == std::string::npos) {
+    ss << "syntax is 'add_bootstrap_peer_hint ip[:port]'";
+    return;
+  }
+
+  entity_addr_t addr;
+  const char *end = 0;
+  if (!addr.parse(cmd.c_str() + off + 1, &end)) {
+    ss << "failed to parse addr '" << (cmd.c_str() + off + 1) << "'";
+    return;
+  }
+
+  if (addr.get_port() == 0)
+    addr.set_port(CEPH_MON_PORT);
+
+  extra_probe_peers.insert(addr);
+  ss << "adding peer " << addr << " to list: " << extra_probe_peers;
 }
 
 // called by bootstrap(), or on leader|peon -> electing
