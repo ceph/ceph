@@ -1082,7 +1082,10 @@ void Monitor::handle_command(MMonCommand *m)
     }
     if (m->cmd[0] == "status") {
       // reply with the status for all the components
+      string health;
+      get_health(health, NULL);
       stringstream ss;
+      ss << "   health " << health << "\n";
       ss << "   monmap " << *monmap << "\n";
       ss << "   osdmap " << osdmon()->osdmap << "\n";
       ss << "    pgmap " << pgmon()->pg_map << "\n";
