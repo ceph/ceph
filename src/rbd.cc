@@ -600,7 +600,7 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 			 const char *user)
 {
   MonMap monmap;
-  int r = MonClient::build_initial_monmap(g_ceph_context, monmap);
+  int r = monmap.build_initial(g_ceph_context, cerr);
   if (r < 0)
     return r;
 
