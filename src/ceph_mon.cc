@@ -132,9 +132,7 @@ int main(int argc, const char **argv)
     } else {
       int err = MonClient::build_initial_monmap(g_ceph_context, monmap);
       if (err < 0) {
-	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
-	usage();
-	exit(1);
+	cerr << argv[0] << ": warning: no initial monitors; must set 'mon initial members' and use admin socket to feed hints" << std::endl;
       }
 
       // am i part of the initial quorum?
