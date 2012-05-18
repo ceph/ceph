@@ -199,6 +199,21 @@ class MonMap {
   int read(const char *fn);
 
   /**
+   * build an initial bootstrap monmap from conf
+   *
+   * Build an initial bootstrap monmap from the config.  This will
+   * try, in this order:
+   *
+   *   1 monmap   -- an explicitly provided monmap
+   *   2 mon_host -- list of monitors
+   *   3 config [mon.*] sections, and 'mon addr' fields in those sections
+   *
+   * @param cct context (and associated config)
+   * @param errout ostream to send error messages too
+   */
+  int build_initial(CephContext *cct, ostream& errout);
+
+  /**
    * build a monmap from a list of hosts or ips
    *
    * Resolve dns as needed.  Give mons dummy names.

@@ -133,7 +133,7 @@ int main(int argc, const char **argv)
 	exit(1);
       }      
     } else {
-      int err = MonClient::build_initial_monmap(g_ceph_context, monmap);
+      int err = monmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
 	cerr << argv[0] << ": warning: no initial monitors; must set 'mon initial members' and use admin socket to feed hints" << std::endl;
       }
@@ -347,7 +347,7 @@ int main(int argc, const char **argv)
       ipaddr = g_conf->public_addr;
     } else {
       MonMap tmpmap;
-      int err = MonClient::build_initial_monmap(g_ceph_context, tmpmap);
+      int err = tmpmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
 	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
 	usage();
