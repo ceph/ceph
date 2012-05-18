@@ -1021,13 +1021,10 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "status") {
       // reply with the status for all the components
       stringstream ss;
-      ss << "   osdmap " << osdmon()->osdmap;
-      ss << "\n";
-      ss << "    pgmap " << pgmon()->pg_map;
-      ss << "\n";
-      ss << "   mdsmap " << mdsmon()->mdsmap;
-      ss << "\n";
-      ss << "   monmap " << *monmap;
+      ss << "   monmap " << *monmap << "\n";
+      ss << "   osdmap " << osdmon()->osdmap << "\n";
+      ss << "    pgmap " << pgmon()->pg_map << "\n";
+      ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
       rs = ss.str();
       r = 0;
     }
