@@ -115,7 +115,6 @@ binary-arch: build install
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
 	dh_strip -plibcephfs1 --dbg-package=libcephfs1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
-	dh_strip -pgceph --dbg-package=gceph-dbg
 	dh_strip -prest-bench --dbg-package=rest-bench-dbg
 
 	dh_compress
