@@ -490,7 +490,7 @@ void MDSMonitor::on_active()
   tick();
   update_logger();
 
-  mon->clog.info() << "mdsmap: " << mdsmap << "\n";
+  mon->clog.info() << "mdsmap " << mdsmap << "\n";
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,

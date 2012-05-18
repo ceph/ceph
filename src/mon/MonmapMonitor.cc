@@ -265,7 +265,7 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
 
 void MonmapMonitor::on_active() 
 {
-  mon->clog.info() << "monmap: " << *mon->monmap << "\n";
+  mon->clog.info() << "monmap " << *mon->monmap << "\n";
 }
 
 bool MonmapMonitor::prepare_command(MMonCommand *m)

@@ -234,7 +234,7 @@ void OSDMonitor::on_active()
   if (thrash_map && thrash())
     propose_pending();
 
-  mon->clog.info() << "osdmap: " << osdmap << "\n"; 
+  mon->clog.info() << "osdmap " << osdmap << "\n"; 
 }
 
 void OSDMonitor::update_logger()
