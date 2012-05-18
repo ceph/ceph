@@ -1,13 +1,9 @@
-  $ ceph-authtool kring --create-keyring --bin
+  $ ceph-authtool kring --create-keyring
   creating kring
 
-  $ ceph-authtool kring --list --bin
-
-# --list actually does not use --bin, but autodetects; run it both
-# ways just to trigger that
   $ ceph-authtool kring --list
 
-  $ ceph-authtool kring --gen-key --bin
+  $ ceph-authtool kring --gen-key
 
 # cram makes matching escape-containing lines with regexps a bit ugly
   $ ceph-authtool kring --list
