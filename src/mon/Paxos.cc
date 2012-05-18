@@ -17,7 +17,6 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonPaxos.h"
-#include "messages/MMonObserveNotify.h"
 
 #include "common/config.h"
 
@@ -381,7 +380,6 @@ void Paxos::begin(bufferlist& v)
     finish_contexts(g_ceph_context, waiting_for_commit);
     finish_contexts(g_ceph_context, waiting_for_readable);
     finish_contexts(g_ceph_context, waiting_for_writeable);
-    update_observers();
     return;
   }
 
@@ -891,72 +889,8 @@ void Paxos::dispatch(PaxosServiceMessage *m)
   default:
     assert(0);
   }
-
-  if (is_readable())
-    update_observers();
 }
 
-void Paxos::register_observer(entity_inst_t inst, version_t v)
-{
-  dout(10) << "register_observer " << inst << " v" << v << dendl;
-  
-  Observer *observer;
-  if (observers.count(inst))
-    observer = observers[inst];
-  else {
-    observers[inst] = observer = new Observer(inst, v);
-  }  
-
-  utime_t timeout = ceph_clock_now(g_ceph_context);
-  timeout += g_conf->paxos_observer_timeout;
-  observer->timeout = timeout;
-
-  if (is_readable())
-    update_observers();
-}
-
-
-void Paxos::update_observers()
-{
-  dout(10) << "update_observers" << dendl;
-
-  bufferlist bl;
-  version_t ver;
-
-  map<entity_inst_t, Observer *>::iterator iter = observers.begin();
-  while (iter != observers.end()) {
-    Observer *observer = iter->second;
-
-    // timed out?
-    if (ceph_clock_now(g_ceph_context) > observer->timeout) {
-      delete observer;
-      observers.erase(iter++);
-      continue;
-    }
-    ++iter;
-    
-    if (observer->last_version == 0 ||
-	observer->last_version < first_committed) {
-      ver = get_stashed(bl);
-      if (ver) {
-	dout(10) << " sending summary state v" << ver << " to " << observer->inst << dendl;
-	mon->messenger->send_message(new MMonObserveNotify(mon->monmap->fsid, machine_id, bl, ver, true),
-				     observer->inst);
-	observer->last_version = ver;
-	continue;
-      }
-    }
-    
-    for (ver = observer->last_version + 1; ver <= last_committed; ver++) {
-      if (read(ver, bl)) {
-	dout(10) << " sending state v" << ver << " to " << observer->inst << dendl;
-	mon->messenger->send_message(new MMonObserveNotify(mon->monmap->fsid, machine_id, bl, ver, false),
-				     observer->inst);
-	observer->last_version = ver;
-      }
-    }
-  }
-}
 
 // -----------------
 // service interface
