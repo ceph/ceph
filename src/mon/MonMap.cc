@@ -11,6 +11,8 @@
 #include "include/addr_parsing.h"
 #include "common/ceph_argparse.h"
 
+#include "common/dout.h"
+
 using ceph::Formatter;
 
 void MonMap::encode(bufferlist& blist, uint64_t features) const
@@ -183,4 +185,48 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
     add(name, addrs[i]);
   }
   return 0;
+}
+
+void MonMap::filter_initial_members(CephContext *cct,
+				    list<std::string>& initial_members,
+				    string my_name, entity_addr_t my_addr,
+				    set<entity_addr_t> *removed)
+{
+  // remove non-initial members
+  unsigned i = 0;
+  while (i < size()) {
+    string n = get_name(i);
+    if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
+      lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addr(i) << dendl;
+      i++;
+      continue;
+    }
+
+    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addr(i) << dendl;
+    if (removed)
+      removed->insert(get_addr(i));
+    remove(n);
+    assert(!contains(n));
+  }
+
+  // add missing initial members
+  for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
+    if (!contains(*p)) {
+      if (*p == my_name) {
+	lgeneric_dout(cct, 1) << " adding self " << *p << " " << my_addr << dendl;
+	add(*p, my_addr);
+      } else {
+	entity_addr_t a;
+	a.set_family(AF_INET);
+	for (int n=1; ; n++) {
+	  a.set_nonce(n);
+	  if (!contains(a))
+	    break;
+	}
+	lgeneric_dout(cct, 1) << " adding " << *p << " " << a << dendl;
+	add(*p, a);
+      }
+      assert(contains(*p));
+    }
+  }
 }
