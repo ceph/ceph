@@ -27,3 +27,4 @@ instance (a single context).
    Configuration <ceph-conf>
    Deploy Config <deploying-ceph-conf>
    deploying-ceph-with-mkcephfs
+   Deploy with Chef <chef>

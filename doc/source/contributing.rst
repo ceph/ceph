@@ -10,12 +10,12 @@ Generate SSH Keys
 You must generate SSH keys for github to clone the Ceph
 repository. If you do not have SSH keys for ``github``, execute::
 
-	$ ssh-keygen -d
+	ssh-keygen -d
 
 Get the key to add to your ``github`` account (the following example
 assumes you used the default file path)::
 
-	$ cat .ssh/id_dsa.pub
+	cat .ssh/id_dsa.pub
 
 Copy the public key.
 

@@ -20,6 +20,7 @@ cluster to ensure that the storage hosts are running smoothly.
    start/index
    install/index
    config-cluster/index
+   init/index
    ops/index
    rec/index
    config
