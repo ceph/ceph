@@ -415,7 +415,7 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
   list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
   for (; it != summary.tail.rend(); it++) {
     LogEntry e = *it;
-    if (e.type > level)
+    if (e.type < level)
       continue;
 
     mlog->entries.push_back(e);
@@ -457,7 +457,7 @@ bool LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
       LogEntry le;
       le.decode(p);
 
-      if (level < le.type) {
+      if (le.type < level) {
 	dout(20) << __func__ << " requested " << level 
 		 << " entry " << le.type << dendl;
 	continue;
