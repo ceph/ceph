@@ -387,11 +387,13 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
 
   generate_secret(info.session_key);
 
-  string s = ceph_entity_type_name(service_id);
-  if (!data.get_caps(cct, info.ticket.name, s, info.ticket.caps)) {
-    return -EINVAL;
+  // mon keys are stored externally.  and the caps are blank anyway.
+  if (service_id != CEPH_ENTITY_TYPE_MON) {
+    string s = ceph_entity_type_name(service_id);
+    if (!data.get_caps(cct, info.ticket.name, s, info.ticket.caps)) {
+      return -EINVAL;
+    }
   }
-
   return 0;
 }
 

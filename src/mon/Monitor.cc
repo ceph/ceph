@@ -62,6 +62,7 @@
 #include "osd/OSDMap.h"
 
 #include "auth/AuthSupported.h"
+#include "auth/KeyRing.h"
 
 #include "common/config.h"
 
@@ -222,7 +223,7 @@ void Monitor::handle_signal(int signum)
   shutdown();
 }
 
-void Monitor::init()
+int Monitor::init()
 {
   lock.Lock();
 
@@ -296,13 +297,32 @@ void Monitor::init()
     KeyRing keyring;
     bufferlist::iterator p = bl.begin();
     ::decode(keyring, p);
-    key_server.bootstrap_keyring(keyring);
+    extract_save_mon_key(keyring);
+  }
+
+  ostringstream os;
+  os << g_conf->mon_data << "/keyring";
+  int r = keyring.load(cct, os.str());
+  if (r < 0) {
+    EntityName mon_name;
+    mon_name.set_type(CEPH_ENTITY_TYPE_MON);
+    EntityAuth mon_key;
+    if (key_server.get_auth(mon_name, mon_key)) {
+      dout(1) << "copying mon. key from old db to external keyring" << dendl;
+      keyring.add(mon_name, mon_key);
+      bufferlist bl;
+      keyring.encode_plaintext(bl);
+      store->put_bl_ss(bl, "keyring", NULL);
+    } else {
+      derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+      return r;
+    }
   }
 
   admin_hook = new AdminHook(this);
   AdminSocket* admin_socket = cct->get_admin_socket();
-  int r = admin_socket->register_command("mon_status", admin_hook,
-					 "show current monitor status");
+  r = admin_socket->register_command("mon_status", admin_hook,
+				     "show current monitor status");
   assert(r == 0);
   r = admin_socket->register_command("quorum_status", admin_hook,
 					 "show current quorum status");
@@ -319,6 +339,7 @@ void Monitor::init()
   bootstrap();
   
   lock.Unlock();
+  return 0;
 }
 
 void Monitor::register_cluster_logger()
@@ -1854,11 +1875,31 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     derr << "unable to load initial keyring " << g_conf->keyring << dendl;
     return r;
   }
+
+  // put mon. key in external keyring; seed with everything else.
+  extract_save_mon_key(keyring);
+
   bufferlist keyringbl;
   keyring.encode_plaintext(keyringbl);
   store->put_bl_ss(keyringbl, "mkfs", "keyring");
 
   return 0;
+}
+
+void Monitor::extract_save_mon_key(KeyRing& keyring)
+{
+  EntityName mon_name;
+  mon_name.set_type(CEPH_ENTITY_TYPE_MON);
+  EntityAuth mon_key;
+  if (keyring.get_auth(mon_name, mon_key)) {
+    dout(10) << "extract_save_mon_key moving mon. key to separate keyring" << dendl;
+    KeyRing pkey;
+    pkey.add(mon_name, mon_key);
+    bufferlist bl;
+    pkey.encode_plaintext(bl);
+    store->put_bl_ss(bl, "keyring", NULL);
+    keyring.remove(mon_name);
+  }
 }
 
 bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
@@ -1885,8 +1926,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   auth_ticket_info.ticket.global_id = 0;
 
   CryptoKey secret;
-  if (!key_server.get_secret(name, secret)) {
-    dout(0) << " couldn't get secret for mon service" << dendl;
+  if (!keyring.get_secret(name, secret) &&
+      !key_server.get_secret(name, secret)) {
+    dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
     stringstream ss;
     key_server.list_secrets(ss);
     dout(0) << ss.str() << dendl;
@@ -1940,7 +1982,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(g_ceph_context, &key_server, iter,
+	int ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
 					  auth_ticket_info, authorizer_reply);
 	if (ret >= 0)
 	  isvalid = true;
