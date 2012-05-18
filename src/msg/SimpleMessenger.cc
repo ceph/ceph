@@ -457,6 +457,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
     pipe = rank_pipe[con->get_peer_addr()];
     // we get the Pipe to match the put() below
     pipe->get();
+    con->reset_pipe(pipe);
   }
   submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), lazy);
   lock.Unlock();
