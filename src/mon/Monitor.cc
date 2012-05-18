@@ -318,7 +318,7 @@ int Monitor::init()
 	    entity_addr_t a;
 	    a.set_family(AF_INET);
 	    for (int n=1; ; n++) {
-	      a.set_port(n);
+	      a.set_nonce(n);
 	      if (!monmap->contains(a))
 		break;
 	    }
@@ -705,12 +705,7 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 
   // new initial peer?
   if (monmap->contains(m->name)) {
-    entity_addr_t a = monmap->get_addr(m->name);
-    a.set_port(0);
-    entity_addr_t b;
-    b.set_family(AF_INET);
-    dout(1) << " a " << a <<" b " << b << dendl;
-    if (a == b) {
+    if (monmap->get_addr(m->name).is_blank_ip()) {
       dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
       monmap->set_addr(m->name, m->get_source_addr());
       m->put();
