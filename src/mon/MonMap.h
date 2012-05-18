@@ -198,7 +198,34 @@ class MonMap {
   int write(const char *fn);
   int read(const char *fn);
 
+  /**
+   * build a monmap from a list of hosts or ips
+   *
+   * Resolve dns as needed.  Give mons dummy names.
+   *
+   * @param hosts  list of hosts, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
   int build_from_host_list(std::string hosts, std::string prefix);
+
+  /**
+   * filter monmap given a set of initial members.
+   *
+   * Remove mons that aren't in the initial_members list.  Add missing
+   * mons and give them dummy IPs (blank IPv4, with a non-zero
+   * nonce). If the name matches my_name, then my_addr will be used in
+   * place of a dummy addr.
+   *
+   * @param initial_members list of initial member names
+   * @param my_name name of self, can be blank
+   * @param my_addr my addr
+   * @param removed optional pointer to set to insert removed mon addrs to
+   */
+  void filter_initial_members(CephContext *cct,
+			      list<std::string>& initial_members,
+			      string my_name, entity_addr_t my_addr,
+			      set<entity_addr_t> *removed);
 
   void print(ostream& out) const;
   void print_summary(ostream& out) const;

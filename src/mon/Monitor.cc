@@ -292,42 +292,8 @@ int Monitor::init()
     if (initial_members.size()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
-      // remove non-initial members
-      unsigned i = 0;
-      while (i < monmap->size()) {
-	string n = monmap->get_name(i);
-	if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
-	  dout(1) << " keeping " << n << " " << monmap->get_addr(i) << dendl;
-	  i++;
-	  continue;
-	}
-
-	dout(1) << " removing " << monmap->get_name(i) << " " << monmap->get_addr(i) << dendl;
-	extra_probe_peers.insert(monmap->get_addr(i));
-	monmap->remove(n);
-	assert(!monmap->contains(n));
-      }
-
-      // add missing initial members
-      for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
-	if (!monmap->contains(*p)) {
-	  if (*p == name) {
-	    dout(1) << " adding self " << *p << " " << messenger->get_myaddr() << dendl;
-	    monmap->add(*p, messenger->get_myaddr());
-	  } else {
-	    entity_addr_t a;
-	    a.set_family(AF_INET);
-	    for (int n=1; ; n++) {
-	      a.set_nonce(n);
-	      if (!monmap->contains(a))
-		break;
-	    }
-	    dout(1) << " adding " << *p << " " << a << dendl;
-	    monmap->add(*p, a);
-	  }
-	  assert(monmap->contains(*p));
-	}
-      }
+      monmap->filter_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
+				     &extra_probe_peers);
 
       // (re)calc my rank, in case it changed
       rank = monmap->get_rank(name);
