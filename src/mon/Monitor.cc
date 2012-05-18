@@ -962,6 +962,41 @@ void Monitor::_mon_status(ostream& ss)
   jf.flush(ss);
 }
 
+void Monitor::get_health(string& status, bufferlist *detailbl)
+{
+  list<pair<health_status_t,string> > summary;
+  list<pair<health_status_t,string> > detail;
+  for (vector<PaxosService*>::iterator p = paxos_service.begin();
+       p != paxos_service.end();
+       p++) {
+    PaxosService *s = *p;
+    s->get_health(summary, detailbl ? &detail : NULL);
+  }
+
+  stringstream ss;
+  health_status_t overall = HEALTH_OK;
+  if (!summary.empty()) {
+    ss << ' ';
+    while (!summary.empty()) {
+      if (overall > summary.front().first)
+	overall = summary.front().first;
+      ss << summary.front().second;
+      summary.pop_front();
+      if (!summary.empty())
+	ss << "; ";
+    }
+  }
+  stringstream fss;
+  fss << overall;
+  status = fss.str() + ss.str();
+
+  while (!detail.empty()) {
+    detailbl->append(detail.front().second);
+    detailbl->append('\n');
+    detail.pop_front();
+  }
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
@@ -1074,37 +1109,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "health") {
-      list<pair<health_status_t,string> > summary;
-      list<pair<health_status_t,string> > detail;
-      for (vector<PaxosService*>::iterator p = paxos_service.begin();
-	   p != paxos_service.end();
-	   p++) {
-	PaxosService *s = *p;
-	ostringstream oss;
-	s->get_health(summary, (m->cmd.size() > 1) ? &detail : NULL);
-      }
-      
-      stringstream ss;
-      health_status_t overall = HEALTH_OK;
-      if (!summary.empty()) {
-	ss << ' ';
-	while (!summary.empty()) {
-	  if (overall > summary.front().first)
-	    overall = summary.front().first;
-	  ss << summary.front().second;
-	  summary.pop_front();
-	  if (!summary.empty())
-	    ss << "; ";
-	}
-      }
-      stringstream fss;
-      fss << overall;
-      rs = fss.str() + ss.str();
-      while (!detail.empty()) {
-	rdata.append(detail.front().second);
-	rdata.append('\n');
-	detail.pop_front();
-      }
+      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
       r = 0;
     }
     if (m->cmd[0] == "heap") {
