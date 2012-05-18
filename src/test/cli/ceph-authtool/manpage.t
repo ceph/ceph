@@ -15,7 +15,6 @@
     --cap subsystem capability    will set the capability for given subsystem
     --caps capsfile               will set all of capabilities associated with a
                                   given key, for all subsystems
-    -b, --bin                     will create a binary formatted keyring
   [1]
 
 # demonstrate that manpage examples fail without config
