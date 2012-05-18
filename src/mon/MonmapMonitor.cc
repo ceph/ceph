@@ -263,6 +263,12 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
   return false;
 }
 
+void MonmapMonitor::on_active() 
+{
+  if (mon->is_leader())
+    mon->clog.info() << "monmap " << *mon->monmap << "\n";
+}
+
 bool MonmapMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;

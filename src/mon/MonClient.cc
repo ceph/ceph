@@ -616,6 +616,10 @@ void MonClient::tick()
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
+    ldout(cct, 10) << "renew subs? (now: " << now 
+		   << "; renew after: " << sub_renew_after << ") -- " 
+		   << (now > sub_renew_after ? "yes" : "no") 
+		   << dendl;
     if (now > sub_renew_after)
       _renew_subs();
 

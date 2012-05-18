@@ -1,5 +1,3 @@
-%define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
-
 %bcond_with ocf
 # it seems there is no usable tcmalloc rpm for x86_64; parts of
 # google-perftools don't compile on x86_64, and apparently the
@@ -118,18 +116,6 @@ obsync is a tool to synchronize objects between cloud object
 storage providers, such as Amazon S3 (or compatible services), a
 Ceph RADOS cluster, or a local directory.
 
-%if %{with_gtk2}
-%package gcephtool
-Summary:	Ceph graphical monitoring tool
-Group:		System Environment/Base
-License:	LGPLv2
-Requires:	gtk2 gtkmm24
-BuildRequires:	gtk2-devel gtkmm24-devel
-%description gcephtool
-gcephtool is a graphical monitor for the clusters running the Ceph distributed
-file system.
-%endif
-
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
@@ -199,12 +185,6 @@ object storage.
 MY_CONF_OPT=""
 
 MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
-
-%if %{with_gtk2}
-MY_CONF_OPT="$MY_CONF_OPT --with-gtk2"
-%else
-MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
-%endif
 
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
@@ -401,14 +381,6 @@ fi
 %if %{defined suse_version}
 %restart_on_update ceph-radosgw
 %insserv_cleanup
-%endif
-
-#################################################################################
-%if %{with_gtk2}
-%files gcephtool
-%defattr(-,root,root,-)
-%{_bindir}/gceph
-%{_datadir}/ceph_tool/gui_resources/*
 %endif
 
 #################################################################################

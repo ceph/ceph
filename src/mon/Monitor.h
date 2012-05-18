@@ -86,7 +86,6 @@ class AdminSocketHook;
 class MMonGetMap;
 class MMonGetVersion;
 class MMonProbe;
-class MMonObserve;
 class MMonSubscribe;
 class MAuthRotating;
 class MRoute;
@@ -219,11 +218,29 @@ public:
   Paxos *get_paxos_by_name(const string& name);
   PaxosService *get_paxos_service_by_name(const string& name);
 
-  class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
-  class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
-  class MonmapMonitor *monmon() { return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP]; }
-  class OSDMonitor *osdmon() { return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP]; }
-  class AuthMonitor *authmon() { return (class AuthMonitor *)paxos_service[PAXOS_AUTH]; }
+  class PGMonitor *pgmon() {
+    return (class PGMonitor *)paxos_service[PAXOS_PGMAP];
+  }
+
+  class MDSMonitor *mdsmon() {
+    return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP];
+  }
+
+  class MonmapMonitor *monmon() {
+    return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP];
+  }
+
+  class OSDMonitor *osdmon() {
+    return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP];
+  }
+
+  class AuthMonitor *authmon() {
+    return (class AuthMonitor *)paxos_service[PAXOS_AUTH];
+  }
+
+  class LogMonitor *logmon() {
+    return (class LogMonitor*) paxos_service[PAXOS_LOG];
+  }
 
   friend class Paxos;
   friend class OSDMonitor;
@@ -250,7 +267,6 @@ public:
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
   void handle_command(class MMonCommand *m);
-  void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);

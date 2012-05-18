@@ -28,8 +28,6 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
-#include "messages/MMonObserve.h"
-#include "messages/MMonObserveNotify.h"
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
@@ -1047,6 +1045,16 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "status") {
+      // reply with the status for all the components
+      stringstream ss;
+      ss << "   monmap " << *monmap << "\n";
+      ss << "   osdmap " << osdmon()->osdmap << "\n";
+      ss << "    pgmap " << pgmon()->pg_map << "\n";
+      ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+      rs = ss.str();
+      r = 0;
+    }
     if (m->cmd[0] == "quorum_status") {
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
@@ -1342,25 +1350,6 @@ void Monitor::remove_session(MonSession *s)
 }
 
 
-void Monitor::handle_observe(MMonObserve *m)
-{
-  dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
-  // check that there are perms. Send a response back if they aren't sufficient,
-  // and delete the message (if it's not deleted for us, which happens when
-  // we own the connection to the requested observer).
-  MonSession *session = m->get_session();
-  if (!session || !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
-    send_reply(m, m);
-    return;
-  }
-  if (m->machine_id >= PAXOS_NUM) {
-    dout(0) << "register_observer: bad monitor id: " << m->machine_id << dendl;
-  } else {
-    paxos[m->machine_id]->register_observer(m->get_orig_source_inst(), m->ver);
-  }
-  messenger->send_message(m, m->get_orig_source_inst());
-}
-
 void Monitor::send_command(const entity_inst_t& inst,
 			   const vector<string>& com, version_t version)
 {
@@ -1577,10 +1566,6 @@ bool Monitor::_ms_dispatch(Message *m)
       }
       break;
 
-    case MSG_MON_OBSERVE:
-      handle_observe((MMonObserve *)m);
-      break;
-
       // elector messages
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
@@ -1646,6 +1631,10 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       }
     } else if (p->first == "monmap") {
       check_sub(s->sub_map["monmap"]);
+    } else if ((p->first == "log-error") || (p->first == "log-warn")
+	|| (p->first == "log-sec") || (p->first == "log-info") 
+	|| (p->first == "log-debug")) {
+      logmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
