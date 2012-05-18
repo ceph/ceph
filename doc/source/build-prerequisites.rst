@@ -29,17 +29,16 @@ depend on the following:
 - ``libcrypto++-dev``
 - ``libcrypto++``
 - ``libexpat1-dev``
-- ``libgtkmm-2.4-dev``
 - ``pkg-config``
 - ``libcurl4-gnutls-dev``
 
 On Ubuntu, execute ``sudo apt-get install`` for each dependency that isn't installed on your host. ::
 
-	$ sudo apt-get install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev libgtkmm-2.4-dev
+	$ sudo apt-get install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev
 
 On Debian/Squeeze, execute ``aptitude install`` for each dependency that isn't installed on your host. ::
 
-	$ aptitude install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev libgtkmm-2.4-dev
+	$ aptitude install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev
 
 
 Ubuntu Requirements
