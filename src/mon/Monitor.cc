@@ -748,11 +748,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       }
     }
     if (ok) {
-      if (monmap->contains(name)) {
+      if (monmap->contains(name) &&
+	  !monmap->get_addr(name).is_blank_ip()) {
 	// i'm part of the cluster; just initiate a new election
 	start_election();
       } else {
-	dout(10) << " ready to join, but i'm not in the monmap, trying to join" << dendl;
+	dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
 	messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
 				monmap->get_inst(*m->quorum.begin()));
       }
