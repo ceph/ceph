@@ -468,7 +468,6 @@ private:
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
   bool m_filestore_journal_writeahead;
-  std::string m_filestore_dev;
   int m_filestore_fiemap_threshold;
   bool m_filestore_sync_flush;
   int m_filestore_flusher_max_fds;

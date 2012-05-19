@@ -688,7 +688,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_journal_parallel(g_conf->filestore_journal_parallel ),
   m_filestore_journal_trailing(g_conf->filestore_journal_trailing),
   m_filestore_journal_writeahead(g_conf->filestore_journal_writeahead),
-  m_filestore_dev(g_conf->filestore_dev),
   m_filestore_fiemap_threshold(g_conf->filestore_fiemap_threshold),
   m_filestore_sync_flush(g_conf->filestore_sync_flush),
   m_filestore_flusher_max_fds(g_conf->filestore_flusher_max_fds),
@@ -916,17 +915,6 @@ int FileStore::mkfs()
   memset(&volargs, 0, sizeof(volargs));
 #endif
 
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "mounting" << dendl;
-    std::string mret = run_cmd("mount", m_filestore_dev.c_str(), (char*)NULL);
-    if (!mret.empty()) {
-      derr << "FileStore::mkfs: failed to mount m_filestore_dev "
-	   << "'" << m_filestore_dev << "'. " << mret << dendl;
-      ret = -EIO;
-      goto out;
-    }
-  }
-
   dout(1) << "mkfs in " << basedir << dendl;
 
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
@@ -1119,12 +1107,6 @@ int FileStore::mkfs()
   ret = mkjournal();
   if (ret)
     goto close_basedir_fd;
-
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "umounting" << dendl;
-    snprintf(buf, sizeof(buf), "umount %s", m_filestore_dev.c_str());
-    //system(cmd);
-  }
 
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
@@ -1637,11 +1619,6 @@ int FileStore::mount()
   uint64_t initial_op_seq;
   set<string> cluster_snaps;
 
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "mounting" << dendl;
-    //run_cmd("mount", m_filestore_dev, (char*)NULL);
-  }
-
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
   
   // make sure global base dir exists
@@ -2070,11 +2047,6 @@ int FileStore::umount()
     basedir_fd = -1;
   }
   object_map.reset();
-
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "umounting" << dendl;
-    //run_cmd("umount", m_filestore_dev, (char*)NULL);
-  }
 
   {
     Mutex::Locker l(sync_entry_timeo_lock);
