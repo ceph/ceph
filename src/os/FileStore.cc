@@ -855,22 +855,29 @@ int FileStore::mkfs()
 {
   int ret = 0;
   char buf[PATH_MAX];
-#if defined(__linux__)
   int basedir_fd;
+
+#if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
 #endif
 
   dout(1) << "mkfs in " << basedir << dendl;
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  if (basedir_fd < 0) {
+    ret = -errno;
+    derr << "mkfs failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
 
   // fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(buf, O_CREAT|O_WRONLY|O_TRUNC, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
-    derr << "FileStore::mkfs: failed to open " << buf << ": "
+    derr << "mkfs: failed to open " << buf << ": "
 	 << cpp_strerror(ret) << dendl;
-    goto out;
+    goto close_basedir_fd;
   }
   if (lock_fsid() < 0) {
     ret = -EBUSY;
@@ -887,13 +894,13 @@ int FileStore::mkfs()
   strcat(fsid_str, "\n");
   ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
   if (ret < 0) {
-    derr << "FileStore::mkfs: failed to write fsid: "
+    derr << "mkfs: failed to write fsid: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
   if (TEMP_FAILURE_RETRY(::close(fsid_fd))) {
     ret = errno;
-    derr << "FileStore::mkfs: close failed: can't write fsid: "
+    derr << "mkfs: close failed: can't write fsid: "
 	 << cpp_strerror(ret) << dendl;
     fsid_fd = -1;
     goto close_fsid_fd;
@@ -904,14 +911,13 @@ int FileStore::mkfs()
 
   ret = write_version_stamp();
   if (ret < 0) {
-    derr << "Firestore::mkfs: write_version_stamp() failed: "
+    derr << "mkfs: write_version_stamp() failed: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
 
   // current
 #if defined(__linux__)
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   volargs.fd = 0;
   strcpy(volargs.name, "current");
   if (::ioctl(basedir_fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs)) {
@@ -927,17 +933,17 @@ int FileStore::mkfs()
       if (::mkdir(current_fn.c_str(), 0755)) {
 	ret = errno;
 	if (ret != EEXIST) {
-	  derr << "FileStore::mkfs: mkdir " << current_fn << " failed: "
+	  derr << "mkfs: mkdir " << current_fn << " failed: "
 	       << cpp_strerror(ret) << dendl;
-	  goto close_basedir_fd;
+	  goto close_fsid_fd;
 	}
       }
 #if defined(__linux__)
     }
     else {
-      derr << "FileStore::mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
+      derr << "mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
 	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
   }
   else {
@@ -945,9 +951,9 @@ int FileStore::mkfs()
     dout(2) << " created btrfs subvol " << current_fn << dendl;
     if (::chmod(current_fn.c_str(), 0755)) {
       ret = -errno;
-      derr << "FileStore::mkfs: failed to chmod " << current_fn << " to 0755: "
+      derr << "mkfs: failed to chmod " << current_fn << " to 0755: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
     btrfs_stable_commits = true;
   }
@@ -958,16 +964,16 @@ int FileStore::mkfs()
     uint64_t initial_seq;
     int fd = read_op_seq(&initial_seq);
     if (fd < 0) {
-      derr << "FileStore::mkfs: failed to create " << current_op_seq_fn << ": "
+      derr << "mkfs: failed to create " << current_op_seq_fn << ": "
 	   << cpp_strerror(fd) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
     int err = write_op_seq(fd, 1);
     if (err < 0) {
       TEMP_FAILURE_RETRY(::close(fd));  
-      derr << "FileStore::mkfs: failed to write to " << current_op_seq_fn << ": "
+      derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
 	   << cpp_strerror(err) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
     TEMP_FAILURE_RETRY(::close(fd));  
   }
@@ -983,7 +989,7 @@ int FileStore::mkfs()
     } else {
       derr << "Failed to create leveldb: " << status.ToString() << dendl;
       ret = -1;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
   }
 
@@ -994,17 +1000,17 @@ int FileStore::mkfs()
     assert(volargs.fd >= 0);
     if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
       ret = -errno;
-      derr << "FileStore::mkfs: failed to create " << volargs.name << ": "
+      derr << "mkfs: failed to create " << volargs.name << ": "
 	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
 
     if (::fchmod(volargs.fd, 0755)) {
       TEMP_FAILURE_RETRY(::close(volargs.fd));
       ret = -errno;
-      derr << "FileStore::mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
+      derr << "mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
     TEMP_FAILURE_RETRY(::close(volargs.fd));
   }
@@ -1012,21 +1018,18 @@ int FileStore::mkfs()
   // journal?
   ret = mkjournal();
   if (ret)
-    goto close_basedir_fd;
+    goto close_fsid_fd;
 
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
- close_basedir_fd:
-#if defined(__linux__)
-  TEMP_FAILURE_RETRY(::close(basedir_fd));
-#endif
  close_fsid_fd:
   if (fsid_fd != -1) {
     TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;
   }
-out:
+ close_basedir_fd:
+  TEMP_FAILURE_RETRY(::close(basedir_fd));
   return ret;
 }
 
