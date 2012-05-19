@@ -1013,6 +1013,30 @@ int FileStore::mkfs()
       goto close_fsid_fd;
     }
     if (initial_seq == 0) {
+
+      if (btrfs_stable_commits) {
+	// create snap_0 too
+	snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
+	volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
+	assert(volargs.fd >= 0);
+	if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
+	  ret = -errno;
+	  if (ret != -EEXIST) {
+	    derr << "mkfs: failed to create " << volargs.name << ": "
+		 << cpp_strerror(ret) << dendl;
+	    goto close_fsid_fd;
+	  }
+	}
+	if (::fchmod(volargs.fd, 0755)) {
+	  TEMP_FAILURE_RETRY(::close(volargs.fd));
+	  ret = -errno;
+	  derr << "mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
+	       << cpp_strerror(ret) << dendl;
+	  goto close_fsid_fd;
+	}
+	TEMP_FAILURE_RETRY(::close(volargs.fd));
+      }
+      
       int err = write_op_seq(fd, 1);
       if (err < 0) {
 	TEMP_FAILURE_RETRY(::close(fd));  
@@ -1037,28 +1061,6 @@ int FileStore::mkfs()
       ret = -1;
       goto close_fsid_fd;
     }
-  }
-
-  if (btrfs_stable_commits) {
-    // create snap_0 too
-    snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
-    volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
-    assert(volargs.fd >= 0);
-    if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
-      ret = -errno;
-      derr << "mkfs: failed to create " << volargs.name << ": "
-	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
-    }
-
-    if (::fchmod(volargs.fd, 0755)) {
-      TEMP_FAILURE_RETRY(::close(volargs.fd));
-      ret = -errno;
-      derr << "mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
-	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
-    }
-    TEMP_FAILURE_RETRY(::close(volargs.fd));
   }
 
   // journal?
