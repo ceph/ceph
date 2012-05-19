@@ -1098,11 +1098,7 @@ int FileStore::mkjournal()
     TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
-  if (TEMP_FAILURE_RETRY(::close(fd))) {
-    int err = errno;
-    derr << "FileStore::mkjournal: close error: " << cpp_strerror(err) << dendl;
-    return -err;
-  }
+  TEMP_FAILURE_RETRY(::close(fd));
 
   ret = 0;
 
