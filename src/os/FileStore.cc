@@ -1312,7 +1312,7 @@ int FileStore::_detect_fs()
   char fn[PATH_MAX];
   int x = rand();
   int y = x+1;
-  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
+  snprintf(fn, sizeof(fn), "%s/whoami", basedir.c_str());
   int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
   if (ret >= 0)
     ret = do_getxattr(fn, "user.test", &y, sizeof(y));
