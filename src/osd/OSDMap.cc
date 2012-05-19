@@ -1457,6 +1457,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
     pool_name[pool] = p->second;
+    name_pool[p->second] = pool;
   }
 
   build_simple_crush_map(cct, *crush, rulesets, nosd);
@@ -1571,6 +1572,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
     pool_name[pool] = p->second;
+    name_pool[p->second] = pool;
   }
 
   build_simple_crush_map_from_conf(cct, *crush, rulesets);
