@@ -377,7 +377,7 @@ void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
   int actual = mon->get_quorum().size();
   if (actual < max) {
     ostringstream ss;
-    ss << (max-actual) << " mons down, quorum " << mon->get_quorum();
+    ss << (max-actual) << " mons down, quorum " << mon->get_quorum() << " " << mon->get_quorum_names();
     summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     if (detail) {
       set<int> q = mon->get_quorum();
