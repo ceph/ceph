@@ -1104,11 +1104,14 @@ int FileStore::mkjournal()
 
   open_journal();
   if (journal) {
-    ret = journal->create();
-    if (ret)
-      dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
-    else
-      dout(0) << "mkjournal created journal on " << journalpath << dendl;
+    ret = journal->check();
+    if (ret < 0) {
+      ret = journal->create();
+      if (ret)
+	dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
+      else
+	dout(0) << "mkjournal created journal on " << journalpath << dendl;
+    }
     delete journal;
     journal = 0;
   }
