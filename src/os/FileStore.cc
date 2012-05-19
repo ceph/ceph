@@ -979,19 +979,21 @@ int FileStore::mkfs()
 
   // write initial op_seq
   {
-    uint64_t initial_seq;
+    uint64_t initial_seq = 0;
     int fd = read_op_seq(&initial_seq);
     if (fd < 0) {
       derr << "mkfs: failed to create " << current_op_seq_fn << ": "
 	   << cpp_strerror(fd) << dendl;
       goto close_fsid_fd;
     }
-    int err = write_op_seq(fd, 1);
-    if (err < 0) {
-      TEMP_FAILURE_RETRY(::close(fd));  
-      derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
-	   << cpp_strerror(err) << dendl;
-      goto close_fsid_fd;
+    if (initial_seq == 0) {
+      int err = write_op_seq(fd, 1);
+      if (err < 0) {
+	TEMP_FAILURE_RETRY(::close(fd));  
+	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
+	     << cpp_strerror(err) << dendl;
+	goto close_fsid_fd;
+      }
     }
     TEMP_FAILURE_RETRY(::close(fd));  
   }
