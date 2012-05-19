@@ -83,6 +83,11 @@ using ceph::crypto::SHA1;
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
 
+#if defined(__linux__)
+# ifndef BTRFS_SUPER_MAGIC
+static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
+# endif
+#endif
 
 #define ATTR_MAX_NAME_LEN  128
 #define ATTR_MAX_BLOCK_LEN 2048
@@ -856,6 +861,7 @@ int FileStore::mkfs()
   int ret = 0;
   int basedir_fd;
   char fsid_fn[PATH_MAX];
+  struct stat st;
   uuid_d old_fsid;
 
 #if defined(__linux__)
@@ -935,45 +941,65 @@ int FileStore::mkfs()
   }
 
   // current
-#if defined(__linux__)
-  volargs.fd = 0;
-  strcpy(volargs.name, "current");
-  if (::ioctl(basedir_fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs)) {
-    ret = errno;
-    if (ret == EEXIST) {
-      dout(2) << " current already exists" << dendl;
-      // not fatal
+  ret = ::stat(current_fn.c_str(), &st);
+  if (ret == 0) {
+    // current/ exists
+    if (!S_ISDIR(st.st_mode)) {
+      ret = -EINVAL;
+      derr << "mkfs current/ exists but is not a directory" << dendl;
+      goto close_fsid_fd;
     }
-    else if (ret == EOPNOTSUPP || ret == ENOTTY) {
-      dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
-	      << current_fn << dendl;
+
+#if defined(__linux__)
+    // is current/ a btrfs subvolume?
+    //  check fsid, and compare st_dev to see if it's a subvolume.
+    struct stat basest;
+    struct statfs basefs, currentfs;
+    ::fstat(basedir_fd, &basest);
+    ::fstatfs(basedir_fd, &basefs);
+    ::statfs(current_fn.c_str(), &currentfs);
+    if (basefs.f_type == BTRFS_SUPER_MAGIC &&
+	currentfs.f_type == BTRFS_SUPER_MAGIC &&
+	basest.st_dev != st.st_dev) {
+      dout(2) << " current appears to be a btrfs subvolume" << dendl;
+      btrfs_stable_commits = true;
+    }
 #endif
-      if (::mkdir(current_fn.c_str(), 0755)) {
-	ret = errno;
-	if (ret != EEXIST) {
+  } else {
+#if defined(__linux__)
+    volargs.fd = 0;
+    strcpy(volargs.name, "current");
+    if (::ioctl(basedir_fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs)) {
+      ret = -errno;
+      if (ret == -EOPNOTSUPP || ret == -ENOTTY) {
+	dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
+		<< current_fn << dendl;
+#endif
+	if (::mkdir(current_fn.c_str(), 0755)) {
+	  ret = -errno;
 	  derr << "mkfs: mkdir " << current_fn << " failed: "
 	       << cpp_strerror(ret) << dendl;
 	  goto close_fsid_fd;
 	}
-      }
 #if defined(__linux__)
+      }
+      else {
+	derr << "mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
+	     << cpp_strerror(ret) << dendl;
+	goto close_fsid_fd;
+      }
     }
     else {
-      derr << "mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
-	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      // ioctl succeeded. yay
+      dout(2) << " created btrfs subvol " << current_fn << dendl;
+      if (::chmod(current_fn.c_str(), 0755)) {
+	ret = -errno;
+	derr << "mkfs: failed to chmod " << current_fn << " to 0755: "
+	     << cpp_strerror(ret) << dendl;
+	goto close_fsid_fd;
+      }
+      btrfs_stable_commits = true;
     }
-  }
-  else {
-    // ioctl succeeded. yay
-    dout(2) << " created btrfs subvol " << current_fn << dendl;
-    if (::chmod(current_fn.c_str(), 0755)) {
-      ret = -errno;
-      derr << "mkfs: failed to chmod " << current_fn << " to 0755: "
-	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
-    }
-    btrfs_stable_commits = true;
   }
 #endif
 
@@ -1280,8 +1306,7 @@ int FileStore::_detect_fs()
   blk_size = st.f_bsize;
 
 #if defined(__linux__)
-  static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
-  if (st.f_type == BTRFS_F_TYPE) {
+  if (st.f_type == BTRFS_SUPER_MAGIC) {
     dout(0) << "mount detected btrfs" << dendl;      
     btrfs = true;
 
