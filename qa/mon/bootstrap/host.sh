@@ -21,7 +21,7 @@ ceph-authtool keyring --gen-key -n mon.
 
 ceph-mon -c conf -i a --mkfs --fsid $fsid --mon-data mon.a -k keyring
 
-ceph-mon -c conf -i a --mon-data mon.a
+ceph-mon -c conf -i a --mon-data $cwd/mon.a
 
 ceph -c conf -k keyring health
 
