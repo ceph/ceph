@@ -1685,10 +1685,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   else
     pending_inc.new_pools[pool].crush_ruleset = g_conf->osd_pool_default_crush_rule;
   pending_inc.new_pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].pg_num = (pg_num ? pg_num :
-                                        g_conf->osd_pool_default_pg_num);
-  pending_inc.new_pools[pool].pgp_num = (pgp_num ? pgp_num :
-                                         g_conf->osd_pool_default_pgp_num);
+  pending_inc.new_pools[pool].set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
+  pending_inc.new_pools[pool].set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pending_inc.new_pools[pool].last_change = pending_inc.epoch;
   pending_inc.new_pools[pool].auid = auid;
   pending_inc.new_pool_names[pool] = name;
@@ -2295,7 +2293,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      } else {
 		if (pending_inc.new_pools.count(pool) == 0)
 		  pending_inc.new_pools[pool] = *p;
-		pending_inc.new_pools[pool].pg_num = n;
+		pending_inc.new_pools[pool].set_pg_num(n);
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pg_num to " << n;
 		getline(ss, rs);
@@ -2311,7 +2309,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      } else {
 		if (pending_inc.new_pools.count(pool) == 0)
 		  pending_inc.new_pools[pool] = *p;
-		pending_inc.new_pools[pool].pgp_num = n;
+		pending_inc.new_pools[pool].set_pgp_num(n);
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pgp_num to " << n;
 		getline(ss, rs);

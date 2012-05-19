@@ -3521,9 +3521,10 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     pool->auid = pi->auid;
 
     // split?
-    if (pool->info.pg_num != pi->pg_num) {
-      dout(1) << " pool " << p->first << " pg_num " << pool->info.pg_num << " -> " << pi->pg_num << dendl;
-      pool_resize[p->first] = pool->info.pg_num;
+    if (pool->info.get_pg_num() != pi->get_pg_num()) {
+      dout(1) << " pool " << p->first << " pg_num " << pool->info.get_pg_num()
+	      << " -> " << pi->get_pg_num() << dendl;
+      pool_resize[p->first] = pool->info.get_pg_num();
       changed = true;
     }
     
@@ -3579,7 +3580,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
 	pg_t pgid = it->first;
 	PG *pg = it->second;
 	set<pg_t> children;
-	if (pgid.is_split(p->second, pg->pool->info.pg_num, &children)) {
+	if (pgid.is_split(p->second, pg->pool->info.get_pg_num(), &children)) {
 	  do_split(pg, children, t, tfin);
 	}
       }
