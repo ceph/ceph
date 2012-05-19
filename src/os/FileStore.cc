@@ -1312,7 +1312,16 @@ int FileStore::_detect_fs()
   char fn[PATH_MAX];
   int x = rand();
   int y = x+1;
-  snprintf(fn, sizeof(fn), "%s/whoami", basedir.c_str());
+
+  snprintf(fn, sizeof(fn), "%s/xattr_test", basedir.c_str());
+
+  int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);
+  if (tmpfd < 0) {
+    int ret = -errno;
+    derr << "_detect_fs unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
   int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
   if (ret >= 0)
     ret = do_getxattr(fn, "user.test", &y, sizeof(y));
@@ -1344,6 +1353,9 @@ int FileStore::_detect_fs()
   do_removexattr(fn, "user.test3");
   do_removexattr(fn, "user.test4");
   do_removexattr(fn, "user.test5");
+
+  ::unlink(fn);
+  TEMP_FAILURE_RETRY(::close(tmpfd));
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0)
