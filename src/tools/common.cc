@@ -87,6 +87,19 @@ OSDMap *osdmap = 0;
 
 static set<int> registered, seen;
 
+static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
+{
+  epoch_t e = m->get_first();
+  assert(m->maps.count(e));
+  ctx->lock.Lock();
+  delete osdmap;
+  osdmap = new OSDMap;
+  osdmap->decode(m->maps[e]);
+  cmd_cond.Signal();
+  ctx->lock.Unlock();
+  m->put();
+}
+
 static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
 {
   ctx->lock.Lock();
@@ -507,6 +520,9 @@ bool Admin::ms_dispatch(Message *m) {
     break;
   case CEPH_MSG_MON_MAP:
     m->put();
+    break;
+  case CEPH_MSG_OSD_MAP:
+    handle_osd_map(ctx, (MOSDMap *)m);
     break;
   case MSG_LOG:
    {
