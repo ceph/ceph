@@ -1055,9 +1055,9 @@ int FileStore::mkfs()
     leveldb::Status status = leveldb::DB::Open(options, omap_dir, &db);
     if (status.ok()) {
       delete db;
-      derr << "leveldb db created" << dendl;
+      dout(1) << "leveldb db exists/created" << dendl;
     } else {
-      derr << "Failed to create leveldb: " << status.ToString() << dendl;
+      derr << "mkfs failed to create leveldb: " << status.ToString() << dendl;
       ret = -1;
       goto close_fsid_fd;
     }
