@@ -1451,8 +1451,8 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = poolbase << pg_bits;
-    pools[pool].pgp_num = poolbase << pgp_bits;
+    pools[pool].set_pg_num(poolbase << pg_bits);
+    pools[pool].set_pgp_num(poolbase << pgp_bits);
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
@@ -1565,8 +1565,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = (maxosd + 1) << pg_bits;
-    pools[pool].pgp_num = (maxosd + 1) << pgp_bits;
+    pools[pool].set_pg_num((maxosd + 1) << pg_bits);
+    pools[pool].set_pgp_num((maxosd + 1) << pgp_bits);
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
