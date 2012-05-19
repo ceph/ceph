@@ -856,6 +856,7 @@ int FileStore::mkfs()
   int ret = 0;
   int basedir_fd;
   char fsid_fn[PATH_MAX];
+  uuid_d old_fsid;
 
 #if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
@@ -870,44 +871,62 @@ int FileStore::mkfs()
     return ret;
   }
 
-  // fsid
+  // open+lock fsid
   snprintf(fsid_fn, sizeof(fsid_fn), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(fsid_fn, O_CREAT|O_WRONLY|O_TRUNC, 0644);
+  fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
     derr << "mkfs: failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
+
   if (lock_fsid() < 0) {
     ret = -EBUSY;
     goto close_fsid_fd;
   }
 
-  if (fsid.is_zero())
-    fsid.generate_random();
-  else
-    dout(1) << "mkfs using provided fsid " << fsid << dendl;
+  if (read_fsid(fsid_fd, old_fsid) < 0 || old_fsid.is_zero()) {
+    if (fsid.is_zero()) {
+      fsid.generate_random();
+      dout(1) << "mkfs generated fsid " << fsid << dendl;
+    } else {
+      dout(1) << "mkfs using provided fsid " << fsid << dendl;
+    }
 
-  char fsid_str[40];
-  fsid.print(fsid_str);
-  strcat(fsid_str, "\n");
-  ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
-  if (ret < 0) {
-    derr << "mkfs: failed to write fsid: "
-	 << cpp_strerror(ret) << dendl;
-    goto close_fsid_fd;
+    char fsid_str[40];
+    fsid.print(fsid_str);
+    strcat(fsid_str, "\n");
+    ret = ::ftruncate(fsid_fd, 0);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs: failed to truncate fsid: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
+    if (ret < 0) {
+      derr << "mkfs: failed to write fsid: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    if (::fsync(fsid_fd) < 0) {
+      ret = errno;
+      derr << "mkfs: close failed: can't write fsid: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    dout(10) << "mkfs fsid is " << fsid << dendl;
+  } else {
+    if (!fsid.is_zero() && fsid != old_fsid) {
+      derr << "mkfs on-disk fsid " << old_fsid << " != provided " << fsid << dendl;
+      ret = -EINVAL;
+      goto close_fsid_fd;
+    }
+    fsid = old_fsid;
+    dout(1) << "mkfs fsid is " << fsid << dendl;
   }
-  if (TEMP_FAILURE_RETRY(::close(fsid_fd))) {
-    ret = errno;
-    derr << "mkfs: close failed: can't write fsid: "
-	 << cpp_strerror(ret) << dendl;
-    fsid_fd = -1;
-    goto close_fsid_fd;
-  }
-  fsid_fd = -1;
-  dout(10) << "mkfs fsid is " << fsid << dendl;
 
-
+  // version stamp
   ret = write_version_stamp();
   if (ret < 0) {
     derr << "mkfs: write_version_stamp() failed: "
@@ -1023,12 +1042,11 @@ int FileStore::mkfs()
   ret = 0;
 
  close_fsid_fd:
-  if (fsid_fd != -1) {
-    TEMP_FAILURE_RETRY(::close(fsid_fd));
-    fsid_fd = -1;
-  }
+  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  fsid_fd = -1;
  close_basedir_fd:
   TEMP_FAILURE_RETRY(::close(basedir_fd));
+  basedir_fd = -1;
   return ret;
 }
 
