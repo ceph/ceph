@@ -9,7 +9,7 @@
   monmaptool: monmap file mymonmap
   monmaptool: removing doesnotexist
   monmaptool: map does not contain doesnotexist
-   usage: [--print] [--create [--clobber][--fsid uuid]] [--add name 1.2.3.4:567] [--rm name] <mapfilename>
+   usage: [--print] [--create [--clobber][--fsid uuid]] [--generate] [--filter-initial-members] [--add name 1.2.3.4:567] [--rm name] <mapfilename>
   [1]
 
   $ monmaptool --print mymonmap
