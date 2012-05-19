@@ -851,64 +851,10 @@ int FileStore::dump_journal(ostream& out)
   return r;
 }
 
-int FileStore::wipe_subvol(const char *s)
-{
-#if defined(__linux__)
-  struct btrfs_ioctl_vol_args volargs;
-  memset(&volargs, 0, sizeof(volargs));
-  strncpy(volargs.name, s, sizeof(volargs.name)-1);
-  int fd = ::open(basedir.c_str(), O_RDONLY);
-  if (fd < 0) {
-    int err = errno;
-    derr << "FileStore::wipe_subvol: failed to open " << basedir << ": "
-	 << cpp_strerror(err) << dendl;
-    return -err;
-  }
-  int r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
-  TEMP_FAILURE_RETRY(::close(fd));
-  if (r == 0) {
-    dout(0) << "mkfs  removed old subvol " << s << dendl;
-    return 0;
-  }
-#endif
-
-  dout(0) << "mkfs  removing old directory " << s << dendl;
-  ostringstream old_dir;
-  old_dir << basedir << "/" << s;
-  DIR *dir = ::opendir(old_dir.str().c_str());
-  if (!dir) {
-    int err = errno;
-    derr << "FileStore::wipe_subvol: failed to opendir " << old_dir << ": "
-	 << cpp_strerror(err) << dendl;
-    return -err;
-  }
-  struct dirent sde, *de;
-  while (::readdir_r(dir, &sde, &de) == 0) {
-    if (!de)
-      break;
-    if (strcmp(de->d_name, ".") == 0 ||
-	strcmp(de->d_name, "..") == 0)
-      continue;
-    ostringstream oss;
-    oss << old_dir.str().c_str() << "/" << de->d_name;
-    std::string ret = run_cmd("rm", "-rf", oss.str().c_str(), (char*)NULL);
-    if (!ret.empty()) {
-      derr << "FileStore::wipe_subvol: failed to remove " << oss.str() << ": "
-	   << "error " << ret << dendl;
-      ::closedir(dir);
-      return -EIO;
-    }
-  }
-  ::closedir(dir);
-  return 0;
-}
-
 int FileStore::mkfs()
 {
   int ret = 0;
   char buf[PATH_MAX];
-  DIR *dir;
-  struct dirent *de;
 #if defined(__linux__)
   int basedir_fd;
   struct btrfs_ioctl_vol_args volargs;
@@ -917,9 +863,9 @@ int FileStore::mkfs()
 
   dout(1) << "mkfs in " << basedir << dendl;
 
+  // fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(buf, O_CREAT|O_WRONLY|O_TRUNC, 0644);
-
   if (fsid_fd < 0) {
     ret = -errno;
     derr << "FileStore::mkfs: failed to open " << buf << ": "
@@ -931,47 +877,6 @@ int FileStore::mkfs()
     goto close_fsid_fd;
   }
 
-  // wipe
-  dir = ::opendir(basedir.c_str());
-  if (!dir) {
-    ret = -errno;
-    derr << "FileStore::mkfs: failed to opendir " << basedir << dendl;
-    goto close_fsid_fd;
-  }
-  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
-    if (!de)
-      break;
-    if (strcmp(de->d_name, ".") == 0 ||
-	strcmp(de->d_name, "..") == 0)
-      continue;
-    if (strcmp(de->d_name, "fsid") == 0)
-      continue;
-
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path), "%s/%s", basedir.c_str(), de->d_name);
-    struct stat st;
-    if (::stat(path, &st)) {
-      ret = -errno;
-      derr << "FileStore::mkfs: failed to stat " << de->d_name << dendl;
-      goto close_dir;
-    }
-    if (S_ISDIR(st.st_mode)) {
-      ret = wipe_subvol(de->d_name);
-      if (ret)
-	goto close_dir;
-    }
-    else {
-      if (::unlink(path)) {
-	ret = -errno;
-	derr << "FileStore::mkfs: failed to remove old file "
-	     << de->d_name << dendl;
-	goto close_dir;
-      }
-      dout(0) << "mkfs  removing old file " << de->d_name << dendl;
-    }
-  }
-
-  // fsid
   if (fsid.is_zero())
     fsid.generate_random();
   else
@@ -995,6 +900,7 @@ int FileStore::mkfs()
   }
   fsid_fd = -1;
   dout(10) << "mkfs fsid is " << fsid << dendl;
+
 
   ret = write_version_stamp();
   if (ret < 0) {
@@ -1115,8 +1021,6 @@ int FileStore::mkfs()
 #if defined(__linux__)
   TEMP_FAILURE_RETRY(::close(basedir_fd));
 #endif
- close_dir:
-  ::closedir(dir);
  close_fsid_fd:
   if (fsid_fd != -1) {
     TEMP_FAILURE_RETRY(::close(fsid_fd));
