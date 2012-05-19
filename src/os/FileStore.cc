@@ -854,8 +854,8 @@ int FileStore::dump_journal(ostream& out)
 int FileStore::mkfs()
 {
   int ret = 0;
-  char buf[PATH_MAX];
   int basedir_fd;
+  char fsid_fn[PATH_MAX];
 
 #if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
@@ -871,12 +871,11 @@ int FileStore::mkfs()
   }
 
   // fsid
-  snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(buf, O_CREAT|O_WRONLY|O_TRUNC, 0644);
+  snprintf(fsid_fn, sizeof(fsid_fn), "%s/fsid", basedir.c_str());
+  fsid_fd = ::open(fsid_fn, O_CREAT|O_WRONLY|O_TRUNC, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
-    derr << "mkfs: failed to open " << buf << ": "
-	 << cpp_strerror(ret) << dendl;
+    derr << "mkfs: failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
   if (lock_fsid() < 0) {
