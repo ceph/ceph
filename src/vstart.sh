@@ -361,6 +361,8 @@ EOF
 		    [ "$cephx" -eq 1 ] && cat <<EOF >> $conf
         keyring = dev/osd$osd/keyring
 EOF
+		    rm -rf dev/osd$osd || true
+		    mkdir -p dev/osd$osd
 	    fi
 
 	    uuid=`uuidgen`
