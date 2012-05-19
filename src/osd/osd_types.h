@@ -597,7 +597,9 @@ struct pg_pool_t {
   __u8 size;                /// number of osds in each pg
   __u8 crush_ruleset;       /// crush placement rule set
   __u8 object_hash;         /// hash mapping object name to ps
+private:
   __u32 pg_num, pgp_num;    /// number of pgs
+public:
   epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
   snapid_t snap_seq;        /// seq for per-pool snapshot
   epoch_t snap_epoch;       /// osdmap epoch of last snap
@@ -656,6 +658,15 @@ struct pg_pool_t {
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
+
+  void set_pg_num(int p) {
+    pg_num = p;
+    calc_pg_masks();
+  }
+  void set_pgp_num(int p) {
+    pgp_num = p;
+    calc_pg_masks();
+  }
 
   static int calc_bits_of(int t);
   void calc_pg_masks();
