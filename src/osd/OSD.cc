@@ -264,10 +264,6 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
 {
   int ret;
   ObjectStore *store = NULL;
-  OSDSuperblock sb;
-
-  sb.cluster_fsid = fsid;
-  sb.whoami = whoami;
 
   try {
     store = create_object_store(dev, jdev);
@@ -284,7 +280,6 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
       goto free_store;
     }
-    sb.osd_fsid = store->get_fsid();
 
     ret = store->mount();
     if (ret) {
@@ -305,38 +300,48 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       }
     }
 
-    // benchmark?
-    if (g_conf->osd_auto_weight) {
-      bufferlist bl;
-      bufferptr bp(1048576);
-      bp.zero();
-      bl.push_back(bp);
-      dout(0) << "testing disk bandwidth..." << dendl;
-      utime_t start = ceph_clock_now(g_ceph_context);
-      object_t oid("disk_bw_test");
-      for (int i=0; i<1000; i++) {
-	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->write(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
-	store->queue_transaction(NULL, t);
-      }
-      store->sync();
-      utime_t end = ceph_clock_now(g_ceph_context);
-      end -= start;
-      dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
-      ObjectStore::Transaction tr;
-      tr.remove(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)));
-      ret = store->apply_transaction(tr);
-      if (ret) {
-	derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
-	     << ret << dendl;
-	goto umount_store;
+    OSDSuperblock sb;
+    bufferlist sbbl;
+    ret = store->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
+    if (ret >= 0) {
+      dout(0) << " have superblock" << dendl;
+    } else {
+      // create superblock
+      sb.cluster_fsid = fsid;
+      sb.osd_fsid = store->get_fsid();
+      sb.whoami = whoami;
+
+      // benchmark?
+      if (g_conf->osd_auto_weight) {
+	bufferlist bl;
+	bufferptr bp(1048576);
+	bp.zero();
+	bl.push_back(bp);
+	dout(0) << "testing disk bandwidth..." << dendl;
+	utime_t start = ceph_clock_now(g_ceph_context);
+	object_t oid("disk_bw_test");
+	for (int i=0; i<1000; i++) {
+	  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	  t->write(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
+	  store->queue_transaction(NULL, t);
+	}
+	store->sync();
+	utime_t end = ceph_clock_now(g_ceph_context);
+	end -= start;
+	dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
+	ObjectStore::Transaction tr;
+	tr.remove(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)));
+	ret = store->apply_transaction(tr);
+	if (ret) {
+	  derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
+	       << ret << dendl;
+	  goto umount_store;
+	}
+	
+	// set osd weight
+	sb.weight = (1000.0 / (double)end);
       }
 
-      // set osd weight
-      sb.weight = (1000.0 / (double)end);
-    }
-
-    {
       bufferlist bl;
       ::encode(sb, bl);
 
