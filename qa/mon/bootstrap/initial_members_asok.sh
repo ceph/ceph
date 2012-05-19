@@ -18,13 +18,13 @@ rm -f keyring
 ceph-authtool --create-keyring keyring --gen-key -n client.admin
 ceph-authtool keyring --gen-key -n mon.
 
-ceph-mon -c conf -i a --mkfs --fsid $fsid --mon-data mon.a -k keyring
-ceph-mon -c conf -i b --mkfs --fsid $fsid --mon-data mon.b -k keyring
-ceph-mon -c conf -i c --mkfs --fsid $fsid --mon-data mon.c -k keyring
+ceph-mon -c conf -i a --mkfs --fsid $fsid --mon-data $cwd/mon.a -k keyring
+ceph-mon -c conf -i b --mkfs --fsid $fsid --mon-data $cwd/mon.b -k keyring
+ceph-mon -c conf -i c --mkfs --fsid $fsid --mon-data $cwd/mon.c -k keyring
 
-ceph-mon -c conf -i a --mon-data mon.a --public-addr 127.0.0.1:6789
-ceph-mon -c conf -i b --mon-data mon.c --public-addr 127.0.0.1:6790
-ceph-mon -c conf -i c --mon-data mon.b --public-addr 127.0.0.1:6791
+ceph-mon -c conf -i a --mon-data $cwd/mon.a --public-addr 127.0.0.1:6789
+ceph-mon -c conf -i b --mon-data $cwd/mon.c --public-addr 127.0.0.1:6790
+ceph-mon -c conf -i c --mon-data $cwd/mon.b --public-addr 127.0.0.1:6791
 
 sleep 1
 
@@ -51,8 +51,8 @@ while true; do
     sleep 1
 done
 
-ceph-mon -c conf -i d --mkfs --fsid $fsid --mon-data mon.d -k keyring
-ceph-mon -c conf -i d --mon-data mon.d --public-addr 127.0.0.1:6792
+ceph-mon -c conf -i d --mkfs --fsid $fsid --mon-data $cwd/mon.d -k keyring
+ceph-mon -c conf -i d --mon-data $cwd/mon.d --public-addr 127.0.0.1:6792
 ceph --admin-daemon mon.d.asok add_bootstrap_peer_hint 127.0.0.1:6790
 
 while true; do
