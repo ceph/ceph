@@ -168,7 +168,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
     
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
-    crush_bucket_add_item(b, cur, 0);
+    int r = crush_bucket_add_item(b, cur, 0);
+    assert (!r);
 
     // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
     adjust_item_weightf(cct, item, weight);
