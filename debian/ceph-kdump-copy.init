@@ -1,8 +1,8 @@
 #! /bin/sh
 ### BEGIN INIT INFO
 # Provides:          ceph-kdump-copy
-# Required-Start:    $kdump
-# Required-Stop:
+# Required-Start:    $remote_fs $network $named
+# Required-Stop:     $remote_fs $network $named
 # Default-Start:     2
 # Default-Stop:      6
 # Short-Description: Copies kdump crash files to remote server
