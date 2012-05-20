@@ -867,7 +867,7 @@ int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight
 
 /************************************************/
 
-int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_uniform *bucket)
+static void crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_uniform *bucket)
 {
 	unsigned i;
 	unsigned sum = 0, n = 0, leaves = 0;
@@ -887,11 +887,9 @@ int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_u
 	if (n > leaves)
 		bucket->item_weight = sum / n;  // more bucket children than leaves, average!
 	bucket->h.weight = bucket->item_weight * bucket->h.size;
-
-	return 0;
 }
 
-int crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list *bucket)
+static void crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list *bucket)
 {
 	unsigned i;
 
@@ -905,10 +903,9 @@ int crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list
 		}
 		bucket->h.weight += bucket->item_weights[i];
 	}
-	return 0;
 }
 
-int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree *bucket)
+static void crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree *bucket)
 {
 	unsigned i;
 
@@ -923,10 +920,9 @@ int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree
 		}
 		bucket->h.weight += bucket->node_weights[node];
 	}
-	return 0;
 }
 
-int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_straw *bucket)
+static void crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_straw *bucket)
 {
 	unsigned i;
 
@@ -940,20 +936,23 @@ int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_str
 		}
 		bucket->h.weight += bucket->item_weights[i];
 	}
-	return 0;
 }
 
 int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
-		return crush_reweight_uniform_bucket(crush, (struct crush_bucket_uniform *)b);
+		crush_reweight_uniform_bucket(crush, (struct crush_bucket_uniform *)b);
+		break;
 	case CRUSH_BUCKET_LIST:
-		return crush_reweight_list_bucket(crush, (struct crush_bucket_list *)b);
+		crush_reweight_list_bucket(crush, (struct crush_bucket_list *)b);
+		break;
 	case CRUSH_BUCKET_TREE:
-		return crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
+		crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
+		break;
 	case CRUSH_BUCKET_STRAW:
-		return crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
+		crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
+		break;
 	default:
 		return -1;
 	}
