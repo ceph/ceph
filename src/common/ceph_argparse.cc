@@ -85,6 +85,8 @@ void vec_to_argv(std::vector<const char*>& args,
   if (argc && argv)
     myname = argv[0];
   argv = (const char**)malloc(sizeof(char*) * argc);
+  if (!argv)
+    throw bad_alloc();
   argc = 1;
   argv[0] = myname;
 
