@@ -92,6 +92,8 @@ int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
 
   *outdata = (char *)malloc(op.outdata.length());
+  if (!*outdata)
+    return -ENOMEM;
   memcpy(*outdata, op.outdata.c_str(), op.outdata.length());
   *outdatalen = op.outdata.length();
 
@@ -113,6 +115,8 @@ int cls_getxattr(cls_method_context_t hctx, const char *name,
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
 
   *outdata = (char *)malloc(op.outdata.length());
+  if (!*outdata)
+    return -ENOMEM;
   memcpy(*outdata, op.outdata.c_str(), op.outdata.length());
   *outdatalen = op.outdata.length();
 
@@ -149,6 +153,8 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   int r = (*pctx)->pg->do_osd_ops(*pctx, ops);
 
   *outdata = (char *)malloc(ops[0].outdata.length());
+  if (!*outdata)
+    return -ENOMEM;
   memcpy(*outdata, ops[0].outdata.c_str(), ops[0].outdata.length());
   *outdatalen = ops[0].outdata.length();
 

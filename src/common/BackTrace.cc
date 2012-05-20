@@ -22,6 +22,8 @@ void BackTrace::print(std::ostream& out)
 
     size_t sz = 1024; // just a guess, template names will go much wider
     char *function = (char *)malloc(sz);
+    if (!function)
+      return;
     char *begin = 0, *end = 0;
     
     // find the parentheses and address offset surrounding the mangled name
@@ -34,6 +36,8 @@ void BackTrace::print(std::ostream& out)
     if (begin && end) {
       int len = end - begin;
       char *foo = (char *)malloc(len+1);
+      if (!foo)
+        return;
       memcpy(foo, begin, len);
       foo[len] = 0;
 
