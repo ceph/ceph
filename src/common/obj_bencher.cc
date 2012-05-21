@@ -76,6 +76,12 @@ void *ObjBencher::status_printer(void *_bencher) {
       * (data.trans_size)
       / (1024*1024)
       / cycleSinceChange;
+
+    if (bandwidth > data.idata.max_bandwidth)
+      data.idata.max_bandwidth = bandwidth;
+    if (bandwidth < data.idata.min_bandwidth)
+      data.idata.min_bandwidth = bandwidth;
+
     avg_bandwidth = (double) (data.trans_size) * (data.finished)
       / (double)(ceph_clock_now(g_ceph_context) - data.start_time) / (1024*1024);
     if (previous_writes != data.finished) {
@@ -145,6 +151,8 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
   data.min_latency = 9999.0; // this better be higher than initial latency!
   data.max_latency = 0;
   data.avg_latency = 0;
+  data.idata.min_bandwidth = 99999999.0;
+  data.idata.max_bandwidth = 0;
   data.object_contents = contentsChars;
   lock.Unlock();
 
@@ -339,13 +347,15 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   char bw[20];
   snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
-  cout << "Total time run:        " << timePassed << std::endl
-       << "Total writes made:     " << data.finished << std::endl
-       << "Write size:            " << data.object_size << std::endl
-       << "Bandwidth (MB/sec):    " << bw << std::endl
-       << "Average Latency:       " << data.avg_latency << std::endl
-       << "Max latency:           " << data.max_latency << std::endl
-       << "Min latency:           " << data.min_latency << std::endl;
+  cout << "Total time run:         " << timePassed << std::endl
+       << "Total writes made:      " << data.finished << std::endl
+       << "Write size:             " << data.object_size << std::endl
+       << "Bandwidth (MB/sec):     " << bw << std::endl
+       << "Average Latency:        " << data.avg_latency << std::endl
+       << "Max latency:            " << data.max_latency << std::endl
+       << "Min latency:            " << data.min_latency << std::endl
+       << "Max bandwidth (MB/sec): " << data.idata.max_bandwidth << std::endl
+       << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl;
 
   //write object size/number data for read benchmarks
   ::encode(data.object_size, b_write);
