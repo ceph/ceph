@@ -135,7 +135,7 @@ int main(int argc, const char **argv)
     } else {
       int err = monmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
-	cerr << argv[0] << ": warning: no initial monitors; must set 'mon initial members' and use admin socket to feed hints" << std::endl;
+	cerr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << std::endl;
       }
 
       // am i part of the initial quorum?
