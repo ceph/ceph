@@ -474,7 +474,7 @@ def xfstests(ctx, config):
         - rbd.xfstests:
             client.0:
                 test_image: 'test_image'
-                test_size: 100
+                test_size: 250
                 scratch_image: 'scratch_image'
                 scratch_size: 250
                 fs_type: 'xfs'
@@ -505,7 +505,7 @@ def xfstests(ctx, config):
             properties = {}
 
         test_image = properties.get('test_image', 'test_image')
-        test_size = properties.get('test_size', 100)
+        test_size = properties.get('test_size', 250)
         scratch_image = properties.get('scratch_image', 'scratch_image')
         scratch_size = properties.get('scratch_size', 250)
 
