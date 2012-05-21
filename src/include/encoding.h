@@ -794,6 +794,9 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
 #define DECODE_START_LEGACY_COMPAT_LEN_32(v, compatv, lenv, bl)		\
   __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3, bl)
 
+#define DECODE_START_LEGACY_COMPAT_LEN_16(v, compatv, lenv, bl)		\
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 1, bl)
+
 /**
  * finish decode block
  *
