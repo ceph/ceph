@@ -1691,13 +1691,7 @@ bool Monitor::_ms_dispatch(Message *m)
 		<< s->caps << dendl;
       }
       if (!is_probing() && !is_slurping()) {
-	if (monmap->contains(m->get_source_addr())) {
-	  elector.dispatch(m);
-	} else {
-	  dout(1) << "discarding election message: " << m->get_source_addr() << " not in my monmap "
-		  << *monmap << dendl;
-	  m->put();
-	}
+	elector.dispatch(m);
       } else {
 	m->put();
       }
