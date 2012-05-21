@@ -237,10 +237,10 @@ class MonMap {
    * @param my_addr my addr
    * @param removed optional pointer to set to insert removed mon addrs to
    */
-  void filter_initial_members(CephContext *cct,
-			      list<std::string>& initial_members,
-			      string my_name, entity_addr_t my_addr,
-			      set<entity_addr_t> *removed);
+  void set_initial_members(CephContext *cct,
+			   list<std::string>& initial_members,
+			   string my_name, entity_addr_t my_addr,
+			   set<entity_addr_t> *removed);
 
   void print(ostream& out) const;
   void print_summary(ostream& out) const;

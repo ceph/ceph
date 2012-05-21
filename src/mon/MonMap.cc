@@ -188,10 +188,10 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
   return 0;
 }
 
-void MonMap::filter_initial_members(CephContext *cct,
-				    list<std::string>& initial_members,
-				    string my_name, entity_addr_t my_addr,
-				    set<entity_addr_t> *removed)
+void MonMap::set_initial_members(CephContext *cct,
+				 list<std::string>& initial_members,
+				 string my_name, entity_addr_t my_addr,
+				 set<entity_addr_t> *removed)
 {
   // remove non-initial members
   unsigned i = 0;
