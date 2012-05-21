@@ -652,12 +652,14 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 			       !has_ever_joined)) {
       dout(10) << " got newer/committed monmap epoch " << newmap->get_epoch()
 	       << ", mine was " << monmap->get_epoch() << dendl;
+      delete newmap;
       monmap->decode(m->monmap_bl);
       m->put();
 
       bootstrap();
       return;
     }
+    delete newmap;
   }
 
   // rename peer?
