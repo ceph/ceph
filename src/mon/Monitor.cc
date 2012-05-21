@@ -292,8 +292,8 @@ int Monitor::init()
     if (initial_members.size()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
-      monmap->filter_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
-				     &extra_probe_peers);
+      monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
+				  &extra_probe_peers);
 
       // (re)calc my rank, in case it changed
       rank = monmap->get_rank(name);

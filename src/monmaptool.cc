@@ -30,7 +30,7 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--print] [--create [--clobber][--fsid uuid]] [--generate] [--filter-initial-members] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
+  cout << " usage: [--print] [--create [--clobber][--fsid uuid]] [--generate] [--set-initial-members] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
   exit(1);
 }
 
@@ -68,7 +68,7 @@ int main(int argc, const char **argv)
       clobber = true;
     } else if (ceph_argparse_flag(args, i, "--generate", (char*)NULL)) {
       generate = true;
-    } else if (ceph_argparse_flag(args, i, "--filter-initial-members", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--set-initial-members", (char*)NULL)) {
       filter = true;
     } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
       string name = *i;
@@ -151,9 +151,9 @@ int main(int argc, const char **argv)
     if (initial_members.size()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addr_t> removed;
-      monmap.filter_initial_members(g_ceph_context, initial_members,
-				    string(), entity_addr_t(),
-				    &removed);
+      monmap.set_initial_members(g_ceph_context, initial_members,
+				 string(), entity_addr_t(),
+				 &removed);
       cout << "removed " << removed << std::endl;
     }
     modified = true;
