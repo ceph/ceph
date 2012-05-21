@@ -341,7 +341,7 @@ bool MonmapMonitor::preprocess_join(MMonJoin *join)
     join->put();
     return true;
   }
-  if (pending_map.contains(join->addr)) {
+  if (pending_map.contains(join->addr) && pending_map.get_name(join->addr) == join->name) {
     dout(10) << " already have " << join->addr << dendl;
     join->put();
     return true;
@@ -353,6 +353,8 @@ bool MonmapMonitor::prepare_join(MMonJoin *join)
   dout(0) << "adding/updating " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
+  if (pending_map.contains(join->addr))
+    pending_map.remove(pending_map.get_name(join->addr));
   pending_map.add(join->name, join->addr);
   pending_map.last_changed = ceph_clock_now(g_ceph_context);
   join->put();
