@@ -986,6 +986,14 @@ void Monitor::finish_election()
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
+
+  // am i named properly?
+  string cur_name = monmap->get_name(messenger->get_myaddr());
+  if (cur_name != name) {
+    dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
+    messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+			    monmap->get_inst(*quorum.begin()));
+  }
 } 
 
 
