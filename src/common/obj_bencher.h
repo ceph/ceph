@@ -17,6 +17,11 @@
 #include "common/config.h"
 #include "common/Cond.h"
 
+struct bench_interval_data {
+  double min_bandwidth;
+  double max_bandwidth;
+};
+
 struct bench_data {
   bool done; //is the benchmark is done
   int object_size; //the size of the objects
@@ -28,6 +33,7 @@ struct bench_data {
   double min_latency;
   double max_latency;
   double avg_latency;
+  struct bench_interval_data idata; // data that is updated by time intervals and not by events
   utime_t cur_latency; //latency of last completed transaction
   utime_t start_time; //start time for benchmark
   char *object_contents; //pointer to the contents written to each object
