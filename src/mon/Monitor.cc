@@ -295,11 +295,6 @@ int Monitor::init()
       monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
 				  &extra_probe_peers);
 
-      // (re)calc my rank, in case it changed
-      rank = monmap->get_rank(name);
-      messenger->set_myname(entity_name_t::MON(rank));
-      messenger->mark_down_all();
-
       dout(10) << " monmap is " << *monmap << dendl;
     }
   }
