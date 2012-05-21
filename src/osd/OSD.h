@@ -274,7 +274,7 @@ public:
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
-  SharedLRU<epoch_t, OSDMap> map_cache;
+  SharedLRU<epoch_t, const OSDMap> map_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
