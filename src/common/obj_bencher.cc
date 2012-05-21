@@ -77,10 +77,14 @@ void *ObjBencher::status_printer(void *_bencher) {
       / (1024*1024)
       / cycleSinceChange;
 
-    if (bandwidth > data.idata.max_bandwidth)
-      data.idata.max_bandwidth = bandwidth;
-    if (bandwidth < data.idata.min_bandwidth)
-      data.idata.min_bandwidth = bandwidth;
+    if (!isnan(bandwidth)) {
+      if (bandwidth > data.idata.max_bandwidth)
+        data.idata.max_bandwidth = bandwidth;
+      if (bandwidth < data.idata.min_bandwidth)
+        data.idata.min_bandwidth = bandwidth;
+
+      data.history.bandwidth.push_back(bandwidth);
+    }
 
     avg_bandwidth = (double) (data.trans_size) * (data.finished)
       / (double)(ceph_clock_now(g_ceph_context) - data.start_time) / (1024*1024);
@@ -190,6 +194,30 @@ void _aio_cb(void *cb, void *arg) {
   lc->lock->Unlock();
 }
 
+static double vec_stddev(vector<double>& v)
+{
+  double mean = 0;
+
+  if (v.size() < 2)
+    return 0;
+
+  vector<double>::iterator iter;
+  for (iter = v.begin(); iter != v.end(); ++iter) {
+    mean += *iter;
+  }
+
+  mean /= v.size();
+
+  double stddev = 0;
+  for (iter = v.begin(); iter != v.end(); ++iter) {
+    double dev = *iter - mean;
+    dev *= dev;
+    stddev += dev;
+  }
+  stddev /= (v.size() - 1);
+  return sqrt(stddev);
+}
+
 int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << data.object_size << " bytes for at least "
@@ -282,6 +310,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
       goto ERR;
     }
     data.cur_latency = ceph_clock_now(g_ceph_context) - start_times[slot];
+    data.history.latency.push_back(data.cur_latency);
     total_latency += data.cur_latency;
     if( data.cur_latency > data.max_latency) data.max_latency = data.cur_latency;
     if (data.cur_latency < data.min_latency) data.min_latency = data.cur_latency;
@@ -322,6 +351,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
       goto ERR;
     }
     data.cur_latency = ceph_clock_now(g_ceph_context) - start_times[slot];
+    data.history.latency.push_back(data.cur_latency);
     total_latency += data.cur_latency;
     if (data.cur_latency > data.max_latency) data.max_latency = data.cur_latency;
     if (data.cur_latency < data.min_latency) data.min_latency = data.cur_latency;
@@ -351,11 +381,13 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
        << "Total writes made:      " << data.finished << std::endl
        << "Write size:             " << data.object_size << std::endl
        << "Bandwidth (MB/sec):     " << bw << std::endl
-       << "Average Latency:        " << data.avg_latency << std::endl
-       << "Max latency:            " << data.max_latency << std::endl
-       << "Min latency:            " << data.min_latency << std::endl
+       << "Stddev Bandwidth:       " << vec_stddev(data.history.bandwidth) << std::endl
        << "Max bandwidth (MB/sec): " << data.idata.max_bandwidth << std::endl
-       << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl;
+       << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl
+       << "Average Latency:        " << data.avg_latency << std::endl
+       << "Stddev Latency:         " << vec_stddev(data.history.latency) << std::endl
+       << "Max latency:            " << data.max_latency << std::endl
+       << "Min latency:            " << data.min_latency << std::endl;
 
   //write object size/number data for read benchmarks
   ::encode(data.object_size, b_write);
