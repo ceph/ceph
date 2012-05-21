@@ -659,11 +659,13 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 
   // rename peer?
   string peer_name = monmap->get_name(m->get_source_addr());
-  if (peer_name.find("noname-") == 0) {
+  if (monmap->get_epoch() == 0 && peer_name.find("noname-") == 0) {
     dout(10) << " renaming peer " << m->get_source_addr() << " "
 	     << peer_name << " -> " << m->name << " in my monmap"
 	     << dendl;
     monmap->rename(peer_name, m->name);
+  } else {
+    dout(10) << " peer name is " << peer_name << dendl;
   }
 
   // new initial peer?
