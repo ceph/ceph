@@ -29,7 +29,7 @@ ceph-mon -c conf -i c --mon-data $cwd/mon.c
 
 ceph -c conf -k keyring health -m 127.0.0.1
 while true; do
-    if ceph -c conf -k keyring -m 127.0.0.1 mon stat | grep 'quorum 0,1,2'; then
+    if ceph -c conf -k keyring -m 127.0.0.1 mon stat | grep 'a,b,c'; then
 	break
     fi
     sleep 1
