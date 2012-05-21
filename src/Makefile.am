@@ -1,5 +1,5 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf libs3
+SUBDIRS = ocf
 DIST_SUBDIRS = gtest ocf leveldb libs3
 
 EXTRA_DIST = \
