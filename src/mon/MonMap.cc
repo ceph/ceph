@@ -48,7 +48,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
 
 void MonMap::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(3, 3, 3, p);
   ::decode_raw(fsid, p);
   ::decode(epoch, p);
   if (struct_v == 1) {
