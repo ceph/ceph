@@ -152,6 +152,7 @@ class MonMap {
     assert(!contains(newname));
     mon_addr[newname] = mon_addr[oldname];
     mon_addr.erase(oldname);
+    addr_name[mon_addr[newname]] = newname;
   }
 
   const entity_addr_t& get_addr(const string& n) {
