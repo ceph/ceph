@@ -43,6 +43,20 @@ static void sanitize_object_contents (bench_data *data, int length) {
   memset(data->object_contents, 'z', length);
 }
 
+ostream& ObjBencher::out(ostream& os, utime_t& t)
+{
+  if (show_time)
+    return t.localtime(os) << " ";
+  else
+    return os << " ";
+}
+
+ostream& ObjBencher::out(ostream& os)
+{
+  utime_t cur_time = ceph_clock_now(g_ceph_context);
+  return out(os, cur_time);
+}
+
 void *ObjBencher::status_printer(void *_bencher) {
   ObjBencher *bencher = (ObjBencher *)_bencher;
   bench_data& data = bencher->data;
@@ -56,13 +70,15 @@ void *ObjBencher::status_printer(void *_bencher) {
   ONE_SECOND.set_from_double(1.0);
   bencher->lock.Lock();
   while(!data.done) {
+    utime_t cur_time = ceph_clock_now(g_ceph_context);
+
     if (i % 20 == 0) {
       if (i > 0)
-	cout << "min lat: " << data.min_latency
+	cur_time.localtime(cout) << "min lat: " << data.min_latency
 	     << " max lat: " << data.max_latency
 	     << " avg lat: " << data.avg_latency << std::endl;
       //I'm naughty and don't reset the fill
-      cout << setfill(' ')
+      bencher->out(cout, cur_time) << setfill(' ')
 	   << setw(5) << "sec"
 	   << setw(8) << "Cur ops"
 	   << setw(10) << "started"
@@ -87,11 +103,11 @@ void *ObjBencher::status_printer(void *_bencher) {
     }
 
     avg_bandwidth = (double) (data.trans_size) * (data.finished)
-      / (double)(ceph_clock_now(g_ceph_context) - data.start_time) / (1024*1024);
+      / (double)(cur_time - data.start_time) / (1024*1024);
     if (previous_writes != data.finished) {
       previous_writes = data.finished;
       cycleSinceChange = 0;
-      cout << setfill(' ')
+      bencher->out(cout, cur_time) << setfill(' ')
 	   << setw(5) << i
 	   << setw(8) << data.in_flight
 	   << setw(10) << data.started
@@ -102,7 +118,7 @@ void *ObjBencher::status_printer(void *_bencher) {
 	   << setw(10) << data.avg_latency << std::endl;
     }
     else {
-      cout << setfill(' ')
+      bencher->out(cout, cur_time) << setfill(' ')
 	   << setw(5) << i
 	   << setw(8) << data.in_flight
 	   << setw(10) << data.started
@@ -219,7 +235,7 @@ static double vec_stddev(vector<double>& v)
 }
 
 int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
-  cout << "Maintaining " << concurrentios << " concurrent writes of "
+  out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
        << data.object_size << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
 
@@ -377,7 +393,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   char bw[20];
   snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
-  cout << "Total time run:         " << timePassed << std::endl
+  out(cout) << "Total time run:         " << timePassed << std::endl
        << "Total writes made:      " << data.finished << std::endl
        << "Write size:             " << data.object_size << std::endl
        << "Bandwidth (MB/sec):     " << bw << std::endl
@@ -574,7 +590,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   char bw[20];
   snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
-  cout << "Total time run:        " << runtime << std::endl
+  out(cout) << "Total time run:        " << runtime << std::endl
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.object_size << std::endl
        << "Bandwidth (MB/sec):    " << bw << std::endl
