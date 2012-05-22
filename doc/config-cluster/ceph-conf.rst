@@ -13,12 +13,12 @@ Each process or daemon looks for a ``ceph.conf`` file that provides their
 configuration settings. The default ``ceph.conf`` locations in sequential
 order include:
 
-#. ``$CEPH_CONF`` (*i.e.,* the path following
-the ``$CEPH_CONF`` environment variable)
+#. ``$CEPH_CONF`` (*i.e.,* the path following the ``$CEPH_CONF`` environment variable)
 #. ``-c path/path``  (*i.e.,* the ``-c`` command line argument)
 #. ``/etc/ceph/ceph.conf``
 #. ``~/.ceph/config``
 #. ``./ceph.conf`` (*i.e.,* in the current working directory)
+
 
 The ``ceph.conf`` file provides the settings for each Ceph daemon. Once you
 have installed the Ceph packages on the OSD Cluster hosts, you need to create
@@ -124,7 +124,7 @@ alphanumeric for monitors and metadata servers. ::
 
 ``host`` and ``addr`` Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The `Hardware Recommendations <../hardware-recommendations>`_ section
+The `Hardware Recommendations <../../install/hardware-recommendations>`_ section
 provides some hardware guidelines for configuring the cluster. It is possible
 for a single host to run multiple daemons. For example, a single host with
 multiple disks or RAIDs may run one ``ceph-osd`` for each disk or RAID.
@@ -153,7 +153,7 @@ algorithm can determine which version of the cluster map is the most accurate.
 .. note:: You may deploy Ceph with a single monitor, but if the instance fails,
 	  the lack of a monitor may interrupt data service availability.
 
-Ceph monitors typically listen on port ``6789``. For example: 
+Ceph monitors typically listen on port ``6789``. For example:: 
 
 	[mon.a]
 		host = hostNumber1
@@ -173,7 +173,7 @@ all hosts share the same configuration file.
 
 You may create a ``ceph.conf`` file for each host if you wish, or specify a
 particular ``ceph.conf`` file for a subset of hosts within the cluster. However,
-using per-host ``ceph.conf``configuration files imposes a maintenance burden as the
+using per-host ``ceph.conf`` configuration files imposes a maintenance burden as the
 cluster grows. In a typical deployment, an administrator creates a ``ceph.conf`` file
 on the Administration host and then copies that file to each OSD Cluster host.
 
