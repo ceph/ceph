@@ -55,6 +55,8 @@ char *resolve_addrs(const char *orig_str)
 
   len = BUF_SIZE;
   new_str = (char *)malloc(len);
+  if (!new_str)
+    return NULL;
 
   pos = 0;
 

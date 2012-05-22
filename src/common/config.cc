@@ -695,6 +695,8 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
     int l = strlen(str.c_str()) + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
+      if (!*buf)
+        return -ENOMEM;
       strcpy(*buf, str.c_str());
       return 0;
     }
