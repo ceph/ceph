@@ -101,7 +101,12 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   monmap(map),
   clog(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
-  auth_supported(cct, cct->_conf->auth_supported),
+  auth_cluster_required(cct,
+			cct->_conf->auth_cluster_required.length() ?
+			cct->_conf->auth_cluster_required : cct->_conf->auth_supported),
+  auth_service_required(cct,
+		       cct->_conf->auth_service_required.length() ?
+		       cct->_conf->auth_service_required : cct->_conf->auth_supported),
   store(s),
   
   state(STATE_PROBING),
@@ -2095,7 +2100,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
 
-  if (!auth_supported.is_supported_auth(CEPH_AUTH_CEPHX))
+  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX))
     return false;
 
   CephXServiceTicketInfo auth_ticket_info;
@@ -2156,7 +2161,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     return false;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
-      auth_supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
+      auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX)) {
     // monitor, and cephx is enabled
     isvalid = false;
     if (protocol == CEPH_AUTH_CEPHX) {

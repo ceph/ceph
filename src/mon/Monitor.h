@@ -121,7 +121,8 @@ public:
   KeyRing keyring;
   KeyServer key_server;
 
-  AuthMethodList auth_supported;
+  AuthMethodList auth_cluster_required;
+  AuthMethodList auth_service_required;
 
   CompatSet features;
 
