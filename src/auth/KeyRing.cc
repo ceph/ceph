@@ -17,7 +17,7 @@
 #include <memory>
 #include <sstream>
 
-#include "auth/AuthSupported.h"
+#include "auth/AuthMethodList.h"
 #include "auth/Crypto.h"
 #include "auth/KeyRing.h"
 #include "common/ConfUtils.h"
@@ -40,7 +40,7 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
   bool found_key = false;
   auto_ptr < KeyRing > keyring(new KeyRing());
 
-  AuthSupported supported(cct);
+  AuthMethodList supported(cct, cct->_conf->auth_supported);
 
   if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
     ldout(cct, 2) << "CephX auth is not supported." << dendl;
