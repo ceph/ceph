@@ -305,6 +305,16 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
     ret = store->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
     if (ret >= 0) {
       dout(0) << " have superblock" << dendl;
+      if (whoami != sb.whoami) {
+	derr << "provided osd id " << whoami << " != superblock's " << sb.whoami << dendl;
+	ret = -EINVAL;
+	goto umount_store;
+      }
+      if (fsid != sb.cluster_fsid) {
+	derr << "provided cluster fsid " << fsid << " != superblock's " << sb.cluster_fsid << dendl;
+	ret = -EINVAL;
+	goto umount_store;
+      }
     } else {
       // create superblock
       if (fsid.is_zero()) {
