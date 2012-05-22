@@ -103,6 +103,14 @@ class MonMap {
     calc_ranks();
   }
 
+  void rename(string oldname, string newname) {
+    assert(contains(oldname));
+    assert(!contains(newname));
+    mon_addr[newname] = mon_addr[oldname];
+    mon_addr.erase(oldname);
+    calc_ranks();
+  }
+
   bool contains(const string& name) {
     return mon_addr.count(name);
   }
@@ -145,14 +153,6 @@ class MonMap {
       return false;
     name = addr_name[a];
     return true;
-  }
-
-  void rename(string oldname, string newname) {
-    assert(contains(oldname));
-    assert(!contains(newname));
-    mon_addr[newname] = mon_addr[oldname];
-    mon_addr.erase(oldname);
-    addr_name[mon_addr[newname]] = newname;
   }
 
   const entity_addr_t& get_addr(const string& n) {
