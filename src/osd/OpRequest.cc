@@ -3,8 +3,12 @@
 #include "OpRequest.h"
 #include "common/Formatter.h"
 #include <iostream>
+#include <vector>
 #include "common/debug.h"
 #include "common/config.h"
+#include "msg/Message.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDSubOp.h"
 
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix
@@ -61,7 +65,7 @@ void OpTracker::unregister_inflight_op(xlist<OpRequest*>::item *i)
   i->remove_myself();
 }
 
-bool OpTracker::check_ops_in_flight(ostream &out)
+bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
   Mutex::Locker locker(ops_in_flight_lock);
   if (!ops_in_flight.size())
@@ -70,42 +74,95 @@ bool OpTracker::check_ops_in_flight(ostream &out)
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t too_old = now;
   too_old -= g_conf->osd_op_complaint_time;
-  
+
+  utime_t oldest_secs = now - ops_in_flight.front()->received_time;
+
   dout(10) << "ops_in_flight.size: " << ops_in_flight.size()
-	   << "; oldest is " << now - ops_in_flight.front()->received_time
-	   << " seconds old" << dendl;
+           << "; oldest is " << oldest_secs
+           << " seconds old" << dendl;
+
+  if (oldest_secs < g_conf->osd_op_complaint_time)
+    return false;
+
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
+  warning_vector.reserve(g_conf->osd_op_log_threshold + 1);
+
+  int slow = 0;     // total slow
+  int warned = 0;   // total logged
   while (!i.end() && (*i)->received_time < too_old) {
+    slow++;
+
     // exponential backoff of warning intervals
-    if ( ( (*i)->received_time +
-	   (g_conf->osd_op_complaint_time *
-	    (*i)->warn_interval_multiplier) )< now) {
-      out << "old request " << *((*i)->request) << " received at "
-	  << (*i)->received_time << " currently " << (*i)->state_string();
+    if (((*i)->received_time +
+	 (g_conf->osd_op_complaint_time *
+	  (*i)->warn_interval_multiplier)) < now) {
+      // will warn
+      if (warning_vector.empty())
+	warning_vector.push_back("");
+      warned++;
+      if (warned > g_conf->osd_op_log_threshold)
+        break;
+
+      utime_t age = now - (*i)->received_time;
+      stringstream ss;
+      ss << "slow request " << age << " seconds old, received at " << (*i)->received_time
+          << ": " << *((*i)->request) << " currently " << (*i)->state_string();
+      warning_vector.push_back(ss.str());
+
+      // only those that have been shown will backoff
       (*i)->warn_interval_multiplier *= 2;
     }
     ++i;
   }
-  return !i.end();
+
+  // only summarize if we warn about any.  if everything has backed
+  // off, we will stay silent.
+  if (warned > 0) {
+    stringstream ss;
+    ss << slow << " slow requests, " << warned << " included below; oldest blocked for > "
+       << oldest_secs << " secs";
+    warning_vector[0] = ss.str();
+  }
+
+  return warning_vector.size();
 }
 
 void OpTracker::mark_event(OpRequest *op, const string &dest)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
   utime_t now = ceph_clock_now(g_ceph_context);
-  dout(1) << "seq: " << op->seq << ", time: " << now << ", event: " << dest
-	  << " " << *op->request << dendl;
+  return _mark_event(op, dest, now);
+}
+
+void OpTracker::_mark_event(OpRequest *op, const string &evt,
+			    utime_t time)
+{
+  Mutex::Locker locker(ops_in_flight_lock);
+  dout(5) << "reqid: " << op->get_reqid() << ", seq: " << op->seq
+	  << ", time: " << time << ", event: " << evt
+	  << ", request: " << *op->request << dendl;
 }
 
 void OpTracker::RemoveOnDelete::operator()(OpRequest *op) {
+  op->mark_event("done");
   tracker->unregister_inflight_op(&(op->xitem));
   delete op;
 }
 
 OpRequestRef OpTracker::create_request(Message *ref)
 {
-  return OpRequestRef(new OpRequest(ref, this),
+  OpRequestRef retval(new OpRequest(ref, this),
 		      RemoveOnDelete(this));
+
+  if (ref->get_type() == CEPH_MSG_OSD_OP) {
+    retval->reqid = static_cast<MOSDOp*>(ref)->get_reqid();
+  } else if (ref->get_type() == MSG_OSD_SUBOP) {
+    retval->reqid = static_cast<MOSDSubOp*>(ref)->reqid;
+  }
+  _mark_event(retval.get(), "header_read", ref->get_recv_stamp());
+  _mark_event(retval.get(), "throttled", ref->get_throttle_stamp());
+  _mark_event(retval.get(), "all_read", ref->get_recv_complete_stamp());
+  _mark_event(retval.get(), "dispatched", ref->get_dispatch_stamp());
+  return retval;
 }
 
 void OpRequest::mark_event(const string &event)

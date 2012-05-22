@@ -100,9 +100,10 @@ class Filer {
    * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
    * ranges in objects on (primary) osds)
    */
-  void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-		       uint64_t offset, uint64_t len,
-		       vector<ObjectExtent>& extents);
+  static void file_to_extents(CephContext *cct, inodeno_t ino,
+			      ceph_file_layout *layout,
+			      uint64_t offset, uint64_t len,
+			      vector<ObjectExtent>& extents);
 
 
   
@@ -119,7 +120,7 @@ class Filer {
            Context *onfinish) {
     assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
+    file_to_extents(cct, ino, layout, offset, len, extents);
     objecter->sg_read(extents, snap, bl, flags, onfinish);
     return 0;
   }
@@ -136,7 +137,7 @@ class Filer {
            Context *onfinish) {
     assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
+    file_to_extents(cct, ino, layout, offset, len, extents);
     objecter->sg_read_trunc(extents, snap, bl, flags,
 			    truncate_size, truncate_seq, onfinish);
     return 0;
@@ -153,7 +154,7 @@ class Filer {
             Context *onack,
             Context *oncommit) {
     vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
+    file_to_extents(cct, ino, layout, offset, len, extents);
     objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit);
     return 0;
   }
@@ -171,7 +172,7 @@ class Filer {
             Context *onack,
             Context *oncommit) {
     vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
+    file_to_extents(cct, ino, layout, offset, len, extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
 		       truncate_size, truncate_seq, onack, oncommit);
     return 0;
@@ -188,7 +189,7 @@ class Filer {
 	       Context *onack,
 	       Context *oncommit) {
     vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
+    file_to_extents(cct, ino, layout, offset, len, extents);
     if (extents.size() == 1) {
       vector<OSDOp> ops(1);
       ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
@@ -223,7 +224,7 @@ class Filer {
            Context *onack,
            Context *oncommit) {
     vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
+    file_to_extents(cct, ino, layout, offset, len, extents);
     if (extents.size() == 1) {
       if (extents[0].offset == 0 && extents[0].length == layout->fl_object_size)
 	objecter->remove(extents[0].oid, extents[0].oloc, 

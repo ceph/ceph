@@ -83,7 +83,7 @@ typedef void *rados_config_t;
  * - snapshot context for writes (see
  *   rados_ioctx_selfmanaged_snap_set_write_ctx())
  * - snapshot id to read from (see rados_ioctx_snap_set_read())
- * - object locator for all single-object operations (see
+ * - object locator for all single-object operation28e61811dc3dccd922bd0b30cf614c2768e7d6d0s (see
  *   rados_ioctx_locator_set_key())
  *
  * @warning changing any of these settings is not thread-safe -
@@ -548,6 +548,16 @@ int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
  * @returns the id of the pool the io context uses
  */
 int64_t rados_ioctx_get_id(rados_ioctx_t io);
+
+/**
+ * Get the pool name of the io context
+ *
+ * @param io the io context to query
+ * @param buf pointer to buffer where name will be stored
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer to small
+ */
+int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf, unsigned maxlen);
 
 /** @} pools */
 
@@ -1215,6 +1225,46 @@ int rados_aio_is_complete(rados_completion_t c);
  * @returns whether c is safe
  */
 int rados_aio_is_safe(rados_completion_t c);
+
+/**
+ * Block until an operation completes and callback completes
+ *
+ * This means it is in memory on all replicas and can be read.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+int rados_aio_wait_for_complete_and_cb(rados_completion_t c);
+
+/**
+ * Block until an operation is safe and callback has completed
+ *
+ * This means it is on stable storage on all replicas.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+int rados_aio_wait_for_safe_and_cb(rados_completion_t c);
+
+/**
+ * Has an asynchronous operation and callback completed
+ *
+ * @param c async operation to inspect
+ * @returns whether c is complete
+ */
+int rados_aio_is_complete_and_cb(rados_completion_t c);
+
+/**
+ * Is an asynchronous operation safe and has the callback completed
+ *
+ * @param c async operation to inspect
+ * @returns whether c is safe
+ */
+int rados_aio_is_safe_and_cb(rados_completion_t c);
 
 /**
  * Get the return value of an asychronous operation

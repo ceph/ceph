@@ -30,8 +30,8 @@
 #define MSG_MON_COMMAND_ACK        51
 #define MSG_LOG                    52
 #define MSG_LOGACK                 53
-#define MSG_MON_OBSERVE            54
-#define MSG_MON_OBSERVE_NOTIFY     55
+//#define MSG_MON_OBSERVE            54
+//#define MSG_MON_OBSERVE_NOTIFY     55
 #define MSG_CLASS                  56
 #define MSG_CLASS_ACK              57
 
@@ -141,7 +141,8 @@ using std::list;
 #include "include/buffer.h"
 #include "common/Throttle.h"
 #include "msg_types.h"
-#include "include/atomic.h"
+
+#include "common/RefCountedObj.h"
 
 #include "common/debug.h"
 
@@ -151,22 +152,6 @@ using std::list;
 
 // abstract Connection, for keeping per-connection state
 
-struct RefCountedObject {
-  atomic_t nref;
-  RefCountedObject() : nref(1) {}
-  virtual ~RefCountedObject() {}
-  
-  RefCountedObject *get() {
-    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
-    nref.inc();
-    return this;
-  }
-  void put() {
-    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
-    if (nref.dec() == 0)
-      delete this;
-  }
-};
 
 struct Connection : public RefCountedObject {
   Mutex lock;
@@ -278,9 +263,10 @@ protected:
   /* dispatch_stamp is set when the Messenger starts calling dispatch() on
    * its endpoints */
   utime_t dispatch_stamp;
-  /* throttle_wait is the amount of time spent waiting on throttlers between
-   * message receipt and message dispatch*/
-  utime_t throttle_wait;
+  /* throttle_stamp is the point at which we got throttle */
+  utime_t throttle_stamp;
+  /* time at which message was fully read */
+  utime_t recv_complete_stamp;
 
   Connection *connection;
 
@@ -397,8 +383,10 @@ public:
   const utime_t& get_recv_stamp() const { return recv_stamp; }
   void set_dispatch_stamp(utime_t t) { dispatch_stamp = t; }
   const utime_t& get_dispatch_stamp() const { return dispatch_stamp; }
-  void set_throttle_wait(utime_t t) { throttle_wait = t; }
-  const utime_t& get_throttle_wait() const { return throttle_wait; }
+  void set_throttle_stamp(utime_t t) { throttle_stamp = t; }
+  const utime_t& get_throttle_stamp() const { return throttle_stamp; }
+  void set_recv_complete_stamp(utime_t t) { recv_complete_stamp = t; }
+  const utime_t& get_recv_complete_stamp() const { return recv_complete_stamp; }
 
   void calc_header_crc() {
     header.crc = ceph_crc32c_le(0, (unsigned char*)&header,

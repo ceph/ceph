@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.45], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.47], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 AC_CONFIG_SUBDIRS([src/leveldb])
@@ -308,6 +308,24 @@ AS_IF([test "x$with_system_leveldb" = xcheck],
 	    [AC_CHECK_LIB([leveldb], [leveldb_open], [with_system_leveldb=yes], [], [-lsnappy -lpthread])])
 AM_CONDITIONAL(WITH_SYSTEM_LEVELDB, [ test "$with_system_leveldb" = "yes" ])
 
+# use system libs3?
+AC_ARG_WITH([system-libs3],
+	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
+	,
+	[with_system_libs3=no])
+AS_IF([test "x$with_system_libs3" = xyes],
+            [AC_CHECK_LIB([s3], [S3_initialize], [true], [AC_MSG_FAILURE([libs3 not found])], [-lpthread])])
+AS_IF([test "x$with_system_libs3" = xcheck],
+            [AC_SEARCH_LIBS([S3_initialize], [s3], [with_system_libs3=yes], [true], [-lpthread])])
+AM_CONDITIONAL(WITH_SYSTEM_LIBS3, [ test "$with_system_libs3" = "yes" ])
+
+# rest-bench?
+AC_ARG_WITH([rest-bench],
+	    [AS_HELP_STRING([--with-rest-bench], [enables rest-bench])],
+	    [],
+	    [with_rest_bench=no])
+AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
+
 # use libaio?
 AC_ARG_WITH([libaio],
             [AS_HELP_STRING([--without-libaio], [disable libaio use by journal])],
@@ -399,23 +417,6 @@ AC_CHECK_FUNC([fallocate],
 #AC_FUNC_STAT
 #AC_FUNC_UTIME_NULL
 #AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
-
-AC_ARG_WITH([gtk2],
-        [AS_HELP_STRING([--with-gtk2], [Build the graphical tools.  Default=yes.])],
-        [],
-        [with_gtk2=check])
-have_gtk2=no
-AS_IF([test "x$with_gtk2" != "xno"],
-        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 2.12],
-                [have_gtk2=yes
-		AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])
-		],
-                [if test "x$with_gtk2" != xcheck; then
-		    AC_MSG_FAILURE(
-			[--with-gtk2 was given, but test for gtkmm failed])
-		 fi
-		])])
-AM_CONDITIONAL(WITH_GTK2, [test "x$have_gtk2" != "xno"])
 
 AM_CONDITIONAL(WITH_BUILD_TESTS, test "$WITH_BUILD_TESTS" = "1")
 

@@ -43,10 +43,6 @@ class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
 
-  Mutex ratio_lock;
-  bool need_full_ratio_update, need_nearfull_ratio_update;
-  float new_full_ratio, new_nearfull_ratio;
-
   bool need_check_down_pgs;
 
 private:
@@ -67,8 +63,6 @@ private:
   bool pg_stats_have_changed(int from, const MPGStats *stats) const;
   bool prepare_pg_stats(MPGStats *stats);
   void _updated_stats(MPGStats *req, MPGStatsAck *ack);
-
-  void update_full_ratios(float full_ratio, float nearfull_ratio);
 
   struct C_Stats : public Context {
     PGMonitor *pgmon;
@@ -146,9 +140,6 @@ private:
   // no copying allowed
   PGMonitor(const PGMonitor &rhs);
   PGMonitor &operator=(const PGMonitor &rhs);
-
-  RatioMonitor *ratio_monitor;
-  friend class RatioMonitor;
 };
 
 #endif

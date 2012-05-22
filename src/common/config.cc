@@ -62,7 +62,7 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_size: init_le32(1<<22),
  fl_cas_hash: init_le32(0),
  fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred : init_le32(-1),
+ fl_unused: init_le32(-1),
  fl_pg_pool : init_le32(-1),
 };
 
@@ -283,6 +283,11 @@ void md_config_t::show_config(std::ostream& out)
 {
   out << "name = " << name << std::endl;
   out << "cluster = " << cluster << std::endl;
+  for (int o = 0; o < subsys.get_num(); o++) {
+    out << "debug_" << subsys.get_name(o)
+	<< " = " << subsys.get_log_level(o)
+	<< "/" << subsys.get_gather_level(o) << std::endl;
+  }
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     char *buf;
@@ -586,6 +591,26 @@ int md_config_t::set_val(const char *key, const char *val)
 
   string k(ConfFile::normalize_key_name(key));
 
+  // subsystems?
+  if (strncmp(k.c_str(), "debug_", 6) == 0) {
+    for (int o = 0; o < subsys.get_num(); o++) {
+      std::string as_option = "debug_" + subsys.get_name(o);
+      if (k == as_option) {
+	int log, gather;
+	int r = sscanf(v.c_str(), "%d/%d", &log, &gather);
+	if (r >= 1) {
+	  if (r < 2)
+	    gather = log;
+	  //	  cout << "subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
+	  subsys.set_log_level(o, log);
+	  subsys.set_gather_level(o, gather);
+	  return 0;
+	}
+	return -EINVAL;
+      }
+    }	
+  }
+
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
     if (strcmp(opt->name, k.c_str()) == 0) {
@@ -670,12 +695,28 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
     int l = strlen(str.c_str()) + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
+      if (!*buf)
+        return -ENOMEM;
       strcpy(*buf, str.c_str());
       return 0;
     }
     snprintf(*buf, len, "%s", str.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
+
+  // subsys?
+  for (int o = 0; o < subsys.get_num(); o++) {
+    std::string as_option = "debug_" + subsys.get_name(o);
+    if (k == as_option) {
+      if (len == -1) {
+	*buf = (char*)malloc(20);
+	len = 20;
+      }
+      int l = snprintf(*buf, len, "%d/%d", subsys.get_log_level(o), subsys.get_gather_level(o));
+      return (l == len) ? -ENAMETOOLONG : 0;
+    }
+  }
+
   // couldn't find a configuration option with key 'k'
   return -ENOENT;
 }

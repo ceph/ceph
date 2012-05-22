@@ -264,11 +264,9 @@ void MDCache::remove_inode(CInode *o)
 void MDCache::init_layouts()
 {
   default_file_layout = g_default_file_layout;
-  default_file_layout.fl_pg_preferred = -1;
   default_file_layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
 
   default_log_layout = g_default_file_layout;
-  default_log_layout.fl_pg_preferred = -1;
   default_log_layout.fl_pg_pool = mds->mdsmap->get_metadata_pg_pool();
 }
 

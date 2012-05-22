@@ -19,14 +19,13 @@ TYPE(entity_addr_t)
 
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
-TYPE(OSDMap)
-TYPE(OSDMap::Incremental)
+TYPEWITHSTRAYDATA(OSDMap)
+TYPEWITHSTRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
 TYPE(CrushWrapper)
 
 #include "osd/PG.h"
-TYPE(PG::Interval)
 TYPE(PG::OndiskLog)
 
 #include "osd/osd_types.h"
@@ -44,6 +43,7 @@ TYPE(pg_stat_t)
 TYPE(pool_stat_t)
 TYPE(pg_history_t)
 TYPE(pg_info_t)
+TYPE(pg_interval_t)
 TYPE(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
@@ -68,6 +68,9 @@ TYPE(SequencerPosition)
 
 #include "os/hobject.h"
 TYPE(hobject_t)
+
+#include "mon/AuthMonitor.h"
+TYPE(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
@@ -250,10 +253,6 @@ MESSAGE(MMonGlobalID)
 MESSAGE(MMonJoin)
 #include "messages/MMonMap.h"
 MESSAGE(MMonMap)
-#include "messages/MMonObserve.h"
-MESSAGE(MMonObserve)
-#include "messages/MMonObserveNotify.h"
-MESSAGE(MMonObserveNotify)
 #include "messages/MMonPaxos.h"
 MESSAGE(MMonPaxos)
 #include "messages/MMonProbe.h"

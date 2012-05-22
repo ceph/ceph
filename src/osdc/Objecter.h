@@ -598,6 +598,10 @@ public:
 
     utime_t stamp;
 
+    bool precalc_pgid;
+
+    bool budgeted;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, eversion_t *ov) :
       session(NULL), session_item(this), incarnation(0),
@@ -607,7 +611,8 @@ public:
       outbl(NULL),
       flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
-      paused(false), objver(ov), reply_epoch(NULL) {
+      paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false),
+      budgeted(false) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
@@ -861,7 +866,7 @@ public:
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
-  void send_linger(LingerOp *info);
+  void send_linger(LingerOp *info, bool first_send);
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
 
@@ -897,8 +902,10 @@ public:
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
     }
+    op->budgeted = true;
   }
   void put_op_budget(Op *op) {
+    assert(op->budgeted);
     int op_budget = calc_op_budget(op);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
@@ -920,8 +927,8 @@ public:
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
-    op_throttle_bytes(cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct->_conf->objecter_inflight_ops)
+    op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
+    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
   { }
   ~Objecter() {
     assert(!tick_event);
@@ -955,6 +962,7 @@ public:
 private:
   // low-level
   tid_t op_submit(Op *op, OSDSession *s = NULL);
+  tid_t _op_submit(Op *op, OSDSession *s);
 
   // public interface
  public:

@@ -30,7 +30,7 @@ static void log_on_exit(int r, void *p)
 }
 
 Log::Log(SubsystemMap *s)
-  : m_indirect_this(new (Log*)(this)),   // we will deliberately leak this
+  : m_indirect_this(NULL),
     m_subs(s),
     m_new(), m_recent(),
     m_fd(-1),
@@ -41,12 +41,6 @@ Log::Log(SubsystemMap *s)
     m_max_recent(DEFAULT_MAX_RECENT)
 {
   int ret;
-
-  // Make sure we flush on shutdown.  We do this by deliberately
-  // leaking an indirect pointer to ourselves (on_exit() can't
-  // unregister a callback).  This is not racy only becuase we
-  // assume that exit() won't race with ~Log().
-  on_exit(log_on_exit, m_indirect_this);
 
   ret = pthread_spin_init(&m_lock, PTHREAD_PROCESS_SHARED);
   assert(ret == 0);
@@ -68,7 +62,9 @@ Log::Log(SubsystemMap *s)
 
 Log::~Log()
 {
-  *m_indirect_this = NULL;
+  if (m_indirect_this) {
+    *m_indirect_this = NULL;
+  }
 
   assert(!is_started());
   if (m_fd >= 0)
@@ -82,6 +78,18 @@ Log::~Log()
 
 
 ///
+
+void Log::set_flush_on_exit()
+{
+  // Make sure we flush on shutdown.  We do this by deliberately
+  // leaking an indirect pointer to ourselves (on_exit() can't
+  // unregister a callback).  This is not racy only becuase we
+  // assume that exit() won't race with ~Log().
+  if (m_indirect_this == NULL) {
+    m_indirect_this = new (Log*)(this);
+    on_exit(log_on_exit, m_indirect_this);
+  }
+}
 
 void Log::set_max_new(int n)
 {
@@ -185,8 +193,12 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_stderr = (crash ? m_stderr_crash : m_stderr_log) >= e->m_prio;
 
     if (do_fd || do_syslog || do_stderr) {
-      int buflen = e->m_stamp.sprintf(buf, sizeof(buf));
-      buflen += sprintf(buf + buflen, " %lx %2d ",
+      int buflen = 0;
+
+      if (crash)
+	buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
+      buflen += e->m_stamp.sprintf(buf + buflen, sizeof(buf)-buflen);
+      buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
       // FIXME: this is slow

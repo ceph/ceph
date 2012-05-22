@@ -469,6 +469,30 @@ inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
     decode(v[i], p);
 }
 
+// vector (shared_ptr)
+template<class T>
+inline void encode(const std::vector<std::tr1::shared_ptr<T> >& v, bufferlist& bl)
+{
+  __u32 n = v.size();
+  encode(n, bl);
+  for (typename std::vector<std::tr1::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
+    if (*p)
+      encode(**p, bl);
+    else
+      encode(T(), bl);
+}
+template<class T>
+inline void decode(std::vector<std::tr1::shared_ptr<T> >& v, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  v.resize(n);
+  for (__u32 i=0; i<n; i++) {
+    v[i].reset(new T());
+    decode(*v[i], p);
+  }
+}
+
 // map (pointers)
 /*
 template<class T, class U>
@@ -769,6 +793,9 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
  */
 #define DECODE_START_LEGACY_COMPAT_LEN_32(v, compatv, lenv, bl)		\
   __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3, bl)
+
+#define DECODE_START_LEGACY_COMPAT_LEN_16(v, compatv, lenv, bl)		\
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 1, bl)
 
 /**
  * finish decode block

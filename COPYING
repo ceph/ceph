@@ -2,6 +2,10 @@ Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 License: LGPL2.1 (see COPYING-LGPL2.1)
 
+Files: doc/*
+Copyright: (c) 2010-2012 New Dream Network and contributors
+License: Creative Commons Attribution-ShareAlike (CC BY-SA)
+
 Files: src/client/hadoop/ceph
 Copyright: Copyright (C) New Dream Network and contributors
 License: Apache License v2

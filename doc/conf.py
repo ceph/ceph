@@ -1,5 +1,5 @@
 project = u'Ceph'
-copyright = u'2011, New Dream Network'
+copyright = u'2012, New Dream Network'
 version = 'dev'
 release = 'dev'
 
@@ -9,9 +9,10 @@ master_doc = 'index'
 exclude_patterns = ['**/.#*', '**/*~']
 pygments_style = 'sphinx'
 
-html_theme = 'nature'
+html_theme = 'ceph'
+html_theme_path = ['_themes']
 html_title = "Ceph documentation"
-html_logo = 'logo.jpg'
+html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
 html_use_smartypants = True
 html_show_sphinx = False

@@ -9,9 +9,11 @@
 #include "msg/Message.h"
 
 #define TYPE(t)
+#define TYPEWITHSTRAYDATA(t)
 #define MESSAGE(t)
 #include "types.h"
 #undef TYPE
+#undef TYPEWITHSTRAYDATA
 #undef MESSAGE
 
 void usage(ostream &out)
@@ -51,9 +53,10 @@ template<class T>
 class DencoderImpl : public Dencoder {
   T* m_object;
   list<T*> m_list;
+  bool stray_okay;
 
 public:
-  DencoderImpl() : m_object(new T) {}
+  DencoderImpl(bool stray_okay=false) : m_object(new T), stray_okay(stray_okay) {}
 
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
@@ -63,7 +66,7 @@ public:
     catch (buffer::error& e) {
       return e.what();
     }
-    if (!p.end())
+    if (!stray_okay && !p.end())
       return "stray data at end of buffer";
     return string();
   }
@@ -178,9 +181,11 @@ int main(int argc, const char **argv)
 #define T_STR(x) #x
 #define T_STRINGIFY(x) T_STR(x)
 #define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImpl<t>;
+#define TYPEWITHSTRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImpl<t>(true);
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
+#undef TYPEWITHSTRAYDATA
 #undef T_STR
 #undef T_STRRINGIFY
 

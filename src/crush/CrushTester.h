@@ -15,15 +15,13 @@ class CrushTester {
   int min_rule, max_rule;
   int min_x, max_x;
   int min_rep, max_rep;
-  int force;
 
 public:
   CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
     : crush(c), err(eo), verbose(verbosity),
       min_rule(-1), max_rule(-1),
       min_x(-1), max_x(-1),
-      min_rep(-1), max_rep(-1),
-      force(-1)
+      min_rep(-1), max_rep(-1)
   { }
 
   void set_verbosity(int v) {
@@ -59,10 +57,6 @@ public:
   }
   void set_rule(int rule) {
     min_rule = max_rule = rule;
-  }
-
-  void set_force(int x) {
-    force = x;
   }
 
   int test();

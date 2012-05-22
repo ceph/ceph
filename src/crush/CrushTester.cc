@@ -54,7 +54,7 @@ int CrushTester::test()
       map<int,int> sizes;
       for (int x = min_x; x <= max_x; x++) {
 	vector<int> out;
-	crush.do_rule(r, x, out, nr, force, weight);
+	crush.do_rule(r, x, out, nr, weight);
 	if (verbose)
 	  if (verbose>1)
 	    err << " rule " << r << " x " << x << " " << out << std::endl;
