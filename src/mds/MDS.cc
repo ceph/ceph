@@ -87,7 +87,14 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   timer(m->cct, mds_lock),
-  authorize_handler_registry(new AuthAuthorizeHandlerRegistry(m->cct)),
+  authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
+								      m->cct->_conf->auth_cluster_required.length() ?
+								      m->cct->_conf->auth_cluster_required :
+								      m->cct->_conf->auth_supported)),
+  authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(m->cct,
+								      m->cct->_conf->auth_service_required.length() ?
+								      m->cct->_conf->auth_service_required :
+								      m->cct->_conf->auth_supported)),
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
@@ -148,7 +155,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 MDS::~MDS() {
   Mutex::Locker lock(mds_lock);
 
-  delete authorize_handler_registry;
+  delete authorize_handler_service_registry;
+  delete authorize_handler_cluster_registry;
 
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
@@ -2009,8 +2017,14 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   if (want_state == CEPH_MDS_STATE_DNE)
     return false;
 
-  AuthAuthorizeHandler *authorize_handler =
-    authorize_handler_registry->get_handler(protocol);
+  AuthAuthorizeHandler *authorize_handler = 0;
+  switch (peer_type) {
+  case CEPH_ENTITY_TYPE_MDS:
+    authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
+    break;
+  default:
+    authorize_handler = authorize_handler_service_registry->get_handler(protocol);
+  }
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;
