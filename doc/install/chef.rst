@@ -195,6 +195,10 @@ Chef nodes. ::
 
 A list of the nodes you've boostrapped should appear.
 
+
+See the `Deploy With Chef <../../config-cluster/chef>`_ section for information
+on using Chef to deploy your Ceph cluster.
+
 .. _Chef Architecture Introduction: http://wiki.opscode.com/display/chef/Architecture+Introduction
 .. _Installing Chef Client on Ubuntu or Debian: http://wiki.opscode.com/display/chef/Installing+Chef+Client+on+Ubuntu+or+Debian
 .. _Installing Chef Server on Debian or Ubuntu using Packages: http://wiki.opscode.com/display/chef/Installing+Chef+Server+on+Debian+or+Ubuntu+using+Packages
