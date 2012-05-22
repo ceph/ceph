@@ -76,7 +76,7 @@ public:
   {
     pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
     // for local dmsg delivery
-    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
+    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN, NULL);
     init_local_pipe();
   }
   /**
@@ -439,7 +439,7 @@ private:
     friend class Writer;
 
   public:
-    Pipe(SimpleMessenger *r, int st) :
+    Pipe(SimpleMessenger *r, int st, Connection *con) :
       reader_thread(this), writer_thread(this),
       msgr(r),
       sd(-1),
@@ -452,7 +452,13 @@ private:
       close_on_empty(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0) {
-      connection_state->pipe = get();
+      if (con) {
+        connection_state = con->get();
+        connection_state->reset_pipe(this);
+      } else {
+        connection_state = new Connection();
+        connection_state->pipe = get();
+      }
       msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
       if (msgr->timeout == 0)
         msgr->timeout = -1;
@@ -780,11 +786,13 @@ private:
    *
    * @param addr The address of the entity to connect to.
    * @param type The peer type of the entity at the address.
+   * @param con An existing Connection to associate with the new Pipe. If
+   * NULL, it creates a new Connection.
    *
    * @return a pointer to the newly-created Pipe. Caller does not own a
    * reference; take one if you need it.
    */
-  Pipe *connect_rank(const entity_addr_t& addr, int type);
+  Pipe *connect_rank(const entity_addr_t& addr, int type, Connection *con);
   /**
    * Send a message, lazily or not.
    * This just glues [lazy_]send_message together and passes
@@ -798,19 +806,17 @@ private:
   /**
    * Queue up a Message for delivery to the entity specified
    * by addr and dest_type.
-   * If there is already an established Pipe connected to the given
-   * addr you must pass it in to this function, regardless of the Pipe's
-   * current state. submit_message() is responsible for creating
+   * submit_message() is responsible for creating
    * new Pipes (and closing old ones) as necessary.
    *
    * @param m The Message to queue up. This function eats a reference.
-   * @param pipe The existing Pipe to the given address.
+   * @param con The existing Connection to use, or NULL if you don't know of one.
    * @param addr The address to send the Message to.
    * @param dest_type The peer type of the address we're sending to
    * @param lazy If true, do not establish or fix a Connection to send the Message;
    * just drop silently under failure.
    */
-  void submit_message(Message *m, Pipe *pipe,
+  void submit_message(Message *m, Connection *con,
                       const entity_addr_t& addr, int dest_type, bool lazy);
   /**
    * Look through the pipes in the pipe_reap_queue and tear them down.

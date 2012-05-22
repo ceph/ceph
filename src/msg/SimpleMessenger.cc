@@ -235,7 +235,7 @@ void *SimpleMessenger::Accepter::entry()
       msgr->lock.Lock();
 
       if (!msgr->destination_stopped) {
-	Pipe *p = new Pipe(msgr, Pipe::STATE_ACCEPTING);
+	Pipe *p = new Pipe(msgr, Pipe::STATE_ACCEPTING, NULL);
 	p->sd = sd;
 	p->pipe_lock.Lock();
 	p->start_reader();
@@ -433,7 +433,8 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
 
   lock.Lock();
   Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
-  submit_message(m, pipe, dest.addr, dest.name.type(), lazy);
+  submit_message(m, (pipe ? pipe->connection_state : NULL),
+                 dest.addr, dest.name.type(), lazy);
   lock.Unlock();
   return 0;
 }
@@ -451,19 +452,8 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
       << " " << m << " con " << con
       << dendl;
 
-  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
-  lock.Lock();
-  if (!pipe && rank_pipe.count(con->get_peer_addr())) {
-    pipe = rank_pipe[con->get_peer_addr()];
-    // we get the Pipe to match the put() below
-    pipe->get();
-    con->reset_pipe(pipe);
-  }
-  submit_message(m, pipe, con->get_peer_addr(), con->get_peer_type(), lazy);
+  submit_message(m, con, con->get_peer_addr(), con->get_peer_type(), lazy);
   lock.Unlock();
-  if (pipe) {
-    pipe->put();
-  }
   return 0;
 }
 
@@ -2365,7 +2355,9 @@ int SimpleMessenger::start()
 /* connect_rank
  * NOTE: assumes messenger.lock held.
  */
-SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, int type)
+SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
+                                                     int type,
+                                                     Connection *con)
 {
   assert(lock.is_locked());
   assert(addr != my_inst.addr);
@@ -2373,7 +2365,7 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
   // create pipe
-  Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
+  Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING, con);
   pipe->pipe_lock.Lock();
   pipe->set_peer_type(type);
   pipe->set_peer_addr(addr);
@@ -2425,15 +2417,22 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
       }
     }
     if (!pipe) {
-      pipe = connect_rank(dest.addr, dest.name.type());
+      pipe = connect_rank(dest.addr, dest.name.type(), NULL);
     }
   }
   return (Connection *)pipe->connection_state->get();
 }
 
 
-void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t& dest_addr, int dest_type, bool lazy)
+void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
+  Pipe *pipe = NULL;
+  if (con) {
+    pipe = con ? (Pipe *)con->pipe : NULL;
+    // we don't want to deal with ref-counting here, so we don't use get_pipe()
+    con->get();
+  }
+
   // local?
   if (!pipe && my_inst.addr == dest_addr) {
     if (!destination_stopped) {
@@ -2473,10 +2472,13 @@ void SimpleMessenger::submit_message(Message *m, Pipe *pipe, const entity_addr_t
       } else {
         ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
         // not connected.
-        pipe = connect_rank(dest_addr, dest_type);
+        pipe = connect_rank(dest_addr, dest_type, con);
         pipe->send(m);
       }
     }
+  }
+  if (con) {
+    con->put();
   }
 }
 
