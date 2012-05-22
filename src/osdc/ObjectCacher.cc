@@ -1181,40 +1181,38 @@ void ObjectCacher::flusher_entry()
   ldout(cct, 10) << "flusher start" << dendl;
   lock.Lock();
   while (!flusher_stop) {
-    while (!flusher_stop) {
-      loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() + get_stat_dirty();
-      ldout(cct, 11) << "flusher "
-		     << all << " / " << max_size << ":  "
-		     << get_stat_tx() << " tx, "
-		     << get_stat_rx() << " rx, "
-		     << get_stat_clean() << " clean, "
-		     << get_stat_dirty() << " dirty ("
-		     << target_dirty << " target, "
-		     << max_dirty << " max)"
-		     << dendl;
-      if (get_stat_dirty() + get_stat_dirty_waiting() > target_dirty) {
-        // flush some dirty pages
-        ldout(cct, 10) << "flusher " 
-		       << get_stat_dirty() << " dirty + " << get_stat_dirty_waiting()
-		       << " dirty_waiting > target "
-		       << target_dirty
-		       << ", flushing some dirty bhs" << dendl;
-        flush(get_stat_dirty() + get_stat_dirty_waiting() - target_dirty);
-      }
-      else {
-        // check tail of lru for old dirty items
-        utime_t cutoff = ceph_clock_now(cct);
-	cutoff -= max_dirty_age;
-        BufferHead *bh = 0;
-        while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
-               bh->last_write < cutoff) {
-          ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
-          bh_write(bh);
-        }
-        break;
+    loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() + get_stat_dirty();
+    ldout(cct, 11) << "flusher "
+		   << all << " / " << max_size << ":  "
+		   << get_stat_tx() << " tx, "
+		   << get_stat_rx() << " rx, "
+		   << get_stat_clean() << " clean, "
+		   << get_stat_dirty() << " dirty ("
+		   << target_dirty << " target, "
+		   << max_dirty << " max)"
+		   << dendl;
+    loff_t actual = get_stat_dirty() + get_stat_dirty_waiting();
+    if (actual > target_dirty) {
+      // flush some dirty pages
+      ldout(cct, 10) << "flusher " 
+		     << get_stat_dirty() << " dirty + " << get_stat_dirty_waiting()
+		     << " dirty_waiting > target "
+		     << target_dirty
+		     << ", flushing some dirty bhs" << dendl;
+      flush(actual - target_dirty);
+    } else {
+      // check tail of lru for old dirty items
+      utime_t cutoff = ceph_clock_now(cct);
+      cutoff -= max_dirty_age;
+      BufferHead *bh = 0;
+      while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
+	     bh->last_write < cutoff) {
+	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
+	bh_write(bh);
       }
     }
-    if (flusher_stop) break;
+    if (flusher_stop)
+      break;
     flusher_cond.WaitInterval(cct, lock, utime_t(1,0));
   }
   lock.Unlock();
