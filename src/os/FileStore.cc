@@ -929,7 +929,7 @@ int FileStore::mkfs()
       goto close_fsid_fd;
     }
     fsid = old_fsid;
-    dout(1) << "mkfs fsid is " << fsid << dendl;
+    dout(1) << "mkfs fsid is already set to " << fsid << dendl;
   }
 
   // version stamp
