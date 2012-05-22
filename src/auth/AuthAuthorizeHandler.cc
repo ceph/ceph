@@ -16,7 +16,7 @@
 #include "AuthAuthorizeHandler.h"
 #include "cephx/CephxAuthorizeHandler.h"
 #include "none/AuthNoneAuthorizeHandler.h"
-#include "AuthSupported.h"
+#include "AuthMethodList.h"
 #include "common/Mutex.h"
 
 AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)

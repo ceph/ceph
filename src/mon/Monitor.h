@@ -38,7 +38,7 @@
 #include "common/LogClient.h"
 
 #include "auth/cephx/CephxKeyServer.h"
-#include "auth/AuthSupported.h"
+#include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 
 #include "perfglue/heap_profiler.h"
@@ -121,7 +121,7 @@ public:
   KeyRing keyring;
   KeyServer key_server;
 
-  AuthSupported auth_supported;
+  AuthMethodList auth_supported;
 
   CompatSet features;
 

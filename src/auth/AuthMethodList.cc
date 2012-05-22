@@ -17,14 +17,13 @@
 #include "common/debug.h"
 #include "include/str_list.h"
 
-#include "AuthSupported.h"
+#include "AuthMethodList.h"
 
 const static int dout_subsys = ceph_subsys_auth;
 
 
-AuthSupported::AuthSupported(CephContext *cct)
+AuthMethodList::AuthMethodList(CephContext *cct, string str)
 {
-  string str = cct->_conf->auth_supported;
   list<string> sup_list;
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
@@ -38,12 +37,12 @@ AuthSupported::AuthSupported(CephContext *cct)
   }
 }
 
-bool AuthSupported::is_supported_auth(int auth_type)
+bool AuthMethodList::is_supported_auth(int auth_type)
 {
-  return std:find(auth_supported.begin(), auth_supported.end(), auth_type) != auth_supported.end();
+  return std::find(auth_supported.begin(), auth_supported.end(), auth_type) != auth_supported.end();
 }
 
-int AuthSupported::pick(const std::set<__u32>& supported)
+int AuthMethodList::pick(const std::set<__u32>& supported)
 {
   for (set<__u32>::const_reverse_iterator p = supported.rbegin(); p != supported.rend(); ++p)
     if (is_supported_auth(*p))

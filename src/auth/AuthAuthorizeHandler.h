@@ -16,7 +16,7 @@
 #define CEPH_AUTHAUTHORIZEHANDLER_H
 
 #include "Auth.h"
-#include "AuthSupported.h"
+#include "AuthMethodList.h"
 #include "include/types.h"
 
 class CephContext;
@@ -35,11 +35,11 @@ class AuthAuthorizeHandlerRegistry {
   Mutex m_lock;
   map<int,AuthAuthorizeHandler*> m_authorizers;
   CephContext *cct;
-  AuthSupported supported;
+  AuthMethodList supported;
 
 public:
-  AuthAuthorizeHandlerRegistry(CephContext *cct_)
-    : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), cct(cct_), supported(cct_)
+  AuthAuthorizeHandlerRegistry(CephContext *cct_, std::string methods)
+    : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), cct(cct_), supported(cct_, methods)
   {}
   ~AuthAuthorizeHandlerRegistry();
   

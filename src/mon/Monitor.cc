@@ -65,7 +65,7 @@
 
 #include "osd/OSDMap.h"
 
-#include "auth/AuthSupported.h"
+#include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
@@ -101,7 +101,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   monmap(map),
   clog(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
-  auth_supported(cct),
+  auth_supported(cct, cct->_conf->auth_supported),
   store(s),
   
   state(STATE_PROBING),
