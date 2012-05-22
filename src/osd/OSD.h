@@ -325,7 +325,8 @@ protected:
   Mutex osd_lock;			// global lock
   SafeTimer timer;    // safe timer (osd_lock)
 
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
+  AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
+  AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;

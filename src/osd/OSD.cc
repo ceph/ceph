@@ -667,7 +667,14 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   Dispatcher(external_messenger->cct),
   osd_lock("OSD::osd_lock"),
   timer(external_messenger->cct, osd_lock),
-  authorize_handler_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct)),
+  authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct,
+								      cct->_conf->auth_cluster_required.length() ?
+								      cct->_conf->auth_cluster_required :
+								      cct->_conf->auth_supported)),
+  authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct,
+								      cct->_conf->auth_service_required.length() ?
+								      cct->_conf->auth_service_required :
+								      cct->_conf->auth_supported)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),
@@ -723,7 +730,8 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 
 OSD::~OSD()
 {
-  delete authorize_handler_registry;
+  delete authorize_handler_cluster_registry;
+  delete authorize_handler_service_registry;
   delete class_handler;
   g_ceph_context->get_perfcounters_collection()->remove(logger);
   delete logger;
@@ -2956,7 +2964,19 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid)
 {
-  AuthAuthorizeHandler *authorize_handler = authorize_handler_registry->get_handler(protocol);
+  AuthAuthorizeHandler *authorize_handler = 0;
+  switch (peer_type) {
+  case CEPH_ENTITY_TYPE_MDS:
+    /*
+     * note: mds is technically a client from our perspective, but
+     * this makes the 'cluster' consistent w/ monitor's usage.
+     */
+  case CEPH_ENTITY_TYPE_OSD:
+    authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
+    break;
+  default:
+    authorize_handler = authorize_handler_service_registry->get_handler(protocol);
+  }
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     isvalid = false;
