@@ -126,6 +126,10 @@ parse_file(const std::string &fname, std::deque<std::string> *errors)
 
   sz = (size_t)st_buf.st_size;
   buf = (char*)malloc(sz);
+  if (!buf) {
+    ret = -ENOMEM;
+    goto done;
+  }
 
   if (fread(buf, 1, sz, fp) != sz) {
     if (ferror(fp)) {

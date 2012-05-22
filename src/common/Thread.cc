@@ -71,6 +71,8 @@ int Thread::try_create(size_t stacksize)
   stacksize &= CEPH_PAGE_MASK;  // must be multiple of page
   if (stacksize) {
     thread_attr = (pthread_attr_t*) malloc(sizeof(pthread_attr_t));
+    if (!thread_attr)
+      return -ENOMEM;
     pthread_attr_init(thread_attr);
     pthread_attr_setstacksize(thread_attr, stacksize);
   }
