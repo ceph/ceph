@@ -255,7 +255,7 @@ void MonClient::handle_monmap(MMonMap *m)
 
 int MonClient::init()
 {
-  ldout(cct, 10) << "init auth_supported " << cct->_conf->auth_supported << dendl;
+  ldout(cct, 10) << "init" << dendl;
 
   messenger->add_dispatcher_head(this);
 
@@ -276,7 +276,14 @@ int MonClient::init()
   // seed rng so we choose a different monitor each time
   srand(getpid());
 
-  auth_supported = new AuthMethodList(cct, cct->_conf->auth_supported);
+  string method;
+  if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
+      entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+      entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
+    method = cct->_conf->auth_cluster_required;
+  else
+    method = cct->_conf->auth_client_required;
+  auth_supported = new AuthMethodList(cct, method.length() ? method : cct->_conf->auth_supported);
   ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << dendl;
 
   initialized = true;
