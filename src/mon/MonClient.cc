@@ -259,16 +259,33 @@ int MonClient::init()
 
   messenger->add_dispatcher_head(this);
 
+  entity_name = cct->_conf->name;
+
+  // keyring
   keyring = new KeyRing;
   int r = KeyRing::from_ceph_context(cct, keyring);
+  if (r == -ENOENT) {
+    // do we care?
+    string method;
+    if (entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	entity_name.get_type() == CEPH_ENTITY_TYPE_OSD)
+      method = cct->_conf->auth_cluster_required;
+    else
+      method = cct->_conf->auth_client_required;
+    if (method.length() == 0)
+      method = cct->_conf->auth_supported;
+    AuthMethodList supported(cct, method);
+    if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
+      ldout(cct, 2) << "cephx auth is not supported, ignoring absence of keyring" << dendl;
+      r = 0;
+    }
+  }
   if (r < 0) {
     lderr(cct) << "failed to open keyring: " << cpp_strerror(r) << dendl;
     return r;
   }
   rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
 
-  entity_name = cct->_conf->name;
-  
   Mutex::Locker l(monc_lock);
   timer.init();
   finisher.start();
