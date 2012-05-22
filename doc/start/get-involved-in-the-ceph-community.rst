@@ -28,7 +28,7 @@ These are exciting times in the Ceph community! Get involved!
 +-----------------+-------------------------------------------------+-----------------------------------------------+
 | **Source Code** | If you would like to participate in             |                                               |
 |                 | development, bug fixing, or if you just want    | - http://github.com:ceph/ceph.git             |
-|                 | the very latest code for Ceph, you can get it   | - ``$git clone git@github.com:ceph/ceph.git`` |
+|                 | the very latest code for Ceph, you can get it   | - ``git clone git@github.com:ceph/ceph.git``  |
 |                 | at http://github.com.                           |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+
 | **Support**     | If you have a very specific problem, an         | http://inktank.com                            |

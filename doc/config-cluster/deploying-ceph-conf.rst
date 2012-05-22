@@ -1,6 +1,6 @@
-==============================
- Deploying Ceph Configuration
-==============================
+==================================
+ Deploying the Ceph Configuration
+==================================
 Ceph's ``mkcephfs`` deployment script does not copy the configuration file you
 created from the Administration host to the OSD Cluster hosts. Copy the
 configuration file you created (*i.e.,* ``mycluster.conf`` in the example below)
