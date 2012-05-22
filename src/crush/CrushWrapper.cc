@@ -249,7 +249,8 @@ void CrushWrapper::reweight(CephContext *cct)
       continue;
     crush_bucket *b = get_bucket(*p);
     ldout(cct, 5) << "reweight bucket " << *p << dendl;
-    crush_reweight_bucket(crush, b);
+    int r = crush_reweight_bucket(crush, b);
+    assert(r == 0);
   }
 }
 
