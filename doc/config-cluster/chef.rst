@@ -3,7 +3,8 @@
 =====================
 
 We use Chef cookbooks to deploy Ceph. See `Managing Cookbooks with Knife`_ for details
-on using ``knife``.
+on using ``knife``.  For Chef installation instructions, see
+`Installing Chef <../../install/chef>`_.
 
 Add a Cookbook Path
 -------------------
