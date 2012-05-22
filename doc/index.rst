@@ -30,5 +30,6 @@ cluster to ensure that the storage hosts are running smoothly.
    Internals <dev/index>
    man/index
    architecture
+   faq
    papers
    appendix/index
