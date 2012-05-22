@@ -284,7 +284,7 @@ public:
   void handle_route(MRoute *m);
 
   /**
-   * generate health report
+   * Generate health report
    *
    * @param status one-line status summary
    * @param detailbl optional bufferlist* to fill with a detailed report
@@ -295,12 +295,27 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
   void handle_probe(MMonProbe *m);
+  /**
+   * Handle a Probe Operation, replying with our name, quorum and known versions.
+   *
+   * We use the MMonProbe message class for anything and everything related with
+   * Monitor probing. One of the operations relates directly with the probing
+   * itself, in which we receive a probe request and to which we reply with
+   * our name, our quorum and the known versions for each Paxos service. Thus the
+   * redundant function name. This reply will obviously be sent to the one
+   * probing/requesting these infos.
+   *
+   * @todo Add @pre and @post
+   *
+   * @param m A Probe message, with an operation of type Probe.
+   */
   void handle_probe_probe(MMonProbe *m);
   void handle_probe_reply(MMonProbe *m);
   void handle_probe_slurp(MMonProbe *m);
   void handle_probe_slurp_latest(MMonProbe *m);
   void handle_probe_data(MMonProbe *m);
-  /* Given an MMonProbe and associated Paxos machine, create a reply,
+  /**
+   * Given an MMonProbe and associated Paxos machine, create a reply,
    * fill it with the missing Paxos states and current commit pointers
    *
    * @param m The incoming MMonProbe. We use this to determine the range
