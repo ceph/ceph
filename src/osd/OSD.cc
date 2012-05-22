@@ -4893,11 +4893,11 @@ void OSD::start_recovery_op(PG *pg, const hobject_t& soid)
 
 void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 {
+  recovery_wq.lock();
   dout(10) << "finish_recovery_op " << *pg << " " << soid
 	   << " dequeue=" << dequeue
 	   << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops)"
 	   << dendl;
-  recovery_wq.lock();
 
   // adjust count
   recovery_ops_active--;
