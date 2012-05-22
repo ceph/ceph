@@ -104,6 +104,7 @@ bool PaxosService::should_propose(double& delay)
   return true;
 }
 
+
 void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
@@ -115,7 +116,14 @@ void PaxosService::propose_pending()
     proposal_timer = 0;
   }
 
-  // finish and encode
+  /**
+   * @note The value we propose is encoded in a bufferlist, passed to 
+   *	   Paxos::propose_new_value and it is obtained by calling a 
+   *	   function that must be implemented by the class implementing us.
+   *	   I.e., the function encode_pending will be the one responsible
+   *	   to encode whatever is pending on the implementation class into a
+   *	   bufferlist, so we can then propose that as a value through Paxos.
+   */
   bufferlist bl;
   encode_pending(bl);
   have_pending = false;
