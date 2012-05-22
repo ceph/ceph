@@ -214,6 +214,10 @@ testrados_SOURCES = test/osd/TestRados.cc test/osd/TestOpStat.cc test/osd/Object
 testrados_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testrados
 
+omapbench_SOURCES = test/omap_bench.cc
+omapbench_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += omapbench
+
 multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += multi_stress_watch 
