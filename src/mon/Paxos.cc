@@ -383,7 +383,7 @@ void Paxos::begin(bufferlist& v)
     return;
   }
 
-  // ask others to accept it to!
+  // ask others to accept it too!
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
