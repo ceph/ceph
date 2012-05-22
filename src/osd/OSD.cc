@@ -4298,6 +4298,8 @@ void OSD::do_notifies(
       dout(7) << "do_notify osd." << it->first << " is self, skipping" << dendl;
       continue;
     }
+    if (!osdmap->is_up(it->first))
+      continue;
     dout(7) << "do_notify osd." << it->first
 	    << " on " << it->second.size() << " PGs" << dendl;
     MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(),
@@ -4316,6 +4318,8 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map)
   for (map< int, map<pg_t,pg_query_t> >::iterator pit = query_map.begin();
        pit != query_map.end();
        pit++) {
+    if (!osdmap->is_up(pit->first))
+      continue;
     int who = pit->first;
     dout(7) << "do_queries querying osd." << who
             << " on " << pit->second.size() << " PGs" << dendl;
@@ -4330,7 +4334,9 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
 {
   for (map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >::iterator p = info_map.begin();
        p != info_map.end();
-       ++p) { 
+       ++p) {
+    if (!osdmap->is_up(p->first))
+      continue;
     for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator i = p->second.begin();
 	 i != p->second.end();
 	 ++i) {
