@@ -20,34 +20,75 @@
 #include "osd/osd_types.h"
 
 class MOSDPGInfo : public Message {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
+
   epoch_t epoch;
 
 public:
-  vector<pg_info_t> pg_info;
+  vector<pair<pg_info_t,pg_interval_map_t> > pg_list;
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGInfo() : Message(MSG_OSD_PG_INFO) {}
-  MOSDPGInfo(version_t mv) :
-    Message(MSG_OSD_PG_INFO),
-    epoch(mv) { }
+  MOSDPGInfo()
+    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGInfo(version_t mv)
+    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
+      epoch(mv) { }
 private:
   ~MOSDPGInfo() {}
 
 public:
   const char *get_type_name() const { return "pg_info"; }
   void print(ostream& out) const {
-    out << "pg_info(" << pg_info.size() << " pgs e" << epoch << ")";
+    out << "pg_info(" << pg_list.size() << " pgs e" << epoch << ":";
+
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::const_iterator i = pg_list.begin();
+         i != pg_list.end();
+         ++i) {
+      if (i != pg_list.begin())
+	out << ",";
+      out << i->first.pgid;
+      if (i->second.size())
+	out << "(" << i->second.size() << ")";
+    }
+
+    out << ")";
   }
 
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
-    ::encode(pg_info, payload);
+
+    // v1 was vector<pg_info_t>
+    __u32 n = pg_list.size();
+    ::encode(n, payload);
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+	 p != pg_list.end();
+	 p++)
+      ::encode(p->first, payload);
+
+    // v2 needs the pg_interval_map_t for each record
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+	 p != pg_list.end();
+	 p++)
+      ::encode(p->second, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(pg_info, p);
+
+    // decode pg_info_t portion of the vector
+    __u32 n;
+    ::decode(n, p);
+    pg_list.resize(n);
+    for (unsigned i=0; i<n; i++)
+      ::decode(pg_list[i].first, p);
+
+    if (header.version >= 2) {
+      // get the pg_interval_map_t portion
+      for (unsigned i=0; i<n; i++)
+	::decode(pg_list[i].second, p);
+    }
   }
 };
 

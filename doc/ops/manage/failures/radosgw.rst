@@ -1,21 +1,21 @@
-=================================
- Recovering from radosgw failure
-=================================
+====================================
+ Recovering from ``radosgw`` failure
+====================================
 
 
-HTTP request errors
+HTTP Request Errors
 ===================
 
 Examining the access and error logs for the web server itself is
 probably the first step in identifying what is going on.  If there is
 a 500 error, that usually indicates a problem communicating with the
-radosgw daemon.  Ensure the daemon is running, its socket path is
+``radosgw`` daemon.  Ensure the daemon is running, its socket path is
 configured, and that the web server is looking for it in the proper
 location.
 
 
-Crashed radosgw process
-=======================
+Crashed ``radosgw`` process
+===========================
 
 If the ``radosgw`` process dies, you will normally see a 500 error
 from the web server (apache, nginx, etc.).  In that situation, simply
@@ -25,8 +25,8 @@ To diagnose the cause of the crash, check the log in ``/var/log/ceph``
 and/or the core file (if one was generated).
 
 
-Blocked radosgw requests
-========================
+Blocked ``radosgw`` Requests
+============================
 
 If some (or all) radosgw requests appear to be blocked, you can get
 some insight into the internal state of the ``radosgw`` daemon via

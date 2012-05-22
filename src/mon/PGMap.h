@@ -82,7 +82,7 @@ public:
   PGMap()
     : version(0),
       last_osdmap_epoch(0), last_pg_scan(0),
-      full_ratio(.8), nearfull_ratio(.9),
+      full_ratio(0), nearfull_ratio(0),
       num_pg(0),
       num_osd(0)
   {}

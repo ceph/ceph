@@ -1,4 +1,4 @@
-.TH "MKCEPHFS" "8" "October 17, 2011" "dev" "Ceph"
+.TH "MKCEPHFS" "8" "April 11, 2012" "dev" "Ceph"
 .SH NAME
 mkcephfs \- create a ceph file system
 .
@@ -116,6 +116,14 @@ Create and mount the any btrfs file systems specified in the
 ceph.conf for OSD data storage using mkfs.btrfs. The "btrfs devs"
 and (if it differs from "osd data") "btrfs path" options must be
 defined.
+.sp
+\fBNOTE\fP Btrfs is still considered experimental.  This option
+can ease some configuration pain, but is the use of btrfs is not
+required when \fBosd data\fP directories are mounted manually by the
+adminstrator.
+.sp
+\fBNOTE\fP This option is deprecated and will be removed in a future
+release.
 .UNINDENT
 .INDENT 0.0
 .TP

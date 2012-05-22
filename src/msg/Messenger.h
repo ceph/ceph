@@ -121,10 +121,12 @@ public:
    *
    * @param cct context
    * @param name entity name to register
+   * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    */
   static Messenger *create(CephContext *cct,
                            entity_name_t name,
+			   string lname,
                            uint64_t nonce);
 
   /**

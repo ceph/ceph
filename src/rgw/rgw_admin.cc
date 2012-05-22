@@ -723,8 +723,14 @@ int main(int argc, char **argv)
 
     if (opt_cmd == OPT_USER_CREATE) {
       if (found) {
-        cerr << "error: user already exists" << std::endl;
-        return 1;
+        if (info.display_name.compare(display_name) != 0 ||
+            info.user_email.compare(user_email) != 0) {
+          cerr << "error: user already exists with different display_name/email" << std::endl;
+          return 1;
+        }
+        /* turn into OPT_USER_MODIFY */
+        opt_cmd = OPT_USER_MODIFY;
+        user_modify_op = true;
       }
     } else if (!found) {
       cerr << "error reading user info, aborting" << std::endl;
@@ -738,7 +744,7 @@ int main(int argc, char **argv)
     map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
     subuser_found = (iter != info.subusers.end());
 
-    if (!subuser_found && opt_cmd != OPT_SUBUSER_CREATE) {
+    if (!subuser_found && opt_cmd != OPT_SUBUSER_CREATE && opt_cmd != OPT_USER_CREATE) {
       cerr << "subuser specified but was not found, aborting" << std::endl;
       return 1;
     }
@@ -1203,6 +1209,14 @@ next:
   }
   
   if (opt_cmd == OPT_USER_RM) {
+    RGWUserBuckets buckets;
+    if (rgw_read_user_buckets(user_id, buckets, false) >= 0) {
+      map<string, RGWBucketEnt>& m = buckets.get_buckets();
+      if (m.size() > 0) {
+        cerr << "user bucket list not empty, can't remove user" << std::endl;
+        return 1;
+      }
+    }
     rgw_delete_user(info);
   }
   

@@ -104,9 +104,11 @@ public:
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
+  int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+  int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();
 

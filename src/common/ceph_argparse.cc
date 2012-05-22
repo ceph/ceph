@@ -85,6 +85,8 @@ void vec_to_argv(std::vector<const char*>& args,
   if (argc && argv)
     myname = argv[0];
   argv = (const char**)malloc(sizeof(char*) * argc);
+  if (!argv)
+    throw bad_alloc();
   argc = 1;
   argv[0] = myname;
 
@@ -357,7 +359,7 @@ CephInitParameters ceph_argparse_early_args
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
       *conf_file_list = val;
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--cluster", "-C", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--cluster", (char*)NULL)) {
       *cluster = val;
     }
     else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&

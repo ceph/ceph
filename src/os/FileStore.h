@@ -33,6 +33,7 @@
 #include <map>
 #include <deque>
 #include <boost/scoped_ptr.hpp>
+#include <fstream>
 using namespace std;
 
 #include <ext/hash_map>
@@ -47,6 +48,7 @@ class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
   static const uint32_t on_disk_version = 2;
+  string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
   std::string current_fn;
   std::string current_op_seq_fn;
@@ -179,6 +181,10 @@ class FileStore : public JournalingObjectStore,
     ~OpSequencer() {
       assert(q.empty());
     }
+
+    const string& get_name() const {
+      return parent->get_name();
+    }
   };
 
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
@@ -274,9 +280,10 @@ public:
   int lfn_unlink(coll_t cid, const hobject_t& o);
 
  public:
-  FileStore(const std::string &base, const std::string &jdev);
+  FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore");
   ~FileStore();
 
+  int _test_fiemap();
   int _detect_fs();
   int _sanity_check_fs();
   
@@ -317,7 +324,10 @@ public:
    * @param fd open file descriptor for the file/object
    * @param spos sequencer position of the last operation we should not replay
    */
-  void _set_replay_guard(int fd, const SequencerPosition& spos);
+  void _set_replay_guard(int fd, const SequencerPosition& spos, bool in_progress=false);
+
+  /// close a replay guard opened with in_progress=true
+  void _close_replay_guard(int fd, const SequencerPosition& spos);
 
   /**
    * check replay guard xattr on given file
@@ -333,11 +343,11 @@ public:
    *
    * @param fd open fd on the file/object in question
    * @param spos sequencerposition for an operation we could apply/replay
-   * @return true if we can apply (maybe replay) this operation, false if spos has already been applied
+   * @return 1 if we can apply (maybe replay) this operation, -1 if spos has already been applied, 0 if it was in progress
    */
-  bool _check_replay_guard(int fd, const SequencerPosition& spos);
-  bool _check_replay_guard(coll_t cid, const SequencerPosition& spos);
-  bool _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
+  int _check_replay_guard(int fd, const SequencerPosition& spos);
+  int _check_replay_guard(coll_t cid, const SequencerPosition& spos);
+  int _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
 
   // ------------------
   // objects
@@ -373,6 +383,9 @@ public:
 
   int dump_journal(ostream& out);
 
+  void set_fsid(uuid_d u) {
+    fsid = u;
+  }
   uuid_d get_fsid() { return fsid; }
 
   int snapshot(const string& name);
@@ -427,10 +440,14 @@ public:
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o,
 		      const SequencerPosition& spos);
   int _collection_remove(coll_t c, const hobject_t& o);
-  int _collection_move(coll_t c, coll_t ocid, const hobject_t& o,
-		       const SequencerPosition& spos);
+
+  void dump_start(const std::string& file);
+  void dump_stop();
+  void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
 
 private:
+  void _inject_failure();
+
   // omap
   int _omap_clear(coll_t cid, const hobject_t &hoid);
   int _omap_setkeys(coll_t cid, const hobject_t &hoid,
@@ -465,6 +482,10 @@ private:
   int m_filestore_queue_max_bytes;
   int m_filestore_queue_committing_max_ops;
   int m_filestore_queue_committing_max_bytes;
+  bool m_filestore_do_dump;
+  std::ofstream m_filestore_dump;
+  JSONFormatter m_filestore_dump_fmt;
+  atomic_t m_filestore_kill_at;
 };
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);

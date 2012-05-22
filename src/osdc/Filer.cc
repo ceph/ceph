@@ -100,7 +100,7 @@ void Filer::_probe(Probe *probe)
   // map range onto objects
   probe->known_size.clear();
   probe->probing.clear();
-  file_to_extents(probe->ino, &probe->layout,
+  file_to_extents(cct, probe->ino, &probe->layout,
 		  probe->probing_off, probe->probing_len, probe->probing);
   
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
@@ -305,9 +305,13 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 
 // -----------------------
 
-void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-                            uint64_t offset, uint64_t len,
-                            vector<ObjectExtent>& extents)
+#undef dout_prefix
+#define dout_prefix *_dout << "filer "
+
+void Filer::file_to_extents(CephContext *cct, inodeno_t ino,
+			    ceph_file_layout *layout,
+			    uint64_t offset, uint64_t len,
+			    vector<ObjectExtent>& extents)
 {
   ldout(cct, 10) << "file_to_extents " << offset << "~" << len 
            << " on " << hex << ino << dec
@@ -345,7 +349,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     else {
       ex = &object_extents[oid];
       ex->oid = oid;
-      ex->oloc = objecter->osdmap->file_to_object_locator(*layout);
+      ex->oloc = OSDMap::file_to_object_locator(*layout);
     }
     
     // map range into object

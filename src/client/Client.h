@@ -65,7 +65,7 @@ class InodeStat;
 
 class Filer;
 class Objecter;
-class ObjectCacher;
+class WritebackHandler;
 
 class PerfCounters;
 
@@ -255,7 +255,6 @@ public:
   int file_stripe_count;
   int object_size;
   int file_replication;
-  int preferred_pg;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void sync_write_commit(Inode *in);
@@ -264,7 +263,8 @@ protected:
   Filer                 *filer;     
   ObjectCacher          *objectcacher;
   Objecter              *objecter;     // (non-blocking) osd interface
-  
+  WritebackHandler      *writeback_handler;
+
   // cache
   hash_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
@@ -618,7 +618,6 @@ public:
   void set_default_file_stripe_count(int count);
   void set_default_object_size(int size);
   void set_default_file_replication(int replication);
-  void set_default_preferred_pg(int osd);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

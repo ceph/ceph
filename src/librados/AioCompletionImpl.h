@@ -38,6 +38,7 @@ struct librados::AioCompletionImpl {
   void *callback_arg;
 
   // for read
+  bool is_read;
   bufferlist bl, *pbl;
   char *buf;
   unsigned maxlen;
@@ -49,7 +50,7 @@ struct librados::AioCompletionImpl {
   AioCompletionImpl() : lock("AioCompletionImpl lock"),
 			ref(1), rval(0), released(false), ack(false), safe(false),
 			callback_complete(0), callback_safe(0), callback_arg(0),
-			pbl(0), buf(0), maxlen(0),
+			is_read(false), pbl(0), buf(0), maxlen(0),
 			io(NULL), aio_write_seq(0), aio_write_list_item(this) { }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
@@ -92,6 +93,32 @@ struct librados::AioCompletionImpl {
     lock.Unlock();
     return r;
   }
+  int wait_for_complete_and_cb() {
+    lock.Lock();
+    while (!ack || callback_complete)
+      cond.Wait(lock);
+    lock.Unlock();
+    return 0;
+  }
+  int wait_for_safe_and_cb() {
+    lock.Lock();
+    while (!safe || callback_safe)
+      cond.Wait(lock);
+    lock.Unlock();
+    return 0;
+  }
+  int is_complete_and_cb() {
+    lock.Lock();
+    int r = ack && !callback_complete;
+    lock.Unlock();
+    return r;
+  }
+  int is_safe_and_cb() {
+    lock.Lock();
+    int r = safe && !callback_safe;
+    lock.Unlock();
+    return r;
+  }
   int get_return_value() {
     lock.Lock();
     int r = rval;
@@ -129,5 +156,46 @@ struct librados::AioCompletionImpl {
       delete this;
   }
 };
+
+namespace librados {
+struct C_AioComplete : public Context {
+  AioCompletionImpl *c;
+
+  C_AioComplete(AioCompletionImpl *cc) : c(cc) {
+    c->ref++;
+  }
+
+  void finish(int r) {
+    rados_callback_t cb = c->callback_complete;
+    void *cb_arg = c->callback_arg;
+    cb(c, cb_arg);
+
+    c->lock.Lock();
+    c->callback_complete = NULL;
+    c->cond.Signal();
+    c->put_unlock();
+  }
+};
+
+struct C_AioSafe : public Context {
+  AioCompletionImpl *c;
+
+  C_AioSafe(AioCompletionImpl *cc) : c(cc) {
+    c->ref++;
+  }
+
+  void finish(int r) {
+    rados_callback_t cb = c->callback_safe;
+    void *cb_arg = c->callback_arg;
+    cb(c, cb_arg);
+
+    c->lock.Lock();
+    c->callback_safe = NULL;
+    c->cond.Signal();
+    c->put_unlock();
+  }
+};
+
+}
 
 #endif

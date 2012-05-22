@@ -189,7 +189,6 @@ void Dumper::undump(const char *dump_file)
   h.magic = CEPH_FS_ONDISK_MAGIC;
 
   h.layout = g_default_file_layout;
-  h.layout.fl_pg_preferred = -1;
   h.layout.fl_pg_pool = pg_pool;
   
   bufferlist hbl;

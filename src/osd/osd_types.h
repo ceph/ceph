@@ -18,6 +18,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <stdexcept>
+#include <memory>
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -100,28 +101,21 @@ namespace __gnu_cxx {
 // does it go in.
 struct object_locator_t {
   int64_t pool;
-  int32_t preferred;
   string key;
 
   explicit object_locator_t()
-    : pool(-1), preferred(-1) {}
+    : pool(-1) {}
   explicit object_locator_t(int64_t po)
-    : pool(po), preferred(-1) {}
-  explicit object_locator_t(int64_t po, int pre)
-    : pool(po), preferred(pre) {}
-  explicit object_locator_t(int64_t po, int pre, string s)
-    : pool(po), preferred(pre), key(s) {}
+    : pool(po) {}
+  explicit object_locator_t(int64_t po, string s)
+    : pool(po), key(s) {}
 
   int get_pool() const {
     return pool;
   }
-  int get_preferred() const {
-    return preferred;
-  }
 
   void clear() {
     pool = -1;
-    preferred = -1;
     key = "";
   }
 
@@ -133,7 +127,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
+  return l.pool == r.pool && l.key == r.key;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -142,8 +136,6 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
-  if (loc.preferred >= 0)
-    out << "p" << loc.preferred;
   if (loc.key.length())
     out << ":" << loc.key;
   return out;
@@ -605,8 +597,9 @@ struct pg_pool_t {
   __u8 size;                /// number of osds in each pg
   __u8 crush_ruleset;       /// crush placement rule set
   __u8 object_hash;         /// hash mapping object name to ps
+private:
   __u32 pg_num, pgp_num;    /// number of pgs
-  __u32 lpg_num, lpgp_num;  /// number of localized pgs
+public:
   epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
   snapid_t snap_seq;        /// seq for per-pool snapshot
   epoch_t snap_epoch;       /// osdmap epoch of last snap
@@ -627,16 +620,16 @@ struct pg_pool_t {
    */
   interval_set<snapid_t> removed_snaps;
 
-  int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+  int pg_num_mask, pgp_num_mask;
 
   pg_pool_t()
     : flags(0), type(0), size(0), crush_ruleset(0), object_hash(0),
-      pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
+      pg_num(0), pgp_num(0),
       last_change(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
-      pg_num_mask(0), pgp_num_mask(0), lpg_num_mask(0), lpgp_num_mask(0) { }
+      pg_num_mask(0), pgp_num_mask(0) { }
 
   void dump(Formatter *f) const;
 
@@ -662,13 +655,18 @@ struct pg_pool_t {
 
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }
-  unsigned get_lpg_num() const { return lpg_num; }
-  unsigned get_lpgp_num() const { return lpgp_num; }
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
-  unsigned get_lpg_num_mask() const { return lpg_num_mask; }
-  unsigned get_lpgp_num_mask() const { return lpgp_num_mask; }
+
+  void set_pg_num(int p) {
+    pg_num = p;
+    calc_pg_masks();
+  }
+  void set_pgp_num(int p) {
+    pgp_num = p;
+    calc_pg_masks();
+  }
 
   static int calc_bits_of(int t);
   void calc_pg_masks();
@@ -681,8 +679,10 @@ struct pg_pool_t {
    *    - removal governed by removed_snaps
    *
    * we know which mode we're using based on whether removed_snaps is empty.
+   * If nothing has been created, both functions report false.
    */
   bool is_pool_snaps_mode() const;
+  bool is_unmanaged_snaps_mode() const;
   bool is_removed_snap(snapid_t s) const;
 
   /*
@@ -940,20 +940,34 @@ struct pg_history_t {
       last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
       same_up_since(0), same_interval_since(0), same_primary_since(0) {}
   
-  void merge(const pg_history_t &other) {
+  bool merge(const pg_history_t &other) {
     // Here, we only update the fields which cannot be calculated from the OSDmap.
-    if (epoch_created < other.epoch_created)
+    bool modified = false;
+    if (epoch_created < other.epoch_created) {
       epoch_created = other.epoch_created;
-    if (last_epoch_started < other.last_epoch_started)
+      modified = true;
+    }
+    if (last_epoch_started < other.last_epoch_started) {
       last_epoch_started = other.last_epoch_started;
-    if (last_epoch_clean < other.last_epoch_clean)
+      modified = true;
+    }
+    if (last_epoch_clean < other.last_epoch_clean) {
       last_epoch_clean = other.last_epoch_clean;
-    if (last_epoch_split < other.last_epoch_started)
-      last_epoch_split = other.last_epoch_started;
-    if (other.last_scrub > last_scrub)
+      modified = true;
+    }
+    if (last_epoch_split < other.last_epoch_started) {
+      last_epoch_split = other.last_epoch_started; 
+      modified = true;
+    }
+    if (other.last_scrub > last_scrub) {
       last_scrub = other.last_scrub;
-    if (other.last_scrub_stamp > last_scrub_stamp)
+      modified = true;
+    }
+    if (other.last_scrub_stamp > last_scrub_stamp) {
       last_scrub_stamp = other.last_scrub_stamp;
+      modified = true;
+    }
+    return modified;
   }
 
   void encode(bufferlist& bl) const;
@@ -1035,6 +1049,46 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
       << ")";
   return out;
 }
+
+
+/**
+ * pg_interval_t - information about a past interval
+ */
+class OSDMap;
+struct pg_interval_t {
+  vector<int> up, acting;
+  epoch_t first, last;
+  bool maybe_went_rw;
+
+  pg_interval_t() : first(0), last(0), maybe_went_rw(false) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_interval_t*>& o);
+
+  /**
+   * Integrates a new map into *past_intervals, returns true
+   * if an interval was closed out.
+   */
+  static bool check_new_interval(
+    const vector<int> &old_acting,              ///< [in] acting as of lastmap
+    const vector<int> &new_acting,              ///< [in] acting as of osdmap
+    const vector<int> &old_up,                  ///< [in] up as of lastmap
+    const vector<int> &new_up,                  ///< [in] up as of osdmap
+    epoch_t same_interval_since,                ///< [in] as of osdmap
+    epoch_t last_epoch_clean,                   ///< [in] current
+    std::tr1::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    std::tr1::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
+    ostream *out = 0                            ///< [out] debug ostream
+    );
+};
+WRITE_CLASS_ENCODER(pg_interval_t)
+
+ostream& operator<<(ostream& out, const pg_interval_t& i);
+
+typedef map<epoch_t, pg_interval_t> pg_interval_map_t;
 
 
 /** 

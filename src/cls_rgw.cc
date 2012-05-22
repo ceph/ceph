@@ -140,18 +140,25 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   if (rc < 0 && rc != -ENOENT)
     return rc;
 
+  struct rgw_bucket_dir_entry entry;
+
+  bool noent = (rc == -ENOENT);
+
   rc = 0;
 
-  struct rgw_bucket_dir_entry entry;
-  if (rc != -ENOENT) {
+  if (!noent) {
     try {
       bufferlist::iterator biter = cur_value.begin();
       ::decode(entry, biter);
     } catch (buffer::error& err) {
       CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode entry\n");
       /* ignoring error */
+
+      noent = true;
     }
-  } else { // no entry, initialize fields
+  }
+
+  if (noent) { // no entry, initialize fields
     entry.name = op.name;
     entry.epoch = 0;
     entry.exists = false;
@@ -243,7 +250,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   bufferlist op_bl;
-
   if (cancel) {
     if (op.tag.size()) {
       bufferlist new_key_bl;
@@ -328,7 +334,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   __u8 op;
   rgw_bucket_dir_entry cur_change;
   rgw_bucket_dir_entry cur_disk;
-  bufferlist cur_disk_bl;
   bufferlist op_bl;
 
   while (!in_iter.end()) {
@@ -340,26 +345,30 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       return -EINVAL;
     }
 
-    cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
-    bufferlist::iterator cur_disk_iter = cur_disk_bl.begin();
-    try {
-      ::decode(cur_disk, cur_disk_iter);
-    } catch (buffer::error& error) {
-      CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode cur_disk\n");
+    bufferlist cur_disk_bl;
+    int ret = cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
+    if (ret < 0 && ret != -ENOENT)
       return -EINVAL;
-    }
 
-    utime_t cur_time = ceph_clock_now(g_ceph_context);
-    map<string, struct rgw_bucket_pending_info>::iterator iter =
-              cur_disk.pending_map.begin();
-    while(iter != cur_disk.pending_map.end()) {
-      map<string, struct rgw_bucket_pending_info>::iterator cur_iter=iter++;
-      if (cur_time > (cur_iter->second.timestamp + CEPH_RGW_TAG_TIMEOUT)) {
-        cur_disk.pending_map.erase(cur_iter);
+    if (cur_disk_bl.length()) {
+      bufferlist::iterator cur_disk_iter = cur_disk_bl.begin();
+      try {
+        ::decode(cur_disk, cur_disk_iter);
+      } catch (buffer::error& error) {
+        CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode cur_disk\n");
+        return -EINVAL;
+      }
+
+      utime_t cur_time = ceph_clock_now(g_ceph_context);
+      map<string, struct rgw_bucket_pending_info>::iterator iter =
+                cur_disk.pending_map.begin();
+      while(iter != cur_disk.pending_map.end()) {
+        map<string, struct rgw_bucket_pending_info>::iterator cur_iter=iter++;
+        if (cur_time > (cur_iter->second.timestamp + CEPH_RGW_TAG_TIMEOUT)) {
+          cur_disk.pending_map.erase(cur_iter);
+        }
       }
     }
-
-    int ret = 0;
 
     if (cur_disk.pending_map.empty()) {
       struct rgw_bucket_category_stats& stats =

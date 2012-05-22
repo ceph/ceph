@@ -102,7 +102,7 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
-  pending_map.encode(bl);
+  pending_map.encode(bl, CEPH_FEATURES_ALL);
 }
 
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
@@ -137,7 +137,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd.size() == 2 && m->cmd[1] == "getmap") {
-      mon->monmap->encode(rdata);
+      mon->monmap->encode(rdata, CEPH_FEATURES_ALL);
       r = 0;
       ss << "got latest monmap";
     }
@@ -261,6 +261,12 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
   }
 
   return false;
+}
+
+void MonmapMonitor::on_active() 
+{
+  if (mon->is_leader())
+    mon->clog.info() << "monmap " << *mon->monmap << "\n";
 }
 
 bool MonmapMonitor::prepare_command(MMonCommand *m)

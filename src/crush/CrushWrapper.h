@@ -86,6 +86,7 @@ public:
     if (crush)
       crush_destroy(crush);
     crush = crush_create();
+    assert(crush);
   }
 
   // bucket types
@@ -164,14 +165,93 @@ public:
 
 
   void find_roots(set<int>& roots) const;
+
+  /**
+   * see if item is located where we think it is
+   *
+   * This verifies that the given item is located at a particular
+   * location in the hierarchy.  However, that check is imprecise; we
+   * are actually verifying that the most specific location key/value
+   * is correct.  For example, if loc specifies that rack=foo and
+   * host=bar, it will verify that host=bar is correct; any placement
+   * above that level in the hierarchy is ignored.  This matches the
+   * semantics for insert_item().
+   *
+   * @param cct cct
+   * @param item item id
+   * @param loc location to check (map of type to bucket names)
+   * @param weight optional pointer to weight of item at that location
+   * @return true if item is at specified location
+   */
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, int *iweight);
+  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight) {
+    int iweight;
+    bool ret = check_item_loc(cct, item, loc, &iweight);
+    if (weight)
+      *weight = (float)iweight / (float)0x10000;
+    return ret;
+  }
+
+  /**
+   * insert an item into the map at a specific position
+   *
+   * Add an item as a specific location of the hierarchy.
+   * Specifically, we look for the most specific location constriant
+   * for which a bucket already exists, and then create intervening
+   * buckets beneath that in order to place the item.
+   *
+   * Note that any location specifiers *above* the most specific match
+   * are ignored.  For example, if we specify that osd.12 goes in
+   * host=foo, rack=bar, and row=baz, and rack=bar is the most
+   * specific match, we will create host=foo beneath that point and
+   * put osd.12 inside it.  However, we will not verify that rack=bar
+   * is beneath row=baz or move it.
+   *
+   * In short, we will build out a hierarchy, and move leaves around,
+   * but not adjust the hierarchy's internal structure.  Yet.
+   *
+   * If the item is already present in the map, we will return EEXIST.
+   * If the location key/value pairs are nonsensical
+   * (rack=nameofdevice), or location specifies that do not attach us
+   * to any existing part of the hierarchy, we will return EINVAL.
+   *
+   * @param cct cct
+   * @param id item id
+   * @param weight item weight
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   * @return 0 for success, negative on error
+   */
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+
+  /**
+   * add or update an item's position in the map
+   *
+   * This is analogous to insert_item, except we will move an item if
+   * it is already present.
+   *
+   * @param cct cct
+   * @param id item id
+   * @param weight item weight
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   * @return 0 for no change, 1 for successful change, negative on error
+   */
+  int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+
+  /**
+   * remove an item from the map
+   *
+   * @param cct cct
+   * @param id item id to remove
+   * @return 0 on success, negative on error
+   */
   int remove_item(CephContext *cct, int id);
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   void reweight(CephContext *cct);
-
 
   /*** devices ***/
   int get_max_devices() const {
@@ -253,6 +333,7 @@ public:
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
     crush_rule *n = crush_make_rule(len, ruleset, type, minsize, maxsize);
+    assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
   }
@@ -373,6 +454,7 @@ public:
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
 		 int *items, int *weights) {
     crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
+    assert(b);
     return crush_add_bucket(crush, bucketno, b);
   }
   
@@ -389,13 +471,12 @@ public:
     if (!crush) return -1;
     return crush_find_rule(crush, ruleset, type, size);
   }
-  void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
+  void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
-			       forcefeed, &weight[0]);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size());
     if (numrep < 0)
-      numrep = 0;   // e.g., when forcefed device dne.
+      numrep = 0;
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];

@@ -107,9 +107,9 @@ int main(int argc, const char **argv)
       dump_journal = true;
     } else if (ceph_argparse_flag(args, i, "--get-cluster-fsid", (char*)NULL)) {
       get_cluster_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", "--get-osd-uuid", (char*)NULL)) {
       get_osd_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
       get_journal_fsid = true;
     } else {
       ++i;
@@ -303,17 +303,17 @@ int main(int argc, const char **argv)
   }
 
   Messenger *client_messenger = Messenger::create(g_ceph_context,
-						  entity_name_t::OSD(whoami),
+						  entity_name_t::OSD(whoami), "client",
 						  getpid());
   Messenger *cluster_messenger = Messenger::create(g_ceph_context,
-						   entity_name_t::OSD(whoami),
+						   entity_name_t::OSD(whoami), "cluster",
 						   getpid());
   Messenger *messenger_hbclient = Messenger::create(g_ceph_context,
-						entity_name_t::OSD(whoami),
-						getpid());
+						    entity_name_t::OSD(whoami), "hbclient",
+						    getpid());
   Messenger *messenger_hbserver = Messenger::create(g_ceph_context,
-						 entity_name_t::OSD(whoami),
-						 getpid());
+						    entity_name_t::OSD(whoami), "hbserver",
+						    getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbserver->set_cluster_protocol(CEPH_OSD_PROTOCOL);
@@ -327,7 +327,8 @@ int main(int argc, const char **argv)
 		    "(no journal)" : g_conf->osd_journal)
        << std::endl;
 
-  Throttle client_throttler(g_conf->osd_client_message_size_cap);
+  Throttle client_throttler(g_ceph_context, "osd_client_bytes",
+			    g_conf->osd_client_message_size_cap);
 
   uint64_t supported =
     CEPH_FEATURE_UID | 

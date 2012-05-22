@@ -58,7 +58,6 @@ struct fiemap *read_fiemap(int fd)
   /* Find out how many extents there are */
   r = ioctl(fd, FS_IOC_FIEMAP, fiemap);
   if (r < 0) {
-    fprintf(stderr, "fiemap ioctl() failed\n");
     goto done_err;
   }
 

@@ -20,7 +20,8 @@
 
 class MOSDPGLog : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
   epoch_t epoch;
   /// query_epoch is the epoch of the query being responded to, or
@@ -33,17 +34,18 @@ public:
   pg_info_t info;
   pg_log_t log;
   pg_missing_t missing;
+  pg_interval_map_t past_intervals;
 
   epoch_t get_epoch() { return epoch; }
   pg_t get_pgid() { return info.pgid; }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION) { }
+  MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDPGLog(version_t mv, pg_info_t& i)
-    : Message(MSG_OSD_PG_LOG, HEAD_VERSION),
+    : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(mv), info(i)  { }
   MOSDPGLog(version_t mv, pg_info_t& i, epoch_t query_epoch)
-    : Message(MSG_OSD_PG_LOG, HEAD_VERSION),
+    : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(query_epoch), info(i)  { }
 
 private:
@@ -62,6 +64,7 @@ public:
     ::encode(log, payload);
     ::encode(missing, payload);
     ::encode(query_epoch, payload);
+    ::encode(past_intervals, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -71,6 +74,9 @@ public:
     ::decode(missing, p);
     if (header.version >= 2) {
       ::decode(query_epoch, p);
+    }
+    if (header.version >= 3) {
+      ::decode(past_intervals, p);
     }
   }
 };

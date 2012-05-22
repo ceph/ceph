@@ -1,4 +1,4 @@
-.TH "RBD" "8" "February 17, 2012" "dev" "Ceph"
+.TH "RBD" "8" "May 02, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -116,7 +116,7 @@ Creates a new image and imports its data from path.
 Copies the content of a src\-image into the newly created dest\-image.
 .TP
 .B \fBmv\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
-Renames an image.
+Renames an image.  Note: rename across pools is not supported.
 .TP
 .B \fBsnap\fP ls [\fIimage\-name\fP]
 Dumps the list of snapshots inside a specific image.

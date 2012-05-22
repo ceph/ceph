@@ -1,6 +1,10 @@
 #ifndef CEPH_TOOLS_COMMON_DOT_H
 #define CEPH_TOOLS_COMMON_DOT_H
 
+#include <iosfwd>
+#include <stdint.h>
+#include <map>
+
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "mon/MonClient.h"
@@ -9,8 +13,15 @@
 #include "osd/OSDMap.h"
 #include "common/Timer.h"
 
-#include <iosfwd>
-#include <stdint.h>
+
+#include "common/LogEntry.h"
+#include "mon/mon_types.h"
+#include "messages/MOSDMap.h"
+#include "messages/MLog.h"
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
+#include "messages/MMonCommandAck.h"
+
 
 #define OSD_MON_UPDATE	    (1<<0)
 #define MDS_MON_UPDATE	    (1<<1)
@@ -19,13 +30,45 @@
 #define EVERYTHING_UPDATE   0xffffffff
 
 class CephContext;
+class CephToolCtx;
 
 enum ceph_tool_mode_t {
   CEPH_TOOL_MODE_CLI_INPUT = 0,
-  CEPH_TOOL_MODE_OBSERVER = 1,
-  CEPH_TOOL_MODE_ONE_SHOT_OBSERVER = 2,
+  CEPH_TOOL_MODE_WATCH = 1,
+  CEPH_TOOL_MODE_STATUS = 2,
   CEPH_TOOL_MODE_GUI = 3
 };
+
+struct Subscriptions {
+  CephToolCtx *ctx;
+  version_t last_known_version;
+  string name;
+
+  Subscriptions(CephToolCtx *c) : ctx(c) { }
+
+  void handle_log(MLog *m);
+};
+
+class Admin : public Dispatcher {
+private:
+  CephToolCtx *ctx;
+public:
+  Subscriptions subs;
+
+  Admin(CephToolCtx *ctx_)
+    : Dispatcher(g_ceph_context),
+      ctx(ctx_), subs(ctx_)
+  {
+  }
+
+  bool ms_dispatch(Message *m);
+  void ms_handle_connect(Connection *con);
+  bool ms_handle_reset(Connection *con) { return false; }
+  void ms_handle_remote_reset(Connection *con) {}
+
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+};
+
 
 // tool/ceph.cc
 class CephToolCtx
@@ -56,7 +99,7 @@ public:
 
   bool concise;
 
-  Dispatcher *dispatcher;
+  Admin *dispatcher;
 
   CephToolCtx(CephContext *cct_, bool concise_) :
     cct(cct_),
@@ -78,7 +121,6 @@ public:
 // tool/ceph.cc
 int ceph_tool_do_cli(CephToolCtx *data);
 int run_command(CephToolCtx *data, const char *line);
-void send_observe_requests(CephToolCtx *ctx);
 CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise);
 int do_command(CephToolCtx *ctx,
 	       vector<string>& cmd, bufferlist& bl, bufferlist& rbl);

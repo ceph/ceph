@@ -4,7 +4,7 @@
 
 ### BEGIN INIT INFO
 # Provides:          ceph
-# Default-Start:     2 3 5
+# Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Required-Start:    $remote_fs $named $network $time
 # Required-Stop:     $remote_fs $named $network $time
@@ -175,13 +175,18 @@ for name in $what; do
 
     check_host || continue
 
+    binary="$BINDIR/ceph-$type"
+    cmd="$binary -i $id"
+
     get_conf pid_file "$RUN_DIR/$type.$id.pid" "pid file"
-    [ -n "$pid_file" ] && do_cmd "mkdir -p "`dirname $pid_file`
+    if [ -n "$pid_file" ]; then
+	do_cmd "mkdir -p "`dirname $pid_file`
+	cmd="$cmd --pid-file $pid_file"
+    fi
 
     get_conf log_dir "" "log dir"
     [ -n "$log_dir" ] && do_cmd "mkdir -p $log_dir"
 
-    binary="$BINDIR/ceph-$type"
     if [ "$command" = "start" ]; then
         get_conf auto_start "" "auto start"
         if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
@@ -202,8 +207,6 @@ for name in $what; do
 	    binary="$copy_executable_to"
 	fi
     fi
-
-    cmd="$binary -i $id"
 
     # conf file
     if [ "$host" = "$hostname" ]; then

@@ -43,7 +43,7 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
   AuthSupported supported(cct);
 
   if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
-    ldout(cct, 2) << "KeyRing::from_ceph_context: CephX auth is not supported." << dendl;
+    ldout(cct, 2) << "CephX auth is not supported." << dendl;
     *pkeyring = keyring.release();
     return 0;
   }
@@ -53,7 +53,7 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
   if (ceph_resolve_file_search(conf->keyring, filename)) {
     ret = keyring->load(cct, filename);
     if (ret) {
-      lderr(cct) << "KeyRing::from_ceph_context: failed to load " << filename
+      lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
     } else {
       found_key = true;
@@ -62,9 +62,15 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
 
   if (!conf->key.empty()) {
     EntityAuth ea;
-    ea.key.decode_base64(conf->key);
-    keyring->add(conf->name, ea);
-    found_key = true;
+    try {
+      ea.key.decode_base64(conf->key);
+      keyring->add(conf->name, ea);
+      found_key = true;
+    }
+    catch (buffer::error& e) {
+      lderr(cct) << "failed to decode key '" << conf->key << "'" << dendl;
+      return -EINVAL;
+    }
   }
 
   if (!conf->keyfile.empty()) {
@@ -74,20 +80,25 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
       int res = fread(buf, 1, sizeof(buf) - 1, fp);
       if (res < 0) {
 	res = ferror(fp);
-	lderr(cct) << "KeyRing::from_ceph_context: failed to read '" << conf->keyfile
-		   << "'" << dendl;
+	lderr(cct) << "failed to read '" << conf->keyfile << "'" << dendl;
       }
       else {
 	string k = buf;
 	EntityAuth ea;
-	ea.key.decode_base64(k);
-	keyring->add(conf->name, ea);
-	found_key = true;
+	try {
+	  ea.key.decode_base64(k);
+	  keyring->add(conf->name, ea);
+	  found_key = true;
+	}
+	catch (buffer::error& e) {
+	  lderr(cct) << "failed to decode key '" << k << "'" << dendl;
+	  return -EINVAL;
+	}
       }
       fclose(fp);
     } else {
       ret = errno;
-      lderr(cct) << "KeyRing::conf_ceph_context: failed to open " << conf->keyfile
+      lderr(cct) << "failed to open " << conf->keyfile
 		 << ": " << cpp_strerror(ret) << dendl;
     }
   }

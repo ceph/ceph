@@ -460,6 +460,30 @@ bool librados::AioCompletion::AioCompletion::is_safe()
   return c->is_safe();
 }
 
+int librados::AioCompletion::AioCompletion::wait_for_complete_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->wait_for_complete_and_cb();
+}
+
+int librados::AioCompletion::AioCompletion::wait_for_safe_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->wait_for_safe_and_cb();
+}
+
+bool librados::AioCompletion::AioCompletion::is_complete_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->is_complete_and_cb();
+}
+
+bool librados::AioCompletion::AioCompletion::is_safe_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->is_safe_and_cb();
+}
+
 int librados::AioCompletion::AioCompletion::get_return_value()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
@@ -545,6 +569,13 @@ int librados::IoCtx::set_auid_async(uint64_t auid_, PoolAsyncCompletion *c)
 int librados::IoCtx::get_auid(uint64_t *auid_)
 {
   return rados_ioctx_pool_get_auid(io_ctx_impl, auid_);
+}
+
+std::string librados::IoCtx::get_pool_name()
+{
+  std::string s;
+  io_ctx_impl->client->pool_get_name(get_id(), &s);
+  return s;
 }
 
 int librados::IoCtx::create(const std::string& oid, bool exclusive)
@@ -1621,6 +1652,16 @@ extern "C" int64_t rados_ioctx_get_id(rados_ioctx_t io)
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->get_id();
 }
+
+extern "C" int rados_ioctx_get_pool_name(rados_ioctx_t io, char *s, unsigned maxlen)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  if (ctx->pool_name.length() >= maxlen)
+    return -ERANGE;
+  strcpy(s, ctx->pool_name.c_str());
+  return ctx->pool_name.length();
+}
+
 // snaps
 
 extern "C" int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname)
@@ -1954,6 +1995,26 @@ extern "C" int rados_aio_is_complete(rados_completion_t c)
 extern "C" int rados_aio_is_safe(rados_completion_t c)
 {
   return ((librados::AioCompletionImpl*)c)->is_safe();
+}
+
+extern "C" int rados_aio_wait_for_complete_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->wait_for_complete_and_cb();
+}
+
+extern "C" int rados_aio_wait_for_safe_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->wait_for_safe_and_cb();
+}
+
+extern "C" int rados_aio_is_complete_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->is_complete_and_cb();
+}
+
+extern "C" int rados_aio_is_safe_and_cb(rados_completion_t c)
+{
+  return ((librados::AioCompletionImpl*)c)->is_safe_and_cb();
 }
 
 extern "C" int rados_aio_get_return_value(rados_completion_t c)

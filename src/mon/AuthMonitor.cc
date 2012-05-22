@@ -29,7 +29,6 @@
 #include "auth/KeyRing.h"
 
 #include "osd/osd_types.h"
-#include "osd/PG.h"  // yuck
 
 #include "common/config.h"
 #include <sstream>
@@ -431,8 +430,8 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
-	m->cmd[1] == "caps" ||
-        m->cmd[1] == "list") {
+	m->cmd[1] == "get-or-create" ||
+	m->cmd[1] == "caps") {
       return false;
     }
     else if (m->cmd[1] == "export") {
@@ -445,7 +444,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  if (keyring.get_auth(ename, eauth)) {
 	    KeyRing kr;
 	    kr.add(ename, eauth);
-	    ::encode(kr, rdata);
+	    kr.encode_plaintext(rdata);
 	    ss << "export " << eauth;
 	    r = 0;
 	  } else {
@@ -457,7 +456,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  r = -EINVAL;
 	}
       } else {
-	::encode(keyring, rdata);
+	keyring.encode_plaintext(rdata);
 	ss << "exported master keyring";
 	r = 0;
       }
@@ -475,13 +474,13 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  r = -ENOENT;
 	} else {
 	  keyring.add(entity, entity_auth);
-	  ::encode(keyring, rdata);
+	  keyring.encode_plaintext(rdata);
 	  ss << "exported keyring for " << m->cmd[2];
 	  r = 0;
 	}
       }
     }
-    else if ((m->cmd[1] == "print-key" || m->cmd[1] == "print_key") &&
+    else if ((m->cmd[1] == "print-key" || m->cmd[1] == "print_key" || m->cmd[1] == "get-key") &&
 	     m->cmd.size() == 3) {
       EntityName ename;
       if (!ename.from_str(m->cmd[2])) {
@@ -497,6 +496,11 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
       }
       ss << auth.key;
       r = 0;      
+    }
+    else if (m->cmd[1] == "list") {
+      mon->key_server.list_secrets(ss);
+      r = 0;
+      goto done;
     }
     else {
       auth_usage(ss);
@@ -536,6 +540,7 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
 bool AuthMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;
+  bufferlist rdata;
   string rs;
   int err = -EINVAL;
 
@@ -605,6 +610,66 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
+    else if (m->cmd[1] == "get-or-create-key" && m->cmd.size() >= 3) {
+      // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
+      EntityName entity;
+      if (!entity.from_str(m->cmd[2])) {
+	ss << "bad entity name";
+	err = -EINVAL;
+	goto done;
+      }
+
+      // do we have it?
+      EntityAuth entity_auth;
+      if (mon->key_server.get_auth(entity, entity_auth)) {
+	for (unsigned i=3; i + 1<m->cmd.size(); i += 2) {
+	  string sys = m->cmd[i];
+	  bufferlist cap;
+	  ::encode(m->cmd[i+1], cap);
+	  if (entity_auth.caps.count(sys) == 0 ||
+	      !entity_auth.caps[sys].contents_equal(cap)) {
+	    ss << "key for " << entity << " exists but cap " << sys << " does not match";
+	    err = -EINVAL;
+	    goto done;
+	  }
+	}
+
+	ss << entity_auth.key;
+	err = 0;
+	goto done;
+      }
+
+      // ...or are we about to?
+      for (vector<Incremental>::iterator p = pending_auth.begin();
+	   p != pending_auth.end();
+	   ++p) {
+	if (p->inc_type == AUTH_DATA) {
+	  KeyServerData::Incremental auth_inc;
+	  bufferlist::iterator q = p->auth_data.begin();
+	  ::decode(auth_inc, q);
+	  if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
+	      auth_inc.name == entity) {
+	    paxos->wait_for_commit(new C_RetryMessage(this, m));
+	    return true;
+	  }
+	}
+      }
+
+      // create it
+      KeyServerData::Incremental auth_inc;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      auth_inc.name = entity;
+      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+      for (unsigned i=3; i + 1<m->cmd.size(); i += 2)
+	::encode(m->cmd[i+1], auth_inc.auth.caps[m->cmd[i]]);
+
+      push_cephx_inc(auth_inc);
+
+      ss << auth_inc.auth.key;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
     else if (m->cmd[1] == "caps" && m->cmd.size() >= 3) {
       KeyServerData::Incremental auth_inc;
       if (!auth_inc.name.from_str(m->cmd[2])) {
@@ -649,11 +714,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "list") {
-      mon->key_server.list_secrets(ss);
-      err = 0;
-      goto done;
-    }
     else {
       auth_usage(ss);
     }
@@ -663,7 +723,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
 done:
   getline(ss, rs, '\0');
-  mon->reply_command(m, err, rs, paxos->get_version());
+  mon->reply_command(m, err, rs, rdata, paxos->get_version());
   return false;
 }
 

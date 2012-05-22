@@ -195,7 +195,8 @@ public:
                 map<string, bufferlist>* rmattrs);
   int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-                   map<std::string, bufferlist>* rmattrs, const bufferlist *data);
+                   map<std::string, bufferlist>* rmattrs, const bufferlist *data,
+                   RGWObjManifest *manifest);
 
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
@@ -338,7 +339,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
 template <class T>
 int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
-                              map<std::string, bufferlist>* rmattrs, const bufferlist *data)
+                              map<std::string, bufferlist>* rmattrs, const bufferlist *data, RGWObjManifest *manifest)
 {
   rgw_bucket bucket;
   string oid;
@@ -355,7 +356,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
       info.flags |= CACHE_FLAG_DATA;
     }
   }
-  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, exclusive, rmattrs, data);
+  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, exclusive, rmattrs, data, manifest);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
@@ -484,7 +485,10 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     return -EIO;
   }
 
-  string name = normal_name(info.obj);
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(info.obj.bucket, info.obj.object, bucket, oid);
+  string name = normal_name(bucket, oid);
 
   switch (info.op) {
   case UPDATE_OBJ:

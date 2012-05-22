@@ -64,6 +64,7 @@ private:
   SafeTimer timer;
 
 public:
+  Finisher finisher;
 
   RadosClient(CephContext *cct_);
   ~RadosClient();
@@ -77,6 +78,7 @@ public:
   int64_t lookup_pool(const char *name);
   const char *get_pool_name(int64_t pool_id);
   int pool_get_auid(uint64_t pool_id, unsigned long long *auid);
+  int pool_get_name(uint64_t pool_id, std::string *auid);
 
   int pool_list(std::list<string>& ls);
   int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);

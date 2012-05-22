@@ -58,7 +58,8 @@ public:
    * _nonce A unique ID to use for this SimpleMessenger. It should not
    * be a value that will be repeated if the daemon restarts.
    */
-  SimpleMessenger(CephContext *cct, entity_name_t name, uint64_t _nonce) :
+  SimpleMessenger(CephContext *cct, entity_name_t name,
+		  string mname, uint64_t _nonce) :
     Messenger(cct, name),
     accepter(this),
     reaper_thread(this),
@@ -69,7 +70,7 @@ public:
     global_seq(0),
     destination_stopped(false),
     cluster_protocol(0),
-    dispatch_throttler(cct->_conf->ms_dispatch_throttle_bytes),
+    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
     msgr(this)

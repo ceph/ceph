@@ -36,7 +36,6 @@ class Thread {
   static void *_entry_func(void *arg);
 
  public:
-  static int get_num_threads(void);
   const pthread_t &get_thread_id();
   bool is_started();
   bool am_self();

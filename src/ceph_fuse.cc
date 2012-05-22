@@ -91,7 +91,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   // start up network
   Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::CLIENT(),
+					   entity_name_t::CLIENT(), "client",
 					   getpid());
   Client *client = new Client(messenger, &mc);
   if (filer_flags) {
@@ -115,9 +115,9 @@ int main(int argc, const char **argv, const char *envp[]) {
     childpid = fork();
   }
 
-  common_init_finish(g_ceph_context);
-
   if (childpid == 0) {
+    common_init_finish(g_ceph_context);
+
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
 

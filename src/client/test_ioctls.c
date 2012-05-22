@@ -41,8 +41,8 @@ int main(int argc, char **argv)
                 perror("ioctl IOC_GET_LAYOUT error");
                 return 1;
         }
-        printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n preferred osd %lld\n",
-               (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool, (long long)l.preferred_osd);
+        printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n",
+               (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool);
 
 
         /* set layout */
@@ -62,8 +62,8 @@ int main(int argc, char **argv)
 		perror("ioctl IOC_GET_LAYOUT error");
 		return 1;
 	}
-	printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n preferred osd %lld\n",
-	       (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool, (long long)l.preferred_osd);
+	printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n",
+	       (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool);
 
 	/* dataloc */
 	dl.file_offset = atoll(argv[2]);
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
                 perror("ioctl IOC_GET_LAYOUT error");
                 return 1;
         }
-        printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n preferred osd %lld\n",
-               (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool, (long long)l.preferred_osd);
+        printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n",
+               (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool);
         return 0;
 }

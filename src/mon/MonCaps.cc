@@ -341,8 +341,7 @@ void MonCap::generate_test_instances(list<MonCap*>& o)
 
 void MonCaps::encode(bufferlist& bl) const
 {
-  __u8 v = 2;
-  ::encode(v, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(text, bl);
   ::encode(default_action, bl);
   ::encode(services_map, bl);
@@ -350,12 +349,12 @@ void MonCaps::encode(bufferlist& bl) const
   ::encode(allow_all, bl);
   ::encode(auid, bl);
   ::encode(cmd_allow, bl);
+  ENCODE_FINISH(bl);
 }
 
 void MonCaps::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   ::decode(text, bl);
   ::decode(default_action, bl);
   ::decode(services_map, bl);
@@ -363,6 +362,7 @@ void MonCaps::decode(bufferlist::iterator& bl)
   ::decode(allow_all, bl);
   ::decode(auid, bl);
   ::decode(cmd_allow, bl);
+  DECODE_FINISH(bl);
 }
 
 void MonCaps::dump(Formatter *f) const

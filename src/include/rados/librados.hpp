@@ -88,8 +88,12 @@ namespace librados
     int set_safe_callback(void *cb_arg, callback_t cb);
     int wait_for_complete();
     int wait_for_safe();
+    int wait_for_complete_and_cb();
+    int wait_for_safe_and_cb();
     bool is_complete();
     bool is_safe();
+    bool is_complete_and_cb();
+    bool is_safe_and_cb();
     int get_return_value();
     int get_version();
     void release();
@@ -325,6 +329,8 @@ namespace librados
 
     // get pool auid
     int get_auid(uint64_t *auid_);
+
+    std::string get_pool_name();
 
     // create an object
     int create(const std::string& oid, bool exclusive);

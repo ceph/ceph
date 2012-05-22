@@ -90,3 +90,19 @@ declarative language for drawing things, and includes:
 .. _`sequence diagrams`: http://blockdiag.com/en/seqdiag/index.html
 .. _`activity diagrams`: http://blockdiag.com/en/actdiag/index.html
 .. _`network diagrams`: http://blockdiag.com/en/nwdiag/
+
+
+Inkscape
+--------
+
+You can use Inkscape to generate scalable vector graphics.
+http://inkscape.org for restructedText documents.
+
+If you generate diagrams with Inkscape, you should
+commit both the Scalable Vector Graphics (SVG) file and export a
+Portable Network Graphic (PNG) file. Reference the PNG file.
+
+By committing the SVG file, others will be able to update the
+SVG diagrams using Inkscape.
+
+HTML5 will support SVG inline.

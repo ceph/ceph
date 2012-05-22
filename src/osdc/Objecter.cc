@@ -246,7 +246,7 @@ void Objecter::shutdown()
   }
 }
 
-void Objecter::send_linger(LingerOp *info)
+void Objecter::send_linger(LingerOp *info, bool first_send)
 {
   if (!info->registering) {
     ldout(cct, 15) << "send_linger " << info->linger_id << dendl;
@@ -264,7 +264,20 @@ void Objecter::send_linger(LingerOp *info)
 	linger_check_for_latest_map(info);
       }
     }
-    op_submit(o, info->session);
+
+    if (first_send) {
+      op_submit(o, info->session);
+    } else {
+      _op_submit(o, info->session);
+    }
+
+    OSDSession *s = o->session;
+    if (info->session != s) {
+      info->session_item.remove_myself();
+      info->session = s;
+      if (info->session)
+	s->linger_ops.push_back(&info->session_item);
+    }
     info->registering = true;
 
     logger->inc(l_osdc_linger_send);
@@ -335,7 +348,7 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
 
   logger->set(l_osdc_linger_active, linger_ops.size());
 
-  send_linger(info);
+  send_linger(info, true);
 
   return info->linger_id;
 }
@@ -537,7 +550,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     LingerOp *op = *p;
     if (op->session) {
       logger->inc(l_osdc_linger_resend);
-      send_linger(op);
+      send_linger(op, false);
     }
   }
 
@@ -742,7 +755,7 @@ void Objecter::kick_requests(OSDSession *session)
   // resend lingers
   for (xlist<LingerOp*>::iterator j = session->linger_ops.begin(); !j.end(); ++j) {
     logger->inc(l_osdc_linger_resend);
-    send_linger(*j);
+    send_linger(*j, false);
   }
 }
 
@@ -780,6 +793,17 @@ void Objecter::tick()
       ++laggy_ops;
     }
   }
+  for (map<uint64_t,LingerOp*>::iterator p = linger_ops.begin();
+       p != linger_ops.end();
+       p++) {
+    LingerOp *op = p->second;
+    if (op->session) {
+      ldout(cct, 0) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      toping.insert(op->session);
+    } else {
+      ldout(cct, 0) << " lingering tid " << p->first << " does not have session" << dendl;
+    }
+  }
   logger->set(l_osdc_op_laggy, laggy_ops);
   logger->set(l_osdc_osd_laggy, toping.size());
 
@@ -791,8 +815,9 @@ void Objecter::tick()
     // (osd reply message policy is lossy)
     for (set<OSDSession*>::iterator i = toping.begin();
 	 i != toping.end();
-	 i++)
+	 i++) {
       messenger->send_message(new MPing, (*i)->con);
+    }
   }
     
   // reschedule
@@ -844,6 +869,11 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
 
+  return _op_submit(op, s);
+}
+
+tid_t Objecter::_op_submit(Op *op, OSDSession *s)
+{
   // pick tid
   tid_t mytid = ++last_tid;
   op->tid = mytid;
@@ -974,7 +1004,7 @@ int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
-  if (op->oid.name.length()) {
+  if (!op->precalc_pgid) {
     int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
@@ -1269,7 +1299,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (!op->onack && !op->oncommit) {
     op->session_item.remove_myself();
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
-    put_op_budget(op);
+    if (op->budgeted)
+      put_op_budget(op);
     ops.erase(tid);
     logger->set(l_osdc_op_active, ops.size());
     if (op->con)
@@ -1349,6 +1380,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   o->reply_epoch = &onack->epoch;
 
   o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
+  o->precalc_pgid = true;
 
   op_submit(o);
 }

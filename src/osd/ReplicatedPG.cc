@@ -1557,7 +1557,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
 
-  bool first_read = false;
+  bool first_read = true;
 
   ObjectStore::Transaction& t = ctx->op_t;
 
@@ -3797,7 +3797,6 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
     // if the on-disk oloc is bad/undefined, set up the pool value
     if (oi.oloc.get_pool() < 0) {
       oi.oloc.pool = info.pgid.pool();
-      oi.oloc.preferred = info.pgid.preferred();
     }
 
     SnapSetContext *ssc = NULL;
@@ -6480,7 +6479,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       // tell replicas
       for (unsigned i=1; i<acting.size(); i++) {
 	MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
-	m->pg_info.push_back(info);
+	m->pg_list.push_back(make_pair(info, pg_interval_map_t()));
 	osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(acting[i]));
       }
     }

@@ -11,8 +11,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
@@ -434,12 +432,9 @@ public:
       ops++;
     }
     void collection_move(coll_t cid, coll_t oldcid, const hobject_t& oid) {
-      __u32 op = OP_COLL_MOVE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oldcid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      collection_add(cid, oldcid, oid);
+      collection_remove(oldcid, oid);
+      return;
     }
 
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
@@ -577,7 +572,6 @@ public:
       DECODE_FINISH(bl);
     }
 
-    void dump(ostream& out);
     void dump(ceph::Formatter *f);
     static void generate_test_instances(list<Transaction*>& o);
   };
@@ -745,6 +739,7 @@ public:
 
   virtual int snapshot(const string& name) { return -EOPNOTSUPP; }
     
+  virtual void set_fsid(uuid_d u) = 0;
   virtual uuid_d get_fsid() = 0;
 };
 

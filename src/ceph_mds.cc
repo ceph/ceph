@@ -72,7 +72,7 @@ static int do_cmds_special_action(const std::string &action,
 {
   common_init_finish(g_ceph_context);
   Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::CLIENT(),
+					   entity_name_t::CLIENT(), "mds",
 					   getpid());
   int r = messenger->bind(g_conf->public_addr);
   if (r < 0)
@@ -234,7 +234,7 @@ int main(int argc, const char **argv)
   global_print_banner();
 
   Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::MDS(-1),
+					   entity_name_t::MDS(-1), "mds",
 					   getpid());
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 

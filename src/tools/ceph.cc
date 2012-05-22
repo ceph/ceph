@@ -37,6 +37,8 @@
 
 using std::vector;
 
+void do_status(CephToolCtx *ctx, bool shutdown = false);
+
 static void usage()
 {
   cout << "usage: ceph [options] [commands]\n";
@@ -58,7 +60,8 @@ static void usage()
 static void parse_cmd_args(vector<const char*> &args,
 		std::string *in_file, std::string *out_file,
 			   ceph_tool_mode_t *mode, bool *concise,
-			   string *admin_socket, string *admin_socket_cmd)
+			   string *admin_socket, string *admin_socket_cmd,
+			   string *watch_level)
 {
   std::vector<const char*>::iterator i;
   std::string val;
@@ -75,9 +78,19 @@ static void parse_cmd_args(vector<const char*> &args,
 	usage();
       *admin_socket_cmd = *i;
     } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
-      *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
+      *mode = CEPH_TOOL_MODE_STATUS;
     } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
-      *mode = CEPH_TOOL_MODE_OBSERVER;
+      *mode = CEPH_TOOL_MODE_WATCH;
+    } else if (ceph_argparse_flag(args, i, "--watch-debug", (char*) NULL)) {
+      *watch_level = "log-debug";
+    } else if (ceph_argparse_flag(args, i, "--watch-info", (char*) NULL)) {
+      *watch_level = "log-info";
+    } else if (ceph_argparse_flag(args, i, "--watch-sec", (char*) NULL)) {
+      *watch_level = "log-sec";
+    } else if (ceph_argparse_flag(args, i, "--watch-warn", (char*) NULL)) {
+      *watch_level = "log-warn";
+    } else if (ceph_argparse_flag(args, i, "--watch-error", (char*) NULL)) {
+      *watch_level = "log-error";
     } else if (ceph_argparse_flag(args, i, "--concise", (char*)NULL)) {
       *concise = true;
     } else if (ceph_argparse_flag(args, i, "--verbose", (char*)NULL)) {
@@ -179,6 +192,7 @@ int do_admin_socket(string path, string cmd)
   return r;
 }
 
+
 int main(int argc, const char **argv)
 {
   std::string in_file, out_file;
@@ -195,7 +209,9 @@ int main(int argc, const char **argv)
   bool concise = true;
   string admin_socket;
   string admin_socket_cmd;
-  parse_cmd_args(args, &in_file, &out_file, &mode, &concise, &admin_socket, &admin_socket_cmd);
+  string watch_level = "log-info";
+  parse_cmd_args(args, &in_file, &out_file, &mode, &concise, 
+		 &admin_socket, &admin_socket_cmd, &watch_level);
 
   // daemon admin socket?
   if (admin_socket.length()) {
@@ -222,10 +238,16 @@ int main(int argc, const char **argv)
   bufferlist outbl;
   int ret = 0;
   switch (mode) {
-    case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER: // fall through
-    case CEPH_TOOL_MODE_OBSERVER: {
+    case CEPH_TOOL_MODE_STATUS:
+      do_status(ctx, true);
+      break;
+    case CEPH_TOOL_MODE_WATCH: {
+      do_status(ctx);
       ctx->lock.Lock();
-      send_observe_requests(ctx);
+      ctx->dispatcher->subs.name = watch_level;
+      ctx->dispatcher->subs.last_known_version = 0;
+      ctx->mc.sub_want(watch_level, 0, 0);
+      ctx->mc.renew_subs();
       ctx->lock.Unlock();
       break;
     }

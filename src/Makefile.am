@@ -1,6 +1,26 @@
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS = ocf
-DIST_SUBDIRS = gtest ocf leveldb
+DIST_SUBDIRS = gtest ocf leveldb libs3
+
+EXTRA_DIST = \
+	libs3/COPYING \
+	libs3/ChangeLog \
+	libs3/GNUmakefile \
+	libs3/GNUmakefile.mingw \
+	libs3/GNUmakefile.osx \
+	libs3/INSTALL \
+	libs3/LICENSE \
+	libs3/README \
+	libs3/TODO \
+	libs3/archlinux \
+	libs3/debian \
+	libs3/doxyfile \
+	libs3/inc \
+	libs3/libs3.spec \
+	libs3/mswin \
+	libs3/src \
+	libs3/test
+
 CLEANFILES =
 bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
@@ -33,26 +53,38 @@ endif
 
 LIBGLOBAL_LDA = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
+LIBOS_LDA = libos.a leveldb/libleveldb.a
+
+if WITH_LIBAIO
+LIBOS_LDA += -laio
+endif
+
+if WITH_SYSTEM_LEVELDB
+LIBOS_LDA += -lleveldb -lsnappy
+else
+LIBOS_LDA += leveldb/libleveldb.a
+SUBDIRS += leveldb
+endif
+
+
+
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
-ceph_mon_LDADD = libmon.la $(LIBGLOBAL_LDA)
+ceph_mon_LDADD = libmon.a $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-mon
 
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA)
+ceph_osd_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-osd
 
 if WITH_SYSTEM_LEVELDB
-ceph_osd_LDADD += -lleveldb -lsnappy
 else
-ceph_osd_LDADD += leveldb/libleveldb.a
 ceph_osd_CXXFLAGS += -I$(top_srcdir)/src/leveldb/include
-SUBDIRS += leveldb
 endif
 
 if LINUX
@@ -73,37 +105,6 @@ ceph_SOURCES = \
 ceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS)
 ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
-if WITH_GTK2
-ceph_tool_guidir = ${datadir}/ceph_tool/gui_resources/
-ceph_tool_gui_DATA = \
-	tools/gui_resources/blacklist.svg \
-	tools/gui_resources/client.svg \
-	tools/gui_resources/cluster_stats_window.glade \
-	tools/gui_resources/down_osd.svg \
-	tools/gui_resources/failed_mds.svg \
-	tools/gui_resources/gui_monitor.build \
-	tools/gui_resources/gui_monitor.glade \
-	tools/gui_resources/gui_monitor_old.glade \
-	tools/gui_resources/main-window.glade \
-	tools/gui_resources/mds.svg \
-	tools/gui_resources/monitor.svg \
-	tools/gui_resources/node_stats_window.glade \
-	tools/gui_resources/osd.svg \
-	tools/gui_resources/out_osd.svg \
-	tools/gui_resources/pg.svg \
-	tools/gui_resources/stats_window.glade \
-	tools/gui_resources/stopped_mds.svg
-gceph_SOURCES = \
-	tools/common.cc \
-	mon/PGMap.cc \
-	tools/gceph.cc \
-	tools/gui.cc
-gceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS) $(GTKMM_LIBS)
-gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
-	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
-bin_PROGRAMS += gceph
-endif
-
 ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
 ceph_authtool_SOURCES = ceph_authtool.cc
@@ -123,7 +124,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.la libmds.a libos.la libmon.la
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.a libmds.a $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -200,18 +201,13 @@ test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+dupstore_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_idempotent_SOURCES = test/test_filestore_idempotent.cc
-test_filestore_idempotent_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_idempotent2_SOURCES = test/filestore_test/test_idempotent.cc test/filestore_test/FileStoreTracker.cc test/common/ObjectContents.cc
-test_filestore_idempotent2_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_filestore_idempotent2_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
-bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent test_filestore_idempotent2
+streamtest_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_trans_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testrados_SOURCES = test/osd/TestRados.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
@@ -298,31 +294,88 @@ librados_la_LIBADD = libcommon.la $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
 
-# librgw
 if WITH_RADOSGW
-librgw_SOURCES = \
-	$(my_libradosgw_src)
-librgw_la_SOURCES = ${librgw_SOURCES}
-librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librgw_la_LIBADD = librados.la
-librgw_la_LDFLAGS = -version-info 1:0:0 $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
-lib_LTLIBRARIES += librgw.la
+
+# rgw
+librgw_a_SOURCES =  \
+	rgw/librgw.cc \
+	rgw/rgw_acl.cc \
+	rgw/rgw_acl_s3.cc \
+	rgw/rgw_acl_swift.cc \
+	rgw/rgw_xml.cc \
+	rgw/rgw_user.cc \
+	rgw/rgw_tools.cc \
+	rgw/rgw_rados.cc \
+	rgw/rgw_op.cc \
+	rgw/rgw_common.cc \
+	rgw/rgw_cache.cc \
+	rgw/rgw_formats.cc \
+	rgw/rgw_log.cc \
+	rgw/rgw_multi.cc \
+	rgw/rgw_env.cc
+librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LIBRARIES += librgw.a
+
+my_radosgw_ldadd = \
+       libglobal.la librgw.a librados.la -lcurl -lexpat \
+       $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+
+radosgw_SOURCES = \
+        rgw/rgw_rest.cc \
+        rgw/rgw_rest_swift.cc \
+        rgw/rgw_rest_s3.cc \
+        rgw/rgw_swift.cc \
+	rgw/rgw_swift_auth.cc \
+	rgw/rgw_main.cc
+radosgw_LDADD = $(my_radosgw_ldadd) -lfcgi
+radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+bin_PROGRAMS += radosgw
+
+radosgw_admin_SOURCES = rgw/rgw_admin.cc
+radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+radosgw_admin_LDADD = $(my_radosgw_ldadd)
+bin_PROGRAMS += radosgw-admin
+
+rgw_multiparser_SOURCES = rgw/rgw_multiparser.cc
+rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+rgw_multiparser_LDADD = $(my_radosgw_ldadd)
+bin_DEBUGPROGRAMS += rgw_multiparser
 
 endif
 
 # librbd
-librbd_la_SOURCES = librbd.cc
+librbd_la_SOURCES = \
+	librbd.cc \
+	librbd/LibrbdWriteback.cc \
+	osdc/ObjectCacher.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
-librbd_la_LIBADD = librados.la 
+librbd_la_LIBADD = librados.la
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
-rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc
+rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/obj_bencher.cc
 rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
+
+if WITH_REST_BENCH
+
+rest_bench_SOURCES = tools/rest_bench.cc common/obj_bencher.cc
+rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rest_bench_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += rest-bench
+
+if WITH_SYSTEM_LIBS3
+rest_bench_LDADD += -ls3
+else
+rest_bench_LDADD += libs3/build/lib/libs3.a -lcurl -lxml2
+rest_bench_CXXFLAGS += -I$(top_srcdir)/src/libs3/inc
+SUBDIRS += libs3
+endif
+
+endif
 
 scratchtool_SOURCES = scratchtool.c
 scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -339,49 +392,6 @@ if LINUX
 bin_PROGRAMS += rbd
 endif
 
-if WITH_RADOSGW
-my_libradosgw_src = \
-	rgw/librgw.cc \
-	rgw/rgw_acl.cc \
-	rgw/rgw_acl_s3.cc \
-	rgw/rgw_acl_swift.cc \
-	rgw/rgw_xml.cc \
-	rgw/rgw_user.cc \
-	rgw/rgw_tools.cc \
-	rgw/rgw_rados.cc \
-	rgw/rgw_op.cc \
-	rgw/rgw_common.cc \
-	rgw/rgw_cache.cc \
-	rgw/rgw_formats.cc \
-	rgw/rgw_log.cc \
-	rgw/rgw_multi.cc \
-	rgw/rgw_env.cc
-
-my_radosgw_ldadd = \
-	libglobal.la librgw.la librados.la -lcurl -lexpat \
-	$(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-
-radosgw_SOURCES = $(my_libradosgw_src) \
-	rgw/rgw_rest.cc \
-	rgw/rgw_rest_swift.cc \
-	rgw/rgw_rest_s3.cc \
-	rgw/rgw_swift.cc \
-	rgw/rgw_swift_auth.cc \
-  rgw/rgw_main.cc
-
-radosgw_LDADD = $(my_radosgw_ldadd) -lfcgi
-radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-radosgw_admin_SOURCES = $(my_libradosgw_src) rgw/rgw_admin.cc
-radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-radosgw_admin_LDADD = $(my_radosgw_ldadd)
-bin_PROGRAMS += radosgw radosgw-admin
-
-rgw_multiparser_SOURCES = $(my_libradosgw_src) rgw/rgw_multiparser.cc
-rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-rgw_multiparser_LDADD = $(my_radosgw_ldadd)
-bin_DEBUGPROGRAMS += rgw_multiparser
-
-endif
 
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD =  $(LIBGLOBAL_LDA)
@@ -389,7 +399,7 @@ testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libmon.la $(LIBGLOBAL_LDA) 
+testkeys_LDADD = libmon.a $(LIBGLOBAL_LDA) 
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testkeys
 
@@ -536,9 +546,9 @@ unittest_ceph_argparse_LDADD = libglobal.la ${UNITTEST_LDADD}
 unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_argparse
 
-unittest_osd_types_SOURCES = test/test_osd_types.cc libcommon.la
+unittest_osd_types_SOURCES = test/test_osd_types.cc
 unittest_osd_types_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_osd_types_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+unittest_osd_types_LDADD = libglobal.la libcommon.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_osd_types
 
 unittest_gather_SOURCES = test/gather.cc
@@ -650,11 +660,11 @@ unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
 unittest_librados_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados_config
 
-unittest_librgw_link_SOURCES = test/librgw_link.cc
-unittest_librgw_link_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
-unittest_librgw_link_LDADD =  librgw.la ${UNITTEST_LDADD}
-unittest_librgw_link_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_librgw_link
+#unittest_librgw_link_SOURCES = test/librgw_link.cc
+#unittest_librgw_link_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+#unittest_librgw_link_LDADD =  librgw.la ${UNITTEST_LDADD}
+#unittest_librgw_link_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+#check_PROGRAMS += unittest_librgw_link
 
 unittest_daemon_config_SOURCES = test/daemon_config.cc
 unittest_daemon_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
@@ -662,13 +672,13 @@ unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_daemon_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_daemon_config
 
-if WITH_RADOSGW
-unittest_librgw_SOURCES = test/librgw.cc
-unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
-unittest_librgw_LDADD =  librgw.la librados.la ${UNITTEST_LDADD} -lexpat $(LIBGLOBAL_LDA)
-unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_librgw
-endif
+#if WITH_RADOSGW
+#unittest_librgw_SOURCES = test/librgw.cc
+#unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
+#unittest_librgw_LDADD =  librgw.la librados.la ${UNITTEST_LDADD} -lexpat $(LIBGLOBAL_LDA)
+#unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+#check_PROGRAMS += unittest_librgw
+#endif
 
 unittest_ipaddr_SOURCES = test/test_ipaddr.cc
 unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
@@ -679,6 +689,11 @@ test_librbd_SOURCES = test/test_librbd.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
+
+test_librbd_fsx_SOURCES = test/rbd/fsx.c
+test_librbd_fsx_LDADD =  librbd.la librados.la
+test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
+bin_DEBUGPROGRAMS += test_librbd_fsx
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
@@ -734,30 +749,43 @@ test_libcephfs_readdir_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
 test_libcephfs_readdir_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_libcephfs_readdir
 
-test_store_SOURCES = test/store_test.cc
-test_store_LDFLAGS = ${AM_LDFLAGS}
-test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+test_filestore_SOURCES = test/filestore/store_test.cc
+test_filestore_LDFLAGS = ${AM_LDFLAGS}
+test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
-bin_DEBUGPROGRAMS += test_store
+bin_DEBUGPROGRAMS += test_filestore
 
-test_wrkldgen_SOURCES = test/test_workload_gen/workload_generator.cc
-test_wrkldgen_LDFLAGS = ${AM_LDFLAGS}
-test_wrkldgen_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
-test_wrkldgen_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
-bin_DEBUGPROGRAMS += test_wrkldgen
+test_filestore_workloadgen_SOURCES = \
+     test/filestore/workload_generator.cc \
+     test/filestore/TestFileStoreState.cc
+test_filestore_workloadgen_LDFLAGS = ${AM_LDFLAGS}
+test_filestore_workloadgen_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += test_filestore_workloadgen
+
+test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
+test_filestore_idempotent_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+test_filestore_idempotent_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
+bin_DEBUGPROGRAMS += test_filestore_idempotent
+
+test_filestore_idempotent_sequence_SOURCES = \
+     test/filestore/test_idempotent_sequence.cc \
+     test/filestore/DeterministicOpSequence.cc \
+     test/filestore/TestFileStoreState.cc \
+     test/filestore/FileStoreDiff.cc
+test_filestore_idempotent_sequence_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
 
 xattr_bench_SOURCES = test/xattr_bench.cc
 xattr_bench_LDFLAGS = ${AM_LDFLAGS}
-xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += xattr_bench
 
 test_filejournal_SOURCES = test/test_filejournal.cc
 test_filejournal_LDFLAGS = ${AM_LDFLAGS}
-test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_filejournal_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_filejournal
 
@@ -769,14 +797,14 @@ bin_DEBUGPROGRAMS += test_stress_watch
 
 test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
 test_object_map_LDFLAGS = ${AM_LDFLAGS}
-test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_object_map
 
 test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc os/LevelDBStore.cc
 test_keyvaluedb_atomicity_LDFLAGS = ${AM_LDFLAGS}
-test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la leveldb/libleveldb.a $(LIBGLOBAL_LDA)
+test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
 bin_DEBUGPROGRAMS += test_keyvaluedb_atomicity
@@ -791,7 +819,11 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs ceph-debugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile ceph-debugpack.in ceph-coverage.in
+shell_scripts = init-ceph mkcephfs ceph-debugpack ceph-coverage ceph-kdump-copy
+
+$(shell_scripts): Makefile
+
+$(shell_scripts): %: %.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -805,13 +837,11 @@ bin_SCRIPTS += obsync/obsync
 bin_SCRIPTS += obsync/boto_tool
 bin_SCRIPTS += ceph-coverage
 
-CLEANFILES += \
-	ceph-debugpack \
-	ceph_ver.h \
-	init-ceph \
-	mkcephfs \
-	sample.fetch_config \
-	ceph-coverage
+bin_SCRIPTS += ceph-kdump-copy
+
+CLEANFILES += $(shell_scripts)
+
+CLEANFILES += ceph_ver.h sample.fetch_config
 
 ##
 
@@ -843,17 +873,18 @@ EXTRALIBS += -lgcov
 endif
 
 # extra bits
-EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
-	ceph-run $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
+EXTRA_DIST += \
+	$(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
+	ceph-run $(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
-	$(srcdir)/ceph-debugpack.in \
-	$(srcdir)/ceph-coverage.in \
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(ceph_tool_gui_DATA) \
 	$(srcdir)/test/encoding/readable.sh \
 	$(srcdir)/test/encoding/check-generated.sh
+
+EXTRA_DIST += $(srcdir)/$(shell_scripts:%=%.in)
 
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
@@ -965,6 +996,7 @@ libcommon_files = \
 	common/admin_socket_client.cc \
 	common/escape.c \
 	common/Clock.cc \
+	common/Throttle.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/environment.cc\
@@ -996,6 +1028,7 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
+	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \
 	common/ceph_argparse.cc \
@@ -1035,7 +1068,7 @@ endif
 
 
 
-libmon_la_SOURCES = \
+libmon_a_SOURCES = \
 	auth/cephx/CephxKeyServer.cc \
 	auth/cephx/CephxServiceHandler.cc \
 	auth/AuthServiceHandler.cc \
@@ -1051,9 +1084,8 @@ libmon_la_SOURCES = \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
-libmon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libmon_la_LIBADD = libglobal.la
-noinst_LTLIBRARIES += libmon.la
+libmon_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LIBRARIES += libmon.a
 
 libmds_a_SOURCES = \
 	mds/Dumper.cc \
@@ -1081,10 +1113,11 @@ libmds_a_SOURCES = \
 	mds/SnapServer.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
-	mds/MDLog.cc
+	mds/MDLog.cc \
+	osdc/Journaler.cc
 noinst_LIBRARIES += libmds.a
 
-libos_la_SOURCES = \
+libos_a_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
 	os/ObjectStore.cc \
@@ -1095,15 +1128,11 @@ libos_la_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc
-libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
+libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
 	-I$(top_srcdir)/src/leveldb/include
-libos_la_LIBADD = libglobal.la
-if WITH_LIBAIO
-libos_la_LIBADD += -laio
-endif
-noinst_LTLIBRARIES += libos.la
+noinst_LIBRARIES += libos.a
 
-libosd_la_SOURCES = \
+libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
@@ -1112,15 +1141,13 @@ libosd_la_SOURCES = \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc
-libosd_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libosd_la_LIBADD = libglobal.la
-noinst_LTLIBRARIES += libosd.la
+libosd_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LIBRARIES += libosd.a
 
 libosdc_la_SOURCES = \
 	osdc/Objecter.cc \
 	osdc/ObjectCacher.cc \
-	osdc/Filer.cc \
-	osdc/Journaler.cc
+	osdc/Filer.cc
 libosdc_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libosdc_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libosdc.la
@@ -1130,14 +1157,13 @@ libclient_la_SOURCES = \
 	client/Inode.cc \
 	client/MetaRequest.cc \
 	client/Trace.cc
-libclient_la_LIBADD = libcommon.la $(LIBEDIT_LIBS)
+libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
 noinst_LTLIBRARIES += libclient.la
 
 dist-hook:
 	$(srcdir)/check_version $(srcdir)/.git_version
 
 python_PYTHON = pybind/rados.py \
-		pybind/rgw.py \
 		pybind/rbd.py
 
 # headers... and everything else we want to include in a 'make dist' 
@@ -1178,9 +1204,11 @@ noinst_HEADERS = \
         client/fuse_ll.h\
 	client/ioctl.h\
         client/hadoop/CephFSInterface.h\
+	client/ObjecterWriteback.h\
 	cls_acl.cc\
 	cls_crypto.cc\
 	common/BackTrace.h\
+	common/RefCountedObj.h\
 	common/HeartbeatMap.h\
 	common/LogClient.h\
 	common/LogEntry.h\
@@ -1188,6 +1216,7 @@ noinst_HEADERS = \
 	common/ceph_argparse.h\
 	common/ceph_context.h\
 	common/xattr.h\
+	common/blkdev.h\
 	common/compiler_extensions.h\
 	common/debug.h\
 	common/dout.h\
@@ -1199,6 +1228,7 @@ noinst_HEADERS = \
 	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
+	common/obj_bencher.h\
 	common/snap_types.h\
         common/Clock.h\
         common/Cond.h\
@@ -1209,6 +1239,8 @@ noinst_HEADERS = \
         common/perf_counters.h\
 	common/admin_socket.h \
 	common/admin_socket_client.h \
+	common/shared_cache.hpp \
+	common/simple_cache.hpp \
         common/MemoryModel.h\
         common/Mutex.h\
 	common/PrebufferedStreambuf.h\
@@ -1313,6 +1345,7 @@ noinst_HEADERS = \
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
+	librbd/LibrbdWriteback.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
 	json_spirit/json_spirit_error_position.h\
@@ -1440,8 +1473,6 @@ noinst_HEADERS = \
 	messages/MMonGlobalID.h\
 	messages/MMonJoin.h\
         messages/MMonMap.h\
-        messages/MMonObserve.h\
-        messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
         messages/MMonProbe.h\
         messages/MMonSubscribe.h\
@@ -1532,12 +1563,12 @@ noinst_HEADERS = \
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\
-	osdc/rados_bencher.h\
         osdc/Blinker.h\
         osdc/Filer.h\
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
+	osdc/WritebackHandler.h\
         perfglue/cpu_profiler.h\
         perfglue/heap_profiler.h\
 	rgw/rgw_acl.h\
@@ -1561,8 +1592,6 @@ noinst_HEADERS = \
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/common.h\
-	tools/gui.h\
-	tools/gui_resources.h\
 	test/osd/RadosModel.h\
 	test/osd/Object.h\
 	test/osd/TestOpStat.h\
@@ -1626,7 +1655,6 @@ uninstall-local: uninstall-coverage
 if WITH_DEBUG
 bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
 endif
-
 
 project.tgz: clean
 	cov-configure -co /usr/bin/gcc

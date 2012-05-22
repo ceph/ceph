@@ -1,5 +1,3 @@
-%define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
-
 %bcond_with ocf
 # it seems there is no usable tcmalloc rpm for x86_64; parts of
 # google-perftools don't compile on x86_64, and apparently the
@@ -25,7 +23,6 @@ URL:		http://ceph.newdream.net/
 Source0:	http://ceph.newdream.net/download/%{name}-%{version}.tar.bz2
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
-Requires:	librgw1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
@@ -85,7 +82,6 @@ Group:		Development/Libraries
 License:	LGPLv2
 Requires:	%{name} = %{version}-%{release}
 Requires:	librados2 = %{version}
-Requires:	librgw1 = %{version}
 Requires:	librbd1 = %{version}
 Requires:	libcephfs1 = %{version}
 %description devel
@@ -120,18 +116,6 @@ obsync is a tool to synchronize objects between cloud object
 storage providers, such as Amazon S3 (or compatible services), a
 Ceph RADOS cluster, or a local directory.
 
-%if %{with_gtk2}
-%package gcephtool
-Summary:	Ceph graphical monitoring tool
-Group:		System Environment/Base
-License:	LGPLv2
-Requires:	gtk2 gtkmm24
-BuildRequires:	gtk2-devel gtkmm24-devel
-%description gcephtool
-gcephtool is a graphical monitor for the clusters running the Ceph distributed
-file system.
-%endif
-
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
@@ -165,15 +149,6 @@ RBD is a block device striped across multiple distributed objects in
 RADOS, a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to manage these block devices.
-
-%package -n librgw1
-Summary:	RGW distributed object store client library
-Group:		System Environment/Libraries
-License:	LGPLv2
-%description -n librgw1
-radosgw is a REST gateway for RADOS distributed object store. librgw
-contains support for reading and writing objects in the format expected
-by radosgw.
 
 %package -n libcephfs1
 Summary:	Ceph distributed file system client library
@@ -210,12 +185,6 @@ object storage.
 MY_CONF_OPT=""
 
 MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
-
-%if %{with_gtk2}
-MY_CONF_OPT="$MY_CONF_OPT --with-gtk2"
-%else
-MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
-%endif
 
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
@@ -315,6 +284,7 @@ fi
 %{_bindir}/boto_tool
 %{_bindir}/ceph-coverage
 %{_bindir}/obsync
+%{_bindir}/ceph-kdump-copy
 %{_initrddir}/ceph
 %dir %{_libdir}/rados-classes
 /sbin/mkcephfs
@@ -341,6 +311,8 @@ fi
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
+%{_mandir}/man1/obsync.1*
+%{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
@@ -376,13 +348,11 @@ fi
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
-%{_includedir}/rados/librgw.h
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
-%{_libdir}/librgw.so
 %{_libdir}/librados.so
 
 #################################################################################
@@ -414,14 +384,6 @@ fi
 %endif
 
 #################################################################################
-%if %{with_gtk2}
-%files gcephtool
-%defattr(-,root,root,-)
-%{_bindir}/gceph
-%{_datadir}/ceph_tool/gui_resources/*
-%endif
-
-#################################################################################
 %if %{with ocf}
 %files resource-agents
 %defattr(0755,root,root,-)
@@ -437,17 +399,6 @@ fi
 /sbin/ldconfig
 
 %postun -n librados2
-/sbin/ldconfig
-
-#################################################################################
-%files -n librgw1
-%defattr(-,root,root,-)
-%{_libdir}/librgw.so.*
-
-%post -n librgw1
-/sbin/ldconfig
-
-%postun -n librgw1
 /sbin/ldconfig
 
 #################################################################################
@@ -477,6 +428,5 @@ fi
 %defattr(-,root,root,-)
 %{python_sitelib}/rados.py*
 %{python_sitelib}/rbd.py*
-%{python_sitelib}/rgw.py*
 
 %changelog

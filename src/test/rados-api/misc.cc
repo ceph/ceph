@@ -275,7 +275,7 @@ TEST(LibRadosMisc, AioOperatePP) {
     o.append(bl2);
   }
   ASSERT_EQ(0, ioctx.aio_operate("foo", my_completion, &o));
-  ASSERT_EQ(0, my_completion->wait_for_complete());
+  ASSERT_EQ(0, my_completion->wait_for_complete_and_cb());
   ASSERT_EQ(my_aio_complete, true);
 
   uint64_t size;

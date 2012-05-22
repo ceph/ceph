@@ -1,41 +1,120 @@
+============================================
 Ceph - a scalable distributed storage system
------------------------------------------
+============================================
 
 Please see http://ceph.newdream.net/ for current info.
 
-----
+Contributing Code
+=================
 
-To prepare the source tree for the first time in case it has been git cloned,
+Most of Ceph is licensed under the LGPL version 2.1.  Some
+miscellaneous code is under BSD-style license or is public domain.
+The documentation is licensed under Creative Commons
+Attribution-ShareAlike (CC BY-SA).  There are a handful of headers
+included here that are licensed under the GPL.  Please see the file
+COPYING for a full inventory of licenses by file.
 
-$ git submodule update --init
+Code contributions must include a valid "Signed-off-by" acknowledging
+the license for the modified or contributed file.  Please see the file
+SubmittingPatches for details on what that means and on how to
+generate and submit patches.
 
-To build the server daemons, and FUSE client,
+We do not require assignment of copyright to contribute code; code is
+contributed under the terms of the applicable license.
 
-$ ./autogen.sh
-$ ./configure
-$ make
+
+Building Ceph
+=============
+
+To prepare the source tree after it has been git cloned,
+
+	$ git submodule update --init
+
+To build the server daemons, and FUSE client, execute the following:
+
+	$ ./autogen.sh
+	$ ./configure
+	$ make
 
 (Note that the FUSE client will only be built if libfuse is present.)
 
-----
+Dependencies
+------------
 
-A quick summary of binaries that will be built in src/
+The configure script will complain about any missing dependencies as
+it goes.  You can also refer to debian/control or ceph.spec.in for the
+package build dependencies on those platforms.  In many cases,
+dependencies can be avoided with --with-foo or --without-bar switches.
+For example,
 
-daemons:
- ceph-mon -- monitor daemon.  handles cluster state and configuration
-         information.
- ceph-osd -- storage daemon.  stores objects on a given block device.
- ceph-mds -- metadata daemon.  handles file system namespace.
- ceph-fuse -- fuse client.
+$ ./configure --with-nss         # use libnss instead of libcrypto++
+$ ./configure --without-radosgw  # do not build radosgw and avoid libfcgi-dev
+$ ./configure --without-tcmalloc # avoid google-perftools dependency
 
-tools:
- ceph -- send management commands to the monitor cluster.
- rados -- interact with the object store
- rbd -- manipulate rados block device images
- monmaptool -- create/edit mon map
- osdmaptool -- create/edit osd map 
- crushtool -- create/edit crush map
 
-scripts:
- mkcephfs -- cluster mkfs tool
- init-ceph -- init.d start/stop script
+Building packages
+-----------------
+
+You can build packages for Debian or Debian-derived (e.g., Ubuntu)
+systems with
+
+$ sudo apt-get dpkg-dev
+$ dpkg-checkbuilddeps        # make sure we have all dependencies
+$ dpkg-buildpackage
+
+For RPM-based systems (Redhat, Suse, etc.),
+
+$ rpmbuild
+
+
+Building the Documentation
+==========================
+
+Prerequisites
+-------------
+To build the documentation, you must install the following:
+
+- python-dev
+- python-pip
+- python-virualenv
+- doxygen
+- ditaa
+- libxml2-dev
+- libxslt-dev
+- dot
+- graphviz
+
+For example:
+
+	sudo apt-get install python-dev python-pip python-virualenv doxygen ditaa libxml2-dev libxslt-dev dot graphviz
+
+Building the Documentation
+--------------------------
+
+To build the documentation, ensure that you are in the top-level `/ceph directory, and execute the build script. For example:
+
+	$ admin/build-doc
+
+
+Build Prerequisites
+-------------------
+To build the source code, you must install the following:
+
+- automake
+- autoconf
+- automake
+- gcc
+- g++
+- libboost-dev
+- libedit-dev
+- libssl-dev
+- libtool
+- libfcgi
+- libfcgi-dev
+- libfuse-dev
+- linux-kernel-headers
+- libcrypto++-dev
+
+For example:
+
+	$ apt-get install automake autoconf automake gcc g++ libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev

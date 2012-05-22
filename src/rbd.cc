@@ -28,6 +28,7 @@
 #include "include/intarith.h"
 
 #include "include/compat.h"
+#include "common/blkdev.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -405,7 +406,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 {
   int fd = open(path, O_RDONLY);
   int r;
-  uint64_t size;
+  int64_t size = 0;
   struct stat stat_buf;
   string md_oid;
   struct fiemap *fiemap;
@@ -424,6 +425,13 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     return r;
   }
   size = (uint64_t)stat_buf.st_size;
+  if (!size) {
+    r = get_block_device_size(fd, &size);
+    if (r < 0) {
+      cerr << "unable to get size of file/block device: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
 
   assert(imgname);
 
@@ -1082,6 +1090,13 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
+  if ((opt_cmd == OPT_RENAME) && (strcmp(poolname, dest_poolname) != 0)) {
+    cerr << "error: mv/rename across pools not supported" << std::endl;
+    cerr << "source pool: " << poolname << " dest pool: " << dest_poolname
+      << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   bool talk_to_cluster = (opt_cmd != OPT_MAP &&
 			  opt_cmd != OPT_UNMAP &&
 			  opt_cmd != OPT_SHOWMAPPED);
@@ -1185,14 +1200,21 @@ int main(int argc, const char **argv)
   case OPT_RM:
     r = do_delete(rbd, io_ctx, imgname);
     if (r < 0) {
-      if (r == -EBUSY) {
+      if (r == -ENOTEMPTY) {
 	cerr << "delete error: image has snapshots - these must be deleted"
 	     << " with 'rbd snap purge' before the image can be removed."
+	     << std::endl;
+      } else if (r == -EBUSY) {
+	cerr << "delete error: image still has watchers"
+	     << std::endl
+	     << "This means the image is still open or the client using "
+	     << "it crashed. Try again after closing/unmapping it or "
+	     << "waiting 30s for the crashed client to timeout."
 	     << std::endl;
       } else {
 	cerr << "delete error: " << cpp_strerror(-r) << std::endl;
       }
-      exit(1);
+      exit(-r);
     }
     break;
 

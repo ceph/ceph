@@ -1,0 +1,69 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          ceph-kdump-copy
+# Required-Start:    $remote_fs $network $named
+# Required-Stop:     $remote_fs $network $named
+# Default-Start:     2
+# Default-Stop:      6
+# Short-Description: Copies kdump crash files to remote server
+# Description:       This file is used to move crash files generated
+#                    by Ubuntu apport via the kdump init script to a
+#                    remote host.
+### END INIT INFO
+
+# Author: Alex Elder <elder@dreamhost.com>
+
+# To install and activate this init script:
+#	update-rc.d ceph-kdump-copy start 02 2 .
+# To deactivate and uninstall this init script:
+#	update-rc.d -f ceph-kdump-copy remove
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
+DESC="Copies kdump crash files to remote server"
+NAME="ceph-kdump-copy"
+SCRIPTNAME="/etc/init.d/${NAME}"
+CONFIGFILE="/etc/default/${NAME}"
+
+# Exit if the copy command is not installed
+[ -x "/usr/bin/ceph-kdump-copy" ] || exit 0
+
+# Read configuration variable file if it is present
+[ -r "${CONFIGFILE}" ] && . "${CONFIGFILE}"
+
+[ -z "${KDUMP_HOST}" ] &&
+	err "please specify KDUMP_HOST in '${CONFIGFILE}'"
+[ -z "${KDUMP_HOST_USER}" ] &&
+	err "please specify KDUMP_HOST_USER in '${CONFIGFILE}'"
+export KDUMP_HOST KDUMP_HOST_USER
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
+. /lib/lsb/init-functions
+
+case "$1" in
+  start)
+	[ "$VERBOSE" != no ] && log_action_begin_msg "Copying kdump files"
+	/usr/bin/ceph-kdump-copy
+	if [ "$?" -eq 0 ]; then
+		[ "$VERBOSE" != no ] && log_end_msg 0
+	else
+		[ "$VERBOSE" != no ] && log_end_msg 1
+	fi
+	;;
+  stop)	# No-op
+	;;
+  status|reload|force-reload|restart)
+	echo "Error: argument '$1' not supported" >&2
+	echo "Usage: $SCRIPTNAME {start|stop}" >&2
+	exit 3
+	;;
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop}" >&2
+	exit 3
+	;;
+esac

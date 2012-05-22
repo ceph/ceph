@@ -69,7 +69,7 @@ int main(int argc, const char **argv, char *envp[])
   cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf->num_client; i++) {
     messengers[i] = Messenger::create(g_ceph_context,
-				      entity_name_t(entity_name_t::TYPE_CLIENT,-1),
+				      entity_name_t(entity_name_t::TYPE_CLIENT,-1), "synclient",
 				      i * 1000000 + getpid());
     messengers[i]->bind(g_conf->public_addr);
     mclients[i] = new MonClient(g_ceph_context);

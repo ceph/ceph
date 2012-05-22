@@ -9,7 +9,7 @@ Synopsis
 
 | **ceph-authtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
   ] [ -p | --print ] [ -n | --name *entityname* ] [ --gen-key ] [ -a |
-  --add-key *base64_key* ] [ --caps *capfils* ] [ -b | --bin ]
+  --add-key *base64_key* ] [ --caps *capfils* ]
 
 
 Description
@@ -21,6 +21,11 @@ possibly an associated capability specification. Each key is
 associated with an entity name, of the form
 ``{client,mon,mds,osd}.name``.
 
+**WARNING** Ceph provides authentication and protection against
+man-in-the-middle attacks once secret keys are in place.  However,
+data over the wire is not encrypted, which may include the messages
+used to configure said keys.  The system is primarily intended to be
+used in trusted environments.
 
 Options
 =======
@@ -53,10 +58,6 @@ Options
 .. option:: --caps capsfile
 
    will set all of capabilities associated with a given key, for all subsystems
-
-.. option:: -b, --bin
-
-   will create a binary formatted keyring
 
 
 Capabilities

@@ -64,8 +64,7 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();
   aio_write_list_lock.Lock();
-  assert(!c->io);
-  c->io = this;
+  assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
   aio_write_list.push_back(&c->aio_write_list_item);
   aio_write_list_lock.Unlock();
@@ -75,7 +74,6 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
   aio_write_list_lock.Lock();
   assert(c->io == this);
-  c->io = NULL;
   c->aio_write_list_item.remove_myself();
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
@@ -648,6 +646,8 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->is_read = true;
+  c->io = this;
   c->pbl = pbl;
 
   Mutex::Locker l(*lock);
@@ -668,6 +668,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   Context *onack = new C_aio_Ack(c);
   Context *oncommit = new C_aio_Safe(c);
 
+  c->io = this;
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
@@ -679,10 +680,14 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
 
   Context *onack = new C_aio_Ack(c);
   eversion_t ver;
 
+  c->is_read = true;
+  c->io = this;
   c->pbl = pbl;
 
   Mutex::Locker l(*lock);
@@ -695,8 +700,13 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
   Context *onack = new C_aio_Ack(c);
 
+  c->is_read = true;
+  c->io = this;
   c->buf = buf;
   c->maxlen = len;
 
@@ -714,12 +724,15 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 bufferlist *data_bl, size_t len,
 					 uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
 
   C_aio_sparse_read_Ack *onack = new C_aio_sparse_read_Ack(c);
   onack->m = m;
   onack->data_bl = data_bl;
   eversion_t ver;
 
+  c->io = this;
   c->pbl = NULL;
 
   Mutex::Locker l(*lock);
@@ -734,11 +747,13 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   uint64_t off)
 {
   utime_t ut = ceph_clock_now(client->cct);
+  ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
 
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  c->io = this;
   queue_aio_write(c);
 
   Context *onack = new C_aio_Ack(c);
@@ -761,6 +776,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  c->io = this;
   queue_aio_write(c);
 
   Context *onack = new C_aio_Ack(c);
@@ -784,6 +800,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  c->io = this;
   queue_aio_write(c);
 
   Context *onack = new C_aio_Ack(c);
@@ -1003,6 +1020,9 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 {
   Context *onack = new C_aio_Ack(c);
 
+  c->is_read = true;
+  c->io = this;
+
   Mutex::Locker l(*lock);
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
@@ -1015,12 +1035,16 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::read(const object_t& oid,
 			      bufferlist& bl, size_t len, uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
   Mutex mylock("IoCtxImpl::read::mylock");
   Cond cond;
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
+
 
   ::ObjectOperation op;
   ::ObjectOperation *pop = prepare_assert_ops(&op);
@@ -1088,6 +1112,9 @@ int librados::IoCtxImpl::sparse_read(const object_t& oid,
 				     bufferlist& data_bl, size_t len,
 				     uint64_t off)
 {
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
   bufferlist bl;
 
   Mutex mylock("IoCtxImpl::read::mylock");
@@ -1480,6 +1507,8 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
   c->lock.Lock();
   c->rval = r;
   c->ack = true;
+  if (c->is_read)
+    c->safe = true;
   c->cond.Signal();
 
   if (c->buf && c->bl.length() > 0) {
@@ -1492,11 +1521,10 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
   }
 
   if (c->callback_complete) {
-    rados_callback_t cb = c->callback_complete;
-    void *cb_arg = c->callback_arg;
-    c->lock.Unlock();
-    cb(c, cb_arg);
-    c->lock.Lock();
+    c->io->client->finisher.queue(new C_AioComplete(c));
+  }
+  if (c->is_read && c->callback_safe) {
+    c->io->client->finisher.queue(new C_AioSafe(c));
   }
 
   c->put_unlock();
@@ -1524,11 +1552,7 @@ void librados::IoCtxImpl::C_aio_sparse_read_Ack::finish(int r)
   }
 
   if (c->callback_complete) {
-    rados_callback_t cb = c->callback_complete;
-    void *cb_arg = c->callback_arg;
-    c->lock.Unlock();
-    cb(c, cb_arg);
-    c->lock.Lock();
+    c->io->client->finisher.queue(new C_AioComplete(c));
   }
 
   c->put_unlock();
@@ -1552,11 +1576,7 @@ void librados::IoCtxImpl::C_aio_Safe::finish(int r)
   c->cond.Signal();
 
   if (c->callback_safe) {
-    rados_callback_t cb = c->callback_safe;
-    void *cb_arg = c->callback_arg;
-    c->lock.Unlock();
-    cb(c, cb_arg);
-    c->lock.Lock();
+    c->io->client->finisher.queue(new C_AioSafe(c));
   }
 
   c->io->complete_aio_write(c);
@@ -1597,13 +1617,16 @@ librados::WatchContext::~WatchContext()
   io_ctx_impl->put();
 }
 
-void librados::WatchContext::notify(uint8_t opcode,
+void librados::WatchContext::notify(Mutex *client_lock,
+                                    uint8_t opcode,
 				    uint64_t ver,
 				    uint64_t notify_id,
 				    bufferlist& payload)
 {
   ctx->notify(opcode, ver, payload);
   if (opcode != WATCH_NOTIFY_COMPLETE) {
+    client_lock->Lock();
     io_ctx_impl->_notify_ack(oid, notify_id, ver);
+    client_lock->Unlock();
   }
 }

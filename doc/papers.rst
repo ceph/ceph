@@ -2,4 +2,4 @@
  Academic papers
 =================
 
-.. todo:: transfer content from http://ceph.newdream.net/publications/ ?
+.. todo:: transfer content from http://ceph.com/resources/publications/ ?

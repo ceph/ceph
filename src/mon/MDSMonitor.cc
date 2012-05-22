@@ -489,6 +489,9 @@ void MDSMonitor::on_active()
 {
   tick();
   update_logger();
+
+  if (mon->is_leader())
+    mon->clog.info() << "mdsmap " << mdsmap << "\n";
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
@@ -780,13 +783,23 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "rm" && m->cmd.size() == 3) {
       uint64_t gid = atoll(m->cmd[2].c_str());
-      pending_mdsmap.mds_info.erase(gid);
-      stringstream ss;
-      ss << "removed mds gid " << gid;
-      string rs;
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      int state = pending_mdsmap.get_state_gid(gid);
+      if (state == 0) {
+	ss << "mds gid " << gid << " dne";
+	r = 0;
+      } else if (state > 0) {
+	ss << "cannot remove active mds." << pending_mdsmap.get_info_gid(gid).name
+	   << " rank " << pending_mdsmap.get_info_gid(gid).rank;
+	r = -EBUSY;
+      } else {
+	pending_mdsmap.mds_info.erase(gid);
+	stringstream ss;
+	ss << "removed mds gid " << gid;
+	string rs;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      }
     }
     else if (m->cmd[1] == "rmfailed" && m->cmd.size() == 3) {
       int w = atoi(m->cmd[2].c_str());

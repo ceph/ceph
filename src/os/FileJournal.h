@@ -29,8 +29,49 @@ using std::deque;
 # include <libaio.h>
 #endif
 
+/**
+ * Implements journaling on top of block device or file.
+ *
+ * Lock ordering is write_lock > aio_lock > queue_lock
+ */
 class FileJournal : public Journal {
 public:
+  /// Protected by queue_lock
+  struct completion_item {
+    uint64_t seq;
+    Context *finish;
+    utime_t start;
+    TrackedOpRef tracked_op;
+    completion_item(uint64_t o, Context *c, utime_t s,
+		    TrackedOpRef opref)
+      : seq(o), finish(c), start(s), tracked_op(opref) {}
+    completion_item() : seq(0), finish(0), start(0) {}
+  };
+  struct write_item {
+    uint64_t seq;
+    bufferlist bl;
+    int alignment;
+    TrackedOpRef tracked_op;
+    write_item(uint64_t s, bufferlist& b, int al, TrackedOpRef opref) :
+      seq(s), alignment(al), tracked_op(opref) {
+      bl.claim(b);
+    }
+    write_item() : seq(0), alignment(0) {}
+  };
+  Mutex queue_lock;
+  Cond queue_cond;
+  uint64_t journaled_seq;
+  bool plug_journal_completions;
+  deque<write_item> writeq;
+  deque<completion_item> completions;
+  bool writeq_empty();
+  write_item &peek_write();
+  void pop_write();
+  void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
+		    Context *oncommit,
+		    TrackedOpRef osd_op = TrackedOpRef());
+  /// End protected by queue_lock
+
   /*
    * journal header
    */
@@ -128,12 +169,13 @@ private:
   size_t block_size;
   bool is_bdev;
   bool directio, aio;
-  bool writing, must_write_header;
+  bool must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
 
 #ifdef HAVE_LIBAIO
   /// state associated with an in-flight aio request
+  /// Protected by aio_lock
   struct aio_info {
     struct iocb iocb;
     bufferlist bl;
@@ -150,10 +192,13 @@ private:
       delete[] iov;
     }
   };
+  Mutex aio_lock;
+  Cond aio_cond;
+  Cond write_finish_cond;
   io_context_t aio_ctx;
   list<aio_info> aio_queue;
   int aio_num, aio_bytes;
-  Cond write_finish_cond;
+  /// End protected by aio_lock
 #endif
 
   uint64_t last_committed_seq;
@@ -176,31 +221,8 @@ private:
 
   // in journal
   deque<pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
+  uint64_t writing_seq;
 
-  struct completion_item {
-    uint64_t seq;
-    Context *finish;
-    utime_t start;
-    completion_item(uint64_t o, Context *c, utime_t s)
-      : seq(o), finish(c), start(s) {}
-  };
-  deque<completion_item> completions;  // queued, writing, waiting for commit.
-  map<uint64_t, TrackedOpRef> pending_ops;
-
-  uint64_t writing_seq, journaled_seq;
-  bool plug_journal_completions;
-
-  // waiting to be journaled
-  struct write_item {
-    uint64_t seq;
-    bufferlist bl;
-    int alignment;
-    write_item(uint64_t s, bufferlist& b, int al) :
-      seq(s), alignment(al) { 
-      bl.claim(b);
-    }
-  };
-  deque<write_item> writeq;
   
   // throttle
   Throttle throttle_ops, throttle_bytes;
@@ -209,7 +231,7 @@ private:
 
   // write thread
   Mutex write_lock;
-  Cond write_cond, write_empty_cond;
+  Cond write_cond;
   bool write_stop;
 
   Cond commit_cond;
@@ -268,20 +290,26 @@ private:
 
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true) : 
-    Journal(fsid, fin, sync_cond), fn(f),
+    Journal(fsid, fin, sync_cond),
+    queue_lock("FileJournal::queue_lock"),
+    journaled_seq(0),
+    plug_journal_completions(false),
+    fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
     is_bdev(false), directio(dio), aio(ai),
-    writing(false), must_write_header(false),
+    must_write_header(false),
     write_pos(0), read_pos(0),
 #ifdef HAVE_LIBAIO
+    aio_lock("FileJournal::aio_lock"),
     aio_num(0), aio_bytes(0),
 #endif
     last_committed_seq(0), 
     full_state(FULL_NOTFULL),
     fd(-1),
-    writing_seq(0), journaled_seq(0),
-    plug_journal_completions(false),
+    writing_seq(0),
+    throttle_ops(g_ceph_context, "filestore_ops"),
+    throttle_bytes(g_ceph_context, "filestore_bytes"),
     write_lock("FileJournal::write_lock"),
     write_stop(false),
     write_thread(this),
@@ -307,8 +335,6 @@ private:
   void make_writeable();
 
   // writes
-  void submit_entry(uint64_t seq, bufferlist& bl, int alignment, Context *oncommit,
-		    TrackedOpRef osd_op = TrackedOpRef());  // submit an item
   void commit_start();
   void committed_thru(uint64_t seq);
   bool should_commit_now() {

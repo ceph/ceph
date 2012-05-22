@@ -28,8 +28,6 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
-#include "messages/MMonObserve.h"
-#include "messages/MMonObserveNotify.h"
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
@@ -62,6 +60,7 @@
 #include "osd/OSDMap.h"
 
 #include "auth/AuthSupported.h"
+#include "auth/KeyRing.h"
 
 #include "common/config.h"
 
@@ -222,7 +221,7 @@ void Monitor::handle_signal(int signum)
   shutdown();
 }
 
-void Monitor::init()
+int Monitor::init()
 {
   lock.Lock();
 
@@ -266,6 +265,19 @@ void Monitor::init()
     cluster_logger = pcb.create_perf_counters();
   }
 
+  // open compatset
+  {
+    bufferlist bl;
+    store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
+    if (bl.length()) {
+      bufferlist::iterator p = bl.begin();
+      ::decode(features, p);
+    } else {
+      features = get_ceph_mon_feature_compat_set();
+    }
+    dout(10) << "features " << features << dendl;
+  }
+
   // init paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos[i]->init();
@@ -283,13 +295,32 @@ void Monitor::init()
     KeyRing keyring;
     bufferlist::iterator p = bl.begin();
     ::decode(keyring, p);
-    key_server.bootstrap_keyring(keyring);
+    extract_save_mon_key(keyring);
+  }
+
+  ostringstream os;
+  os << g_conf->mon_data << "/keyring";
+  int r = keyring.load(cct, os.str());
+  if (r < 0) {
+    EntityName mon_name;
+    mon_name.set_type(CEPH_ENTITY_TYPE_MON);
+    EntityAuth mon_key;
+    if (key_server.get_auth(mon_name, mon_key)) {
+      dout(1) << "copying mon. key from old db to external keyring" << dendl;
+      keyring.add(mon_name, mon_key);
+      bufferlist bl;
+      keyring.encode_plaintext(bl);
+      store->put_bl_ss(bl, "keyring", NULL);
+    } else {
+      derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+      return r;
+    }
   }
 
   admin_hook = new AdminHook(this);
   AdminSocket* admin_socket = cct->get_admin_socket();
-  int r = admin_socket->register_command("mon_status", admin_hook,
-					 "show current monitor status");
+  r = admin_socket->register_command("mon_status", admin_hook,
+				     "show current monitor status");
   assert(r == 0);
   r = admin_socket->register_command("quorum_status", admin_hook,
 					 "show current quorum status");
@@ -306,6 +337,7 @@ void Monitor::init()
   bootstrap();
   
   lock.Unlock();
+  return 0;
 }
 
 void Monitor::register_cluster_logger()
@@ -387,8 +419,11 @@ void Monitor::bootstrap()
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddr());
   if (newrank < 0 && rank >= 0) {
-    dout(0) << " removed from monmap, suicide." << dendl;
-    exit(0);
+    // was i ever part of the quorum?
+    if (store->exists_bl_ss("joined")) {
+      dout(0) << " removed from monmap, suicide." << dendl;
+      exit(0);
+    }
   }
   if (newrank != rank) {
     dout(0) << " my rank is now " << newrank << " (was " << rank << ")" << dendl;
@@ -511,7 +546,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
   r->name = name;
   r->quorum = quorum;
-  monmap->encode(r->monmap_bl);
+  monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
@@ -838,6 +873,9 @@ void Monitor::finish_election()
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
+
+  // make note of the fact that i was, once, part of the quorum.
+  store->put_int(1, "joined");
 } 
 
 
@@ -924,6 +962,41 @@ void Monitor::_mon_status(ostream& ss)
   jf.flush(ss);
 }
 
+void Monitor::get_health(string& status, bufferlist *detailbl)
+{
+  list<pair<health_status_t,string> > summary;
+  list<pair<health_status_t,string> > detail;
+  for (vector<PaxosService*>::iterator p = paxos_service.begin();
+       p != paxos_service.end();
+       p++) {
+    PaxosService *s = *p;
+    s->get_health(summary, detailbl ? &detail : NULL);
+  }
+
+  stringstream ss;
+  health_status_t overall = HEALTH_OK;
+  if (!summary.empty()) {
+    ss << ' ';
+    while (!summary.empty()) {
+      if (overall > summary.front().first)
+	overall = summary.front().first;
+      ss << summary.front().second;
+      summary.pop_front();
+      if (!summary.empty())
+	ss << "; ";
+    }
+  }
+  stringstream fss;
+  fss << overall;
+  status = fss.str() + ss.str();
+
+  while (!detail.empty()) {
+    detailbl->append(detail.front().second);
+    detailbl->append('\n');
+    detail.pop_front();
+  }
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
@@ -1007,6 +1080,19 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "status") {
+      // reply with the status for all the components
+      string health;
+      get_health(health, NULL);
+      stringstream ss;
+      ss << "   health " << health << "\n";
+      ss << "   monmap " << *monmap << "\n";
+      ss << "   osdmap " << osdmon()->osdmap << "\n";
+      ss << "    pgmap " << pgmon()->pg_map << "\n";
+      ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+      rs = ss.str();
+      r = 0;
+    }
     if (m->cmd[0] == "quorum_status") {
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
@@ -1026,37 +1112,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "health") {
-      list<pair<health_status_t,string> > summary;
-      list<pair<health_status_t,string> > detail;
-      for (vector<PaxosService*>::iterator p = paxos_service.begin();
-	   p != paxos_service.end();
-	   p++) {
-	PaxosService *s = *p;
-	ostringstream oss;
-	s->get_health(summary, (m->cmd.size() > 1) ? &detail : NULL);
-      }
-      
-      stringstream ss;
-      health_status_t overall = HEALTH_OK;
-      if (!summary.empty()) {
-	ss << ' ';
-	while (!summary.empty()) {
-	  if (overall > summary.front().first)
-	    overall = summary.front().first;
-	  ss << summary.front().second;
-	  summary.pop_front();
-	  if (!summary.empty())
-	    ss << "; ";
-	}
-      }
-      stringstream fss;
-      fss << overall;
-      rs = fss.str() + ss.str();
-      while (!detail.empty()) {
-	rdata.append(detail.front().second);
-	rdata.append('\n');
-	detail.pop_front();
-      }
+      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
       r = 0;
     }
     if (m->cmd[0] == "heap") {
@@ -1128,7 +1184,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client = req->get_source_inst();
-    encode_message(req, -1, rr->request_bl);   // for my use only; use all features
+    encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
@@ -1194,7 +1250,7 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(m, -1, bl);  // fixme: assume peers have all features we do.
+  encode_message(m, CEPH_FEATURES_ALL, bl);  // fixme: assume peers have all features we do.
 
   messenger->send_message(m, to);
 
@@ -1301,25 +1357,6 @@ void Monitor::remove_session(MonSession *s)
   session_map.remove_session(s);
 }
 
-
-void Monitor::handle_observe(MMonObserve *m)
-{
-  dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
-  // check that there are perms. Send a response back if they aren't sufficient,
-  // and delete the message (if it's not deleted for us, which happens when
-  // we own the connection to the requested observer).
-  MonSession *session = m->get_session();
-  if (!session || !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
-    send_reply(m, m);
-    return;
-  }
-  if (m->machine_id >= PAXOS_NUM) {
-    dout(0) << "register_observer: bad monitor id: " << m->machine_id << dendl;
-  } else {
-    paxos[m->machine_id]->register_observer(m->get_orig_source_inst(), m->ver);
-  }
-  messenger->send_message(m, m->get_orig_source_inst());
-}
 
 void Monitor::send_command(const entity_inst_t& inst,
 			   const vector<string>& com, version_t version)
@@ -1537,10 +1574,6 @@ bool Monitor::_ms_dispatch(Message *m)
       }
       break;
 
-    case MSG_MON_OBSERVE:
-      handle_observe((MMonObserve *)m);
-      break;
-
       // elector messages
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
@@ -1606,6 +1639,10 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       }
     } else if (p->first == "monmap") {
       check_sub(s->sub_map["monmap"]);
+    } else if ((p->first == "log-error") || (p->first == "log-warn")
+	|| (p->first == "log-sec") || (p->first == "log-info") 
+	|| (p->first == "log-debug")) {
+      logmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
@@ -1709,10 +1746,7 @@ void Monitor::check_sub(Subscription *sub)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
-  if (!con->has_feature(CEPH_FEATURE_MONNAMES))
-    monmap->encode_v1(bl);
-  else
-    monmap->encode(bl);
+  monmap->encode(bl, con->get_features());
   messenger->send_message(new MMonMap(bl), con);
 }
 
@@ -1815,7 +1849,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
-  monmap->encode(monmapbl);
+  monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
@@ -1838,11 +1872,31 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     derr << "unable to load initial keyring " << g_conf->keyring << dendl;
     return r;
   }
+
+  // put mon. key in external keyring; seed with everything else.
+  extract_save_mon_key(keyring);
+
   bufferlist keyringbl;
-  ::encode(keyring, keyringbl);
+  keyring.encode_plaintext(keyringbl);
   store->put_bl_ss(keyringbl, "mkfs", "keyring");
 
   return 0;
+}
+
+void Monitor::extract_save_mon_key(KeyRing& keyring)
+{
+  EntityName mon_name;
+  mon_name.set_type(CEPH_ENTITY_TYPE_MON);
+  EntityAuth mon_key;
+  if (keyring.get_auth(mon_name, mon_key)) {
+    dout(10) << "extract_save_mon_key moving mon. key to separate keyring" << dendl;
+    KeyRing pkey;
+    pkey.add(mon_name, mon_key);
+    bufferlist bl;
+    pkey.encode_plaintext(bl);
+    store->put_bl_ss(bl, "keyring", NULL);
+    keyring.remove(mon_name);
+  }
 }
 
 bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
@@ -1869,8 +1923,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   auth_ticket_info.ticket.global_id = 0;
 
   CryptoKey secret;
-  if (!key_server.get_secret(name, secret)) {
-    dout(0) << " couldn't get secret for mon service" << dendl;
+  if (!keyring.get_secret(name, secret) &&
+      !key_server.get_secret(name, secret)) {
+    dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
     stringstream ss;
     key_server.list_secrets(ss);
     dout(0) << ss.str() << dendl;
@@ -1924,7 +1979,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(g_ceph_context, &key_server, iter,
+	int ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
 					  auth_ticket_info, authorizer_reply);
 	if (ret >= 0)
 	  isvalid = true;

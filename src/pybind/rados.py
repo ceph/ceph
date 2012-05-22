@@ -762,7 +762,7 @@ class Object(object):
     @set_object_locator
     def read(self, length = 1024*1024):
         self.require_object_exists()
-        ret = self.ioctx.read(self.key, self.offset, length)
+        ret = self.ioctx.read(self.key, length, self.offset)
         self.offset += len(ret)
         return ret
 

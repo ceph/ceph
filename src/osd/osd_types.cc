@@ -14,6 +14,8 @@
 
 #include "osd_types.h"
 #include "include/ceph_features.h"
+#include "PG.h"
+#include "OSDMap.h"
 
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
@@ -51,8 +53,9 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
 
 void object_locator_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(pool, bl);
+  int32_t preferred = -1;  // tell old code there is no preferred osd (-1).
   ::encode(preferred, bl);
   ::encode(key, bl);
   ENCODE_FINISH(bl);
@@ -60,16 +63,16 @@ void object_locator_t::encode(bufferlist& bl) const
 
 void object_locator_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, p);
   if (struct_v < 2) {
     int32_t op;
     ::decode(op, p);
     pool = op;
     int16_t pref;
     ::decode(pref, p);
-    preferred = pref;
   } else {
     ::decode(pool, p);
+    int32_t preferred;
     ::decode(preferred, p);
   }
   ::decode(key, p);
@@ -79,7 +82,6 @@ void object_locator_t::decode(bufferlist::iterator& p)
 void object_locator_t::dump(Formatter *f) const
 {
   f->dump_int("pool", pool);
-  f->dump_int("preferred", preferred);
   f->dump_string("key", key);
 }
 
@@ -87,9 +89,8 @@ void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
 {
   o.push_back(new object_locator_t);
   o.push_back(new object_locator_t(123));
-  o.push_back(new object_locator_t(123, 456));
-  o.push_back(new object_locator_t(1234, -1, "key"));
-  o.push_back(new object_locator_t(12, 789, "key2"));
+  o.push_back(new object_locator_t(1234, "key"));
+  o.push_back(new object_locator_t(12, "key2"));
 }
 
 
@@ -458,8 +459,6 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("object_hash", get_object_hash());
   f->dump_int("pg_num", get_pg_num());
   f->dump_int("pg_placement_num", get_pgp_num());
-  f->dump_int("localized_pg_num", get_lpg_num());
-  f->dump_int("localized_pg_placement_num", get_lpgp_num());
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_unsigned("auid", get_auid());
@@ -491,8 +490,6 @@ void pg_pool_t::calc_pg_masks()
 {
   pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
   pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
-  lpg_num_mask = (1 << calc_bits_of(lpg_num-1)) - 1;
-  lpgp_num_mask = (1 << calc_bits_of(lpgp_num-1)) - 1;
 }
 
 /*
@@ -507,6 +504,11 @@ void pg_pool_t::calc_pg_masks()
 bool pg_pool_t::is_pool_snaps_mode() const
 {
   return removed_snaps.empty() && get_snap_seq() > 0;
+}
+
+bool pg_pool_t::is_unmanaged_snaps_mode() const
+{
+  return removed_snaps.size() && get_snap_seq() > 0;
 }
 
 bool pg_pool_t::is_removed_snap(snapid_t s) const
@@ -545,7 +547,7 @@ snapid_t pg_pool_t::snap_exists(const char *s) const
 
 void pg_pool_t::add_snap(const char *n, utime_t stamp)
 {
-  assert(removed_snaps.empty());
+  assert(!is_unmanaged_snaps_mode());
   snapid_t s = get_snap_seq() + 1;
   snap_seq = s;
   snaps[s].snapid = s;
@@ -556,7 +558,7 @@ void pg_pool_t::add_snap(const char *n, utime_t stamp)
 void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
 {
   if (removed_snaps.empty()) {
-    assert(snaps.empty());
+    assert(!is_pool_snaps_mode());
     removed_snaps.insert(snapid_t(1));
     snap_seq = 1;
   }
@@ -572,7 +574,7 @@ void pg_pool_t::remove_snap(snapid_t s)
 
 void pg_pool_t::remove_unmanaged_snap(snapid_t s)
 {
-  assert(snaps.empty());
+  assert(is_unmanaged_snaps_mode());
   removed_snaps.insert(s);
   snap_seq = snap_seq + 1;
   removed_snaps.insert(get_snap_seq());
@@ -594,10 +596,7 @@ SnapContext pg_pool_t::get_snap_context() const
  */
 pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
 {
-  if (pg.preferred() >= 0 && lpg_num)
-    pg.set_ps(ceph_stable_mod(pg.ps(), lpg_num, lpg_num_mask));
-  else
-    pg.set_ps(ceph_stable_mod(pg.ps(), pg_num, pg_num_mask));
+  pg.set_ps(ceph_stable_mod(pg.ps(), pg_num, pg_num_mask));
   return pg;
 }
   
@@ -608,10 +607,7 @@ pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
  */
 ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
 {
-  if (pg.preferred() >= 0 && lpgp_num)
-    return ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask) + pg.pool();
-  else
-    return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) + pg.pool();
+  return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) + pg.pool();
 }
 
 void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
@@ -626,6 +622,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
+    __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
     ::encode(lpg_num, bl);
     ::encode(lpgp_num, bl);
     ::encode(last_change, bl);
@@ -653,6 +650,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
+    __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
     ::encode(lpg_num, bl);
     ::encode(lpgp_num, bl);
     ::encode(last_change, bl);
@@ -666,13 +664,14 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
   ::encode(object_hash, bl);
   ::encode(pg_num, bl);
   ::encode(pgp_num, bl);
+  __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
   ::encode(lpg_num, bl);
   ::encode(lpgp_num, bl);
   ::encode(last_change, bl);
@@ -688,15 +687,18 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
   ::decode(object_hash, bl);
   ::decode(pg_num, bl);
   ::decode(pgp_num, bl);
-  ::decode(lpg_num, bl);
-  ::decode(lpgp_num, bl);
+  {
+    __u32 lpg_num, lpgp_num;
+    ::decode(lpg_num, bl);
+    ::decode(lpgp_num, bl);
+  }
   ::decode(last_change, bl);
   ::decode(snap_seq, bl);
   ::decode(snap_epoch, bl);
@@ -744,8 +746,6 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.object_hash = 4;
   a.pg_num = 6;
   a.pgp_num = 5;
-  a.lpg_num = 8;
-  a.lpgp_num = 7;
   a.last_change = 9;
   a.snap_seq = 10;
   a.snap_epoch = 11;
@@ -773,8 +773,6 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
-      << " lpg_num " << p.get_lpg_num()
-      << " lpgp_num " << p.get_lpgp_num()
       << " last_change " << p.get_last_change()
       << " owner " << p.get_auid();
   if (p.flags)
@@ -1309,6 +1307,132 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   pg_stat_t::generate_test_instances(s);
   o.back()->stats = *s.back();
 }
+
+
+// -- pg_interval_t --
+
+void pg_interval_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(first, bl);
+  ::encode(last, bl);
+  ::encode(up, bl);
+  ::encode(acting, bl);
+  ::encode(maybe_went_rw, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_interval_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(first, bl);
+  ::decode(last, bl);
+  ::decode(up, bl);
+  ::decode(acting, bl);
+  ::decode(maybe_went_rw, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_interval_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("first", first);
+  f->dump_unsigned("last", last);
+  f->dump_int("maybe_went_rw", maybe_went_rw ? 1 : 0);
+  f->open_array_section("up");
+  for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+  f->open_array_section("acting");
+  for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+}
+
+void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
+{
+  o.push_back(new pg_interval_t);
+  o.push_back(new pg_interval_t);
+  o.back()->up.push_back(1);
+  o.back()->acting.push_back(2);
+  o.back()->acting.push_back(3);
+  o.back()->first = 4;
+  o.back()->last = 5;
+  o.back()->maybe_went_rw = true;
+}
+
+bool pg_interval_t::check_new_interval(
+  const vector<int> &old_acting,
+  const vector<int> &new_acting,
+  const vector<int> &old_up,
+  const vector<int> &new_up,
+  epoch_t same_interval_since,
+  epoch_t last_epoch_clean,
+  OSDMapRef osdmap,
+  OSDMapRef lastmap,
+  map<epoch_t, pg_interval_t> *past_intervals,
+  std::ostream *out)
+{
+  // remember past interval
+  if (new_acting != old_acting || new_up != old_up) {
+    pg_interval_t& i = (*past_intervals)[same_interval_since];
+    i.first = same_interval_since;
+    i.last = osdmap->get_epoch() - 1;
+    i.acting = old_acting;
+    i.up = old_up;
+
+    if (i.acting.size()) {
+      if (lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	  lastmap->get_up_from(i.acting[0]) <= i.first) {
+	i.maybe_went_rw = true;
+	if (out)
+	  *out << "generate_past_intervals " << i
+	       << " : primary up " << lastmap->get_up_from(i.acting[0])
+	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << std::endl;
+      } else if (last_epoch_clean >= i.first &&
+		 last_epoch_clean <= i.last) {
+	// If the last_epoch_clean is included in this interval, then
+	// the pg must have been rw (for recovery to have completed).
+	// This is important because we won't know the _real_
+	// first_epoch because we stop at last_epoch_clean, and we
+	// don't want the oldest interval to randomly have
+	// maybe_went_rw false depending on the relative up_thru vs
+	// last_epoch_clean timing.
+	i.maybe_went_rw = true;
+	if (out)
+	  *out << "generate_past_intervals " << i
+	       << " : includes last_epoch_clean " << last_epoch_clean
+	       << " and presumed to have been rw"
+	       << std::endl;
+      } else {
+	i.maybe_went_rw = false;
+	if (out)
+	  *out << "generate_past_intervals " << i
+	       << " : primary up " << lastmap->get_up_from(i.acting[0])
+	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << " does not include interval"
+	       << std::endl;
+      }
+    } else {
+      i.maybe_went_rw = false;
+      if (out)
+	*out << "generate_past_intervals " << i << " : empty" << std::endl;
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
+ostream& operator<<(ostream& out, const pg_interval_t& i)
+{
+  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
+  if (i.maybe_went_rw)
+    out << " maybe_went_rw";
+  out << ")";
+  return out;
+}
+
 
 
 // -- pg_query_t --
@@ -1957,10 +2081,6 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
   else
     ps = ceph_str_hash(CEPH_STR_HASH_RJENKINS, oid.name.c_str(),
 		       oid.name.length());
-  // mix in preferred osd, so we don't get the same peers for
-  // all of the placement pgs (e.g. 0.0p*)
-  if (loc.get_preferred() >= 0)
-    ps += loc.get_preferred();
   return ps;
 }
 

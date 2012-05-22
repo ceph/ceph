@@ -49,6 +49,8 @@ public:
   Log(SubsystemMap *s);
   virtual ~Log();
 
+  void set_flush_on_exit();
+
   void set_max_new(int n);
   void set_max_recent(int n);
   void set_log_file(std::string fn);

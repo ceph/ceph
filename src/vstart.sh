@@ -314,6 +314,7 @@ EOF
 			if [ $overwrite_conf -eq 1 ]; then
 				cat <<EOF >> $conf
 [mon.$f]
+        host = $HOSTNAME
         mon data = dev/mon.$f
         mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
@@ -352,6 +353,7 @@ if [ "$start_osd" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 		    cat <<EOF >> $conf
 [osd.$osd]
+        host = $HOSTNAME
         osd data = dev/osd$osd
         osd journal = dev/osd$osd.journal
         osd journal size = 100
@@ -361,10 +363,11 @@ EOF
 EOF
 	    fi
 
-	    echo add osd$osd
-	    $SUDO $CEPH_ADM osd create $osd
-	    $SUDO $CEPH_ADM osd crush add $osd osd.$osd 1.0 host=localhost rack=localrack pool=default
-	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey
+	    uuid=`uuidgen`
+	    echo "add osd$osd $uuid"
+	    $SUDO $CEPH_ADM osd create $uuid
+	    $SUDO $CEPH_ADM osd crush set $osd osd.$osd 1.0 host=localhost rack=localrack pool=default
+	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
 	    if [ "$cephx" -eq 1 ]; then
 		key_fn=dev/osd$osd/keyring
@@ -395,6 +398,7 @@ if [ "$start_mds" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 	    	cat <<EOF >> $conf
 [mds.$name]
+        host = $HOSTNAME
 EOF
 		if [ "$cephx" -eq 1 ]; then
 	    	    cat <<EOF >> $conf

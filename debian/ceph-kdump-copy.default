@@ -1,0 +1,33 @@
+# ceph-kdump-copy configuration
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Remote host information:
+#
+# These first two MUST be specified
+# KDUMP_HOST - The remote host to which kdumps will be copied.
+# KDUMP_HOST_USER - The ssh user on KDUMP_HOST that has write
+#     permission in KDUMP_HOST_COREDIR.
+KDUMP_HOST="YOU_MUST_SPECIFY_THIS"
+KDUMP_HOST_USER="YOU_MUST_SPECIFY_THIS_TOO"
+
+# KDUMP_HOST_COREDIR - Full path to the directory on KDUMP_HOST that
+#     will contain copied kdumps.  If not set, "/var/crash/remote" is
+#     the default.
+# KDUMP_HOST_COREDIR="/var/crash/remote"
+
+# KDUMP_HOST_MY_ID - Name for "me", used as the directory name
+#     under KDUMP_HOST_COREDIR under which all kdumps from this
+#     host are placed.  Each kdump is identified by a date stamp.
+#     If not set, "$(hostname)" is the default.
+# KDUMP_HOST_MY_ID="$(hostname)"
+
+# ---------------------------------------------------------------------------
+# Local host information:
+#
+# The local directory in which dumps are saved.  If not set, "/var/crash"
+# is the default.
+# KDUMP_COREDIR="/var/crash"
+
+# ---------------------------------------------------------------------------
+# Architecture specific Overrides:

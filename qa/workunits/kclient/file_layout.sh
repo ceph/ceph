@@ -11,23 +11,19 @@ rm temp || true
 echo "layout.data_pool:     0
 layout.object_size:   1048576
 layout.stripe_unit:   1048576
-layout.stripe_count:  1
-layout.preferred_osd: -1" > new_layout
+layout.stripe_count:  1" > new_layout
 echo "layout.data_pool:     0
 layout.object_size:   2097152
 layout.stripe_unit:   1048576
-layout.stripe_count:  2
-layout.preferred_osd: -1" > file2_layout
+layout.stripe_count:  2" > file2_layout
 echo "layout.data_pool:     3
 layout.object_size:   1048576
 layout.stripe_unit:   1048576
-layout.stripe_count:  1
-layout.preferred_osd: -1" > file3_layout
+layout.stripe_count:  1" > file3_layout
 echo "layout.data_pool:     0
 layout.object_size:   1048576
 layout.stripe_unit:   262144
-layout.stripe_count:  1
-layout.preferred_osd: -1" > file4_layout
+layout.stripe_count:  1" > file4_layout
 
 
 mkdir layout_test
