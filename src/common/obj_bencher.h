@@ -50,6 +50,7 @@ const int OP_SEQ_READ  = 2;
 const int OP_RAND_READ = 3;
 
 class ObjBencher {
+  bool show_time;
 protected:
   Mutex lock;
 
@@ -74,10 +75,17 @@ protected:
   virtual int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len) = 0;
   virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
+
+  ostream& out(ostream& os);
+  ostream& out(ostream& os, utime_t& t);
 public:
-  ObjBencher() : lock("ObjBencher::lock") {}
+  ObjBencher() : show_time(false), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
   int aio_bench(int operation, int secondsToRun, int concurrentios, int op_size);
+
+  void set_show_time(bool dt) {
+    show_time = dt;
+  }
 };
 
 

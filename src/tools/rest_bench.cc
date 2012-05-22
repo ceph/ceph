@@ -45,6 +45,8 @@ void usage(ostream& out)
 "   -b op-size\n"
 "   --block-size=op-size\n"
 "        set the size of write ops for put or benchmarking\n"
+"   --show-time\n"
+"        prefix output lines with date and time\n"
 "REST CONFIG OPTIONS\n"
 "   --api-host=bhost\n"
 "        host name\n"
@@ -541,6 +543,8 @@ int main(int argc, const char **argv)
   int op_size = 1 << 22;
   int seconds = 60;
 
+  bool show_time = false;
+
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -548,6 +552,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage(cout);
       exit(0);
+    } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
+      show_time = true;
     } else if (ceph_argparse_witharg(args, i, &user_agent, "--agent", (char*)NULL)) {
       /* nothing */
     } else if (ceph_argparse_witharg(args, i, &access_key, "--access-key", (char*)NULL)) {
@@ -627,6 +633,7 @@ int main(int argc, const char **argv)
   RESTDispatcher dispatcher(g_ceph_context, concurrent_ios);
 
   RESTBencher bencher(&dispatcher);
+  bencher.set_show_time(show_time);
 
   int ret = bencher.init(user_agent, host, bucket, protocol, uri_style, access_key, secret);
   if (ret < 0) {
