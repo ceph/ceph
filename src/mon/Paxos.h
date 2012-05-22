@@ -75,7 +75,6 @@ class Paxos {
 
   friend class Monitor;
   friend class PaxosService;
-  friend class PaxosObserver;
 
   list<std::string> extra_state_dirs;
 
@@ -144,15 +143,6 @@ private:
 
   list<Context*> waiting_for_writeable;
   list<Context*> waiting_for_commit;
-
-  // observers
-  struct Observer {
-    entity_inst_t inst;
-    version_t last_version;
-    utime_t timeout;
-    Observer(entity_inst_t& ei, version_t v) : inst(ei), last_version(v) { }
-  };
-  map<entity_inst_t, Observer *> observers;
 
   //synchronization warnings
   utime_t last_clock_drift_warn;
@@ -320,9 +310,6 @@ public:
   version_t get_stashed_version() { return latest_stashed; }
 
   version_t get_first_committed() { return first_committed; }
-
-  void register_observer(entity_inst_t inst, version_t v);
-  void update_observers();
 };
 
 

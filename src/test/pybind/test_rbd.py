@@ -4,8 +4,8 @@ import struct
 from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
-from rbd import RBD, Image, ImageNotFound, InvalidArgument, ImageExists, \
-    ImageBusy
+from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
+                 ImageBusy, ImageHasSnapshots)
 
 
 rados = None
@@ -130,6 +130,26 @@ class TestImage(object):
         info = self.image.stat()
         check_stat(info, new_size, IMG_ORDER)
 
+    def test_resize_down(self):
+        new_size = IMG_SIZE / 2
+        data = rand_data(256)
+        self.image.write(data, IMG_SIZE / 2);
+        self.image.resize(new_size)
+        self.image.resize(IMG_SIZE)
+        read = self.image.read(IMG_SIZE / 2, 256)
+        eq('\0' * 256, read)
+
+    def test_resize_bytes(self):
+        new_size = IMG_SIZE / 2 - 5
+        data = rand_data(256)
+        self.image.write(data, IMG_SIZE / 2 - 10);
+        self.image.resize(new_size)
+        self.image.resize(IMG_SIZE)
+        read = self.image.read(IMG_SIZE / 2 - 10, 5)
+        eq(data[:5], read)
+        read = self.image.read(IMG_SIZE / 2 - 5, 251)
+        eq('\0' * 251, read)
+
     def test_copy(self):
         global ioctx
         data = rand_data(256)
@@ -175,8 +195,11 @@ class TestImage(object):
 
     def test_remove_with_snap(self):
         self.image.create_snap('snap1')
-        assert_raises(ImageBusy, remove_image)
+        assert_raises(ImageHasSnapshots, remove_image)
         self.image.remove_snap('snap1')
+
+    def test_remove_with_watcher(self):
+        assert_raises(ImageBusy, remove_image)
 
     def test_rollback_to_snap(self):
         self.image.write('\0' * 256, 0)
@@ -286,3 +309,37 @@ class TestImage(object):
             eq(snap['name'], str(i))
         for i in xrange(num_snaps):
             self.image.remove_snap(str(i))
+
+    def test_set_snap_deleted(self):
+        self.image.write('\0' * 256, 0)
+        self.image.create_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, '\0' * 256)
+        data = rand_data(256)
+        self.image.write(data, 0)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        self.image.set_snap('snap1')
+        self.image.remove_snap('snap1')
+        assert_raises(ImageNotFound, self.image.read, 0, 256)
+        self.image.set_snap(None)
+        read = self.image.read(0, 256)
+        eq(read, data)
+
+    def test_set_snap_recreated(self):
+        self.image.write('\0' * 256, 0)
+        self.image.create_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, '\0' * 256)
+        data = rand_data(256)
+        self.image.write(data, 0)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        self.image.set_snap('snap1')
+        self.image.remove_snap('snap1')
+        self.image.create_snap('snap1')
+        assert_raises(ImageNotFound, self.image.read, 0, 256)
+        self.image.set_snap(None)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        self.image.remove_snap('snap1')

@@ -9,14 +9,6 @@
 #include "msgr.h"
 
 /*
- * osdmap encoding versions
- */
-#define CEPH_OSDMAP_INC_VERSION     5
-#define CEPH_OSDMAP_INC_VERSION_EXT 7
-#define CEPH_OSDMAP_VERSION         5
-#define CEPH_OSDMAP_VERSION_EXT     7
-
-/*
  * fs id
  */
 struct ceph_fsid {
@@ -134,6 +126,10 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_PAUSERD  (1<<2)  /* pause all reads */
 #define CEPH_OSDMAP_PAUSEWR  (1<<3)  /* pause all writes */
 #define CEPH_OSDMAP_PAUSEREC (1<<4)  /* pause recovery */
+#define CEPH_OSDMAP_NOUP     (1<<5)  /* block osd boot */
+#define CEPH_OSDMAP_NODOWN   (1<<6)  /* block osd mark-down/failure */
+#define CEPH_OSDMAP_NOOUT    (1<<7)  /* block osd auto mark-out */
+#define CEPH_OSDMAP_NOIN     (1<<8)  /* block osd auto mark-in */
 
 /*
  * The error code to return when an OSD can't handle a write

@@ -3,7 +3,7 @@
 # Provides:          radosgw
 # Required-Start:    $remote_fs $named $network $time
 # Required-Stop:     $remote_fs $named $network $time
-# Default-Start:     2 3 5
+# Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: radosgw RESTful rados gateway
 ### END INIT INFO
@@ -48,7 +48,7 @@ case "$1" in
 
             # mapped to this host?
 	    host=`ceph-conf -n $name host`
-	    if [ -n "$host" ] && [ "$host" != `hostname` ]; then
+	    if [ "$host" != `hostname` ]; then
 		continue
 	    fi
 

@@ -76,6 +76,9 @@ public:
   void write_json_to_buf(std::vector <char> &buffer, bool schema);
 
   const std::string& get_name() const;
+  void set_name(std::string s) {
+    m_name = s;
+  }
 
 private:
   PerfCounters(CephContext *cct, const std::string &name,
@@ -102,7 +105,7 @@ private:
   CephContext *m_cct;
   int m_lower_bound;
   int m_upper_bound;
-  const std::string m_name;
+  std::string m_name;
   const std::string m_lock_name;
 
   /** Protects m_data */

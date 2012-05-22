@@ -25,7 +25,7 @@
 
 class MOSDPGNotify : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
   epoch_t epoch;
@@ -34,16 +34,16 @@ class MOSDPGNotify : public Message {
   /// query. This allows the recipient to disregard responses to old
   /// queries.
   epoch_t query_epoch;
-  vector<pg_info_t> pg_list;   // pgid -> version
+  vector<pair<pg_info_t,pg_interval_map_t> > pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
-  vector<pg_info_t>& get_pg_list() { return pg_list; }
+  vector<pair<pg_info_t,pg_interval_map_t> >& get_pg_list() { return pg_list; }
   epoch_t get_query_epoch() { return query_epoch; }
 
   MOSDPGNotify()
     : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDPGNotify(epoch_t e, vector<pg_info_t>& l, epoch_t query_epoch)
+  MOSDPGNotify(epoch_t e, vector<pair<pg_info_t,pg_interval_map_t> >& l, epoch_t query_epoch)
     : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       epoch(e), query_epoch(query_epoch) {
     pg_list.swap(l);
@@ -56,25 +56,53 @@ public:
 
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
-    ::encode(pg_list, payload);
+
+    // v2 was vector<pg_info_t>
+    __u32 n = pg_list.size();
+    ::encode(n, payload);
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+	 p != pg_list.end();
+	 p++)
+      ::encode(p->first, payload);
+
     ::encode(query_epoch, payload);
+
+    // v3 needs the pg_interval_map_t for each record
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+	 p != pg_list.end();
+	 p++)
+      ::encode(p->second, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(pg_list, p);
+
+    // decode pg_info_t portion of the vector
+    __u32 n;
+    ::decode(n, p);
+    pg_list.resize(n);
+    for (unsigned i=0; i<n; i++)
+      ::decode(pg_list[i].first, p);
+    
     if (header.version >= 2) {
       ::decode(query_epoch, p);
+    }
+    if (header.version >= 3) {
+      // get the pg_interval_map_t portion
+      for (unsigned i=0; i<n; i++)
+	::decode(pg_list[i].second, p);
     }
   }
   void print(ostream& out) const {
     out << "pg_notify(";
-    for (vector<pg_info_t>::const_iterator i = pg_list.begin();
+    for (vector<pair<pg_info_t,pg_interval_map_t> >::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       if (i != pg_list.begin())
 	out << ",";
-      out << i->pgid;
+      out << i->first.pgid;
+      if (i->second.size())
+	out << "(" << i->second.size() << ")";
     }
     out << " epoch " << epoch
 	<< " query_epoch " << query_epoch

@@ -77,6 +77,14 @@ Options
    and (if it differs from "osd data") "btrfs path" options must be
    defined.
 
+   **NOTE** Btrfs is still considered experimental.  This option
+   can ease some configuration pain, but is the use of btrfs is not
+   required when ``osd data`` directories are mounted manually by the
+   adminstrator.
+
+   **NOTE** This option is deprecated and will be removed in a future
+   release.
+
 .. option:: --no-copy-conf
 
    By default, mkcephfs with -a will copy the new configuration to

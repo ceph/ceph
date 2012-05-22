@@ -56,6 +56,9 @@ class ReadOnlyImage(Error):
 class ImageBusy(Error):
     pass
 
+class ImageHasSnapshots(Error):
+    pass
+
 def make_ex(ret, msg):
     """
     Translate a librbd return code into an exception.
@@ -67,14 +70,15 @@ def make_ex(ret, msg):
     :returns: a subclass of :class:`Error`
     """
     errors = {
-        errno.EPERM  : PermissionError,
-        errno.ENOENT : ImageNotFound,
-        errno.EIO    : IOError,
-        errno.ENOSPC : NoSpace,
-        errno.EEXIST : ImageExists,
-        errno.EINVAL : InvalidArgument,
-        errno.EROFS  : ReadOnlyImage,
-        errno.EBUSY  : ImageBusy,
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ImageNotFound,
+        errno.EIO       : IOError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ImageExists,
+        errno.EINVAL    : InvalidArgument,
+        errno.EROFS     : ReadOnlyImage,
+        errno.EBUSY     : ImageBusy,
+        errno.ENOTEMPTY : ImageHasSnapshots,
         }
     ret = abs(ret)
     if ret in errors:
@@ -163,13 +167,16 @@ class RBD(object):
         not return until every object that comprises the image has
         been deleted. Note that all snapshots must be deleted before
         the image can be removed. If there are snapshots left,
+        :class:`ImageHasSnapshots` is raised. If the image is still
+        open, or the watch from a crashed client has not expired,
         :class:`ImageBusy` is raised.
 
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
         :type name: str
-        :raises: :class:`ImageNotFound`, :class:`ImageBusy`
+        :raises: :class:`ImageNotFound`, :class:`ImageBusy`,
+                 :class:`ImageHasSnapshots`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')

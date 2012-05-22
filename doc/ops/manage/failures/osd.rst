@@ -289,3 +289,33 @@ Possible causes include:
  * overloaded cluster (check system load, iostat, etc.)
  * ceph-osd bug
 
+
+Flapping OSDs
+=============
+
+If something is causing OSDs to "flap" (repeated get marked down and then
+up again), you can force the monitors to stop with::
+
+ $ ceph osd set noup      # prevent osds from getting marked up
+ $ ceph osd set nodown    # prevent osds from getting marked down
+
+These flags are recorded in the osdmap structure::
+
+ $ ceph osd dump | grep flags
+ flags no-up,no-down
+
+You can clear the flags with::
+
+ $ ceph osd unset noup
+ $ ceph osd unset nodown
+
+Two other flags are supported, ``noin`` and ``noout``, which prevent
+booting OSDs from being marked ``in`` (allocated data) or down
+ceph-osds from eventually being marked ``out`` (regardless of what the
+current value for ``mon osd down out interval`` is).
+
+Note that ``noup``, ``noout``, and ``noout`` are temporary in the
+sense that once the flags are cleared, the action they were blocking
+should occur shortly after.  The ``noin`` flag, on the other hand,
+prevents ceph-osds from being marked in on boot, and any daemons that
+started while the flag was set will remain that way.

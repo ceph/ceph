@@ -81,8 +81,12 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   }
   else if (ret == -EINVAL) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
-      dout_emergency("global_init: unable to open config file.\n");
-      _exit(1);
+      if (conf_file_list.length()) {
+        dout_emergency("global_init: unable to open config file.\n");
+        _exit(1);
+      } else {
+        derr <<"did not load config file, using default settings." << dendl;
+      }
     }
   }
   else if (ret) {
@@ -100,12 +104,17 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   g_lockdep = cct->_conf->lockdep;
 
   // Now we're ready to complain about config file parse errors
-  complain_about_parse_errors(cct, &parse_errors);
+  if (conf_file_list.length()) {
+    complain_about_parse_errors(cct, &parse_errors);
+  }
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
   install_standard_sighandlers();
+
+  if (g_conf->log_flush_on_exit)
+    g_ceph_context->_log->set_flush_on_exit();
 
   if (g_lockdep) {
     dout(1) << "lockdep is enabled" << dendl;
@@ -134,13 +143,6 @@ void global_init_daemonize(CephContext *cct, int flags)
 
   // stop log thread
   g_ceph_context->_log->stop();
-
-  int num_threads = Thread::get_num_threads();
-  if (num_threads > 1) {
-    derr << "global_init_daemonize: BUG: there are " << num_threads - 1
-	 << " child threads already started that will now die!" << dendl;
-    exit(1);
-  }
 
   int ret = daemon(1, 1);
   if (ret) {
@@ -180,7 +182,7 @@ void global_init_daemonize(CephContext *cct, int flags)
 	 << err << dendl;
     exit(1);
   }
-  if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
+  if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
     ret = global_init_shutdown_stderr(cct);
     if (ret) {
       derr << "global_init_daemonize: global_init_shutdown_stderr failed with "

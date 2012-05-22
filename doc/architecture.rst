@@ -80,7 +80,7 @@ metadata to store file owner etc.
 
 Underneath, ``ceph-osd`` stores the data on a local filesystem. We
 recommend using Btrfs_, but any POSIX filesystem that has extended
-attributes should work (see :ref:`xattr`).
+attributes should work.
 
 .. _Btrfs: http://en.wikipedia.org/wiki/Btrfs
 

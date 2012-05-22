@@ -53,16 +53,18 @@ bool librados::RadosClient::ms_get_authorizer(int dest_type,
   return *authorizer != NULL;
 }
 
-librados::RadosClient::RadosClient(CephContext *cct_) : Dispatcher(cct_),
-							cct(cct_),
-							conf(cct_->_conf),
-							state(DISCONNECTED),
-							monclient(cct_),
-							messenger(NULL),
-							objecter(NULL),
-							lock("radosclient"),
-							timer(cct, lock),
-							max_watch_cookie(0)
+librados::RadosClient::RadosClient(CephContext *cct_)
+  : Dispatcher(cct_),
+    cct(cct_),
+    conf(cct_->_conf),
+    state(DISCONNECTED),
+    monclient(cct_),
+    messenger(NULL),
+    objecter(NULL),
+    lock("radosclient"),
+    timer(cct, lock),
+    finisher(cct),
+    max_watch_cookie(0)
 {
 }
 
@@ -88,6 +90,16 @@ int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *a
   return 0;
 }
 
+int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
+{
+  Mutex::Locker l(lock);
+  const char *str = osdmap.get_pool_name(pool_id);
+  if (!s)
+    return -ENOENT;
+  *s = str;
+  return 0;
+}
+
 int librados::RadosClient::connect()
 {
   common_init_finish(cct);
@@ -109,7 +121,7 @@ int librados::RadosClient::connect()
 
   err = -ENOMEM;
   nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), nonce);
+  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), "radosclient", nonce);
   if (!messenger)
     goto out;
 
@@ -164,7 +176,11 @@ int librados::RadosClient::connect()
     ldout(cct, 1) << "waiting for osdmap" << dendl;
     cond.Wait(lock);
   }
+
+  finisher.start();
+
   state = CONNECTED;
+
   lock.Unlock();
 
   ldout(cct, 1) << "init done" << dendl;
@@ -182,6 +198,9 @@ void librados::RadosClient::shutdown()
   if (state == DISCONNECTED) {
     lock.Unlock();
     return;
+  }
+  if (state == CONNECTED) {
+    finisher.stop();
   }
   monclient.shutdown();
   if (objecter && state == CONNECTED)
@@ -428,10 +447,35 @@ void librados::RadosClient::unregister_watcher(uint64_t cookie)
     WatchContext *ctx = iter->second;
     if (ctx->linger_id)
       objecter->unregister_linger(ctx->linger_id);
-    delete ctx;
+
     watchers.erase(iter);
+    lock.Unlock();
+    ldout(cct, 10) << "unregister_watcher, dropping reference, waiting ctx=" << (void *)ctx << dendl;
+    ctx->put_wait();
+    ldout(cct, 10) << "unregister_watcher, done ctx=" << (void *)ctx << dendl;
+    lock.Lock();
   }
 }
+
+
+class C_WatchNotify : public Context {
+  librados::WatchContext *ctx;
+  Mutex *client_lock;
+  uint8_t opcode;
+  uint64_t ver;
+  uint64_t notify_id;
+  bufferlist bl;
+
+public:
+  C_WatchNotify(librados::WatchContext *_ctx, Mutex *_client_lock,
+                uint8_t _o, uint64_t _v, uint64_t _n, bufferlist& _bl) : 
+                ctx(_ctx), client_lock(_client_lock), opcode(_o), ver(_v), notify_id(_n), bl(_bl) {}
+
+  void finish(int r) {
+    ctx->notify(client_lock, opcode, ver, notify_id, bl);
+    ctx->put();
+  }
+};
 
 void librados::RadosClient::watch_notify(MWatchNotify *m)
 {
@@ -444,7 +488,7 @@ void librados::RadosClient::watch_notify(MWatchNotify *m)
   if (!wc)
     return;
 
-  wc->notify(m->opcode, m->ver, m->notify_id, m->bl);
-
+  wc->get();
+  finisher.queue(new C_WatchNotify(wc, &lock, m->opcode, m->ver, m->notify_id, m->bl));
   m->put();
 }

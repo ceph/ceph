@@ -200,7 +200,7 @@ struct librados::IoCtxImpl {
 };
 
 namespace librados {
-struct WatchContext {
+struct WatchContext : public RefCountedWaitObject {
   IoCtxImpl *io_ctx_impl;
   const object_t oid;
   uint64_t cookie;
@@ -212,7 +212,7 @@ struct WatchContext {
 	       const object_t& _oc,
 	       librados::WatchCtx *_ctx);
   ~WatchContext();
-  void notify(uint8_t opcode, uint64_t ver, uint64_t notify_id,
+  void notify(Mutex *lock, uint8_t opcode, uint64_t ver, uint64_t notify_id,
 	      bufferlist& payload);
 };
 }

@@ -44,6 +44,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 	  }	    
 	  was_bucket = t;
 	}
+	adjust_item_weight(cct, item, 0);
 	ldout(cct, 5) << "remove_device removing item " << item << " from bucket " << b->id << dendl;
 	crush_bucket_remove_item(b, item);
 	ret = 0;
@@ -59,13 +60,61 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
     name_map.erase(item);
     have_rmaps = false;
     ret = 0;
-  }  
+  }
   
   return ret;
 }
 
+bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>& loc,
+				  int *weight)
+{
+  ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
+
+  for (map<int,string>::const_iterator p = type_map.begin(); p != type_map.end(); p++) {
+    // ignore device
+    if (p->first == 0)
+      continue;
+
+    // ignore types that aren't specified in loc
+    if (loc.count(p->second) == 0) {
+      ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
+		    << type_map << ")" << dendl;
+      continue;
+    }
+
+    if (!name_exists(loc[p->second].c_str())) {
+      ldout(cct, 5) << "check_item_loc bucket " << loc[p->second] << " dne" << dendl;
+      return false;
+    }
+
+    int id = get_item_id(loc[p->second].c_str());
+    if (id >= 0) {
+      ldout(cct, 5) << "check_item_loc requested " << loc[p->second] << " for type " << p->second
+		    << " is a device, not bucket" << dendl;
+      return false;
+    }
+
+    crush_bucket *b = get_bucket(id);
+    assert(b);
+
+    // see if item exists in this bucket
+    for (unsigned j=0; j<b->size; j++) {
+      if (b->items[j] == item) {
+	ldout(cct, 2) << "check_item_loc " << item << " exists in bucket " << b->id << dendl;
+	if (weight)
+	  *weight = crush_get_bucket_item_weight(b, j);
+	return true;
+      }
+    }
+    return false;
+  }
+  
+  ldout(cct, 1) << "check_item_loc item " << item << " loc " << loc << dendl;
+  return false;
+}
+
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
-				map<string,string>& loc)  // typename -> bucketname
+			      map<string,string>& loc)  // typename -> bucketname
 {
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
@@ -81,27 +130,27 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   int cur = item;
 
   for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); p++) {
+    // ignore device type
     if (p->first == 0)
       continue;
 
+    // skip types that are unspecified
     if (loc.count(p->second) == 0) {
       ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
     }
 
-    int id = get_item_id(loc[p->second].c_str());
-    if (!id) {
-      // create the bucket
+    if (!name_exists(loc[p->second].c_str())) {
       ldout(cct, 5) << "insert_item creating bucket " << loc[p->second] << dendl;
       int empty = 0;
-      id = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
-      set_item_name(id, loc[p->second].c_str());
-      cur = id;
+      cur = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
+      set_item_name(cur, loc[p->second].c_str());
       continue;
     }
 
     // add to an existing bucket
+    int id = get_item_id(loc[p->second].c_str());
     if (!bucket_exists(id)) {
       ldout(cct, 1) << "insert_item don't have bucket " << id << dendl;
       return -EINVAL;
@@ -119,15 +168,58 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
     
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
-    crush_bucket_add_item(b, cur, 0);
+    int r = crush_bucket_add_item(b, cur, 0);
+    assert (!r);
 
     // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
     adjust_item_weightf(cct, item, weight);
+
+    if (item >= crush->max_devices) {
+      crush->max_devices = item + 1;
+      ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices << dendl;
+    }
+
     return 0;
   }
 
   ldout(cct, 1) << "error: didn't find anywhere to add item " << item << " in " << loc << dendl;
   return -EINVAL;
+}
+
+int CrushWrapper::update_item(CephContext *cct, int item, float weight, string name,
+			      map<string,string>& loc)  // typename -> bucketname
+{
+  ldout(cct, 5) << "update_item item " << item << " weight " << weight
+		<< " name " << name << " loc " << loc << dendl;
+  int ret = 0;
+
+  // compare quantized (fixed-point integer) weights!  
+  int iweight = (int)(weight * (float)0x10000);
+  int old_iweight;
+  if (check_item_loc(cct, item, loc, &old_iweight)) {
+    ldout(cct, 5) << "update_item " << item << " already at " << loc << dendl;
+    if (old_iweight != iweight) {
+      ldout(cct, 5) << "update_item " << item << " adjusting weight "
+		    << ((float)old_iweight/(float)0x10000) << " -> " << weight << dendl;
+      adjust_item_weight(cct, item, iweight);
+      ret = 1;
+    }
+    if (get_item_name(item) != name) {
+      ldout(cct, 5) << "update_item setting " << item << " name to " << name << dendl;
+      set_item_name(item, name.c_str());
+      ret = 1;
+    }
+  } else {
+    if (item_exists(item)) {
+      remove_item(cct, item);
+    }
+    ldout(cct, 5) << "update_item adding " << item << " weight " << weight
+		  << " at " << loc << dendl;
+    ret = insert_item(cct, item, weight, name.c_str(), loc);
+    if (ret == 0)
+      ret = 1;  // changed
+  }
+  return ret;
 }
 
 int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
@@ -157,7 +249,8 @@ void CrushWrapper::reweight(CephContext *cct)
       continue;
     crush_bucket *b = get_bucket(*p);
     ldout(cct, 5) << "reweight bucket " << *p << dendl;
-    crush_reweight_bucket(crush, b);
+    int r = crush_reweight_bucket(crush, b);
+    assert(r == 0);
   }
 }
 

@@ -19,5 +19,5 @@ do
     md=`md5sum $f | awk '{print $1}'`
 
     [ -d "$dest_dir/$type" ] || mkdir $dest_dir/$type
-    [ -e "$dest_dir/$type/$md" ] || cp $f $dest_dir/$md
+    [ -e "$dest_dir/$type/$md" ] || cp $f $dest_dir/$type/$md
 done

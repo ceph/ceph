@@ -94,7 +94,7 @@ Commands
   Copies the content of a src-image into the newly created dest-image.
 
 :command:`mv` [*src-image*] [*dest-image*]
-  Renames an image.
+  Renames an image.  Note: rename across pools is not supported.
 
 :command:`snap` ls [*image-name*]
   Dumps the list of snapshots inside a specific image.

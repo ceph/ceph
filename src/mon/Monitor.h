@@ -39,6 +39,7 @@
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthSupported.h"
+#include "auth/KeyRing.h"
 
 #include "perfglue/heap_profiler.h"
 
@@ -85,7 +86,6 @@ class AdminSocketHook;
 class MMonGetMap;
 class MMonGetVersion;
 class MMonProbe;
-class MMonObserve;
 class MMonSubscribe;
 class MAuthRotating;
 class MRoute;
@@ -111,9 +111,12 @@ public:
   MonMap *monmap;
 
   LogClient clog;
+  KeyRing keyring;
   KeyServer key_server;
 
   AuthSupported auth_supported;
+
+  CompatSet features;
 
 private:
   void new_tick();
@@ -215,11 +218,29 @@ public:
   Paxos *get_paxos_by_name(const string& name);
   PaxosService *get_paxos_service_by_name(const string& name);
 
-  class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
-  class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
-  class MonmapMonitor *monmon() { return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP]; }
-  class OSDMonitor *osdmon() { return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP]; }
-  class AuthMonitor *authmon() { return (class AuthMonitor *)paxos_service[PAXOS_AUTH]; }
+  class PGMonitor *pgmon() {
+    return (class PGMonitor *)paxos_service[PAXOS_PGMAP];
+  }
+
+  class MDSMonitor *mdsmon() {
+    return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP];
+  }
+
+  class MonmapMonitor *monmon() {
+    return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP];
+  }
+
+  class OSDMonitor *osdmon() {
+    return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP];
+  }
+
+  class AuthMonitor *authmon() {
+    return (class AuthMonitor *)paxos_service[PAXOS_AUTH];
+  }
+
+  class LogMonitor *logmon() {
+    return (class LogMonitor*) paxos_service[PAXOS_LOG];
+  }
 
   friend class Paxos;
   friend class OSDMonitor;
@@ -246,8 +267,15 @@ public:
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
   void handle_command(class MMonCommand *m);
-  void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);
+
+  /**
+   * generate health report
+   *
+   * @param status one-line status summary
+   * @param detailbl optional bufferlist* to fill with a detailed report
+   */
+  void get_health(string& status, bufferlist *detailbl);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
@@ -300,11 +328,14 @@ public:
     MMonCommand *m;
     int rc;
     string rs;
+    bufferlist rdata;
     version_t version;
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s, version_t v) :
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, version_t v) :
       mon(_mm), m(_m), rc(r), rs(s), version(v){}
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, bufferlist rd, version_t v) :
+      mon(_mm), m(_m), rc(r), rs(s), rdata(rd), version(v){}
     void finish(int r) {
-      mon->reply_command(m, rc, rs, version);
+      mon->reply_command(m, rc, rs, rdata, version);
     }
   };
 
@@ -337,11 +368,13 @@ public:
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
+  void extract_save_mon_key(KeyRing& keyring);
+
  public:
   Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
 
-  void init();
+  int init();
   void shutdown();
   void tick();
 

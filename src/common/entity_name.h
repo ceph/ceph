@@ -65,6 +65,8 @@ struct EntityName
 
   friend bool operator<(const EntityName& a, const EntityName& b);
   friend std::ostream& operator<<(std::ostream& out, const EntityName& n);
+  friend bool operator==(const EntityName& a, const EntityName& b);
+  friend bool operator!=(const EntityName& a, const EntityName& b);
 
 private:
   uint32_t type;
@@ -75,5 +77,7 @@ private:
 uint32_t str_to_ceph_entity_type(const char * str);
 
 WRITE_CLASS_ENCODER(EntityName);
+
+WRITE_EQ_OPERATORS_2(EntityName, type, id)
 
 #endif

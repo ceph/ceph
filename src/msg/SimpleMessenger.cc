@@ -1889,10 +1889,7 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
     waited_on_throttle |= msgr->dispatch_throttler.get(message_size);
   }
 
-  utime_t throttle_wait;
-  if (waited_on_throttle) {
-    throttle_wait = ceph_clock_now(msgr->cct) - recv_stamp;
-  }
+  utime_t throttle_stamp = ceph_clock_now(msgr->cct);
 
   // read front
   front_len = header.front_len;
@@ -2000,7 +1997,8 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   message->set_dispatch_throttle_size(message_size);
 
   message->set_recv_stamp(recv_stamp);
-  message->set_throttle_wait(throttle_wait);
+  message->set_throttle_stamp(throttle_stamp);
+  message->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
 
   *pm = message;
   return 0;

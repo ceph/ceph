@@ -1,5 +1,6 @@
 from nose.tools import eq_ as eq, assert_raises
-from rados import Rados, ObjectExists, ObjectNotFound, ANONYMOUS_AUID, ADMIN_AUID
+from rados import (Rados, Object, ObjectExists, ObjectNotFound,
+                   ANONYMOUS_AUID, ADMIN_AUID)
 import threading
 
 class TestPool(object):
@@ -227,3 +228,35 @@ class TestIoctx(object):
         eq(retval[0], "bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
+class TestObject(object):
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.rados.create_pool('test_pool')
+        assert self.rados.pool_exists('test_pool')
+        self.ioctx = self.rados.open_ioctx('test_pool')
+        self.ioctx.write('foo', 'bar')
+        self.object = Object(self.ioctx, 'foo')
+
+    def tearDown(self):
+        self.ioctx.close()
+        self.rados.delete_pool('test_pool')
+        self.rados.shutdown()
+
+    def test_read(self):
+        eq(self.object.read(3), 'bar')
+        eq(self.object.read(100), '')
+
+    def test_seek(self):
+        self.object.write('blah')
+        self.object.seek(0)
+        eq(self.object.read(4), 'blah')
+        self.object.seek(1)
+        eq(self.object.read(3), 'lah')
+
+    def test_write(self):
+        self.object.write('barbaz')
+        self.object.seek(0)
+        eq(self.object.read(3), 'bar')
+        eq(self.object.read(3), 'baz')

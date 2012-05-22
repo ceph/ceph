@@ -15,12 +15,15 @@
 #define OPREQUEST_H_
 #include <sstream>
 #include <stdint.h>
+#include <vector>
+
 #include <include/utime.h>
 #include "common/Mutex.h"
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include <tr1/memory>
 #include "common/TrackedOp.h"
+#include "osd/osd_types.h"
 
 class OpRequest;
 typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
@@ -41,8 +44,17 @@ public:
   void dump_ops_in_flight(std::ostream& ss);
   void register_inflight_op(xlist<OpRequest*>::item *i);
   void unregister_inflight_op(xlist<OpRequest*>::item *i);
-  bool check_ops_in_flight(std::ostream &out);
+  /**
+   * Look for Ops which are too old, and insert warning
+   * strings for each Op that is too old.
+   *
+   * @param warning_strings A vector<string> reference which is filled
+   * with a warning string for each old Op.
+   * @return True if there are any Ops to warn on, false otherwise.
+   */
+  bool check_ops_in_flight(std::vector<string> &warning_strings);
   void mark_event(OpRequest *op, const string &evt);
+  void _mark_event(OpRequest *op, const string &evt, utime_t now);
   OpRequestRef create_request(Message *req);
 };
 
@@ -61,6 +73,7 @@ struct OpRequest : public TrackedOp {
   uint8_t warn_interval_multiplier;
 private:
   OpTracker *tracker;
+  osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
   uint64_t seq;
@@ -133,6 +146,9 @@ public:
   }
 
   void mark_event(const string &event);
+  osd_reqid_t get_reqid() const {
+    return reqid;
+  }
 };
 
 #endif /* OPREQUEST_H_ */
