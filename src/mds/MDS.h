@@ -147,7 +147,8 @@ class MDS : public Dispatcher {
   Mutex        mds_lock;
   SafeTimer    timer;
 
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
+  AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
+  AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
   string name;
   int whoami;
