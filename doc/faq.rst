@@ -31,7 +31,9 @@ If you'd like to add a question to this list (hopefully with an
 accompanying answer!), you can find it in the doc/ directory of our
 main git repository:
 
-.. http://github.com/ceph/ceph/doc/faq.rst
+	`https://github.com/ceph/ceph/blob/master/doc/faq.rst`_
+
+.. _https://github.com/ceph/ceph/blob/master/doc/faq.rst: https://github.com/ceph/ceph/blob/master/doc/faq.rst
 
 We use Sphinx to manage our documentation, and this page is generated
 from reStructuredText source.  See the section on Building Ceph
