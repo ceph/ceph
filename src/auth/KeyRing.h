@@ -30,7 +30,7 @@ class KeyRing : public KeyStore {
 public:
   /* Create a KeyRing from a Ceph context.
    * We will use the configuration stored inside the context. */
-  static int from_ceph_context(CephContext *cct, KeyRing **pkeyring);
+  static int from_ceph_context(CephContext *cct, KeyRing *pkeyring);
   /* Create an empty KeyRing */
   static KeyRing *create_empty();
 

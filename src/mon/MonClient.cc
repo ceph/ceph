@@ -259,7 +259,8 @@ int MonClient::init()
 
   messenger->add_dispatcher_head(this);
 
-  int r = KeyRing::from_ceph_context(cct, &keyring);
+  keyring = new KeyRing;
+  int r = KeyRing::from_ceph_context(cct, keyring);
   if (r < 0) {
     lderr(cct) << "failed to open keyring: " << cpp_strerror(r) << dendl;
     return r;
