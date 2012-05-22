@@ -12,18 +12,20 @@
  * 
  */
 
-#ifndef CEPH_AUTHSUPPORTED_H
-#define CEPH_AUTHSUPPORTED_H
+#ifndef CEPH_AUTHMETHODLIST_H
+#define CEPH_AUTHMETHODLIST_H
 
 #include "include/inttypes.h"
+#include <list>
 #include <set>
+#include <string>
 
 class CephContext;
 
-class AuthSupported {
+class AuthMethodList {
   std::list<__u32> auth_supported;
 public:
-  AuthSupported(CephContext *cct);
+  AuthMethodList(CephContext *cct, std::string str);
 
   bool is_supported_auth(int auth_type);
   int pick(const std::set<__u32>& supported);

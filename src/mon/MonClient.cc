@@ -32,7 +32,7 @@
 
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
-#include "auth/AuthSupported.h"
+#include "auth/AuthMethodList.h"
 
 #include "include/str_list.h"
 #include "include/addr_parsing.h"
@@ -276,7 +276,7 @@ int MonClient::init()
   // seed rng so we choose a different monitor each time
   srand(getpid());
 
-  auth_supported = new AuthSupported(cct);
+  auth_supported = new AuthMethodList(cct, cct->_conf->auth_supported);
   ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << dendl;
 
   initialized = true;
