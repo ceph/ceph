@@ -34,11 +34,10 @@
 using std::auto_ptr;
 using namespace std;
 
-int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
+int KeyRing::from_ceph_context(CephContext *cct, KeyRing *keyring)
 {
   const md_config_t *conf = cct->_conf;
   bool found_key = false;
-  auto_ptr < KeyRing > keyring(new KeyRing());
 
   AuthMethodList supported(cct,
 			   cct->_conf->auth_client_required.length() ?
@@ -46,7 +45,6 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
 
   if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
     ldout(cct, 2) << "CephX auth is not supported." << dendl;
-    *pkeyring = keyring.release();
     return 0;
   }
 
@@ -111,7 +109,6 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing **pkeyring)
     return -ENOENT;
   }
 
-  *pkeyring = keyring.release();
   return 0;
 }
 
