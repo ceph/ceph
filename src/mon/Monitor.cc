@@ -1121,9 +1121,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->caps.get_allow_all() &&
-       !_allowed_command(session, m->cmd))) {
+  if (!session) {
     string rs = "Access denied";
     reply_command(m, -EACCES, rs, 0);
     return;
@@ -1136,18 +1134,34 @@ void Monitor::handle_command(MMonCommand *m)
   rs = "unrecognized subsystem";
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       mdsmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "osd") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       osdmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "pg") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       pgmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "mon") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       monmon()->dispatch(m);
       return;
     }
@@ -1158,6 +1172,10 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "log") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       stringstream ss;
       for (unsigned i=1; i<m->cmd.size(); i++) {
 	if (i > 1)
@@ -1170,12 +1188,20 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "stop_cluster") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       stop_cluster();
       reply_command(m, 0, "initiating cluster shutdown", 0);
       return;
     }
 
     if (m->cmd[0] == "injectargs") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       if (m->cmd.size() == 2) {
 	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
 	ostringstream oss;
@@ -1194,10 +1220,18 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "auth") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       authmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "status") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       // reply with the status for all the components
       string health;
       get_health(health, NULL);
@@ -1211,6 +1245,10 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
 	dout(10) << " waiting for qorum" << dendl;
@@ -1223,22 +1261,38 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       stringstream ss;
       _mon_status(ss);
       rs = ss.str();
       r = 0;
     }
     if (m->cmd[0] == "health") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
       r = 0;
     }
     if (m->cmd[0] == "heap") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       if (!ceph_using_tcmalloc())
 	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
       else
 	ceph_heap_profiler_handle_command(m->cmd, clog);
     }
     if (m->cmd[0] == "quorum") {
+      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+	r = -EACCES;
+	goto out;
+      }
       if (m->cmd[1] == "exit") {
         reset();
         start_election();
@@ -1259,6 +1313,7 @@ void Monitor::handle_command(MMonCommand *m)
   } else 
     rs = "no command";
 
+ out:
   if (!m->get_source().is_mon())  // don't reply to mon->mon commands
     reply_command(m, r, rs, rdata, 0);
   else
