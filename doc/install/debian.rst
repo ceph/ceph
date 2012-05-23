@@ -26,4 +26,5 @@ Update APT's database::
 Install Ceph::
 
         sudo apt-get install ceph
+	sudo apt-get install ceph-common
 

@@ -50,9 +50,12 @@ Next, you must request keys so that APT can verify the packages. ::
 
 	gpg --keyserver keys.gnupg.net --recv-keys 83EF826A
 	gpg --export packages@opscode.com | sudo apt-key add -
+	sudo apt-get update
+	sudo apt-get install opscode-keyring
 
 To install Chef, execute ``update`` and ``install``. For example::
 
+	sudo apt-get upgrade
 	sudo apt-get update
 	sudo apt-get install chef
 

@@ -18,7 +18,7 @@ To get the cookbooks for Ceph, clone them from git.::
 
 	cd ~/.chef	
 	git clone https://github.com/ceph/ceph-cookbooks.git
-	knife cookbook site upload parted btrfs parted
+	knife cookbook upload parted btrfs ceph
 
 Install Apache Cookbooks
 ------------------------

@@ -19,21 +19,21 @@ server directories for each instance of a Ceph daemon. Using the exemplary
 
 On ``myserver01``::
 
-	mkdir srv/osd.0
-	mkdir srv/mon.a
+	sudo mkdir srv/osd.0
+	sudo mkdir srv/mon.a
 
 On ``myserver02``::
 
-	mkdir srv/osd.1
-	mkdir srv/mon.b
+	sudo mkdir srv/osd.1
+	sudo mkdir srv/mon.b
 
 On ``myserver03``::
 
-	mkdir srv/osd.2
-	mkdir srv/mon.c
+	sudo mkdir srv/osd.2
+	sudo mkdir srv/mon.c
 
 On ``myserver04``::
 
-	mkdir srv/osd.3
+	sudo mkdir srv/osd.3
 
 .. important:: The ``host`` variable determines which host runs each instance of a Ceph daemon.
