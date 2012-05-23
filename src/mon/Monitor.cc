@@ -1131,11 +1131,12 @@ void Monitor::handle_command(MMonCommand *m)
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
-  rs = "unrecognized subsystem";
+  rs = "unrecognized command";
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       mdsmon()->dispatch(m);
@@ -1144,6 +1145,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "osd") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       osdmon()->dispatch(m);
@@ -1152,6 +1154,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "pg") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       pgmon()->dispatch(m);
@@ -1160,6 +1163,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "mon") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       monmon()->dispatch(m);
@@ -1174,6 +1178,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "log") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       stringstream ss;
@@ -1190,6 +1195,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "stop_cluster") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       stop_cluster();
@@ -1200,6 +1206,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "injectargs") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       if (m->cmd.size() == 2) {
@@ -1226,6 +1233,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "status") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       // reply with the status for all the components
@@ -1243,6 +1251,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "quorum_status") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       // make sure our map is readable and up to date
@@ -1259,6 +1268,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "mon_status") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       stringstream ss;
@@ -1269,6 +1279,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "health") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
@@ -1277,6 +1288,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "heap") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       if (!ceph_using_tcmalloc())
@@ -1287,6 +1299,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "quorum") {
       if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
+	rs = "access denied";
 	goto out;
       }
       if (m->cmd[1] == "exit") {
@@ -1306,8 +1319,7 @@ void Monitor::handle_command(MMonCommand *m)
 	r = -EINVAL;
       }
     }
-  } else 
-    rs = "no command";
+  }
 
  out:
   if (!m->get_source().is_mon())  // don't reply to mon->mon commands
