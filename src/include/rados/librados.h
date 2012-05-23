@@ -937,7 +937,7 @@ int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
  * @param name which extended attribute to read
  * @param buf where to store the result
  * @param len size of buf in bytes
- * @returns 0 on success, negative error code on failure
+ * @returns length of xattr value on success, negative error code on failure
  */
 int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
 
