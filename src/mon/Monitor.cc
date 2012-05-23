@@ -1156,8 +1156,7 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "log") {
-      if (!session->caps.get_allow_all() &&
-	  !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
 	  !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
 	rs = "access denied";
@@ -1213,8 +1212,7 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "status") {
-      if (!session->caps.get_allow_all() &&
-	  !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
 	  !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
 	rs = "access denied";
@@ -1233,8 +1231,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
-      if (!session->caps.get_allow_all() &&
-	  !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
 	  !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
 	rs = "access denied";
@@ -1252,8 +1249,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
-      if (!session->caps.get_allow_all() &&
-	  !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
 	  !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
 	rs = "access denied";
@@ -1265,8 +1261,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "health") {
-      if (!session->caps.get_allow_all() &&
-	  !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
 	  !_allowed_command(session, m->cmd)) {
 	r = -EACCES;
 	rs = "access denied";
