@@ -179,7 +179,7 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", tmp) == 0)
     return;
 
-  s->formatter->dump_format(name, buf); 
+  s->formatter->dump_string(name, buf);
 }
 
 void dump_owner(struct req_state *s, string& id, string& name, const char *section)
@@ -187,8 +187,8 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
   if (!section)
     section = "Owner";
   s->formatter->open_object_section(section);
-  s->formatter->dump_format("ID", id.c_str());
-  s->formatter->dump_format("DisplayName", name.c_str());
+  s->formatter->dump_string("ID", id);
+  s->formatter->dump_string("DisplayName", name);
   s->formatter->close_section();
 }
 
@@ -225,9 +225,9 @@ void end_header(struct req_state *s, const char *content_type)
     dump_start(s);
     s->formatter->open_object_section("Error");
     if (!s->err.s3_code.empty())
-      s->formatter->dump_string("Code", s->err.s3_code.c_str());
+      s->formatter->dump_string("Code", s->err.s3_code);
     if (!s->err.message.empty())
-      s->formatter->dump_format("Message", s->err.message.c_str());
+      s->formatter->dump_string("Message", s->err.message);
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   }
