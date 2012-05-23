@@ -1127,6 +1127,11 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  bool access_cmd = _allowed_command(session, m->cmd);
+  bool access_r = (session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) ||
+		   access_cmd);
+  bool access_all = (session->caps.get_allow_all() || access_cmd);
+
   dout(0) << "handle_command " << *m << dendl;
   bufferlist rdata;
   string rs;
@@ -1156,8 +1161,7 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "log") {
-      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
-	  !_allowed_command(session, m->cmd)) {
+      if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1174,7 +1178,7 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "stop_cluster") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+      if (!access_all) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1185,7 +1189,7 @@ void Monitor::handle_command(MMonCommand *m)
     }
 
     if (m->cmd[0] == "injectargs") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+      if (!access_all) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1212,8 +1216,7 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "status") {
-      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
-	  !_allowed_command(session, m->cmd)) {
+      if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1231,15 +1234,14 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
-      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
-	  !_allowed_command(session, m->cmd)) {
+      if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
       }
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
-	dout(10) << " waiting for qorum" << dendl;
+	dout(10) << " waiting for quorum" << dendl;
 	waitfor_quorum.push_back(new C_RetryMessage(this, m));
 	return;
       }
@@ -1249,8 +1251,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
-      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
-	  !_allowed_command(session, m->cmd)) {
+      if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1261,8 +1262,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "health") {
-      if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
-	  !_allowed_command(session, m->cmd)) {
+      if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1271,7 +1271,7 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "heap") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+      if (!access_all) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
@@ -1282,7 +1282,7 @@ void Monitor::handle_command(MMonCommand *m)
 	ceph_heap_profiler_handle_command(m->cmd, clog);
     }
     if (m->cmd[0] == "quorum") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
+      if (!access_all) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
