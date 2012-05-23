@@ -26,10 +26,11 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "mon/MonMap.h"
+#include "include/str_list.h"
 
 void usage()
 {
-  cout << " usage: [--print] [--create [--clobber][--fsid uuid]] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
+  cout << " usage: [--print] [--create [--clobber][--fsid uuid]] [--generate] [--set-initial-members] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
   exit(1);
 }
 
@@ -45,6 +46,8 @@ int main(int argc, const char **argv)
   bool create = false;
   bool clobber = false;
   bool modified = false;
+  bool generate = false;
+  bool filter = false;
   map<string,entity_addr_t> add;
   list<string> rm;
 
@@ -63,6 +66,10 @@ int main(int argc, const char **argv)
       create = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
+    } else if (ceph_argparse_flag(args, i, "--generate", (char*)NULL)) {
+      generate = true;
+    } else if (ceph_argparse_flag(args, i, "--set-initial-members", (char*)NULL)) {
+      filter = true;
     } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
       string name = *i;
       i = args.erase(i);
@@ -130,6 +137,28 @@ int main(int argc, const char **argv)
     }
     modified = true;
   }
+
+  if (generate) {
+    int r = monmap.build_initial(g_ceph_context, cerr);
+    if (r < 0)
+      return r;
+  }
+
+  if (filter) {
+    // apply initial members
+    list<string> initial_members;
+    get_str_list(g_conf->mon_initial_members, initial_members);
+    if (initial_members.size()) {
+      cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
+      set<entity_addr_t> removed;
+      monmap.set_initial_members(g_ceph_context, initial_members,
+				 string(), entity_addr_t(),
+				 &removed);
+      cout << "removed " << removed << std::endl;
+    }
+    modified = true;
+  }
+
   if (!g_conf->fsid.is_zero()) {
     monmap.fsid = g_conf->fsid;
     cout << me << ": set fsid to " << monmap.fsid << std::endl;
@@ -158,9 +187,6 @@ int main(int argc, const char **argv)
 
   if (!print && !modified)
     usage();
-
-  if (modified && !create)
-    monmap.epoch++;
 
   if (print) 
     monmap.print(cout);

@@ -124,17 +124,18 @@ int main(int argc, const char **argv)
       }
       try {
 	monmap.decode(monmapbl);
+
+	// always mark seed/mkfs monmap as epoch 0
+	monmap.set_epoch(0);
       }
       catch (const buffer::error& e) {
 	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << std::endl;
 	exit(1);
       }      
     } else {
-      int err = MonClient::build_initial_monmap(g_ceph_context, monmap);
+      int err = monmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
-	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
-	usage();
-	exit(1);
+	cerr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << std::endl;
       }
 
       // am i part of the initial quorum?
@@ -346,7 +347,7 @@ int main(int argc, const char **argv)
       ipaddr = g_conf->public_addr;
     } else {
       MonMap tmpmap;
-      int err = MonClient::build_initial_monmap(g_ceph_context, tmpmap);
+      int err = tmpmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
 	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
 	usage();

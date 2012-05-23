@@ -44,6 +44,22 @@ Options
    will create a new monitor map with a new UUID (and with it, a new,
    empty Ceph file system).
 
+.. option:: --generate
+
+   generate a new monmap based on the values on the command line or specified
+   in the ceph configuration.  This is, in order of preference,
+
+      #. ``--monmap filename`` to specify a monmap to load
+      #. ``--mon-host 'host1,ip2'`` to specify a list of hosts or ip addresses
+      #. ``[mon.foo]`` sections containing ``mon addr`` settings in the config
+
+.. option:: --filter-initial-members
+
+   filter the initial monmap by applying the ``mon initial members``
+   setting.  Monitors not present in that list will be removed, and
+   initial members not present in the map will be added with dummy
+   addresses.
+
 .. option:: --add name ip:port
 
    will add a monitor with the specified ip:port to the map.

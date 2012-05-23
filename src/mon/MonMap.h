@@ -103,6 +103,14 @@ class MonMap {
     calc_ranks();
   }
 
+  void rename(string oldname, string newname) {
+    assert(contains(oldname));
+    assert(!contains(newname));
+    mon_addr[newname] = mon_addr[oldname];
+    mon_addr.erase(oldname);
+    calc_ranks();
+  }
+
   bool contains(const string& name) {
     return mon_addr.count(name);
   }
@@ -119,6 +127,13 @@ class MonMap {
   string get_name(unsigned n) const {
     assert(n < rank_name.size());
     return rank_name[n];
+  }
+  string get_name(entity_addr_t a) const {
+    map<entity_addr_t,string>::const_iterator p = addr_name.find(a);
+    if (p == addr_name.end())
+      return string();
+    else
+      return p->second;
   }
 
   int get_rank(const string& n) {
@@ -140,13 +155,6 @@ class MonMap {
     return true;
   }
 
-  void rename(string oldname, string newname) {
-    assert(contains(oldname));
-    assert(!contains(newname));
-    mon_addr[newname] = mon_addr[oldname];
-    mon_addr.erase(oldname);
-  }
-
   const entity_addr_t& get_addr(const string& n) {
     assert(mon_addr.count(n));
     return mon_addr[n];
@@ -154,6 +162,11 @@ class MonMap {
   const entity_addr_t& get_addr(unsigned m) {
     assert(m < rank_addr.size());
     return rank_addr[m];
+  }
+  void set_addr(const string& n, entity_addr_t a) {
+    assert(mon_addr.count(n));
+    mon_addr[n] = a;
+    calc_ranks();
   }
   entity_inst_t get_inst(const string& n) {
     assert(mon_addr.count(n));
@@ -185,6 +198,50 @@ class MonMap {
   // read from/write to a file
   int write(const char *fn);
   int read(const char *fn);
+
+  /**
+   * build an initial bootstrap monmap from conf
+   *
+   * Build an initial bootstrap monmap from the config.  This will
+   * try, in this order:
+   *
+   *   1 monmap   -- an explicitly provided monmap
+   *   2 mon_host -- list of monitors
+   *   3 config [mon.*] sections, and 'mon addr' fields in those sections
+   *
+   * @param cct context (and associated config)
+   * @param errout ostream to send error messages too
+   */
+  int build_initial(CephContext *cct, ostream& errout);
+
+  /**
+   * build a monmap from a list of hosts or ips
+   *
+   * Resolve dns as needed.  Give mons dummy names.
+   *
+   * @param hosts  list of hosts, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
+  int build_from_host_list(std::string hosts, std::string prefix);
+
+  /**
+   * filter monmap given a set of initial members.
+   *
+   * Remove mons that aren't in the initial_members list.  Add missing
+   * mons and give them dummy IPs (blank IPv4, with a non-zero
+   * nonce). If the name matches my_name, then my_addr will be used in
+   * place of a dummy addr.
+   *
+   * @param initial_members list of initial member names
+   * @param my_name name of self, can be blank
+   * @param my_addr my addr
+   * @param removed optional pointer to set to insert removed mon addrs to
+   */
+  void set_initial_members(CephContext *cct,
+			   list<std::string>& initial_members,
+			   string my_name, entity_addr_t my_addr,
+			   set<entity_addr_t> *removed);
 
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
