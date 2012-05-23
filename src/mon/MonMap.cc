@@ -162,6 +162,8 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
       name += n;
       add(name, addrs[i]);
     }
+    if (addrs.empty())
+      return -ENOENT;
     return 0;
   }
 
@@ -174,6 +176,9 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
   free(hosts);
   if (!success)
     return -EINVAL;
+
+  if (addrs.empty())
+    return -ENOENT;
 
   for (unsigned i=0; i<addrs.size(); i++) {
     char n[2];
