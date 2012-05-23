@@ -1142,20 +1142,10 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "pg") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
       pgmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "mon") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
       monmon()->dispatch(m);
       return;
     }

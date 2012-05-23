@@ -832,6 +832,15 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    return true;
+  }
+
   vector<const char*> args;
   for (unsigned i = 1; i < m->cmd.size(); i++)
     args.push_back(m->cmd[i].c_str());
@@ -1029,6 +1038,15 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
   int r = -EINVAL;
   string rs;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_W) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    return true;
+  }
 
   if (m->cmd.size() >= 1 && m->cmd[1] == "force_create_pg") {
     if (m->cmd.size() <= 2) {
