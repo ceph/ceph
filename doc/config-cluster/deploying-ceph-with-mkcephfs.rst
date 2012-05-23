@@ -11,6 +11,7 @@ you may deploy Ceph with the ``mkcephfs`` script.
 For production environments, you deploy Ceph using Chef cookbooks. To run 
 ``mkcephfs``, execute the following:: 
 
+   cd /etc/ceph
    sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring
 	
 The script adds an admin key to the ``ceph.keyring``, which is analogous to a 
