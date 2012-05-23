@@ -999,9 +999,6 @@ void Monitor::finish_election()
 
 bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 {
-  if (s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))
-    return true;
-
   for (list<list<string> >::iterator p = s->caps.cmd_allow.begin();
        p != s->caps.cmd_allow.end();
        ++p) {
@@ -1124,17 +1121,22 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  if (!session || !_allowed_command(session, m->cmd)) {
+  if (!session) {
     string rs = "Access denied";
     reply_command(m, -EACCES, rs, 0);
     return;
   }
 
+  bool access_cmd = _allowed_command(session, m->cmd);
+  bool access_r = (session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) ||
+		   access_cmd);
+  bool access_all = (session->caps.get_allow_all() || access_cmd);
+
   dout(0) << "handle_command " << *m << dendl;
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
-  rs = "unrecognized subsystem";
+  rs = "unrecognized command";
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
       mdsmon()->dispatch(m);
@@ -1159,6 +1161,11 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "log") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       stringstream ss;
       for (unsigned i=1; i<m->cmd.size(); i++) {
 	if (i > 1)
@@ -1171,12 +1178,22 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "stop_cluster") {
+      if (!access_all) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       stop_cluster();
       reply_command(m, 0, "initiating cluster shutdown", 0);
       return;
     }
 
     if (m->cmd[0] == "injectargs") {
+      if (!access_all) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       if (m->cmd.size() == 2) {
 	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
 	ostringstream oss;
@@ -1199,6 +1216,11 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "status") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       // reply with the status for all the components
       string health;
       get_health(health, NULL);
@@ -1212,9 +1234,14 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       // make sure our map is readable and up to date
       if (!is_leader() && !is_peon()) {
-	dout(10) << " waiting for qorum" << dendl;
+	dout(10) << " waiting for quorum" << dendl;
 	waitfor_quorum.push_back(new C_RetryMessage(this, m));
 	return;
       }
@@ -1224,22 +1251,42 @@ void Monitor::handle_command(MMonCommand *m)
       r = 0;
     }
     if (m->cmd[0] == "mon_status") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       stringstream ss;
       _mon_status(ss);
       rs = ss.str();
       r = 0;
     }
     if (m->cmd[0] == "health") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
       r = 0;
     }
     if (m->cmd[0] == "heap") {
+      if (!access_all) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       if (!ceph_using_tcmalloc())
 	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
       else
 	ceph_heap_profiler_handle_command(m->cmd, clog);
     }
     if (m->cmd[0] == "quorum") {
+      if (!access_all) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
       if (m->cmd[1] == "exit") {
         reset();
         start_election();
@@ -1257,9 +1304,9 @@ void Monitor::handle_command(MMonCommand *m)
 	r = -EINVAL;
       }
     }
-  } else 
-    rs = "no command";
+  }
 
+ out:
   if (!m->get_source().is_mon())  // don't reply to mon->mon commands
     reply_command(m, r, rs, rdata, 0);
   else
