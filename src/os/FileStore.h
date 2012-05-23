@@ -84,7 +84,7 @@ class FileStore : public JournalingObjectStore,
   int get_cdir(coll_t cid, char *s, int len);
   
   /// read a uuid from fd
-  int read_fsid(int fd, uuid_d& uuid);
+  int read_fsid(int fd, uuid_d *uuid);
 
   /// lock fsid_fd
   int lock_fsid();
