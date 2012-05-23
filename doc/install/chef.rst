@@ -32,44 +32,32 @@ Linux distribution. ::
 	sudo apt-get update
 	sudo apt-get install ruby
 
-Installing Chef
----------------
+Installing Chef and the Chef Server
+-----------------------------------
 .. important:: Before you install Chef, identify the host for your Chef
                server, and its fully qualified URI.
 
-First, add Opscode packages to your APT configuration. 
-Replace ``{dist.name}`` with the name of your Linux distribution. 
+First, add Opscode packages to your APT configuration.
 For example:: 
 
 	sudo tee /etc/apt/sources.list.d/chef.list << EOF
-	deb http://apt.opscode.com/ `lsb_release -cs`{dist.name}-0.10 main  
-	deb-src http://apt.opscode.com/ `lsb_release -cs`{dist.name}-0.10 main
+	deb http://apt.opscode.com/ $(lsb_release -cs)-0.10 main  
+	deb-src http://apt.opscode.com/ $(lsb_release -cs)-0.10 main
 	EOF
 
 Next, you must request keys so that APT can verify the packages. :: 
 
-	gpg --keyserver keys.gnupg.net --recv-keys 83EF826A
-	gpg --export packages@opscode.com | sudo apt-key add -
-	sudo apt-get update
-	sudo apt-get install opscode-keyring
+	sudo apt-key adv --keyserver keys.gnupg.net --recv-keys 83EF826A
 
 To install Chef, execute ``update`` and ``install``. For example::
 
 	sudo apt-get upgrade
 	sudo apt-get update
-	sudo apt-get install chef
+	sudo apt-get install chef chef-server
 
 Enter the fully qualified URI for your Chef server. For example::
 
-	http://127.0.0.1:4000
-
-Installing Chef Server
-----------------------
-Once you have installed Chef, you must install the Chef server.
-See `Installing Chef Server on Debian or Ubuntu using Packages`_ for details.
-For example:: 
-
-	sudo apt-get install chef-server
+	http://your-chef-server.com:4000
 
 The Chef server installer will prompt you to enter a temporary password. Enter
 a temporary password (e.g., ``foo``) and proceed with the installation. 
@@ -81,7 +69,7 @@ a temporary password (e.g., ``foo``) and proceed with the installation.
 Once the installer finishes and activates the Chef server, you may enter the fully 
 qualified URI in a browser to launch the Chef web UI. For example:: 
 
-	http://127.0.0.1:4000
+	http://your-chef-server.com:4000
 
 The Chef web UI will prompt you to enter the username and password.
 
@@ -96,7 +84,7 @@ Configuring Knife
 Once you complete the Chef server installation, install ``knife`` on the the
 Chef server. If the Chef server is a remote host, use ``ssh`` to connect. :: 
 
-	ssh username@my-chef-server
+	ssh username@your-chef-server.com
 
 In the ``/home/username`` directory, create a hidden Chef directory. :: 
 
@@ -108,7 +96,6 @@ permissions for the user that installed the Chef server. Copy them from the
 ownership to the current user. ::
 
 	sudo cp /etc/chef/validation.pem /etc/chef/webui.pem ~/.chef
-	sudo chown -R $USER ~/.chef
 
 From the current user's home directory, configure ``knife`` with an initial 
 API client. :: 
@@ -147,8 +134,7 @@ Leave the entry field blank and press **Enter**.
 
 Installing Chef Client
 ----------------------
-Install the Chef client on the Chef Workstation. If you use the same host for
-the workstation and server, you may have performed a number of these steps. 
+Install the Chef client on the Chef Workstation and nodes.
 See `Installing Chef Client on Ubuntu or Debian`_
 
 Create a directory for the GPG key. ::
@@ -177,17 +163,13 @@ Create the ``client.rb`` and ``validation.pem`` for ``chef-client``. ::
 
 	sudo knife configure client /etc/chef
 
-Bootstrapping Nodes
--------------------
-The fastest way to deploy Chef on nodes is to use ``knife``
-to boostrap each node. Chef must have network access to each host
-you intend to configure as a node (e.g., ``NAT``, ``ssh``). Replace 
-the ``{dist.vernum}`` with your distribution and version number. 
-For example:: 
+Copy ``validation.pem`` to Nodes
+--------------------------------
+You will need to copy the ``validation.pem`` file in each node with 
+the one installed on your Chef server. For each node, replace 
+``{nodename}`` in the following line with the node's host name. ::
 
-	knife bootstrap IP_ADDR -d {dist.vernum}-apt --sudo
-
-See `Knife Bootstrap`_ for details.
+	sudo cat /etc/chef/validation.pem | ssh -t -v {nodename} "exec sudo tee /etc/chef/validation.pem >/dev/null"
 
 Verify Nodes
 ------------
@@ -196,7 +178,7 @@ Chef nodes. ::
 
 	knife node list
 
-A list of the nodes you've boostrapped should appear.
+A list of the nodes you've configured should appear.
 
 
 See the `Deploy With Chef <../../config-cluster/chef>`_ section for information
