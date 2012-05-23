@@ -76,7 +76,7 @@ static void parse_cmd_args(vector<const char*> &args,
       *admin_socket = val;
       if (i == args.end())
 	usage();
-      *admin_socket_cmd = *i;
+      *admin_socket_cmd = *i++;
     } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
       *mode = CEPH_TOOL_MODE_STATUS;
     } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
@@ -98,6 +98,9 @@ static void parse_cmd_args(vector<const char*> &args,
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
     } else {
+      if (admin_socket_cmd && admin_socket_cmd->length()) {
+	*admin_socket_cmd += " " + string(*i);
+      }
       ++i;
     }
   }

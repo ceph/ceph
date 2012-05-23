@@ -49,6 +49,7 @@
 
 #include "include/color.h"
 #include "include/ceph_fs.h"
+#include "include/str_list.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -93,6 +94,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   messenger(m),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
   clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
@@ -210,6 +212,8 @@ void Monitor::do_admin_command(string command, ostream& ss)
     _mon_status(ss);
   else if (command == "quorum_status")
     _quorum_status(ss);
+  else if (command.find("add_bootstrap_peer_hint") == 0)
+    _add_bootstrap_peer_hint(command, ss);
   else
     assert(0 == "bad AdminSocket command binding");
 }
@@ -225,8 +229,6 @@ int Monitor::init()
 {
   lock.Lock();
 
-  rank = monmap->get_rank(messenger->get_myaddr());
-  
   dout(1) << "init fsid " << monmap->fsid << dendl;
   
   assert(!logger);
@@ -278,6 +280,25 @@ int Monitor::init()
     dout(10) << "features " << features << dendl;
   }
 
+  // have we ever joined a quorum?
+  has_ever_joined = store->exists_bl_ss("joined");
+  dout(10) << "has_ever_joined = " << (int)has_ever_joined << dendl;
+
+  if (!has_ever_joined) {
+    // impose initial quorum restrictions?
+    list<string> initial_members;
+    get_str_list(g_conf->mon_initial_members, initial_members);
+
+    if (initial_members.size()) {
+      dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
+
+      monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
+				  &extra_probe_peers);
+
+      dout(10) << " monmap is " << *monmap << dendl;
+    }
+  }
+
   // init paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos[i]->init();
@@ -324,6 +345,9 @@ int Monitor::init()
   assert(r == 0);
   r = admin_socket->register_command("quorum_status", admin_hook,
 					 "show current quorum status");
+  assert(r == 0);
+  r = admin_socket->register_command("add_bootstrap_peer_hint", admin_hook,
+				     "add peer address as potential bootstrap peer for cluster bringup");
   assert(r == 0);
 
   // i'm ready!
@@ -420,7 +444,7 @@ void Monitor::bootstrap()
   int newrank = monmap->get_rank(messenger->get_myaddr());
   if (newrank < 0 && rank >= 0) {
     // was i ever part of the quorum?
-    if (store->exists_bl_ss("joined")) {
+    if (has_ever_joined) {
       dout(0) << " removed from monmap, suicide." << dendl;
       exit(0);
     }
@@ -448,14 +472,55 @@ void Monitor::bootstrap()
   reset_probe_timeout();
 
   // i'm outside the quorum
-  outside_quorum.insert(name);
+  if (monmap->contains(name))
+    outside_quorum.insert(name);
 
   // probe monitors
   dout(10) << "probing other monitors" << dendl;
   for (unsigned i = 0; i < monmap->size(); i++) {
     if ((int)i != rank)
-      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name), monmap->get_inst(i));
+      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
+			      monmap->get_inst(i));
   }
+  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+       p != extra_probe_peers.end();
+       ++p) {
+    if (*p != messenger->get_myaddr()) {
+      entity_inst_t i;
+      i.name = entity_name_t::MON(-1);
+      i.addr = *p;
+      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined), i);
+    }
+  }
+}
+
+void Monitor::_add_bootstrap_peer_hint(string cmd, ostream& ss)
+{
+  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "'" << dendl;
+
+  if (is_leader() || is_peon()) {
+    ss << "mon already active; ignoring bootstrap hint";
+    return;
+  }
+
+  size_t off = cmd.find(" ");
+  if (off == std::string::npos) {
+    ss << "syntax is 'add_bootstrap_peer_hint ip[:port]'";
+    return;
+  }
+
+  entity_addr_t addr;
+  const char *end = 0;
+  if (!addr.parse(cmd.c_str() + off + 1, &end)) {
+    ss << "failed to parse addr '" << (cmd.c_str() + off + 1) << "'";
+    return;
+  }
+
+  if (addr.get_port() == 0)
+    addr.set_port(CEPH_MON_PORT);
+
+  extra_probe_peers.insert(addr);
+  ss << "adding peer " << addr << " to list: " << extra_probe_peers;
 }
 
 // called by bootstrap(), or on leader|peon -> electing
@@ -543,36 +608,76 @@ void Monitor::handle_probe(MMonProbe *m)
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
+
+  // did we discover a peer here?
+  if (!monmap->contains(m->get_source_addr())) {
+    dout(1) << " adding peer " << m->get_source_addr() << " to list of hints" << dendl;
+    extra_probe_peers.insert(m->get_source_addr());
+  }
+
   m->put();
 }
 
 void Monitor::handle_probe_reply(MMonProbe *m)
 {
   dout(10) << "handle_probe_reply " << m->get_source_inst() << *m << dendl;
+  dout(10) << " monmap is " << *monmap << dendl;
 
   if (!is_probing()) {
     m->put();
     return;
   }
 
-  // newer map?
-  MonMap *newmap = new MonMap;
-  newmap->decode(m->monmap_bl);
-  if (newmap->get_epoch() > monmap->get_epoch()) {
-    dout(10) << " got new monmap epoch " << newmap->get_epoch()
-	     << " > my " << monmap->get_epoch() << dendl;
-    monmap->decode(m->monmap_bl);
-    m->put();
+  // newer map, or they've joined a quorum and we haven't?
+  bufferlist mybl;
+  monmap->encode(mybl, m->get_connection()->get_features());
+  // make sure it's actually different; the checks below err toward
+  // taking the other guy's map, which could cause us to loop.
+  if (!mybl.contents_equal(m->monmap_bl)) {
+    MonMap *newmap = new MonMap;
+    newmap->decode(m->monmap_bl);
+    if (m->has_ever_joined && (newmap->get_epoch() > monmap->get_epoch() ||
+			       !has_ever_joined)) {
+      dout(10) << " got newer/committed monmap epoch " << newmap->get_epoch()
+	       << ", mine was " << monmap->get_epoch() << dendl;
+      delete newmap;
+      monmap->decode(m->monmap_bl);
+      m->put();
 
-    bootstrap();
-    return;
+      bootstrap();
+      return;
+    }
+    delete newmap;
+  }
+
+  // rename peer?
+  string peer_name = monmap->get_name(m->get_source_addr());
+  if (monmap->get_epoch() == 0 && peer_name.find("noname-") == 0) {
+    dout(10) << " renaming peer " << m->get_source_addr() << " "
+	     << peer_name << " -> " << m->name << " in my monmap"
+	     << dendl;
+    monmap->rename(peer_name, m->name);
+  } else {
+    dout(10) << " peer name is " << peer_name << dendl;
+  }
+
+  // new initial peer?
+  if (monmap->contains(m->name)) {
+    if (monmap->get_addr(m->name).is_blank_ip()) {
+      dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
+      monmap->set_addr(m->name, m->get_source_addr());
+      m->put();
+
+      bootstrap();
+      return;
+    }
   }
 
   // is there an existing quorum?
@@ -608,11 +713,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       }
     }
     if (ok) {
-      if (monmap->contains(name)) {
+      if (monmap->contains(name) &&
+	  !monmap->get_addr(name).is_blank_ip()) {
 	// i'm part of the cluster; just initiate a new election
 	start_election();
       } else {
-	dout(10) << " ready to join, but i'm not in the monmap, trying to join" << dendl;
+	dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
 	messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
 				monmap->get_inst(*m->quorum.begin()));
       }
@@ -623,14 +729,21 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     }
   } else {
     // not part of a quorum
-    outside_quorum.insert(m->name);
+    if (monmap->contains(m->name))
+      outside_quorum.insert(m->name);
+    else
+      dout(10) << " mostly ignoring mon." << m->name << ", not part of monmap" << dendl;
 
     unsigned need = monmap->size() / 2 + 1;
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
 
     if (outside_quorum.size() >= need) {
-      dout(10) << " that's enough to form a new quorum, calling election" << dendl;
-      start_election();
+      if (outside_quorum.count(name)) {
+	dout(10) << " that's enough to form a new quorum, calling election" << dendl;
+	start_election();
+      } else {
+	dout(10) << " that's enough to form a new quorum, but it does not include me; waiting" << dendl;
+      }
     } else {
       dout(10) << " that's not yet enough for a new quorum, waiting" << dendl;
     }
@@ -673,7 +786,7 @@ void Monitor::slurp()
       if (!pax->is_slurping()) {
         pax->start_slurping();
       }
-      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name);
+      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name, has_ever_joined);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
       m->newest_version = pax->get_version();
@@ -687,7 +800,7 @@ void Monitor::slurp()
       if (!pax->is_slurping()) {
         pax->start_slurping();
       }
-      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
+      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name, has_ever_joined);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
       m->newest_version = pax->get_version();
@@ -710,7 +823,7 @@ void Monitor::slurp()
 
 MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
 {
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name, has_ever_joined);
   r->machine_name = m->machine_name;
   r->oldest_version = pax->get_first_committed();
   r->newest_version = pax->get_version();
@@ -874,8 +987,13 @@ void Monitor::finish_election()
   update_logger();
   register_cluster_logger();
 
-  // make note of the fact that i was, once, part of the quorum.
-  store->put_int(1, "joined");
+  // am i named properly?
+  string cur_name = monmap->get_name(messenger->get_myaddr());
+  if (cur_name != name) {
+    dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
+    messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+			    monmap->get_inst(*quorum.begin()));
+  }
 } 
 
 
@@ -1582,10 +1700,11 @@ bool Monitor::_ms_dispatch(Message *m)
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
       }
-      if (!is_probing() && !is_slurping())
+      if (!is_probing() && !is_slurping()) {
 	elector.dispatch(m);
-      else
+      } else {
 	m->put();
+      }
       break;
 
     case MSG_FORWARD:

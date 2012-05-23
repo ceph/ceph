@@ -308,6 +308,13 @@ void Elector::dispatch(Message *m)
 	return;
       }
 
+      if (!mon->monmap->contains(m->get_source_addr())) {
+	dout(1) << "discarding election message: " << m->get_source_addr()
+		<< " not in my monmap " << *mon->monmap << dendl;
+	m->put();
+	return;
+      }
+
       MonMap *peermap = new MonMap;
       peermap->decode(em->monmap_bl);
       if (peermap->epoch > mon->monmap->epoch) {
