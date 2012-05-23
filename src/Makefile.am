@@ -920,12 +920,6 @@ rados_include_DATA = \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h
 
-if WITH_RADOSGW
-rgw_includedir = $(includedir)/rados
-rgw_include_DATA = \
-	$(srcdir)/include/rados/librgw.h
-endif
-
 crush_includedir = $(includedir)/crush
 crush_include_DATA = \
 	$(srcdir)/crush/hash.h \

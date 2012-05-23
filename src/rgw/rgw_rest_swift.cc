@@ -49,7 +49,7 @@ void RGWListBuckets_REST_SWIFT::send_response()
   for (int i = 0; i < limit && iter != m.end(); ++iter, ++i) {
     RGWBucketEnt obj = iter->second;
     s->formatter->open_object_section("container");
-    s->formatter->dump_string("name", obj.bucket.name.c_str());
+    s->formatter->dump_string("name", obj.bucket.name);
     s->formatter->dump_int("count", obj.count);
     s->formatter->dump_int("bytes", obj.size);
     s->formatter->close_section();
@@ -137,8 +137,8 @@ void RGWListBucket_REST_SWIFT::send_response()
         goto next;
 
       s->formatter->open_object_section("object");
-      s->formatter->dump_string("name", iter->name.c_str());
-      s->formatter->dump_string("hash", iter->etag.c_str());
+      s->formatter->dump_string("name", iter->name);
+      s->formatter->dump_string("hash", iter->etag);
       s->formatter->dump_int("bytes", iter->size);
       string single_content_type = iter->content_type;
       if (iter->content_type.size()) {
@@ -150,7 +150,7 @@ void RGWListBucket_REST_SWIFT::send_response()
             ++pos;
           single_content_type = single_content_type.substr(pos);
         }
-        s->formatter->dump_string("content_type", single_content_type.c_str());
+        s->formatter->dump_string("content_type", single_content_type);
       }
       dump_time(s, "last_modified", &iter->mtime);
       s->formatter->close_section();
@@ -162,7 +162,7 @@ void RGWListBucket_REST_SWIFT::send_response()
         goto next;
 
       s->formatter->open_object_section("object");
-      s->formatter->dump_string("name", pref_iter->first.c_str());
+      s->formatter->dump_string("name", pref_iter->first);
       s->formatter->close_section();
     }
 next:
