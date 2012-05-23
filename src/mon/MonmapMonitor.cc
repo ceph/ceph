@@ -355,6 +355,15 @@ bool MonmapMonitor::preprocess_join(MMonJoin *join)
 {
   dout(10) << "preprocess_join " << join->name << " at " << join->addr << dendl;
 
+  MonSession *session = join->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))) {
+    dout(10) << " insufficient caps" << dendl;
+    join->put();
+    return true;
+  }
+
   if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
     join->put();
