@@ -48,7 +48,7 @@ Ubuntu Requirements
 -------------------
 
 - ``uuid-dev``
-- ``libkeytutils-dev``
+- ``libkeyutils-dev``
 - ``libgoogle-perftools-dev``
 - ``libatomic-ops-dev``
 - ``libaio-dev``
@@ -58,7 +58,7 @@ Ubuntu Requirements
 Execute ``sudo apt-get install`` for each dependency that isn't installed on 
 your host. ::
 
-	sudo apt-get install uuid-dev libkeytutils-dev libgoogle-perftools-dev libatomic-ops-dev libaio-dev libgdata-common libgdata13
+	sudo apt-get install uuid-dev libkeyutils-dev libgoogle-perftools-dev libatomic-ops-dev libaio-dev libgdata-common libgdata13
 
 Debian
 ------
