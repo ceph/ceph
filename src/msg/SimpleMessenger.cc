@@ -452,6 +452,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
       << " " << m << " con " << con
       << dendl;
 
+  lock.Lock();
   submit_message(m, con, con->get_peer_addr(), con->get_peer_type(), lazy);
   lock.Unlock();
   return 0;
