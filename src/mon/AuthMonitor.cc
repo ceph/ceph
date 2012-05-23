@@ -430,7 +430,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
-	m->cmd[1] == "get-or-create" ||
+	m->cmd[1] == "get-or-create-key" ||
 	m->cmd[1] == "caps") {
       return false;
     }
