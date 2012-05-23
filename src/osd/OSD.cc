@@ -3522,6 +3522,10 @@ void OSD::advance_pg(epoch_t osd_epoch, PG *pg, PG::RecoveryCtx *rctx)
   epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
   OSDMapRef lastmap = pg->get_osdmap();
 
+  if (lastmap->get_epoch() == osd_epoch)
+    return;
+  assert(lastmap->get_epoch() < osd_epoch);
+
   for (;
        next_epoch <= osd_epoch;
        ++next_epoch) {
