@@ -28,31 +28,141 @@ using namespace std;
 
 class Monitor;
 
-
+/**
+ * This class is responsible for maintaining the local state when electing
+ * a new Leader. We may win or we may lose. If we win, it means we became the
+ * Leader; if we lose, it means we are a Peon.
+ */
 class Elector {
+  /**
+   * @defgroup Elector_h_class Elector
+   * @{
+   */
  private:
+  /**
+   * The Monitor instance associated with this class.
+   */
   Monitor *mon;
 
+  /**
+   * Event callback responsible for dealing with an expired election once a
+   * timer runs out and fires up.
+   */
   Context *expire_event;
 
+  /**
+   * Resets the expire_event timer, by cancelling any existing one and
+   * scheduling a new one.
+   *
+   * @remarks This function assumes as a default firing value the duration of
+   *	      the monitor's lease interval, and adds to it the value specified
+   *	      in @plus
+   *
+   * @post expire_event is set
+   *
+   * @param plus The amount of time to be added to the default firing value.
+   */
   void reset_timer(double plus=0.0);
+  /**
+   * Cancel the expire_event timer, if it is defined.
+   *
+   * @post expire_event is not set
+   */
   void cancel_timer();
 
-  epoch_t epoch;   // latest epoch we've seen.  odd == election, even == stable, 
+  /**
+   * Latest epoch we've seen.
+   *
+   * @remarks if its value is odd, we're electing; if it's even, then we're
+   *	      stable.
+   */
+  epoch_t epoch;
 
+  /**
+   * Indicates if we are participating in the quorum.
+   *
+   * @remarks By default, we are created as participating. We may stop
+   *	      participating if the Monitor explicitely calls
+   *	      Elector::stop_participating though. If that happens, it will
+   *	      have to call Elector::start_participating for us to resume
+   *	      participating in the quorum.
+   */
   bool participating;
 
   // electing me
+  /**
+   * @defgroup Elector_h_electing_me_vars We are being elected
+   * @{
+   */
+  /**
+   * Indicates if we are the ones being elected.
+   *
+   * We always attempt to be the one being elected if we are the ones starting
+   * the election. If we are not the ones that started it, we will only attempt
+   * to be elected if we think we might have a chance (i.e., the other guy's
+   * rank is lower than ours).
+   */
   bool     electing_me;
+  /**
+   * Holds the time at which we started the election.
+   */
   utime_t  start_stamp;
+  /**
+   * Set containing all those that acked our proposal to become the Leader.
+   *
+   * If we are acked by everyone in the MonMap, we will declare victory.
+   */
   set<int> acked_me;
+  /**
+   * @}
+   */
+  /**
+   * @defgroup Elector_h_electing_them_vars We are electing another guy
+   * @{
+   */
+  /**
+   * Indicates who we have acked
+   */
+  int	    leader_acked;
+  /**
+   * Indicates when we have acked him
+   */
+  utime_t   ack_stamp;
+  /**
+   * @}
+   */
+ 
+  /**
+   * Update our epoch.
+   *
+   * If we come across a higher epoch, we simply update ours, also making
+   * sure we are no longer being elected (even though we could have been,
+   * we no longer are since we no longer are on that old epoch).
+   *
+   * @pre Our epoch is lower than @p e
+   * @post Our epoch equals @p e
+   *
+   * @param e Epoch to which we will update our epoch
+   */
+  void bump_epoch(epoch_t e=0);
 
-  // electing them
-  int     leader_acked;  // who i've acked
-  utime_t ack_stamp;     // and when
-  
-  void bump_epoch(epoch_t e=0);  // i just saw a larger epoch
-
+  /**
+   * @defgroup Elector_h_callbacks Callbacks
+   * @{
+   */
+  /**
+   * This class is used as the callback when the expire_event timer fires up.
+   *
+   * If the expire_event is fired, then it means that we had an election going,
+   * either started by us or by some other participant, but it took too long,
+   * thus expiring.
+   *
+   * When the election expires, we will check if we were the ones who won, and
+   * if so we will declare victory. If that is not the case, then we assume
+   * that the one we defered to didn't declare victory quickly enough (in fact,
+   * as far as we know, we may even be dead); so, just propose ourselves as the
+   * Leader.
+   */
   class C_ElectionExpire : public Context {
     Elector *elector;
   public:
@@ -61,17 +171,155 @@ class Elector {
       elector->expire();
     }
   };
+  /**
+   * @}
+   */
 
-  void start();   // start an electing me
+  /**
+   * Start new elections by proposing ourselves as the new Leader.
+   *
+   * Basically, send propose messages to all the monitors in the MonMap and
+   * then reset the expire_event timer so we can limit the amount of time we 
+   * will be going at it.
+   *
+   * @pre   participating is true
+   * @post  epoch is an odd value
+   * @post  electing_me is true
+   * @post  we sent propose messages to all the monitors in the MonMap
+   * @post  we reset the expire_event timer
+   */
+  void start();
+  /**
+   * Defer the current election to some other monitor.
+   *
+   * This means that we will ack some other monitor and drop out from the run
+   * to become the Leader. We will only defer an election if the monitor we
+   * are deferring to outranks us.
+   *
+   * @pre   @p who outranks us (i.e., who < our rank)
+   * @pre   @p who outranks any other monitor we have deferred to in the past
+   * @post  electing_me is false
+   * @post  leader_acked equals @p who
+   * @post  we sent an ack message to @p who
+   * @post  we reset the expire_event timer
+   *
+   * @param who Some other monitor's numeric identifier. 
+   */
   void defer(int who);
-  void expire();  // timer goes off
+  /**
+   * The election has taken too long and has expired.
+   *
+   * This will happen when no one declared victory or started a new election
+   * during the time span allowed by the expire_event timer.
+   *
+   * When the election expires, we will check if we were the ones who won, and
+   * if so we will declare victory. If that is not the case, then we assume
+   * that the one we defered to didn't declare victory quickly enough (in fact,
+   * as far as we know, we may even be dead); so, just propose ourselves as the
+   * Leader.
+   */
+  void expire();
+  /**
+   * Declare Victory.
+   * 
+   * We won. Or at least we believe we won, but for all intentions and purposes
+   * that does not matter. What matters is that we Won.
+   *
+   * That said, we must now bump our epoch to reflect that the election is over
+   * and then we must let everybody in the quorum know we are their brand new
+   * Leader. And we will also cancel our expire_event timer.
+   *
+   * Actually, the quorum will be now defined as the group of monitors that
+   * acked us during the election process.
+   *
+   * @pre   Election is on-going
+   * @pre   electing_me is true
+   * @post  electing_me is false
+   * @post  epoch is bumped up into an even value
+   * @post  Election is not on-going
+   * @post  We have a quorum, composed of the monitors that acked us
+   * @post  We sent a message of type OP_VICTORY to each quorum member.
+   */
   void victory();
-   
+  
+  /**
+   * Handle a message from some other node proposing himself to become him
+   * the Leader.
+   *
+   * If the message appears to be old (i.e., its epoch is lower than our epoch),
+   * then we may take one of two actions:
+   *
+   *  @li Ignore it because it's nothing more than an old proposal
+   *  @li Start new elections if we verify that it was sent by a monitor from
+   *	  outside the quorum; given its old state, it's fair to assume he just
+   *	  started, so we should start new elections so he may rejoin
+   *
+   * If we did not ignore the received message, then we know that this message
+   * was sent by some other node proposing himself to become the Leader. So, we
+   * will take one of the following actions:
+   *
+   *  @li Ignore him because we already acked another node with higher rank
+   *  @li Ignore him and start a new election because we outrank him
+   *  @li Defer to him because he outranks us and the node we previously
+   *	  acked, if any
+   *
+   *
+   * @invariant The received message is an operation of type OP_PROPOSE
+   *
+   * @param m A message sent by another participant in the quorum.
+   */
   void handle_propose(class MMonElection *m);
+  /**
+   * Handle a message from some other participant Acking us as the Leader.
+   *
+   * When we receive such a message, one of three thing may be happening:
+   *  @li We received a message with a newer epoch, which means we must have
+   *	  somehow lost track of what was going on (maybe we rebooted), thus we
+   *	  will start a new election
+   *  @li We consider ourselves in the run for the Leader (i.e., @p electing_me 
+   *	  is true), and we are actually being Acked by someone; thus simply add
+   *	  the one acking us to the @p acked_me set. If we do now have acks from
+   *	  all the participants, then we can declare victory
+   *  @li We already deferred the election to somebody else, so we will just
+   *	  ignore this message
+   *
+   * @pre   Election is on-going
+   * @post  Election is on-going if we deferred to somebody else
+   * @post  Election is on-going if we are still waiting for further Acks
+   * @post  Election is not on-going if we are victorious
+   * @post  Election is not on-going if we must start a new one
+   *
+   * @param m A message with an operation type of OP_ACK
+   */
   void handle_ack(class MMonElection *m);
+  /**
+   * Handle a message from some other participant declaring Victory.
+   *
+   * We just got a message from someone declaring themselves Victorious, thus
+   * the new Leader.
+   *
+   * However, if the message's epoch happens to be different from our epoch+1,
+   * then it means we lost track of something and we must start a new election.
+   *
+   * If that is not the case, then we will simply update our epoch to the one
+   * in the message, cancel our @p expire_event timer and inform our Monitor
+   * that we lost the election and provide it with the new quorum.
+   *
+   * @pre   Election in on-going
+   * @post  Election is not on-going
+   * @post  Updated @p epoch
+   * @post  We have a new quorum if we lost the election
+   *
+   * @param m A message with an operation type of OP_VICTORY
+   */
   void handle_victory(class MMonElection *m);
   
- public:  
+ public:
+  /**
+   * Create an Elector class
+   *
+   * @param m A Monitor instance
+   */
   Elector(Monitor *m) : mon(m),
 			       expire_event(0),
 			       epoch(0),
@@ -79,20 +327,74 @@ class Elector {
 			       electing_me(false),
 			       leader_acked(-1) { }
 
+  /**
+   * Initiate the Elector class.
+   *
+   * Basically, we will simply read whatever epoch value we have in our stable
+   * storage, or consider it to be 1 if none is read.
+   *
+   * @post @p epoch is set to 1 or higher.
+   */
   void init();
+  /**
+   * Inform this class it is supposed to shutdown.
+   *
+   * We will simply cancel the @p expire_event if any exists.
+   *
+   * @post @p expire_event is cancelled 
+   */
   void shutdown();
 
+  /**
+   * Obtain our epoch
+   *
+   * @returns Our current epoch number
+   */
   epoch_t get_epoch() { return epoch; }
 
+  /**
+   * Handle received messages.
+   *
+   * We will ignore all messages that are not of type @p MSG_MON_ELECTION
+   * (i.e., messages whose interface is not of type @p MMonElection). All of
+   * those that are will then be dispatched to their operation-specific
+   * functions.
+   *
+   * @param m A received message
+   */
   void dispatch(Message *m);
 
+  /**
+   * Call an election.
+   *
+   * This function simply calls Elector::start.
+   */
   void call_election() {
     start();
   }
 
+  /**
+   * Stop participating in subsequent Elections.
+   *
+   * @post @p participating is false
+   */
   void stop_participating() { participating = false; }
+  /**
+   * Start participating in Elections.
+   *
+   * If we are already participating (i.e., @p participating is true), then
+   * calling this function is moot.
+   *
+   * However, if we are not participating (i.e., @p participating is false),
+   * then we will start participating by setting @p participating to true and
+   * we will call for an Election.
+   *
+   * @post  @p participating is true
+   */
   void start_participating();
+  /**
+   * @}
+   */
 };
-
 
 #endif
