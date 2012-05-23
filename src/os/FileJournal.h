@@ -318,6 +318,7 @@ private:
     delete[] zero_buf;
   }
 
+  int check();
   int create();
   int open(uint64_t fs_op_seq);
   void close();

@@ -185,18 +185,26 @@ int main(int argc, const char **argv)
       derr << "Unable to get a Ceph keyring." << dendl;
       return 1;
     }
+
     EntityName ename(g_conf->name);
     EntityAuth eauth;
-    eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
-    keyring->add(ename, eauth);
-    bufferlist bl;
-    keyring->encode_plaintext(bl);
-    int r = bl.write_file(g_conf->keyring.c_str(), 0600);
-    if (r)
-      derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf->keyring
-	   << ": " << cpp_strerror(r) << TEXT_NORMAL << dendl;
-    else
-      derr << "created new key in keyring " << g_conf->keyring << dendl;
+
+    int ret = keyring->load(g_ceph_context, g_conf->keyring);
+    if (ret == 0 &&
+	keyring->get_auth(ename, eauth)) {
+      derr << "already have key in keyring " << g_conf->keyring << dendl;
+    } else {
+      eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+      keyring->add(ename, eauth);
+      bufferlist bl;
+      keyring->encode_plaintext(bl);
+      int r = bl.write_file(g_conf->keyring.c_str(), 0600);
+      if (r)
+	derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf->keyring
+	     << ": " << cpp_strerror(r) << TEXT_NORMAL << dendl;
+      else
+	derr << "created new key in keyring " << g_conf->keyring << dendl;
+    }
   }
   if (mkfs || mkkey)
     exit(0);
