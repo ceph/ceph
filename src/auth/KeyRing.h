@@ -74,6 +74,11 @@ public:
   void add(const EntityName& name, EntityAuth &a) {
     keys[name] = a;
   }
+  void add(const EntityName& name, CryptoKey &k) {
+    EntityAuth a;
+    a.key = k;
+    keys[name] = a;
+  }
   void remove(const EntityName& name) {
     keys.erase(name);
   }

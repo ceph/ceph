@@ -431,6 +431,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
+	m->cmd[1] == "get-or-create" ||
 	m->cmd[1] == "get-or-create-key" ||
 	m->cmd[1] == "caps") {
       return false;
@@ -628,7 +629,9 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "get-or-create-key" && m->cmd.size() >= 3) {
+    else if ((m->cmd[1] == "get-or-create-key" ||
+	      m->cmd[1] == "get-or-create") &&
+	     m->cmd.size() >= 3) {
       // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
       EntityName entity;
       if (!entity.from_str(m->cmd[2])) {
@@ -652,7 +655,13 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	  }
 	}
 
-	ss << entity_auth.key;
+	if (m->cmd[1] == "get-or-create-key") {
+	  ss << entity_auth.key;
+	} else {
+	  KeyRing kr;
+	  kr.add(entity, entity_auth.key);
+	  kr.encode_plaintext(rdata);
+	}
 	err = 0;
 	goto done;
       }
@@ -683,9 +692,16 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
       push_cephx_inc(auth_inc);
 
-      ss << auth_inc.auth.key;
+      if (m->cmd[1] == "get-or-create-key") {
+	ss << auth_inc.auth.key;
+      } else {
+	KeyRing kr;
+	kr.add(entity, auth_inc.auth.key);
+	kr.encode_plaintext(rdata);
+      }
+
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, rdata, paxos->get_version()));
       return true;
     }
     else if (m->cmd[1] == "caps" && m->cmd.size() >= 3) {
