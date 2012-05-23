@@ -296,10 +296,10 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 
   formatter->open_object_section("user_info");
 
-  formatter->dump_string("user_id", info.user_id.c_str());
+  formatter->dump_string("user_id", info.user_id);
   formatter->dump_int("rados_uid", info.auid);
-  formatter->dump_string("display_name", info.display_name.c_str());
-  formatter->dump_string("email", info.user_email.c_str());
+  formatter->dump_string("display_name", info.display_name);
+  formatter->dump_string("email", info.user_email);
   formatter->dump_int("suspended", (int)info.suspended);
 
   // subusers
@@ -473,12 +473,12 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   }
   map<RGWObjCategory, RGWBucketStats>::iterator iter;
   formatter->open_object_section("stats");
-  formatter->dump_string("bucket", bucket.name.c_str());
-  formatter->dump_string("pool", bucket.pool.c_str());
+  formatter->dump_string("bucket", bucket.name);
+  formatter->dump_string("pool", bucket.pool);
   
   formatter->dump_string("id", bucket.bucket_id);
-  formatter->dump_string("marker", bucket.marker.c_str());
-  formatter->dump_string("owner", bucket_info.owner.c_str());
+  formatter->dump_string("marker", bucket.marker);
+  formatter->dump_string("owner", bucket_info.owner);
   formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
     RGWBucketStats& s = iter->second;
@@ -1156,23 +1156,23 @@ int main(int argc, char **argv)
 
         if (show_log_entries) {
 	  formatter->open_object_section("log_entry");
-	  formatter->dump_string("bucket", entry.bucket.c_str());
+	  formatter->dump_string("bucket", entry.bucket);
 	  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
 	  entry.time.localtime(formatter->dump_stream("time_local"));
-	  formatter->dump_string("remote_addr", entry.remote_addr.c_str());
+	  formatter->dump_string("remote_addr", entry.remote_addr);
 	  if (entry.object_owner.length())
-	    formatter->dump_string("object_owner", entry.object_owner.c_str());
-	  formatter->dump_string("user", entry.user.c_str());
-	  formatter->dump_string("operation", entry.op.c_str());
-	  formatter->dump_string("uri", entry.uri.c_str());
-	  formatter->dump_string("http_status", entry.http_status.c_str());
-	  formatter->dump_string("error_code", entry.error_code.c_str());
+	    formatter->dump_string("object_owner", entry.object_owner);
+	  formatter->dump_string("user", entry.user);
+	  formatter->dump_string("operation", entry.op);
+	  formatter->dump_string("uri", entry.uri);
+	  formatter->dump_string("http_status", entry.http_status);
+	  formatter->dump_string("error_code", entry.error_code);
 	  formatter->dump_int("bytes_sent", entry.bytes_sent);
 	  formatter->dump_int("bytes_received", entry.bytes_received);
 	  formatter->dump_int("object_size", entry.obj_size);
 	  formatter->dump_int("total_time", total_time);
-	  formatter->dump_string("user_agent",  entry.user_agent.c_str());
-	  formatter->dump_string("referrer",  entry.referrer.c_str());
+	  formatter->dump_string("user_agent",  entry.user_agent);
+	  formatter->dump_string("referrer",  entry.referrer);
 	  formatter->close_section();
 	  formatter->flush(cout);
         }
