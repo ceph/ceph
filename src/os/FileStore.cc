@@ -891,7 +891,7 @@ int FileStore::mkfs()
     goto close_fsid_fd;
   }
 
-  if (read_fsid(fsid_fd, old_fsid) < 0 || old_fsid.is_zero()) {
+  if (read_fsid(fsid_fd, &old_fsid) < 0 || old_fsid.is_zero()) {
     if (fsid.is_zero()) {
       fsid.generate_random();
       dout(1) << "mkfs generated fsid " << fsid << dendl;
@@ -1092,7 +1092,7 @@ int FileStore::mkjournal()
     derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
     return -err;
   }
-  ret = read_fsid(fd, fsid);
+  ret = read_fsid(fd, &fsid);
   if (ret < 0) {
     derr << "FileStore::mkjournal: read error: " << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
@@ -1118,7 +1118,7 @@ int FileStore::mkjournal()
   return ret;
 }
 
-int FileStore::read_fsid(int fd, uuid_d& uuid)
+int FileStore::read_fsid(int fd, uuid_d *uuid)
 {
   char fsid_str[40];
   int ret = safe_read(fd, fsid_str, sizeof(fsid_str));
@@ -1126,14 +1126,14 @@ int FileStore::read_fsid(int fd, uuid_d& uuid)
     return ret;
   if (ret == 8) {
     // old 64-bit fsid... mirror it.
-    *(uint64_t*)&uuid.uuid[0] = *(uint64_t*)fsid_str;
-    *(uint64_t*)&uuid.uuid[8] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&uuid->uuid[0] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&uuid->uuid[8] = *(uint64_t*)fsid_str;
     return 0;
   }
 
   if (ret > 36)
     fsid_str[36] = 0;
-  if (!uuid.parse(fsid_str))
+  if (!uuid->parse(fsid_str))
     return -EINVAL;
   return 0;
 }
@@ -1591,7 +1591,7 @@ int FileStore::mount()
     goto done;
   }
 
-  ret = read_fsid(fsid_fd, fsid);
+  ret = read_fsid(fsid_fd, &fsid);
   if (ret < 0) {
     derr << "FileStore::mount: error reading fsid_fd: " << cpp_strerror(ret)
 	 << dendl;
