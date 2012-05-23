@@ -44,6 +44,7 @@ class MonMap {
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
 	 p++) {
+      assert(addr_name.count(p->second) == 0);
       addr_name[p->second] = p->first;
     }
     unsigned i = 0;
@@ -93,6 +94,7 @@ class MonMap {
 
   void add(const string &name, const entity_addr_t &addr) {
     assert(mon_addr.count(name) == 0);
+    assert(addr_name.count(addr) == 0);
     mon_addr[name] = addr;
     calc_ranks();
   }
