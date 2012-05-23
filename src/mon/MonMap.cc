@@ -262,6 +262,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     int r = build_from_host_list(conf->mon_host, "noname-");
     if (r < 0)
       errout << "unable to parse addrs in '" << conf->mon_host << "'" << std::endl;
+    return 0;
   }
 
   // What monitors are in the config file?
