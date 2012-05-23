@@ -703,7 +703,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   command_wq(this, g_conf->osd_command_thread_timeout, &command_tp),
   recovery_ops_active(0),
   recovery_wq(this, g_conf->osd_recovery_thread_timeout, &recovery_tp),
-  remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, g_conf->osd_snap_trim_thread_timeout, &disk_tp),
   scrub_wq(this, g_conf->osd_scrub_thread_timeout, &disk_tp),
@@ -1903,22 +1902,6 @@ void OSD::tick()
   else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
     do_mon_report();
   }
-
-  // remove stray pgs?
-  remove_list_lock.Lock();
-  for (map<epoch_t, map<int, vector<pg_t> > >::iterator p = remove_list.begin();
-       p != remove_list.end();
-       p++)
-    for (map<int, vector<pg_t> >::iterator q = p->second.begin();
-	 q != p->second.end();
-	 q++) {
-      if (osdmap->is_up(q->first)) {
-	MOSDPGRemove *m = new MOSDPGRemove(p->first, q->second);
-	cluster_messenger->send_message(m, osdmap->get_cluster_inst(q->first));
-      }
-    }
-  remove_list.clear();
-  remove_list_lock.Unlock();
 
   map_lock.put_read();
 
@@ -5256,12 +5239,6 @@ void OSDService::queue_for_peering(PG *pg)
 void OSDService::queue_for_op(PG *pg)
 {
   op_wq.queue(pg);
-}
-
-void OSDService::queue_for_removal(epoch_t epoch, int osdnum, pg_t pgid) {
-  osd->remove_list_lock.Lock();
-  osd->remove_list[epoch][osdnum].push_back(pgid);
-  osd->remove_list_lock.Unlock();
 }
 
 void OSD::process_peering_event(PG *pg)

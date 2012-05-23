@@ -274,7 +274,6 @@ public:
   bool queue_for_scrub(PG *pg) {
     return scrub_wq.queue(pg);
   }
-  void queue_for_removal(epoch_t epoch, int osd, pg_t pgid);
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
@@ -981,9 +980,6 @@ protected:
   void defer_recovery(PG *pg);
   void do_recovery(PG *pg);
   bool _recover_now();
-
-  Mutex remove_list_lock;
-  map<epoch_t, map<int, vector<pg_t> > > remove_list;
 
   // replay / delayed pg activation
   Mutex replay_queue_lock;
