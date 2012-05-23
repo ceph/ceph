@@ -400,6 +400,7 @@ void MonClient::_pick_new_mon()
 {
   assert(monc_lock.is_locked());
 
+  assert(monmap.size() > 0);
   if (!cur_mon.empty() && monmap.size() > 1) {
     // pick a _different_ mon
     cur_mon = monmap.pick_random_mon_not(cur_mon);
