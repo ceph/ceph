@@ -1143,11 +1143,6 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "osd") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
       osdmon()->dispatch(m);
       return;
     }
