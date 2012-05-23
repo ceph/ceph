@@ -1000,8 +1000,8 @@ int FileStore::mkfs()
       }
       btrfs_stable_commits = true;
     }
-  }
 #endif
+  }
 
   // write initial op_seq
   {
