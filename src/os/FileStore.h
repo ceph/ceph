@@ -83,7 +83,10 @@ class FileStore : public JournalingObjectStore,
   // helper fns
   int get_cdir(coll_t cid, char *s, int len);
   
-  int read_fsid(int fd);
+  /// read a uuid from fd
+  int read_fsid(int fd, uuid_d *uuid);
+
+  /// lock fsid_fd
   int lock_fsid();
 
   // sync thread
@@ -296,7 +299,6 @@ public:
   int mount();
   int umount();
   int get_max_object_name_length();
-  int wipe_subvol(const char *s);
   int mkfs();
   int mkjournal();
 
@@ -468,7 +470,6 @@ private:
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
   bool m_filestore_journal_writeahead;
-  std::string m_filestore_dev;
   int m_filestore_fiemap_threshold;
   bool m_filestore_sync_flush;
   int m_filestore_flusher_max_fds;
