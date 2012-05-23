@@ -42,9 +42,10 @@ public:
     wait_on_full(false) { }
   virtual ~Journal() { }
 
-  virtual int create() = 0;
-  virtual int open(uint64_t fs_op_seq) = 0;
-  virtual void close() = 0;
+  virtual int check() = 0;   ///< check if journal appears valid
+  virtual int create() = 0;  ///< create a fresh journal
+  virtual int open(uint64_t fs_op_seq) = 0;  ///< open an existing journal
+  virtual void close() = 0;  ///< close an open journal
 
   virtual void flush() = 0;
   virtual void throttle() = 0;
