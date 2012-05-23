@@ -136,6 +136,15 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    return true;
+  }
+
   vector<const char*> args;
   for (unsigned i = 1; i < m->cmd.size(); i++)
     args.push_back(m->cmd[i].c_str());
@@ -279,6 +288,16 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   stringstream ss;
   string rs;
   int err = -EINVAL;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    return true;
+  }
+
   if (m->cmd.size() > 1) {
     if (m->cmd.size() == 4 && m->cmd[1] == "add") {
       string name = m->cmd[2];
@@ -335,6 +354,15 @@ out:
 bool MonmapMonitor::preprocess_join(MMonJoin *join)
 {
   dout(10) << "preprocess_join " << join->name << " at " << join->addr << dendl;
+
+  MonSession *session = join->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))) {
+    dout(10) << " insufficient caps" << dendl;
+    join->put();
+    return true;
+  }
 
   if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;

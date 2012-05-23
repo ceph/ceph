@@ -434,7 +434,16 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	m->cmd[1] == "caps") {
       return false;
     }
-    else if (m->cmd[1] == "export") {
+
+    MonSession *session = m->get_session();
+    if (!session ||
+	(!session->caps.get_allow_all() &&
+	 !mon->_allowed_command(session, m->cmd))) {
+      mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+      return true;
+    }
+
+    if (m->cmd[1] == "export") {
       KeyRing keyring;
       export_keyring(keyring);
       if (m->cmd.size() > 2) {
@@ -543,6 +552,14 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   bufferlist rdata;
   string rs;
   int err = -EINVAL;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    return true;
+  }
 
   // nothing here yet
   if (m->cmd.size() > 1) {
