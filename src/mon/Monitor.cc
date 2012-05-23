@@ -999,9 +999,6 @@ void Monitor::finish_election()
 
 bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 {
-  if (s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))
-    return true;
-
   for (list<list<string> >::iterator p = s->caps.cmd_allow.begin();
        p != s->caps.cmd_allow.end();
        ++p) {
@@ -1124,7 +1121,9 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  if (!session || !_allowed_command(session, m->cmd)) {
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !_allowed_command(session, m->cmd))) {
     string rs = "Access denied";
     reply_command(m, -EACCES, rs, 0);
     return;
