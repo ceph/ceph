@@ -204,10 +204,10 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 
 # figure machine's ip
+HOSTNAME=`hostname`
 if [ "$localhost" -eq 1 ]; then
     IP="127.0.0.1"
 else
-    HOSTNAME=`hostname`
     echo hostname $HOSTNAME
     RAW_IP=`hostname --ip-address`
     # filter out IPv6 and localhost addresses
