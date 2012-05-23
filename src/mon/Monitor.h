@@ -102,6 +102,11 @@ public:
   Mutex lock;
   SafeTimer timer;
   
+  /// true if we have ever joined a quorum.  if false, we are either a
+  /// new cluster, a newly joining monitor, or a just-upgraded
+  /// monitor.
+  bool has_ever_joined;
+
   PerfCounters *logger, *cluster_logger;
   bool cluster_logger_registered;
 
@@ -109,6 +114,8 @@ public:
   void unregister_cluster_logger();
 
   MonMap *monmap;
+
+  set<entity_addr_t> extra_probe_peers;
 
   LogClient clog;
   KeyRing keyring;
@@ -199,6 +206,12 @@ public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
+  set<string> get_quorum_names() {
+    set<string> q;
+    for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+      q.insert(monmap->get_name(*p));
+    return q;
+  }
 
   void bootstrap();
   void reset();
@@ -266,6 +279,7 @@ public:
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
+  void _add_bootstrap_peer_hint(string cmd, ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
 

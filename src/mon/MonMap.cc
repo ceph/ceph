@@ -8,6 +8,11 @@
 #include "common/Formatter.h"
 
 #include "include/ceph_features.h"
+#include "include/addr_parsing.h"
+#include "common/ceph_argparse.h"
+#include "common/errno.h"
+
+#include "common/dout.h"
 
 using ceph::Formatter;
 
@@ -140,4 +145,174 @@ void MonMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+}
+
+
+int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
+{
+  vector<entity_addr_t> addrs;
+  if (parse_ip_port_vec(hostlist.c_str(), addrs)) {
+    for (unsigned i=0; i<addrs.size(); i++) {
+      char n[2];
+      n[0] = 'a' + i;
+      n[1] = 0;
+      if (addrs[i].get_port() == 0)
+	addrs[i].set_port(CEPH_MON_PORT);
+      string name = prefix;
+      name += n;
+      add(name, addrs[i]);
+    }
+    return 0;
+  }
+
+  // maybe they passed us a DNS-resolvable name
+  char *hosts = NULL;
+  hosts = resolve_addrs(hostlist.c_str());
+  if (!hosts)
+    return -EINVAL;
+  bool success = parse_ip_port_vec(hosts, addrs);
+  free(hosts);
+  if (!success)
+    return -EINVAL;
+
+  for (unsigned i=0; i<addrs.size(); i++) {
+    char n[2];
+    n[0] = 'a' + i;
+    n[1] = 0;
+    if (addrs[i].get_port() == 0)
+      addrs[i].set_port(CEPH_MON_PORT);
+    string name = prefix;
+    name += n;
+    add(name, addrs[i]);
+  }
+  return 0;
+}
+
+void MonMap::set_initial_members(CephContext *cct,
+				 list<std::string>& initial_members,
+				 string my_name, entity_addr_t my_addr,
+				 set<entity_addr_t> *removed)
+{
+  // remove non-initial members
+  unsigned i = 0;
+  while (i < size()) {
+    string n = get_name(i);
+    if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
+      lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addr(i) << dendl;
+      i++;
+      continue;
+    }
+
+    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addr(i) << dendl;
+    if (removed)
+      removed->insert(get_addr(i));
+    remove(n);
+    assert(!contains(n));
+  }
+
+  // add missing initial members
+  for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
+    if (!contains(*p)) {
+      if (*p == my_name) {
+	lgeneric_dout(cct, 1) << " adding self " << *p << " " << my_addr << dendl;
+	add(*p, my_addr);
+      } else {
+	entity_addr_t a;
+	a.set_family(AF_INET);
+	for (int n=1; ; n++) {
+	  a.set_nonce(n);
+	  if (!contains(a))
+	    break;
+	}
+	lgeneric_dout(cct, 1) << " adding " << *p << " " << a << dendl;
+	add(*p, a);
+      }
+      assert(contains(*p));
+    }
+  }
+}
+
+
+int MonMap::build_initial(CephContext *cct, ostream& errout)
+{
+  const md_config_t *conf = cct->_conf;
+  // file?
+  if (!conf->monmap.empty()) {
+    int r;
+    try {
+      r = read(conf->monmap.c_str());
+    }
+    catch (const buffer::error &e) {
+      r = -EINVAL;
+    }
+    if (r >= 0)
+      return 0;
+    errout << "unable to read/decode monmap from " << conf->monmap
+	 << ": " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  // fsid from conf?
+  if (!cct->_conf->fsid.is_zero()) {
+    fsid = cct->_conf->fsid;
+  }
+
+  // -m foo?
+  if (!conf->mon_host.empty()) {
+    int r = build_from_host_list(conf->mon_host, "noname-");
+    if (r < 0)
+      errout << "unable to parse addrs in '" << conf->mon_host << "'" << std::endl;
+  }
+
+  // What monitors are in the config file?
+  std::vector <std::string> sections;
+  int ret = conf->get_all_sections(sections);
+  if (ret) {
+    errout << "Unable to find any monitors in the configuration "
+         << "file, because there was an error listing the sections. error "
+	 << ret << std::endl;
+    return -ENOENT;
+  }
+  std::vector <std::string> mon_names;
+  for (std::vector <std::string>::const_iterator s = sections.begin();
+       s != sections.end(); ++s) {
+    if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
+      mon_names.push_back(s->substr(4));
+    }
+  }
+
+  // Find an address for each monitor in the config file.
+  for (std::vector <std::string>::const_iterator m = mon_names.begin();
+       m != mon_names.end(); ++m) {
+    std::vector <std::string> sections;
+    std::string m_name("mon");
+    m_name += ".";
+    m_name += *m;
+    sections.push_back(m_name);
+    sections.push_back("mon");
+    sections.push_back("global");
+    std::string val;
+    int res = conf->get_val_from_conf_file(sections, "mon addr", val, true);
+    if (res) {
+      errout << "failed to get an address for mon." << *m << ": error "
+	   << res << std::endl;
+      continue;
+    }
+    entity_addr_t addr;
+    if (!addr.parse(val.c_str())) {
+      errout << "unable to parse address for mon." << *m
+	   << ": addr='" << val << "'" << std::endl;
+      continue;
+    }
+    if (addr.get_port() == 0)
+      addr.set_port(CEPH_MON_PORT);    
+    add(m->c_str(), addr);
+  }
+
+  if (size() == 0) {
+    errout << "unable to find any monitors in conf. "
+	 << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
+    return -ENOENT;
+  }
+  return 0;
 }
