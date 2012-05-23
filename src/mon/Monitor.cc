@@ -1220,10 +1220,6 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "auth") {
-      if (!session->caps.get_allow_all() && !_allowed_command(session, m->cmd)) {
-	r = -EACCES;
-	goto out;
-      }
       authmon()->dispatch(m);
       return;
     }
