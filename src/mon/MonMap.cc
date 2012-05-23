@@ -305,7 +305,14 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
       continue;
     }
     if (addr.get_port() == 0)
-      addr.set_port(CEPH_MON_PORT);    
+      addr.set_port(CEPH_MON_PORT);
+
+    // the make sure this mon isn't already in the map
+    if (contains(addr))
+      remove(get_name(addr));
+    if (contains(*m))
+      remove(*m);
+
     add(m->c_str(), addr);
   }
 
