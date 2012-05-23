@@ -78,8 +78,8 @@ void Elector::start()
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == mon->rank) continue;
-    mon->messenger->send_message(new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap),
-				 mon->monmap->get_inst(i));
+    Message *m = new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
+    mon->messenger->send_message(m, mon->monmap->get_inst(i));
   }
   
   reset_timer();
@@ -294,7 +294,8 @@ void Elector::dispatch(Message *m)
         return;
       }
       if (m->get_source().num() >= mon->monmap->size()) {
-	dout(5) << " ignoring bogus election message with bad mon rank " << m->get_source() << dendl;
+	dout(5) << " ignoring bogus election message with bad mon rank " 
+		<< m->get_source() << dendl;
 	m->put();
 	return;
       }
@@ -303,7 +304,8 @@ void Elector::dispatch(Message *m)
 
       // assume an old message encoding would have matched
       if (em->fsid != mon->monmap->fsid) {
-	dout(0) << " ignoring election msg fsid " << em->fsid << " != " << mon->monmap->fsid << dendl;
+	dout(0) << " ignoring election msg fsid " 
+		<< em->fsid << " != " << mon->monmap->fsid << dendl;
 	m->put();
 	return;
       }
