@@ -362,6 +362,7 @@ EOF
         keyring = dev/osd$osd/keyring
 EOF
 		    rm -rf dev/osd$osd || true
+		    for f in dev/osd$osd/* ; do btrfs sub delete $f || true ; done || true
 		    mkdir -p dev/osd$osd
 	    fi
 
