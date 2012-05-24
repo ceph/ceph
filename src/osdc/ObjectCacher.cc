@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
+#include <limits.h>
 
 /*** ObjectCacher::BufferHead ***/
 
