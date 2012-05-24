@@ -18,6 +18,7 @@
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 
+#include <limits.h>
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
