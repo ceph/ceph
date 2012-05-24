@@ -1013,9 +1013,16 @@ int FileStore::mkfs()
       goto close_fsid_fd;
     }
     if (initial_seq == 0) {
+      int err = write_op_seq(fd, 1);
+      if (err < 0) {
+	TEMP_FAILURE_RETRY(::close(fd));
+	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
+	     << cpp_strerror(err) << dendl;
+	goto close_fsid_fd;
+      }
 
       if (btrfs_stable_commits) {
-	// create snap_0 too
+	// create snap_1 too
 	snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
 	volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
 	assert(volargs.fd >= 0);
@@ -1035,14 +1042,6 @@ int FileStore::mkfs()
 	  goto close_fsid_fd;
 	}
 	TEMP_FAILURE_RETRY(::close(volargs.fd));
-      }
-      
-      int err = write_op_seq(fd, 1);
-      if (err < 0) {
-	TEMP_FAILURE_RETRY(::close(fd));  
-	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
-	     << cpp_strerror(err) << dendl;
-	goto close_fsid_fd;
       }
     }
     TEMP_FAILURE_RETRY(::close(fd));  
