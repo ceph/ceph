@@ -61,9 +61,10 @@ block::
     finally:
         cluster.shutdown()
 
-This can be cumbersome, so the :class:Rados, :class:Ioctx, and :class:Image
-classes can be used as context managers that close/shutdown automatically (see
-:pep:`343`). Using them as context managers, the above example becomes::
+This can be cumbersome, so the :class:`Rados`, :class:`Ioctx`, and
+:class:`Image` classes can be used as context managers that close/shutdown
+automatically (see :pep:`343`). Using them as context managers, the
+above example becomes::
 
     with rados.Rados(conffile='my_ceph.conf') as cluster:
         with cluster.open_ioctx('mypool') as ioctx:
