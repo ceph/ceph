@@ -47,7 +47,7 @@ using namespace __gnu_cxx;
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
-  static const uint32_t on_disk_version = 2;
+  static const uint32_t on_disk_version = 3;
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
   std::string current_fn;

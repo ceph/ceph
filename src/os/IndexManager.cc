@@ -97,7 +97,8 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
       return 0;
     }
     case CollectionIndex::HASH_INDEX_TAG: // fall through
-    case CollectionIndex::HASH_INDEX_TAG_2: {
+    case CollectionIndex::HASH_INDEX_TAG_2: // fall through
+    case CollectionIndex::HOBJECT_WITH_POOL: {
       // Must be a HashIndex
       *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				   g_conf->filestore_split_multiple, version), 
@@ -111,7 +112,7 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
     // No need to check
     *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				 g_conf->filestore_split_multiple,
-				 CollectionIndex::HASH_INDEX_TAG_2), 
+				 CollectionIndex::HOBJECT_WITH_POOL), 
 		   RemoveOnDelete(c, this));
     return 0;
   }

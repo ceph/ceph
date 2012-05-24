@@ -81,6 +81,7 @@ protected:
   static const uint32_t FLAT_INDEX_TAG = 0;
   static const uint32_t HASH_INDEX_TAG = 1;
   static const uint32_t HASH_INDEX_TAG_2 = 2;
+  static const uint32_t HOBJECT_WITH_POOL = 3;
   /**
    * For tracking Filestore collection versions.
    *
