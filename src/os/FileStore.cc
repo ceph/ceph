@@ -1799,6 +1799,11 @@ int FileStore::mount()
   }
 
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
+  if (initial_op_seq == 0) {
+    derr << "mount initial op seq is 0; something is wrong" << dendl;
+    ret = -EINVAL;
+    goto close_current_fd;
+  }
 
   if (!btrfs_stable_commits) {
     // mark current/ as non-snapshotted so that we don't rollback away
