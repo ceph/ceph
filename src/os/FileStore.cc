@@ -1326,18 +1326,33 @@ int FileStore::_detect_fs()
       dout(0) << "mount btrfs CLONE_RANGE ioctl is DISABLED via 'filestore btrfs clone range' option" << dendl;
     }
 
+    struct btrfs_ioctl_vol_args vol_args;
+    memset(&vol_args, 0, sizeof(vol_args));
+
+    // create test source volume
+    vol_args.fd = 0;
+    strcpy(vol_args.name, "test_subvol");
+    r = ::ioctl(fd, BTRFS_IOC_SUBVOL_CREATE, &vol_args);
+    if (r != 0) {
+      r = -errno;
+      dout(0) << "mount  failed to create simple subvolume " << vol_args.name << ": " << cpp_strerror(r) << dendl;
+    }
+    int srcfd = ::openat(fd, vol_args.name, O_RDONLY);
+    if (srcfd < 0) {
+      r = -errno;
+      dout(0) << "mount  failed to open " << vol_args.name << ": " << cpp_strerror(r) << dendl;
+    }
+
     // snap_create and snap_destroy?
-    struct btrfs_ioctl_vol_args volargs;
-    memset(&volargs, 0, sizeof(volargs));
-    volargs.fd = fd;
-    strcpy(volargs.name, "sync_snap_test");
-    r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &volargs);
+    vol_args.fd = srcfd;
+    strcpy(vol_args.name, "sync_snap_test");
+    r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
     int err = errno;
     if (r == 0 || errno == EEXIST) {
       dout(0) << "mount btrfs SNAP_CREATE is supported" << dendl;
       btrfs_snap_create = true;
 
-      r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+      r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
       if (r == 0) {
 	dout(0) << "mount btrfs SNAP_DESTROY is supported" << dendl;
 	btrfs_snap_destroy = true;
@@ -1384,19 +1399,15 @@ int FileStore::_detect_fs()
 
     if (btrfs_wait_sync) {
       // async snap creation?
-      struct btrfs_ioctl_vol_args vol_args;
-      memset(&vol_args, 0, sizeof(vol_args));
-      vol_args.fd = 0;
-      strcpy(vol_args.name, "async_snap_test");
-
       struct btrfs_ioctl_vol_args_v2 async_args;
       memset(&async_args, 0, sizeof(async_args));
-      async_args.fd = fd;
+      async_args.fd = srcfd;
       async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
       strcpy(async_args.name, "async_snap_test");
 
       // remove old one, first
       struct stat st;
+      strcpy(vol_args.name, async_args.name);
       if (::fstatat(fd, vol_args.name, &st, 0) == 0) {
 	dout(0) << "mount btrfs removing old async_snap_test" << dendl;
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
@@ -1412,6 +1423,7 @@ int FileStore::_detect_fs()
 	btrfs_snap_create_v2 = true;
       
 	// clean up
+	strcpy(vol_args.name, "async_snap_test");
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	if (r != 0) {
 	  int err = errno;
@@ -1422,6 +1434,17 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_CREATE_V2 is NOT supported: "
 		<< cpp_strerror(err) << dendl;
       }
+    }
+
+    // clean up test subvol
+    if (srcfd >= 0)
+      TEMP_FAILURE_RETRY(::close(srcfd));
+
+    strcpy(vol_args.name, "test_subvol");
+    r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
+    if (r < 0) {
+      r = -errno;
+      dout(0) << "mount  failed to remove " << vol_args.name << ": " << cpp_strerror(r) << dendl;
     }
 
     if (m_filestore_btrfs_snap && !btrfs_snap_create_v2) {
