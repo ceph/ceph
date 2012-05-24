@@ -5,18 +5,20 @@
 
 void hobject_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(key, bl);
   ::encode(oid, bl);
   ::encode(snap, bl);
   ::encode(hash, bl);
   ::encode(max, bl);
+  ::encode(nspace, bl);
+  ::encode(pool, bl);
   ENCODE_FINISH(bl);
 }
 
 void hobject_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 1)
     ::decode(key, bl);
   ::decode(oid, bl);
@@ -26,6 +28,10 @@ void hobject_t::decode(bufferlist::iterator& bl)
     ::decode(max, bl);
   else
     max = false;
+  if (struct_v >= 4) {
+    ::decode(nspace, bl);
+    ::decode(pool, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -62,9 +68,9 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
   o.push_back(new hobject_t);
   o.push_back(new hobject_t);
   o.back()->max = true;
-  o.push_back(new hobject_t(object_t("oname"), string(), 1, 234));
-  o.push_back(new hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP, 67));
-  o.push_back(new hobject_t(object_t("oname3"), string("oname3"), CEPH_SNAPDIR, 910));
+  o.push_back(new hobject_t(object_t("oname"), string(), 1, 234, -1));
+  o.push_back(new hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP, 67, 0));
+  o.push_back(new hobject_t(object_t("oname3"), string("oname3"), CEPH_SNAPDIR, 910, 1));
 }
 
 ostream& operator<<(ostream& out, const hobject_t& o)
@@ -75,5 +81,6 @@ ostream& operator<<(ostream& out, const hobject_t& o)
   if (o.get_key().length())
     out << "." << o.get_key();
   out << "/" << o.oid << "/" << o.snap;
+  out << "/" << o.nspace << "/" << o.pool;
   return out;
 }

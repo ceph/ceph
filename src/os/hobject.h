@@ -30,6 +30,8 @@ struct hobject_t {
   snapid_t snap;
   uint32_t hash;
   bool max;
+  int64_t pool;
+  string nspace;
 
 private:
   string key;
@@ -39,19 +41,23 @@ public:
     return key;
   }
   
-  hobject_t() : snap(0), hash(0), max(false) {}
+  hobject_t() : snap(0), hash(0), max(false), pool(-1) {}
 
-  hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash) : 
+  hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash,
+	    int64_t pool) : 
     oid(oid), snap(snap), hash(hash), max(false),
+    pool(pool),
     key(oid.name == key ? string() : key) {}
 
-  hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
+  hobject_t(const sobject_t &soid, const string &key, uint32_t hash,
+	    int64_t pool) : 
     oid(soid.oid), snap(soid.snap), hash(hash), max(false),
+    pool(pool),
     key(soid.oid.name == key ? string() : key) {}
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
-    oid(o.oid), snap(o.snap), max(false) {
+    oid(o.oid), snap(o.snap), max(false), pool(-1) {
     hash = __gnu_cxx::hash<sobject_t>()(o);
   }
 
@@ -91,14 +97,8 @@ public:
 
   void swap(hobject_t &o) {
     hobject_t temp(o);
-    o.oid = oid;
-    o.key = key;
-    o.snap = snap;
-    o.hash = hash;
-    oid = temp.oid;
-    key = temp.key;
-    snap = temp.snap;
-    hash = temp.hash;
+    o = (*this);
+    (*this) = temp;
   }
 
   void encode(bufferlist& bl) const;
@@ -121,9 +121,15 @@ namespace __gnu_cxx {
 
 ostream& operator<<(ostream& out, const hobject_t& o);
 
-WRITE_EQ_OPERATORS_5(hobject_t, oid, get_key(), snap, hash, max)
+WRITE_EQ_OPERATORS_7(hobject_t, oid, get_key(), snap, hash, max, pool, nspace)
 // sort hobject_t's by <max, get_filestore_key(hash), key, oid, snapid>
-WRITE_CMP_OPERATORS_5(hobject_t, max, get_filestore_key(), get_effective_key(), oid, snap)
-
+WRITE_CMP_OPERATORS_7(hobject_t,
+		      max,
+		      get_filestore_key(),
+		      nspace,
+		      pool,
+		      get_effective_key(),
+		      oid,
+		      snap)
 
 #endif

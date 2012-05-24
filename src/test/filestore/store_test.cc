@@ -257,7 +257,7 @@ public:
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return hobject_t(name, string(), CEPH_NOSNAP, rand());
+    return hobject_t(name, string(), CEPH_NOSNAP, rand(), 0);
   }
 };
 
@@ -485,7 +485,7 @@ TEST_F(StoreTest, HashCollisionTest) {
     if (!(i % 5)) {
       cerr << "Object " << i << std::endl;
     }
-    hobject_t hoid(string(buf) + base, string(), CEPH_NOSNAP, 0);
+    hobject_t hoid(string(buf) + base, string(), CEPH_NOSNAP, 0, 0);
     {
       ObjectStore::Transaction t;
       t.touch(cid, hoid);
@@ -544,7 +544,7 @@ TEST_F(StoreTest, HashCollisionTest) {
 
 TEST_F(StoreTest, OMapTest) {
   coll_t cid("blah");
-  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0);
+  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0);
   int r;
   {
     ObjectStore::Transaction t;
@@ -640,7 +640,7 @@ TEST_F(StoreTest, OMapTest) {
 
 TEST_F(StoreTest, XattrTest) {
   coll_t cid("blah");
-  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0);
+  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0);
   bufferlist big;
   for (unsigned i = 0; i < 10000; ++i) {
     big.append('\0');
