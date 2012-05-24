@@ -449,9 +449,9 @@ void RGWListMultipart_REST_S3::send_response()
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
-    s->formatter->dump_format("PartNumberMarker", "%d", marker);
-    s->formatter->dump_format("NextPartNumberMarker", "%d", cur_max + 1);
-    s->formatter->dump_format("MaxParts", "%d", max_parts);
+    s->formatter->dump_int("PartNumberMarker", marker);
+    s->formatter->dump_int("NextPartNumberMarker", cur_max + 1);
+    s->formatter->dump_int("MaxParts", max_parts);
     s->formatter->dump_string("IsTruncated", (test_iter == parts.end() ? "false" : "true"));
 
     ACLOwner& owner = policy.get_owner();
@@ -508,7 +508,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
   string next_upload_id = next_marker.mp.get_upload_id();
   if (!next_upload_id.empty())
     s->formatter->dump_string("NextUploadIdMarker", next_upload_id);
-  s->formatter->dump_format("MaxUploads", "%d", max_uploads);
+  s->formatter->dump_int("MaxUploads", max_uploads);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
   s->formatter->dump_string("IsTruncated", (is_truncated ? "true" : "false"));
