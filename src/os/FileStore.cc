@@ -1357,19 +1357,25 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_DESTROY is supported" << dendl;
 	btrfs_snap_destroy = true;
       } else {
+	err = -errno;
 	dout(0) << "mount btrfs SNAP_DESTROY failed: " << cpp_strerror(err) << dendl;
+
+	if (err == -EPERM && getuid() != 0) {
+	  dout(0) << "btrfs SNAP_DESTROY failed with EPERM as non-root; remount with -o user_subvol_rm_allowed" << dendl;
+	  cerr << TEXT_YELLOW
+	       << "btrfs SNAP_DESTROY failed as non-root; remount with -o user_subvol_rm_allowed"
+	       << TEXT_NORMAL
+	       << std::endl;
+	} else if (err == -EOPNOTSUPP) {
+	  derr << "btrfs SNAP_DESTROY ioctl not supported; you need a kernel newer than 2.6.32" << dendl;
+	}
       }
     } else {
       dout(0) << "mount btrfs SNAP_CREATE failed: " << cpp_strerror(err) << dendl;
     }
 
     if (m_filestore_btrfs_snap && !btrfs_snap_destroy) {
-      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+); DISABLING" << dendl;
-      cerr << TEXT_YELLOW
-	   << " ** WARNING: 'filestore btrfs snap' was enabled (for safe transactions, rollback),\n"
-	   << "             but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
-	   << "             Linux 2.6.32).  Disabling.\n"
-	   << TEXT_NORMAL;
+      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl; DISABLING" << dendl;
       btrfs_stable_commits = false;
     }
 
