@@ -83,7 +83,7 @@ typedef void *rados_config_t;
  * - snapshot context for writes (see
  *   rados_ioctx_selfmanaged_snap_set_write_ctx())
  * - snapshot id to read from (see rados_ioctx_snap_set_read())
- * - object locator for all single-object operation28e61811dc3dccd922bd0b30cf614c2768e7d6d0s (see
+ * - object locator for all single-object operations (see
  *   rados_ioctx_locator_set_key())
  *
  * @warning changing any of these settings is not thread-safe -
