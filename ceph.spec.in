@@ -233,9 +233,6 @@ make -j$(getconf _NPROCESSORS_ONLN)
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
-rmdir $RPM_BUILD_ROOT/bin
-rmdir $RPM_BUILD_ROOT/lib
-rmdir $RPM_BUILD_ROOT/include
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
