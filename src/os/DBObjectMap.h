@@ -271,12 +271,15 @@ public:
     _Header() : seq(0), parent(0), num_children(1) {}
   };
 
+  /// String munging (public for testing)
+  static string hobject_key(coll_t c, const hobject_t &hoid);
+  static string hobject_key_v0(coll_t c, const hobject_t &hoid);
+  static bool parse_hobject_key_v0(const string &in,
+				   coll_t *c, hobject_t *hoid);
 private:
   /// Implicit lock on Header->seq
   typedef std::tr1::shared_ptr<_Header> Header;
 
-  /// String munging
-  string hobject_key(coll_t c, const hobject_t &hoid);
   string map_header_key(coll_t c, const hobject_t &hoid);
   string header_key(uint64_t seq);
   string complete_prefix(Header header);
