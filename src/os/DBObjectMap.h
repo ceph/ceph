@@ -168,13 +168,6 @@ public:
     Index target_index
     );
 
-  int link(
-    const hobject_t &hoid,
-    Index index,
-    const hobject_t &target,
-    Index target_index
-    );
-
   /// Read initial state from backing store
   int init(bool upgrade = false);
 

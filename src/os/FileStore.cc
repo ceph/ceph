@@ -360,11 +360,6 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
-  r = object_map->link(o, path_old->get_index(),
-		       o, path_new->get_index());
-  if (r < 0 && r != -ENOENT)
-    return r;
-
   r = index_new->created(o, path_new->path());
   if (r < 0)
     return r;
@@ -383,9 +378,17 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o)
     r = index->lookup(o, &path, &exist);
     if (r < 0)
       return r;
-    object_map->clear(o, path->get_index());
-    if (r < 0 && r != -ENOENT)
-      return r;
+
+    struct stat st;
+    r = ::stat(path->path(), &st);
+    if (r < 0) {
+      return -errno;
+    }
+    if (st.st_nlink == 1) {
+      r = object_map->clear(o, path->get_index());
+      if (r < 0 && r != -ENOENT)
+	return r;
+    }
   }
   return index->unlink(o);
 }
