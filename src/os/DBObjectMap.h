@@ -176,7 +176,10 @@ public:
     );
 
   /// Read initial state from backing store
-  int init();
+  int init(bool upgrade = false);
+
+  /// Upgrade store to current version
+  int upgrade();
 
   /// Consistency check, debug, there must be no parallel writes
   bool check(std::ostream &out);
@@ -199,18 +202,24 @@ public:
 
   /// persistent state for store @see generate_header
   struct State {
+    __u8 v;
     uint64_t seq;
-    State() : seq(0) {}
+    State() : v(1), seq(0) {}
     State(uint64_t seq) : seq(seq) {}
 
     void encode(bufferlist &bl) const {
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 2, bl);
+      ::encode(v, bl);
       ::encode(seq, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
+      if (struct_v >= 2)
+	::decode(v, bl);
+      else
+	v = 0;
       ::decode(seq, bl);
       DECODE_FINISH(bl);
     }
