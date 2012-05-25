@@ -39,6 +39,7 @@ BuildRequires:	python
 BuildRequires:  libaio-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
+BuildRequires:  libuuid-devel
 
 #################################################################################
 # specific
