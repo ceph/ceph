@@ -49,6 +49,5 @@ you should update APT's database::
 Install Ceph::
 
 	sudo apt-get install ceph
-	sudo apt-get install ceph-common
 
 .. _the Debian repository: http://ceph.com/debian/dists
