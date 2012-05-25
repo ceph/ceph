@@ -82,6 +82,7 @@ Returns a list of bucket objects.
 
 Syntax
 ~~~~~~
+
 ::
 
     GET /{bucket}?max-keys=25 HTTP/1.1
@@ -167,6 +168,7 @@ Syntax
 Add the ``acl`` subresource to the bucket request as shown below.
 
 ::
+
     GET /{bucket}?acl HTTP/1.1
     Host: cname.domain.com
 
@@ -205,6 +207,7 @@ Syntax
 Add the ``acl`` subresource to the bucket request as shown below.
 
 ::
+
     PUT /{bucket}?acl HTTP/1.1
 
 Request Entities
@@ -238,7 +241,9 @@ the service hasn't completed all the uploads yet.
 
 Syntax
 ~~~~~~
+
 ::
+
     GET /{bucket}?uploads HTTP/1.1
 
 Parameters
