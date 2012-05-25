@@ -82,7 +82,6 @@ Returns a list of bucket objects.
 
 Syntax
 ~~~~~~
-
 ::
 
     GET /{bucket}?max-keys=25 HTTP/1.1
@@ -102,7 +101,6 @@ Parameters
 +-----------------+-----------+-----------------------------------------------------------------------+
 | ``max-keys``    | Integer   | The maximum number of keys to return. Default is 1000.                |
 +-----------------+-----------+-----------------------------------------------------------------------+
-
 
 
 HTTP Response
@@ -161,7 +159,6 @@ The ``ListBucketResult`` contains objects, where each object is within a ``Conte
 
 Get Bucket ACL
 --------------
-
 Retrieves the bucket access control list. The user needs to be the bucket
 owner or to have been granted ``READ_ACP`` permission on the bucket.
 
@@ -170,7 +167,6 @@ Syntax
 Add the ``acl`` subresource to the bucket request as shown below.
 
 ::
-
     GET /{bucket}?acl HTTP/1.1
     Host: cname.domain.com
 
@@ -209,7 +205,6 @@ Syntax
 Add the ``acl`` subresource to the bucket request as shown below.
 
 ::
-
     PUT /{bucket}?acl HTTP/1.1
 
 Request Entities
@@ -243,9 +238,7 @@ the service hasn't completed all the uploads yet.
 
 Syntax
 ~~~~~~
-
 ::
-
     GET /{bucket}?uploads HTTP/1.1
 
 Parameters
@@ -285,7 +278,7 @@ Response Entities
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
 | ``KeyMarker``                           | String      | The key marker specified by the ``key-marker`` request parameter (if any).                               |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
-| ``UploadIdMarker``                      | String      | The marker specified by the ``upload-id-marker`` request paramter (if any).                              |
+| ``UploadIdMarker``                      | String      | The marker specified by the ``upload-id-marker`` request parameter (if any).                             |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
 | ``NextKeyMarker``                       | String      | The key marker to use in a subsequent request if ``IsTruncated`` is ``true``.                            |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
