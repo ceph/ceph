@@ -131,14 +131,6 @@ public:
     Index target_index                 ///< [in] path to target
     ) { return 0; }
 
-  /// Efficiently tie <target, target_path> to same key space as <hoid, path>
-  virtual int link(
-    const hobject_t &hoid,             ///< [in] object containing map
-    Index index,                       ///< [in] Path to hoid
-    const hobject_t &target,           ///< [in] target of link
-    Index target_index                 ///< [in] path to target
-    ) { return 0; }
-
   /// Ensure all previous writes are durable
   virtual int sync() { return 0; }
 

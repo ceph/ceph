@@ -939,33 +939,6 @@ int DBObjectMap::clone(const hobject_t &hoid,
   return db->submit_transaction(t);
 }
 
-int DBObjectMap::link(const hobject_t &hoid,
-		      Index index,
-		      const hobject_t &target,
-		      Index target_index)
-{
-  assert(index->coll() != target_index->coll() ||
-	 hoid != target);
-  KeyValueDB::Transaction t = db->get_transaction();
-  {
-    Header destination = lookup_map_header(target_index->coll(), target);
-    if (destination) {
-      remove_map_header(target_index->coll(), target, destination, t);
-      destination->num_children--;
-      _clear(destination, t);
-    }
-  }
-  Header header = lookup_create_map_header(index->coll(), hoid, t);
-
-  assert(header->num_children > 0);
-  header->num_children++;
-  set_header(header, t);
-  _Header ldestination;
-  ldestination.parent = header->seq;
-  set_map_header(target_index->coll(), target, ldestination, t);
-  return db->submit_transaction(t);
-}
-
 int DBObjectMap::upgrade()
 {
   assert(0);
