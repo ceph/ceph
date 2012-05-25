@@ -966,7 +966,14 @@ int DBObjectMap::link(const hobject_t &hoid,
   return db->submit_transaction(t);
 }
 
-int DBObjectMap::init() {
+int DBObjectMap::upgrade()
+{
+  assert(0);
+  return 0;
+}
+
+int DBObjectMap::init(bool do_upgrade)
+{
   State state;
   map<string, bufferlist> result;
   set<string> to_get;
@@ -977,6 +984,17 @@ int DBObjectMap::init() {
   if (result.size()) {
     bufferlist::iterator bliter = result.begin()->second.begin();
     state.decode(bliter);
+    if (state.v < 1) { // Needs upgrade
+      if (!do_upgrade) {
+	dout(1) << "DOBjbectMap requires an upgrade, set filestore_update_omap"
+		<< dendl;
+	return -ENOTSUP;
+      } else {
+	r = upgrade();
+	if (r < 0)
+	  return r;
+      }
+    }
     next_seq = state.seq;
   }
   dout(20) << "(init)dbobjectmap: seq is " << next_seq << dendl;
