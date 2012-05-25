@@ -18,9 +18,7 @@ cls_handle_t h_class;
 cls_method_handle_t h_snapshots_list;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
-cls_method_handle_t h_snapshot_revert;
 cls_method_handle_t h_assign_bid;
-cls_method_handle_t h_test_exec;
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -166,80 +164,6 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  bufferlist bl;
-  struct rbd_obj_header_ondisk *header;
-  bufferlist newbl;
-  bufferptr header_bp(sizeof(*header));
-  struct rbd_obj_snap_ondisk *new_snaps;
-
-  int rc = snap_read_header(hctx, bl);
-  if (rc < 0)
-    return rc;
-
-  header = (struct rbd_obj_header_ondisk *)bl.c_str();
-
-  int snaps_id_ofs = sizeof(*header);
-  int names_ofs = snaps_id_ofs + sizeof(*new_snaps) * header->snap_count;
-  const char *snap_name;
-  const char *snap_names = ((char *)header) + names_ofs;
-  const char *end = snap_names + header->snap_names_len;
-  bufferlist::iterator iter = in->begin();
-  string s;
-  int i;
-  bool found = false;
-  struct rbd_obj_snap_ondisk snap;
-
-  try {
-    ::decode(s, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-  snap_name = s.c_str();
-
-  for (i = 0; snap_names < end; i++) {
-    if (strcmp(snap_names, snap_name) == 0) {
-      snap = header->snaps[i];
-      found = true;
-      break;
-    }
-    snap_names += strlen(snap_names) + 1;
-  }
-  if (!found) {
-    CLS_LOG("couldn't find snap %s\n",snap_name);
-    return -ENOENT;
-  }
-
-  header->image_size = snap.image_size;
-  header->snap_seq = header->snap_seq + 1;
-
-  snap_names += strlen(snap_names) + 1;
-  i++;
-
-  header->snap_count = header->snap_count - i;
-  bufferptr new_names_bp(end - snap_names);
-  bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
-
-  memcpy(header_bp.c_str(), header, sizeof(*header));
-  newbl.push_back(header_bp);
-
-  if (header->snap_count) {
-    memcpy(new_snaps_bp.c_str(), header->snaps + i, sizeof(header->snaps[0]) * header->snap_count);
-    memcpy(new_names_bp.c_str(), snap_names, end - snap_names);
-    newbl.push_back(new_snaps_bp);
-    newbl.push_back(new_names_bp);
-  }
-
-  rc = cls_cxx_write_full(hctx, &newbl);
-  if (rc < 0)
-    return rc;
-
-  ::encode(snap.id, *out);
-
-  return out->length();
-}
-
 int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist bl;
@@ -367,15 +291,6 @@ int rbd_assign_bid(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return out->length();
 }
 
-/* Used for testing rados_exec */
-static int test_exec(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  bufferlist bl;
-  std::string testing123("testing123");
-  ::encode(testing123, *out);
-  return out->length();
-}
-
 void __cls_init()
 {
   CLS_LOG("Loaded rbd class!");
@@ -384,12 +299,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "snap_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, snapshots_list, &h_snapshots_list);
   cls_register_cxx_method(h_class, "snap_add", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, snapshot_add, &h_snapshot_add);
   cls_register_cxx_method(h_class, "snap_remove", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, snapshot_remove, &h_snapshot_remove);
-  cls_register_cxx_method(h_class, "snap_revert", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, snapshot_revert, &h_snapshot_revert);
 
   /* assign a unique block id for rbd blocks */
   cls_register_cxx_method(h_class, "assign_bid", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rbd_assign_bid, &h_assign_bid);
-
-  cls_register_cxx_method(h_class, "test_exec", CLS_METHOD_RD | CLS_METHOD_PUBLIC, test_exec, &h_test_exec);
 
   return;
 }
