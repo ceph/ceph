@@ -52,6 +52,27 @@ static void append_escaped(const string &in, string *out)
   }
 }
 
+static bool append_unescaped(string::const_iterator begin,
+			     string::const_iterator end, 
+			     string *out) {
+  for (string::const_iterator i = begin; i != end; ++i) {
+    if (*i == '%') {
+      ++i;
+      if (*i == 'p')
+	out->push_back('%');
+      else if (*i == 'e')
+	out->push_back('.');
+      else if (*i == 'u')
+	out->push_back('_');
+      else
+	return false;
+    } else {
+      out->push_back(*i);
+    }
+  }
+  return true;
+}
+
 bool DBObjectMap::check(std::ostream &out)
 {
   bool retval = true;
@@ -127,6 +148,96 @@ string DBObjectMap::hobject_key(coll_t c, const hobject_t &hoid)
   snprintf(t, end - t, ".%.*X", (int)(sizeof(hoid.hash)*2), hoid.hash);
   out += string(snap_with_hash);
   return out;
+}
+
+string DBObjectMap::hobject_key_v0(coll_t c, const hobject_t &hoid)
+{
+  string out;
+  append_escaped(c.to_str(), &out);
+  out.push_back('.');
+  append_escaped(hoid.oid.name, &out);
+  out.push_back('.');
+  append_escaped(hoid.get_key(), &out);
+  out.push_back('.');
+
+  char snap_with_hash[1000];
+  char *t = snap_with_hash;
+  char *end = t + sizeof(snap_with_hash);
+  if (hoid.snap == CEPH_NOSNAP)
+    t += snprintf(t, end - t, ".head");
+  else if (hoid.snap == CEPH_SNAPDIR)
+    t += snprintf(t, end - t, ".snapdir");
+  else
+    t += snprintf(t, end - t, ".%llx", (long long unsigned)hoid.snap);
+  snprintf(t, end - t, ".%.*X", (int)(sizeof(hoid.hash)*2), hoid.hash);
+  out += string(snap_with_hash);
+  return out;
+}
+
+bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
+				       hobject_t *hoid)
+{
+  string coll;
+  string name;
+  string key;
+  snapid_t snap;
+  uint32_t hash;
+
+  string::const_iterator current = in.begin();
+  string::const_iterator end;
+  for (end = current; end != in.end() && *end != '.'; ++end);
+  if (end == name.end())
+    return false;
+  if (!append_unescaped(current, end, &coll))
+    return false;
+
+  current = ++end;
+  for (; end != in.end() && *end != '.'; ++end);
+  if (end == name.end())
+    return false;
+  if (!append_unescaped(current, end, &name))
+    return false;
+
+  current = ++end;
+  for (; end != in.end() && *end != '.'; ++end);
+  if (end == name.end())
+    return false;
+  if (!append_unescaped(current, end, &key))
+    return false;
+
+  current = ++end;
+  // Bug in old encoding, double .
+  if (*current != '.')
+    return false;
+
+  current = ++end;
+  for (; end != in.end() && *end != '.'; ++end);
+  if (end == name.end())
+    return false;
+  string snap_str(current, end);
+  
+  current = ++end;
+  for (; end != in.end() && *end != '.'; ++end);
+  if (end != name.end())
+    return false;
+  string hash_str(current, end);
+
+  if (snap_str == "head")
+    snap = CEPH_NOSNAP;
+  else if (snap_str == "snapdir")
+    snap = CEPH_SNAPDIR;
+  else
+    snap = strtoull(snap_str.c_str(), NULL, 16);
+  sscanf(hash_str.c_str(), "%X", &hash);
+
+  *c = coll_t(coll);
+  int64_t pool = -1;
+  pg_t pg;
+  snapid_t pg_snap;
+  if (c->is_pg(pg, pg_snap))
+    pool = (int64_t)pg.pool();
+  (*hoid) = hobject_t(name, key, snap, hash, pool);
+  return true;
 }
 
 string DBObjectMap::map_header_key(coll_t c, const hobject_t &hoid)
