@@ -656,18 +656,16 @@ TEST_F(ObjectMapTest, CloneOneObject) {
 TEST_F(ObjectMapTest, OddEvenClone) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
-  hobject_t hoid_link(sobject_t("foo_link", CEPH_NOSNAP));
   Index path = Index(new HashIndex(coll_t("foo_coll"),
 				   string("/bar").c_str(),
 				   2,
 				   2,
-				   CollectionIndex::HASH_INDEX_TAG_2));
+				   CollectionIndex::HOBJECT_WITH_POOL));
 
   for (unsigned i = 0; i < 1000; ++i) {
     set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));
   }
 
-  db->link(hoid, path, hoid_link, path);
   db->clone(hoid, path, hoid2, path);
 
   int r = 0;
@@ -680,9 +678,6 @@ TEST_F(ObjectMapTest, OddEvenClone) {
     ASSERT_EQ(1, r);
     ASSERT_EQ("bar" + num_str(i), result);
 
-    r = get_key(hoid2, path, "foo" + num_str(i), &result);
-    ASSERT_EQ(1, r);
-    ASSERT_EQ("bar" + num_str(i), result);
     if (i % 2) {
       remove_key(hoid, path, "foo" + num_str(i));
     } else {
@@ -693,25 +688,18 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   for (unsigned i = 0; i < 1000; ++i) {
     string result;
     string result2;
-    string result3;
     r = get_key(hoid, path, "foo" + num_str(i), &result);
-    int r3 = get_key(hoid_link, path, "foo" + num_str(i), &result3);
     int r2 = get_key(hoid2, path, "foo" + num_str(i), &result2);
     if (i % 2) {
       ASSERT_EQ(0, r);
-      ASSERT_EQ(0, r3);
       ASSERT_EQ(1, r2);
       ASSERT_EQ("bar" + num_str(i), result2);
     } else {
       ASSERT_EQ(0, r2);
       ASSERT_EQ(1, r);
-      ASSERT_EQ(1, r3);
       ASSERT_EQ("bar" + num_str(i), result);
-      ASSERT_EQ("bar" + num_str(i), result3);
     }
   }
-
-  db->clear(hoid_link, path);
 
   {
     ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid, path);
