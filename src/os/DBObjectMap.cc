@@ -81,9 +81,11 @@ bool DBObjectMap::check(std::ostream &out)
   bool retval = true;
   map<uint64_t, uint64_t> parent_to_num_children;
   map<uint64_t, uint64_t> parent_to_actual_num_children;
-  KeyValueDB::Iterator iter = db->get_iterator(LEAF_PREFIX);
+  KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     _Header header;
+    assert(header.num_children == 1);
+    header.num_children = 0; // Hack for leaf node
     bufferlist bl = iter->value();
     while (true) {
       bufferlist::iterator bliter = bl.begin();
