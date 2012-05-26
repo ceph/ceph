@@ -60,12 +60,6 @@ public:
   boost::scoped_ptr<KeyValueDB> db;
 
   /**
-   * Each header has a unique id.  This value is updated and written *before*
-   * the transaction writing th new header
-   */
-  uint64_t next_seq;
-
-  /**
    * Serializes access to next_seq as well as the in_use set
    */
   Mutex header_lock;
@@ -78,7 +72,7 @@ public:
   set<uint64_t> in_use;
   set<hobject_t> map_header_in_use;
 
-  DBObjectMap(KeyValueDB *db) : db(db), next_seq(1),
+  DBObjectMap(KeyValueDB *db) : db(db),
 				header_lock("DBOBjectMap")
     {}
 
@@ -202,11 +196,11 @@ public:
   struct State {
     __u8 v;
     uint64_t seq;
-    State() : v(1), seq(0) {}
-    State(uint64_t seq) : seq(seq) {}
+    State() : v(0), seq(1) {}
+    State(uint64_t seq) : v(0), seq(seq) {}
 
     void encode(bufferlist &bl) const {
-      ENCODE_START(2, 2, bl);
+      ENCODE_START(2, 1, bl);
       ::encode(v, bl);
       ::encode(seq, bl);
       ENCODE_FINISH(bl);
@@ -230,7 +224,7 @@ public:
       o.push_back(new State(0));
       o.push_back(new State(20));
     }
-  };
+  } state;
 
   struct _Header {
     uint64_t seq;
