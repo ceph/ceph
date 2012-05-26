@@ -194,21 +194,21 @@ bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
   string::const_iterator current = in.begin();
   string::const_iterator end;
   for (end = current; end != in.end() && *end != '.'; ++end);
-  if (end == name.end())
+  if (end == in.end())
     return false;
   if (!append_unescaped(current, end, &coll))
     return false;
 
   current = ++end;
   for (; end != in.end() && *end != '.'; ++end);
-  if (end == name.end())
+  if (end == in.end())
     return false;
   if (!append_unescaped(current, end, &name))
     return false;
 
   current = ++end;
   for (; end != in.end() && *end != '.'; ++end);
-  if (end == name.end())
+  if (end == in.end())
     return false;
   if (!append_unescaped(current, end, &key))
     return false;
@@ -220,13 +220,13 @@ bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
 
   current = ++end;
   for (; end != in.end() && *end != '.'; ++end);
-  if (end == name.end())
+  if (end == in.end())
     return false;
   string snap_str(current, end);
   
   current = ++end;
   for (; end != in.end() && *end != '.'; ++end);
-  if (end != name.end())
+  if (end != in.end())
     return false;
   string hash_str(current, end);
 
@@ -931,13 +931,77 @@ int DBObjectMap::clone(const hobject_t &hoid,
 
 int DBObjectMap::upgrade()
 {
-  assert(0);
+  while (1) {
+    unsigned count = 0;
+    KeyValueDB::Iterator iter = db->get_iterator(LEAF_PREFIX);
+    iter->seek_to_first();
+    if (!iter->valid())
+      break;
+    KeyValueDB::Transaction t = db->get_transaction();
+    set<string> legacy_to_remove;
+    set<uint64_t> moved_seqs;
+    map<string, bufferlist> new_map_headers;
+    for (;
+	 iter->valid() && count < 300;
+	 iter->next(), ++count) {
+      bufferlist bl = iter->value();
+      _Header hdr;
+      bufferlist::iterator bliter = bl.begin();
+      hdr.decode(bliter);
+
+      legacy_to_remove.insert(iter->key());
+      if (moved_seqs.count(hdr.parent))
+	continue; // Moved already in this transaction
+      moved_seqs.insert(hdr.parent);
+
+      set<string> to_get;
+      to_get.insert(HEADER_KEY);
+      map<string, bufferlist> got;
+      int r = db->get(USER_PREFIX + header_key(hdr.parent) + SYS_PREFIX,
+		      to_get,
+		      &got);
+      if (r < 0)
+	return r;
+      if (!got.size())
+	continue; // Moved in a previous transaction
+
+      t->rmkeys(USER_PREFIX + header_key(hdr.parent) + SYS_PREFIX,
+		 to_get);
+
+      coll_t coll;
+      hobject_t hoid;
+      assert(parse_hobject_key_v0(iter->key(), &coll, &hoid));
+      new_map_headers[hobject_key(hoid)] = got.begin()->second;
+    }
+
+    t->rmkeys(LEAF_PREFIX, legacy_to_remove);
+    t->set(HOBJECT_TO_SEQ, new_map_headers);
+    int r = db->submit_transaction(t);
+    if (r < 0)
+      return r;
+  }
+
+  
+  while (1) {
+    KeyValueDB::Transaction t = db->get_transaction();
+    KeyValueDB::Iterator iter = db->get_iterator(REVERSE_LEAF_PREFIX);
+    iter->seek_to_first();
+    if (!iter->valid())
+      break;
+    set<string> to_remove;
+    unsigned count = 0;
+    for (; iter->valid() && count < 1000; iter->next(), ++count)
+      to_remove.insert(iter->key());
+    t->rmkeys(REVERSE_LEAF_PREFIX, to_remove);
+    db->submit_transaction(t);
+  }
+  state.v = 1;
+  write_state(true);
   return 0;
 }
 
 int DBObjectMap::init(bool do_upgrade)
 {
-  State state;
   map<string, bufferlist> result;
   set<string> to_get;
   to_get.insert(GLOBAL_STATE_KEY);
@@ -958,9 +1022,8 @@ int DBObjectMap::init(bool do_upgrade)
 	  return r;
       }
     }
-    next_seq = state.seq;
   }
-  dout(20) << "(init)dbobjectmap: seq is " << next_seq << dendl;
+  dout(20) << "(init)dbobjectmap: seq is " << state.seq << dendl;
   return 0;
 }
 
@@ -969,10 +1032,8 @@ int DBObjectMap::sync() {
 }
 
 int DBObjectMap::write_state(bool sync) {
-  dout(20) << "dbobjectmap: seq is " << next_seq << dendl;
+  dout(20) << "dbobjectmap: seq is " << state.seq << dendl;
   KeyValueDB::Transaction t = db->get_transaction();
-  State state;
-  state.seq = next_seq;
   bufferlist bl;
   state.encode(bl);
   map<string, bufferlist> to_write;
@@ -1006,7 +1067,7 @@ DBObjectMap::Header DBObjectMap::_generate_new_header(const hobject_t &hoid,
 						      Header parent)
 {
   Header header = Header(new _Header(), RemoveOnDelete(this));
-  header->seq = next_seq++;
+  header->seq = state.seq++;
   if (parent)
     header->parent = parent->seq;
   header->num_children = 1;

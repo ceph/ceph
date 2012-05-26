@@ -40,9 +40,9 @@ string num_str(unsigned i) {
   return string(buf);
 }
 
-class ObjectMapTest : public ::testing::Test {
+class ObjectMapTester {
 public:
-  boost::scoped_ptr< ObjectMap > db;
+  ObjectMap *db;
   set<string> key_space;
   set<string> object_name_space;
   map<string, map<string, string> > omap;
@@ -51,28 +51,7 @@ public:
   Index def_collection;
   unsigned seq;
 
-  ObjectMapTest() : db(), seq(0) {}
-
-  virtual void SetUp() {
-    char *path = getenv("OBJECT_MAP_PATH");
-    if (!path) {
-      db.reset(new DBObjectMap(new KeyValueDBMemory()));
-      return;
-    }
-
-    string strpath(path);
-
-    cerr << "using path " << strpath << std::endl;;
-    LevelDBStore *store = new LevelDBStore(strpath);
-    assert(!store->init(cerr));
-
-    db.reset(new DBObjectMap(store));
-  }
-
-  virtual void TearDown() {
-    std::cerr << "Checking..." << std::endl;
-    assert(db->check(std::cerr));
-  }
+  ObjectMapTester() : db(0), seq(0) {}
 
   string val_from_key(const string &object, const string &key) {
     return object + "_" + key + "_" + num_str(seq++);
@@ -536,6 +515,35 @@ public:
   }
 };
 
+class ObjectMapTest : public ::testing::Test {
+public:
+  boost::scoped_ptr< ObjectMap > db;
+  ObjectMapTester tester;
+  virtual void SetUp() {
+    char *path = getenv("OBJECT_MAP_PATH");
+    if (!path) {
+      db.reset(new DBObjectMap(new KeyValueDBMemory()));
+      tester.db = db.get();
+      return;
+    }
+
+    string strpath(path);
+
+    cerr << "using path " << strpath << std::endl;;
+    LevelDBStore *store = new LevelDBStore(strpath);
+    assert(!store->init(cerr));
+
+    db.reset(new DBObjectMap(store));
+    tester.db = db.get();
+  }
+
+  virtual void TearDown() {
+    std::cerr << "Checking..." << std::endl;
+    assert(db->check(std::cerr));
+  }
+};
+
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -596,39 +604,39 @@ TEST_F(ObjectMapTest, CloneOneObject) {
 				   2,
 				   CollectionIndex::HASH_INDEX_TAG_2));
 
-  set_key(hoid, path, "foo", "bar");
-  set_key(hoid, path, "foo2", "bar2");
+  tester.set_key(hoid, path, "foo", "bar");
+  tester.set_key(hoid, path, "foo2", "bar2");
   string result;
-  int r = get_key(hoid, path, "foo", &result);
+  int r = tester.get_key(hoid, path, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
 
   db->clone(hoid, path, hoid2, path);
-  r = get_key(hoid, path, "foo", &result);
+  r = tester.get_key(hoid, path, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
-  r = get_key(hoid2, path, "foo", &result);
+  r = tester.get_key(hoid2, path, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
 
-  remove_key(hoid, path, "foo");
-  r = get_key(hoid2, path, "foo", &result);
+  tester.remove_key(hoid, path, "foo");
+  r = tester.get_key(hoid2, path, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
-  r = get_key(hoid, path, "foo", &result);
+  r = tester.get_key(hoid, path, "foo", &result);
   ASSERT_EQ(r, 0);
-  r = get_key(hoid, path, "foo2", &result);
+  r = tester.get_key(hoid, path, "foo2", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar2");
 
-  set_key(hoid, path, "foo", "baz");
-  remove_key(hoid, path, "foo");
-  r = get_key(hoid, path, "foo", &result);
+  tester.set_key(hoid, path, "foo", "baz");
+  tester.remove_key(hoid, path, "foo");
+  r = tester.get_key(hoid, path, "foo", &result);
   ASSERT_EQ(r, 0);
 
-  set_key(hoid, path, "foo2", "baz");
-  remove_key(hoid, path, "foo2");
-  r = get_key(hoid, path, "foo2", &result);
+  tester.set_key(hoid, path, "foo2", "baz");
+  tester.remove_key(hoid, path, "foo2");
+  r = tester.get_key(hoid, path, "foo2", &result);
   ASSERT_EQ(r, 0);
 
   map<string, bufferlist> got;
@@ -645,7 +653,7 @@ TEST_F(ObjectMapTest, CloneOneObject) {
   db->get(hoid2, path, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
 
-  set_key(hoid, path, "baz", "bar");
+  tester.set_key(hoid, path, "baz", "bar");
   got.clear();
   db->get(hoid, path, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)1);
@@ -663,7 +671,7 @@ TEST_F(ObjectMapTest, OddEvenClone) {
 				   CollectionIndex::HOBJECT_WITH_POOL));
 
   for (unsigned i = 0; i < 1000; ++i) {
-    set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));
+    tester.set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));
   }
 
   db->clone(hoid, path, hoid2, path);
@@ -671,25 +679,25 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   int r = 0;
   for (unsigned i = 0; i < 1000; ++i) {
     string result;
-    r = get_key(hoid, path, "foo" + num_str(i), &result);
+    r = tester.get_key(hoid, path, "foo" + num_str(i), &result);
     ASSERT_EQ(1, r);
     ASSERT_EQ("bar" + num_str(i), result);
-    r = get_key(hoid2, path, "foo" + num_str(i), &result);
+    r = tester.get_key(hoid2, path, "foo" + num_str(i), &result);
     ASSERT_EQ(1, r);
     ASSERT_EQ("bar" + num_str(i), result);
 
     if (i % 2) {
-      remove_key(hoid, path, "foo" + num_str(i));
+      tester.remove_key(hoid, path, "foo" + num_str(i));
     } else {
-      remove_key(hoid2, path, "foo" + num_str(i));
+      tester.remove_key(hoid2, path, "foo" + num_str(i));
     }
   }
 
   for (unsigned i = 0; i < 1000; ++i) {
     string result;
     string result2;
-    r = get_key(hoid, path, "foo" + num_str(i), &result);
-    int r2 = get_key(hoid2, path, "foo" + num_str(i), &result2);
+    r = tester.get_key(hoid, path, "foo" + num_str(i), &result);
+    int r2 = tester.get_key(hoid2, path, "foo" + num_str(i), &result2);
     if (i % 2) {
       ASSERT_EQ(0, r);
       ASSERT_EQ(1, r2);
@@ -729,8 +737,98 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   db->clear(hoid2, path);
 }
 
+TEST(Upgrade, UpgradeTest) {
+  KeyValueDBMemory *map1 = new KeyValueDBMemory();
+  KeyValueDBMemory *map2 = new KeyValueDBMemory();
+  ObjectMapTester tester;
+  {
+    boost::scoped_ptr< ObjectMap > db;
+    db.reset(new DBObjectMapv0(map1));
+    tester.db = db.get();
+    tester.def_init();
+    for (unsigned i = 0; i < 5000; ++i) {
+      unsigned val = rand();
+      val <<= 8;
+      val %= 100;
+      if (!(i%100))
+	std::cout << "on op " << i
+		  << " val is " << val << std::endl;
+      
+      if (val < 7) {
+	tester.auto_write_header(std::cerr);
+      } else if (val < 14) {
+	ASSERT_TRUE(tester.auto_verify_header(std::cerr));
+      } else if (val < 30) {
+	tester.auto_set_key(std::cerr);
+      } else if (val < 42) {
+	tester.auto_set_xattr(std::cerr);
+      } else if (val < 55) {
+	ASSERT_TRUE(tester.auto_check_present_key(std::cerr));
+      } else if (val < 62) {
+	ASSERT_TRUE(tester.auto_check_present_xattr(std::cerr));
+      } else if (val < 70) {
+	ASSERT_TRUE(tester.auto_check_absent_key(std::cerr));
+      } else if (val < 73) {
+	ASSERT_TRUE(tester.auto_check_absent_xattr(std::cerr));
+      } else if (val < 76) {
+	tester.auto_delete_object(std::cerr);
+      } else if (val < 85) {
+	tester.auto_clone_key(std::cerr);
+      } else if (val < 92) {
+	tester.auto_remove_xattr(std::cerr);
+      } else {
+	tester.auto_remove_key(std::cerr);
+      }
+    }
+    *map2 = *map1;
+  }
+
+  std::cout << "Populated, upgrading" << std::endl;
+  {
+    boost::scoped_ptr< ObjectMap > db;
+    DBObjectMap *_db = new DBObjectMap(map2);
+    assert(!_db->init(true));
+    db.reset(_db);
+    tester.db = db.get();
+    for (unsigned i = 0; i < 5000; ++i) {
+      unsigned val = rand();
+      val <<= 8;
+      val %= 100;
+      if (!(i%100))
+	std::cout << "on op " << i
+		  << " val is " << val << std::endl;
+      
+      if (val < 7) {
+	tester.auto_write_header(std::cerr);
+      } else if (val < 14) {
+	ASSERT_TRUE(tester.auto_verify_header(std::cerr));
+      } else if (val < 30) {
+	tester.auto_set_key(std::cerr);
+      } else if (val < 42) {
+	tester.auto_set_xattr(std::cerr);
+      } else if (val < 55) {
+	ASSERT_TRUE(tester.auto_check_present_key(std::cerr));
+      } else if (val < 62) {
+	ASSERT_TRUE(tester.auto_check_present_xattr(std::cerr));
+      } else if (val < 70) {
+	ASSERT_TRUE(tester.auto_check_absent_key(std::cerr));
+      } else if (val < 73) {
+	ASSERT_TRUE(tester.auto_check_absent_xattr(std::cerr));
+      } else if (val < 76) {
+	tester.auto_delete_object(std::cerr);
+      } else if (val < 85) {
+	tester.auto_clone_key(std::cerr);
+      } else if (val < 92) {
+	tester.auto_remove_xattr(std::cerr);
+      } else {
+	tester.auto_remove_key(std::cerr);
+      }
+    }
+  }
+}
+
 TEST_F(ObjectMapTest, RandomTest) {
-  def_init();
+  tester.def_init();
   for (unsigned i = 0; i < 5000; ++i) {
     unsigned val = rand();
     val <<= 8;
@@ -740,29 +838,29 @@ TEST_F(ObjectMapTest, RandomTest) {
 		<< " val is " << val << std::endl;
 
     if (val < 7) {
-      auto_write_header(std::cerr);
+      tester.auto_write_header(std::cerr);
     } else if (val < 14) {
-      ASSERT_TRUE(auto_verify_header(std::cerr));
+      ASSERT_TRUE(tester.auto_verify_header(std::cerr));
     } else if (val < 30) {
-      auto_set_key(std::cerr);
+      tester.auto_set_key(std::cerr);
     } else if (val < 42) {
-      auto_set_xattr(std::cerr);
+      tester.auto_set_xattr(std::cerr);
     } else if (val < 55) {
-      ASSERT_TRUE(auto_check_present_key(std::cerr));
+      ASSERT_TRUE(tester.auto_check_present_key(std::cerr));
     } else if (val < 62) {
-      ASSERT_TRUE(auto_check_present_xattr(std::cerr));
+      ASSERT_TRUE(tester.auto_check_present_xattr(std::cerr));
     } else if (val < 70) {
-      ASSERT_TRUE(auto_check_absent_key(std::cerr));
+      ASSERT_TRUE(tester.auto_check_absent_key(std::cerr));
     } else if (val < 73) {
-      ASSERT_TRUE(auto_check_absent_xattr(std::cerr));
+      ASSERT_TRUE(tester.auto_check_absent_xattr(std::cerr));
     } else if (val < 76) {
-      auto_delete_object(std::cerr);
+      tester.auto_delete_object(std::cerr);
     } else if (val < 85) {
-      auto_clone_key(std::cerr);
+      tester.auto_clone_key(std::cerr);
     } else if (val < 92) {
-      auto_remove_xattr(std::cerr);
+      tester.auto_remove_xattr(std::cerr);
     } else {
-      auto_remove_key(std::cerr);
+      tester.auto_remove_key(std::cerr);
     }
   }
 }

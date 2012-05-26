@@ -1882,7 +1882,7 @@ int FileStore::mount()
       goto close_current_fd;
     }
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
-    ret = dbomap->init();
+    ret = dbomap->init(m_filestore_update_collections);
     if (ret < 0) {
       derr << "Error initializing DBObjectMap: " << ret << dendl;
       goto close_current_fd;
