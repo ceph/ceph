@@ -70,11 +70,13 @@ public:
    */
   Mutex header_lock;
   Cond header_cond;
+  Cond map_header_cond;
 
   /**
    * Set of headers currently in use
    */
   set<uint64_t> in_use;
+  set<hobject_t> map_header_in_use;
 
   DBObjectMap(KeyValueDB *db) : db(db), next_seq(1),
 				header_lock("DBOBjectMap")
@@ -189,8 +191,11 @@ public:
   static const string COMPLETE_PREFIX;
   static const string HEADER_KEY;
   static const string USER_HEADER_KEY;
-  static const string LEAF_PREFIX;
   static const string GLOBAL_STATE_KEY;
+  static const string HOBJECT_TO_SEQ;
+
+  /// Legacy
+  static const string LEAF_PREFIX;
   static const string REVERSE_LEAF_PREFIX;
 
   /// persistent state for store @see generate_header
@@ -274,7 +279,7 @@ public:
   };
 
   /// String munging (public for testing)
-  static string hobject_key(coll_t c, const hobject_t &hoid);
+  static string hobject_key(const hobject_t &hoid);
   static string hobject_key_v0(coll_t c, const hobject_t &hoid);
   static bool parse_hobject_key_v0(const string &in,
 				   coll_t *c, hobject_t *hoid);
@@ -282,7 +287,7 @@ private:
   /// Implicit lock on Header->seq
   typedef std::tr1::shared_ptr<_Header> Header;
 
-  string map_header_key(coll_t c, const hobject_t &hoid);
+  string map_header_key(const hobject_t &hoid);
   string header_key(uint64_t seq);
   string complete_prefix(Header header);
   string user_prefix(Header header);
@@ -374,16 +379,16 @@ private:
   void set_header(Header input, KeyValueDB::Transaction t);
 
   /// Remove leaf node corresponding to hoid in c
-  void remove_map_header(coll_t c, const hobject_t &hoid,
+  void remove_map_header(const hobject_t &hoid,
 			 Header header,
 			 KeyValueDB::Transaction t);
 
   /// Set leaf node for c and hoid to the value of header
-  void set_map_header(coll_t c, const hobject_t &hoid, _Header header,
-		     KeyValueDB::Transaction t);
+  void set_map_header(const hobject_t &hoid, _Header header,
+		      KeyValueDB::Transaction t);
 
   /// Lookup or create header for c hoid
-  Header lookup_create_map_header(coll_t c, const hobject_t &hoid,
+  Header lookup_create_map_header(const hobject_t &hoid,
 				  KeyValueDB::Transaction t);
 
   /**
@@ -391,10 +396,18 @@ private:
    *
    * Has the side effect of syncronously saving the new DBObjectMap state
    */
-  Header generate_new_header(coll_t c, const hobject_t &hoid, Header parent);
+  Header _generate_new_header(const hobject_t &hoid, Header parent);
+  Header generate_new_header(const hobject_t &hoid, Header parent) {
+    Mutex::Locker l(header_lock);
+    return _generate_new_header(hoid, parent);
+  }
 
   /// Lookup leaf header for c hoid
-  Header lookup_map_header(coll_t c, const hobject_t &hoid);
+  Header _lookup_map_header(const hobject_t &hoid);
+  Header lookup_map_header(const hobject_t &hoid) {
+    Mutex::Locker l(header_lock);
+    return _lookup_map_header(hoid);
+  }
 
   /// Lookup header node for input
   Header lookup_parent(Header input);
@@ -432,6 +445,23 @@ private:
   void _set_header(Header header, const bufferlist &bl,
 		   KeyValueDB::Transaction t);
 
+  /** 
+   * Removes map header lock once Header is out of scope
+   * @see lookup_map_header
+   */
+  class RemoveMapHeaderOnDelete {
+  public:
+    DBObjectMap *db;
+    hobject_t obj;
+    RemoveMapHeaderOnDelete(DBObjectMap *db, const hobject_t &obj) :
+      db(db), obj(obj) {}
+    void operator() (_Header *header) {
+      Mutex::Locker l(db->header_lock);
+      db->map_header_in_use.erase(obj);
+      db->map_header_cond.Signal();
+      delete header;
+    }
+  };
 
   /** 
    * Removes header seq lock once Header is out of scope
@@ -441,9 +471,8 @@ private:
   class RemoveOnDelete {
   public:
     DBObjectMap *db;
-    uint64_t seq;
     RemoveOnDelete(DBObjectMap *db) :
-      db(db), seq(seq) {}
+      db(db) {}
     void operator() (_Header *header) {
       Mutex::Locker l(db->header_lock);
       db->in_use.erase(header->seq);
