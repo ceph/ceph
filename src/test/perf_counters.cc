@@ -18,7 +18,15 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "test/unit.h"
+
+#include "include/types.h" // FIXME: ordering shouldn't be important, but right 
+                           // now, this include has to come before the others.
+
+#include "common/code_environment.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
+#include "gtest/gtest.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -35,9 +43,23 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "global/global_init.h"
+#include "common/common_init.h"
+#include "common/ceph_context.h"
+
+int main(int argc, char **argv) {
+  std::vector<const char *> preargs;
+  preargs.push_back("--admin-socket");
+  preargs.push_back(get_rand_socket_path());
+  std::vector<const char*> args;
+  global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
+
 TEST(PerfCounters, SimpleTest) {
-  g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
-  g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
   std::string message;
   ASSERT_EQ("", client.do_request("perfcounters_dump", &message));
@@ -78,8 +100,6 @@ TEST(PerfCounters, SinglePerfCounters) {
   PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
   PerfCounters* fake_pf = setup_test_perfcounters1(g_ceph_context);
   coll->add(fake_pf);
-  g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
-  g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
   std::string msg;
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
@@ -121,8 +141,6 @@ TEST(PerfCounters, MultiplePerfCounters) {
   PerfCounters* fake_pf2 = setup_test_perfcounter2(g_ceph_context);
   coll->add(fake_pf1);
   coll->add(fake_pf2);
-  g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
-  g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
   std::string msg;
 
