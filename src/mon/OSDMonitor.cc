@@ -600,6 +600,10 @@ bool OSDMonitor::can_mark_up(int i)
   return true;
 }
 
+/**
+ * @note the parameter @p i apparently only exists here so we can output the
+ *	 osd's id on messages.
+ */
 bool OSDMonitor::can_mark_out(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
@@ -1249,6 +1253,12 @@ void OSDMonitor::tick()
   // mark down osds out?
   utime_t now = ceph_clock_now(g_ceph_context);
 
+
+  /* can_mark_out() checks if we can mark osds as being out. The -1 has no
+   * influence at all. The decision is made based on the ratio of "in" osds,
+   * and the function returns false if this ratio is lower that the minimum
+   * ratio set by g_conf->mon_osd_min_in_ratio. So it's not really up to us.
+   */
   if (can_mark_out(-1)) {
     map<int,utime_t>::iterator i = down_pending_out.begin();
     while (i != down_pending_out.end()) {
