@@ -193,7 +193,6 @@ CephContext::CephContext(uint32_t module_type_)
 
   _perf_counters_collection = new PerfCountersCollection(this);
   _admin_socket = new AdminSocket(this);
-  _conf->add_observer(_admin_socket);
   _heartbeat_map = new HeartbeatMap(this);
 
   _admin_hook = new CephContextHook(this);
@@ -214,8 +213,6 @@ CephContext::~CephContext()
   delete _admin_hook;
 
   delete _heartbeat_map;
-
-  _conf->remove_observer(_admin_socket);
 
   delete _perf_counters_collection;
   _perf_counters_collection = NULL;
@@ -246,6 +243,18 @@ void CephContext::start_service_thread()
   _service_thread = new CephContextServiceThread(this);
   _service_thread->create();
   pthread_spin_unlock(&_service_thread_lock);
+
+  // make logs flush on_exit()
+  if (_conf->log_flush_on_exit)
+    _log->set_flush_on_exit();
+
+  // Trigger callbacks on any config observers that were waiting for
+  // it to become safe to start threads.
+  _conf->set_val("internal_safe_to_start_threads", "true");
+  _conf->call_all_observers();
+
+  // start admin socket
+  _admin_socket->init(_conf->admin_socket);
 }
 
 void CephContext::reopen_logs()
