@@ -601,9 +601,11 @@ int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 /**
  * Get the next object name and locator in the pool
  *
+ * *entry and *key are valid until next call to rados_objects_list_*
+ *
  * @param ctx iterator marking where you are in the listing
- * @param entry where to store the name of the entry (caller must free)
- * @param key where to store the object locator (set to NULL to ignore) (caller must free)
+ * @param entry where to store the name of the entry
+ * @param key where to store the object locator (set to NULL to ignore)
  * @returns 0 on success, negative error code on failure
  * @returns -ENOENT when there are no more objects to list
  */
