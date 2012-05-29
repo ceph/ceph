@@ -243,7 +243,7 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
 					C_StatState *stat)
 {
   if (m_suppress_write_data) {
-    dout(0) << __func__ << " suppressed" << dendl;
+    dout(5) << __func__ << " suppressed" << dendl;
     return;
   }
 
@@ -254,8 +254,8 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   bufferlist bl;
   get_filled_byte_array(bl, size);
 
-  dout(0) << __func__ << " " << coll << "/" << obj
-      << " size " << bl.length() << dendl;
+  dout(2) << __func__ << " " << coll << "/" << obj
+	  << " size " << bl.length() << dendl;
 
   if (m_do_stats && (stat != NULL))
     stat->written_data += bl.length();
@@ -268,7 +268,7 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
 					  C_StatState *stat)
 {
   if (m_suppress_write_xattr_obj) {
-    dout(0) << __func__ << " suppressed" << dendl;
+    dout(5) << __func__ << " suppressed" << dendl;
     return;
   }
 
@@ -279,7 +279,7 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
   bufferlist bl;
   get_filled_byte_array(bl, size);
 
-  dout(0) << __func__ << " " << coll << "/" << obj << " size " << size << dendl;
+  dout(2) << __func__ << " " << coll << "/" << obj << " size " << size << dendl;
 
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
@@ -291,7 +291,7 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
 					      coll_t coll, C_StatState *stat)
 {
   if (m_suppress_write_xattr_coll) {
-    dout(0) << __func__ << " suppressed" << dendl;
+    dout(5) << __func__ << " suppressed" << dendl;
     return;
   }
 
@@ -301,7 +301,7 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
-  dout(0) << __func__ << " coll " << coll << " size " << size << dendl;
+  dout(2) << __func__ << " coll " << coll << " size " << size << dendl;
 
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
@@ -313,7 +313,7 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
                                       coll_entry_t *entry, C_StatState *stat)
 {
   if (m_suppress_write_log) {
-    dout(0) << __func__ << " suppressed" << dendl;
+    dout(5) << __func__ << " suppressed" << dendl;
     return;
   }
 
@@ -323,7 +323,7 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
   get_filled_byte_array(bl, size);
   hobject_t log_obj = entry->m_meta_obj;
 
-  dout(0) << __func__ << " coll " << entry->m_coll << " "
+  dout(2) << __func__ << " coll " << entry->m_coll << " "
       << META_COLL << " /" << log_obj << " (" << bl.length() << ")" << dendl;
 
   if (m_do_stats && (stat != NULL))
@@ -342,7 +342,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   entry->m_osr.flush();
   vector<hobject_t> ls;
   m_store->collection_list(entry->m_coll, ls);
-  dout(0) << __func__ << " coll " << entry->m_coll
+  dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
   vector<hobject_t>::iterator it;
@@ -366,9 +366,9 @@ TestFileStoreState::coll_entry_t
   }
   m_collections.insert(make_pair(entry->m_id, entry));
 
-  dout(0) << __func__ << " id " << entry->m_id << " coll " << entry->m_coll << dendl;
+  dout(2) << __func__ << " id " << entry->m_id << " coll " << entry->m_coll << dendl;
   t->create_collection(entry->m_coll);
-  dout(0) << __func__ << " meta " << META_COLL << "/" << entry->m_meta_obj << dendl;
+  dout(2) << __func__ << " meta " << META_COLL << "/" << entry->m_meta_obj << dendl;
   t->touch(META_COLL, entry->m_meta_obj);
   return entry;
 }
@@ -415,10 +415,12 @@ void WorkloadGenerator::run()
         double throughput = (m_stats_written_data / ((double) m_stats_duration));
         double tx_throughput (m_stats_finished_txs / ((double) m_stats_duration));
 
-        dout(0) << __func__ << " written data: " << m_stats_written_data
-            << " duration: " << m_stats_duration << dendl;
-        dout(0) << "Throughput bandwidth " << prettybyte_t(throughput) << "/s"
-            << " transactions " << tx_throughput << "/s" << dendl;
+        dout(0) << __func__
+		<< " written: " << m_stats_written_data
+		<< " duration: " << m_stats_duration
+		<< " bandwidth: " << prettybyte_t(throughput) << "/s"
+		<< " iops: " << tx_throughput << "/s"
+		<< dendl;
 
         m_stats_finished_txs = 0;
         m_stats_written_data = 0;
@@ -479,8 +481,8 @@ queue_tx:
 
   } while (true);
 
-  dout(0) << __func__ << " waiting for "
-      << m_in_flight.read() << " in-flight transactions" << dendl;
+  dout(2) << __func__ << " waiting for "
+	  << m_in_flight.read() << " in-flight transactions" << dendl;
 
   wait_for_done();
 
