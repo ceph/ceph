@@ -21,6 +21,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
+#include "common/errno.h"
 #include "log/Log.h"
 
 #include <iostream>
@@ -160,6 +161,7 @@ public:
 
 void CephContext::do_command(std::string command, bufferlist *out)
 {
+  lgeneric_dout(this, 1) << "do_command '" << command << "'" << dendl;
   if (command == "perfcounters_dump" || command == "1") {
     std::vector<char> v;
     _perf_counters_collection->write_json_to_buf(v, false);
@@ -175,9 +177,29 @@ void CephContext::do_command(std::string command, bufferlist *out)
     _conf->show_config(ss);
     out->append(ss.str());
   }
+  else if (command.find("set_config ") == 0) {
+    std::string var = command.substr(11);
+    size_t pos = var.find(' ');
+    if (pos == string::npos) {
+      out->append("set_config syntax is 'set_config <var> <value>'");
+    } else {
+      std::string val = var.substr(pos+1);
+      var.resize(pos);
+      std::vector<const char*> args;
+      int r = _conf->set_val(var.c_str(), val.c_str());
+      ostringstream ss;
+      if (r < 0) {
+	ss << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
+      } else {
+	_conf->apply_changes(&ss);
+      }
+      out->append(ss.str());
+    }
+  }
   else {
     assert(0 == "registered under wrong command?");    
   }
+  lgeneric_dout(this, 1) << "do_command '" << command << "' result is " << out->length() << " bytes" << dendl;
 };
 
 
@@ -210,6 +232,7 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("perfcounters_schema", _admin_hook, "dump perfcounters schema");
   _admin_socket->register_command("2", _admin_hook, "");
   _admin_socket->register_command("show_config", _admin_hook, "dump current config settings");
+  _admin_socket->register_command("set_config", _admin_hook, "set_config <field> <val>: set a config settings");
 }
 
 CephContext::~CephContext()
@@ -221,6 +244,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("perfcounters_schema");
   _admin_socket->unregister_command("2");
   _admin_socket->unregister_command("show_config");
+  _admin_socket->unregister_command("set_config");
   delete _admin_hook;
 
   delete _heartbeat_map;
