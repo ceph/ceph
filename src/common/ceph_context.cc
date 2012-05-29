@@ -196,6 +196,15 @@ void CephContext::do_command(std::string command, bufferlist *out)
       out->append(ss.str());
     }
   }
+  else if (command == "log_flush") {
+    _log->flush();
+  }
+  else if (command == "log_dump_recent") {
+    _log->dump_recent();
+  }
+  else if (command == "log_reopen") {
+    _log->reopen_log_file();
+  }
   else {
     assert(0 == "registered under wrong command?");    
   }
@@ -233,6 +242,9 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("2", _admin_hook, "");
   _admin_socket->register_command("show_config", _admin_hook, "dump current config settings");
   _admin_socket->register_command("set_config", _admin_hook, "set_config <field> <val>: set a config settings");
+  _admin_socket->register_command("log_flush", _admin_hook, "flush log entries to log file");
+  _admin_socket->register_command("log_dump_recent", _admin_hook, "dump recent log entries to log file");
+  _admin_socket->register_command("log_reopen", _admin_hook, "reopen log file");
 }
 
 CephContext::~CephContext()
@@ -245,6 +257,9 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("2");
   _admin_socket->unregister_command("show_config");
   _admin_socket->unregister_command("set_config");
+  _admin_socket->unregister_command("log_flush");
+  _admin_socket->unregister_command("log_dump_recent");
+  _admin_socket->unregister_command("log_reopen");
   delete _admin_hook;
 
   delete _heartbeat_map;
