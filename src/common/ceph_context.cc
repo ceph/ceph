@@ -160,15 +160,24 @@ public:
 
 void CephContext::do_command(std::string command, bufferlist *out)
 {
-  std::vector<char> v;
-
-  if (command == "perfcounters_dump" || command == "1")
+  if (command == "perfcounters_dump" || command == "1") {
+    std::vector<char> v;
     _perf_counters_collection->write_json_to_buf(v, false);
-  else if (command == "perfcounters_schema" || command == "2")
+    out->append(&v[0], v.size());
+  }
+  else if (command == "perfcounters_schema" || command == "2") {
+    std::vector<char> v;
     _perf_counters_collection->write_json_to_buf(v, true);
-  else 
+    out->append(&v[0], v.size());
+  }
+  else if (command == "show_config") {
+    ostringstream ss;
+    _conf->show_config(ss);
+    out->append(ss.str());
+  }
+  else {
     assert(0 == "registered under wrong command?");    
-  out->append(&v[0], v.size());
+  }
 };
 
 
@@ -200,6 +209,7 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("1", _admin_hook, "");
   _admin_socket->register_command("perfcounters_schema", _admin_hook, "dump perfcounters schema");
   _admin_socket->register_command("2", _admin_hook, "");
+  _admin_socket->register_command("show_config", _admin_hook, "dump current config settings");
 }
 
 CephContext::~CephContext()
@@ -210,6 +220,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("1");
   _admin_socket->unregister_command("perfcounters_schema");
   _admin_socket->unregister_command("2");
+  _admin_socket->unregister_command("show_config");
   delete _admin_hook;
 
   delete _heartbeat_map;
