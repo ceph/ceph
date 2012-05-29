@@ -1024,6 +1024,10 @@ int DBObjectMap::init(bool do_upgrade)
 	  return r;
       }
     }
+  } else {
+    // New store
+    state.v = 1;
+    state.seq = 1;
   }
   dout(20) << "(init)dbobjectmap: seq is " << state.seq << dendl;
   return 0;
