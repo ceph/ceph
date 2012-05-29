@@ -4693,6 +4693,7 @@ void ReplicatedPG::submit_push_data(
   ObjectStore::Transaction *t)
 {
   if (first) {
+    remove_object_with_snap_hardlinks(*t, recovery_info.soid);
     t->remove(get_temp_coll(t), recovery_info.soid);
     t->touch(get_temp_coll(t), recovery_info.soid);
     t->omap_setheader(get_temp_coll(t), recovery_info.soid, omap_header);
