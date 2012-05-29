@@ -146,25 +146,29 @@ public:
 
 // perfcounter hooks
 
-class PerfCountersHook : public AdminSocketHook {
-  PerfCountersCollection *m_coll;
+class CephContextHook : public AdminSocketHook {
+  CephContext *m_cct;
 
 public:
-  PerfCountersHook(PerfCountersCollection *c) : m_coll(c) {}
+  CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   bool call(std::string command, bufferlist& out) {
-    std::vector<char> v;
-    if (command == "perfcounters_dump" ||
-	command == "1")
-      m_coll->write_json_to_buf(v, false);
-    else if (command == "perfcounters_schema" ||
-	     command == "2")
-      m_coll->write_json_to_buf(v, true);
-    else 
-      assert(0 == "registered under wrong command?");    
-    out.append(&v[0], v.size());
+    m_cct->do_command(command, &out);
     return true;
   }
+};
+
+void CephContext::do_command(std::string command, bufferlist *out)
+{
+  std::vector<char> v;
+
+  if (command == "perfcounters_dump" || command == "1")
+    _perf_counters_collection->write_json_to_buf(v, false);
+  else if (command == "perfcounters_schema" || command == "2")
+    _perf_counters_collection->write_json_to_buf(v, true);
+  else 
+    assert(0 == "registered under wrong command?");    
+  out->append(&v[0], v.size());
 };
 
 
@@ -192,11 +196,11 @@ CephContext::CephContext(uint32_t module_type_)
   _conf->add_observer(_admin_socket);
   _heartbeat_map = new HeartbeatMap(this);
 
-  _perf_counters_hook = new PerfCountersHook(_perf_counters_collection);
-  _admin_socket->register_command("perfcounters_dump", _perf_counters_hook, "dump perfcounters value");
-  _admin_socket->register_command("1", _perf_counters_hook, "");
-  _admin_socket->register_command("perfcounters_schema", _perf_counters_hook, "dump perfcounters schema");
-  _admin_socket->register_command("2", _perf_counters_hook, "");
+  _admin_hook = new CephContextHook(this);
+  _admin_socket->register_command("perfcounters_dump", _admin_hook, "dump perfcounters value");
+  _admin_socket->register_command("1", _admin_hook, "");
+  _admin_socket->register_command("perfcounters_schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("2", _admin_hook, "");
 }
 
 CephContext::~CephContext()
@@ -207,7 +211,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("1");
   _admin_socket->unregister_command("perfcounters_schema");
   _admin_socket->unregister_command("2");
-  delete _perf_counters_hook;
+  delete _admin_hook;
 
   delete _heartbeat_map;
 
