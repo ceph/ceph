@@ -227,10 +227,14 @@ void WorkloadGenerator::get_filled_byte_array(bufferlist& bl, size_t size)
     "abcdefghijklmnopqrstuvwxyz";
 
   bufferptr bp(size);
-  for (unsigned int i = 0; i < size - 1; i++) {
-    bp[i] = alphanum[rand() % sizeof(alphanum)];
+  if (false) {
+    for (unsigned int i = 0; i < size - 1; i++) {
+      bp[i] = alphanum[rand() % sizeof(alphanum)];
+    }
+    bp[size - 1] = '\0';
+  } else {
+    bp.zero();
   }
-  bp[size - 1] = '\0';
   bl.append(bp);
 }
 
