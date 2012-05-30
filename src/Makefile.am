@@ -1010,6 +1010,7 @@ libcommon_files = \
 	json_spirit/json_spirit_writer.cpp \
 	json_spirit/json_spirit_value.cpp \
 	log/Log.cc \
+	log/SubsystemMap.cc \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \

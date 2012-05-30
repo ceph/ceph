@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "include/assert.h"
+
 namespace ceph {
 namespace log {
 
@@ -32,25 +34,9 @@ public:
     return m_max_name_len;
   }
 
-  void add(unsigned subsys, string name, int log, int gather) {
-    if (subsys >= m_subsys.size())
-      m_subsys.resize(subsys + 1);
-    m_subsys[subsys].name = name;
-    m_subsys[subsys].log_level = log;
-    m_subsys[subsys].gather_level = gather;
-    if (name.length() > m_max_name_len)
-      m_max_name_len = name.length();
-  }
-  
-  void set_log_level(unsigned subsys, int log) {
-    assert(subsys < m_subsys.size());
-    m_subsys[subsys].log_level = log;
-  }
-
-  void set_gather_level(unsigned subsys, int gather) {
-    assert(subsys < m_subsys.size());
-    m_subsys[subsys].gather_level = gather;
-  }
+  void add(unsigned subsys, std::string name, int log, int gather);  
+  void set_log_level(unsigned subsys, int log);
+  void set_gather_level(unsigned subsys, int gather);
 
   int get_log_level(unsigned subsys) const {
     if (subsys >= m_subsys.size())
@@ -64,7 +50,7 @@ public:
     return m_subsys[subsys].gather_level;
   }
 
-  const string& get_name(unsigned subsys) const {
+  const std::string& get_name(unsigned subsys) const {
     if (subsys >= m_subsys.size())
       subsys = 0;
     return m_subsys[subsys].name;
