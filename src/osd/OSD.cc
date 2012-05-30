@@ -5307,7 +5307,7 @@ void OSD::handle_op(OpRequestRef op)
     }
 
     // okay, we aren't valid now; check send epoch
-    if (m->get_map_epoch() >= superblock.oldest_map) {
+    if (m->get_map_epoch() < superblock.oldest_map) {
       dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
       return;
     }
