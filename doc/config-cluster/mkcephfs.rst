@@ -60,4 +60,4 @@ The script adds an admin key to the ``ceph.keyring``, which is analogous to a
 root password. See `Authentication`_ when running with ``cephx`` enabled.
 
 
-.. _Authentication: authentication
+.. _Authentication: ../authentication
