@@ -5217,8 +5217,8 @@ void OSD::handle_misdirected_op(PG *pg, OpRequestRef op)
     dout(7) << "got misdirected op from " << m->get_source_inst()
             << " for pgid " << m->get_pg() << dendl;
     clog.warn() << m->get_source_inst() << " misdirected "
-                << m->get_reqid() << " " << pg->info.pgid
-                << "to osd." << whoami
+                << m->get_reqid() << " pg " << m->get_pg()
+                << " to osd." << whoami
                 << " in e" << m->get_map_epoch() << "\n";
   }
   reply_op_error(op, -ENXIO);
