@@ -12,7 +12,6 @@
 #include <vector>
 #include <tr1/memory>
 
-#include "IndexManager.h"
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
 #include "DBObjectMap.h"
@@ -313,8 +312,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
 }
 
 ObjectMap::ObjectMapIterator DBObjectMap::get_iterator(
-  const hobject_t &hoid,
-  Index index)
+  const hobject_t &hoid)
 {
   Header header = lookup_map_header(hoid);
   if (!header)
@@ -500,7 +498,6 @@ int DBObjectMap::DBObjectMapIteratorImpl::status()
 }
 
 int DBObjectMap::set_keys(const hobject_t &hoid,
-			  Index index,
 			  const map<string, bufferlist> &set)
 {
   KeyValueDB::Transaction t = db->get_transaction();
@@ -514,7 +511,6 @@ int DBObjectMap::set_keys(const hobject_t &hoid,
 }
 
 int DBObjectMap::set_header(const hobject_t &hoid,
-			    Index index,
 			    const bufferlist &bl)
 {
   KeyValueDB::Transaction t = db->get_transaction();
@@ -534,7 +530,6 @@ void DBObjectMap::_set_header(Header header, const bufferlist &bl,
 }
 
 int DBObjectMap::get_header(const hobject_t &hoid,
-			    Index index,
 			    bufferlist *bl)
 {
   Header header = lookup_map_header(hoid);
@@ -569,8 +564,7 @@ int DBObjectMap::_get_header(Header header,
   return 0;
 }
 
-int DBObjectMap::clear(const hobject_t &hoid,
-		       Index index)
+int DBObjectMap::clear(const hobject_t &hoid)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   Header header = lookup_map_header(hoid);
@@ -689,7 +683,6 @@ int DBObjectMap::need_parent(DBObjectMapIterator iter)
 }
 
 int DBObjectMap::rm_keys(const hobject_t &hoid,
-			 Index index,
 			 const set<string> &to_clear)
 {
   Header header = lookup_map_header(hoid);
@@ -762,7 +755,6 @@ int DBObjectMap::rm_keys(const hobject_t &hoid,
 }
 
 int DBObjectMap::get(const hobject_t &hoid,
-		     Index index,
 		     bufferlist *_header,
 		     map<string, bufferlist> *out)
 {
@@ -780,13 +772,12 @@ int DBObjectMap::get(const hobject_t &hoid,
 }
 
 int DBObjectMap::get_keys(const hobject_t &hoid,
-			  Index index,
 			  set<string> *keys)
 {
   Header header = lookup_map_header(hoid);
   if (!header)
     return -ENOENT;
-  ObjectMapIterator iter = get_iterator(hoid, index);
+  ObjectMapIterator iter = get_iterator(hoid);
   for (; iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
@@ -818,7 +809,6 @@ int DBObjectMap::scan(Header header,
 }
 
 int DBObjectMap::get_values(const hobject_t &hoid,
-			    Index index,
 			    const set<string> &keys,
 			    map<string, bufferlist> *out)
 {
@@ -829,7 +819,6 @@ int DBObjectMap::get_values(const hobject_t &hoid,
 }
 
 int DBObjectMap::check_keys(const hobject_t &hoid,
-			    Index index,
 			    const set<string> &keys,
 			    set<string> *out)
 {
@@ -840,7 +829,6 @@ int DBObjectMap::check_keys(const hobject_t &hoid,
 }
 
 int DBObjectMap::get_xattrs(const hobject_t &hoid,
-			    Index index,
 			    const set<string> &to_get,
 			    map<string, bufferlist> *out)
 {
@@ -851,7 +839,6 @@ int DBObjectMap::get_xattrs(const hobject_t &hoid,
 }
 
 int DBObjectMap::get_all_xattrs(const hobject_t &hoid,
-				Index index,
 				set<string> *out)
 {
   Header header = lookup_map_header(hoid);
@@ -866,7 +853,6 @@ int DBObjectMap::get_all_xattrs(const hobject_t &hoid,
 }
 
 int DBObjectMap::set_xattrs(const hobject_t &hoid,
-			    Index index,
 			    const map<string, bufferlist> &to_set)
 {
   KeyValueDB::Transaction t = db->get_transaction();
@@ -878,7 +864,6 @@ int DBObjectMap::set_xattrs(const hobject_t &hoid,
 }
 
 int DBObjectMap::remove_xattrs(const hobject_t &hoid,
-			       Index index,
 			       const set<string> &to_remove)
 {
   KeyValueDB::Transaction t = db->get_transaction();
@@ -890,9 +875,7 @@ int DBObjectMap::remove_xattrs(const hobject_t &hoid,
 }
 
 int DBObjectMap::clone(const hobject_t &hoid,
-		       Index index,
-		       const hobject_t &target,
-		       Index target_index)
+		       const hobject_t &target)
 {
   if (hoid == target)
     return 0;
