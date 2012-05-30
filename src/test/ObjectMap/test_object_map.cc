@@ -8,7 +8,6 @@
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "os/KeyValueDB.h"
 #include "os/DBObjectMap.h"
-#include "DBObjectMap_v0.h"
 #include "os/HashIndex.h"
 #include "os/LevelDBStore.h"
 #include <sys/types.h>
