@@ -282,8 +282,9 @@ int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>
   return vals->size();
 }
 
-int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj,
-                          string& filter_prefix, uint64_t max, map<string, bufferlist>* vals)
+int cls_cxx_map_read_keys(cls_method_context_t hctx, const string &start_obj,
+                          const string &filter_prefix, uint64_t max,
+                          map<string, bufferlist> *vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -327,7 +328,7 @@ int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 
   return 0;
 }
-int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl)
+int cls_cxx_map_read_key(cls_method_context_t hctx, const string &key, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -359,7 +360,7 @@ int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outb
   return 0;
 }
 
-int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl)
+int cls_cxx_map_write_key(cls_method_context_t hctx, const string &key, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -397,7 +398,7 @@ int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-int cls_cxx_map_remove_key(cls_method_context_t hctx, string key)
+int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);

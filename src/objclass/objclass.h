@@ -98,14 +98,14 @@ extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferli
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
 extern int cls_cxx_map_read_all_keys(cls_method_context_t hctx, std::map<string, bufferlist> *keys);
-extern int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_after, string& filter_prefix,
+extern int cls_cxx_map_read_keys(cls_method_context_t hctx, const string &start_after, const string &filter_prefix,
 				 uint64_t max, std::map<string, bufferlist> *keys);
 extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
-extern int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl);
-extern int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl);
+extern int cls_cxx_map_read_key(cls_method_context_t hctx, const string &key, bufferlist *outbl);
+extern int cls_cxx_map_write_key(cls_method_context_t hctx, const string &key, bufferlist *inbl);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
-extern int cls_cxx_map_remove_key(cls_method_context_t hctx, string key);
-extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist* inbl);
+extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key);
+extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist *inbl);
 
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'
