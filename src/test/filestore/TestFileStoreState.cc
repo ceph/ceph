@@ -139,16 +139,14 @@ TestFileStoreState::get_coll_at(int pos, bool erase)
 TestFileStoreState::coll_entry_t::~coll_entry_t()
 {
   if (m_objects.size() > 0) {
-//    for (set<hobject_t*>::iterator it = m_objects.begin();
-//        it != m_objects.end(); it++) {
     map<int, hobject_t*>::iterator it = m_objects.begin();
     for (; it != m_objects.end(); it++) {
       hobject_t *obj = it->second;
-      m_objects.erase(it);
       if (obj) {
         delete obj;
       }
     }
+    m_objects.clear();
   }
 }
 
