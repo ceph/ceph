@@ -316,6 +316,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   oss << buf;
   std::string sep;
   oss << "overloaded osds: ";
+  bool changed = false;
   for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
@@ -334,6 +335,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
 	       (float)weight / (float)0x10000,
 	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
+      changed = true;
     }
   }
   if (sep.empty()) {
@@ -341,7 +343,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   }
   out_str = oss.str();
   dout(0) << "reweight_by_utilization: finished with " << out_str << dendl;
-  return 0;
+  return changed;
 }
 
 void OSDMonitor::create_pending()
@@ -2392,11 +2394,16 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
       string out_str;
       err = reweight_by_utilization(oload, out_str);
-      if (err) {
-	ss << "FAILED to reweight-by-utilization: " << out_str;
+      if (err < 0) {
+	ss << "FAILED reweight-by-utilization: " << out_str;
       }
-      else {
+      else if (err == 0) {
+	ss << "no change: " << out_str;
+      } else {
 	ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
       }
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "thrash") {
