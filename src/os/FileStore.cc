@@ -1471,6 +1471,25 @@ int FileStore::_detect_fs()
     btrfs = false;
   }
 
+#ifdef HAVE_SYS_SYNCFS
+  if (syncfs(fd) == 0) {
+    dout(0) << "mount syncfs(2) syscall fully supported (by glibc and kernel)" << dendl;
+  } else {
+    dout(0) << "mount syncfs(2) syscall supported by glibc BUT NOT the kernel" << dendl;
+  } else
+#endif
+  {
+    if (btrfs) {
+      dout(0) << "mount syncfs(2) syscall not support by glibc, but the btrfs SYNC ioctl will suffice" << dendl;
+    } else if (m_filestore_fsync_flushes_journal_data) {
+      dout(0) << "mount syncfs(2) syscall not support by glibc, but 'filestore fsync flushes journal data = true', so fsync will suffice." << dendl;
+    } else {
+      dout(0) << "mount syncfs(2) syscall not support by glibc; must use sync(2)." << dendl;
+      dout(0) << "mount WARNING: multiple ceph-osd daemons on the same host will be slow" << dendl;
+    }
+  }
+
+
   TEMP_FAILURE_RETRY(::close(fd));
   return 0;
 }
