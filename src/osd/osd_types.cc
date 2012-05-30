@@ -1775,6 +1775,13 @@ void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
   rmissing[need.version] = oid;
 }
 
+void pg_missing_t::revise_have(hobject_t oid, eversion_t have)
+{
+  if (missing.count(oid)) {
+    missing[oid].have = have;
+  }
+}
+
 void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
 {
   missing[oid] = item(need, have);
