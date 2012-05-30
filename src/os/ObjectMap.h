@@ -15,11 +15,10 @@
 #ifndef OS_KEYVALUESTORE_H
 #define OS_KEYVALUESTORE_H
 
+#include "IndexManager.h"
 #include <string>
 #include <vector>
 #include <tr1/memory>
-
-#include "IndexManager.h"
 
 /**
  * Encapsulates the FileStore key value store
@@ -31,41 +30,35 @@ public:
   /// Set keys and values from specified map
   virtual int set_keys(
     const hobject_t &hoid,              ///< [in] object containing map
-    Index index,                        ///< [in] Path to hoid
     const map<string, bufferlist> &set   ///< [in] key to value map to set
     ) = 0;
 
   /// Set header
   virtual int set_header(
     const hobject_t &hoid,              ///< [in] object containing map
-    Index index,                        ///< [in] Path to hoid
     const bufferlist &bl                ///< [in] header to set
     ) = 0;
 
   /// Retrieve header
   virtual int get_header(
     const hobject_t &hoid,              ///< [in] object containing map
-    Index index,                        ///< [in] Path to hoid
     bufferlist *bl                      ///< [out] header to set
     ) = 0;
 
   /// Clear all map keys and values from hoid
   virtual int clear(
-    const hobject_t &hoid,              ///< [in] object containing map
-    Index index                         ///< [in] Path to hoid
+    const hobject_t &hoid              ///< [in] object containing map
     ) = 0;
 
   /// Clear all map keys and values from hoid
   virtual int rm_keys(
     const hobject_t &hoid,              ///< [in] object containing map
-    Index index,                        ///< [in] Path to hoid
     const set<string> &to_clear         ///< [in] Keys to clear
     ) = 0;
 
   /// Get all keys and values
   virtual int get(
     const hobject_t &hoid,             ///< [in] object containing map
-    Index index,                       ///< [in] Path to hoid
     bufferlist *header,                ///< [out] Returned Header
     map<string, bufferlist> *out       ///< [out] Returned keys and values
     ) = 0;
@@ -73,14 +66,12 @@ public:
   /// Get values for supplied keys
   virtual int get_keys(
     const hobject_t &hoid,             ///< [in] object containing map
-    Index index,                       ///< [in] Path to hoid
     set<string> *keys                  ///< [out] Keys defined on hoid
     ) = 0;
 
   /// Get values for supplied keys
   virtual int get_values(
     const hobject_t &hoid,             ///< [in] object containing map
-    Index index,                       ///< [in] Path to hoid
     const set<string> &keys,           ///< [in] Keys to get
     map<string, bufferlist> *out       ///< [out] Returned keys and values
     ) = 0;
@@ -88,7 +79,6 @@ public:
   /// Check key existence
   virtual int check_keys(
     const hobject_t &hoid,             ///< [in] object containing map
-    Index index,                       ///< [in] Path to hoid
     const set<string> &keys,           ///< [in] Keys to check
     set<string> *out                   ///< [out] Subset of keys defined on hoid
     ) = 0;
@@ -96,7 +86,6 @@ public:
   /// Get xattrs
   virtual int get_xattrs(
     const hobject_t &hoid,             ///< [in] object
-    Index index,                       ///< [in] path to hoid
     const set<string> &to_get,         ///< [in] keys to get
     map<string, bufferlist> *out       ///< [out] subset of attrs/vals defined
     ) = 0;
@@ -104,21 +93,18 @@ public:
   /// Get all xattrs
   virtual int get_all_xattrs(
     const hobject_t &hoid,             ///< [in] object
-    Index index,                       ///< [in] path to hoid
     set<string> *out       ///< [out] attrs and values
     ) = 0;
 
   /// set xattrs in to_set
   virtual int set_xattrs(
     const hobject_t &hoid,                ///< [in] object
-    Index index,                          ///< [in] path to object
     const map<string, bufferlist> &to_set ///< [in] attrs/values to set
     ) = 0;
 
   /// remove xattrs in to_remove
   virtual int remove_xattrs(
     const hobject_t &hoid,               ///< [in] object
-    Index index,                         ///< [in] path to hoid
     const set<string> &to_remove         ///< [in] attrs to remove
     ) = 0;
 
@@ -126,9 +112,7 @@ public:
   /// Clone keys efficiently from hoid map to target map
   virtual int clone(
     const hobject_t &hoid,             ///< [in] object containing map
-    Index index,                       ///< [in] Path to hoid
-    const hobject_t &target,           ///< [in] target of clone
-    Index target_index                 ///< [in] path to target
+    const hobject_t &target            ///< [in] target of clone
     ) { return 0; }
 
   /// Ensure all previous writes are durable
@@ -149,8 +133,7 @@ public:
     virtual ~ObjectMapIteratorImpl() {}
   };
   typedef std::tr1::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
-  virtual ObjectMapIterator get_iterator(const hobject_t &hoid,
-					 Index index) {
+  virtual ObjectMapIterator get_iterator(const hobject_t &hoid) {
     return ObjectMapIterator();
   }
 

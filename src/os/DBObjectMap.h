@@ -12,7 +12,6 @@
 #include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
 
-#include "IndexManager.h"
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
 #include "osd/osd_types.h"
@@ -76,90 +75,75 @@ public:
 
   int set_keys(
     const hobject_t &hoid,
-    Index index,
     const map<string, bufferlist> &set
     );
 
   int set_header(
     const hobject_t &hoid,
-    Index index,
     const bufferlist &bl
     );
 
   int get_header(
     const hobject_t &hoid,
-    Index index,
     bufferlist *bl
     );
 
   int clear(
-    const hobject_t &hoid,
-    Index index
+    const hobject_t &hoid
     );
 
   int rm_keys(
     const hobject_t &hoid,
-    Index index,
     const set<string> &to_clear
     );
 
   int get(
     const hobject_t &hoid,
-    Index index,
     bufferlist *header,
     map<string, bufferlist> *out
     );
 
   int get_keys(
     const hobject_t &hoid,
-    Index index,
     set<string> *keys
     );
 
   int get_values(
     const hobject_t &hoid,
-    Index index,
     const set<string> &keys,
     map<string, bufferlist> *out
     );
 
   int check_keys(
     const hobject_t &hoid,
-    Index index,
     const set<string> &keys,
     set<string> *out
     );
 
   int get_xattrs(
     const hobject_t &hoid,
-    Index index,
     const set<string> &to_get,
     map<string, bufferlist> *out
     );
 
   int get_all_xattrs(
     const hobject_t &hoid,
-    Index index,
     set<string> *out
     );
 
   int set_xattrs(
     const hobject_t &hoid,
-    Index index,
     const map<string, bufferlist> &to_set
     );
 
   int remove_xattrs(
     const hobject_t &hoid,
-    Index index,
     const set<string> &to_remove
     );
 
   int clone(
     const hobject_t &hoid,
-    Index index,
-    const hobject_t &target,
-    Index target_index
+    const hobject_t &target
     );
 
   /// Read initial state from backing store
@@ -174,8 +158,7 @@ public:
   /// Ensure that all previous operations are durable
   int sync();
 
-  ObjectMapIterator get_iterator(const hobject_t &hoid,
-				 Index index);
+  ObjectMapIterator get_iterator(const hobject_t &hoid);
 
   static const string USER_PREFIX;
   static const string XATTR_PREFIX;
