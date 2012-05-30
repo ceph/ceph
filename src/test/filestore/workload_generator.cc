@@ -51,8 +51,10 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
     m_suppress_write_xattr_coll(false), m_suppress_write_log(false),
     m_do_stats(false),
     m_stats_finished_txs(0),
-    m_stats_written_data(0), m_stats_duration(), m_stats_lock("WorldloadGenerator::m_stats_lock"),
-    m_stats_show_secs(5)
+    m_stats_lock("WorldloadGenerator::m_stats_lock"),
+    m_stats_show_secs(5),
+    m_stats_total_written(0),
+    m_stats_begin()
 {
   int err = 0;
 
@@ -373,13 +375,36 @@ TestFileStoreState::coll_entry_t
   return entry;
 }
 
+void WorkloadGenerator::do_stats()
+{
+  utime_t now = ceph_clock_now(NULL);
+  m_stats_lock.Lock();
+
+  utime_t duration = (now - m_stats_begin);
+
+  // when cast to double, a utime_t behaves properly
+  double throughput = (m_stats_total_written / ((double) duration));
+  double tx_throughput (m_stats_finished_txs / ((double) duration));
+
+  dout(0) << __func__
+	  << " written: " << m_stats_total_written
+	  << " duration: " << duration << " sec"
+	  << " bandwidth: " << prettybyte_t(throughput) << "/s"
+	  << " iops: " << tx_throughput << "/s"
+	  << dendl;
+
+  m_stats_lock.Unlock();
+}
+
 void WorkloadGenerator::run()
 {
   bool create_coll = false;
   int ops_run = 0;
 
   utime_t stats_interval(m_stats_show_secs, 0);
-  utime_t stats_time = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now(NULL);
+  utime_t stats_time = now;
+  m_stats_begin = now;
 
   do {
     C_StatState *stat_state = NULL;
@@ -409,28 +434,9 @@ void WorkloadGenerator::run()
       utime_t now = ceph_clock_now(NULL);
       utime_t elapsed = now - stats_time;
       if (elapsed >= stats_interval) {
-        m_stats_lock.Lock();
-
-        // when cast to double, a utime_t behaves properly
-        double throughput = (m_stats_written_data / ((double) m_stats_duration));
-        double tx_throughput (m_stats_finished_txs / ((double) m_stats_duration));
-
-        dout(0) << __func__
-		<< " written: " << m_stats_written_data
-		<< " duration: " << m_stats_duration
-		<< " bandwidth: " << prettybyte_t(throughput) << "/s"
-		<< " iops: " << tx_throughput << "/s"
-		<< dendl;
-
-        m_stats_finished_txs = 0;
-        m_stats_written_data = 0;
-        m_stats_duration = utime_t();
-
-        m_stats_lock.Unlock();
-
-        stats_time = now;
+	do_stats();
+	stats_time = now;
       }
-
       stat_state = new C_StatState(this, now);
     }
 
@@ -486,12 +492,9 @@ queue_tx:
 
   wait_for_done();
 
+  do_stats();
+
   dout(0) << __func__ << " finishing" << dendl;
-}
-
-void WorkloadGenerator::print_results()
-{
-
 }
 
 void usage()
@@ -561,6 +564,5 @@ int main(int argc, const char *argv[])
   WorkloadGenerator *wrkldgen_ptr = new WorkloadGenerator(args);
   wrkldgen.reset(wrkldgen_ptr);
   wrkldgen->run();
-  wrkldgen->print_results();
   return 0;
 }
