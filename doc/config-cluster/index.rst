@@ -28,3 +28,5 @@ instance (a single context).
    Deploy Config <deploying-ceph-conf>
    deploying-ceph-with-mkcephfs
    Deploy with Chef <chef>
+   Storage Pools <pools>
+   Authentication <authentication>
