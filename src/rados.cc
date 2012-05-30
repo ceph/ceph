@@ -111,6 +111,10 @@ STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
 "\n"
+"BENCH OPTIONS:\n"
+"   --show-time\n"
+"        prefix output with date/time\n"
+"\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
 "   --min-object-size                min object size\n"
@@ -667,6 +671,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t num_objs = 0;
   int run_length = 0;
 
+  bool show_time = false;
+
   Formatter *formatter = NULL;
   bool pretty_format = false;
 
@@ -741,6 +747,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("run-length");
   if (i != opts.end()) {
     run_length = strtol(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("show-time");
+  if (i != opts.end()) {
+    show_time = true;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -1281,6 +1291,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     else
       usage_exit();
     RadosBencher bencher(rados, io_ctx);
+    bencher.set_show_time(show_time);
     ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
@@ -1419,6 +1430,8 @@ int main(int argc, const char **argv)
       opts["create"] = "true";
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
       opts["pretty-format"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
+      opts["show-time"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {
