@@ -326,12 +326,13 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
-      float weight = osdmap.get_weightf(p->first);
-      float new_weight = (average_util / util) * weight;
-      osdmap.set_weightf(p->first, new_weight);
+      unsigned weight = osdmap.get_weight(p->first);
+      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      pending_inc.new_weight[p->first] = new_weight;
       char buf[128];
       snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
-	       weight, new_weight);
+	       (float)weight / (float)0x10000,
+	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
     }
   }
