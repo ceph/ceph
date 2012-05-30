@@ -9,7 +9,7 @@ at least one of three processes or daemons:
 - Monitor (``ceph-mon``)
 - Metadata Server (``ceph-mds``)
 
-Each process or daemon looks for a ``ceph.conf`` file that provides their
+Each process or daemon looks for a ``ceph.conf`` file that provides its
 configuration settings. The default ``ceph.conf`` locations in sequential
 order include:
 
@@ -90,9 +90,8 @@ instances of all processes in the cluster. Use the ``[global]`` setting for
 values that are common for all hosts in the cluster. You can override each
 ``[global]`` setting by:
 
-1. Changing the setting in a particular ``[group]``.
-2. Changing the setting in a particular process type (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
-3. Changing the setting in a particular process (*e.g.,* ``[osd.1]`` )
+#. Changing the setting in a particular process type (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
+#. Changing the setting in a particular process (*e.g.,* ``[osd.1]`` )
 
 Overriding a global setting affects all child processes, except those that
 you specifically override. For example::
@@ -108,6 +107,11 @@ specify settings under ``[osd]``, ``[mon]`` or ``[mds]`` without specifying a
 particular instance, the setting will apply to all OSDs, monitors or metadata
 daemons respectively.
 
+For details on settings for each type of daemon, 
+see `Configuration Reference`_.
+
+.. _Configuration Reference: ../../config
+
 Instance Settings
 ~~~~~~~~~~~~~~~~~
 You may specify settings for particular instances of an daemon. You may specify
@@ -121,6 +125,7 @@ alphanumeric for monitors and metadata servers. ::
 		; settings affect mon.a1 only.
 	[mds.b2]
 		; settings affect mds.b2 only.
+		
 
 ``host`` and ``addr`` Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,13 +141,11 @@ may run a ``ceph-mds`` daemon, and other hosts may run ``ceph-mon`` daemons.
 Each host has a name identified by the ``host`` setting, and a network location
 (i.e., domain name or IP address) identified by the ``addr`` setting. For example::
 
-	[osd.1]
-		host = hostNumber1
-		addr = 150.140.130.120
-	[osd.2]
-		host = hostNumber1
-		addr = 150.140.130.120
-
+	[mon.a]
+		host = hostName
+		mon addr = 150.140.130.120:6789
+	[osd.0]
+		host = hostName
 
 Monitor Configuration
 ~~~~~~~~~~~~~~~~~~~~~
@@ -156,9 +159,8 @@ algorithm can determine which version of the cluster map is the most accurate.
 Ceph monitors typically listen on port ``6789``. For example:: 
 
 	[mon.a]
-		host = hostNumber1
-		addr = 150.140.130.120:6789
-
+		host = hostName
+		mon addr = 150.140.130.120:6789
 
 Example Configuration File
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -166,16 +168,12 @@ Example Configuration File
 .. literalinclude:: demo-ceph.conf
    :language: ini
 
-Configuration File Deployment Options
--------------------------------------
-The most common way to deploy the ``ceph.conf`` file in a cluster is to have
-all hosts share the same configuration file.
 
-You may create a ``ceph.conf`` file for each host if you wish, or specify a
-particular ``ceph.conf`` file for a subset of hosts within the cluster. However,
-using per-host ``ceph.conf`` configuration files imposes a maintenance burden as the
-cluster grows. In a typical deployment, an administrator creates a ``ceph.conf`` file
-on the Administration host and then copies that file to each OSD Cluster host.
+``iptables`` Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Monitors listen on port 6789, while metadata servers and OSDs listen on the first
+available port beginning at 6800. Ensure that you open port 6789 on hosts that run
+a monitor daemon, and open one port beginning at port 6800 for each OSD or metadata
+server that runs on the host. For example:: 
 
-The current cluster deployment script, ``mkcephfs``, does not make copies of the
-``ceph.conf``. You must copy the file manually.
+	iptables -A INPUT -m multiport -p tcp -s 192.168.1.0/24 --dports 6789,6800:6803 -j ACCEPT
