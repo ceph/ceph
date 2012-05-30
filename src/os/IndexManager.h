@@ -47,6 +47,7 @@ typedef std::tr1::shared_ptr<CollectionIndex> Index;
 class IndexManager {
   Mutex lock; ///< Lock for Index Manager
   Cond cond;  ///< Cond for waiters on col_indices
+  bool upgrade;
 
   /// Currently in use CollectionIndices
   map<coll_t,std::tr1::weak_ptr<CollectionIndex> > col_indices;
@@ -84,7 +85,8 @@ class IndexManager {
   int build_index(coll_t c, const char *path, Index *index);
 public:
   /// Constructor
-  IndexManager() : lock("IndexManager lock") {}
+  IndexManager(bool upgrade) : lock("IndexManager lock"),
+			       upgrade(upgrade) {}
 
   /**
    * Reserve and return index for c

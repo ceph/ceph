@@ -659,7 +659,7 @@ done:
   return r;
 }
 
-FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name) :
+FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name, bool do_update) :
   internal_name(name),
   basedir(base), journalpath(jdev),
   btrfs(false),
@@ -673,6 +673,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   ioctl_fiemap(false),
   fsid_fd(-1), op_fd(-1),
   basedir_fd(-1), current_fd(-1),
+  index_manager(do_update),
   ondisk_finisher(g_ceph_context),
   lock("FileStore::lock"),
   force_sync(false), sync_epoch(0),
@@ -701,7 +702,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_flusher_max_fds(g_conf->filestore_flusher_max_fds),
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
-  m_filestore_update_collections(g_conf->filestore_update_collections),
+  do_update(do_update),
   m_journal_dio(g_conf->journal_dio),
   m_journal_aio(g_conf->journal_aio),
   m_osd_rollback_to_cluster_snap(g_conf->osd_rollback_to_cluster_snap),
@@ -1672,10 +1673,10 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
-    if (m_filestore_update_collections) {
+    if (do_update) {
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
-	   << ". Proceeding, m_filestore_update_collections "
+	   << ". Proceeding, do_update "
 	   << "is set, DO NOT USE THIS OPTION IF YOU DO NOT KNOW WHAT IT DOES."
 	   << " More details can be found on the wiki."
 	   << dendl;
@@ -1683,7 +1684,7 @@ int FileStore::mount()
       ret = -EINVAL;
       derr << "FileStore::mount : stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
-	   << "OSD."
+	   << "OSD, or set filestore_update_to to " << on_disk_version
 	   << dendl;
       goto close_fsid_fd;
     }
@@ -1882,7 +1883,7 @@ int FileStore::mount()
       goto close_current_fd;
     }
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
-    ret = dbomap->init(m_filestore_update_collections);
+    ret = dbomap->init(do_update);
     if (ret < 0) {
       derr << "Error initializing DBObjectMap: " << ret << dendl;
       goto close_current_fd;

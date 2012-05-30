@@ -998,7 +998,8 @@ int DBObjectMap::init(bool do_upgrade)
     state.decode(bliter);
     if (state.v < 1) { // Needs upgrade
       if (!do_upgrade) {
-	dout(1) << "DOBjbectMap requires an upgrade, set filestore_update_omap"
+	dout(1) << "DOBjbectMap requires an upgrade,"
+		<< " set filestore_update_to"
 		<< dendl;
 	return -ENOTSUP;
       } else {
