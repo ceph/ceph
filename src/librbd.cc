@@ -406,7 +406,7 @@ namespace librbd {
     AioCompletion() : lock("AioCompletion::lock", true),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL), pending_count(1),
-		      ref(1), released(false), start_time(0) { 
+		      ref(1), released(false) { 
     }
     ~AioCompletion() {
     }
@@ -436,25 +436,19 @@ namespace librbd {
       lock.Unlock();
     }
 
-    void set_start_time() {
-      start_time = ceph_clock_now(ictx->cct);
-    }
-
-    void set_ictx(ImageCtx *i) {
+    void init_time(ImageCtx *i, aio_type_t t) {
       ictx = i;
-    }
-
-    void set_aio_type(aio_type_t t) {
       aio_type = t;
+      start_time = ceph_clock_now(ictx->cct);
     }
 
     void complete() {
       utime_t elapsed;
       assert(lock.is_locked());
+      elapsed = ceph_clock_now(ictx->cct) - start_time;
       if (complete_cb) {
 	complete_cb(rbd_comp, complete_arg);
       }
-      elapsed = ceph_clock_now(ictx->cct) - start_time;
       switch (aio_type) {
 	case AIO_TYPE_READ: 
 	  ictx->perfcounter->finc(l_librbd_aio_rd_latency, elapsed); break;
@@ -1911,9 +1905,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     return -EROFS;
 
   c->get();
-  c->set_ictx(ictx);
-  c->set_start_time();
-  c->set_aio_type(AIO_TYPE_WRITE);
+  c->init_time(ictx, AIO_TYPE_WRITE);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
@@ -1979,9 +1971,7 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
     v.reserve(end_block - start_block + 1);
 
   c->get();
-  c->set_start_time();
-  c->set_ictx(ictx);
-  c->set_aio_type(AIO_TYPE_DISCARD);
+  c->init_time(ictx, AIO_TYPE_DISCARD);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
@@ -2061,9 +2051,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   uint64_t left = len;
 
   c->get();
-  c->set_start_time();
-  c->set_ictx(ictx);
-  c->set_aio_type(AIO_TYPE_READ);
+  c->init_time(ictx, AIO_TYPE_READ);
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
