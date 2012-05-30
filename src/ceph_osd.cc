@@ -23,6 +23,7 @@
 using namespace std;
 
 #include "osd/OSD.h"
+#include "os/FileStore.h"
 #include "include/ceph_features.h"
 
 #include "common/config.h"
@@ -252,14 +253,16 @@ int main(int argc, const char **argv)
   }
 
 
-  if (convertfilestore) {
+  if (convertfilestore ||
+      g_conf->filestore_update_to >= (int)FileStore::on_disk_version) {
     int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    exit(0);
+    if (convertfilestore)
+      exit(0);
   }
   
   string magic;

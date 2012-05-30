@@ -47,7 +47,9 @@ using namespace __gnu_cxx;
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
+public:
   static const uint32_t on_disk_version = 3;
+private:
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
   std::string current_fn;
@@ -283,7 +285,7 @@ public:
   int lfn_unlink(coll_t cid, const hobject_t& o);
 
  public:
-  FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore");
+  FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 
   int _test_fiemap();
@@ -475,7 +477,7 @@ private:
   int m_filestore_flusher_max_fds;
   double m_filestore_max_sync_interval;
   double m_filestore_min_sync_interval;
-  bool m_filestore_update_collections;
+  int do_update;
   bool m_journal_dio, m_journal_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;

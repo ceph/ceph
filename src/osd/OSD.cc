@@ -246,17 +246,10 @@ static int do_convertfs(ObjectStore *store)
 
 int OSD::convertfs(const std::string &dev, const std::string &jdev)
 {
-  // N.B. at some point we should rewrite this to avoid playing games with
-  // g_conf here
-  char buf[16] = { 0 };
-  char *b = buf;
-  g_ceph_context->_conf->get_val("filestore_update_collections", &b, sizeof(buf));
-  g_ceph_context->_conf->set_val_or_die("filestore_update_collections", "true");
-  g_ceph_context->_conf->apply_changes(NULL);
-  boost::scoped_ptr<ObjectStore> store(new FileStore(dev, jdev));
+  boost::scoped_ptr<ObjectStore> store(
+    new FileStore(dev, jdev, "filestore", 
+		  true));
   int r = do_convertfs(store.get());
-  g_ceph_context->_conf->set_val_or_die("filestore_update_collections", buf);
-  g_ceph_context->_conf->apply_changes(NULL);
   return r;
 }
 
