@@ -4,7 +4,6 @@
 #include <set>
 #include <boost/scoped_ptr.hpp>
 
-#include "os/IndexManager.h"
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "os/KeyValueDB.h"
@@ -48,7 +47,6 @@ public:
   map<string, map<string, string> > omap;
   map<string, string > hmap;
   map<string, map<string, string> > xattrs;
-  Index def_collection;
   unsigned seq;
 
   ObjectMapTester() : db(0), seq(0) {}
@@ -58,56 +56,56 @@ public:
   }
 
   void set_key(const string &objname, const string &key, const string &value) {
-    set_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    set_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 	    key, value);
   }
 
   void set_xattr(const string &objname, const string &key, const string &value) {
-    set_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    set_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 	      key, value);
   }
 
-  void set_key(hobject_t hoid, Index path,
+  void set_key(hobject_t hoid,
 	       string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
     bufferlist bl;
     bl.append(bp);
     to_write.insert(make_pair(key, bl));
-    db->set_keys(hoid, path, to_write);
+    db->set_keys(hoid, to_write);
   }
 
-  void set_xattr(hobject_t hoid, Index path,
+  void set_xattr(hobject_t hoid,
 		 string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
     bufferlist bl;
     bl.append(bp);
     to_write.insert(make_pair(key, bl));
-    db->set_xattrs(hoid, path, to_write);
+    db->set_xattrs(hoid, to_write);
   }
 
   void set_header(const string &objname, const string &value) {
-    set_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    set_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 	       value);
   }
 
-  void set_header(hobject_t hoid, Index path,
+  void set_header(hobject_t hoid,
 		  const string &value) {
     bufferlist header;
     header.append(bufferptr(value.c_str(), value.size() + 1));
-    db->set_header(hoid, path, header);
+    db->set_header(hoid, header);
   }
 
   int get_header(const string &objname, string *value) {
-    return get_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    return get_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 		      value);
   }
 
-  int get_header(hobject_t hoid, Index path,
+  int get_header(hobject_t hoid,
 		 string *value) {
     bufferlist header;
-    int r = db->get_header(hoid, path, &header);
+    int r = db->get_header(hoid, &header);
     if (r < 0)
       return r;
     if (header.length())
@@ -118,16 +116,16 @@ public:
   }
 
   int get_xattr(const string &objname, const string &key, string *value) {
-    return get_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    return get_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 		     key, value);
   }
 
-  int get_xattr(hobject_t hoid, Index path,
+  int get_xattr(hobject_t hoid,
 		string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
     map<string, bufferlist> got;
-    db->get_xattrs(hoid, path, to_get, &got);
+    db->get_xattrs(hoid, to_get, &got);
     if (got.size()) {
       *value = string(got.begin()->second.c_str(),
 		      got.begin()->second.length());
@@ -138,16 +136,16 @@ public:
   }
 
   int get_key(const string &objname, const string &key, string *value) {
-    return get_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    return get_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 		   key, value);
   }
 
-  int get_key(hobject_t hoid, Index path,
+  int get_key(hobject_t hoid,
 	      string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
     map<string, bufferlist> got;
-    db->get_values(hoid, path, to_get, &got);
+    db->get_values(hoid, to_get, &got);
     if (got.size()) {
       *value = string(got.begin()->second.c_str(),
 		      got.begin()->second.length());
@@ -158,45 +156,45 @@ public:
   }
 
   void remove_key(const string &objname, const string &key) {
-    remove_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    remove_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 	       key);
   }
 
-  void remove_key(hobject_t hoid, Index path,
+  void remove_key(hobject_t hoid,
 		  string key) {
     set<string> to_remove;
     to_remove.insert(key);
-    db->rm_keys(hoid, path, to_remove);
+    db->rm_keys(hoid, to_remove);
   }
 
   void remove_xattr(const string &objname, const string &key) {
-    remove_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
+    remove_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
 		 key);
   }
 
-  void remove_xattr(hobject_t hoid, Index path,
+  void remove_xattr(hobject_t hoid,
 		    string key) {
     set<string> to_remove;
     to_remove.insert(key);
-    db->remove_xattrs(hoid, path, to_remove);
+    db->remove_xattrs(hoid, to_remove);
   }
 
   void clone(const string &objname, const string &target) {
-    clone(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection,
-	  hobject_t(sobject_t(target, CEPH_NOSNAP)), def_collection);
+    clone(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+	  hobject_t(sobject_t(target, CEPH_NOSNAP)));
   }
 
-  void clone(hobject_t hoid, Index path,
-	     hobject_t hoid2, Index path2) {
-    db->clone(hoid, path, hoid2, path2);
+  void clone(hobject_t hoid,
+	     hobject_t hoid2) {
+    db->clone(hoid, hoid2);
   }
 
   void clear(const string &objname) {
-    clear(hobject_t(sobject_t(objname, CEPH_NOSNAP)), def_collection);
+    clear(hobject_t(sobject_t(objname, CEPH_NOSNAP)));
   }
 
-  void clear(hobject_t hoid, Index path) {
-    db->clear(hoid, path);
+  void clear(hobject_t hoid) {
+    db->clear(hoid);
   }
 
   void def_init() {
@@ -206,7 +204,6 @@ public:
     for (unsigned i = 0; i < 1000; ++i) {
       object_name_space.insert("name_" + num_str(i));
     }
-    init_default_collection("def_collection");
   }
 
   void init_key_set(const set<string> &keys) {
@@ -215,14 +212,6 @@ public:
 
   void init_object_name_space(const set<string> &onamespace) {
     object_name_space = onamespace;
-  }
-
-  void init_default_collection(const string &coll_name) {
-    def_collection = Index(new HashIndex(coll_t(coll_name),
-					 ("/" + coll_name).c_str(),
-					 2,
-					 2,
-					 CollectionIndex::HASH_INDEX_TAG_2));
   }
 
   void auto_set_xattr(ostream &out) {
@@ -556,11 +545,6 @@ int main(int argc, char **argv) {
 
 TEST_F(ObjectMapTest, CreateOneObject) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
-  Index path = Index(new HashIndex(coll_t("foo_coll"),
-				   string("/bar").c_str(),
-				   2,
-				   2,
-				   CollectionIndex::HASH_INDEX_TAG_2));
   map<string, bufferlist> to_set;
   string key("test");
   string val("test_val");
@@ -568,136 +552,126 @@ TEST_F(ObjectMapTest, CreateOneObject) {
   bufferlist bl;
   bl.append(bp);
   to_set.insert(make_pair(key, bl));
-  ASSERT_FALSE(db->set_keys(hoid, path, to_set));
+  ASSERT_FALSE(db->set_keys(hoid, to_set));
 
   map<string, bufferlist> got;
   set<string> to_get;
   to_get.insert(key);
   to_get.insert("not there");
-  db->get_values(hoid, path, to_get, &got);
+  db->get_values(hoid, to_get, &got);
   ASSERT_EQ(got.size(), (unsigned)1);
   ASSERT_EQ(string(got[key].c_str(), got[key].length()), val);
 
   bufferlist header;
   got.clear();
-  db->get(hoid, path, &header, &got);
+  db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)1);
   ASSERT_EQ(string(got[key].c_str(), got[key].length()), val);
   ASSERT_EQ(header.length(), (unsigned)0);
 
-  db->rm_keys(hoid, path, to_get);
+  db->rm_keys(hoid, to_get);
   got.clear();
-  db->get(hoid, path, &header, &got);
+  db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
 
-  db->clear(hoid, path);
-  db->get(hoid, path, &header, &got);
+  db->clear(hoid);
+  db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
 }
 
 TEST_F(ObjectMapTest, CloneOneObject) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
-  Index path = Index(new HashIndex(coll_t("foo_coll"),
-				   string("/bar").c_str(),
-				   2,
-				   2,
-				   CollectionIndex::HASH_INDEX_TAG_2));
 
-  tester.set_key(hoid, path, "foo", "bar");
-  tester.set_key(hoid, path, "foo2", "bar2");
+  tester.set_key(hoid, "foo", "bar");
+  tester.set_key(hoid, "foo2", "bar2");
   string result;
-  int r = tester.get_key(hoid, path, "foo", &result);
+  int r = tester.get_key(hoid, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
 
-  db->clone(hoid, path, hoid2, path);
-  r = tester.get_key(hoid, path, "foo", &result);
+  db->clone(hoid, hoid2);
+  r = tester.get_key(hoid, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
-  r = tester.get_key(hoid2, path, "foo", &result);
+  r = tester.get_key(hoid2, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
 
-  tester.remove_key(hoid, path, "foo");
-  r = tester.get_key(hoid2, path, "foo", &result);
+  tester.remove_key(hoid, "foo");
+  r = tester.get_key(hoid2, "foo", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar");
-  r = tester.get_key(hoid, path, "foo", &result);
+  r = tester.get_key(hoid, "foo", &result);
   ASSERT_EQ(r, 0);
-  r = tester.get_key(hoid, path, "foo2", &result);
+  r = tester.get_key(hoid, "foo2", &result);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(result, "bar2");
 
-  tester.set_key(hoid, path, "foo", "baz");
-  tester.remove_key(hoid, path, "foo");
-  r = tester.get_key(hoid, path, "foo", &result);
+  tester.set_key(hoid, "foo", "baz");
+  tester.remove_key(hoid, "foo");
+  r = tester.get_key(hoid, "foo", &result);
   ASSERT_EQ(r, 0);
 
-  tester.set_key(hoid, path, "foo2", "baz");
-  tester.remove_key(hoid, path, "foo2");
-  r = tester.get_key(hoid, path, "foo2", &result);
+  tester.set_key(hoid, "foo2", "baz");
+  tester.remove_key(hoid, "foo2");
+  r = tester.get_key(hoid, "foo2", &result);
   ASSERT_EQ(r, 0);
 
   map<string, bufferlist> got;
   bufferlist header;
 
   got.clear();
-  db->clear(hoid, path);
-  db->get(hoid, path, &header, &got);
+  db->clear(hoid);
+  db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
 
   got.clear();
-  r = db->clear(hoid2, path);
+  r = db->clear(hoid2);
   ASSERT_EQ(0, r);
-  db->get(hoid2, path, &header, &got);
+  db->get(hoid2, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
 
-  tester.set_key(hoid, path, "baz", "bar");
+  tester.set_key(hoid, "baz", "bar");
   got.clear();
-  db->get(hoid, path, &header, &got);
+  db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)1);
-  db->clear(hoid, path);
-  db->clear(hoid2, path);
+  db->clear(hoid);
+  db->clear(hoid2);
 }
 
 TEST_F(ObjectMapTest, OddEvenClone) {
   hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
   hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
-  Index path = Index(new HashIndex(coll_t("foo_coll"),
-				   string("/bar").c_str(),
-				   2,
-				   2,
-				   CollectionIndex::HOBJECT_WITH_POOL));
 
   for (unsigned i = 0; i < 1000; ++i) {
-    tester.set_key(hoid, path, "foo" + num_str(i), "bar" + num_str(i));
+    tester.set_key(hoid, "foo" + num_str(i), "bar" + num_str(i));
   }
 
-  db->clone(hoid, path, hoid2, path);
+  db->clone(hoid, hoid2);
 
   int r = 0;
   for (unsigned i = 0; i < 1000; ++i) {
     string result;
-    r = tester.get_key(hoid, path, "foo" + num_str(i), &result);
+    r = tester.get_key(hoid, "foo" + num_str(i), &result);
     ASSERT_EQ(1, r);
     ASSERT_EQ("bar" + num_str(i), result);
-    r = tester.get_key(hoid2, path, "foo" + num_str(i), &result);
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
     ASSERT_EQ(1, r);
     ASSERT_EQ("bar" + num_str(i), result);
 
     if (i % 2) {
-      tester.remove_key(hoid, path, "foo" + num_str(i));
+      tester.remove_key(hoid, "foo" + num_str(i));
     } else {
-      tester.remove_key(hoid2, path, "foo" + num_str(i));
+      tester.remove_key(hoid2, "foo" + num_str(i));
     }
   }
 
   for (unsigned i = 0; i < 1000; ++i) {
     string result;
     string result2;
-    r = tester.get_key(hoid, path, "foo" + num_str(i), &result);
-    int r2 = tester.get_key(hoid2, path, "foo" + num_str(i), &result2);
+    r = tester.get_key(hoid, "foo" + num_str(i), &result);
+    int r2 = tester.get_key(hoid2, "foo" + num_str(i), &result2);
     if (i % 2) {
       ASSERT_EQ(0, r);
       ASSERT_EQ(1, r2);
@@ -710,7 +684,7 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   }
 
   {
-    ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid, path);
+    ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid);
     iter->seek_to_first();
     for (unsigned i = 0; i < 1000; ++i) {
       if (!(i % 2)) {
@@ -722,7 +696,7 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   }
 
   {
-    ObjectMap::ObjectMapIterator iter2 = db->get_iterator(hoid2, path);
+    ObjectMap::ObjectMapIterator iter2 = db->get_iterator(hoid2);
     iter2->seek_to_first();
     for (unsigned i = 0; i < 1000; ++i) {
       if (i % 2) {
@@ -733,98 +707,8 @@ TEST_F(ObjectMapTest, OddEvenClone) {
     }
   }
 
-  db->clear(hoid, path);
-  db->clear(hoid2, path);
-}
-
-TEST(Upgrade, UpgradeTest) {
-  KeyValueDBMemory *map1 = new KeyValueDBMemory();
-  KeyValueDBMemory *map2 = new KeyValueDBMemory();
-  ObjectMapTester tester;
-  {
-    boost::scoped_ptr< ObjectMap > db;
-    db.reset(new DBObjectMapv0(map1));
-    tester.db = db.get();
-    tester.def_init();
-    for (unsigned i = 0; i < 5000; ++i) {
-      unsigned val = rand();
-      val <<= 8;
-      val %= 100;
-      if (!(i%100))
-	std::cout << "on op " << i
-		  << " val is " << val << std::endl;
-      
-      if (val < 7) {
-	tester.auto_write_header(std::cerr);
-      } else if (val < 14) {
-	ASSERT_TRUE(tester.auto_verify_header(std::cerr));
-      } else if (val < 30) {
-	tester.auto_set_key(std::cerr);
-      } else if (val < 42) {
-	tester.auto_set_xattr(std::cerr);
-      } else if (val < 55) {
-	ASSERT_TRUE(tester.auto_check_present_key(std::cerr));
-      } else if (val < 62) {
-	ASSERT_TRUE(tester.auto_check_present_xattr(std::cerr));
-      } else if (val < 70) {
-	ASSERT_TRUE(tester.auto_check_absent_key(std::cerr));
-      } else if (val < 73) {
-	ASSERT_TRUE(tester.auto_check_absent_xattr(std::cerr));
-      } else if (val < 76) {
-	tester.auto_delete_object(std::cerr);
-      } else if (val < 85) {
-	tester.auto_clone_key(std::cerr);
-      } else if (val < 92) {
-	tester.auto_remove_xattr(std::cerr);
-      } else {
-	tester.auto_remove_key(std::cerr);
-      }
-    }
-    *map2 = *map1;
-  }
-
-  std::cout << "Populated, upgrading" << std::endl;
-  {
-    boost::scoped_ptr< ObjectMap > db;
-    DBObjectMap *_db = new DBObjectMap(map2);
-    assert(!_db->init(true));
-    db.reset(_db);
-    tester.db = db.get();
-    for (unsigned i = 0; i < 5000; ++i) {
-      unsigned val = rand();
-      val <<= 8;
-      val %= 100;
-      if (!(i%100))
-	std::cout << "on op " << i
-		  << " val is " << val << std::endl;
-      
-      if (val < 7) {
-	tester.auto_write_header(std::cerr);
-      } else if (val < 14) {
-	ASSERT_TRUE(tester.auto_verify_header(std::cerr));
-      } else if (val < 30) {
-	tester.auto_set_key(std::cerr);
-      } else if (val < 42) {
-	tester.auto_set_xattr(std::cerr);
-      } else if (val < 55) {
-	ASSERT_TRUE(tester.auto_check_present_key(std::cerr));
-      } else if (val < 62) {
-	ASSERT_TRUE(tester.auto_check_present_xattr(std::cerr));
-      } else if (val < 70) {
-	ASSERT_TRUE(tester.auto_check_absent_key(std::cerr));
-      } else if (val < 73) {
-	ASSERT_TRUE(tester.auto_check_absent_xattr(std::cerr));
-      } else if (val < 76) {
-	tester.auto_delete_object(std::cerr);
-      } else if (val < 85) {
-	tester.auto_clone_key(std::cerr);
-      } else if (val < 92) {
-	tester.auto_remove_xattr(std::cerr);
-      } else {
-	tester.auto_remove_key(std::cerr);
-      }
-    }
-  }
+  db->clear(hoid);
+  db->clear(hoid2);
 }
 
 TEST_F(ObjectMapTest, RandomTest) {
