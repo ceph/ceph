@@ -4633,6 +4633,7 @@ void ReplicatedPG::push_start(
   interval_set<uint64_t> &data_subset,
   map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
+  peer_missing[peer].revise_have(soid, eversion_t());
   // take note.
   PushInfo &pi = pushing[soid][peer];
   pi.recovery_info.size = obc->obs.oi.size;
@@ -4693,6 +4694,7 @@ void ReplicatedPG::submit_push_data(
   ObjectStore::Transaction *t)
 {
   if (first) {
+    missing.revise_have(recovery_info.soid, eversion_t());
     remove_object_with_snap_hardlinks(*t, recovery_info.soid);
     t->remove(get_temp_coll(t), recovery_info.soid);
     t->touch(get_temp_coll(t), recovery_info.soid);

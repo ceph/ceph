@@ -1379,6 +1379,7 @@ struct pg_missing_t {
   eversion_t have_old(const hobject_t& oid) const;
   void add_next_event(const pg_log_entry_t& e);
   void revise_need(hobject_t oid, eversion_t need);
+  void revise_have(hobject_t oid, eversion_t have);
   void add(const hobject_t& oid, eversion_t need, eversion_t have);
   void rm(const hobject_t& oid, eversion_t v);
   void rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
