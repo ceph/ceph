@@ -78,10 +78,11 @@ class WorkloadGenerator : public TestFileStoreState {
   bool m_do_stats;
 
   int m_stats_finished_txs;
-  size_t m_stats_written_data;
-  utime_t m_stats_duration;
   Mutex m_stats_lock;
   int m_stats_show_secs;
+
+  size_t m_stats_total_written;
+  utime_t m_stats_begin;
 
  private:
 
@@ -115,6 +116,8 @@ class WorkloadGenerator : public TestFileStoreState {
       C_StatState *stat);
   coll_entry_t *do_create_collection(ObjectStore::Transaction *t,
       C_StatState *stat);
+
+  void do_stats();
 
 public:
   WorkloadGenerator(vector<const char*> args);
@@ -162,19 +165,15 @@ public:
     void finish(int r) {
       ctx->finish(r);
 
-      utime_t end = ceph_clock_now(NULL);
-      utime_t taken = end - stat_state->start;
-
       stat_state->wrkldgen->m_stats_lock.Lock();
-      stat_state->wrkldgen->m_stats_duration += taken;
-      stat_state->wrkldgen->m_stats_written_data += stat_state->written_data;
+
+      stat_state->wrkldgen->m_stats_total_written += stat_state->written_data;
       stat_state->wrkldgen->m_stats_finished_txs ++;
       stat_state->wrkldgen->m_stats_lock.Unlock();
     }
   };
 
   void run(void);
-  void print_results(void);
 };
 
 bool operator<(const WorkloadGenerator::coll_entry_t& l,
