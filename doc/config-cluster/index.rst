@@ -25,8 +25,7 @@ instance (a single context).
 
    file-system-recommendations
    Configuration <ceph-conf>
-   Deploy Config <deploying-ceph-conf>
-   deploying-ceph-with-mkcephfs
+   Deploy with mkcephfs <mkcephfs>
    Deploy with Chef <chef>
    Storage Pools <pools>
    Authentication <authentication>
