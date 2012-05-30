@@ -28,10 +28,8 @@
  * @see user_prefix
  * @see sys_prefix
  *
- * - LEAF_PREFIX: Contains mapping from (coll_t,hobject_t)->seq
- * - REVERSE_LEAF_PREFIX: Contains mapping from seq->[(coll_t, hobject_t)]
- *                        @see set_map_header
- *                        @see remove_map_header
+ * - HOBJECT_TO_SEQ: Contains leaf mapping from hobject_t->seq and
+ *                   corresponding omap header
  * - SYS_PREFIX: GLOBAL_STATE_KEY - contains next seq number
  *                                  @see State
  *                                  @see write_state
@@ -45,7 +43,7 @@
  *              : USER_HEADER_KEY - omap header for header->seq
  *              : HEADER_KEY - encoding of header for header->seq
  *
- * For each node (represented by a header, not counting LEAF_PREFIX space), we
+ * For each node (represented by a header), we
  * store three mappings: the key mapping, the complete mapping, and the parent.
  * The complete mapping (COMPLETE_PREFIX space) is key->key.  Each x->y entry in
  * this mapping indicates that the key mapping contains all entries on [x,y).
