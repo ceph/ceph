@@ -1269,6 +1269,7 @@ int FileStore::_detect_fs()
   }
 
   char buf[1000];
+  memset(buf, 0, sizeof(buf)); // shut up valgrind
   do_setxattr(fn, "user.test", &buf, sizeof(buf));
   do_setxattr(fn, "user.test2", &buf, sizeof(buf));
   do_setxattr(fn, "user.test3", &buf, sizeof(buf));
