@@ -29,7 +29,7 @@ class CephContext;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string command, bufferlist& out) = 0;
+  virtual bool call(std::string command, std::string args, bufferlist& out) = 0;
   virtual ~AdminSocketHook() {};
 };
 

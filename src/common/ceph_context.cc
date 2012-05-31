@@ -153,15 +153,15 @@ class CephContextHook : public AdminSocketHook {
 public:
   CephContextHook(CephContext *cct) : m_cct(cct) {}
 
-  bool call(std::string command, bufferlist& out) {
-    m_cct->do_command(command, &out);
+  bool call(std::string command, std::string args, bufferlist& out) {
+    m_cct->do_command(command, args, &out);
     return true;
   }
 };
 
-void CephContext::do_command(std::string command, bufferlist *out)
+void CephContext::do_command(std::string command, std::string args, bufferlist *out)
 {
-  lgeneric_dout(this, 1) << "do_command '" << command << "'" << dendl;
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "'" << dendl;
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
     std::vector<char> v;
@@ -179,8 +179,8 @@ void CephContext::do_command(std::string command, bufferlist *out)
     _conf->show_config(ss);
     out->append(ss.str());
   }
-  else if (command.find("config set ") == 0) {
-    std::string var = command.substr(11);
+  else if (command == "config set ") {
+    std::string var = args;
     size_t pos = var.find(' ');
     if (pos == string::npos) {
       out->append("set_config syntax is 'set_config <var> <value>'");
@@ -210,7 +210,7 @@ void CephContext::do_command(std::string command, bufferlist *out)
   else {
     assert(0 == "registered under wrong command?");    
   }
-  lgeneric_dout(this, 1) << "do_command '" << command << "' result is " << out->length() << " bytes" << dendl;
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "' result is " << out->length() << " bytes" << dendl;
 };
 
 

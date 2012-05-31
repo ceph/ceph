@@ -547,7 +547,7 @@ class Objecter {
     Objecter *m_objecter;
   public:
     RequestStateHook(Objecter *objecter);
-    bool call(std::string command, bufferlist& out);
+    bool call(std::string command, std::string args, bufferlist& out);
   };
 
   RequestStateHook *m_request_state_hook;
