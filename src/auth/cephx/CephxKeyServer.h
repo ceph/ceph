@@ -153,10 +153,6 @@ struct KeyServerData {
     }
   };
 
-  void bootstrap_keyring(KeyRing& keyring) {
-    secrets = keyring.get_keys();
-  }
-
   void apply_incremental(Incremental& inc) {
     switch (inc.op) {
     case AUTH_INC_ADD:
@@ -283,10 +279,6 @@ public:
   Mutex& get_lock() const { return lock; }
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
-
-  void bootstrap_keyring(KeyRing& keyring) {
-    data.bootstrap_keyring(keyring);
-  }
 
 };
 WRITE_CLASS_ENCODER(KeyServer);

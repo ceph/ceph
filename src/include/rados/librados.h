@@ -83,7 +83,7 @@ typedef void *rados_config_t;
  * - snapshot context for writes (see
  *   rados_ioctx_selfmanaged_snap_set_write_ctx())
  * - snapshot id to read from (see rados_ioctx_snap_set_read())
- * - object locator for all single-object operation28e61811dc3dccd922bd0b30cf614c2768e7d6d0s (see
+ * - object locator for all single-object operations (see
  *   rados_ioctx_locator_set_key())
  *
  * @warning changing any of these settings is not thread-safe -
@@ -601,9 +601,11 @@ int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 /**
  * Get the next object name and locator in the pool
  *
+ * *entry and *key are valid until next call to rados_objects_list_*
+ *
  * @param ctx iterator marking where you are in the listing
- * @param entry where to store the name of the entry (caller must free)
- * @param key where to store the object locator (set to NULL to ignore) (caller must free)
+ * @param entry where to store the name of the entry
+ * @param key where to store the object locator (set to NULL to ignore)
  * @returns 0 on success, negative error code on failure
  * @returns -ENOENT when there are no more objects to list
  */
@@ -937,7 +939,7 @@ int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
  * @param name which extended attribute to read
  * @param buf where to store the result
  * @param len size of buf in bytes
- * @returns 0 on success, negative error code on failure
+ * @returns length of xattr value on success, negative error code on failure
  */
 int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
 

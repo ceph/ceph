@@ -281,6 +281,12 @@ void md_config_t::parse_env()
 
 void md_config_t::show_config(std::ostream& out)
 {
+  Mutex::Locker l(lock);
+  _show_config(out);
+}
+
+void md_config_t::_show_config(std::ostream& out)
+{
   out << "name = " << name << std::endl;
   out << "cluster = " << cluster << std::endl;
   for (int o = 0; o < subsys.get_num(); o++) {
@@ -320,7 +326,7 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
       expand_all_meta();
-      show_config(cout);
+      _show_config(cout);
       _exit(0);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
@@ -695,6 +701,8 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
     int l = strlen(str.c_str()) + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
+      if (!*buf)
+        return -ENOMEM;
       strcpy(*buf, str.c_str());
       return 0;
     }

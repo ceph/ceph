@@ -85,6 +85,8 @@ void vec_to_argv(std::vector<const char*>& args,
   if (argc && argv)
     myname = argv[0];
   argv = (const char**)malloc(sizeof(char*) * argc);
+  if (!argv)
+    throw bad_alloc();
   argc = 1;
   argv[0] = myname;
 
@@ -343,6 +345,9 @@ CephInitParameters ceph_argparse_early_args
 {
   CephInitParameters iparams(module_type);
   std::string val;
+
+  vector<const char *> orig_args = args;
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (strcmp(*i, "--") == 0) {
       /* Normally we would use ceph_argparse_double_dash. However, in this
@@ -374,6 +379,15 @@ CephInitParameters ceph_argparse_early_args
 	  << EntityName::get_valid_types_as_str() << std::endl;
 	_exit(1);
       }
+    }
+    else if (ceph_argparse_flag(args, i, "--show_args", (char*)NULL)) {
+      cout << "args: ";
+      for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
+        if (ci != orig_args.begin())
+          cout << " ";
+        cout << *ci;
+      }
+      cout << std::endl;
     }
     else {
       // ignore

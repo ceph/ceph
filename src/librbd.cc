@@ -37,18 +37,24 @@ namespace librbd {
 
     l_librbd_rd,               // read ops
     l_librbd_rd_bytes,         // bytes read
+    l_librbd_rd_latency,       // average latency
     l_librbd_wr,
     l_librbd_wr_bytes,
+    l_librbd_wr_latency,
     l_librbd_discard,
     l_librbd_discard_bytes,
+    l_librbd_discard_latency,
     l_librbd_flush,
 
     l_librbd_aio_rd,               // read ops
     l_librbd_aio_rd_bytes,         // bytes read
+    l_librbd_aio_rd_latency,
     l_librbd_aio_wr,
     l_librbd_aio_wr_bytes,
+    l_librbd_aio_wr_latency,
     l_librbd_aio_discard,
     l_librbd_aio_discard_bytes,
+    l_librbd_aio_discard_latency,
 
     l_librbd_snap_create,
     l_librbd_snap_remove,
@@ -59,6 +65,12 @@ namespace librbd {
 
     l_librbd_last,
   };
+
+  typedef enum {
+    AIO_TYPE_READ = 0,
+    AIO_TYPE_WRITE,
+    AIO_TYPE_DISCARD
+  } aio_type_t;
 
   using ceph::bufferlist;
   using librados::snap_t;
@@ -144,7 +156,7 @@ namespace librbd {
 
       if (cct->_conf->rbd_cache) {
 	Mutex::Locker l(cache_lock);
-	ldout(cct, 20) << "enabling writback caching..." << dendl;
+	ldout(cct, 20) << "enabling writeback caching..." << dendl;
 	writeback_handler = new LibrbdWriteback(data_ctx, cache_lock);
 	object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 					 NULL, NULL,
@@ -178,17 +190,23 @@ namespace librbd {
 
       plb.add_u64_counter(l_librbd_rd, "rd");
       plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes");
+      plb.add_fl_avg(l_librbd_rd_latency, "rd_latency");
       plb.add_u64_counter(l_librbd_wr, "wr");
       plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes");
+      plb.add_fl_avg(l_librbd_wr_latency, "wr_latency");
       plb.add_u64_counter(l_librbd_discard, "discard");
       plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes");
+      plb.add_fl_avg(l_librbd_discard_latency, "discard_latency");
       plb.add_u64_counter(l_librbd_flush, "flush");
       plb.add_u64_counter(l_librbd_aio_rd, "aio_rd");
       plb.add_u64_counter(l_librbd_aio_rd_bytes, "aio_rd_bytes");
+      plb.add_fl_avg(l_librbd_aio_rd_latency, "aio_rd_latency");
       plb.add_u64_counter(l_librbd_aio_wr, "aio_wr");
       plb.add_u64_counter(l_librbd_aio_wr_bytes, "aio_wr_bytes");
+      plb.add_fl_avg(l_librbd_aio_wr_latency, "aio_wr_latency");
       plb.add_u64_counter(l_librbd_aio_discard, "aio_discard");
       plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes");
+      plb.add_fl_avg(l_librbd_aio_discard_latency, "aio_discard_latency");
       plb.add_u64_counter(l_librbd_snap_create, "snap_create");
       plb.add_u64_counter(l_librbd_snap_remove, "snap_remove");
       plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
@@ -310,8 +328,8 @@ namespace librbd {
       return r;
     }
 
-    void flush_cache() {
-      int r;
+    int flush_cache() {
+      int r = 0;
       Mutex mylock("librbd::ImageCtx::flush_cache");
       Cond cond;
       bool done;
@@ -328,6 +346,7 @@ namespace librbd {
 	mylock.Unlock();
 	ldout(cct, 20) << "finished flushing cache" << dendl;
       }
+      return r;
     }
 
     void shutdown_cache() {
@@ -344,11 +363,14 @@ namespace librbd {
       cache_lock.Lock();
       object_cacher->release_set(object_set);
       cache_lock.Unlock();
-      flush_cache();
+      int r = flush_cache();
+      if (r)
+	lderr(cct) << "flush_cache returned " << r << dendl;
       cache_lock.Lock();
       bool unclean = object_cacher->release_set(object_set);
       cache_lock.Unlock();
-      assert(!unclean);
+      if (unclean)
+	lderr(cct) << "could not release all objects from cache" << dendl;
     }
   };
 
@@ -377,10 +399,14 @@ namespace librbd {
     int pending_count;
     int ref;
     bool released;
+    ImageCtx *ictx;
+    utime_t start_time;
+    aio_type_t aio_type;
 
     AioCompletion() : lock("AioCompletion::lock", true),
-		      done(false), rval(0), complete_cb(NULL), complete_arg(NULL),
-		      rbd_comp(NULL), pending_count(1), ref(1), released(false) {
+		      done(false), rval(0), complete_cb(NULL),
+		      complete_arg(NULL), rbd_comp(NULL), pending_count(1),
+		      ref(1), released(false) { 
     }
     ~AioCompletion() {
     }
@@ -410,10 +436,27 @@ namespace librbd {
       lock.Unlock();
     }
 
+    void init_time(ImageCtx *i, aio_type_t t) {
+      ictx = i;
+      aio_type = t;
+      start_time = ceph_clock_now(ictx->cct);
+    }
+
     void complete() {
+      utime_t elapsed;
       assert(lock.is_locked());
+      elapsed = ceph_clock_now(ictx->cct) - start_time;
       if (complete_cb) {
 	complete_cb(rbd_comp, complete_arg);
+      }
+      switch (aio_type) {
+	case AIO_TYPE_READ: 
+	  ictx->perfcounter->finc(l_librbd_aio_rd_latency, elapsed); break;
+	case AIO_TYPE_WRITE:
+	  ictx->perfcounter->finc(l_librbd_aio_wr_latency, elapsed); break;
+	case AIO_TYPE_DISCARD:
+	  ictx->perfcounter->finc(l_librbd_aio_discard_latency, elapsed); break;
+	default: break;
       }
       done = true;
       cond.Signal();
@@ -1473,6 +1516,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 		     int (*cb)(uint64_t, size_t, const char *, void *),
 		     void *arg)
 {
+  utime_t start_time, elapsed;
+
   ldout(ictx->cct, 20) << "read_iterate " << ictx << " off = " << off << " len = " << len << dendl;
 
   int r = ictx_check(ictx);
@@ -1492,6 +1537,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   ictx->lock.Unlock();
   uint64_t left = len;
 
+  start_time = ceph_clock_now(ictx->cct);
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
@@ -1527,12 +1573,13 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     if (r < 0) {
       return r;
     }
-
     total_read += bytes_read;
     left -= bytes_read;
   }
   ret = total_read;
 
+  elapsed = ceph_clock_now(ictx->cct) - start_time;
+  ictx->perfcounter->finc(l_librbd_rd_latency, elapsed);
   ictx->perfcounter->inc(l_librbd_rd);
   ictx->perfcounter->inc(l_librbd_rd_bytes, len);
   return ret;
@@ -1557,6 +1604,7 @@ ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
 
 ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 {
+  utime_t start_time, elapsed;
   ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = " << len << dendl;
 
   if (!len)
@@ -1582,6 +1630,7 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   if (snap != CEPH_NOSNAP)
     return -EROFS;
 
+  start_time = ceph_clock_now(ictx->cct);
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
@@ -1603,6 +1652,8 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
     left -= write_len;
   }
 
+  elapsed = ceph_clock_now(ictx->cct) - start_time;
+  ictx->perfcounter->finc(l_librbd_wr_latency, elapsed);
   ictx->perfcounter->inc(l_librbd_wr);
   ictx->perfcounter->inc(l_librbd_wr_bytes, total_write);
   return total_write;
@@ -1610,6 +1661,7 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 
 int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
 {
+  utime_t start_time, elapsed;
   ldout(ictx->cct, 20) << "discard " << ictx << " off = " << off << " len = " << len << dendl;
 
   if (!len)
@@ -1635,6 +1687,7 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   if (ictx->object_cacher)
     v.reserve(end_block - start_block + 1);
 
+  start_time = ceph_clock_now(ictx->cct);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
@@ -1664,6 +1717,8 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   if (ictx->object_cacher)
     ictx->object_cacher->discard_set(ictx->object_set, v);
 
+  elapsed = ceph_clock_now(ictx->cct) - start_time;
+  ictx->perfcounter->inc(l_librbd_discard_latency, elapsed);
   ictx->perfcounter->inc(l_librbd_discard);
   ictx->perfcounter->inc(l_librbd_discard_bytes, total_write);
   return total_write;
@@ -1729,7 +1784,7 @@ ssize_t handle_sparse_read(CephContext *cct,
 
   /* last hole */
   if (buf_left > 0) {
-    ldout(cct, 0) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
+    ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
     r = cb(buf_ofs, buf_left, NULL, arg);
     if (r < 0) {
       return r;
@@ -1809,14 +1864,13 @@ int _flush(ImageCtx *ictx)
   int r;
   // flush any outstanding writes
   if (ictx->object_cacher) {
-    ictx->flush_cache();
-    r = 0;
+    r = ictx->flush_cache();
   } else {
     r = ictx->data_ctx.aio_flush();
   }
 
   if (r)
-    ldout(cct, 10) << "aio_flush " << ictx << " r = " << r << dendl;
+    lderr(cct) << "_flush " << ictx << " r = " << r << dendl;
 
   return r;
 }
@@ -1851,6 +1905,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     return -EROFS;
 
   c->get();
+  c->init_time(ictx, AIO_TYPE_WRITE);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
@@ -1916,6 +1971,7 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
     v.reserve(end_block - start_block + 1);
 
   c->get();
+  c->init_time(ictx, AIO_TYPE_DISCARD);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
     string oid = get_block_oid(ictx->header, i);
@@ -1995,6 +2051,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   uint64_t left = len;
 
   c->get();
+  c->init_time(ictx, AIO_TYPE_READ);
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
@@ -2111,7 +2168,8 @@ int RBD::rename(IoCtx& src_io_ctx, const char *srcname, const char *destname)
 
 RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
 {
-  librbd::AioCompletion *c = librbd::aio_create_completion(cb_arg, complete_cb);
+  librbd::AioCompletion *c = librbd::aio_create_completion(cb_arg,
+    complete_cb);
   pc = (void *)c;
   c->rbd_comp = this;
 }

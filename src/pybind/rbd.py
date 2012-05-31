@@ -230,7 +230,6 @@ class Image(object):
         self.librbd = CDLL('librbd.so.1')
         self.image = c_void_p()
         self.name = name
-        self.closed = False
         if not isinstance(name, str):
             raise TypeError('name must be a string')
         if snapshot is not None and not isinstance(snapshot, str):
@@ -239,6 +238,7 @@ class Image(object):
                                    byref(self.image), c_char_p(snapshot))
         if ret != 0:
             raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
+	self.closed = False
 
     def __enter__(self):
         return self

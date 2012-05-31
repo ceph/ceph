@@ -96,6 +96,7 @@ OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
+OPTION(mon_initial_members, OPT_STR, "")    // list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
 OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
@@ -127,7 +128,6 @@ OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
 OPTION(paxos_max_join_drift, OPT_INT, 10)       // max paxos iterations before we must first slurp
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
-OPTION(paxos_observer_timeout, OPT_DOUBLE, 5*60) // gather updates for this long before proposing a map update
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_supported, OPT_STR, "none")
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
@@ -260,7 +260,7 @@ OPTION(osd_shed_reads, OPT_INT, false)     // forward from primary to replica
 OPTION(osd_shed_reads_min_latency, OPT_DOUBLE, .01)       // min local latency
 OPTION(osd_shed_reads_min_latency_diff, OPT_DOUBLE, .01)  // min latency difference
 OPTION(osd_shed_reads_min_latency_ratio, OPT_DOUBLE, 1.5)  // 1.2 == 20% higher than peer
-OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // default to 200MB client data allowed in-memory
+OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
 OPTION(osd_stat_refresh_interval, OPT_DOUBLE, .5)
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
@@ -317,7 +317,7 @@ OPTION(osd_scrub_max_interval, OPT_FLOAT, 60*60*24)   // once a day
 OPTION(osd_auto_weight, OPT_BOOL, false)
 OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0)  // seconds
 OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0) // seconds
-OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes")
+OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
@@ -338,7 +338,6 @@ OPTION(filestore_max_inline_xattrs, OPT_U32, 2)
 
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
-OPTION(filestore_dev, OPT_STR, "")
 OPTION(filestore_btrfs_trans, OPT_BOOL, false)
 OPTION(filestore_btrfs_snap, OPT_BOOL, true)
 OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
@@ -375,11 +374,11 @@ OPTION(journal_queue_max_bytes, OPT_INT, 100 << 20)
 OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
-OPTION(rbd_cache, OPT_BOOL, false) // whether to enable writeback caching
-OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size
-OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit
-OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit
-OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // age in cache before writeback starts
+OPTION(rbd_cache, OPT_BOOL, false) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
+OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
+OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
+OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
+OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi

@@ -204,10 +204,10 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 
 # figure machine's ip
+HOSTNAME=`hostname`
 if [ "$localhost" -eq 1 ]; then
     IP="127.0.0.1"
 else
-    HOSTNAME=`hostname`
     echo hostname $HOSTNAME
     RAW_IP=`hostname --ip-address`
     # filter out IPv6 and localhost addresses
@@ -314,6 +314,7 @@ EOF
 			if [ $overwrite_conf -eq 1 ]; then
 				cat <<EOF >> $conf
 [mon.$f]
+        host = $HOSTNAME
         mon data = dev/mon.$f
         mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
@@ -352,6 +353,7 @@ if [ "$start_osd" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 		    cat <<EOF >> $conf
 [osd.$osd]
+        host = $HOSTNAME
         osd data = dev/osd$osd
         osd journal = dev/osd$osd.journal
         osd journal size = 100
@@ -359,6 +361,9 @@ EOF
 		    [ "$cephx" -eq 1 ] && cat <<EOF >> $conf
         keyring = dev/osd$osd/keyring
 EOF
+		    rm -rf dev/osd$osd || true
+		    for f in dev/osd$osd/* ; do btrfs sub delete $f || true ; done || true
+		    mkdir -p dev/osd$osd
 	    fi
 
 	    uuid=`uuidgen`
@@ -396,6 +401,7 @@ if [ "$start_mds" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 	    	cat <<EOF >> $conf
 [mds.$name]
+        host = $HOSTNAME
 EOF
 		if [ "$cephx" -eq 1 ]; then
 	    	    cat <<EOF >> $conf

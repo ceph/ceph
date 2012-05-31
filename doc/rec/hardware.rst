@@ -1,7 +1,7 @@
-==========================
- Hardware recommendations
-==========================
+==========
+ Hardware
+==========
 
-Discussing the hardware requirements for each daemon, the tradeoffs of
-doing one ceph-osd per machine versus one per disk, and hardware-related
-configuration options like journaling locations.
+See `Hardware Recommendations`_ for details.
+
+.. _Hardware Recommendations: ../../install/hardware-recommendations
