@@ -254,7 +254,7 @@ bool AdminSocket::do_accept()
     return false;
   }
 
-  char cmd[80];
+  char cmd[1024];
   int pos = 0;
   string c;
   while (1) {
@@ -305,17 +305,35 @@ bool AdminSocket::do_accept()
     firstword = c.substr(0, c.find(" "));
 
   m_lock.Lock();
-  map<string,AdminSocketHook*>::iterator p = m_hooks.find(firstword);
+  map<string,AdminSocketHook*>::iterator p;
+  string match = c;
+  while (match.size()) {
+    p = m_hooks.find(match);
+    if (p != m_hooks.end())
+      break;
+    
+    // drop right-most word
+    size_t pos = match.rfind(' ');
+    if (pos == std::string::npos) {
+      match.clear();  // we fail
+      break;
+    } else {
+      match.resize(pos);
+    }
+  }
+
   bufferlist out;
-  if (p == m_hooks.end()) {
-    lderr(m_cct) << "AdminSocket: request '" << firstword << "' not defined" << dendl;
+  if (match.size() == 0) {
+    lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
     bool success = p->second->call(c, out);
     if (!success) {
-      ldout(m_cct, 0) << "AdminSocket: request '" << c << "' to " << p->second << " failed" << dendl;
+      ldout(m_cct, 0) << "AdminSocket: request '" << c << "' (" << match
+		      << ") to " << p->second << " failed" << dendl;
       out.append("failed");
     } else {
-      ldout(m_cct, 20) << "AdminSocket: request '" << c << "' to " << p->second
+      ldout(m_cct, 20) << "AdminSocket: request '" << c << "' (" << match
+		       << ") to " << p->second
 		       << " returned " << out.length() << " bytes" << dendl;
     }
     uint32_t len = htonl(out.length());
