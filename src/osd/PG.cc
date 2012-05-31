@@ -2169,6 +2169,10 @@ void PG::read_log(ObjectStore *store)
 	}
       }
 
+      if (e.invalid_pool) {
+	e.soid.pool = info.pgid.pool();
+      }
+
       e.offset = pos;
       uint64_t endpos = ondisklog.tail + p.get_off();
       log.log.push_back(e);

@@ -37,6 +37,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_OLOC CompatSet::Feature(3, "object locator")
 #define CEPH_OSD_FEATURE_INCOMPAT_LEC  CompatSet::Feature(4, "last_epoch_clean")
 #define CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES  CompatSet::Feature(5, "categories")
+#define CEPH_OSD_FEATURE_INCOMPAT_HOBJECTPOOL  CompatSet::Feature(6, "hobjectpool")
 
 
 typedef hobject_t collection_list_handle_t;
@@ -1196,6 +1197,7 @@ struct pg_log_entry_t {
   utime_t     mtime;  // this is the _user_ mtime, mind you
   bufferlist snaps;   // only for clone entries
   bool invalid_hash; // only when decoding sobject_t based entries
+  bool invalid_pool; // only when decoding pool-less hobject based entries
 
   uint64_t offset;   // [soft state] my offset on disk
       
@@ -1206,7 +1208,8 @@ struct pg_log_entry_t {
 		 const osd_reqid_t& rid, const utime_t& mt)
     : op(_op), soid(_soid), version(v),
       prior_version(pv),
-      reqid(rid), mtime(mt), invalid_hash(false), offset(0) {}
+      reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
+      offset(0) {}
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
