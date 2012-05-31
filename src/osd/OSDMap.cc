@@ -895,7 +895,7 @@ int OSDMap::pg_to_acting_osds(pg_t pg, vector<int>& acting) const
   return acting.size();
 }
 
-void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up)
+void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)

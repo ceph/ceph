@@ -417,7 +417,7 @@ private:
 public:
   int pg_to_osds(pg_t pg, vector<int>& raw) const;
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const;
-  void pg_to_raw_up(pg_t pg, vector<int>& up);  
+  void pg_to_raw_up(pg_t pg, vector<int>& up) const;
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const;
 
   int64_t lookup_pg_pool_name(const char *name) {
@@ -464,7 +464,7 @@ public:
   }
 
   // pg -> primary osd
-  int get_pg_primary(pg_t pg) {
+  int get_pg_primary(pg_t pg) const {
     vector<int> group;
     int nrep = pg_to_osds(pg, group);
     if (nrep)
@@ -473,14 +473,14 @@ public:
   }
 
   // pg -> acting primary osd
-  int get_pg_acting_primary(pg_t pg) {
+  int get_pg_acting_primary(pg_t pg) const {
     vector<int> group;
     int nrep = pg_to_acting_osds(pg, group);
     if (nrep > 0)
       return group[0];
     return -1;  // we fail!
   }
-  int get_pg_acting_tail(pg_t pg) {
+  int get_pg_acting_tail(pg_t pg) const {
     vector<int> group;
     int nrep = pg_to_acting_osds(pg, group);
     if (nrep > 0)
@@ -500,13 +500,13 @@ public:
   }
   
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
-  int get_pg_acting_rank(pg_t pg, int osd) {
+  int get_pg_acting_rank(pg_t pg, int osd) const {
     vector<int> group;
     int nrep = pg_to_acting_osds(pg, group);
     return calc_pg_rank(osd, group, nrep);
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
-  int get_pg_acting_role(pg_t pg, int osd) {
+  int get_pg_acting_role(pg_t pg, int osd) const {
     vector<int> group;
     int nrep = pg_to_acting_osds(pg, group);
     return calc_pg_role(osd, group, nrep);
