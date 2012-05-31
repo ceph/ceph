@@ -4105,6 +4105,8 @@ void PG::handle_create(RecoveryCtx *rctx)
   dout(10) << "handle_create" << dendl;
   Initialize evt;
   recovery_state.handle_event(evt, rctx);
+  ActMap evt2;
+  recovery_state.handle_event(evt2, rctx);
 }
 
 void PG::handle_query_state(Formatter *f)

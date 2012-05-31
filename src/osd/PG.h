@@ -964,7 +964,7 @@ public:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Started >,
+	boost::statechart::transition< Initialize, Reset >,
 	boost::statechart::transition< Load, Reset >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MInfoRec >,

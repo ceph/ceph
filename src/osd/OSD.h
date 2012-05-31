@@ -518,9 +518,7 @@ protected:
   PG *get_or_create_pg(const pg_info_t& info,
 		       pg_interval_map_t& pi,
 		       epoch_t epoch, int from, int& pcreated,
-		       bool primary,
-		       ObjectStore::Transaction **pt = 0,
-		       C_Contexts **pfin = 0);
+		       bool primary);
   
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
