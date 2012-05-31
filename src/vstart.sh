@@ -298,8 +298,8 @@ EOF
 			echo
 		fi
 
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mon. $keyring_fn
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
+	        $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mon. $keyring_fn
+	        $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
 		    --cap mon 'allow *' \
 		    --cap osd 'allow *' \
 		    --cap mds allow \
@@ -372,11 +372,9 @@ EOF
 	    $SUDO $CEPH_ADM osd crush set $osd osd.$osd 1.0 host=localhost rack=localrack pool=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
-	    if [ "$cephx" -eq 1 ]; then
-		key_fn=dev/osd$osd/keyring
-		echo adding osd$osd key to auth repository
-		$SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow rwx"
-	    fi
+	    key_fn=dev/osd$osd/keyring
+	    echo adding osd$osd key to auth repository
+	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow rwx"
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
