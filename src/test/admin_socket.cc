@@ -89,3 +89,38 @@ TEST(AdminSocket, RegisterCommand) {
   ASSERT_EQ("yes", result);
   ASSERT_EQ(true, asoct.shutdown());
 }
+
+class MyTest2 : public AdminSocketHook {
+  bool call(std::string command, bufferlist& result) {
+    result.append("yessir");
+    return true;
+  }
+};
+
+TEST(AdminSocket, RegisterCommandPrefixes) {
+  std::auto_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", new MyTest(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", new MyTest2(), ""));
+  string result;
+  ASSERT_EQ("", client.do_request("test", &result));
+  ASSERT_EQ("yes", result);
+  ASSERT_EQ("", client.do_request("test command", &result));
+  ASSERT_EQ("yessir", result);
+  ASSERT_EQ("", client.do_request("test command post", &result));
+  ASSERT_EQ("yessir", result);
+  ASSERT_EQ("", client.do_request("test command  post", &result));
+  ASSERT_EQ("yessir", result);
+  ASSERT_EQ("", client.do_request("test this thing", &result));
+  ASSERT_EQ("yes", result);
+
+  ASSERT_EQ("", client.do_request("test  command post", &result));
+  ASSERT_EQ("yes", result);
+  ASSERT_EQ("", client.do_request("test  this thing", &result));
+  ASSERT_EQ("yes", result);
+  ASSERT_EQ(true, asoct.shutdown());
+}
