@@ -229,7 +229,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
   peer_missing[from].swap(omissing);
 }
 
-bool PG::proc_replica_info(int from, pg_info_t &oinfo)
+bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
 {
   map<int,pg_info_t>::iterator p = peer_info.find(from);
   if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
@@ -4000,6 +4000,7 @@ void PG::take_waiters()
 
 void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
 {
+  dout(10) << "handle_peering_event" << dendl;
   if (!require_same_or_newer_map(evt->get_epoch_sent())) {
     peering_waiters.push_back(evt);
     return;

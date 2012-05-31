@@ -679,7 +679,7 @@ public:
 			pg_missing_t& omissing, int from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, int from);
-  bool proc_replica_info(int from, pg_info_t &info);
+  bool proc_replica_info(int from, const pg_info_t &info);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
@@ -812,7 +812,7 @@ public:
 
   struct MInfoRec : boost::statechart::event< MInfoRec > {
     int from;
-    pg_info_t &info;
+    pg_info_t info;
     MInfoRec(int from, pg_info_t &info) :
       from(from), info(info) {}
   };
@@ -826,14 +826,14 @@ public:
 
   struct MNotifyRec : boost::statechart::event< MNotifyRec > {
     int from;
-    pg_info_t &info;
+    pg_info_t info;
     MNotifyRec(int from, pg_info_t &info) :
       from(from), info(info) {}
   };
 
   struct MQuery : boost::statechart::event< MQuery > {
     int from;
-    const pg_query_t &query;
+    pg_query_t query;
     epoch_t query_epoch;
     MQuery(int from, const pg_query_t &query, epoch_t query_epoch):
       from(from), query(query), query_epoch(query_epoch) {}
