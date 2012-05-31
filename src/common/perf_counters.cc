@@ -72,22 +72,21 @@ void PerfCountersCollection::clear()
   }
 }
 
-void PerfCountersCollection::write_json_to_buf(std::vector <char> &buffer, bool schema)
+void PerfCountersCollection::write_json_to_buf(bufferlist& bl, bool schema)
 {
   Mutex::Locker lck(m_lock);
-  buffer.push_back('{');
+  bl.append('{');
   perf_counters_set_t::iterator l = m_loggers.begin();
   perf_counters_set_t::iterator l_end = m_loggers.end();
   if (l != l_end) {
     while (true) {
-      (*l)->write_json_to_buf(buffer, schema);
+      (*l)->write_json_to_buf(bl, schema);
       if (++l == l_end)
 	break;
-      buffer.push_back(',');
+      bl.append(',');
     }
   }
-  buffer.push_back('}');
-  buffer.push_back('\0');
+  bl.append('}');
 }
 
 // ---------------------------
@@ -170,26 +169,18 @@ double PerfCounters::fget(int idx) const
   return data.u.dbl;
 }
 
-static inline void append_to_vector(std::vector <char> &buffer, char *buf)
-{
-  size_t strlen_buf = strlen(buf);
-  std::vector<char>::size_type sz = buffer.size();
-  buffer.resize(sz + strlen_buf);
-  memcpy(&buffer[sz], buf, strlen_buf);
-}
-
-void PerfCounters::write_json_to_buf(std::vector <char> &buffer, bool schema)
+void PerfCounters::write_json_to_buf(bufferlist& bl, bool schema)
 {
   char buf[512];
   Mutex::Locker lck(m_lock);
 
   snprintf(buf, sizeof(buf), "\"%s\":{", m_name.c_str());
-  append_to_vector(buffer, buf);
+  bl.append(buf);
 
   perf_counter_data_vec_t::const_iterator d = m_data.begin();
   perf_counter_data_vec_t::const_iterator d_end = m_data.end();
   if (d == d_end) {
-    buffer.push_back('}');
+    bl.append('}');
     return;
   }
   while (true) {
@@ -200,12 +191,12 @@ void PerfCounters::write_json_to_buf(std::vector <char> &buffer, bool schema)
     else
       data.write_json(buf, sizeof(buf));
 
-    append_to_vector(buffer, buf);
+    bl.append(buf);
     if (++d == d_end)
       break;
-    buffer.push_back(',');
+    bl.append(',');
   }
-  buffer.push_back('}');
+  bl.append('}');
 }
 
 const std::string &PerfCounters::get_name() const
