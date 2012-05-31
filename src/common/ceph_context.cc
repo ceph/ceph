@@ -164,15 +164,11 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "'" << dendl;
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
-    std::vector<char> v;
-    _perf_counters_collection->write_json_to_buf(v, false);
-    out->append(&v[0], v.size());
+    _perf_counters_collection->write_json_to_buf(*out, false);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
 	   command == "perf schema") {
-    std::vector<char> v;
-    _perf_counters_collection->write_json_to_buf(v, true);
-    out->append(&v[0], v.size());
+    _perf_counters_collection->write_json_to_buf(*out, true);
   }
   else if (command == "config show") {
     ostringstream ss;
