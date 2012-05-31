@@ -786,16 +786,16 @@ public:
   class CephPeeringEvt {
     epoch_t epoch_sent;
     epoch_t epoch_requested;
-    boost::statechart::event_base *evt;
+    boost::intrusive_ptr< const boost::statechart::event_base> evt;
   public:
     CephPeeringEvt(epoch_t epoch_sent,
 		   epoch_t epoch_requested,
-		   boost::statechart::event_base *evt) :
+		   const boost::statechart::event_base &evt) :
       epoch_sent(epoch_sent), epoch_requested(epoch_requested),
-      evt(evt) {}
+      evt(evt.intrusive_from_this()) {}
     epoch_t get_epoch_sent() { return epoch_sent; }
     epoch_t get_epoch_requested() { return epoch_requested; }
-    boost::statechart::event_base &get_event() { return *evt; }
+    const boost::statechart::event_base &get_event() { return *evt; }
   };
   typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
 
