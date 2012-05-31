@@ -20,6 +20,7 @@
 #include "common/perf_counters.h"
 #include "common/pipe.h"
 #include "common/safe_io.h"
+#include "common/version.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -391,7 +392,12 @@ int AdminSocket::unregister_command(std::string command)
 class VersionHook : public AdminSocketHook {
 public:
   virtual bool call(std::string command, bufferlist& out) {
-    out.append(CEPH_ADMIN_SOCK_VERSION);
+    if (command == "version")
+      out.append(ceph_version_to_str());
+    else if (command == "git_version")
+      out.append(git_version_to_str());
+    else if (command == "0")
+      out.append(CEPH_ADMIN_SOCK_VERSION);
     return true;
   }
 };
@@ -452,8 +458,9 @@ bool AdminSocket::init(const std::string &path)
   m_path = path;
 
   m_version_hook = new VersionHook;
-  register_command("version", m_version_hook, "get protocol version");
   register_command("0", m_version_hook, "");
+  register_command("version", m_version_hook, "get ceph version");
+  register_command("git_version", m_version_hook, "get git sha1");
   m_help_hook = new HelpHook(this);
   register_command("help", m_help_hook, "list available commands");
 
@@ -483,6 +490,7 @@ void AdminSocket::shutdown()
   }
 
   unregister_command("version");
+  unregister_command("git_version");
   unregister_command("0");
   delete m_version_hook;
   unregister_command("help");
