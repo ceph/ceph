@@ -645,6 +645,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   admin_ops_hook(NULL),
   op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
+  peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   map_cache_lock("OSD::map_cache_lock"),
@@ -1347,6 +1348,8 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
 			  C_Contexts **pfin)
 {
   PG *pg;
+  ObjectStore::Transaction *t = 0;
+  C_Contexts *fin = 0;
 
   if (!_have_pg(info.pgid)) {
     // same primary?
@@ -1389,8 +1392,8 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
     }
 
     // ok, create PG locally using provided Info and History
-    *pt = new ObjectStore::Transaction;
-    *pfin = new C_Contexts(g_ceph_context);
+    t = new ObjectStore::Transaction;
+    fin = new C_Contexts(g_ceph_context);
     pg = _create_lock_pg(info.pgid, create, false, role, up, acting, history, pi, **pt);
       
     created++;
@@ -1409,8 +1412,21 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
       pg->unlock();
       return NULL;
     }
-    *pt = new ObjectStore::Transaction;
-    *pfin = new C_Contexts(g_ceph_context);
+    t = new ObjectStore::Transaction;
+    fin = new C_Contexts(g_ceph_context);
+  }
+  if (pt) {
+    assert(pfin);
+    *pt = t;
+    *pfin = fin;
+  } else if (t && t->empty()) {
+    delete t;
+    delete fin;
+  } else {
+    int tr = store->queue_transaction(
+      &pg->osr,
+      t, new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(tr == 0);
   }
   return pg;
 }
@@ -4309,8 +4325,9 @@ void OSD::handle_pg_create(OpRequestRef op)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, vector<pair<pg_info_t,pg_interval_map_t> > >& notify_list,
-		      epoch_t query_epoch)
+void OSD::do_notifies(
+  map< int,vector<pair<pg_info_t,pg_interval_map_t> > >& notify_list,
+  epoch_t query_epoch)
 {
   for (map< int, vector<pair<pg_info_t,pg_interval_map_t> > >::iterator it = notify_list.begin();
        it != notify_list.end();
@@ -4399,32 +4416,13 @@ void OSD::handle_pg_notify(OpRequestRef op)
       continue;
     }
 
-    ObjectStore::Transaction *t;
-    C_Contexts *fin;
-    pg = get_or_create_pg(it->first, it->second, m->get_epoch(), from, created, true, &t, &fin);
+    pg = get_or_create_pg(it->first, it->second,
+			  m->get_epoch(), from, created, true);
     if (!pg)
       continue;
-
-    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
-    pg->handle_notify(m->get_epoch(), m->get_query_epoch(), from, *it, &rctx);
-    pg->write_if_dirty(*t);
-
-    if (!t->empty()) {
-      int tr = store->queue_transaction(
-	&pg->osr,
-	t, new ObjectStore::C_DeleteTransaction(t), fin);
-      assert(tr == 0);
-    } else {
-      delete t;
-      delete fin;
-    }
+    pg->queue_notify(m->get_epoch(), m->get_query_epoch(), from, it->first);
     pg->unlock();
   }
-  
-  do_queries(query_map);
-  do_infos(info_map);
-  
-  maybe_update_heartbeat_peers();
 }
 
 void OSD::handle_pg_log(OpRequestRef op)
@@ -4445,35 +4443,13 @@ void OSD::handle_pg_log(OpRequestRef op)
   }
 
   int created = 0;
-  ObjectStore::Transaction *t;
-  C_Contexts *fin;  
   PG *pg = get_or_create_pg(m->info, m->past_intervals, m->get_epoch(), 
-			    from, created, false, &t, &fin);
-  if (!pg) {
+			    from, created, false);
+  if (!pg)
     return;
-  }
-
   op->mark_started();
-
-  map< int, map<pg_t,pg_query_t> > query_map;
-  map< int, MOSDPGInfo* > info_map;
-  PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
-  pg->handle_log(m->get_epoch(), m->get_query_epoch(), from, m, &rctx);
-  pg->write_if_dirty(*t);
+  pg->queue_log(m->get_epoch(), m->get_query_epoch(), from, m);
   pg->unlock();
-  do_queries(query_map);
-  do_infos(info_map);
-
-  if (!t->empty()) {
-    int tr = store->queue_transaction(
-      &pg->osr,
-      t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(!tr);
-  } else {
-    delete t;
-    delete fin;
-  }
-  maybe_update_heartbeat_peers();
 }
 
 void OSD::handle_pg_info(OpRequestRef op)
@@ -4490,8 +4466,6 @@ void OSD::handle_pg_info(OpRequestRef op)
 
   op->mark_started();
 
-  map< int, MOSDPGInfo* > info_map;
-
   int created = 0;
 
   for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
@@ -4502,31 +4476,13 @@ void OSD::handle_pg_info(OpRequestRef op)
       continue;
     }
 
-    ObjectStore::Transaction *t = 0;
-    C_Contexts *fin = 0;
     PG *pg = get_or_create_pg(p->first, p->second, m->get_epoch(), 
-			      from, created, false, &t, &fin);
+			      from, created, false);
     if (!pg)
       continue;
-
-    PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
-
-    pg->handle_info(m->get_epoch(), m->get_epoch(), from, *p, &rctx);
-    pg->write_if_dirty(*t);
-
-    if (!t->empty()) {
-      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-      assert(!tr);
-    } else {
-      delete t;
-      delete fin;
-    }
+    pg->queue_info(m->get_epoch(), m->get_epoch(), from,  p->first);
     pg->unlock();
   }
-
-  do_infos(info_map);
-
-  maybe_update_heartbeat_peers();
 }
 
 void OSD::handle_pg_trim(OpRequestRef op)
@@ -4738,14 +4694,10 @@ void OSD::handle_pg_query(OpRequestRef op)
     }
 
     pg = _lookup_lock_pg(pgid);
-
-    // ok, process query!
-    PG::RecoveryCtx rctx(0, 0, &notify_list, 0, 0);
-    pg->handle_query(m->get_epoch(), m->get_epoch(),
-		     from, it->second, &rctx);
+    pg->queue_query(m->get_epoch(), m->get_epoch(),
+		    from, it->second);
     pg->unlock();
   }
-  
   do_notifies(notify_list, m->get_epoch());
 }
 
@@ -5563,6 +5515,55 @@ PG *OSD::OpWQ::_dequeue()
   osd->op_queue_len--;
   osd->logger->set(l_osd_opq, osd->op_queue_len);
   return pg;
+}
+
+void OSD::queue_for_peering(PG *pg)
+{
+  peering_wq._enqueue(pg);
+}
+
+void OSD::process_peering_event(PG *pg)
+{
+  map< int, map<pg_t, pg_query_t> > query_map;
+  map< int, vector<pair<pg_info_t, pg_interval_map_t> > > notify_list;
+  map<int,MOSDPGInfo*> info_map;  // peer -> message
+  {
+    pg->lock();
+    if (pg->peering_queue.empty()) {
+      pg->unlock();
+      return;
+    }
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *pfin = new C_Contexts(g_ceph_context);
+    PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list,
+			 &pfin->contexts, t);
+    PG::CephPeeringEvtRef evt = pg->peering_queue.front();
+    pg->peering_queue.pop_front();
+    pg->handle_peering_event(evt, &rctx);
+    if (!t->empty()) {
+      int tr = store->queue_transaction(
+	&pg->osr,
+	t, new ObjectStore::C_DeleteTransaction(t), pfin);
+      assert(tr == 0);
+    } else {
+      delete t;
+      delete pfin;
+    }
+    pg->unlock();
+  }
+  epoch_t current_epoch;
+  {
+    map_lock.get_read();
+    current_epoch = osdmap->get_epoch();
+    map_lock.put_read();
+  }
+  do_notifies(notify_list, current_epoch);
+  do_queries(query_map);
+  do_infos(info_map);
+  {
+    Mutex::Locker l(osd_lock);
+    maybe_update_heartbeat_peers();
+  }
 }
 
 /*

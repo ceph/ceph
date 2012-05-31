@@ -3890,53 +3890,53 @@ void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
   recovery_state.handle_event(evt, rctx);
 }
 
-void PG::handle_notify(epoch_t msg_epoch,
-		       epoch_t query_epoch,
-		       int from, pg_info_t& i,
-		       RecoveryCtx *rctx)
+void PG::queue_peering_event(CephPeeringEvtRef evt)
+{
+  if (old_peering_evt(evt))
+    return;
+  peering_queue.push_back(evt);
+  osd->queue_for_peering(this);
+}
+
+void PG::queue_notify(epoch_t msg_epoch,
+		      epoch_t query_epoch,
+		      int from, pg_info_t& i)
 {
   dout(10) << "handle_notify " << i << " from osd." << from << dendl;
-  handle_peering_event(
+  queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MNotifyRec(from, i))),
-    rctx);
+					 MNotifyRec(from, i))));
 }
 
-void PG::handle_info(epoch_t msg_epoch,
+void PG::queue_info(epoch_t msg_epoch,
 		     epoch_t query_epoch,
-		     int from, pg_info_t& i,
-		     RecoveryCtx *rctx)
+		     int from, pg_info_t& i)
 {
   dout(10) << "handle_info " << i << " from osd." << from << dendl;
-  handle_peering_event(
+  queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MInfoRec(from, i))),
-    rctx);
+					 MInfoRec(from, i))));
 }
 
-void PG::handle_log(epoch_t msg_epoch,
-		    epoch_t query_epoch,
-		    int from,
-		    MOSDPGLog *msg,
-		    RecoveryCtx *rctx)
+void PG::queue_log(epoch_t msg_epoch,
+		   epoch_t query_epoch,
+		   int from,
+		   MOSDPGLog *msg)
 {
   dout(10) << "handle_log " << *msg << " from osd." << from << dendl;
-  handle_peering_event(
+  queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MLogRec(from, msg))),
-    rctx);
+					 MLogRec(from, msg))));
 }
 
-void PG::handle_query(epoch_t msg_epoch,
-		      epoch_t query_epoch,
-		      int from, const pg_query_t& q,
-		      RecoveryCtx *rctx)
+void PG::queue_query(epoch_t msg_epoch,
+		     epoch_t query_epoch,
+		     int from, const pg_query_t& q)
 {
   dout(10) << "handle_query " << q << " from osd." << from << dendl;
-  handle_peering_event(
+  queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MQuery(from, q, query_epoch))),
-    rctx);
+					 MQuery(from, q, query_epoch))));
 }
 
 void PG::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
@@ -4639,7 +4639,9 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
     pair<int, pg_info_t> notify_info;
     pg->update_history_from_master(query.query.history);
     pg->fulfill_info(query.from, query.query, notify_info);
-    context< RecoveryMachine >().send_notify(notify_info.first, notify_info.second);
+    context< RecoveryMachine >().send_notify(notify_info.first,
+					     notify_info.second,
+					     pg->past_intervals);
   } else {
     pg->fulfill_log(query.from, query.query, query.query_epoch);
   }
