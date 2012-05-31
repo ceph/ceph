@@ -1461,7 +1461,7 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1475,7 +1475,7 @@ void pg_log_entry_t::encode(bufferlist &bl) const
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1494,6 +1494,8 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   ::decode(mtime, bl);
   if (op == CLONE)
     ::decode(snaps, bl);
+  if (struct_v < 5)
+    invalid_pool = true;
   DECODE_FINISH(bl);
 }
 
@@ -2093,7 +2095,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
 
 void object_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(9, 8, bl);
+  ENCODE_START(10, 8, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
   ::encode(category, bl);
@@ -2117,7 +2119,7 @@ void object_info_t::encode(bufferlist& bl) const
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 8, 8, bl);
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
     ::decode(obj, bl);
@@ -2158,6 +2160,8 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(uses_tmap, bl);
   else
     uses_tmap = true;
+  if (struct_v < 10)
+    soid.pool = oloc.pool;
   DECODE_FINISH(bl);
 }
 
