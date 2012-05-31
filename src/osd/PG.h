@@ -798,6 +798,7 @@ public:
     const boost::statechart::event_base &get_event() { return *evt; }
   };
   typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
+  list<CephPeeringEvtRef> peering_queue;  // op queue
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -1224,7 +1225,7 @@ public:
       machine.initiate();
     }
 
-    void handle_event(boost::statechart::event_base &evt,
+    void handle_event(const boost::statechart::event_base &evt,
 		      RecoveryCtx *rctx) {
       start_handle(rctx);
       machine.process_event(evt);
@@ -1237,6 +1238,7 @@ public:
       machine.process_event(evt->get_event());
       end_handle();
     }
+
   } recovery_state;
 
 
@@ -1367,17 +1369,16 @@ public:
   }
 
   // recovery bits
+  void queue_peering_event(CephPeeringEvtRef evt);
   void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
-  void handle_notify(epoch_t msg_epoch, epoch_t query_epoch,
-		     int from, pg_info_t& i, RecoveryCtx *rctx);
-  void handle_info(epoch_t msg_epoch, epoch_t query_epoch,
-		   int from, pg_info_t& i, RecoveryCtx *rctx);
-  void handle_log(epoch_t msg_epoch, epoch_t query_epoch, int from,
-		  MOSDPGLog *msg,
-		  RecoveryCtx *rctx);
-  void handle_query(epoch_t msg_epoch, epoch_t query_epoch,
-		    int from, const pg_query_t& q,
-		    RecoveryCtx *rctx);
+  void queue_notify(epoch_t msg_epoch, epoch_t query_epoch,
+		    int from, pg_info_t& i);
+  void queue_info(epoch_t msg_epoch, epoch_t query_epoch,
+		  int from, pg_info_t& i);
+  void queue_log(epoch_t msg_epoch, epoch_t query_epoch, int from,
+		 MOSDPGLog *msg);
+  void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
+		   int from, const pg_query_t& q);
   void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			  vector<int>& newup, vector<int>& newacting,
 			  RecoveryCtx *rctx);

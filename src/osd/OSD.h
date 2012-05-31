@@ -379,6 +379,43 @@ private:
     o->dequeue_op(pg);
   };
 
+  // -- peering queue --
+  struct PeeringWQ : public ThreadPool::WorkQueue<PG> {
+    deque<PG*> peering_queue;
+    OSD *osd;
+    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>(
+	"OSD::PeeringWQ", ti, ti*10, tp), osd(o) {}
+
+    void _dequeue(PG *pg) {
+      assert(0);
+    }
+    bool _enqueue(PG *pg) {
+      pg->get();
+      peering_queue.push_back(pg);
+      return true;
+    }
+    bool _empty() {
+      return peering_queue.empty();
+    }
+    PG *_dequeue() {
+      if (peering_queue.empty())
+	return 0;
+      PG *retval = peering_queue.front();
+      peering_queue.pop_front();
+      return retval;
+    }
+    void _process(PG *pg) {
+      osd->process_peering_event(pg);
+      pg->put();
+    }
+    void _clear() {
+      assert(peering_queue.empty());
+    }
+  } peering_wq;
+
+  void queue_for_peering(PG *pg);
+  void process_peering_event(PG *pg);
 
   friend class PG;
   friend class ReplicatedPG;
@@ -471,15 +508,18 @@ protected:
   PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false, bool hold_map_lock=false);
   PG   *_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
-			int role, vector<int>& up, vector<int>& acting, pg_history_t history,
+			int role, vector<int>& up, vector<int>& acting,
+			pg_history_t history,
 			pg_interval_map_t& pi, ObjectStore::Transaction& t);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 
-  PG *get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
-		       epoch_t epoch, int from, int& pcreated, bool primary,
-		       ObjectStore::Transaction **pt,
-		       C_Contexts **pfin);
+  PG *get_or_create_pg(const pg_info_t& info,
+		       pg_interval_map_t& pi,
+		       epoch_t epoch, int from, int& pcreated,
+		       bool primary,
+		       ObjectStore::Transaction **pt = 0,
+		       C_Contexts **pfin = 0);
   
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
