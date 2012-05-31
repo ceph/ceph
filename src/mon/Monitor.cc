@@ -197,15 +197,15 @@ class AdminHook : public AdminSocketHook {
   Monitor *mon;
 public:
   AdminHook(Monitor *m) : mon(m) {}
-  bool call(std::string command, bufferlist& out) {
+  bool call(std::string command, std::string args, bufferlist& out) {
     stringstream ss;
-    mon->do_admin_command(command, ss);
+    mon->do_admin_command(command, args, ss);
     out.append(ss);
     return true;
   }
 };
 
-void Monitor::do_admin_command(string command, ostream& ss)
+void Monitor::do_admin_command(string command, string args, ostream& ss)
 {
   Mutex::Locker l(lock);
   if (command == "mon_status")
@@ -213,7 +213,7 @@ void Monitor::do_admin_command(string command, ostream& ss)
   else if (command == "quorum_status")
     _quorum_status(ss);
   else if (command.find("add_bootstrap_peer_hint") == 0)
-    _add_bootstrap_peer_hint(command, ss);
+    _add_bootstrap_peer_hint(command, args, ss);
   else
     assert(0 == "bad AdminSocket command binding");
 }
@@ -494,25 +494,24 @@ void Monitor::bootstrap()
   }
 }
 
-void Monitor::_add_bootstrap_peer_hint(string cmd, ostream& ss)
+void Monitor::_add_bootstrap_peer_hint(string cmd, string args, ostream& ss)
 {
-  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "'" << dendl;
+  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '" << args << "'" << dendl;
 
   if (is_leader() || is_peon()) {
     ss << "mon already active; ignoring bootstrap hint";
     return;
   }
 
-  size_t off = cmd.find(" ");
-  if (off == std::string::npos) {
+  if (args.length() == 0) {
     ss << "syntax is 'add_bootstrap_peer_hint ip[:port]'";
     return;
   }
 
   entity_addr_t addr;
   const char *end = 0;
-  if (!addr.parse(cmd.c_str() + off + 1, &end)) {
-    ss << "failed to parse addr '" << (cmd.c_str() + off + 1) << "'";
+  if (!addr.parse(args.c_str(), &end)) {
+    ss << "failed to parse addr '" << args << "'";
     return;
   }
 

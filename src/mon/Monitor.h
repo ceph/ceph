@@ -279,7 +279,7 @@ public:
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
-  void _add_bootstrap_peer_hint(string cmd, ostream& ss);
+  void _add_bootstrap_peer_hint(string cmd, string args, ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
 
@@ -398,7 +398,7 @@ public:
 
   int mkfs(bufferlist& osdmapbl);
 
-  void do_admin_command(std::string command, ostream& ss);
+  void do_admin_command(std::string command, std::string args, ostream& ss);
 
 private:
   // don't allow copying

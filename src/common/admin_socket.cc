@@ -327,14 +327,17 @@ bool AdminSocket::do_accept()
   if (match.size() == 0) {
     lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
-    bool success = p->second->call(c, out);
+    string args;
+    if (match != c)
+      args = c.substr(match.length() + 1);
+    bool success = p->second->call(match, args, out);
     if (!success) {
-      ldout(m_cct, 0) << "AdminSocket: request '" << c << "' (" << match
-		      << ") to " << p->second << " failed" << dendl;
+      ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
+		      << "' to " << p->second << " failed" << dendl;
       out.append("failed");
     } else {
-      ldout(m_cct, 20) << "AdminSocket: request '" << c << "' (" << match
-		       << ") to " << p->second
+      ldout(m_cct, 20) << "AdminSocket: request '" << match << "' '" << args
+		       << "' to " << p->second
 		       << " returned " << out.length() << " bytes" << dendl;
     }
     uint32_t len = htonl(out.length());
@@ -391,7 +394,7 @@ int AdminSocket::unregister_command(std::string command)
 
 class VersionHook : public AdminSocketHook {
 public:
-  virtual bool call(std::string command, bufferlist& out) {
+  virtual bool call(std::string command, std::string args, bufferlist& out) {
     if (command == "version")
       out.append(ceph_version_to_str());
     else if (command == "git_version")
@@ -406,7 +409,7 @@ class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, bufferlist& out) {
+  bool call(string command, string args, bufferlist& out) {
     unsigned max = 0;
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();
