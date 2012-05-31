@@ -694,7 +694,7 @@ class OpsFlightSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   OpsFlightSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, bufferlist& out) {
+  bool call(std::string command, std::string args, bufferlist& out) {
     stringstream ss;
     osd->dump_ops_in_flight(ss);
     out.append(ss);
