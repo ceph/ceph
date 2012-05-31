@@ -30,8 +30,8 @@
 #define MSG_MON_COMMAND_ACK        51
 #define MSG_LOG                    52
 #define MSG_LOGACK                 53
-#define MSG_MON_OBSERVE            54
-#define MSG_MON_OBSERVE_NOTIFY     55
+//#define MSG_MON_OBSERVE            54
+//#define MSG_MON_OBSERVE_NOTIFY     55
 #define MSG_CLASS                  56
 #define MSG_CLASS_ACK              57
 

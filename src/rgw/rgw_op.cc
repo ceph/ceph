@@ -186,9 +186,23 @@ static int get_policy_from_attr(CephContext *cct, void *ctx, RGWAccessControlPol
         s3policy->to_xml(*_dout);
         *_dout << dendl;
       }
+    } else if (ret == -ENODATA) {
+      /* object exists, but policy is broken */
+      RGWBucketInfo info;
+      RGWUserInfo uinfo;
+      string name;
+      int r = rgwstore->get_bucket_info(ctx, obj.bucket.name, info);
+      if (r < 0)
+        goto done;
+      r = rgw_get_user_info_by_uid(info.owner, uinfo);
+      if (r < 0)
+        goto done;
+
+      policy->create_default(info.owner, uinfo.display_name);
+      ret = 0;
     }
   }
-
+done:
   return ret;
 }
 

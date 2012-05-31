@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.46], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.47.2], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 AC_CONFIG_SUBDIRS([src/leveldb])
@@ -417,23 +417,6 @@ AC_CHECK_FUNC([fallocate],
 #AC_FUNC_STAT
 #AC_FUNC_UTIME_NULL
 #AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
-
-AC_ARG_WITH([gtk2],
-        [AS_HELP_STRING([--with-gtk2], [Build the graphical tools.  Default=yes.])],
-        [],
-        [with_gtk2=check])
-have_gtk2=no
-AS_IF([test "x$with_gtk2" != "xno"],
-        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 2.12],
-                [have_gtk2=yes
-		AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])
-		],
-                [if test "x$with_gtk2" != xcheck; then
-		    AC_MSG_FAILURE(
-			[--with-gtk2 was given, but test for gtkmm failed])
-		 fi
-		])])
-AM_CONDITIONAL(WITH_GTK2, [test "x$have_gtk2" != "xno"])
 
 AM_CONDITIONAL(WITH_BUILD_TESTS, test "$WITH_BUILD_TESTS" = "1")
 

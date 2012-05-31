@@ -1,5 +1,5 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf libs3
+SUBDIRS = ocf
 DIST_SUBDIRS = gtest ocf leveldb libs3
 
 EXTRA_DIST = \
@@ -104,37 +104,6 @@ ceph_SOURCES = \
 	mon/PGMap.cc
 ceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS)
 ceph_CXXFLAGS = ${AM_CXXFLAGS}
-
-if WITH_GTK2
-ceph_tool_guidir = ${datadir}/ceph_tool/gui_resources/
-ceph_tool_gui_DATA = \
-	tools/gui_resources/blacklist.svg \
-	tools/gui_resources/client.svg \
-	tools/gui_resources/cluster_stats_window.glade \
-	tools/gui_resources/down_osd.svg \
-	tools/gui_resources/failed_mds.svg \
-	tools/gui_resources/gui_monitor.build \
-	tools/gui_resources/gui_monitor.glade \
-	tools/gui_resources/gui_monitor_old.glade \
-	tools/gui_resources/main-window.glade \
-	tools/gui_resources/mds.svg \
-	tools/gui_resources/monitor.svg \
-	tools/gui_resources/node_stats_window.glade \
-	tools/gui_resources/osd.svg \
-	tools/gui_resources/out_osd.svg \
-	tools/gui_resources/pg.svg \
-	tools/gui_resources/stats_window.glade \
-	tools/gui_resources/stopped_mds.svg
-gceph_SOURCES = \
-	tools/common.cc \
-	mon/PGMap.cc \
-	tools/gceph.cc \
-	tools/gui.cc
-gceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS) $(GTKMM_LIBS)
-gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
-	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
-bin_PROGRAMS += gceph
-endif
 
 ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
@@ -951,12 +920,6 @@ rados_include_DATA = \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h
 
-if WITH_RADOSGW
-rgw_includedir = $(includedir)/rados
-rgw_include_DATA = \
-	$(srcdir)/include/rados/librgw.h
-endif
-
 crush_includedir = $(includedir)/crush
 crush_include_DATA = \
 	$(srcdir)/crush/hash.h \
@@ -1047,6 +1010,7 @@ libcommon_files = \
 	json_spirit/json_spirit_writer.cpp \
 	json_spirit/json_spirit_value.cpp \
 	log/Log.cc \
+	log/SubsystemMap.cc \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
@@ -1504,8 +1468,6 @@ noinst_HEADERS = \
 	messages/MMonGlobalID.h\
 	messages/MMonJoin.h\
         messages/MMonMap.h\
-        messages/MMonObserve.h\
-        messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
         messages/MMonProbe.h\
         messages/MMonSubscribe.h\
@@ -1625,8 +1587,6 @@ noinst_HEADERS = \
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/common.h\
-	tools/gui.h\
-	tools/gui_resources.h\
 	test/osd/RadosModel.h\
 	test/osd/Object.h\
 	test/osd/TestOpStat.h\

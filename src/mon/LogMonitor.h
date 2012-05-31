@@ -57,10 +57,16 @@ private:
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
+  bool _create_sub_summary(MLog *mlog, int level);
+  bool _create_sub_incremental(MLog *mlog, int level, version_t sv);
+
  public:
   LogMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
   void tick();  // check state, take actions
+
+  void check_subs();
+  void check_sub(Subscription *s);
 };
 
 #endif

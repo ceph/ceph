@@ -37,6 +37,7 @@ using namespace librados;
 #include <errno.h>
 #include <dirent.h>
 #include <stdexcept>
+#include <climits>
 
 #include "common/errno.h"
 
@@ -77,6 +78,8 @@ void usage(ostream& out)
 "   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "   load-gen [options]               generate load on the cluster\n"
+"   listomap <obj-name>              list the keys in the object map\n"
+"   getomap <obj-name> <key>         show the value for the specified key in the object's object map"
 "\n"
 "IMPORT AND EXPORT\n"
 "   import [options] <local-directory> <rados-pool>\n"
@@ -107,6 +110,10 @@ STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "        specify input or output file (for certain commands)\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
+"\n"
+"BENCH OPTIONS:\n"
+"   --show-time\n"
+"        prefix output with date/time\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -664,6 +671,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t num_objs = 0;
   int run_length = 0;
 
+  bool show_time = false;
+
   Formatter *formatter = NULL;
   bool pretty_format = false;
 
@@ -738,6 +747,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("run-length");
   if (i != opts.end()) {
     run_length = strtol(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("show-time");
+  if (i != opts.end()) {
+    show_time = true;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -1278,6 +1291,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     else
       usage_exit();
     RadosBencher bencher(rados, io_ctx);
+    bencher.set_show_time(show_time);
     ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
@@ -1343,7 +1357,43 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "load-gen will run " << lg.run_length << " seconds" << std::endl;
     lg.run();
     lg.cleanup();
-  }  else {
+  } else if (strcmp(nargs[0], "listomap") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+
+    librados::ObjectReadOperation read;
+    set<string> out_keys;
+    read.omap_get_keys("", LONG_MAX, &out_keys, &ret);
+    io_ctx.operate(nargs[1], &read, NULL);
+    if (ret < 0) {
+      cerr << "error getting omap key set " << pool_name << "/" << nargs[1] << ": "
+	  << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+
+    for (set<string>::iterator iter = out_keys.begin();
+	 iter != out_keys.end(); ++iter) {
+      cout << *iter << std::endl;
+    }
+  } else if (strcmp(nargs[0],"getomap") == 0){
+      if (!pool_name || nargs.size() < 3)
+	usage_exit();
+      librados::ObjectReadOperation read;
+      set<string> in_keys;
+      map<string,bufferlist> out_map;
+      in_keys.insert(nargs[2]);
+      read.omap_get_vals_by_keys(in_keys, &out_map, &ret);
+      io_ctx.operate(nargs[1], &read, NULL);
+      if (ret < 0) {
+	cerr << "error getting omap key set " << pool_name << "/" << nargs[1] << ": "
+	    << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+	return 1;
+      }
+      for (map<string,bufferlist>::iterator iter = out_map.begin();
+	       iter != out_map.end(); ++iter) {
+      cout << iter->second <<std::endl;
+      }
+    } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage_exit();
   }
@@ -1380,6 +1430,8 @@ int main(int argc, const char **argv)
       opts["create"] = "true";
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
       opts["pretty-format"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
+      opts["show-time"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {

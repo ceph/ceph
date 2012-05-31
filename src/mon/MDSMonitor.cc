@@ -489,6 +489,9 @@ void MDSMonitor::on_active()
 {
   tick();
   update_logger();
+
+  if (mon->is_leader())
+    mon->clog.info() << "mdsmap " << mdsmap << "\n";
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
@@ -502,6 +505,15 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   int r = -1;
   bufferlist rdata;
   stringstream ss;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    return true;
+  }
 
   vector<const char*> args;
   for (unsigned i = 1; i < m->cmd.size(); i++)
@@ -715,6 +727,15 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   int r = -EINVAL;
   stringstream ss;
   bufferlist rdata;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_W) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    return true;
+  }
 
   if (m->cmd.size() > 1) {
     if ((m->cmd[1] == "stop" || m->cmd[1] == "deactivate") && m->cmd.size() > 2) {

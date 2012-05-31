@@ -57,6 +57,8 @@ myrealpath(const char *path, char *resolved_path, int maxreslth) {
 
 	/* Expand each slash-separated pathname component. */
 	link_path = malloc(PATH_MAX+1);
+	if (!link_path)
+		return NULL;
 	while (*path != '\0') {
 		/* Ignore stray "/" */
 		if (*path == '/') {
@@ -179,6 +181,8 @@ canonicalize_path(const char *path)
 		return NULL;
 
 	canonical = malloc(PATH_MAX+2);
+	if (!canonical)
+		return NULL;
 	if (!myrealpath(path, canonical, PATH_MAX+1)) {
 		free(canonical);
 		return strdup(path);

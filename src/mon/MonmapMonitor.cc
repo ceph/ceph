@@ -39,11 +39,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
 
 void MonmapMonitor::create_initial()
 {
-  bufferlist bl;
-  mon->store->get_bl_ss(bl, "mkfs", "monmap");
-  pending_map.decode(bl);
-  dout(10) << "create_initial set fed epoch " << pending_map.epoch << dendl;
-  assert(pending_map.epoch == 0);   // fix mkfs()
+  dout(10) << "create_initial using current monmap" << dendl;
+  pending_map = *mon->monmap;
   pending_map.epoch = 1;
 }
 
@@ -102,7 +99,20 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
-  pending_map.encode(bl);
+  pending_map.encode(bl, CEPH_FEATURES_ALL);
+}
+
+void MonmapMonitor::on_active()
+{
+  if (paxos->get_version() >= 1 && !mon->has_ever_joined) {
+    // make note of the fact that i was, once, part of the quorum.
+    dout(10) << "noting that i was, once, part of an active quorum." << dendl;
+    mon->store->put_int(1, "joined");
+    mon->has_ever_joined = true;
+  }
+
+  if (mon->is_leader())
+    mon->clog.info() << "monmap " << *mon->monmap << "\n";
 }
 
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
@@ -126,6 +136,15 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    return true;
+  }
+
   vector<const char*> args;
   for (unsigned i = 1; i < m->cmd.size(); i++)
     args.push_back(m->cmd[i].c_str());
@@ -133,11 +152,12 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
       mon->monmap->print_summary(ss);
-      ss << ", election epoch " << mon->get_epoch() << ", quorum " << mon->get_quorum();
+      ss << ", election epoch " << mon->get_epoch() << ", quorum " << mon->get_quorum()
+	 << " " << mon->get_quorum_names();
       r = 0;
     }
     else if (m->cmd.size() == 2 && m->cmd[1] == "getmap") {
-      mon->monmap->encode(rdata);
+      mon->monmap->encode(rdata, CEPH_FEATURES_ALL);
       r = 0;
       ss << "got latest monmap";
     }
@@ -268,6 +288,16 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   stringstream ss;
   string rs;
   int err = -EINVAL;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    return true;
+  }
+
   if (m->cmd.size() > 1) {
     if (m->cmd.size() == 4 && m->cmd[1] == "add") {
       string name = m->cmd[2];
@@ -325,12 +355,21 @@ bool MonmapMonitor::preprocess_join(MMonJoin *join)
 {
   dout(10) << "preprocess_join " << join->name << " at " << join->addr << dendl;
 
-  if (pending_map.contains(join->name)) {
+  MonSession *session = join->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))) {
+    dout(10) << " insufficient caps" << dendl;
+    join->put();
+    return true;
+  }
+
+  if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
     join->put();
     return true;
   }
-  if (pending_map.contains(join->addr)) {
+  if (pending_map.contains(join->addr) && pending_map.get_name(join->addr) == join->name) {
     dout(10) << " already have " << join->addr << dendl;
     join->put();
     return true;
@@ -339,7 +378,11 @@ bool MonmapMonitor::preprocess_join(MMonJoin *join)
 }
 bool MonmapMonitor::prepare_join(MMonJoin *join)
 {
-  dout(0) << "adding " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
+  dout(0) << "adding/updating " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
+  if (pending_map.contains(join->name))
+    pending_map.remove(join->name);
+  if (pending_map.contains(join->addr))
+    pending_map.remove(pending_map.get_name(join->addr));
   pending_map.add(join->name, join->addr);
   pending_map.last_changed = ceph_clock_now(g_ceph_context);
   join->put();
@@ -364,7 +407,7 @@ void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
   int actual = mon->get_quorum().size();
   if (actual < max) {
     ostringstream ss;
-    ss << (max-actual) << " mons down, quorum " << mon->get_quorum();
+    ss << (max-actual) << " mons down, quorum " << mon->get_quorum() << " " << mon->get_quorum_names();
     summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     if (detail) {
       set<int> q = mon->get_quorum();

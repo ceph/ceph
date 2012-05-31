@@ -18,12 +18,14 @@
 #include <iostream>
 #include <stdint.h>
 
+#include "include/buffer.h"
+
 class AdminSocket;
 class CephContextServiceThread;
 class PerfCountersCollection;
 class md_config_obs_t;
 class md_config_t;
-class PerfCountersHook;
+class CephContextHook;
 
 namespace ceph {
   class HeartbeatMap;
@@ -31,6 +33,8 @@ namespace ceph {
     class Log;
   }
 }
+
+using ceph::bufferlist;
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -73,6 +77,11 @@ public:
    */
   AdminSocket *get_admin_socket();
 
+  /**
+   * process an admin socket command
+   */
+  void do_command(std::string command, bufferlist *out);
+
 private:
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
@@ -100,7 +109,7 @@ private:
 
   md_config_obs_t *_perf_counters_conf_obs;
 
-  PerfCountersHook *_perf_counters_hook;
+  CephContextHook *_admin_hook;
 
   ceph::HeartbeatMap *_heartbeat_map;
 };

@@ -1451,12 +1451,13 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = poolbase << pg_bits;
-    pools[pool].pgp_num = poolbase << pgp_bits;
+    pools[pool].set_pg_num(poolbase << pg_bits);
+    pools[pool].set_pgp_num(poolbase << pgp_bits);
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
     pool_name[pool] = p->second;
+    name_pool[p->second] = pool;
   }
 
   build_simple_crush_map(cct, *crush, rulesets, nosd);
@@ -1505,6 +1506,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int ruleset = p->first;
     crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
+    assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
     // just spread across osds
     crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
@@ -1565,12 +1567,13 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = (maxosd + 1) << pg_bits;
-    pools[pool].pgp_num = (maxosd + 1) << pgp_bits;
+    pools[pool].set_pg_num((maxosd + 1) << pg_bits);
+    pools[pool].set_pgp_num((maxosd + 1) << pgp_bits);
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
     pool_name[pool] = p->second;
+    name_pool[p->second] = pool;
   }
 
   build_simple_crush_map_from_conf(cct, *crush, rulesets);
@@ -1655,6 +1658,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int ruleset = p->first;
     crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
+    assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
 
     if (racks.size() > 3) {

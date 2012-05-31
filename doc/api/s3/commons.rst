@@ -1,6 +1,6 @@
-===============
-Common Entities
-===============
+=================
+ Common Entities
+=================
 
 .. toctree::
    :maxdepth: -1

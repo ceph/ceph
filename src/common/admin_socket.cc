@@ -15,7 +15,6 @@
 #include "common/Thread.h"
 #include "common/admin_socket.h"
 #include "common/config.h"
-#include "common/config_obs.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -299,11 +298,17 @@ bool AdminSocket::do_accept()
 
   bool rval = false;
 
+  string firstword;
+  if (c.find(" ") == string::npos)
+    firstword = c;
+  else
+    firstword = c.substr(0, c.find(" "));
+
   m_lock.Lock();
-  map<string,AdminSocketHook*>::iterator p = m_hooks.find(c);
+  map<string,AdminSocketHook*>::iterator p = m_hooks.find(firstword);
   bufferlist out;
   if (p == m_hooks.end()) {
-    lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
+    lderr(m_cct) << "AdminSocket: request '" << firstword << "' not defined" << dendl;
   } else {
     bool success = p->second->call(c, out);
     if (!success) {
@@ -363,33 +368,6 @@ int AdminSocket::unregister_command(std::string command)
   }  
   m_lock.Unlock();
   return ret;
-}
-
-const char** AdminSocket::get_tracked_conf_keys() const
-{
-  static const char *KEYS[] = {
-    "admin_socket",
-    "internal_safe_to_start_threads",
-    NULL
-  };
-  return KEYS;
-}
-
-void AdminSocket::handle_conf_change(const md_config_t *conf,
-				     const std::set <std::string> &changed)
-{
-  if (!conf->internal_safe_to_start_threads) {
-    // We can't do anything until it's safe to start threads.
-    return;
-  }
-  shutdown();
-  if (conf->admin_socket.empty()) {
-    // The admin socket is disabled.
-    return;
-  }
-  if (!init(conf->admin_socket)) {
-    lderr(m_cct) << "AdminSocketConfigObs: failed to start AdminSocket" << dendl;
-  }
 }
 
 class VersionHook : public AdminSocketHook {

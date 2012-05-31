@@ -1,5 +1,6 @@
-Bucket Operations
-=================
+===================
+ Bucket Operations
+===================
 
 PUT Bucket
 ----------
@@ -103,7 +104,6 @@ Parameters
 +-----------------+-----------+-----------------------------------------------------------------------+
 
 
-
 HTTP Response
 ~~~~~~~~~~~~~
 
@@ -160,7 +160,6 @@ The ``ListBucketResult`` contains objects, where each object is within a ``Conte
 
 Get Bucket ACL
 --------------
-
 Retrieves the bucket access control list. The user needs to be the bucket
 owner or to have been granted ``READ_ACP`` permission on the bucket.
 
@@ -284,7 +283,7 @@ Response Entities
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
 | ``KeyMarker``                           | String      | The key marker specified by the ``key-marker`` request parameter (if any).                               |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
-| ``UploadIdMarker``                      | String      | The marker specified by the ``upload-id-marker`` request paramter (if any).                              |
+| ``UploadIdMarker``                      | String      | The marker specified by the ``upload-id-marker`` request parameter (if any).                             |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
 | ``NextKeyMarker``                       | String      | The key marker to use in a subsequent request if ``IsTruncated`` is ``true``.                            |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+

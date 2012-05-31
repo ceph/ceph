@@ -44,6 +44,7 @@ class MonMap {
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
 	 p++) {
+      assert(addr_name.count(p->second) == 0);
       addr_name[p->second] = p->first;
     }
     unsigned i = 0;
@@ -93,6 +94,7 @@ class MonMap {
 
   void add(const string &name, const entity_addr_t &addr) {
     assert(mon_addr.count(name) == 0);
+    assert(addr_name.count(addr) == 0);
     mon_addr[name] = addr;
     calc_ranks();
   }
@@ -100,6 +102,14 @@ class MonMap {
   void remove(const string &name) {
     assert(mon_addr.count(name));
     mon_addr.erase(name);
+    calc_ranks();
+  }
+
+  void rename(string oldname, string newname) {
+    assert(contains(oldname));
+    assert(!contains(newname));
+    mon_addr[newname] = mon_addr[oldname];
+    mon_addr.erase(oldname);
     calc_ranks();
   }
 
@@ -119,6 +129,13 @@ class MonMap {
   string get_name(unsigned n) const {
     assert(n < rank_name.size());
     return rank_name[n];
+  }
+  string get_name(entity_addr_t a) const {
+    map<entity_addr_t,string>::const_iterator p = addr_name.find(a);
+    if (p == addr_name.end())
+      return string();
+    else
+      return p->second;
   }
 
   int get_rank(const string& n) {
@@ -140,13 +157,6 @@ class MonMap {
     return true;
   }
 
-  void rename(string oldname, string newname) {
-    assert(contains(oldname));
-    assert(!contains(newname));
-    mon_addr[newname] = mon_addr[oldname];
-    mon_addr.erase(oldname);
-  }
-
   const entity_addr_t& get_addr(const string& n) {
     assert(mon_addr.count(n));
     return mon_addr[n];
@@ -154,6 +164,11 @@ class MonMap {
   const entity_addr_t& get_addr(unsigned m) {
     assert(m < rank_addr.size());
     return rank_addr[m];
+  }
+  void set_addr(const string& n, entity_addr_t a) {
+    assert(mon_addr.count(n));
+    mon_addr[n] = a;
+    calc_ranks();
   }
   entity_inst_t get_inst(const string& n) {
     assert(mon_addr.count(n));
@@ -171,9 +186,7 @@ class MonMap {
     return i;
   }
 
-  void encode(bufferlist& blist) const;
-  void encode_v1(bufferlist& blist) const;
-
+  void encode(bufferlist& blist, uint64_t features) const;
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
     decode(p);
@@ -188,13 +201,57 @@ class MonMap {
   int write(const char *fn);
   int read(const char *fn);
 
+  /**
+   * build an initial bootstrap monmap from conf
+   *
+   * Build an initial bootstrap monmap from the config.  This will
+   * try, in this order:
+   *
+   *   1 monmap   -- an explicitly provided monmap
+   *   2 mon_host -- list of monitors
+   *   3 config [mon.*] sections, and 'mon addr' fields in those sections
+   *
+   * @param cct context (and associated config)
+   * @param errout ostream to send error messages too
+   */
+  int build_initial(CephContext *cct, ostream& errout);
+
+  /**
+   * build a monmap from a list of hosts or ips
+   *
+   * Resolve dns as needed.  Give mons dummy names.
+   *
+   * @param hosts  list of hosts, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
+  int build_from_host_list(std::string hosts, std::string prefix);
+
+  /**
+   * filter monmap given a set of initial members.
+   *
+   * Remove mons that aren't in the initial_members list.  Add missing
+   * mons and give them dummy IPs (blank IPv4, with a non-zero
+   * nonce). If the name matches my_name, then my_addr will be used in
+   * place of a dummy addr.
+   *
+   * @param initial_members list of initial member names
+   * @param my_name name of self, can be blank
+   * @param my_addr my addr
+   * @param removed optional pointer to set to insert removed mon addrs to
+   */
+  void set_initial_members(CephContext *cct,
+			   list<std::string>& initial_members,
+			   string my_name, entity_addr_t my_addr,
+			   set<entity_addr_t> *removed);
+
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
 };
-WRITE_CLASS_ENCODER(MonMap)
+WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
 inline ostream& operator<<(ostream& out, MonMap& m) {
   m.print_summary(out);

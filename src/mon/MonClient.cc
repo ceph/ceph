@@ -73,128 +73,10 @@ MonClient::~MonClient()
   delete rotating_secrets;
 }
 
-/*
- * build an initial monmap with any known monitor
- * addresses.
- */
-int MonClient::build_initial_monmap(CephContext *cct, MonMap &monmap)
-{
-  const md_config_t *conf = cct->_conf;
-  // file?
-  if (!conf->monmap.empty()) {
-    int r;
-    try {
-      r = monmap.read(conf->monmap.c_str());
-    }
-    catch (const buffer::error &e) {
-      r = -EINVAL;
-    }
-    if (r >= 0)
-      return 0;
-    cerr << "unable to read/decode monmap from " << conf->monmap
-	 << ": " << cpp_strerror(-r) << std::endl;
-    return r;
-  }
-
-  // fsid from conf?
-  if (!cct->_conf->fsid.is_zero()) {
-    monmap.fsid = cct->_conf->fsid;
-  }
-
-  // -m foo?
-  if (!conf->mon_host.empty()) {
-    vector<entity_addr_t> addrs;
-    if (parse_ip_port_vec(conf->mon_host.c_str(), addrs)) {
-      for (unsigned i=0; i<addrs.size(); i++) {
-	char n[2];
-	n[0] = 'a' + i;
-	n[1] = 0;
-	if (addrs[i].get_port() == 0)
-	  addrs[i].set_port(CEPH_MON_PORT);
-	string name = "noname-";
-	name += n;
-	monmap.add(name, addrs[i]);
-      }
-      return 0;
-    } else { //maybe they passed us a DNS-resolvable name
-      char *hosts = NULL;
-      hosts = resolve_addrs(conf->mon_host.c_str());
-      if (!hosts)
-        return -EINVAL;
-      bool success = parse_ip_port_vec(hosts, addrs);
-      free(hosts);
-      if (success) {
-        for (unsigned i=0; i<addrs.size(); i++) {
-          char n[2];
-          n[0] = 'a' + i;
-          n[1] = 0;
-          if (addrs[i].get_port() == 0)
-            addrs[i].set_port(CEPH_MON_PORT);
-          monmap.add(n, addrs[i]);
-        }
-        return 0;
-      } else cerr << "couldn't parse_ip_port_vec on " << hosts << std::endl;
-    }
-    cerr << "unable to parse addrs in '" << conf->mon_host << "'" << std::endl;
-  }
-
-  // What monitors are in the config file?
-  std::vector <std::string> sections;
-  int ret = conf->get_all_sections(sections);
-  if (ret) {
-    cerr << "Unable to find any monitors in the configuration "
-         << "file, because there was an error listing the sections. error "
-	 << ret << std::endl;
-    return -ENOENT;
-  }
-  std::vector <std::string> mon_names;
-  for (std::vector <std::string>::const_iterator s = sections.begin();
-       s != sections.end(); ++s) {
-    if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
-      mon_names.push_back(s->substr(4));
-    }
-  }
-
-  // Find an address for each monitor in the config file.
-  for (std::vector <std::string>::const_iterator m = mon_names.begin();
-       m != mon_names.end(); ++m) {
-    std::vector <std::string> sections;
-    std::string m_name("mon");
-    m_name += ".";
-    m_name += *m;
-    sections.push_back(m_name);
-    sections.push_back("mon");
-    sections.push_back("global");
-    std::string val;
-    int res = conf->get_val_from_conf_file(sections, "mon addr", val, true);
-    if (res) {
-      cerr << "failed to get an address for mon." << *m << ": error "
-	   << res << std::endl;
-      continue;
-    }
-    entity_addr_t addr;
-    if (!addr.parse(val.c_str())) {
-      cerr << "unable to parse address for mon." << *m
-	   << ": addr='" << val << "'" << std::endl;
-      continue;
-    }
-    if (addr.get_port() == 0)
-      addr.set_port(CEPH_MON_PORT);    
-    monmap.add(m->c_str(), addr);
-  }
-
-  if (monmap.size() == 0) {
-    cerr << "unable to find any monitors in conf. "
-	 << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
-    return -ENOENT;
-  }
-  return 0;
-}
-
 int MonClient::build_initial_monmap()
 {
   ldout(cct, 10) << "build_initial_monmap" << dendl;
-  return build_initial_monmap(cct, monmap);
+  return monmap.build_initial(cct, cerr);
 }
 
 int MonClient::get_monmap()
@@ -518,6 +400,7 @@ void MonClient::_pick_new_mon()
 {
   assert(monc_lock.is_locked());
 
+  assert(monmap.size() > 0);
   if (!cur_mon.empty() && monmap.size() > 1) {
     // pick a _different_ mon
     cur_mon = monmap.pick_random_mon_not(cur_mon);
@@ -616,6 +499,10 @@ void MonClient::tick()
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
+    ldout(cct, 10) << "renew subs? (now: " << now 
+		   << "; renew after: " << sub_renew_after << ") -- " 
+		   << (now > sub_renew_after ? "yes" : "no") 
+		   << dendl;
     if (now > sub_renew_after)
       _renew_subs();
 

@@ -83,10 +83,10 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 void JSONFormatter::print_quoted_string(const char *s)
 {
   int len = escape_json_attr_len(s);
-  char *escaped = (char*)malloc(len);
+  char *escaped = new char[len];
   escape_json_attr(s, escaped);
   m_ss << '\"' << escaped << '\"';
-  free(escaped);
+  delete[] escaped;
 }
 
 void JSONFormatter::print_name(const char *name)

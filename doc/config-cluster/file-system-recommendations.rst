@@ -1,6 +1,6 @@
-=========================================
-Hard Disk and File System Recommendations
-=========================================
+===========================================
+ Hard Disk and File System Recommendations
+===========================================
 
 Ceph aims for data safety, which means that when the application receives notice
 that data was written to the disk, that data was actually written to the disk.
@@ -9,7 +9,7 @@ disk. Newer kernels should work fine.
 
 Use ``hdparm`` to disable write caching on the hard disk::
 
-	$ hdparm -W 0 /dev/hda 0
+	hdparm -W 0 /dev/hda 0
 
 
 Ceph OSDs depend on the Extended Attributes (XATTRs) of the underlying file
@@ -26,7 +26,8 @@ File system candidates for Ceph include B tree and B+ tree file systems such as:
 - ``btrfs``
 - ``XFS``
 
-If you are using ``ext4``, enable XATTRs. ::
+If you are using ``ext4``, mount your file system to enable XATTRs. You must also
+add the following line to the ``[osd]`` section of your ``ceph.conf`` file. ::
 
 	filestore xattr use omap = true
 

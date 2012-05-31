@@ -22,7 +22,7 @@
 
 class md_config_t;
 
-class KeyRing {
+class KeyRing : public KeyStore {
   map<EntityName, EntityAuth> keys;
 
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
@@ -54,10 +54,17 @@ public:
     secret = k->second.key;
     return true;
   }
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id,
+			  CryptoKey& secret) const {
+    return false;
+  }
 
   // modifiers
   void add(const EntityName& name, EntityAuth &a) {
     keys[name] = a;
+  }
+  void remove(const EntityName& name) {
+    keys.erase(name);
   }
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {
     keys[name].caps = caps;
@@ -71,15 +78,16 @@ public:
   void import(CephContext *cct, KeyRing& other);
 
   // encoders
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(keys, bl);
-  }
   void decode(bufferlist::iterator& bl);
 
   void encode_plaintext(bufferlist& bl);
 };
-WRITE_CLASS_ENCODER(KeyRing)
+
+// don't use WRITE_CLASS_ENCODER macro because we don't have an encode
+// macro.  don't juse encode_plaintext in that case because it is not
+// wrappable; it assumes it gets the entire bufferlist.
+static inline void decode(KeyRing& kr, bufferlist::iterator& p) {
+  kr.decode(p);
+}
 
 #endif

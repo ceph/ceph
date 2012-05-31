@@ -343,6 +343,35 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   return 0;
 }
 
+int FileJournal::check()
+{
+  int ret;
+
+  ret = _open(false, false);
+  if (ret < 0)
+    goto done;
+
+  ret = read_header();
+  if (ret < 0)
+    goto done;
+
+  if (header.fsid != fsid) {
+    derr << "check: ondisk fsid " << header.fsid << " doesn't match expected " << fsid
+	 << ", invalid (someone else's?) journal" << dendl;
+    ret = -EINVAL;
+    goto done;
+  }
+
+  dout(1) << "check: header looks ok" << dendl;
+  ret = 0;
+
+ done:
+  TEMP_FAILURE_RETRY(::close(fd));
+  fd = -1;
+  return ret;
+}
+
+
 int FileJournal::create()
 {
   void *buf = 0;
@@ -724,7 +753,7 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 
   off64_t max = header.max_size - get_top();
   if (size > max)
-    dout(0) << "JOURNAL TOO SMALL: item " << size << " > journal " << max << " (usable)" << dendl;
+    dout(0) << "JOURNAL TOO SMALL: continuing, but slow: item " << size << " > journal " << max << " (usable)" << dendl;
 
   return -ENOSPC;
 }
