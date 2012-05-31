@@ -9,7 +9,7 @@ Synopsis
 
 | **ceph-authtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
   ] [ -p | --print ] [ -n | --name *entityname* ] [ --gen-key ] [ -a |
-  --add-key *base64_key* ] [ --caps *capfils* ] [ -b | --bin ]
+  --add-key *base64_key* ] [ --caps *capfils* ]
 
 
 Description
@@ -58,10 +58,6 @@ Options
 .. option:: --caps capsfile
 
    will set all of capabilities associated with a given key, for all subsystems
-
-.. option:: -b, --bin
-
-   will create a binary formatted keyring
 
 
 Capabilities

@@ -83,6 +83,11 @@ using ceph::crypto::SHA1;
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
 
+#if defined(__linux__)
+# ifndef BTRFS_SUPER_MAGIC
+static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
+# endif
+#endif
 
 #define ATTR_MAX_NAME_LEN  128
 #define ATTR_MAX_BLOCK_LEN 2048
@@ -688,7 +693,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_journal_parallel(g_conf->filestore_journal_parallel ),
   m_filestore_journal_trailing(g_conf->filestore_journal_trailing),
   m_filestore_journal_writeahead(g_conf->filestore_journal_writeahead),
-  m_filestore_dev(g_conf->filestore_dev),
   m_filestore_fiemap_threshold(g_conf->filestore_fiemap_threshold),
   m_filestore_sync_flush(g_conf->filestore_sync_flush),
   m_filestore_flusher_max_fds(g_conf->filestore_flusher_max_fds),
@@ -852,228 +856,193 @@ int FileStore::dump_journal(ostream& out)
   return r;
 }
 
-int FileStore::wipe_subvol(const char *s)
-{
-#if defined(__linux__)
-  struct btrfs_ioctl_vol_args volargs;
-  memset(&volargs, 0, sizeof(volargs));
-  strncpy(volargs.name, s, sizeof(volargs.name)-1);
-  int fd = ::open(basedir.c_str(), O_RDONLY);
-  if (fd < 0) {
-    int err = errno;
-    derr << "FileStore::wipe_subvol: failed to open " << basedir << ": "
-	 << cpp_strerror(err) << dendl;
-    return -err;
-  }
-  int r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
-  TEMP_FAILURE_RETRY(::close(fd));
-  if (r == 0) {
-    dout(0) << "mkfs  removed old subvol " << s << dendl;
-    return 0;
-  }
-#endif
-
-  dout(0) << "mkfs  removing old directory " << s << dendl;
-  ostringstream old_dir;
-  old_dir << basedir << "/" << s;
-  DIR *dir = ::opendir(old_dir.str().c_str());
-  if (!dir) {
-    int err = errno;
-    derr << "FileStore::wipe_subvol: failed to opendir " << old_dir << ": "
-	 << cpp_strerror(err) << dendl;
-    return -err;
-  }
-  struct dirent sde, *de;
-  while (::readdir_r(dir, &sde, &de) == 0) {
-    if (!de)
-      break;
-    if (strcmp(de->d_name, ".") == 0 ||
-	strcmp(de->d_name, "..") == 0)
-      continue;
-    ostringstream oss;
-    oss << old_dir.str().c_str() << "/" << de->d_name;
-    std::string ret = run_cmd("rm", "-rf", oss.str().c_str(), (char*)NULL);
-    if (!ret.empty()) {
-      derr << "FileStore::wipe_subvol: failed to remove " << oss.str() << ": "
-	   << "error " << ret << dendl;
-      ::closedir(dir);
-      return -EIO;
-    }
-  }
-  ::closedir(dir);
-  return 0;
-}
-
 int FileStore::mkfs()
 {
   int ret = 0;
-  char buf[PATH_MAX];
-  DIR *dir;
-  struct dirent *de;
-#if defined(__linux__)
   int basedir_fd;
+  char fsid_fn[PATH_MAX];
+  struct stat st;
+  uuid_d old_fsid;
+
+#if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
 #endif
 
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "mounting" << dendl;
-    std::string mret = run_cmd("mount", m_filestore_dev.c_str(), (char*)NULL);
-    if (!mret.empty()) {
-      derr << "FileStore::mkfs: failed to mount m_filestore_dev "
-	   << "'" << m_filestore_dev << "'. " << mret << dendl;
-      ret = -EIO;
-      goto out;
-    }
+  dout(1) << "mkfs in " << basedir << dendl;
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  if (basedir_fd < 0) {
+    ret = -errno;
+    derr << "mkfs failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
-  dout(1) << "mkfs in " << basedir << dendl;
-
-  snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(buf, O_CREAT|O_WRONLY|O_TRUNC, 0644);
-
+  // open+lock fsid
+  snprintf(fsid_fn, sizeof(fsid_fn), "%s/fsid", basedir.c_str());
+  fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
-    derr << "FileStore::mkfs: failed to open " << buf << ": "
-	 << cpp_strerror(ret) << dendl;
-    goto out;
+    derr << "mkfs: failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
+    goto close_basedir_fd;
   }
+
   if (lock_fsid() < 0) {
     ret = -EBUSY;
     goto close_fsid_fd;
   }
 
-  // wipe
-  dir = ::opendir(basedir.c_str());
-  if (!dir) {
-    ret = -errno;
-    derr << "FileStore::mkfs: failed to opendir " << basedir << dendl;
-    goto close_fsid_fd;
-  }
-  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
-    if (!de)
-      break;
-    if (strcmp(de->d_name, ".") == 0 ||
-	strcmp(de->d_name, "..") == 0)
-      continue;
-    if (strcmp(de->d_name, "fsid") == 0)
-      continue;
+  if (read_fsid(fsid_fd, &old_fsid) < 0 || old_fsid.is_zero()) {
+    if (fsid.is_zero()) {
+      fsid.generate_random();
+      dout(1) << "mkfs generated fsid " << fsid << dendl;
+    } else {
+      dout(1) << "mkfs using provided fsid " << fsid << dendl;
+    }
 
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path), "%s/%s", basedir.c_str(), de->d_name);
-    struct stat st;
-    if (::stat(path, &st)) {
+    char fsid_str[40];
+    fsid.print(fsid_str);
+    strcat(fsid_str, "\n");
+    ret = ::ftruncate(fsid_fd, 0);
+    if (ret < 0) {
       ret = -errno;
-      derr << "FileStore::mkfs: failed to stat " << de->d_name << dendl;
-      goto close_dir;
+      derr << "mkfs: failed to truncate fsid: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
     }
-    if (S_ISDIR(st.st_mode)) {
-      ret = wipe_subvol(de->d_name);
-      if (ret)
-	goto close_dir;
+    ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
+    if (ret < 0) {
+      derr << "mkfs: failed to write fsid: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
     }
-    else {
-      if (::unlink(path)) {
-	ret = -errno;
-	derr << "FileStore::mkfs: failed to remove old file "
-	     << de->d_name << dendl;
-	goto close_dir;
-      }
-      dout(0) << "mkfs  removing old file " << de->d_name << dendl;
+    if (::fsync(fsid_fd) < 0) {
+      ret = errno;
+      derr << "mkfs: close failed: can't write fsid: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
     }
+    dout(10) << "mkfs fsid is " << fsid << dendl;
+  } else {
+    if (!fsid.is_zero() && fsid != old_fsid) {
+      derr << "mkfs on-disk fsid " << old_fsid << " != provided " << fsid << dendl;
+      ret = -EINVAL;
+      goto close_fsid_fd;
+    }
+    fsid = old_fsid;
+    dout(1) << "mkfs fsid is already set to " << fsid << dendl;
   }
 
-  // fsid
-  if (fsid.is_zero())
-    fsid.generate_random();
-  else
-    dout(1) << "mkfs using provided fsid " << fsid << dendl;
-
-  char fsid_str[40];
-  fsid.print(fsid_str);
-  strcat(fsid_str, "\n");
-  ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
-  if (ret < 0) {
-    derr << "FileStore::mkfs: failed to write fsid: "
-	 << cpp_strerror(ret) << dendl;
-    goto close_fsid_fd;
-  }
-  if (TEMP_FAILURE_RETRY(::close(fsid_fd))) {
-    ret = errno;
-    derr << "FileStore::mkfs: close failed: can't write fsid: "
-	 << cpp_strerror(ret) << dendl;
-    fsid_fd = -1;
-    goto close_fsid_fd;
-  }
-  fsid_fd = -1;
-  dout(10) << "mkfs fsid is " << fsid << dendl;
-
+  // version stamp
   ret = write_version_stamp();
   if (ret < 0) {
-    derr << "Firestore::mkfs: write_version_stamp() failed: "
+    derr << "mkfs: write_version_stamp() failed: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
 
   // current
-#if defined(__linux__)
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
-  volargs.fd = 0;
-  strcpy(volargs.name, "current");
-  if (::ioctl(basedir_fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs)) {
-    ret = errno;
-    if (ret == EEXIST) {
-      dout(2) << " current already exists" << dendl;
-      // not fatal
+  ret = ::stat(current_fn.c_str(), &st);
+  if (ret == 0) {
+    // current/ exists
+    if (!S_ISDIR(st.st_mode)) {
+      ret = -EINVAL;
+      derr << "mkfs current/ exists but is not a directory" << dendl;
+      goto close_fsid_fd;
     }
-    else if (ret == EOPNOTSUPP || ret == ENOTTY) {
-      dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
-	      << current_fn << dendl;
-#endif
-      if (::mkdir(current_fn.c_str(), 0755)) {
-	ret = errno;
-	if (ret != EEXIST) {
-	  derr << "FileStore::mkfs: mkdir " << current_fn << " failed: "
-	       << cpp_strerror(ret) << dendl;
-	  goto close_basedir_fd;
-	}
-      }
+
 #if defined(__linux__)
+    // is current/ a btrfs subvolume?
+    //  check fsid, and compare st_dev to see if it's a subvolume.
+    struct stat basest;
+    struct statfs basefs, currentfs;
+    ::fstat(basedir_fd, &basest);
+    ::fstatfs(basedir_fd, &basefs);
+    ::statfs(current_fn.c_str(), &currentfs);
+    if (basefs.f_type == BTRFS_SUPER_MAGIC &&
+	currentfs.f_type == BTRFS_SUPER_MAGIC &&
+	basest.st_dev != st.st_dev) {
+      dout(2) << " current appears to be a btrfs subvolume" << dendl;
+      btrfs_stable_commits = true;
+    }
+#endif
+  } else {
+#if defined(__linux__)
+    volargs.fd = 0;
+    strcpy(volargs.name, "current");
+    if (::ioctl(basedir_fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs)) {
+      ret = -errno;
+      if (ret == -EOPNOTSUPP || ret == -ENOTTY) {
+	dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
+		<< current_fn << dendl;
+#endif
+	if (::mkdir(current_fn.c_str(), 0755)) {
+	  ret = -errno;
+	  derr << "mkfs: mkdir " << current_fn << " failed: "
+	       << cpp_strerror(ret) << dendl;
+	  goto close_fsid_fd;
+	}
+#if defined(__linux__)
+      }
+      else {
+	derr << "mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
+	     << cpp_strerror(ret) << dendl;
+	goto close_fsid_fd;
+      }
     }
     else {
-      derr << "FileStore::mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
-	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
+      // ioctl succeeded. yay
+      dout(2) << " created btrfs subvol " << current_fn << dendl;
+      if (::chmod(current_fn.c_str(), 0755)) {
+	ret = -errno;
+	derr << "mkfs: failed to chmod " << current_fn << " to 0755: "
+	     << cpp_strerror(ret) << dendl;
+	goto close_fsid_fd;
+      }
+      btrfs_stable_commits = true;
     }
-  }
-  else {
-    // ioctl succeeded. yay
-    dout(2) << " created btrfs subvol " << current_fn << dendl;
-    if (::chmod(current_fn.c_str(), 0755)) {
-      ret = -errno;
-      derr << "FileStore::mkfs: failed to chmod " << current_fn << " to 0755: "
-	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
-    }
-    btrfs_stable_commits = true;
-  }
 #endif
+  }
 
   // write initial op_seq
   {
-    uint64_t initial_seq;
+    uint64_t initial_seq = 0;
     int fd = read_op_seq(&initial_seq);
     if (fd < 0) {
-      derr << "FileStore::mkfs: failed to create " << current_op_seq_fn << ": "
+      derr << "mkfs: failed to create " << current_op_seq_fn << ": "
 	   << cpp_strerror(fd) << dendl;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
-    int err = write_op_seq(fd, 1);
-    if (err < 0) {
-      TEMP_FAILURE_RETRY(::close(fd));  
-      derr << "FileStore::mkfs: failed to write to " << current_op_seq_fn << ": "
-	   << cpp_strerror(err) << dendl;
-      goto close_basedir_fd;
+    if (initial_seq == 0) {
+      int err = write_op_seq(fd, 1);
+      if (err < 0) {
+	TEMP_FAILURE_RETRY(::close(fd));
+	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
+	     << cpp_strerror(err) << dendl;
+	goto close_fsid_fd;
+      }
+
+      if (btrfs_stable_commits) {
+	// create snap_1 too
+	snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
+	volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
+	assert(volargs.fd >= 0);
+	if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
+	  ret = -errno;
+	  if (ret != -EEXIST) {
+	    derr << "mkfs: failed to create " << volargs.name << ": "
+		 << cpp_strerror(ret) << dendl;
+	    goto close_fsid_fd;
+	  }
+	}
+	if (::fchmod(volargs.fd, 0755)) {
+	  TEMP_FAILURE_RETRY(::close(volargs.fd));
+	  ret = -errno;
+	  derr << "mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
+	       << cpp_strerror(ret) << dendl;
+	  goto close_fsid_fd;
+	}
+	TEMP_FAILURE_RETRY(::close(volargs.fd));
+      }
     }
     TEMP_FAILURE_RETRY(::close(fd));  
   }
@@ -1085,62 +1054,28 @@ int FileStore::mkfs()
     leveldb::Status status = leveldb::DB::Open(options, omap_dir, &db);
     if (status.ok()) {
       delete db;
-      derr << "leveldb db created" << dendl;
+      dout(1) << "leveldb db exists/created" << dendl;
     } else {
-      derr << "Failed to create leveldb: " << status.ToString() << dendl;
+      derr << "mkfs failed to create leveldb: " << status.ToString() << dendl;
       ret = -1;
-      goto close_basedir_fd;
+      goto close_fsid_fd;
     }
-  }
-
-  if (btrfs_stable_commits) {
-    // create snap_0 too
-    snprintf(volargs.name, sizeof(volargs.name), COMMIT_SNAP_ITEM, 1ull);
-    volargs.fd = ::open(current_fn.c_str(), O_RDONLY);
-    assert(volargs.fd >= 0);
-    if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
-      ret = -errno;
-      derr << "FileStore::mkfs: failed to create " << volargs.name << ": "
-	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
-    }
-
-    if (::fchmod(volargs.fd, 0755)) {
-      TEMP_FAILURE_RETRY(::close(volargs.fd));
-      ret = -errno;
-      derr << "FileStore::mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
-	   << cpp_strerror(ret) << dendl;
-      goto close_basedir_fd;
-    }
-    TEMP_FAILURE_RETRY(::close(volargs.fd));
   }
 
   // journal?
   ret = mkjournal();
   if (ret)
-    goto close_basedir_fd;
-
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "umounting" << dendl;
-    snprintf(buf, sizeof(buf), "umount %s", m_filestore_dev.c_str());
-    //system(cmd);
-  }
+    goto close_fsid_fd;
 
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
- close_basedir_fd:
-#if defined(__linux__)
-  TEMP_FAILURE_RETRY(::close(basedir_fd));
-#endif
- close_dir:
-  ::closedir(dir);
  close_fsid_fd:
-  if (fsid_fd != -1) {
-    TEMP_FAILURE_RETRY(::close(fsid_fd));
-    fsid_fd = -1;
-  }
-out:
+  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  fsid_fd = -1;
+ close_basedir_fd:
+  TEMP_FAILURE_RETRY(::close(basedir_fd));
+  basedir_fd = -1;
   return ret;
 }
 
@@ -1156,34 +1091,33 @@ int FileStore::mkjournal()
     derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
     return -err;
   }
-  ret = read_fsid(fd);
+  ret = read_fsid(fd, &fsid);
   if (ret < 0) {
     derr << "FileStore::mkjournal: read error: " << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
-  if (TEMP_FAILURE_RETRY(::close(fd))) {
-    int err = errno;
-    derr << "FileStore::mkjournal: close error: " << cpp_strerror(err) << dendl;
-    return -err;
-  }
+  TEMP_FAILURE_RETRY(::close(fd));
 
   ret = 0;
 
   open_journal();
   if (journal) {
-    ret = journal->create();
-    if (ret)
-      dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
-    else
-      dout(0) << "mkjournal created journal on " << journalpath << dendl;
+    ret = journal->check();
+    if (ret < 0) {
+      ret = journal->create();
+      if (ret)
+	dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
+      else
+	dout(0) << "mkjournal created journal on " << journalpath << dendl;
+    }
     delete journal;
     journal = 0;
   }
   return ret;
 }
 
-int FileStore::read_fsid(int fd)
+int FileStore::read_fsid(int fd, uuid_d *uuid)
 {
   char fsid_str[40];
   int ret = safe_read(fd, fsid_str, sizeof(fsid_str));
@@ -1191,14 +1125,14 @@ int FileStore::read_fsid(int fd)
     return ret;
   if (ret == 8) {
     // old 64-bit fsid... mirror it.
-    *(uint64_t*)&fsid.uuid[0] = *(uint64_t*)fsid_str;
-    *(uint64_t*)&fsid.uuid[8] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&uuid->uuid[0] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&uuid->uuid[8] = *(uint64_t*)fsid_str;
     return 0;
   }
 
   if (ret > 36)
     fsid_str[36] = 0;
-  if (!fsid.parse(fsid_str))
+  if (!uuid->parse(fsid_str))
     return -EINVAL;
   return 0;
 }
@@ -1312,7 +1246,16 @@ int FileStore::_detect_fs()
   char fn[PATH_MAX];
   int x = rand();
   int y = x+1;
-  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
+
+  snprintf(fn, sizeof(fn), "%s/xattr_test", basedir.c_str());
+
+  int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);
+  if (tmpfd < 0) {
+    int ret = -errno;
+    derr << "_detect_fs unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
   int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
   if (ret >= 0)
     ret = do_getxattr(fn, "user.test", &y, sizeof(y));
@@ -1326,6 +1269,7 @@ int FileStore::_detect_fs()
   }
 
   char buf[1000];
+  memset(buf, 0, sizeof(buf)); // shut up valgrind
   do_setxattr(fn, "user.test", &buf, sizeof(buf));
   do_setxattr(fn, "user.test2", &buf, sizeof(buf));
   do_setxattr(fn, "user.test3", &buf, sizeof(buf));
@@ -1345,6 +1289,9 @@ int FileStore::_detect_fs()
   do_removexattr(fn, "user.test4");
   do_removexattr(fn, "user.test5");
 
+  ::unlink(fn);
+  TEMP_FAILURE_RETRY(::close(tmpfd));
+
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
@@ -1360,8 +1307,7 @@ int FileStore::_detect_fs()
   blk_size = st.f_bsize;
 
 #if defined(__linux__)
-  static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
-  if (st.f_type == BTRFS_F_TYPE) {
+  if (st.f_type == BTRFS_SUPER_MAGIC) {
     dout(0) << "mount detected btrfs" << dendl;      
     btrfs = true;
 
@@ -1381,35 +1327,56 @@ int FileStore::_detect_fs()
       dout(0) << "mount btrfs CLONE_RANGE ioctl is DISABLED via 'filestore btrfs clone range' option" << dendl;
     }
 
+    struct btrfs_ioctl_vol_args vol_args;
+    memset(&vol_args, 0, sizeof(vol_args));
+
+    // create test source volume
+    vol_args.fd = 0;
+    strcpy(vol_args.name, "test_subvol");
+    r = ::ioctl(fd, BTRFS_IOC_SUBVOL_CREATE, &vol_args);
+    if (r != 0) {
+      r = -errno;
+      dout(0) << "mount  failed to create simple subvolume " << vol_args.name << ": " << cpp_strerror(r) << dendl;
+    }
+    int srcfd = ::openat(fd, vol_args.name, O_RDONLY);
+    if (srcfd < 0) {
+      r = -errno;
+      dout(0) << "mount  failed to open " << vol_args.name << ": " << cpp_strerror(r) << dendl;
+    }
+
     // snap_create and snap_destroy?
-    struct btrfs_ioctl_vol_args volargs;
-    memset(&volargs, 0, sizeof(volargs));
-    volargs.fd = fd;
-    strcpy(volargs.name, "sync_snap_test");
-    r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &volargs);
+    vol_args.fd = srcfd;
+    strcpy(vol_args.name, "sync_snap_test");
+    r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
     int err = errno;
     if (r == 0 || errno == EEXIST) {
       dout(0) << "mount btrfs SNAP_CREATE is supported" << dendl;
       btrfs_snap_create = true;
 
-      r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+      r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
       if (r == 0) {
 	dout(0) << "mount btrfs SNAP_DESTROY is supported" << dendl;
 	btrfs_snap_destroy = true;
       } else {
+	err = -errno;
 	dout(0) << "mount btrfs SNAP_DESTROY failed: " << cpp_strerror(err) << dendl;
+
+	if (err == -EPERM && getuid() != 0) {
+	  dout(0) << "btrfs SNAP_DESTROY failed with EPERM as non-root; remount with -o user_subvol_rm_allowed" << dendl;
+	  cerr << TEXT_YELLOW
+	       << "btrfs SNAP_DESTROY failed as non-root; remount with -o user_subvol_rm_allowed"
+	       << TEXT_NORMAL
+	       << std::endl;
+	} else if (err == -EOPNOTSUPP) {
+	  derr << "btrfs SNAP_DESTROY ioctl not supported; you need a kernel newer than 2.6.32" << dendl;
+	}
       }
     } else {
       dout(0) << "mount btrfs SNAP_CREATE failed: " << cpp_strerror(err) << dendl;
     }
 
     if (m_filestore_btrfs_snap && !btrfs_snap_destroy) {
-      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+); DISABLING" << dendl;
-      cerr << TEXT_YELLOW
-	   << " ** WARNING: 'filestore btrfs snap' was enabled (for safe transactions, rollback),\n"
-	   << "             but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
-	   << "             Linux 2.6.32).  Disabling.\n"
-	   << TEXT_NORMAL;
+      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl; DISABLING" << dendl;
       btrfs_stable_commits = false;
     }
 
@@ -1439,19 +1406,15 @@ int FileStore::_detect_fs()
 
     if (btrfs_wait_sync) {
       // async snap creation?
-      struct btrfs_ioctl_vol_args vol_args;
-      memset(&vol_args, 0, sizeof(vol_args));
-      vol_args.fd = 0;
-      strcpy(vol_args.name, "async_snap_test");
-
       struct btrfs_ioctl_vol_args_v2 async_args;
       memset(&async_args, 0, sizeof(async_args));
-      async_args.fd = fd;
+      async_args.fd = srcfd;
       async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
       strcpy(async_args.name, "async_snap_test");
 
       // remove old one, first
       struct stat st;
+      strcpy(vol_args.name, async_args.name);
       if (::fstatat(fd, vol_args.name, &st, 0) == 0) {
 	dout(0) << "mount btrfs removing old async_snap_test" << dendl;
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
@@ -1467,6 +1430,7 @@ int FileStore::_detect_fs()
 	btrfs_snap_create_v2 = true;
       
 	// clean up
+	strcpy(vol_args.name, "async_snap_test");
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	if (r != 0) {
 	  int err = errno;
@@ -1477,6 +1441,17 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_CREATE_V2 is NOT supported: "
 		<< cpp_strerror(err) << dendl;
       }
+    }
+
+    // clean up test subvol
+    if (srcfd >= 0)
+      TEMP_FAILURE_RETRY(::close(srcfd));
+
+    strcpy(vol_args.name, "test_subvol");
+    r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
+    if (r < 0) {
+      r = -errno;
+      dout(0) << "mount  failed to remove " << vol_args.name << ": " << cpp_strerror(r) << dendl;
     }
 
     if (m_filestore_btrfs_snap && !btrfs_snap_create_v2) {
@@ -1494,6 +1469,28 @@ int FileStore::_detect_fs()
   {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
+  }
+
+  bool have_syncfs = false;
+#ifdef HAVE_SYS_SYNCFS
+  if (syncfs(fd) == 0) {
+    dout(0) << "mount syncfs(2) syscall fully supported (by glibc and kernel)" << dendl;
+    have_syncfs = true;
+  } else {
+    dout(0) << "mount syncfs(2) syscall supported by glibc BUT NOT the kernel" << dendl;
+  }
+#else
+  dout(0) << "mount syncfs(2) syscall not support by glibc" << dendl;
+#endif
+  if (!have_syncfs) {
+    if (btrfs) {
+      dout(0) << "mount no syncfs(2), but the btrfs SYNC ioctl will suffice" << dendl;
+    } else if (m_filestore_fsync_flushes_journal_data) {
+      dout(0) << "mount no syncfs(2), but 'filestore fsync flushes journal data = true', so fsync will suffice." << dendl;
+    } else {
+      dout(0) << "mount no syncfs(2), must use sync(2)." << dendl;
+      dout(0) << "mount WARNING: multiple ceph-osd daemons on the same host will be slow" << dendl;
+    }
   }
 
   TEMP_FAILURE_RETRY(::close(fd));
@@ -1625,11 +1622,6 @@ int FileStore::mount()
   uint64_t initial_op_seq;
   set<string> cluster_snaps;
 
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "mounting" << dendl;
-    //run_cmd("mount", m_filestore_dev, (char*)NULL);
-  }
-
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
   
   // make sure global base dir exists
@@ -1650,7 +1642,7 @@ int FileStore::mount()
     goto done;
   }
 
-  ret = read_fsid(fsid_fd);
+  ret = read_fsid(fsid_fd, &fsid);
   if (ret < 0) {
     derr << "FileStore::mount: error reading fsid_fd: " << cpp_strerror(ret)
 	 << dendl;
@@ -1859,6 +1851,11 @@ int FileStore::mount()
   }
 
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
+  if (initial_op_seq == 0) {
+    derr << "mount initial op seq is 0; something is wrong" << dendl;
+    ret = -EINVAL;
+    goto close_current_fd;
+  }
 
   if (!btrfs_stable_commits) {
     // mark current/ as non-snapshotted so that we don't rollback away
@@ -2058,11 +2055,6 @@ int FileStore::umount()
     basedir_fd = -1;
   }
   object_map.reset();
-
-  if (!m_filestore_dev.empty()) {
-    dout(0) << "umounting" << dendl;
-    //run_cmd("umount", m_filestore_dev, (char*)NULL);
-  }
 
   {
     Mutex::Locker l(sync_entry_timeo_lock);

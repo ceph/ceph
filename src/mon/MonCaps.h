@@ -92,6 +92,10 @@ public:
   void set_allow_all(bool allow) { allow_all = allow; }
   void set_auid(uint64_t uid) { auid = uid; }
 
+  bool get_allow_all() const {
+    return allow_all;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;

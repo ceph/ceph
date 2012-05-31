@@ -51,6 +51,7 @@ class MonmapMonitor : public PaxosService {
 
   void encode_pending(bufferlist& bl);
 
+  void on_active();
 
   bool preprocess_query(PaxosServiceMessage *m);
   bool prepare_update(PaxosServiceMessage *m);

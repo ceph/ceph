@@ -233,6 +233,9 @@ void OSDMonitor::on_active()
 
   if (thrash_map && thrash())
     propose_pending();
+
+  if (mon->is_leader())
+    mon->clog.info() << "osdmap " << osdmap << "\n"; 
 }
 
 void OSDMonitor::update_logger()
@@ -313,6 +316,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   oss << buf;
   std::string sep;
   oss << "overloaded osds: ";
+  bool changed = false;
   for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
@@ -323,13 +327,15 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
-      float weight = osdmap.get_weightf(p->first);
-      float new_weight = (average_util / util) * weight;
-      osdmap.set_weightf(p->first, new_weight);
+      unsigned weight = osdmap.get_weight(p->first);
+      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      pending_inc.new_weight[p->first] = new_weight;
       char buf[128];
       snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
-	       weight, new_weight);
+	       (float)weight / (float)0x10000,
+	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
+      changed = true;
     }
   }
   if (sep.empty()) {
@@ -337,7 +343,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   }
   out_str = oss.str();
   dout(0) << "reweight_by_utilization: finished with " << out_str << dendl;
-  return 0;
+  return changed;
 }
 
 void OSDMonitor::create_pending()
@@ -389,7 +395,7 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 
   // encode
   assert(paxos->get_version() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, -1);
+  ::encode(pending_inc, bl, CEPH_FEATURES_ALL);
 }
 
 
@@ -1438,6 +1444,15 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    return true;
+  }
+
   vector<const char*> args;
   for (unsigned i = 1; i < m->cmd.size(); i++)
     args.push_back(m->cmd[i].c_str());
@@ -1682,10 +1697,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   else
     pending_inc.new_pools[pool].crush_ruleset = g_conf->osd_pool_default_crush_rule;
   pending_inc.new_pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].pg_num = (pg_num ? pg_num :
-                                        g_conf->osd_pool_default_pg_num);
-  pending_inc.new_pools[pool].pgp_num = (pgp_num ? pgp_num :
-                                         g_conf->osd_pool_default_pgp_num);
+  pending_inc.new_pools[pool].set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
+  pending_inc.new_pools[pool].set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pending_inc.new_pools[pool].last_change = pending_inc.epoch;
   pending_inc.new_pools[pool].auid = auid;
   pending_inc.new_pool_names[pool] = name;
@@ -1720,6 +1733,16 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   stringstream ss;
   string rs;
   int err = -EINVAL;
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->caps.get_allow_all() &&
+       !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W) &&
+       !mon->_allowed_command(session, m->cmd))) {
+    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    return true;
+  }
+
   if (m->cmd.size() > 1) {
     if ((m->cmd.size() == 2 && m->cmd[1] == "setcrushmap") ||
 	(m->cmd.size() == 3 && m->cmd[1] == "crush" && m->cmd[2] == "set")) {
@@ -2292,7 +2315,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      } else {
 		if (pending_inc.new_pools.count(pool) == 0)
 		  pending_inc.new_pools[pool] = *p;
-		pending_inc.new_pools[pool].pg_num = n;
+		pending_inc.new_pools[pool].set_pg_num(n);
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pg_num to " << n;
 		getline(ss, rs);
@@ -2308,7 +2331,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      } else {
 		if (pending_inc.new_pools.count(pool) == 0)
 		  pending_inc.new_pools[pool] = *p;
-		pending_inc.new_pools[pool].pgp_num = n;
+		pending_inc.new_pools[pool].set_pgp_num(n);
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pgp_num to " << n;
 		getline(ss, rs);
@@ -2371,11 +2394,16 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
       string out_str;
       err = reweight_by_utilization(oload, out_str);
-      if (err) {
-	ss << "FAILED to reweight-by-utilization: " << out_str;
+      if (err < 0) {
+	ss << "FAILED reweight-by-utilization: " << out_str;
       }
-      else {
+      else if (err == 0) {
+	ss << "no change: " << out_str;
+      } else {
 	ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
       }
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "thrash") {

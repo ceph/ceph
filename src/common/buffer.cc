@@ -88,10 +88,13 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   class buffer::raw_malloc : public buffer::raw {
   public:
     raw_malloc(unsigned l) : raw(l) {
-      if (len)
+      if (len) {
 	data = (char *)malloc(len);
-      else
+        if (!data)
+          throw bad_alloc();
+      } else {
 	data = 0;
+      }
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }

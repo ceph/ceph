@@ -87,7 +87,8 @@ class ObjectCacher {
     static const int STATE_DIRTY = 2;
     static const int STATE_RX = 3;
     static const int STATE_TX = 4;
-    
+    static const int STATE_ERROR = 5; // a read error occurred
+
   private:
     // my fields
     int state;
@@ -102,16 +103,17 @@ class ObjectCacher {
     tid_t last_write_tid;  // version of bh (if non-zero)
     utime_t last_write;
     SnapContext snapc;
+    int error; // holds return value for failed reads
     
     map< loff_t, list<Context*> > waitfor_read;
     
-  public:
     // cons
     BufferHead(Object *o) : 
       state(STATE_MISSING),
       ref(0),
       ob(o),
-      last_write_tid(0) {}
+      last_write_tid(0),
+      error(0) {}
   
     // extent
     loff_t start() const { return ex.start; }
@@ -134,6 +136,7 @@ class ObjectCacher {
     bool is_clean() { return state == STATE_CLEAN; }
     bool is_tx() { return state == STATE_TX; }
     bool is_rx() { return state == STATE_RX; }
+    bool is_error() { return state == STATE_ERROR; }
     
     // reference counting
     int get() {
@@ -148,7 +151,6 @@ class ObjectCacher {
       return ref;
     }
   };
-  
 
   // ******* Object *********
   class Object {
@@ -251,6 +253,7 @@ class ObjectCacher {
       assert(data.count(bh->start()));
       data.erase(bh->start());
     }
+
     bool is_empty() { return data.empty(); }
 
     // mid-level
@@ -262,7 +265,8 @@ class ObjectCacher {
     int map_read(OSDRead *rd,
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
-                 map<loff_t, BufferHead*>& rx);
+                 map<loff_t, BufferHead*>& rx,
+		 map<loff_t, BufferHead*>& errors);
     BufferHead *map_write(OSDWrite *wr);
     
     void truncate(loff_t s);
@@ -341,6 +345,7 @@ class ObjectCacher {
   loff_t stat_rx;
   loff_t stat_tx;
   loff_t stat_missing;
+  loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
   void verify_stats() const;
@@ -370,6 +375,7 @@ class ObjectCacher {
   void mark_clean(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_CLEAN); };
   void mark_rx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_RX); };
   void mark_tx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_TX); };
+  void mark_error(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ERROR); };
   void mark_dirty(BufferHead *bh) { 
     bh_set_state(bh, BufferHead::STATE_DIRTY); 
     lru_dirty.lru_touch(bh);
@@ -405,6 +411,9 @@ class ObjectCacher {
   void rdunlock(Object *o);
   void wrlock(Object *o);
   void wrunlock(Object *o);
+
+  int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+	     bool external_call);
 
  public:
   void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset,
@@ -488,11 +497,15 @@ class ObjectCacher {
     Context *onfinish;
   public:
     C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c) : oc(_oc), rd(r), oset(os), onfinish(c) {}
-    void finish(int) {
-      int r = oc->readx(rd, oset, onfinish);
-      if (r > 0 && onfinish) {
-        onfinish->finish(r);
-        delete onfinish;
+    void finish(int r) {
+      if (r < 0) {
+	if (onfinish)
+	  onfinish->complete(r);
+	return;
+      }
+      int ret = oc->_readx(rd, oset, onfinish, false);
+      if (ret != 0 && onfinish) {
+        onfinish->complete(ret);
       }
     }
   };
@@ -500,6 +513,11 @@ class ObjectCacher {
 
 
   // non-blocking.  async.
+
+  /**
+   * @note total read size must be <= INT_MAX, since
+   * the return value is total bytes read
+   */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
   int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
@@ -583,6 +601,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.is_clean()) out << " clean";
   if (bh.is_missing()) out << " missing";
   if (bh.bl.length() > 0) out << " firstbyte=" << (int)bh.bl[0];
+  if (bh.error) out << " error=" << bh.error;
   out << "]";
   return out;
 }

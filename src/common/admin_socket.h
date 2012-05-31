@@ -15,7 +15,6 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
-#include "common/config_obs.h"
 #include "common/Thread.h"
 #include "common/Mutex.h"
 
@@ -34,16 +33,11 @@ public:
   virtual ~AdminSocketHook() {};
 };
 
-class AdminSocket : public Thread, public md_config_obs_t
+class AdminSocket : public Thread
 {
 public:
   AdminSocket(CephContext *cct);
   virtual ~AdminSocket();
-
-  // md_config_obs_t
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const md_config_t *conf,
-				  const std::set <std::string> &changed);
 
   /**
    * register an admin socket command
@@ -63,12 +57,13 @@ public:
    * @return 0 on succest, -ENOENT if command dne.
    */
   int unregister_command(std::string command);
+
+  bool init(const std::string &path);
   
 private:
   AdminSocket(const AdminSocket& rhs);
   AdminSocket& operator=(const AdminSocket &rhs);
 
-  bool init(const std::string &path);
   void shutdown();
 
   std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
