@@ -4000,8 +4000,10 @@ void PG::queue_op(OpRequestRef op)
 void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
-  op_queue.splice(op_queue.begin(), op_waiters,
-		  op_waiters.begin(), op_waiters.end());
+  osd->requeue_ops(this, op_waiters);
+  for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
+       i != peering_waiters.end();
+       ++i) osd->queue_for_peering(this);
   peering_queue.splice(peering_queue.begin(), peering_waiters,
 		       peering_waiters.begin(), peering_waiters.end());
 }
