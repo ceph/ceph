@@ -37,7 +37,7 @@ Add our package repository to your system's list of APT sources, but replace ``{
 with the branch you'd like to use (e.g., chef-3, wip-hack, master, stable)
 and ``{DISTRO}`` with your distribution (we support ``maveric``, ``oneiric``, and ``precise``)::
 
-	echo deb http://gitbuilder.ceph.com/ceph-deb-{DISTRO}-x86_64-basic/ref/{BRANCH} main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://gitbuilder.ceph.com/ceph-deb-{DISTRO}-x86_64-basic/ref/{BRANCH} {DISTRO} main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Installing Packages
 -------------------
