@@ -18,6 +18,7 @@
 
 #include "common/config_obs.h"
 #include "common/Mutex.h"
+#include "include/buffer.h"
 
 #include <stdint.h>
 #include <string>
@@ -73,7 +74,7 @@ public:
   void finc(int idx, double v);
   double fget(int idx) const;
 
-  void write_json_to_buf(std::vector <char> &buffer, bool schema);
+  void write_json_to_buf(ceph::bufferlist& bl, bool schema);
 
   const std::string& get_name() const;
   void set_name(std::string s) {
@@ -136,7 +137,7 @@ public:
   void add(class PerfCounters *l);
   void remove(class PerfCounters *l);
   void clear();
-  void write_json_to_buf(std::vector <char> &buffer, bool schema);
+  void write_json_to_buf(ceph::bufferlist& bl, bool schema);
 private:
   bool init(const std::string &uri);
   void shutdown();

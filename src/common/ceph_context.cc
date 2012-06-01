@@ -153,32 +153,30 @@ class CephContextHook : public AdminSocketHook {
 public:
   CephContextHook(CephContext *cct) : m_cct(cct) {}
 
-  bool call(std::string command, bufferlist& out) {
-    m_cct->do_command(command, &out);
+  bool call(std::string command, std::string args, bufferlist& out) {
+    m_cct->do_command(command, args, &out);
     return true;
   }
 };
 
-void CephContext::do_command(std::string command, bufferlist *out)
+void CephContext::do_command(std::string command, std::string args, bufferlist *out)
 {
-  lgeneric_dout(this, 1) << "do_command '" << command << "'" << dendl;
-  if (command == "perfcounters_dump" || command == "1") {
-    std::vector<char> v;
-    _perf_counters_collection->write_json_to_buf(v, false);
-    out->append(&v[0], v.size());
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "'" << dendl;
+  if (command == "perfcounters_dump" || command == "1" ||
+      command == "perf dump") {
+    _perf_counters_collection->write_json_to_buf(*out, false);
   }
-  else if (command == "perfcounters_schema" || command == "2") {
-    std::vector<char> v;
-    _perf_counters_collection->write_json_to_buf(v, true);
-    out->append(&v[0], v.size());
+  else if (command == "perfcounters_schema" || command == "2" ||
+	   command == "perf schema") {
+    _perf_counters_collection->write_json_to_buf(*out, true);
   }
-  else if (command == "show_config") {
+  else if (command == "config show") {
     ostringstream ss;
     _conf->show_config(ss);
     out->append(ss.str());
   }
-  else if (command.find("set_config ") == 0) {
-    std::string var = command.substr(11);
+  else if (command == "config set ") {
+    std::string var = args;
     size_t pos = var.find(' ');
     if (pos == string::npos) {
       out->append("set_config syntax is 'set_config <var> <value>'");
@@ -196,19 +194,19 @@ void CephContext::do_command(std::string command, bufferlist *out)
       out->append(ss.str());
     }
   }
-  else if (command == "log_flush") {
+  else if (command == "log flush") {
     _log->flush();
   }
-  else if (command == "log_dump_recent") {
+  else if (command == "log dump") {
     _log->dump_recent();
   }
-  else if (command == "log_reopen") {
+  else if (command == "log reopen") {
     _log->reopen_log_file();
   }
   else {
     assert(0 == "registered under wrong command?");    
   }
-  lgeneric_dout(this, 1) << "do_command '" << command << "' result is " << out->length() << " bytes" << dendl;
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "' result is " << out->length() << " bytes" << dendl;
 };
 
 
@@ -236,15 +234,17 @@ CephContext::CephContext(uint32_t module_type_)
   _heartbeat_map = new HeartbeatMap(this);
 
   _admin_hook = new CephContextHook(this);
-  _admin_socket->register_command("perfcounters_dump", _admin_hook, "dump perfcounters value");
+  _admin_socket->register_command("perfcounters_dump", _admin_hook, "");
   _admin_socket->register_command("1", _admin_hook, "");
-  _admin_socket->register_command("perfcounters_schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("perf dump", _admin_hook, "dump perfcounters value");
+  _admin_socket->register_command("perfcounters_schema", _admin_hook, "");
   _admin_socket->register_command("2", _admin_hook, "");
-  _admin_socket->register_command("show_config", _admin_hook, "dump current config settings");
-  _admin_socket->register_command("set_config", _admin_hook, "set_config <field> <val>: set a config settings");
-  _admin_socket->register_command("log_flush", _admin_hook, "flush log entries to log file");
-  _admin_socket->register_command("log_dump_recent", _admin_hook, "dump recent log entries to log file");
-  _admin_socket->register_command("log_reopen", _admin_hook, "reopen log file");
+  _admin_socket->register_command("perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("config show", _admin_hook, "dump current config settings");
+  _admin_socket->register_command("config set", _admin_hook, "set_config <field> <val>: set a config settings");
+  _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
+  _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
+  _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
 }
 
 CephContext::~CephContext()
@@ -252,14 +252,16 @@ CephContext::~CephContext()
   join_service_thread();
 
   _admin_socket->unregister_command("perfcounters_dump");
+  _admin_socket->unregister_command("perf dump");
   _admin_socket->unregister_command("1");
   _admin_socket->unregister_command("perfcounters_schema");
+  _admin_socket->unregister_command("perf schema");
   _admin_socket->unregister_command("2");
-  _admin_socket->unregister_command("show_config");
-  _admin_socket->unregister_command("set_config");
-  _admin_socket->unregister_command("log_flush");
-  _admin_socket->unregister_command("log_dump_recent");
-  _admin_socket->unregister_command("log_reopen");
+  _admin_socket->unregister_command("config show");
+  _admin_socket->unregister_command("config set");
+  _admin_socket->unregister_command("log flush");
+  _admin_socket->unregister_command("log dump");
+  _admin_socket->unregister_command("log reopen");
   delete _admin_hook;
 
   delete _heartbeat_map;

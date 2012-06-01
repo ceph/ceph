@@ -29,7 +29,7 @@ class CephContext;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string command, bufferlist& out) = 0;
+  virtual bool call(std::string command, std::string args, bufferlist& out) = 0;
   virtual ~AdminSocketHook() {};
 };
 
@@ -41,6 +41,15 @@ public:
 
   /**
    * register an admin socket command
+   *
+   * The command is registered under a command string.  Incoming
+   * commands are split by space and matched against the longest
+   * registered command.  For example, if 'foo' and 'foo bar' are
+   * registered, and an incoming command is 'foo bar baz', it is
+   * matched with 'foo bar', while 'foo fud' will match 'foo'.
+   *
+   * The entire incoming command string is passed to the registred
+   * hook.
    *
    * @param command command string
    * @param hook implementaiton

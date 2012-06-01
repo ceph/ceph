@@ -20,6 +20,7 @@
 #include "common/perf_counters.h"
 #include "common/pipe.h"
 #include "common/safe_io.h"
+#include "common/version.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -254,7 +255,7 @@ bool AdminSocket::do_accept()
     return false;
   }
 
-  char cmd[80];
+  char cmd[1024];
   int pos = 0;
   string c;
   while (1) {
@@ -305,17 +306,38 @@ bool AdminSocket::do_accept()
     firstword = c.substr(0, c.find(" "));
 
   m_lock.Lock();
-  map<string,AdminSocketHook*>::iterator p = m_hooks.find(firstword);
+  map<string,AdminSocketHook*>::iterator p;
+  string match = c;
+  while (match.size()) {
+    p = m_hooks.find(match);
+    if (p != m_hooks.end())
+      break;
+    
+    // drop right-most word
+    size_t pos = match.rfind(' ');
+    if (pos == std::string::npos) {
+      match.clear();  // we fail
+      break;
+    } else {
+      match.resize(pos);
+    }
+  }
+
   bufferlist out;
-  if (p == m_hooks.end()) {
-    lderr(m_cct) << "AdminSocket: request '" << firstword << "' not defined" << dendl;
+  if (match.size() == 0) {
+    lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
-    bool success = p->second->call(c, out);
+    string args;
+    if (match != c)
+      args = c.substr(match.length() + 1);
+    bool success = p->second->call(match, args, out);
     if (!success) {
-      ldout(m_cct, 0) << "AdminSocket: request '" << c << "' to " << p->second << " failed" << dendl;
+      ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
+		      << "' to " << p->second << " failed" << dendl;
       out.append("failed");
     } else {
-      ldout(m_cct, 20) << "AdminSocket: request '" << c << "' to " << p->second
+      ldout(m_cct, 20) << "AdminSocket: request '" << match << "' '" << args
+		       << "' to " << p->second
 		       << " returned " << out.length() << " bytes" << dendl;
     }
     uint32_t len = htonl(out.length());
@@ -372,8 +394,13 @@ int AdminSocket::unregister_command(std::string command)
 
 class VersionHook : public AdminSocketHook {
 public:
-  virtual bool call(std::string command, bufferlist& out) {
-    out.append(CEPH_ADMIN_SOCK_VERSION);
+  virtual bool call(std::string command, std::string args, bufferlist& out) {
+    if (command == "version")
+      out.append(ceph_version_to_str());
+    else if (command == "git_version")
+      out.append(git_version_to_str());
+    else if (command == "0")
+      out.append(CEPH_ADMIN_SOCK_VERSION);
     return true;
   }
 };
@@ -382,7 +409,7 @@ class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, bufferlist& out) {
+  bool call(string command, string args, bufferlist& out) {
     unsigned max = 0;
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();
@@ -434,8 +461,9 @@ bool AdminSocket::init(const std::string &path)
   m_path = path;
 
   m_version_hook = new VersionHook;
-  register_command("version", m_version_hook, "get protocol version");
   register_command("0", m_version_hook, "");
+  register_command("version", m_version_hook, "get ceph version");
+  register_command("git_version", m_version_hook, "get git sha1");
   m_help_hook = new HelpHook(this);
   register_command("help", m_help_hook, "list available commands");
 
@@ -465,6 +493,7 @@ void AdminSocket::shutdown()
   }
 
   unregister_command("version");
+  unregister_command("git_version");
   unregister_command("0");
   delete m_version_hook;
   unregister_command("help");
