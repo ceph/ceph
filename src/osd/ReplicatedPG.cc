@@ -4620,7 +4620,8 @@ void ReplicatedPG::push_start(ObjectContext *obc,
 			      const hobject_t& soid, int peer)
 {
   interval_set<uint64_t> data_subset;
-  data_subset.insert(0, obc->obs.oi.size);
+  if (obc->obs.oi.size)
+    data_subset.insert(0, obc->obs.oi.size);
   map<hobject_t, interval_set<uint64_t> > clone_subsets;
 
   push_start(obc, soid, peer, obc->obs.oi.version, data_subset, clone_subsets);
