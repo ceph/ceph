@@ -3012,6 +3012,19 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	assert(obc->unconnected_watchers.count(entity));
 	unregister_unconnected_watcher(obc, entity);
       }
+
+      // ack any pending notifies
+      map<void*, entity_name_t>::iterator p = session->notifs.begin();
+      while (p != session->notifs.end()) {
+	Watch::Notification *notif = (Watch::Notification *)p->first;
+	entity_name_t by = p->second;
+	p++;
+	if (notif->obc == obc) {
+	  dout(10) << " acking pending notif " << notif->id << " by " << by << dendl;
+	  session->del_notif(notif);
+	  osd->ack_notification(entity, notif, obc, this);
+	}
+      }
     }
 
     for (list<notify_info_t>::iterator p = ctx->notifies.begin();
