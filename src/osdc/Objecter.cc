@@ -1385,7 +1385,8 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   op_submit(o);
 }
 
-void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish, epoch_t reply_epoch)
+void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
+			   Context *final_finish, epoch_t reply_epoch)
 {
   ldout(cct, 10) << "_list_reply" << dendl;
 
@@ -1410,12 +1411,22 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
   if (response_size) {
     ldout(cct, 20) << "got a response with objects, proceeding" << dendl;
     list_context->list.merge(response.entries);
-    list_context->max_entries -= response_size;
-    ldout(cct, 20) << "cleaning up and exiting" << dendl;
-    if (!list_context->max_entries) {
+    if (response_size >= list_context->max_entries) {
       final_finish->finish(0);
       delete bl;
       delete final_finish;
+      return;
+    }
+
+    // ask for fewer objects next time around
+    list_context->max_entries -= response_size;
+
+    // if the osd returns 1 (newer code), or no entries, it means we
+    // hit the end of the pg.
+    if (r == 0 && response_size > 0) {
+      // not yet done with this pg
+      delete bl;
+      list_objects(list_context, final_finish);
       return;
     }
   }

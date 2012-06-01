@@ -713,7 +713,7 @@ public:
       list_context(lc), final_finish(finish), bl(b), objecter(ob), epoch(0) {}
     void finish(int r) {
       if (r >= 0) {
-        objecter->_list_reply(list_context, bl, final_finish, epoch);
+        objecter->_list_reply(list_context, r, bl, final_finish, epoch);
       } else {
         final_finish->finish(r);
         delete final_finish;
@@ -881,7 +881,7 @@ public:
   void reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
   
-  void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish,
+  void _list_reply(ListContext *list_context, int r, bufferlist *bl, Context *final_finish,
 		   epoch_t reply_epoch);
 
   void resend_mon_ops();
