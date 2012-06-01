@@ -150,7 +150,7 @@ def install_and_reboot(ctx, config):
             format='deb',
             flavor='basic',
             arch='x86_64',
-            dist='oneiric',
+            dist='precise',
             )
         log.info('fetching kernel from {url}'.format(url=deb_url))
         proc = role_remote.run(
@@ -313,7 +313,7 @@ def task(ctx, config):
             sha1=role_config.get('sha1'),
             flavor='basic',
             format='deb',
-            dist='oneiric',
+            dist='precise',
             arch='x86_64',
             )
         log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))

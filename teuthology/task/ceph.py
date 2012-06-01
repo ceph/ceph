@@ -197,7 +197,7 @@ def binaries(ctx, config):
             sha1=config.get('sha1'),
             flavor=config.get('flavor'),
             format=config.get('format'),
-            dist=config.get('dist'),
+            dist=dist,
             arch=config.get('arch'),
             )
         ctx.summary['ceph-sha1'] = sha1
@@ -963,7 +963,7 @@ def task(ctx, config):
     # match is not found, the teuthology run fails. This is ugly,
     # and should be cleaned up at some point.
 
-    dist = 'oneiric'
+    dist = 'precise'
     format = 'tarball'
     arch = 'x86_64'
     flavor = 'basic'
