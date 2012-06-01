@@ -782,7 +782,8 @@ void Monitor::slurp()
     }
 
     dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
-    if (p->second > pax->get_version()) {
+    if (p->second > pax->get_version() ||
+	pax->get_stashed_version() > pax->get_version()) {
       if (!pax->is_slurping()) {
         pax->start_slurping();
       }
@@ -880,6 +881,10 @@ void Monitor::handle_probe_data(MMonProbe *m)
   // trim old cruft?
   if (m->oldest_version > pax->get_first_committed())
     pax->trim_to(m->oldest_version, true);
+
+  // note new latest version?
+  if (slurp_versions.count(m->machine_name))
+    slurp_versions[m->machine_name] = m->newest_version;
 
   // store any new stuff
   if (m->paxos_values.size()) {
