@@ -387,6 +387,13 @@ int main(int argc, const char **argv)
                                                             CEPH_FEATURE_PGID64 |
                                                             CEPH_FEATURE_OSDENC));
 
+  // throttle client traffic
+  Throttle client_throttler(g_ceph_context, "mon_client_bytes",
+			    g_conf->mon_client_bytes);
+  messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
+  messenger->set_policy_throttler(entity_name_t::TYPE_OSD, &client_throttler);
+  messenger->set_policy_throttler(entity_name_t::TYPE_MDS, &client_throttler);
+
   global_print_banner();
 
   cout << "starting " << g_conf->name << " rank " << rank
