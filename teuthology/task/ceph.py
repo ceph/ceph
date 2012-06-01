@@ -197,7 +197,7 @@ def binaries(ctx, config):
             sha1=config.get('sha1'),
             flavor=config.get('flavor'),
             format=config.get('format'),
-            dist=dist,
+            dist=config.get('dist'),
             arch=config.get('arch'),
             )
         ctx.summary['ceph-sha1'] = sha1
@@ -1008,7 +1008,7 @@ def task(ctx, config):
                 sha1=config.get('sha1'),
                 path=config.get('path'),
                 flavor=flavor,
-                dist=dist,
+                dist=config.get('dist', dist),
                 format=format,
                 arch=arch
                 )),
