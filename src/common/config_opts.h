@@ -256,6 +256,7 @@ OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
 OPTION(osd_journal_size, OPT_INT, 0)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
+OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_balance_reads, OPT_BOOL, false)
 OPTION(osd_shed_reads, OPT_INT, false)     // forward from primary to replica
 OPTION(osd_shed_reads_min_latency, OPT_DOUBLE, .01)       // min local latency
