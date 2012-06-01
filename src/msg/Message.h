@@ -200,9 +200,9 @@ public:
       return pipe->get();
     return NULL;
   }
-  void clear_pipe() {
-    Mutex::Locker l(lock);
-    if (pipe) {
+  void clear_pipe(RefCountedObject *old_p) {
+    if(old_p == pipe) {
+      Mutex::Locker l(lock);
       pipe->put();
       pipe = NULL;
     }
