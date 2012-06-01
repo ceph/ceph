@@ -889,6 +889,8 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-osd.conf \
 	$(srcdir)/upstart/ceph-hotplug.conf \
+	$(srcdir)/upstart/ceph-mds-all.conf \
+	$(srcdir)/upstart/ceph-mds.conf \
 	ceph-disk-prepare \
 	ceph-disk-activate
 
