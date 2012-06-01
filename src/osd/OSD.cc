@@ -2152,6 +2152,7 @@ void OSD::send_boot()
 
 void OSD::queue_want_up_thru(epoch_t want)
 {
+  map_lock.get_read();
   epoch_t cur = osdmap->get_up_thru(whoami);
   if (want > up_thru_wanted) {
     dout(10) << "queue_want_up_thru now " << want << " (was " << up_thru_wanted << ")" 
@@ -2167,6 +2168,7 @@ void OSD::queue_want_up_thru(epoch_t want)
 	     << ", currently " << cur
 	     << dendl;
   }
+  map_lock.put_read();
 }
 
 void OSD::send_alive()
