@@ -80,7 +80,7 @@ public:
   /**
    * process an admin socket command
    */
-  void do_command(std::string command, bufferlist *out);
+  void do_command(std::string command, std::string args, bufferlist *out);
 
 private:
   CephContext(const CephContext &rhs);

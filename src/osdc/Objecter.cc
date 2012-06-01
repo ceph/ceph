@@ -2047,7 +2047,7 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 {
 }
 
-bool Objecter::RequestStateHook::call(std::string command, bufferlist& out)
+bool Objecter::RequestStateHook::call(std::string command, std::string args, bufferlist& out)
 {
   stringstream ss;
   JSONFormatter formatter(true);
