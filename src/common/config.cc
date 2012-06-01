@@ -584,7 +584,7 @@ void md_config_t::set_val_or_die(const char *key, const char *val)
   assert(ret == 0);
 }
 
-int md_config_t::set_val(const char *key, const char *val)
+int md_config_t::set_val(const char *key, const char *val, bool meta)
 {
   Mutex::Locker l(lock);
   if (!key)
@@ -593,7 +593,8 @@ int md_config_t::set_val(const char *key, const char *val)
     return -EINVAL;
 
   std::string v(val);
-  expand_meta(v);
+  if (meta)
+    expand_meta(v);
 
   string k(ConfFile::normalize_key_name(key));
 
