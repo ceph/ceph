@@ -498,12 +498,15 @@ int DBObjectMap::DBObjectMapIteratorImpl::status()
 }
 
 int DBObjectMap::set_keys(const hobject_t &hoid,
-			  const map<string, bufferlist> &set)
+			  const map<string, bufferlist> &set,
+			  const SequencerPosition *spos)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   Header header = lookup_create_map_header(hoid, t);
   if (!header)
     return -EINVAL;
+  if (check_spos(hoid, header, spos))
+    return 0;
 
   t->set(user_prefix(header), set);
 
@@ -511,12 +514,15 @@ int DBObjectMap::set_keys(const hobject_t &hoid,
 }
 
 int DBObjectMap::set_header(const hobject_t &hoid,
-			    const bufferlist &bl)
+			    const bufferlist &bl,
+			    const SequencerPosition *spos)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   Header header = lookup_create_map_header(hoid, t);
   if (!header)
     return -EINVAL;
+  if (check_spos(hoid, header, spos))
+    return 0;
   _set_header(header, bl, t);
   return db->submit_transaction(t);
 }
@@ -564,12 +570,15 @@ int DBObjectMap::_get_header(Header header,
   return 0;
 }
 
-int DBObjectMap::clear(const hobject_t &hoid)
+int DBObjectMap::clear(const hobject_t &hoid,
+		       const SequencerPosition *spos)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   Header header = lookup_map_header(hoid);
   if (!header)
     return -ENOENT;
+  if (check_spos(hoid, header, spos))
+    return 0;
   remove_map_header(hoid, header, t);
   assert(header->num_children > 0);
   header->num_children--;
@@ -683,12 +692,15 @@ int DBObjectMap::need_parent(DBObjectMapIterator iter)
 }
 
 int DBObjectMap::rm_keys(const hobject_t &hoid,
-			 const set<string> &to_clear)
+			 const set<string> &to_clear,
+			 const SequencerPosition *spos)
 {
   Header header = lookup_map_header(hoid);
   if (!header)
     return -ENOENT;
   KeyValueDB::Transaction t = db->get_transaction();
+  if (check_spos(hoid, header, spos))
+    return 0;
   t->rmkeys(user_prefix(header), to_clear);
   if (!header->parent) {
     return db->submit_transaction(t);
@@ -853,29 +865,36 @@ int DBObjectMap::get_all_xattrs(const hobject_t &hoid,
 }
 
 int DBObjectMap::set_xattrs(const hobject_t &hoid,
-			    const map<string, bufferlist> &to_set)
+			    const map<string, bufferlist> &to_set,
+			    const SequencerPosition *spos)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   Header header = lookup_create_map_header(hoid, t);
   if (!header)
     return -EINVAL;
+  if (check_spos(hoid, header, spos))
+    return 0;
   t->set(xattr_prefix(header), to_set);
   return db->submit_transaction(t);
 }
 
 int DBObjectMap::remove_xattrs(const hobject_t &hoid,
-			       const set<string> &to_remove)
+			       const set<string> &to_remove,
+			       const SequencerPosition *spos)
 {
   KeyValueDB::Transaction t = db->get_transaction();
   Header header = lookup_map_header(hoid);
   if (!header)
     return -ENOENT;
+  if (check_spos(hoid, header, spos))
+    return 0;
   t->rmkeys(xattr_prefix(header), to_remove);
   return db->submit_transaction(t);
 }
 
 int DBObjectMap::clone(const hobject_t &hoid,
-		       const hobject_t &target)
+		       const hobject_t &target,
+		       const SequencerPosition *spos)
 {
   if (hoid == target)
     return 0;
@@ -885,6 +904,8 @@ int DBObjectMap::clone(const hobject_t &hoid,
     Header destination = lookup_map_header(target);
     if (destination) {
       remove_map_header(target, destination, t);
+      if (check_spos(target, destination, spos))
+	return 0;
       destination->num_children--;
       _clear(destination, t);
     }
@@ -896,6 +917,8 @@ int DBObjectMap::clone(const hobject_t &hoid,
 
   Header source = generate_new_header(hoid, parent);
   Header destination = generate_new_header(target, parent);
+  if (spos)
+    destination->spos = *spos;
 
   parent->num_children = 2;
   set_header(parent, t);
@@ -981,7 +1004,9 @@ int DBObjectMap::upgrade()
     db->submit_transaction(t);
   }
   state.v = 1;
-  write_state(true);
+  KeyValueDB::Transaction t = db->get_transaction();
+  write_state(t);
+  db->submit_transaction_sync(t);
   return 0;
 }
 
@@ -1017,19 +1042,32 @@ int DBObjectMap::init(bool do_upgrade)
   return 0;
 }
 
-int DBObjectMap::sync() {
-  return write_state(true);
+int DBObjectMap::sync(const hobject_t *hoid,
+		      const SequencerPosition *spos) {
+  KeyValueDB::Transaction t = db->get_transaction();
+  write_state(t);
+  if (hoid) {
+    assert(spos);
+    Header header = lookup_map_header(*hoid);
+    if (header) {
+      dout(10) << "hoid: " << *hoid << " setting spos to "
+	       << *spos << dendl;
+      header->spos = *spos;
+      set_map_header(*hoid, *header, t);
+    }
+  }
+  return db->submit_transaction_sync(t);
 }
 
-int DBObjectMap::write_state(bool sync) {
+int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
   dout(20) << "dbobjectmap: seq is " << state.seq << dendl;
-  KeyValueDB::Transaction t = db->get_transaction();
+  KeyValueDB::Transaction t = _t ? _t : db->get_transaction();
   bufferlist bl;
   state.encode(bl);
   map<string, bufferlist> to_write;
   to_write[GLOBAL_STATE_KEY] = bl;
   t->set(SYS_PREFIX, to_write);
-  return sync ? db->submit_transaction_sync(t) : db->submit_transaction(t);
+  return _t ? 0 : db->submit_transaction(t);
 }
 
 
@@ -1153,4 +1191,25 @@ void DBObjectMap::set_map_header(const hobject_t &hoid, _Header header,
   map<string, bufferlist> to_set;
   header.encode(to_set[map_header_key(hoid)]);
   t->set(HOBJECT_TO_SEQ, to_set);
+}
+
+bool DBObjectMap::check_spos(const hobject_t &hoid,
+			     Header header,
+			     const SequencerPosition *spos)
+{
+  if (!spos || *spos > header->spos) {
+    stringstream out;
+    if (spos)
+      dout(10) << "hoid: " << hoid << " not skipping op, *spos "
+	       << *spos << dendl;
+    else
+      dout(10) << "hoid: " << hoid << " not skipping op, *spos "
+	       << "empty" << dendl;
+    dout(10) << " > header.spos " << header->spos << dendl;
+    return false;
+  } else {
+    dout(10) << "hoid: " << hoid << " skipping op, *spos " << *spos
+	     << " <= header.spos " << header->spos << dendl;
+    return true;
+  }
 }

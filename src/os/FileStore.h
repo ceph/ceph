@@ -282,7 +282,7 @@ public:
   int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags);
   int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
-  int lfn_unlink(coll_t cid, const hobject_t& o);
+  int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
 
  public:
   FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore", bool update_to=false);
@@ -328,7 +328,10 @@ public:
    * @param fd open file descriptor for the file/object
    * @param spos sequencer position of the last operation we should not replay
    */
-  void _set_replay_guard(int fd, const SequencerPosition& spos, bool in_progress=false);
+  void _set_replay_guard(int fd,
+			 const SequencerPosition& spos,
+			 const hobject_t *hoid=0,
+			 bool in_progress=false);
 
   /// close a replay guard opened with in_progress=true
   void _close_replay_guard(int fd, const SequencerPosition& spos);
@@ -374,7 +377,7 @@ public:
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
-  int _remove(coll_t cid, const hobject_t& oid);
+  int _remove(coll_t cid, const hobject_t& oid, const SequencerPosition &spos);
 
   void _start_sync();
 
@@ -403,9 +406,12 @@ public:
   int _getattr(const char *fn, const char *name, bufferptr& bp);
   int _getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only = false);
 
-  int _setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset);
-  int _rmattr(coll_t cid, const hobject_t& oid, const char *name);
-  int _rmattrs(coll_t cid, const hobject_t& oid);
+  int _setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset,
+		const SequencerPosition &spos);
+  int _rmattr(coll_t cid, const hobject_t& oid, const char *name,
+	      const SequencerPosition &spos);
+  int _rmattrs(coll_t cid, const hobject_t& oid,
+	       const SequencerPosition &spos);
 
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   int collection_getattr(coll_t c, const char *name, bufferlist& bl);
@@ -443,8 +449,6 @@ public:
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o,
 		      const SequencerPosition& spos);
-  int _collection_remove(coll_t c, const hobject_t& o);
-
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
@@ -453,11 +457,15 @@ private:
   void _inject_failure();
 
   // omap
-  int _omap_clear(coll_t cid, const hobject_t &hoid);
+  int _omap_clear(coll_t cid, const hobject_t &hoid,
+		  const SequencerPosition &spos);
   int _omap_setkeys(coll_t cid, const hobject_t &hoid,
-		    const map<string, bufferlist> &aset);
-  int _omap_rmkeys(coll_t cid, const hobject_t &hoid, const set<string> &keys);
-  int _omap_setheader(coll_t cid, const hobject_t &hoid, const bufferlist &bl);
+		    const map<string, bufferlist> &aset,
+		    const SequencerPosition &spos);
+  int _omap_rmkeys(coll_t cid, const hobject_t &hoid, const set<string> &keys,
+		   const SequencerPosition &spos);
+  int _omap_setheader(coll_t cid, const hobject_t &hoid, const bufferlist &bl,
+		      const SequencerPosition &spos);
 
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
