@@ -75,12 +75,14 @@ public:
 
   int set_keys(
     const hobject_t &hoid,
-    const map<string, bufferlist> &set
+    const map<string, bufferlist> &set,
+    const SequencerPosition *spos=0
     );
 
   int set_header(
     const hobject_t &hoid,
-    const bufferlist &bl
+    const bufferlist &bl,
+    const SequencerPosition *spos=0
     );
 
   int get_header(
@@ -89,12 +91,14 @@ public:
     );
 
   int clear(
-    const hobject_t &hoid
+    const hobject_t &hoid,
+    const SequencerPosition *spos=0
     );
 
   int rm_keys(
     const hobject_t &hoid,
-    const set<string> &to_clear
+    const set<string> &to_clear,
+    const SequencerPosition *spos=0
     );
 
   int get(
@@ -133,17 +137,20 @@ public:
 
   int set_xattrs(
     const hobject_t &hoid,
-    const map<string, bufferlist> &to_set
+    const map<string, bufferlist> &to_set,
+    const SequencerPosition *spos=0
     );
 
   int remove_xattrs(
     const hobject_t &hoid,
-    const set<string> &to_remove
+    const set<string> &to_remove,
+    const SequencerPosition *spos=0
     );
 
   int clone(
     const hobject_t &hoid,
-    const hobject_t &target
+    const hobject_t &target,
+    const SequencerPosition *spos=0
     );
 
   /// Read initial state from backing store
@@ -156,7 +163,7 @@ public:
   bool check(std::ostream &out);
 
   /// Ensure that all previous operations are durable
-  int sync();
+  int sync(const hobject_t *hoid=0, const SequencerPosition *spos=0);
 
   ObjectMapIterator get_iterator(const hobject_t &hoid);
 
@@ -215,23 +222,28 @@ public:
     coll_t c;
     hobject_t hoid;
 
+    SequencerPosition spos;
+
     void encode(bufferlist &bl) const {
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 1, bl);
       ::encode(seq, bl);
       ::encode(parent, bl);
       ::encode(num_children, bl);
       ::encode(c, bl);
       ::encode(hoid, bl);
+      ::encode(spos, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       ::decode(seq, bl);
       ::decode(parent, bl);
       ::decode(num_children, bl);
       ::decode(c, bl);
       ::decode(hoid, bl);
+      if (struct_v >= 2)
+	::decode(spos, bl);
       DECODE_FINISH(bl);
     }
 
@@ -362,6 +374,11 @@ private:
   void set_map_header(const hobject_t &hoid, _Header header,
 		      KeyValueDB::Transaction t);
 
+  /// Set leaf node for c and hoid to the value of header
+  bool check_spos(const hobject_t &hoid,
+		  Header header,
+		  const SequencerPosition *spos);
+
   /// Lookup or create header for c hoid
   Header lookup_create_map_header(const hobject_t &hoid,
 				  KeyValueDB::Transaction t);
@@ -407,7 +424,8 @@ private:
 			 KeyValueDB::Transaction t);
 
   /// Writes out State (mainly next_seq)
-  int write_state(bool sync = false);
+  int write_state(KeyValueDB::Transaction _t =
+		  KeyValueDB::Transaction());
 
   /// 0 if the complete set now contains all of key space, < 0 on error, 1 else
   int need_parent(DBObjectMapIterator iter);

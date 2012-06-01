@@ -16,6 +16,7 @@
 #define OS_KEYVALUESTORE_H
 
 #include "IndexManager.h"
+#include "SequencerPosition.h"
 #include <string>
 #include <vector>
 #include <tr1/memory>
@@ -30,13 +31,15 @@ public:
   /// Set keys and values from specified map
   virtual int set_keys(
     const hobject_t &hoid,              ///< [in] object containing map
-    const map<string, bufferlist> &set   ///< [in] key to value map to set
+    const map<string, bufferlist> &set,  ///< [in] key to value map to set
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Set header
   virtual int set_header(
     const hobject_t &hoid,              ///< [in] object containing map
-    const bufferlist &bl                ///< [in] header to set
+    const bufferlist &bl,               ///< [in] header to set
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Retrieve header
@@ -47,13 +50,15 @@ public:
 
   /// Clear all map keys and values from hoid
   virtual int clear(
-    const hobject_t &hoid              ///< [in] object containing map
+    const hobject_t &hoid,             ///< [in] object containing map
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Clear all map keys and values from hoid
   virtual int rm_keys(
     const hobject_t &hoid,              ///< [in] object containing map
-    const set<string> &to_clear         ///< [in] Keys to clear
+    const set<string> &to_clear,        ///< [in] Keys to clear
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Get all keys and values
@@ -99,24 +104,30 @@ public:
   /// set xattrs in to_set
   virtual int set_xattrs(
     const hobject_t &hoid,                ///< [in] object
-    const map<string, bufferlist> &to_set ///< [in] attrs/values to set
+    const map<string, bufferlist> &to_set,///< [in] attrs/values to set
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// remove xattrs in to_remove
   virtual int remove_xattrs(
     const hobject_t &hoid,               ///< [in] object
-    const set<string> &to_remove         ///< [in] attrs to remove
+    const set<string> &to_remove,        ///< [in] attrs to remove
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
 
   /// Clone keys efficiently from hoid map to target map
   virtual int clone(
     const hobject_t &hoid,             ///< [in] object containing map
-    const hobject_t &target            ///< [in] target of clone
+    const hobject_t &target,           ///< [in] target of clone
+    const SequencerPosition *spos=0     ///< [in] sequencer position
     ) { return 0; }
 
   /// Ensure all previous writes are durable
-  virtual int sync() { return 0; }
+  virtual int sync(
+    const hobject_t *hoid=0,          ///< [in] object
+    const SequencerPosition *spos=0   ///< [in] Sequencer
+    ) { return 0; }
 
   virtual bool check(std::ostream &out) { return true; }
 
