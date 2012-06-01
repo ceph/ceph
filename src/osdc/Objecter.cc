@@ -798,10 +798,10 @@ void Objecter::tick()
        p++) {
     LingerOp *op = p->second;
     if (op->session) {
-      ldout(cct, 0) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
       toping.insert(op->session);
     } else {
-      ldout(cct, 0) << " lingering tid " << p->first << " does not have session" << dendl;
+      ldout(cct, 10) << " lingering tid " << p->first << " does not have session" << dendl;
     }
   }
   logger->set(l_osdc_op_laggy, laggy_ops);
