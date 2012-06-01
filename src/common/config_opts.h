@@ -174,6 +174,7 @@ OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
 OPTION(journaler_batch_interval, OPT_DOUBLE, .001)   // seconds.. max add'l latency we artificially incur
 OPTION(journaler_batch_max, OPT_U64, 0)  // max bytes we'll delay flushing; disable, for now....
+OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40)
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
