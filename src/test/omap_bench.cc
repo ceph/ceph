@@ -167,7 +167,8 @@ void OmapBench::aio_is_safe(rados_completion_t c, void *arg) {
   double time = aiow->get_time();
   delete aiow;
   data_lock->Lock();
-  data.avg_latency = (data.avg_latency * data.completed_ops + time) / ++(data.completed_ops);
+  data.avg_latency = (data.avg_latency * data.completed_ops + time) / (data.completed_ops + 1);
+  data.completed_ops++;
   if (time < data.min_latency){
     data.min_latency = time;
   }
