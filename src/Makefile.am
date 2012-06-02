@@ -885,12 +885,14 @@ EXTRA_DIST += \
 	$(ceph_tool_gui_DATA) \
 	$(srcdir)/test/encoding/readable.sh \
 	$(srcdir)/test/encoding/check-generated.sh \
-	$(srcdir)/upstart/ceph-mon-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
+	$(srcdir)/upstart/ceph-mon-all.conf \
+	$(srcdir)/upstart/ceph-mon-all-starter.conf \
 	$(srcdir)/upstart/ceph-osd.conf \
 	$(srcdir)/upstart/ceph-hotplug.conf \
-	$(srcdir)/upstart/ceph-mds-all.conf \
 	$(srcdir)/upstart/ceph-mds.conf \
+	$(srcdir)/upstart/ceph-mds-all.conf \
+	$(srcdir)/upstart/ceph-mds-all-starter.conf \
 	ceph-disk-prepare \
 	ceph-disk-activate
 
