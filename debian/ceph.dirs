@@ -1,3 +1,6 @@
 etc/ceph
 var/log/ceph
 var/lib/ceph/tmp
+var/lib/ceph/mon
+var/lib/ceph/osd
+var/lib/ceph/mds

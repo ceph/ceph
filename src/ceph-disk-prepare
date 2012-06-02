@@ -1,0 +1,115 @@
+#!/usr/bin/python
+
+import argparse
+import logging
+import os
+import os.path
+import sys
+import uuid
+
+
+log_name = __name__
+if log_name == '__main__':
+    log_name = os.path.basename(sys.argv[0])
+log = logging.getLogger(log_name)
+
+
+class PrepareError(Exception):
+    """
+    OSD preparation error
+    """
+
+    def __str__(self):
+        doc = self.__doc__.strip()
+        return ': '.join([doc] + [str(a) for a in self.args])
+
+
+def write_one_line(parent, name, text):
+    """
+    Write a file whose sole contents are a single line.
+
+    Adds a newline.
+    """
+    path = os.path.join(parent, name)
+    tmp = '{path}.{pid}.tmp'.format(path=path, pid=os.getpid())
+    with file(tmp, 'wb') as f:
+        f.write(text + '\n')
+        os.fsync(f.fileno())
+    os.rename(tmp, path)
+
+
+CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
+
+
+def prepare(
+    path,
+    cluster_uuid,
+    ):
+    """
+    Prepare a disk to be used as an OSD data disk.
+
+    The ``magic`` file is written last, so it's presence is a reliable
+    indicator of the whole sequence having completed.
+    """
+    if os.path.exists(os.path.join(path, 'magic')):
+        raise PrepareError('already prepared, aborting')
+
+    write_one_line(path, 'ceph_fsid', cluster_uuid)
+    osd_uuid = str(uuid.uuid4())
+    write_one_line(path, 'fsid', osd_uuid)
+    write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Prepare a disk for a Ceph OSD',
+        )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true', default=None,
+        help='be more verbose',
+        )
+    parser.add_argument(
+        '--cluster-uuid',
+        metavar='UUID',
+        help='cluster uuid to assign this disk to',
+        required=True,
+        )
+    parser.add_argument(
+        'path',
+        metavar='PATH',
+        help='path to OSD data directory',
+        )
+    parser.set_defaults(
+        # we want to hold on to this, for later
+        prog=parser.prog,
+        )
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_args()
+
+    loglevel = logging.INFO
+    if args.verbose:
+        loglevel = logging.DEBUG
+
+    logging.basicConfig(
+        level=loglevel,
+        )
+
+    try:
+        prepare(
+            path=args.path,
+            cluster_uuid=args.cluster_uuid,
+            )
+    except PrepareError as e:
+        print >>sys.stderr, '{prog}: {msg}'.format(
+            prog=args.prog,
+            msg=e,
+            )
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
