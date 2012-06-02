@@ -641,8 +641,13 @@ void Paxos::handle_lease(MMonPaxos *lease)
   // extend lease
   if (lease_expire < lease->lease_timestamp) {
     lease_expire = lease->lease_timestamp;
+
+    // check for extreme clock skew.
+    if (lease_expire < ceph_clock_now(g_ceph_context)) {
+      derr << "lease_expire from " << lease->get_source_inst() << " is in the past (" << lease_expire << "); clocks are too skewed for us to function" << dendl;
+    }
   }
-  
+
   state = STATE_ACTIVE;
   
   dout(10) << "handle_lease on " << lease->last_committed
