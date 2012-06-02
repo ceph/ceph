@@ -21,10 +21,10 @@
 #include "common/ceph_argparse.h"
 #include "omap_bench.hpp"
 
-#include<string>
-#include<iostream>
-#include<cassert>
-#include<climits>
+#include <string>
+#include <iostream>
+#include <cassert>
+#include <climits>
 
 using namespace std;
 using ceph::bufferlist;
@@ -56,7 +56,7 @@ int OmapBench::setup(int argc, const char** argv) {
   //parse omap_bench args
   vector<const char*> args;
   argv_to_vec(argc,argv,args);
-  for (int i = 0;i < args.size(); i++) {
+  for (unsigned i = 0; i < args.size(); i++) {
     if (strcmp(args[i], "-t") == 0){
       threads = atoi(args[i+1]);
     } else if (strcmp(args[i],"-o") == 0){
@@ -167,8 +167,7 @@ void OmapBench::aio_is_safe(rados_completion_t c, void *arg) {
   double time = aiow->get_time();
   delete aiow;
   data_lock->Lock();
-  data.avg_latency = (data.avg_latency *
-      data.completed_ops + time) / ++(data.completed_ops);
+  data.avg_latency = (data.avg_latency * data.completed_ops + time) / ++(data.completed_ops);
   if (time < data.min_latency){
     data.min_latency = time;
   }

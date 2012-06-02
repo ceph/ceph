@@ -18,12 +18,12 @@
 #include "common/Cond.h"
 #include "include/rados/librados.hpp"
 #include <string>
-#include<map>
-#include<cfloat>;
+#include <map>
+#include <cfloat>
 
 using ceph::bufferlist;
 
-struct omap_bench_data{
+struct omap_bench_data {
   double avg_latency;
   double min_latency;
   double max_latency;
@@ -32,15 +32,18 @@ struct omap_bench_data{
   int completed_ops;
   std::map<int,int> freq_map;
   pair<int,int> mode;
-  omap_bench_data(): avg_latency(0.0), min_latency(DBL_MAX), max_latency(0.0),
-      total_latency(0.0),started_ops(0),completed_ops(0),freq_map(),mode(){}
-
+  omap_bench_data()
+  : avg_latency(0.0), min_latency(DBL_MAX), max_latency(0.0),
+    total_latency(0.0),
+    started_ops(0), completed_ops(0)
+  {}
 };
 
 class OmapBench;
 
 typedef int (*omap_generator_t)(const int omap_entries, const int key_size,
-    const int value_size, std::map<std::string,bufferlist> * out_omap);
+				const int value_size,
+				std::map<std::string,bufferlist> *out_omap);
 typedef int (OmapBench::*test_t)(omap_generator_t omap_gen);
 
 
@@ -104,12 +107,18 @@ protected:
   friend class AioWriter;
 
 public:
-  OmapBench() : data(),busythreads_count(0),pool_name("data"),rados_id("admin"),
-  safe(aio_is_safe),omap_generator(generate_uniform_omap),
-  thread_is_free_lock("thread is free lock"), data_lock("data lock"),
-  threads(3),objects(100),omap_entries(10),omap_key_size(10),
-  omap_value_size(100),increment(10),test(&OmapBench::write_objects_in_parallel)
-  {};
+  OmapBench()
+    : test(&OmapBench::write_objects_in_parallel),
+      omap_generator(generate_uniform_omap),
+      thread_is_free_lock("OmapBench::thread_is_free_lock"),
+      data_lock("OmapBench::data_lock"),
+      busythreads_count(0),
+      safe(aio_is_safe),
+      pool_name("data"),
+      rados_id("admin"),
+      threads(3), objects(100), omap_entries(10), omap_key_size(10),
+      omap_value_size(100), increment(10)
+  {}
 
   /**
    * Parses command line args, initializes rados and ioctx
