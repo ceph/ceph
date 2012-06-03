@@ -282,6 +282,32 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   return vals->size();
 }
 
+int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
+			 uint64_t max_to_get, set<string> *keys)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  int ret;
+
+  ::encode(start_obj, op.indata);
+  ::encode(max_to_get, op.indata);
+
+  op.op.op = CEPH_OSD_OP_OMAPGETKEYS;
+
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
+  if (ret < 0)
+    return ret;
+
+  bufferlist::iterator iter = op.outdata.begin();
+  try {
+    ::decode(*keys, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return keys->size();
+}
+
 int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
 			 const string &filter_prefix, uint64_t max_to_get,
 			 map<string, bufferlist> *vals)
@@ -372,6 +398,20 @@ int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
   map<string, bufferlist> m;
   m[key] = *inbl;
   ::encode(m, update_bl);
+
+  op.op.op = CEPH_OSD_OP_OMAPSETVALS;
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
+int cls_cxx_map_set_vals(cls_method_context_t hctx,
+			 std::map<string, bufferlist> *map)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  bufferlist& update_bl = op.indata;
+  ::encode(*map, update_bl);
 
   op.op.op = CEPH_OSD_OP_OMAPSETVALS;
 
