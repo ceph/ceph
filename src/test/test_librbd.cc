@@ -29,7 +29,7 @@
 #include <iostream>
 #include <algorithm>
 
-#include "rados-api/test.cc"
+#include "rados-api/test.h"
 #include "common/errno.h"
 
 using namespace std;
