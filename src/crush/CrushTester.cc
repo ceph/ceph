@@ -3,21 +3,22 @@
 
 //chi squared stuff
 #include <math.h>
-#include <boost/math/distributions/chi_squared.hpp>
-#include <boost/accumulators/statistics/variance.hpp>
-#include <boost/accumulators/accumulators.hpp>
-#include <boost/accumulators/statistics/stats.hpp>
+
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+# include <boost/math/distributions/chi_squared.hpp>
+# include <boost/accumulators/statistics/variance.hpp>
+# include <boost/accumulators/accumulators.hpp>
+# include <boost/accumulators/statistics/stats.hpp>
 
 //random number generator
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/discrete_distribution.hpp>
+# include <boost/random/mersenne_twister.hpp>
+# include <boost/random/discrete_distribution.hpp>
 
 // needed to compute chi squared value
 using boost::math::chi_squared;
 using boost::accumulators::stats;
 using boost::accumulators::variance;
 using boost::accumulators::accumulator_set;
-
 
 // create a random number generator to simulate placements
 
@@ -26,6 +27,7 @@ typedef boost::mt19937 generator;
 
 generator gen(42); // repeatable
 //generator gen(static_cast<unsigned int>(std::time(0))); // non-repeatable (ish)
+#endif
 
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -116,11 +118,14 @@ int CrushTester::test()
       
       int num_objects = ((max_x - min_x) + 1);
       float num_devices = (float) per.size(); // get the total number of devices, better to cast as a float here 
+
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
       float test_chi_statistic = 0.0; // our observed chi squared statistic
       
       // look up the chi squared statistic for the 5% and 1% confidence levels
       float chi_statistic_five_percent = quantile(complement(chi_squared(num_devices_active-1), 0.05));
       float chi_statistic_one_percent = quantile(complement(chi_squared(num_devices_active-1), 0.01));
+#endif
       
       // create a map to hold batch-level placement information
       map<int, vector<int> > batchPer; 
@@ -132,6 +137,7 @@ int CrushTester::test()
       int batch_max = min_x + objects_per_batch - 1;
       
       
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
       // placeholders for the reference values, we will probably SEGFAULT if we try zero degrees of freedom
       float batch_chi_statistic_five_percent = -1.0;
       float batch_chi_statistic_one_percent = -1.0;
@@ -141,9 +147,8 @@ int CrushTester::test()
 	batch_chi_statistic_five_percent = quantile(complement(chi_squared(num_batches-1), 0.05));
 	batch_chi_statistic_one_percent = quantile(complement(chi_squared(num_batches-1), 0.01));
       }
-      
-      
-      
+#endif
+
       // get the total weight of the system
       int total_weight = 0;
 
@@ -157,17 +162,19 @@ int CrushTester::test()
       vector<float> proportional_weights( per.size() );
 
       for (unsigned i = 0; i < per.size(); i++)
-    	  proportional_weights[i] = (float) weight[i] / (float) total_weight;
+	proportional_weights[i] = (float) weight[i] / (float) total_weight;
       
 
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
       // create a random number generator with the device weights to use for simulating placements
       boost::random::discrete_distribution<> dist(proportional_weights);
+#endif
       
       // compute the expected number of objects stored per device when a device's weight is considered
       vector<float> num_objects_expected(num_devices);
 
       for (unsigned i = 0; i < num_devices; i++)
-    	  num_objects_expected[i] = (proportional_weights[i]*expected_objects);
+	num_objects_expected[i] = (proportional_weights[i]*expected_objects);
 
 
       for (int currentBatch = 0; currentBatch < num_batches; currentBatch++) {
@@ -198,10 +205,12 @@ int CrushTester::test()
 	    if (verbose > 2)
 	      err << "RNG"; // prepend RNG to placement output to denote simulation
 
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
 	    // fill our vector with random numbers representing an OSD ID
 	    // one day we'll worry about duplicate entries, probably
 	    for (int j = 0; j < nr; j++)
 	      out.push_back( dist(gen) );
+#endif
           }
 	  
 	  if (verbose)
@@ -236,6 +245,7 @@ int CrushTester::test()
 	      << p->second << "/" << (max_x-min_x+1) << std::endl;
 	      
 
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
       // compute our overall test chi squared statistic examining the final distribution of placements
       for (unsigned i = 0; i < per.size(); i++)
 	  if (num_objects_expected[i] > 0) 
@@ -250,46 +260,52 @@ int CrushTester::test()
 	if (deviceTestChi[i] > batch_chi_statistic_one_percent)
 	  num_devices_failing_at_one_percent++;
       }
-      
+#endif      
 
-      if (verbose)
-	if (verbose > 1 )
-	  for (unsigned i = 0; i < per.size(); i++) {
-	    if (verbose < 5 ){
-	      if (num_objects_expected[i] > 0 && per[i] > 0) {
-		err << "  device " << i << ":\t"
-		    << "\t" << " stored " << ": " << per[i]
-		    << "\t" << " expected " << ": " << num_objects_expected[i]
-		    << "\t" << " X^2 " << ": " << deviceTestChi[i]
-		    << "\t" << " critical (5% confidence) " << ": " << batch_chi_statistic_five_percent
-		    << "\t" << " (1% confidence) " << ": " << batch_chi_statistic_one_percent
-		    << std::endl;
-	      }
-	    } else {
-		err << "  device " << i << ":\t"
-		    << "\t" << " stored " << ": " << per[i]
-		    << "\t" << " expected " << ": " << num_objects_expected[i]
-		    << "\t" << " X^2 " << ": " << deviceTestChi[i]
-		    << "\t" << " critical X^2 (5% confidence) " << ": " << batch_chi_statistic_five_percent
-		    << "\t" << " (1% confidence) " << ": " << batch_chi_statistic_one_percent
-		    << std::endl;
-	  }
+      if (verbose > 1)
+	for (unsigned i = 0; i < per.size(); i++) {
+	  if (verbose < 5 ){
+	    if (num_objects_expected[i] > 0 && per[i] > 0) {
+	      err << "  device " << i << ":\t"
+		  << "\t" << " stored " << ": " << per[i]
+		  << "\t" << " expected " << ": " << num_objects_expected[i]
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+		  << "\t" << " X^2 " << ": " << deviceTestChi[i]
+		  << "\t" << " critical (5% confidence) " << ": " << batch_chi_statistic_five_percent
+		  << "\t" << " (1% confidence) " << ": " << batch_chi_statistic_one_percent
+#endif
+		  << std::endl;
 	    }
-	err << " chi squared = " << test_chi_statistic
-	    << " (vs " << chi_statistic_five_percent << " / "
-	    << chi_statistic_one_percent
-	    << " for 5% / 1% confidence level) " << std::endl;	  
-	//err << " total system weight (dec) = " << (total_weight / (float) 0x10000) << std::endl;
-        //err << " number of buckets = " << num_buckets << std::endl;
-	
-	if (num_batches > 1) {
-	  err << " " << num_devices_failing_at_five_percent << "/" << num_devices_active << " ("
-              << (100.0*((float) num_devices_failing_at_five_percent / (float) num_devices_active)) 
-              << "%) devices failed testing at 5% confidence level" << std::endl;
-	  err << " " << num_devices_failing_at_one_percent << "/" << num_devices_active  << " ("
-              << (100.0*((float) num_devices_failing_at_one_percent / (float) num_devices_active))
-              << "%) devices failed testing at 1% confidence level" << std::endl;
+	  } else {
+	    err << "  device " << i << ":\t"
+		<< "\t" << " stored " << ": " << per[i]
+		<< "\t" << " expected " << ": " << num_objects_expected[i]
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+		<< "\t" << " X^2 " << ": " << deviceTestChi[i]
+		<< "\t" << " critical X^2 (5% confidence) " << ": " << batch_chi_statistic_five_percent
+		<< "\t" << " (1% confidence) " << ": " << batch_chi_statistic_one_percent
+#endif
+		<< std::endl;
+	  }
 	}
+
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+      err << " chi squared = " << test_chi_statistic
+	  << " (vs " << chi_statistic_five_percent << " / "
+	  << chi_statistic_one_percent
+	  << " for 5% / 1% confidence level) " << std::endl;	  
+      //err << " total system weight (dec) = " << (total_weight / (float) 0x10000) << std::endl;
+      //err << " number of buckets = " << num_buckets << std::endl;
+
+      if (num_batches > 1) {
+	err << " " << num_devices_failing_at_five_percent << "/" << num_devices_active << " ("
+	    << (100.0*((float) num_devices_failing_at_five_percent / (float) num_devices_active)) 
+	    << "%) devices failed testing at 5% confidence level" << std::endl;
+	err << " " << num_devices_failing_at_one_percent << "/" << num_devices_active  << " ("
+	    << (100.0*((float) num_devices_failing_at_one_percent / (float) num_devices_active))
+	    << "%) devices failed testing at 1% confidence level" << std::endl;
+      }
+#endif
     }
   }
   return 0;
