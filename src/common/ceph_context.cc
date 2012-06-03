@@ -306,7 +306,8 @@ void CephContext::start_service_thread()
   _conf->call_all_observers();
 
   // start admin socket
-  _admin_socket->init(_conf->admin_socket);
+  if (_conf->admin_socket.length())
+    _admin_socket->init(_conf->admin_socket);
 }
 
 void CephContext::reopen_logs()
