@@ -62,7 +62,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist bl;
 
   map<string, bufferlist> keys;
-  rc = cls_cxx_map_read_keys(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
+  rc = cls_cxx_map_get_vals(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
 
@@ -139,7 +139,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   // get on-disk state
   bufferlist cur_value;
-  int rc = cls_cxx_map_read_key(hctx, op.name, &cur_value);
+  int rc = cls_cxx_map_get_val(hctx, op.name, &cur_value);
   if (rc < 0 && rc != -ENOENT)
     return rc;
 
@@ -177,7 +177,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // write out new key to disk
   bufferlist info_bl;
   ::encode(entry, info_bl);
-  cls_cxx_map_write_key(hctx, op.name, &info_bl);
+  cls_cxx_map_set_val(hctx, op.name, &info_bl);
   return rc;
 }
 
@@ -210,7 +210,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   bufferlist current_entry;
   struct rgw_bucket_dir_entry entry;
   bool ondisk = true;
-  rc = cls_cxx_map_read_key(hctx, op.name, &current_entry);
+  rc = cls_cxx_map_get_val(hctx, op.name, &current_entry);
   if (rc < 0) {
     if (rc != -ENOENT) {
       return rc;
@@ -257,7 +257,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (op.tag.size()) {
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
-      return cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+      return cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
     } else {
       return 0;
     }
@@ -281,7 +281,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
         entry.exists = false;
         bufferlist new_key_bl;
         ::encode(entry, new_key_bl);
-	int ret = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+	int ret = cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
 	if (ret < 0)
 	  return ret;
       }
@@ -302,7 +302,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       stats.total_size_rounded += get_rounded_size(meta.size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
-      int ret = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+      int ret = cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
       if (ret < 0)
 	return ret;
     }
@@ -349,7 +349,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     }
 
     bufferlist cur_disk_bl;
-    int ret = cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
+    int ret = cls_cxx_map_get_val(hctx, cur_change.name, &cur_disk_bl);
     if (ret < 0 && ret != -ENOENT)
       return -EINVAL;
 
@@ -394,7 +394,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
         bufferlist cur_state_bl;
         ::encode(cur_change, cur_state_bl);
-        ret = cls_cxx_map_write_key(hctx, cur_change.name, &cur_state_bl);
+        ret = cls_cxx_map_set_val(hctx, cur_change.name, &cur_state_bl);
         if (ret < 0)
 	  return ret;
         break;

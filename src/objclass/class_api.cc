@@ -251,7 +251,7 @@ int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>* vals)
+int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>* vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -282,9 +282,9 @@ int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>
   return vals->size();
 }
 
-int cls_cxx_map_read_keys(cls_method_context_t hctx, const string &start_obj,
-                          const string &filter_prefix, uint64_t max,
-                          map<string, bufferlist> *vals)
+int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
+			 const string &filter_prefix, uint64_t max_to_get,
+			 map<string, bufferlist> *vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -295,7 +295,7 @@ int cls_cxx_map_read_keys(cls_method_context_t hctx, const string &start_obj,
   bufferlist inbl;
 
   ::encode(start_obj, op.indata);
-  ::encode(max, op.indata);
+  ::encode(max_to_get, op.indata);
   ::encode(filter_prefix, op.indata);
 
   op.op.op = CEPH_OSD_OP_OMAPGETVALS;
@@ -328,7 +328,9 @@ int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 
   return 0;
 }
-int cls_cxx_map_read_key(cls_method_context_t hctx, const string &key, bufferlist *outbl)
+
+int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
+			bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -360,7 +362,8 @@ int cls_cxx_map_read_key(cls_method_context_t hctx, const string &key, bufferlis
   return 0;
 }
 
-int cls_cxx_map_write_key(cls_method_context_t hctx, const string &key, bufferlist *inbl)
+int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
+			bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
