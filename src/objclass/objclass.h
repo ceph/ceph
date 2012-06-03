@@ -25,8 +25,9 @@ const char *__cls_name = #name;
 #define CLS_METHOD_PUBLIC	0x4
 
 
-#define CLS_LOG(fmt, ...) \
-	cls_log("<cls> %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+#define CLS_LOG(level, fmt, ...)					\
+  cls_log(level, "<cls> %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+#define CLS_ERR(fmt, ...) CLS_LOG(0, fmt, ##__VA_ARGS__)
 
 void __cls_init();
 
@@ -42,7 +43,7 @@ typedef struct {
 } cls_deps_t;
 
 /* class utils */
-extern int cls_log(const char *format, ...);
+extern int cls_log(int level, const char *format, ...);
 extern void *cls_alloc(size_t size);
 extern void cls_free(void *p);
 
