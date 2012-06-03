@@ -165,7 +165,8 @@ else
         debug osd = 25
         debug monc = 20
         debug journal = 20
-        debug filestore = 20'
+        debug filestore = 20
+        debug objclass = 20'
     CMDSDEBUG='
         lockdep = 1
         debug ms = 1
