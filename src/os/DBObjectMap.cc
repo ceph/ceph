@@ -829,7 +829,7 @@ int DBObjectMap::get_values(const hobject_t &hoid,
   Header header = lookup_map_header(hoid);
   if (!header)
     return -ENOENT;
-  return scan(header, keys, 0, out);;
+  return scan(header, keys, 0, out);
 }
 
 int DBObjectMap::check_keys(const hobject_t &hoid,
