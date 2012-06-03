@@ -58,6 +58,8 @@ void usage()
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
   cout << "      [--num-rep n]\n";
+  cout << "      [--batches b]\n";
+  cout << "      [--simulate]\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
   cout << "   -i mapfn --add-item id weight name [--loc type name ...]\n";
@@ -125,6 +127,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   int x;
+  float y;
 
   std::string val;
   std::ostringstream err;
@@ -141,12 +144,19 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
-      tester.set_verbosity(2);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "-vl", "--verbose-level", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tester.set_verbosity(x);
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
     } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
       test = true;
+    } else if (ceph_argparse_flag(args, i, "-s", "--simulate", (char*)NULL)) {
+      tester.set_random_placement();
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
     } else if (ceph_argparse_withint(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
@@ -240,6 +250,29 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_rule(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--batches", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tester.set_batches(x);
+    } else if (ceph_argparse_withint(args, i, &tmp, &err, "--mark-range-down", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      int start = tmp;
+      if (i == args.end())
+	usage();
+      int range = atof(*i);
+      i = args.erase(i);
+      tester.set_range_down(start, range);
+    } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-percentage-down", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tester.set_percentage_down(y);
     } else if (ceph_argparse_withint(args, i, &tmp, &err, "--weight", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
