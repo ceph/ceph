@@ -27,7 +27,7 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
   int rc;
   struct rbd_obj_header_ondisk *header;
 
-  cls_log("snapshots_list");
+  CLS_LOG(20, "snapshots_list");
 
   while (1) {
     int len = sizeof(*header) +
@@ -206,7 +206,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     snap_names += strlen(snap_names) + 1;
   }
   if (!found) {
-    CLS_LOG("couldn't find snap %s\n",snap_name);
+    CLS_ERR("couldn't find snap %s\n", snap_name);
     return -ENOENT;
   }
 
@@ -222,7 +222,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (header->snap_count) {
     int snaps_len = 0;
     int names_len = 0;
-    CLS_LOG("i=%d\n", i);
+    CLS_LOG(20, "i=%d\n", i);
     if (i > 0) {
       snaps_len = sizeof(header->snaps[0]) * i;
       names_len =  snap_names - orig_names;
@@ -262,7 +262,7 @@ int rbd_assign_bid(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return rc;
 
   if (rc && rc < (int)sizeof(info)) {
-    CLS_LOG("bad rbd_info object, read %d bytes, expected %d", rc, sizeof(info));
+    CLS_ERR("bad rbd_info object, read %d bytes, expected %d", rc, sizeof(info));
     return -EIO;
   }
 
@@ -282,7 +282,7 @@ int rbd_assign_bid(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   newbl.push_back(bp);
   rc = cls_cxx_write_full(hctx, &newbl);
   if (rc < 0) {
-    CLS_LOG("error writing rbd_info, got rc=%d", rc);
+    CLS_ERR("error writing rbd_info, got rc=%d", rc);
     return rc;
   }
 
@@ -293,7 +293,7 @@ int rbd_assign_bid(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 void __cls_init()
 {
-  CLS_LOG("Loaded rbd class!");
+  CLS_LOG(20, "Loaded rbd class!");
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "snap_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, snapshots_list, &h_snapshots_list);
