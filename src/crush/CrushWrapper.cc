@@ -240,6 +240,22 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
   return -ENOENT;
 }
 
+bool CrushWrapper::check_item_present(int id)
+{
+  bool found = false;
+
+  for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
+    crush_bucket *b = crush->buckets[bidx];
+    if (b == 0)
+      continue;
+    for (unsigned i = 0; i < b->size; i++)
+      if (b->items[i] == id)
+	found = true;
+  }
+  return found;
+}
+
+
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
