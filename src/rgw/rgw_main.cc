@@ -425,6 +425,7 @@ int main(int argc, const char **argv)
 
   mutex.Lock();
   init_timer.cancel_all_events();
+  init_timer.shutdown();
   mutex.Unlock();
 
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
