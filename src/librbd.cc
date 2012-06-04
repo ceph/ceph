@@ -1489,8 +1489,6 @@ int open_image(ImageCtx *ictx)
   ictx->data_ctx.snap_set_read(ictx->snapid);
 
   WatchCtx *wctx = new WatchCtx(ictx);
-  if (!wctx)
-    return -ENOMEM;
   ictx->wctx = wctx;
 
   r = ictx->md_ctx.watch(ictx->md_oid(), 0, &(wctx->cookie), wctx);
@@ -2124,8 +2122,6 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name)
 int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname)
 {
   ImageCtx *ictx = new ImageCtx(name, snapname, io_ctx);
-  if (!ictx)
-    return -ENOMEM;
 
   int r = librbd::open_image(ictx);
   if (r < 0)
@@ -2444,8 +2440,6 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image, c
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, snap_name, io_ctx);
-  if (!ictx)
-    return -ENOMEM;
   int r = librbd::open_image(ictx);
   *image = (rbd_image_t)ictx;
   return r;
