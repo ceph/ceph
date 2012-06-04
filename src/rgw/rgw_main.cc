@@ -193,6 +193,16 @@ void RGWProcess::run()
   int s = 0;
   if (!g_conf->rgw_socket_path.empty()) {
     string path_str = g_conf->rgw_socket_path;
+
+    /* this is necessary, as FCGX_OpenSocket might not return an error, but rather ungracefully exit */
+    int fd = open(path_str.c_str(), O_CREAT, 0644);
+    if (fd < 0) {
+      int err = errno;
+      dout(0) << "ERROR: cannot create socket: path=" << path_str << " error=" << cpp_strerror(err) << dendl;
+      return;
+    }
+    close(fd);
+
     const char *path = path_str.c_str();
     s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
     if (s < 0) {
