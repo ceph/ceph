@@ -597,11 +597,19 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	 ++p) {
       if (p->second & CEPH_OSD_UP) {   // true if marked up OR down, but we're too lazy to check which
 	need_check_down_pgs = true;
+
 	// clear out the last_osd_report for this OSD
         map<int, utime_t>::iterator report = last_osd_report.find(p->first);
         if (report != last_osd_report.end()) {
           last_osd_report.erase(report);
         }
+      }
+
+      if (p->second & CEPH_OSD_EXISTS) {
+	// whether it was created *or* destroyed, we can safely drop
+	// it's osd_stat_t record.
+	dout(10) << "check_osd_map  osd." << p->first << " created or destroyed" << dendl;
+	pending_inc.osd_stat_rm.insert(p->first);
       }
     }
   }
