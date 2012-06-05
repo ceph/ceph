@@ -68,6 +68,8 @@ private:
   bool initialized;
 
   LogClient *log_client;
+  bool more_log_pending;
+
   void send_log();
 
   AuthSupported *auth_supported;
@@ -79,7 +81,6 @@ private:
   void handle_monmap(MMonMap *m);
 
   void handle_auth(MAuthReply *m);
-
 
   // monitor session
   bool hunting;
