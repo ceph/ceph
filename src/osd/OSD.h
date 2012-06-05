@@ -539,7 +539,7 @@ protected:
   
   friend class C_OSD_GetVersion;
 
-  void clear_temp(coll_t tmp);
+  static void clear_temp(ObjectStore *store, coll_t tmp);
 
   // -- alive --
   epoch_t up_thru_wanted;
@@ -1044,6 +1044,8 @@ protected:
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const std::string &dev, const std::string &jdev);
   static int convertfs(const std::string &dev, const std::string &jdev);
+  static int do_convertfs(ObjectStore *store);
+  static int convert_collection(ObjectStore *store, coll_t cid);
   static int mkfs(const std::string &dev, const std::string &jdev,
 		  uuid_d fsid, int whoami);
   static int mkjournal(const std::string &dev, const std::string &jdev);
