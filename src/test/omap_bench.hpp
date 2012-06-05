@@ -96,6 +96,7 @@ protected:
 
   string pool_name;
   string rados_id;
+  string prefix;
   int threads;
   int objects;
   int omap_entries;
@@ -116,10 +117,10 @@ public:
       safe(aio_is_safe),
       pool_name("data"),
       rados_id("admin"),
+      prefix(rados_id+".obj."),
       threads(3), objects(100), omap_entries(10), omap_key_size(10),
       omap_value_size(100), increment(10)
   {}
-
   /**
    * Parses command line args, initializes rados and ioctx
    */
