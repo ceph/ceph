@@ -5,6 +5,7 @@ import logging
 import subprocess
 import urllib
 import yaml
+import re
 
 from teuthology import misc as teuthology
 
@@ -205,6 +206,12 @@ Lock, unlock, or query lock status of machines.
     user = ctx.owner
     machines = ctx.machines
     machines_to_update = []
+
+    def canonicalize_hostname(s):
+        if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s) is None:
+            s = 'ubuntu@' + s + '.front.sepia.ceph.com'
+        return s
+    machines = map(canonicalize_hostname, machines)
 
     if ctx.targets:
         try:
