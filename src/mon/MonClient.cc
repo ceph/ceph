@@ -169,6 +169,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_AUTH_REPLY:
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
   case CEPH_MSG_MON_GET_VERSION_REPLY:
+  case MSG_LOGACK:
     break;
   default:
     return false;
@@ -195,8 +196,23 @@ bool MonClient::ms_dispatch(Message *m)
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
     handle_get_version_reply((MMonGetVersionReply*)m);
+    break;
+  case MSG_LOGACK:
+    if (log_client) {
+      log_client->handle_log_ack((MLogAck*)m);
+    } else {
+      m->put();
+    }
+    break;
   }
   return true;
+}
+
+void MonClient::send_log()
+{
+  Message *lm = log_client->get_mon_log_message();
+  if (lm)
+    _send_mon_message(lm);
 }
 
 void MonClient::handle_monmap(MMonMap *m)
@@ -368,9 +384,7 @@ void MonClient::handle_auth(MAuthReply *m)
 
       if (log_client) {
 	log_client->reset_session();
-	Message *lm = log_client->get_mon_log_message();
-	if (lm)
-	  _send_mon_message(lm);
+	send_log();
       }
     }
   
@@ -510,9 +524,7 @@ void MonClient::tick()
    
     if (state == MC_STATE_HAVE_SESSION &&
 	log_client) {
-      Message *m = log_client->get_mon_log_message();
-      if (m)
-	_send_mon_message(m);
+      send_log();
     }
   }
 

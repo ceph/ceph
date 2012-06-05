@@ -95,7 +95,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   standby_replaying(false),
   messenger(m),
   monc(mc),
-  clog(m->cct, messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
+  clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   sessionmap(this) {
 
   orig_argc = 0;
@@ -439,7 +439,6 @@ int MDS::init(int wanted_state)
   dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
 
   messenger->add_dispatcher_tail(this);
-  messenger->add_dispatcher_head(&clog);
 
   // get monmap
   monc->set_messenger(messenger);

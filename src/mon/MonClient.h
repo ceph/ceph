@@ -68,6 +68,7 @@ private:
   bool initialized;
 
   LogClient *log_client;
+  void send_log();
 
   AuthSupported *auth_supported;
 

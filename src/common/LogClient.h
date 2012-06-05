@@ -17,7 +17,6 @@
 
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
-#include "msg/Dispatcher.h"
 
 #include <iosfwd>
 #include <sstream>
@@ -26,8 +25,9 @@ class LogClient;
 class MLog;
 class MLogAck;
 class Messenger;
-class MonClient;
 class MonMap;
+class Message;
+class Connection;
 
 class LogClientTemp
 {
@@ -48,7 +48,7 @@ private:
   stringstream ss;
 };
 
-class LogClient : public Dispatcher
+class LogClient
 {
 public:
   enum logclient_flag_t {
@@ -57,7 +57,7 @@ public:
   };
 
   LogClient(CephContext *cct, Messenger *m, MonMap *mm,
-	    MonClient *mc, enum logclient_flag_t flags);
+	    enum logclient_flag_t flags);
 
   void handle_log_ack(MLogAck *m);
 
@@ -98,15 +98,14 @@ public:
 private:
   void do_log(clog_type type, std::stringstream& ss);
   void do_log(clog_type type, const std::string& s);
-  bool ms_dispatch(Message *m);
   Message *_get_mon_log_message();
   void ms_handle_connect(Connection *con) {}
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
 
+  CephContext *cct;
   Messenger *messenger;
   MonMap *monmap;
-  MonClient *monc;
   bool is_mon;
   Mutex log_lock;
   version_t last_log_sent;
