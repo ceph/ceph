@@ -100,9 +100,6 @@ private:
   void do_log(clog_type type, std::stringstream& ss);
   void do_log(clog_type type, const std::string& s);
   Message *_get_mon_log_message();
-  void ms_handle_connect(Connection *con) {}
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
 
   CephContext *cct;
   Messenger *messenger;
