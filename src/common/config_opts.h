@@ -136,6 +136,7 @@ OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
+OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_cache_stat_ttl, OPT_INT, 0) // seconds until cached stat results become invalid

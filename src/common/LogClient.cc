@@ -154,18 +154,26 @@ Message *LogClient::_get_mon_log_message()
   if (last_log_sent == last_log)
     return NULL;
 
-  unsigned i = last_log - last_log_sent;
-  ldout(cct,10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
-	   << " i " << i << dendl;
-  std::deque<LogEntry> o(i);
-  std::deque<LogEntry>::reverse_iterator p = log_queue.rbegin();
-  while (i > 0) {
-    i--;
-    o[i] = *p++;
-    ldout(cct,10) << " will send " << o[i] << dendl;
-  }
+  // limit entries per message
+  unsigned num = last_log - last_log_sent;
+  unsigned i;
+  if (cct->_conf->mon_client_max_log_entries_per_message > 0)
+    i = MIN(num, cct->_conf->mon_client_max_log_entries_per_message);
+  else
+    i = num;
 
-  last_log_sent = last_log;
+  ldout(cct,10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
+		<< " num " << num << " sending " << i << dendl;
+  std::deque<LogEntry> o(i);
+  std::deque<LogEntry>::iterator p = log_queue.begin();
+  std::deque<LogEntry>::iterator q = o.begin();
+  while (q != o.end()) {
+    *q = *p;
+    last_log_sent = p->seq;
+    ldout(cct,10) << " will send " << *p << dendl;
+    p++;
+    q++;
+  }
   
   MLog *log = new MLog(monmap->get_fsid());
   log->entries.swap(o);
