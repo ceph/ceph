@@ -7,22 +7,21 @@ Ceph supports a RESTful API that is compatible with the the basic data access mo
 API
 ---
 
-- :doc:`Common Entities <s3/commons>`
-- :doc:`Authentication and ACLs <s3/authentication>`
-- :doc:`Service Operations <s3/serviceops>`
-- :doc:`Bucket Operations <s3/bucketops>`
-- :doc:`Object Operations <s3/objectops>`
-
-
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    Common <s3/commons>
    Authentication <s3/authentication>
    Service Ops <s3/serviceops>
    Bucket Ops <s3/bucketops>
    Object Ops <s3/objectops>
+   C++ <s3/cpp>
+   C# <s3/csharp>
+   Java <s3/java>
+   Perl <s3/perl>
+   PHP <s3/php>
+   Python <s3/python>
+   Ruby <s3/ruby>
 
 
 Features Support
