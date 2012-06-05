@@ -159,24 +159,30 @@ Message *LogClient::_get_mon_log_message()
     return NULL;
 
   // limit entries per message
-  unsigned num = last_log - last_log_sent;
-  unsigned i;
+  unsigned num_unsent = last_log - last_log_sent;
+  unsigned num_send;
   if (cct->_conf->mon_client_max_log_entries_per_message > 0)
-    i = MIN(num, cct->_conf->mon_client_max_log_entries_per_message);
+    num_send = MIN(num_unsent, cct->_conf->mon_client_max_log_entries_per_message);
   else
-    i = num;
+    num_send = num_unsent;
 
   ldout(cct,10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
-		<< " num " << num << " sending " << i << dendl;
-  std::deque<LogEntry> o(i);
+		<< " num " << log_queue.size()
+		<< " unsent " << num_unsent
+		<< " sending " << num_send << dendl;
+  assert(num_unsent <= log_queue.size());
   std::deque<LogEntry>::iterator p = log_queue.begin();
-  std::deque<LogEntry>::iterator q = o.begin();
-  while (q != o.end()) {
-    *q = *p;
+  std::deque<LogEntry> o;
+  while (p->seq < last_log_sent) {
+    p++;
+    assert(p != log_queue.end());
+  }
+  while (num_send--) {
+    assert(p != log_queue.end());
+    o.push_back(*p);
     last_log_sent = p->seq;
     ldout(cct,10) << " will send " << *p << dendl;
     p++;
-    q++;
   }
   
   MLog *log = new MLog(monmap->get_fsid());
