@@ -198,11 +198,11 @@ int CrushTester::test()
 	  vector<int> out;
           
           if (use_crush) {
-	    if (verbose > 2)
+	    if (output_statistics)
 	      err << "CRUSH"; // prepend CRUSH to placement output
 	    crush.do_rule(r, x, out, nr, weight);
 	  } else {
-	    if (verbose > 2)
+	    if (output_statistics)
 	      err << "RNG"; // prepend RNG to placement output to denote simulation
 
 #ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
@@ -213,9 +213,9 @@ int CrushTester::test()
 #endif
           }
 	  
-	  if (verbose)
-	    if (verbose>1 )
-	      err << " rule " << r << " x " << x << " " << out << std::endl;
+
+          if (output_statistics)
+            err << " rule " << r << " x " << x << " " << out << std::endl;
 	  for (unsigned i = 0; i < out.size(); i++) {
 	    per[out[i]]++;
 	    temporary_per[out[i]]++;
@@ -234,7 +234,7 @@ int CrushTester::test()
       }
       
       for (unsigned i = 0; i < per.size(); i++)
-	if (verbose>1 )
+	if (output_utilization && !output_statistics)
 	  err << "  device " << i 
 	      << ":\t" << per[i] 
 	      << std::endl;
@@ -262,9 +262,9 @@ int CrushTester::test()
       }
 #endif      
 
-      if (verbose > 1)
+      if (output_statistics)
 	for (unsigned i = 0; i < per.size(); i++) {
-	  if (verbose < 5 ){
+	  if (output_utilization && num_batches > 1){
 	    if (num_objects_expected[i] > 0 && per[i] > 0) {
 	      err << "  device " << i << ":\t"
 		  << "\t" << " stored " << ": " << per[i]
@@ -276,7 +276,7 @@ int CrushTester::test()
 #endif
 		  << std::endl;
 	    }
-	  } else {
+	  } else if (output_utilization_all && num_batches > 1) {
 	    err << "  device " << i << ":\t"
 		<< "\t" << " stored " << ": " << per[i]
 		<< "\t" << " expected " << ": " << num_objects_expected[i]
@@ -297,7 +297,7 @@ int CrushTester::test()
       //err << " total system weight (dec) = " << (total_weight / (float) 0x10000) << std::endl;
       //err << " number of buckets = " << num_buckets << std::endl;
 
-      if (num_batches > 1) {
+      if (num_batches > 1 && output_statistics) {
 	err << " " << num_devices_failing_at_five_percent << "/" << num_devices_active << " ("
 	    << (100.0*((float) num_devices_failing_at_five_percent / (float) num_devices_active)) 
 	    << "%) devices failed testing at 5% confidence level" << std::endl;

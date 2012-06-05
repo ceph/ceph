@@ -25,6 +25,9 @@ class CrushTester {
   float mark_down_percentage;
   int mark_down_start;
   int down_range;
+  bool output_utilization;
+  bool output_utilization_all;
+  bool output_statistics;
 
 public:
   CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
@@ -42,8 +45,10 @@ public:
       down_range(1)
   { }
 
-  void set_verbosity(int v) {
-    verbose = v;
+  void set_output(bool set_output_utilization, bool set_output_utilization_all, bool set_output_statistics) {
+    output_utilization = set_output_utilization;
+    output_utilization_all = set_output_utilization_all;
+    output_statistics = set_output_statistics;
   }
   void set_batches(int b) {
     num_batches = b;
