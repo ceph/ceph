@@ -59,7 +59,7 @@ void usage()
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
   cout << "      [--num-rep n]\n";
   cout << "      [--batches b]\n";
-  cout << "      [--simulate]\n";
+  cout << "    --simulate           simulate placements using a RNG\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
   cout << "   -i mapfn --add-item id weight name [--loc type name ...]\n";
@@ -74,6 +74,9 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
+  cout << "   --output-utilization       output OSD usage\n";
+  cout << "   --output utilization-all   include zero weight items\n";
+  cout << "   --output-statistics        output chi squared statistics\n";
   exit(1);
 }
 
@@ -105,6 +108,9 @@ int main(int argc, const char **argv)
   bool decompile = false;
   bool test = false;
   bool verbose = false;
+  bool output_utilization = false;
+  bool output_utilization_all = false;
+  bool output_statistics = false;
 
   bool reweight = false;
   int add_item = -1;
@@ -144,12 +150,12 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
-    } else if (ceph_argparse_withint(args, i, &x, &err, "-vl", "--verbose-level", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
-      tester.set_verbosity(x);
+    } else if (ceph_argparse_flag(args, i, "--output_utilization", (char*)NULL)) {
+      output_utilization = true;
+    } else if (ceph_argparse_flag(args, i, "--output_utilization_all", (char*)NULL)) {
+      output_utilization_all = true;
+    } else if (ceph_argparse_flag(args, i, "--output_statistics", (char*)NULL)) {
+      output_statistics = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
@@ -552,6 +558,7 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
+    tester.set_output(output_utilization, output_utilization_all, output_statistics);
     int r = tester.test();
     if (r < 0)
       exit(1);
