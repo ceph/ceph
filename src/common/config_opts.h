@@ -126,6 +126,7 @@ OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
 OPTION(mon_slurp_timeout, OPT_DOUBLE, 10.0)
 OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
 OPTION(mon_client_bytes, OPT_U64, 500ul<<20)  // client msg data allowed in memory (in bytes)
+OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(paxos_max_join_drift, OPT_INT, 10)       // max paxos iterations before we must first slurp
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity

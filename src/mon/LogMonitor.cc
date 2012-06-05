@@ -290,6 +290,16 @@ void LogMonitor::_updated_log(MLog *m)
   m->put();
 }
 
+bool LogMonitor::should_propose(double& delay)
+{
+  // commit now if we have a lot of pending events
+  if (g_conf->mon_max_log_entries_per_event > 0 &&
+      pending_log.size() >= (unsigned)g_conf->mon_max_log_entries_per_event)
+    return true;
+
+  // otherwise fall back to generic policy
+  return PaxosService::should_propose(delay);
+}
 
 
 bool LogMonitor::preprocess_command(MMonCommand *m)

@@ -45,6 +45,8 @@ private:
   bool prepare_log(MLog *m);
   void _updated_log(MLog *m);
 
+  bool should_propose(double& delay);
+
   struct C_Log : public Context {
     LogMonitor *logmon;
     MLog *ack;
