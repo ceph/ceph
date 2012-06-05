@@ -86,7 +86,7 @@ is_err() const
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
 {
-  should_log = env->conf->should_log;
+  enable_ops_log = env->conf->enable_ops_log;
   content_started = false;
   format = 0;
   bucket_acl = NULL;

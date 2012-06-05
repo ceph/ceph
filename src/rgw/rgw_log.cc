@@ -80,7 +80,7 @@ int rgw_log_op(struct req_state *s)
   struct rgw_log_entry entry;
   string bucket_id;
 
-  if (!s->should_log)
+  if (!s->enable_ops_log)
     return 0;
 
   if (!s->bucket_name) {
