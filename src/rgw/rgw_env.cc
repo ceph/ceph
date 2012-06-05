@@ -76,5 +76,5 @@ size_t RGWEnv::get_size(const char *name, size_t def_val)
 
 void RGWConf::init(CephContext *cct, RGWEnv *env)
 {
-  should_log = cct->_conf->rgw_enable_ops_log;
+  enable_ops_log = cct->_conf->rgw_enable_ops_log;
 }
