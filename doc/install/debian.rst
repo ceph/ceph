@@ -15,12 +15,11 @@ security warning::
 
 	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/release.asc | sudo apt-key add -
 
-Add our package repository to your system's list of APT sources, but
-replace ``{DISTRO}`` with the code name for Debian/Ubuntu distribution
-(*e.g.,* ``precise`` for Ubuntu ``12.04``).  See `the Debian repository`_ 
-for a complete list of distributions supported. ::
+Add our package repository to your system's list of APT sources.  
+See `the Debian repository`_ for a complete list of distributions 
+supported. ::
 
-	echo deb http://ceph.com/debian/ {DISTRO} main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://ceph.com/debian/ ${lsb_release -sc} main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Add Development Packages
 ------------------------
@@ -34,10 +33,10 @@ security warning::
 	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc \ | sudo apt-key add -
 
 Add our package repository to your system's list of APT sources, but replace ``{BRANCH}`` 
-with the branch you'd like to use (e.g., chef-3, wip-hack, master, stable)
-and ``{DISTRO}`` with your distribution (we support ``maveric``, ``oneiric``, and ``precise``)::
+with the branch you'd like to use (e.g., chef-3, wip-hack, master, stable).
+We support ``maveric``, ``oneiric``, and ``precise`` distributions. ::
 
-	echo deb http://gitbuilder.ceph.com/ceph-deb-{DISTRO}-x86_64-basic/ref/{BRANCH} {DISTRO} main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://gitbuilder.ceph.com/ceph-deb-${lsb_release -sc}-x86_64-basic/ref/{BRANCH} ${lsb_release -sc} main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Installing Packages
 -------------------
