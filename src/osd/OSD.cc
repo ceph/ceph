@@ -595,7 +595,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   logger(NULL),
   store(NULL),
   map_in_progress(false),
-  clog(external_messenger->cct, client_messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
+  clog(external_messenger->cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
@@ -760,7 +760,6 @@ int OSD::init()
     
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
-  client_messenger->add_dispatcher_head(&clog);
   cluster_messenger->add_dispatcher_head(this);
 
   hbclient_messenger->add_dispatcher_head(&heartbeat_dispatcher);

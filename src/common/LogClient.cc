@@ -22,7 +22,6 @@
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 #include "mon/MonMap.h"
-#include "mon/MonClient.h"
 
 #include <iostream>
 #include <errno.h>
@@ -63,9 +62,8 @@ static inline int clog_type_to_syslog_prio(clog_type t)
 }
 
 LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
-		     MonClient *mc, enum logclient_flag_t flags) :
-    Dispatcher(cct),
-    messenger(m), monmap(mm), monc(mc), is_mon(flags & FLAG_MON),
+		     enum logclient_flag_t flags)
+  : cct(cct), messenger(m), monmap(mm), is_mon(flags & FLAG_MON),
     log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0)
 {
 }
@@ -199,14 +197,3 @@ void LogClient::handle_log_ack(MLogAck *m)
   m->put();
 }
 
-bool LogClient::ms_dispatch(Message *m)
-{
-  ldout(cct,20) << "dispatch " << m << dendl;
-
-  switch (m->get_type()) {
-  case MSG_LOGACK:
-    handle_log_ack((MLogAck*)m);
-    return true;
-  }
-  return false;
-}
