@@ -140,6 +140,12 @@ Message *LogClient::get_mon_log_message()
   return _get_mon_log_message();
 }
 
+bool LogClient::are_pending()
+{
+  Mutex::Locker l(log_lock);
+  return last_log > last_log_sent;
+}
+
 Message *LogClient::_get_mon_log_message()
 {
    if (log_queue.empty())

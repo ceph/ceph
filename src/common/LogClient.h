@@ -94,6 +94,7 @@ public:
 
   void reset_session();
   Message *get_mon_log_message();
+  bool are_pending();
 
 private:
   void do_log(clog_type type, std::stringstream& ss);

@@ -53,6 +53,7 @@ MonClient::MonClient(CephContext *cct_) :
   timer(cct_, monc_lock), finisher(cct_),
   initialized(false),
   log_client(NULL),
+  more_log_pending(false),
   auth_supported(NULL),
   hunting(true),
   want_monmap(true),
@@ -200,6 +201,9 @@ bool MonClient::ms_dispatch(Message *m)
   case MSG_LOGACK:
     if (log_client) {
       log_client->handle_log_ack((MLogAck*)m);
+      if (more_log_pending) {
+	send_log();
+      }
     } else {
       m->put();
     }
@@ -213,6 +217,7 @@ void MonClient::send_log()
   Message *lm = log_client->get_mon_log_message();
   if (lm)
     _send_mon_message(lm);
+  more_log_pending = log_client->are_pending();
 }
 
 void MonClient::handle_monmap(MMonMap *m)
@@ -541,7 +546,6 @@ void MonClient::schedule_tick()
   else
     timer.add_event_after(cct->_conf->mon_client_ping_interval, new C_Tick(this));
 }
-
 
 // ---------
 
