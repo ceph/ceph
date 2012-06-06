@@ -20,7 +20,7 @@ Provide a ``keyring`` setting in ``ceph.conf`` like this::
 
 	[global]
 		auth supported = cephx
-		keyring = /etc/ceph/keyring.bin	
+		keyring = /etc/ceph/keyring
 
 If there is no keyring in the path, generate one.  
 
@@ -30,8 +30,8 @@ To generate a keyring in the default location, use the ``ceph-authtool`` and
 specify the same path you specified in the ``[global]`` section of your 
 ``ceph.conf`` file. For example::
 
-	sudo ceph-authtool --create-keyring /etc/ceph/keyring.bin
-	sudo chmod +r /etc/ceph/keyring.bin	
+	sudo ceph-authtool --create-keyring /etc/ceph/keyring
+	sudo chmod +r /etc/ceph/keyring
 
 Specify Keyrings for each Daemon
 --------------------------------
@@ -60,9 +60,9 @@ you need to have a ``client.admin`` key to run ``ceph`` commands.
    
 ::
    
-	sudo ceph-authtool /etc/ceph/keyring.bin -n client.admin --gen-key
-	sudo ceph-authtool -n client.admin --cap mds 'allow' --cap osd 'allow *' --cap mon 'allow *' /etc/ceph/keyring.bin
-	sudo ceph auth add client.admin -i /etc/ceph/keyring.bin
+	sudo ceph-authtool /etc/ceph/keyring -n client.admin --gen-key
+	sudo ceph-authtool -n client.admin --cap mds 'allow' --cap osd 'allow *' --cap mon 'allow *' /etc/ceph/keyring
+	sudo ceph auth add client.admin -i /etc/ceph/keyring
 
 Generate a Key
 --------------
@@ -75,7 +75,7 @@ the ``{keyring/path}`` and ``{username}`` below. ::
 
 For example:: 
 
-	sudo ceph-authtool /etc/ceph/keyring.bin -n client.whirlpool --gen-key
+	sudo ceph-authtool /etc/ceph/keyring -n client.whirlpool --gen-key
 	
 .. note: User names are associated to user types, which include ``client``
    ``admin``, ``osd``, ``mon``, and ``mds``. In most cases, you will be 
@@ -85,7 +85,7 @@ List Keys
 ---------
 To see a list of keys in a keyring, execute the following::
 
-	sudo ceph-authtool /etc/ceph/keyring.bin --list
+	sudo ceph-authtool /etc/ceph/keyring --list
 	
 A keyring will display the user, the user's key, and the capabilities
 associated to the user's key.
@@ -101,18 +101,18 @@ one capability when executing the ``ceph-authtool`` command. Replace the
 
 For example:: 
 
-	ceph-authtool -n client.whirlpool --cap mds 'allow' --cap osd 'allow rw pool=swimmingpool' --cap mon 'allow r' /etc/ceph/keyring.bin
+	ceph-authtool -n client.whirlpool --cap mds 'allow' --cap osd 'allow rw pool=swimmingpool' --cap mon 'allow r' /etc/ceph/keyring
 
 Add the Keys to your Cluster
 ----------------------------
 Once you have generated keys and added capabilities to the keys, add each of the
 keys to your cluster. Replace the ``{usertype.username}`` below. ::
 
-	sudo ceph auth add {usertype.username} -i /etc/ceph/keyring.bin
+	sudo ceph auth add {usertype.username} -i /etc/ceph/keyring
 
 For example:: 
 
-	sudo ceph auth add client.whirlpool -i /etc/ceph/keyring.bin
+	sudo ceph auth add client.whirlpool -i /etc/ceph/keyring
 	
 
 List Keys in your Cluster
