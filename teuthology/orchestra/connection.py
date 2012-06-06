@@ -37,13 +37,11 @@ def connect(user_at_host, host_key=None, keep_alive=False,
             key=_create_key(keytype, key)
             )
         
-    try:
-        ssh.connect(
-            hostname=host,
-            username=user,
-            timeout=60,
-            )
-    except:
-        raise ValueError('failed connect to %s@%s' % (user, host))
+    # just let the exceptions bubble up to caller
+    ssh.connect(
+        hostname=host,
+        username=user,
+        timeout=60,
+        )
     ssh.get_transport().set_keepalive(keep_alive)
     return ssh
