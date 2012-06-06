@@ -1125,6 +1125,19 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   return false;
 }
 
+static void note_stuck_detail(hash_map<pg_t,pg_stat_t>& stuck_pgs,
+			      list<pair<health_status_t,string> > *detail)
+{
+  for (hash_map<pg_t,pg_stat_t>::iterator p = stuck_pgs.begin();
+       p != stuck_pgs.end();
+       ++p) {
+    ostringstream ss;
+    ss << "pg " << p->first << " is stuck " << pg_state_string(p->second.state)
+       << ", last acting " << p->second.acting;
+    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+}
+
 void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			   list<pair<health_status_t,string> > *detail) const
 {
@@ -1161,29 +1174,24 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   pg_map.get_stuck_stats(PGMap::STUCK_INACTIVE, cutoff, stuck_pgs);
   if (!stuck_pgs.empty()) {
     note["stuck inactive"] = stuck_pgs.size();
+    if (detail)
+      note_stuck_detail(stuck_pgs, detail);
   }
   stuck_pgs.clear();
 
   pg_map.get_stuck_stats(PGMap::STUCK_UNCLEAN, cutoff, stuck_pgs);
   if (!stuck_pgs.empty()) {
     note["stuck unclean"] = stuck_pgs.size();
+    if (detail)
+      note_stuck_detail(stuck_pgs, detail);
   }
   stuck_pgs.clear();
 
   pg_map.get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
   if (!stuck_pgs.empty()) {
     note["stuck stale"] = stuck_pgs.size();
-  }
-
-  if (detail) {
-    for (hash_map<pg_t,pg_stat_t>::iterator p = stuck_pgs.begin();
-	 p != stuck_pgs.end();
-	 ++p) {
-      ostringstream ss;
-      ss << "pg " << p->first << " is stuck " << pg_state_string(p->second.state)
-	 << ", last acting " << p->second.acting;
-      detail->push_back(make_pair(HEALTH_WARN, ss.str()));
-    }
+    if (detail)
+      note_stuck_detail(stuck_pgs, detail);
   }
 
   if (!note.empty()) {
