@@ -45,14 +45,52 @@ using namespace __gnu_cxx;
  *    message handler and handles queuing and ordering of pipes. Each
  *    pipe maintains its own message ordering, but the SimpleMessenger
  *    decides what order pipes get to deliver messages in.
- *
- * This class should only be created on the heap, and it should be destroyed
- * via a call to destroy(). Making it on the stack or otherwise calling
- * the destructor will lead to badness.
  */
 
 class SimpleMessenger : public Messenger {
+  // First we have the public Messenger interface implementation...
 public:
+  /**
+   * Initialize the SimpleMessenger!
+   *
+   * @param cct The CephContext to use
+   * @param name The name to assign ourselves
+   * _nonce A unique ID to use for this SimpleMessenger. It should not
+   * be a value that will be repeated if the daemon restarts.
+   */
+  SimpleMessenger(CephContext *cct, entity_name_t name,
+		  string mname, uint64_t _nonce) :
+    Messenger(cct, name),
+    accepter(this),
+    reaper_thread(this),
+    dispatch_thread(this),
+    my_type(name.type()),
+    nonce(_nonce),
+    lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
+    global_seq(0),
+    destination_stopped(false),
+    cluster_protocol(0),
+    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
+    reaper_started(false), reaper_stop(false),
+    timeout(0),
+    msgr(this)
+  {
+    pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
+    // for local dmsg delivery
+    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN, NULL);
+    init_local_pipe();
+  }
+  /**
+   * Destroy the SimpleMessenger. Pretty simple since all the work is done
+   * elsewhere.
+   */
+  virtual ~SimpleMessenger() {
+    assert(destination_stopped); // we've been marked as stopped
+    assert(!did_bind); // either we didn't bind or we shut down the Accepter
+    assert(rank_pipe.empty()); // we don't have any running Pipes.
+    assert(reaper_stop && !reaper_started); // the reaper thread is stopped
+    delete dispatch_queue.local_pipe;
+  }
   /** @defgroup Accessors
    * @{
    */
@@ -67,18 +105,30 @@ public:
    */
   void set_addr_unknowns(entity_addr_t& addr);
   /**
-   * Retrieve the Connection for an endpoint.
-   *
-   * @param dest The endpoint you want to get a Connection for.
-   * @return The requested Connection, as a pointer whose reference you own.
+   * Get the number of Messages which the SimpleMessenger has received
+   * but not yet dispatched.
+   * @return The length of the Dispatch queue.
    */
-  virtual Connection *get_connection(const entity_inst_t& dest);
+  int get_dispatch_queue_len() {
+    return dispatch_queue.get_queue_len();
+  }
   /** @} Accessors */
 
   /**
    * @defgroup Configuration functions
    * @{
    */
+  /**
+   * Set the cluster protocol in use by this daemon.
+   * This is an init-time function and cannot be called after calling
+   * start() or bind().
+   *
+   * @param p The cluster protocol to use. Defined externally.
+   */
+  void set_cluster_protocol(int p) {
+    assert(!started && !did_bind);
+    cluster_protocol = p;
+  }
   /**
    * Set a policy which is applied to all peers who do not have a type-specific
    * Policy.
@@ -116,24 +166,228 @@ public:
    */
   void set_policy_throttler(int type, Throttle *t) {
     assert (!started && !did_bind);
-    get_policy(type).throttler = t;
+    assert(policy_map.count(type));
+    policy_map[type].throttler = t;
   }
   /**
-   * Set the cluster protocol in use by this daemon.
-   * This is an init-time function and cannot be called after calling
-   * start() or bind().
+   * Bind the SimpleMessenger to a specific address. If bind_addr
+   * is not completely filled in the system will use the
+   * valid portions and cycle through the unset ones (eg, the port)
+   * in an unspecified order.
    *
-   * @param p The cluster protocol to use. Defined externally.
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 if the SimpleMessenger is already running, or
+   * -errno if an error is returned from a system call.
    */
-  void set_cluster_protocol(int p) {
-    assert(!started && !did_bind);
-    cluster_protocol = p;
-  }
+  int bind(entity_addr_t bind_addr);
+  /**
+   * This function performs a full restart of the SimpleMessenger. It
+   * calls mark_down_all() and binds to a new port. (If avoid_port
+   * is set it additionally avoids that specific port.)
+   *
+   * @param avoid_port An additional port to avoid binding to.
+   */
+  int rebind(int avoid_port);
   /** @} Configuration functions */
-private:
-  class Pipe;
 
-  // incoming
+  /**
+   * @defgroup Startup/Shutdown
+   * @{
+   */
+  /**
+   * Start up the SimpleMessenger. Create worker threads as necessary.
+   * @return 0
+   */
+  virtual int start();
+  /**
+   * Wait until the SimpleMessenger is ready to shut down (triggered by a
+   * call to the shutdown() function), then handle
+   * stopping its threads and cleaning up Pipes and various queues.
+   * Once this function returns, the SimpleMessenger is fully shut down and
+   * can be deleted.
+   */
+  virtual void wait();
+  /**
+   * Tell the SimpleMessenger to shut down. This function does not
+   * complete the shutdown; it just triggers it.
+   *
+   * @return 0
+   */
+  virtual int shutdown();
+
+  /** @} // Startup/Shutdown */
+
+  /**
+   * @defgroup Messaging
+   * @{
+   */
+  /**
+   * Queue the given Message for the given entity.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message. Other guarantees may be provided based
+   * on the Connection policy associated with the dest.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0 on success, or -EINVAL if the dest's address is empty.
+   */
+  virtual int send_message(Message *m, const entity_inst_t& dest) {
+    return _send_message(m, dest, false);
+  }
+  /**
+   * Queue the given Message to send out on the given Connection.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message (or else a guaranteed-safe drop).
+   * Other guarantees may be provided based on the Connection policy.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param con The Connection to send the Message out on.
+   *
+   * @return 0 on success.
+   */
+  virtual int send_message(Message *m, Connection *con) {
+    return _send_message(m, con, false);
+  }
+  /**
+   * Lazily queue the given Message for the given entity. Unlike with
+   * send_message(), lazy_send_message() will not establish a
+   * Connection if none exists, re-establish the connection if it
+   * has broken, or queue the Message if the connection is broken.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0 on success, or -EINVAL if the dest's address is empty.
+   */
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) {
+    return _send_message(m, dest, true);
+  }
+  /**
+   * Lazily queue the given Message for the given Connection.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param con The Connection to send the Message out on.
+   *
+   * @return 0.
+   */
+  virtual int lazy_send_message(Message *m, Connection *con) {
+    return _send_message(m, con, true);
+  }
+  /** @} // Messaging */
+
+  /**
+   * @defgroup Connection Management
+   * @{
+   */
+  /**
+   * Get the Connection object associated with a given entity. If a
+   * Connection does not exist, create one and establish a logical connection.
+   * The caller owns a reference when this returns. Call ->put() when you're
+   * done!
+   *
+   * @param dest The entity to get a connection for.
+   * @return The requested Connection, as a pointer whose reference you own.
+   */
+  virtual Connection *get_connection(const entity_inst_t& dest);
+  /**
+   * Send a "keepalive" ping to the given dest, if it has a working Connection.
+   * If the Messenger doesn't already have a Connection, or if the underlying
+   * connection has broken, this function does nothing.
+   *
+   * @param dest The entity to send the keepalive to.
+   * @return 0, or -EINVAL if we don't already have a Connection, or
+   * -EPIPE if a Pipe for the dest doesn't exist.
+   */
+  virtual int send_keepalive(const entity_inst_t& addr);
+  /**
+   * Send a "keepalive" ping along the given Connection, if it's working.
+   * If the underlying connection has broken, this function does nothing.
+   *
+   * @param dest The entity to send the keepalive to.
+   * @return 0, or -EPIPE if the Connection doesn't have a running Pipe.
+   */
+  virtual int send_keepalive(Connection *con);
+  /**
+   * Mark down a Connection to a remote. This will cause us to
+   * discard our outgoing queue for them, and if they try
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset. If there is no
+   * Connection to the given dest, it is a no-op.
+   * It does not generate any notifications to the Dispatcher.
+   *
+   * @param a The address to mark down.
+   */
+  virtual void mark_down(const entity_addr_t& addr);
+  /**
+   * Mark down the given Connection. This will cause us to
+   * discard its outgoing queue, and if the endpoint tries
+   * to reconnect they will discard their queue when we
+   * inform them of the session reset.
+   * It does not generate any notifications to the Dispatcher.
+   *
+   * @param con The Connection to mark down.
+   */
+  virtual void mark_down(Connection *con);
+  /**
+   * Unlike mark_down, this function will try and deliver
+   * all messages before ending the connection, and it will use
+   * the Pipe's existing semantics to do so. Once the Messages
+   * all been sent out (and acked, if using reliable delivery)
+   * the Connection will be closed.
+   * This function means that you will get standard delivery to endpoints,
+   * and then the Connection will be cleaned up. It does not
+   * generate any notifications to the Dispatcher.
+   *
+   * @param con The Connection to mark down.
+   */
+  virtual void mark_down_on_empty(Connection *con);
+  /**
+   * Mark a Connection as "disposable", setting it to lossy
+   * (regardless of initial Policy). Unlike mark_down_on_empty()
+   * this does not immediately close the Connection once
+   * Messages have been delivered, so as long as there are no errors you can
+   * continue to receive responses; but it will not attempt
+   * to reconnect for message delivery or preserve your old
+   * delivery semantics, either.
+   * You can compose this with mark_down, in which case the Pipe
+   * will make sure to send all Messages and wait for an ack before
+   * closing, but if there's a failure it will simply shut down. It
+   * does not generate any notifications to the Dispatcher.
+   *
+   * @param con The Connection to mark as disposable.
+   */
+  virtual void mark_disposable(Connection *con);
+  /**
+   * Mark all the existing Connections down. This is equivalent
+   * to iterating over all Connections and calling mark_down()
+   * on each.
+   */
+  virtual void mark_down_all();
+  /** @} // Connection Management */
+protected:
+  /**
+   * @defgroup Messenger Interfaces
+   * @{
+   */
+  /**
+   * Start up the DispatchQueue thread once we have somebody to dispatch to.
+   */
+  virtual void ready();
+  /** @} // Messenger Interfaces */
+private:
+  /**
+   * @defgroup Inner classes
+   * @{
+   */
+  /**
+   * If the SimpleMessenger binds to a specific address, the Accepter runs
+   * and listens for incoming connections.
+   */
   class Accepter : public Thread {
   public:
     SimpleMessenger *msgr;
@@ -149,9 +403,80 @@ private:
     int start();
   } accepter;
 
-  // pipe
+  /**
+   * The Pipe is the most complex SimpleMessenger component. It gets
+   * two threads, one each for reading and writing on a socket it's handed
+   * at creation time, and is responsible for everything that happens on
+   * that socket. Besides message transmission, it's responsible for
+   * propagating socket errors to the SimpleMessenger and then sticking
+   * around in a state where it can provide enough data for the SimpleMessenger
+   * to provide reliable Message delivery when it manages to reconnect.
+   */
   class Pipe : public RefCountedObject {
+    /**
+     * The Reader thread handles all reads off the socket -- not just
+     * Messages, but also acks and other protocol bits (excepting startup,
+     * when the Writer does a couple of reads).
+     * All the work is implemented in Pipe itself, of course.
+     */
+    class Reader : public Thread {
+      Pipe *pipe;
+    public:
+      Reader(Pipe *p) : pipe(p) {}
+      void *entry() { pipe->reader(); return 0; }
+    } reader_thread;
+    friend class Reader;
+
+    /**
+     * The Writer thread handles all writes to the socket (after startup).
+     * All the work is implemented in Pipe itself, of course.
+     */
+    class Writer : public Thread {
+      Pipe *pipe;
+    public:
+      Writer(Pipe *p) : pipe(p) {}
+      void *entry() { pipe->writer(); return 0; }
+    } writer_thread;
+    friend class Writer;
+
   public:
+    Pipe(SimpleMessenger *r, int st, Connection *con) :
+      reader_thread(this), writer_thread(this),
+      msgr(r),
+      sd(-1),
+      peer_type(-1),
+      pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
+      state(st),
+      connection_state(new Connection),
+      reader_running(false), reader_joining(false), writer_running(false),
+      in_qlen(0), keepalive(false), halt_delivery(false),
+      close_on_empty(false),
+      connect_seq(0), peer_global_seq(0),
+      out_seq(0), in_seq(0), in_seq_acked(0) {
+      if (con) {
+        connection_state = con->get();
+        connection_state->reset_pipe(this);
+      } else {
+        connection_state = new Connection();
+        connection_state->pipe = get();
+      }
+      msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
+      if (msgr->timeout == 0)
+        msgr->timeout = -1;
+    }
+    ~Pipe() {
+      for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
+          i != queue_items.end();
+          ++i) {
+        assert(!i->second->is_on_list());
+        delete i->second;
+      }
+      assert(out_q.empty());
+      assert(sent.empty());
+      if (connection_state)
+        connection_state->put();
+    }
+
     SimpleMessenger *msgr;
     ostream& _pipe_prefix(std::ostream *_dout);
 
@@ -191,7 +516,6 @@ private:
     bool keepalive;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
     bool close_on_empty;
-    bool disposable;
     
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
@@ -239,65 +563,14 @@ private:
       }
 
       if (sent.empty() && close_on_empty) {
-	// this is slightly hacky
-	lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
-	policy.lossy = true;
-	fault();
+        lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
+        stop();
       }
     }
 
-    // threads
-    class Reader : public Thread {
-      Pipe *pipe;
     public:
-      Reader(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->reader(); return 0; }
-    } reader_thread;
-    friend class Reader;
-
-    class Writer : public Thread {
-      Pipe *pipe;
-    public:
-      Writer(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->writer(); return 0; }
-    } writer_thread;
-    friend class Writer;
-    
-  public:
     Pipe(const Pipe& other);
     const Pipe& operator=(const Pipe& other);
-
-    Pipe(SimpleMessenger *r, int st) : 
-      msgr(r),
-      sd(-1),
-      peer_type(-1),
-      pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
-      state(st), 
-      connection_state(new Connection),
-      reader_running(false), reader_joining(false), writer_running(false),
-      in_qlen(0), keepalive(false), halt_delivery(false), 
-      close_on_empty(false), disposable(false),
-      connect_seq(0), peer_global_seq(0),
-      out_seq(0), in_seq(0), in_seq_acked(0),
-      reader_thread(this), writer_thread(this) {
-      connection_state->pipe = get();
-      msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
-      if (msgr->timeout == 0)
-        msgr->timeout = -1;
-    }
-    ~Pipe() {
-      for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
-	   i != queue_items.end();
-	   ++i) {
-	assert(!i->second->is_on_list());
-	delete i->second;
-      }
-      assert(out_q.empty());
-      assert(sent.empty());
-      if (connection_state)
-        connection_state->put();
-    }
-
 
     void start_reader() {
       assert(pipe_lock.is_locked());
@@ -313,7 +586,7 @@ private:
     }
     void join_reader() {
       if (!reader_running)
-	return;
+        return;
       assert(!reader_joining);
       reader_joining = true;
       cond.Signal();
@@ -336,7 +609,7 @@ private:
       // this is just to make sure that a changeset is working
       // properly; if you start using the refcounting more and have
       // multiple people hanging on to a message, ditch the assert!
-      assert(m->nref.read() == 1); 
+      assert(m->nref.read() == 1);
 
       queue_received(m, m->get_priority());
     }
@@ -349,7 +622,7 @@ private:
 
     void set_peer_addr(const entity_addr_t& a) {
       if (&peer_addr != &a)  // shut up valgrind
-	peer_addr = a;
+        peer_addr = a;
       connection_state->set_peer_addr(a);
     }
     void set_peer_type(int t) {
@@ -361,9 +634,9 @@ private:
     void unregister_pipe();
     void join() {
       if (writer_thread.is_started())
-	writer_thread.join();
+        writer_thread.join();
       if (reader_thread.is_started())
-	reader_thread.join();
+        reader_thread.join();
     }
     void stop();
 
@@ -371,7 +644,7 @@ private:
       pipe_lock.Lock();
       _send(m);
       pipe_lock.Unlock();
-    }    
+    }
     void _send(Message *m) {
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
@@ -383,13 +656,13 @@ private:
     Message *_get_next_outgoing() {
       Message *m = 0;
       while (!m && !out_q.empty()) {
-	map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
-	if (!p->second.empty()) {
-	  m = p->second.front();
-	  p->second.pop_front();
-	}
-	if (p->second.empty())
-	  out_q.erase(p->first);
+        map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
+        if (!p->second.empty()) {
+          m = p->second.front();
+          p->second.pop_front();
+        }
+        if (p->second.empty())
+          out_q.erase(p->first);
       }
       return m;
     }
@@ -405,7 +678,12 @@ private:
     }
   };
 
-
+  /**
+   * The DispatchQueue contains all the Pipes which have Messages
+   * they want to be dispatched, carefully organized by Message priority
+   * and permitted to deliver in a round-robin fashion.
+   * See SimpleMessenger::dispatch_entry for details.
+   */
   struct DispatchQueue {
     Mutex lock;
     Cond cond;
@@ -468,53 +746,9 @@ private:
     }
   } dispatch_queue;
 
-  void dispatch_throttle_release(uint64_t msize);
-
-  // SimpleMessenger stuff
-  Mutex lock;
-  Cond  wait_cond;  // for wait()
-  bool did_bind;
-  Throttle dispatch_throttler;
-
-  // where i listen
-  bool need_addr;
-  uint64_t nonce;
-  
-  // local
-  bool destination_stopped;
-  
-  // remote
-  hash_map<entity_addr_t, Pipe*> rank_pipe;
- 
-  int my_type;
-
-
-  // --- policy ---
-  Policy default_policy;
-  map<int, Policy> policy_map; // entity_name_t::type -> Policy
-
-  // --- pipes ---
-  set<Pipe*>      pipes;
-  list<Pipe*>     pipe_reap_queue;
-
-  Mutex global_seq_lock;
-  __u32 global_seq;
-public:
-  Policy& get_policy(int t) {
-    if (policy_map.count(t))
-      return policy_map[t];
-    else
-      return default_policy;
-  }
-
-  Pipe *connect_rank(const entity_addr_t& addr, int type);
-  virtual void mark_down(const entity_addr_t& addr);
-  virtual void mark_down(Connection *con);
-  virtual void mark_down_on_empty(Connection *con);
-  virtual void mark_disposable(Connection *con);
-  virtual void mark_down_all();
-
-  // reaper
+  /**
+   * A thread used to tear down Pipes when they're complete.
+   */
   class ReaperThread : public Thread {
     SimpleMessenger *msgr;
   public:
@@ -525,33 +759,9 @@ public:
     }
   } reaper_thread;
 
-  bool reaper_started, reaper_stop;
-  Cond reaper_cond;
-
-  void reaper_entry();
-  void reaper();
-  void queue_reap(Pipe *pipe);
-
-
-  /***** Messenger-required functions  **********/
-  int get_dispatch_queue_len() {
-    return dispatch_queue.get_queue_len();
-  }
-
-  virtual void ready();
-  virtual int shutdown();
-  virtual void suicide();
-  void prepare_dest(const entity_inst_t& inst);
-  virtual int send_message(Message *m, const entity_inst_t& dest);
-  virtual int send_message(Message *m, Connection *con);
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest);
-  virtual int lazy_send_message(Message *m, Connection *con) {
-    return send_message(m, con);
-  }
-
-  /***********************/
-
-private:
+  /**
+   * The DispatchThread runs dispatch_entry to empty out the dispatch_queue.
+   */
   class DispatchThread : public Thread {
     SimpleMessenger *msgr;
   public:
@@ -562,64 +772,212 @@ private:
     }
   } dispatch_thread;
 
-  void dispatch_entry();
+  /**
+   * @} // Inner classes
+   */
 
-  SimpleMessenger *msgr; //hack to make dout macro work, will fix
-  int timeout;
-  
+  /**
+   * @defgroup Utility functions
+   * @{
+   */
+  /**
+   * Create a Pipe associated with the given entity (of the given type).
+   * Initiate the connection. (This function returning does not guarantee
+   * connection success.)
+   *
+   * @param addr The address of the entity to connect to.
+   * @param type The peer type of the entity at the address.
+   * @param con An existing Connection to associate with the new Pipe. If
+   * NULL, it creates a new Connection.
+   *
+   * @return a pointer to the newly-created Pipe. Caller does not own a
+   * reference; take one if you need it.
+   */
+  Pipe *connect_rank(const entity_addr_t& addr, int type, Connection *con);
+  /**
+   * Send a message, lazily or not.
+   * This just glues [lazy_]send_message together and passes
+   * the input on to submit_message.
+   */
+  int _send_message(Message *m, const entity_inst_t& dest, bool lazy);
+  /**
+   * Same as above, but for the Connection-based variants.
+   */
+  int _send_message(Message *m, Connection *con, bool lazy);
+  /**
+   * Queue up a Message for delivery to the entity specified
+   * by addr and dest_type.
+   * submit_message() is responsible for creating
+   * new Pipes (and closing old ones) as necessary.
+   *
+   * @param m The Message to queue up. This function eats a reference.
+   * @param con The existing Connection to use, or NULL if you don't know of one.
+   * @param addr The address to send the Message to.
+   * @param dest_type The peer type of the address we're sending to
+   * @param lazy If true, do not establish or fix a Connection to send the Message;
+   * just drop silently under failure.
+   */
+  void submit_message(Message *m, Connection *con,
+                      const entity_addr_t& addr, int dest_type, bool lazy);
+  /**
+   * Look through the pipes in the pipe_reap_queue and tear them down.
+   */
+  void reaper();
+  /**
+   * @} // Utility functions
+   */
+
+  // SimpleMessenger stuff
+  /// the peer type of our endpoint
+  int my_type;
+  /// approximately unique ID set by the Constructor for use in entity_addr_t
+  uint64_t nonce;
+  /// overall lock used for SimpleMessenger data structures
+  Mutex lock;
+  /// true, specifying we haven't learned our addr; set false when we find it.
+  // maybe this should be protected by the lock?
+  bool need_addr;
+  /**
+   *  false; set to true if the SimpleMessenger bound to a specific address;
+   *  and set false again by Accepter::stop(). This isn't lock-protected
+   *  since you shouldn't be able to race the only writers.
+   */
+  bool did_bind;
+  /// counter for the global seq our connection protocol uses
+  __u32 global_seq;
+  /// lock to protect the global_seq
+  pthread_spinlock_t global_seq_lock;
+
+  /// flag set true when all the threads need to shut down
+  bool destination_stopped;
+
+  /// hash map of addresses to Pipes
+  hash_map<entity_addr_t, Pipe*> rank_pipe;
+  /// a set of all the Pipes we have which are somehow active
+  set<Pipe*>      pipes;
+  /// a list of Pipes we want to tear down
+  list<Pipe*>     pipe_reap_queue;
+
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
+  /// the default Policy we use for Pipes
+  Policy default_policy;
+  /// map specifying different Policies for specific peer types
+  map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
-  int get_proto_version(int peer_type, bool connect);
+  /// Throttle preventing us from building up a big backlog waiting for dispatch
+  Throttle dispatch_throttler;
+
+  bool reaper_started, reaper_stop;
+  Cond reaper_cond;
+
+  /// This Cond is slept on by wait() and signaled by dispatch_entry()
+  Cond  wait_cond;
+
+  int timeout;
+
+  SimpleMessenger *msgr; //hack to make dout macro work, will fix
 
 public:
-  SimpleMessenger(CephContext *cct, entity_name_t name, string mname, uint64_t _nonce) :
-    Messenger(cct, name, mname),
-    accepter(this),
-    lock("SimpleMessenger::lock"), did_bind(false),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
-    need_addr(true),
-    nonce(_nonce), destination_stopped(false), my_type(name.type()),
-    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
-    reaper_thread(this), reaper_started(false), reaper_stop(false), 
-    dispatch_thread(this), msgr(this),
-    timeout(0),
-    cluster_protocol(0)
-  {
-    // for local dmsg delivery
-    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
-    init_local_pipe();
-  }
-  virtual ~SimpleMessenger() {
-    delete dispatch_queue.local_pipe;
-  }
+  /**
+   * @defgroup SimpleMessenger internals
+   * @{
+   */
 
-  int bind(entity_addr_t bind_addr);
-  virtual int start();
-  virtual void wait();
-
-  int rebind(int avoid_port);
-
+  /**
+   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
+   */
+  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
+  /**
+   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
+   */
+  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
+                         bool& isvalid);
+  /**
+   * Increment the global sequence for this SimpleMessenger and return it.
+   * This is for the connect protocol, although it doesn't hurt if somebody
+   * else calls it.
+   *
+   * @return a global sequence ID that nobody else has seen.
+   */
   __u32 get_global_seq(__u32 old=0) {
-    Mutex::Locker l(global_seq_lock);
+    pthread_spin_lock(&global_seq_lock);
     if (old > global_seq)
       global_seq = old;
-    return ++global_seq;
+    __u32 ret = ++global_seq;
+    pthread_spin_unlock(&global_seq_lock);
+    return ret;
+  }
+  /**
+   * Get the protocol version we support for the given peer type: either
+   * a peer protocol (if it matches our own), the protocol version for the
+   * peer (if we're connecting), or our protocol version (if we're accepting).
+   */
+  int get_proto_version(int peer_type, bool connect);
+
+  /**
+   * Fill in the address and peer type for the local pipe, which
+   * is used for delivering messages back to ourself (whether actual Messages
+   * submitted by the endpoint, or interrupts we use to process things like
+   * dead Pipes in a fair order).
+   */
+  void init_local_pipe();  /**
+   * Tell the SimpleMessenger its full IP address.
+   *
+   * This is used by Pipes when connecting to other endpoints, and
+   * probably shouldn't be called by anybody else.
+   */
+  void learned_addr(const entity_addr_t& peer_addr_for_me);
+
+  /**
+   * Get the Policy associated with a type of peer.
+   * @param t The peer type to get the default policy for.
+   *
+   * @return A const Policy reference.
+   */
+  const Policy& get_policy(int t) {
+    if (policy_map.count(t))
+      return policy_map[t];
+    else
+      return default_policy;
   }
 
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
-			 bool& isvalid);
+  /**
+   * This function is used by the dispatch thread. It runs continuously
+   * until dispatch_queue.stop is set to true, choosing what order the Pipes
+   * get to deliver in, and sending out their chosen Message via the
+   * ms_deliver_* functions.
+   * It should really only by dispatch_thread calling this, in our
+   * current implementation.
+   */
+  void dispatch_entry();
+  /**
+   * Release memory accounting back to the dispatch throttler.
+   *
+   * @param msize The amount of memory to release.
+   */
+  void dispatch_throttle_release(uint64_t msize);
 
-  void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
-  void submit_message(Message *m, Pipe *pipe);
-		      
-  virtual int send_keepalive(const entity_inst_t& addr);
-  virtual int send_keepalive(Connection *con);
-
-  void learned_addr(const entity_addr_t& peer_addr_for_me);
-  void init_local_pipe();
-
+  /**
+   * This function is used by the reaper thread. As long as nobody
+   * has set reaper_stop, it calls the reaper function, then
+   * waits to be signaled when it needs to reap again (or when it needs
+   * to stop).
+   */
+  void reaper_entry();
+  /**
+   * Add a pipe to the pipe_reap_queue, to be torn down on
+   * the next call to reaper().
+   * It should really only be the Pipe calling this, in our current
+   * implementation.
+   *
+   * @param pipe A Pipe which has stopped its threads and is
+   * ready to be torn down.
+   */
+  void queue_reap(Pipe *pipe);
+  /**
+   * @} // SimpleMessenger Internals
+   */
 } ;
 
 #endif
