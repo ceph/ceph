@@ -1,13 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include <limits.h>
+
 #include "msg/Messenger.h"
 #include "ObjectCacher.h"
 #include "WritebackHandler.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
-#include <limits.h>
+#include "include/assert.h"
 
 /*** ObjectCacher::BufferHead ***/
 

@@ -12,6 +12,11 @@
  *
  */
 
+#include <fcntl.h>
+#include <iostream>
+#include <string.h>
+#include <string>
+
 #include "client/Client.h"
 #include "include/cephfs/libcephfs.h"
 #include "common/Mutex.h"
@@ -23,11 +28,7 @@
 #include "include/str_list.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
-
-#include <fcntl.h>
-#include <iostream>
-#include <string.h>
-#include <string>
+#include "include/assert.h"
 
 class ceph_mount_info
 {
