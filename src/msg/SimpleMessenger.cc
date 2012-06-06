@@ -235,7 +235,7 @@ void *SimpleMessenger::Accepter::entry()
       msgr->lock.Lock();
 
       if (!msgr->destination_stopped) {
-	Pipe *p = new Pipe(msgr, Pipe::STATE_ACCEPTING);
+	Pipe *p = new Pipe(msgr, Pipe::STATE_ACCEPTING, NULL);
 	p->sd = sd;
 	p->pipe_lock.Lock();
 	p->start_reader();
@@ -410,80 +410,51 @@ int SimpleMessenger::shutdown()
   return 0;
 }
 
-void SimpleMessenger::suicide()
-{
-  ldout(cct,10) << "suicide " << get_myaddr() << dendl;
-  shutdown();
-  // hmm, or exit(0)?
-}
-
-void SimpleMessenger::prepare_dest(const entity_inst_t& inst)
-{
-  lock.Lock();
-  {
-    if (rank_pipe.count(inst.addr) == 0)
-      connect_rank(inst.addr, inst.name.type());
-  }
-  lock.Unlock();
-}
-
-int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
+int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
+                                   bool lazy)
 {
   // set envelope
   m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  ldout(cct,1) << "--> " << dest.name << " " << dest.addr
-          << " -- " << *m
+  ldout(cct,1) << (lazy ? "lazy " : "") <<"--> " << dest.name << " "
+          << dest.addr << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
 	  << dendl;
 
-  submit_message(m, dest.addr, dest.name.type(), false);
+  if (dest.addr == entity_addr_t()) {
+    ldout(cct,0) << (lazy ? "lazy_" : "") << "send_message message " << *m
+                 << " with empty dest " << dest.addr << dendl;
+    m->put();
+    return -EINVAL;
+  }
+
+  lock.Lock();
+  Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
+  submit_message(m, (pipe ? pipe->connection_state : NULL),
+                 dest.addr, dest.name.type(), lazy);
+  lock.Unlock();
   return 0;
 }
 
-int SimpleMessenger::send_message(Message *m, Connection *con)
+int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
 {
   //set envelope
   m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
 
-  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
-  if (pipe) {
-    ldout(cct,1) << "--> " << con->get_peer_addr() << " -- " << *m
-            << " -- ?+" << m->get_data().length()
-            << " " << m << " con " << con
-            << dendl;
+  ldout(cct,1) << (lazy ? "lazy " : "") << "--> " << con->get_peer_addr()
+      << " -- " << *m
+      << " -- ?+" << m->get_data().length()
+      << " " << m << " con " << con
+      << dendl;
 
-    submit_message(m, pipe);
-    pipe->put();
-  } else {
-    ldout(cct,0) << "send_message dropped message " << *m << " because of no pipe on con " << con
-	    << dendl;
-    // else we raced with reaper()
-    m->put();
-  }
-  return 0;
-}
-
-int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
-{
-  // set envelope
-  m->get_header().src = get_myname();
-
-  if (!m->get_priority()) m->set_priority(get_default_send_priority());
- 
-  ldout(cct,1) << "lazy "
-	  << " --> " << dest.name << " " << dest.addr
-          << " -- " << *m
-    	  << " -- ?+" << m->get_data().length()
-          << " " << m
-          << dendl;
-
-  submit_message(m, dest.addr, dest.name.type(), true);
+  lock.Lock();
+  submit_message(m, con, con->get_peer_addr(), con->get_peer_type(), lazy);
+  lock.Unlock();
   return 0;
 }
 
@@ -1303,9 +1274,7 @@ int SimpleMessenger::Pipe::connect()
 
       // hooray!
       peer_global_seq = reply.global_seq;
-      if (!disposable) {
-	policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
-      }
+      policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
       state = STATE_OPEN;
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
@@ -1802,10 +1771,8 @@ void SimpleMessenger::Pipe::writer()
     }
     
     if (sent.empty() && close_on_empty) {
-      // this is slightly hacky
       ldout(msgr->cct,10) << "writer out and sent queues empty, closing" << dendl;
-      policy.lossy = true;
-      fault();
+      stop();
       continue;
     }
 
@@ -2319,7 +2286,7 @@ void SimpleMessenger::reaper()
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     if (p->connection_state)
-      p->connection_state->clear_pipe();
+      p->connection_state->clear_pipe(p);
     p->put();
     ldout(cct,10) << "reaper deleted pipe " << p << dendl;
   }
@@ -2387,7 +2354,9 @@ int SimpleMessenger::start()
 /* connect_rank
  * NOTE: assumes messenger.lock held.
  */
-SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, int type)
+SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
+                                                     int type,
+                                                     Connection *con)
 {
   assert(lock.is_locked());
   assert(addr != my_inst.addr);
@@ -2395,7 +2364,7 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
   // create pipe
-  Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
+  Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING, con);
   pipe->pipe_lock.Lock();
   pipe->set_peer_type(type);
   pipe->set_peer_addr(addr);
@@ -2425,29 +2394,6 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
 }
 
-void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
-{ 
-  assert(pipe->msgr == this);
-  lock.Lock();
-  if (pipe == dispatch_queue.local_pipe) {
-    ldout(cct,20) << "submit_message " << *m << " local" << dendl;
-    dispatch_queue.local_delivery(m, m->get_priority());
-  } else {
-    pipe->pipe_lock.Lock();
-    if (pipe->state == Pipe::STATE_CLOSED) {
-      ldout(cct,20) << "submit_message " << *m << " ignoring closed pipe " << pipe->peer_addr << dendl;
-      pipe->unregister_pipe();
-      pipe->pipe_lock.Unlock();
-      m->put();
-    } else {
-      ldout(cct,20) << "submit_message " << *m << " remote " << pipe->peer_addr << dendl;
-      pipe->_send(m);
-      pipe->pipe_lock.Unlock();
-    }
-  }
-  lock.Unlock();
-}
-
 Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
@@ -2470,83 +2416,76 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
       }
     }
     if (!pipe) {
-      pipe = connect_rank(dest.addr, dest.name.type());
+      pipe = connect_rank(dest.addr, dest.name.type(), NULL);
     }
   }
   return (Connection *)pipe->connection_state->get();
 }
 
 
-void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr, int dest_type, bool lazy)
+void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
-  // this is just to make sure that a changeset is working properly;
-  // if you start using the refcounting more and have multiple people
-  // hanging on to a message, ditch the assert!
-  assert(m->nref.read() == 1);
-
-  if (dest_addr == entity_addr_t()) {
-    ldout(cct,0) << "submit_message message " << *m << " with empty dest " << dest_addr << dendl;
-    m->put();
-    return;
+  Pipe *pipe = NULL;
+  if (con) {
+    pipe = con ? (Pipe *)con->pipe : NULL;
+    // we don't want to deal with ref-counting here, so we don't use get_pipe()
+    con->get();
   }
 
-  lock.Lock();
-  {
-    // local?
-    if (my_inst.addr == dest_addr) {
-      if (!destination_stopped) {
-        // local
-        ldout(cct,20) << "submit_message " << *m << " local" << dendl;
-	dispatch_queue.local_delivery(m, m->get_priority());
-      } else {
-        ldout(cct,0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
-        assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
-        m->put();
-      }
+  // local?
+  if (!pipe && my_inst.addr == dest_addr) {
+    if (!destination_stopped) {
+      // local
+      ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+      dispatch_queue.local_delivery(m, m->get_priority());
     } else {
-      // remote pipe.
-      Pipe *pipe = 0;
-      if (rank_pipe.count(dest_addr)) {
-	pipe = rank_pipe[ dest_addr ];
-	pipe->pipe_lock.Lock();
-	if (pipe->state == Pipe::STATE_CLOSED) {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
-	  pipe->unregister_pipe();
-	  pipe->pipe_lock.Unlock();
-	  pipe = 0;
-	} else {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-	  
-	  pipe->_send(m);
-	  pipe->pipe_lock.Unlock();
-	}
+      ldout(cct,0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
+      assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
+      m->put();
+    }
+  } else {
+    // remote pipe.
+    if (pipe) {
+      pipe->pipe_lock.Lock();
+      if (pipe->state == Pipe::STATE_CLOSED) {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
+        pipe->unregister_pipe();
+        pipe->pipe_lock.Unlock();
+        pipe = 0;
+      } else {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
+
+        pipe->_send(m);
+        pipe->pipe_lock.Unlock();
       }
-      if (!pipe) {
-	Policy& policy = get_policy(dest_type);
-	if (policy.lossy && policy.server) {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
-		   << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
-	  m->put();
-	} else if (lazy) {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
-	  m->put();
-	} else {
-	  ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-	  // not connected.
-	  pipe = connect_rank(dest_addr, dest_type);
-	  pipe->send(m);
-	}
+    }
+    if (!pipe) {
+      const Policy& policy = get_policy(dest_type);
+      if (policy.server) {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
+            << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
+        m->put();
+      } else if (lazy) {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
+        m->put();
+      } else {
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
+        // not connected.
+        pipe = connect_rank(dest_addr, dest_type, con);
+        pipe->send(m);
       }
     }
   }
-
-  lock.Unlock();
+  if (con) {
+    con->put();
+  }
 }
 
 int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 {
   const entity_addr_t dest_addr = dest.addr;
   entity_addr_t dest_proc_addr = dest_addr;
+  int ret = 0;
 
   lock.Lock();
   {
@@ -2563,22 +2502,27 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 	  pipe->unregister_pipe();
 	  pipe->pipe_lock.Unlock();
 	  pipe = 0;
+	  ret = -EPIPE;
 	} else {
 	  ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
 	  pipe->_send_keepalive();
 	  pipe->pipe_lock.Unlock();
 	}
+      } else {
+        ret = -EINVAL;
       }
-      if (!pipe)
+      if (!pipe) {
 	ldout(cct,20) << "send_keepalive no pipe for " << dest_addr << ", doing nothing." << dendl;
+      }
     }
   }
   lock.Unlock();
-  return 0;
+  return ret;
 }
 
 int SimpleMessenger::send_keepalive(Connection *con)
 {
+  int ret = 0;
   SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
   if (pipe) {
     ldout(cct,20) << "send_keepalive con " << con << ", have pipe." << dendl;
@@ -2589,8 +2533,9 @@ int SimpleMessenger::send_keepalive(Connection *con)
     pipe->put();
   } else {
     ldout(cct,0) << "send_keepalive con " << con << ", no pipe." << dendl;
+    ret = -EPIPE;
   }
-  return 0;
+  return ret;
 }
 
 
@@ -2748,7 +2693,6 @@ void SimpleMessenger::mark_disposable(Connection *con)
     assert(p->msgr == this);
     p->pipe_lock.Lock();
     p->policy.lossy = true;
-    p->disposable = true;
     p->pipe_lock.Unlock();
     p->put();
   } else {

@@ -33,7 +33,13 @@ public:
   // how i receive messages
   virtual bool ms_dispatch(Message *m) = 0;
 
-  // after a connection connects
+  /**
+   * This function will be called whenever a new Connection is made to the
+   * Messenger.
+   *
+   * @param con The new Connection which has been established. You are not
+   * granted a reference to it -- take one if you need one!
+   */
   virtual void ms_handle_connect(Connection *con) { };
 
   /*
@@ -42,6 +48,9 @@ public:
    * in the network connection.
    * Only called on lossy Connections or those you've
    * designated mark_down_on_empty().
+   *
+   * @param con The Connection which broke. You are not granted
+   * a reference to it.
    */
   virtual bool ms_handle_reset(Connection *con) = 0;
 
@@ -50,16 +59,50 @@ public:
    * have been violated because the remote somehow reset.
    * It implies that incoming messages were dropped, and
    * probably some of our previous outgoing messages were too.
+   *
+   * @param con The Connection which broke. You are not granted
+   * a reference to it.
    */
   virtual void ms_handle_remote_reset(Connection *con) = 0;
   
-  // authorization handshake provides mutual authentication of peers.
-  //  connecting side
+  /**
+   * @defgroup Authentication
+   * @{
+   */
+  /**
+   * Retrieve the AuthAuthorizer for the given peer type. It might not
+   * provide one if it knows there is no AuthAuthorizer for that type.
+   *
+   * @param dest_type The peer type we want the authorizer for.
+   * @param a Double pointer to an AuthAuthorizer. The Dispatcher will fill
+   * in *a with the correct AuthAuthorizer, if it can. Make sure that you have
+   * set *a to NULL before calling in.
+   * @param force_new Force the Dispatcher to wait for a new set of keys before
+   * returning the authorizer.
+   *
+   * @return True if this function call properly filled in *a, false otherwise.
+   */
   virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a, bool force_new) { return false; };
-  //  accepting side
+  /**
+   * Verify the authorizer for a new incoming Connection.
+   *
+   * @param con The new incoming Connection
+   * @param peer_type The type of the endpoint which initiated this Connection
+   * @param protocol The ID of the protocol in use (at time of writing, cephx or none)
+   * @param authorizer The authorization string supplied by the remote
+   * @param authorizer_reply Output param: The string we should send back to
+   * the remote to authorize ourselves. Only filled in if isvalid
+   * @param isvalid Output param: True if authorizer is valid, false otherwise
+   *
+   * @return True if we were able to prove or disprove correctness of
+   * authorizer, false otherwise.
+   */
   virtual bool ms_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 				    bool& isvalid) { return false; };
+  /**
+   * @} //Authentication
+   */
 protected:
   CephContext *cct;
 private:
