@@ -353,6 +353,10 @@ AC_CHECK_HEADER([boost/spirit/include/classic_core.hpp], [],
     AC_MSG_FAILURE(["Can't find boost spirit headers"]))])
 AM_CONDITIONAL(USE_BOOST_SPIRIT_OLD_HDR, [test "$use_bspirit_old_hdr" = "yes"])
 
+AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
+	[AC_DEFINE([HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION], [], [have boost::random::discrete_distrubition])],
+	[])
+
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
 
