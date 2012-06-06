@@ -54,8 +54,8 @@ public:
   std::map<int, string> rule_name_map;
 
   /* reverse maps */
-  mutable bool have_rmaps;
-  mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  bool have_rmaps;
+  std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
 
 private:
   void build_rmaps() {
