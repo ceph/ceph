@@ -95,6 +95,11 @@ def _positive_int(string):
             '{string} is not positive'.format(string=string))
     return value
 
+def canonicalize_hostname(s):
+    if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s) is None:
+        s = 'ubuntu@' + s + '.front.sepia.ceph.com'
+    return s
+
 def main():
     parser = argparse.ArgumentParser(description="""
 Lock, unlock, or query lock status of machines.
@@ -204,14 +209,8 @@ Lock, unlock, or query lock status of machines.
 
     ret = 0
     user = ctx.owner
-    machines = ctx.machines
+    machines = [canonicalize_hostname(m) for m in ctx.machines]
     machines_to_update = []
-
-    def canonicalize_hostname(s):
-        if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s) is None:
-            s = 'ubuntu@' + s + '.front.sepia.ceph.com'
-        return s
-    machines = map(canonicalize_hostname, machines)
 
     if ctx.targets:
         try:
@@ -353,7 +352,7 @@ to run on, or use -a to check all of them automatically.
         assert not ctx.targets and not ctx.machines, \
             'You can\'t specify machines with the --all option'
 
-    machines = ctx.machines
+    machines = [canonicalize_hostname(m) for m in ctx.machines]
 
     if ctx.targets:
         try:
