@@ -462,7 +462,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
     if (j == objects.end()) {
       if (min_count > 0 && out->size() > (unsigned)min_count) {
 	if (next)
-	  *next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i));
+	  *next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1);
 	return 0;
       }
       *(next_path.rbegin()) = *(i->rbegin());

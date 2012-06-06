@@ -79,6 +79,9 @@ void DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
   case DSOP_COLL_RENAME:
     //do_coll_rename(gen);
     break;
+  case DSOP_SET_ATTRS:
+    do_set_attrs(gen);
+    break;
   default:
     assert(0 == "bad op");
   }
@@ -166,8 +169,8 @@ void DeterministicOpSequence::do_remove(rngen_t& gen)
   _do_touch(entry->m_coll, *obj);
 }
 
-void DeterministicOpSequence::_gen_random(rngen_t& gen,
-					  size_t size, bufferlist& bl) {
+static void _gen_random(rngen_t& gen,
+			size_t size, bufferlist& bl) {
 
   static const char alphanum[] = "0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -180,6 +183,46 @@ void DeterministicOpSequence::_gen_random(rngen_t& gen,
   }
   bp[size - 1] = '\0';
   bl.append(bp);
+}
+
+static void gen_attrs(rngen_t &gen,
+		      map<string, bufferlist> *out) {
+  boost::uniform_int<> num_rng(10, 30);
+  boost::uniform_int<> key_size_rng(5, 10);
+  boost::uniform_int<> val_size_rng(100, 1000);
+  size_t num_attrs = static_cast<size_t>(num_rng(gen));
+  for (size_t i = 0; i < num_attrs; ++i) {
+    size_t key_size = static_cast<size_t>(num_rng(gen));
+    size_t val_size = static_cast<size_t>(num_rng(gen));
+    bufferlist keybl;
+    _gen_random(gen, key_size, keybl);
+    string key(keybl.c_str(), keybl.length());
+    _gen_random(gen, val_size, (*out)[key]);
+  }
+}
+
+void DeterministicOpSequence::do_set_attrs(rngen_t& gen) {
+  int coll_id = _gen_coll_id(gen);
+  int obj_id = _gen_obj_id(gen);
+
+  coll_entry_t *entry = get_coll_at(coll_id);
+  if (!entry) {
+    dout(0) << "do_set_attrs coll id " << coll_id << " non-existent" << dendl;
+    return;
+  }
+
+  hobject_t *obj = entry->get_obj(obj_id);
+  if (!obj) {
+    dout(0) << "do_set_attrs " << entry->m_coll.to_str()
+	    << " no object #" << obj_id << dendl;
+    return;
+  }
+
+  map<string, bufferlist> out;
+  gen_attrs(gen, &out);
+
+  dout(0) << "do_set_attrs " << out.size() << " entries" << dendl;
+  return _do_set_attrs(entry->m_coll, *obj, out);
 }
 
 void DeterministicOpSequence::do_write(rngen_t& gen)
@@ -410,6 +453,16 @@ void DeterministicOpSequence::_do_remove(coll_t coll, hobject_t& obj)
   ObjectStore::Transaction t;
   note_txn(&t);
   t.remove(coll, obj);
+  m_store->apply_transaction(t);
+}
+
+void DeterministicOpSequence::_do_set_attrs(coll_t coll,
+					    hobject_t &obj,
+					    const map<string, bufferlist> &attrs)
+{
+  ObjectStore::Transaction t;
+  note_txn(&t);
+  t.omap_setkeys(coll, obj, attrs);
   m_store->apply_transaction(t);
 }
 

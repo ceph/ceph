@@ -131,6 +131,7 @@ static CompatSet get_osd_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_OLOC);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEC);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HOBJECTPOOL);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -153,46 +154,63 @@ ObjectStore *OSD::create_object_store(const std::string &dev, const std::string 
 #undef dout_prefix
 #define dout_prefix *_dout
 
-static int convert_collection(ObjectStore *store, coll_t cid)
+int OSD::convert_collection(ObjectStore *store, coll_t cid)
 {
+  coll_t tmp0("convertfs_temp");
+  coll_t tmp1("convertfs_temp1");
   vector<hobject_t> objects;
-  int r = store->collection_list(cid, objects);
-  if (r < 0)
-    return r;
-  string temp_name("temp");
+
   map<string, bufferptr> aset;
-  r = store->collection_getattrs(cid, aset);
+  int r = store->collection_getattrs(cid, aset);
   if (r < 0)
     return r;
-  while (store->collection_exists(coll_t(temp_name)))
-    temp_name = "_" + temp_name;
-  coll_t temp(temp_name);
-  
-  ObjectStore::Transaction t;
-  t.collection_rename(cid, temp);
-  t.create_collection(cid);
-  for (vector<hobject_t>::iterator obj = objects.begin();
-       obj != objects.end();
-       ++obj) {
-    t.collection_move(cid, temp, *obj);
+
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(tmp0);
+    for (map<string, bufferptr>::iterator i = aset.begin();
+	 i != aset.end();
+	 ++i) {
+      bufferlist val;
+      val.push_back(i->second);
+      t.collection_setattr(tmp0, i->first, val);
+    }
+    store->apply_transaction(t);
   }
-  for (map<string,bufferptr>::iterator i = aset.begin();
-       i != aset.end();
-       ++i) {
-    bufferlist bl;
-    bl.append(i->second);
-    t.collection_setattr(cid, i->first, bl);
+
+  hobject_t next;
+  while (!next.is_max()) {
+    objects.clear();
+    hobject_t start = next;
+    r = store->collection_list_partial(cid, start,
+				       200, 300, 0,
+				       &objects, &next);
+    if (r < 0)
+      return r;
+
+    ObjectStore::Transaction t;
+    for (vector<hobject_t>::iterator i = objects.begin();
+	 i != objects.end();
+	 ++i) {
+      t.collection_add(tmp0, cid, *i);
+    }
+    store->apply_transaction(t);
   }
-  t.remove_collection(temp);
-  r = store->apply_transaction(t);
-  if (r < 0)
-    return r;
+
+  {
+    ObjectStore::Transaction t;
+    t.collection_rename(cid, tmp1);
+    t.collection_rename(tmp0, cid);
+    store->apply_transaction(t);
+  }
+
+  clear_temp(store, tmp1);
   store->sync_and_flush();
   store->sync();
   return 0;
 }
 
-static int do_convertfs(ObjectStore *store)
+int OSD::do_convertfs(ObjectStore *store)
 {
   int r = store->mount();
   if (r < 0)
@@ -207,13 +225,31 @@ static int do_convertfs(ObjectStore *store)
 
   derr << "FileStore is old at version " << version << ".  Updating..."  << dendl;
 
-  derr << "Getting collections" << dendl;
+  derr << "Removing tmp pgs" << dendl;
   vector<coll_t> collections;
   r = store->list_collections(collections);
   if (r < 0)
     return r;
+  for (vector<coll_t>::iterator i = collections.begin();
+       i != collections.end();
+       ++i) {
+    pg_t pgid;
+    if (i->is_temp(pgid))
+      clear_temp(store, *i);
+    else if (i->to_str() == "convertfs_temp" ||
+	     i->to_str() == "convertfs_temp1")
+      clear_temp(store, *i);
+  }
+  store->flush();
+
+
+  derr << "Getting collections" << dendl;
 
   derr << collections.size() << " to process." << dendl;
+  collections.clear();
+  r = store->list_collections(collections);
+  if (r < 0)
+    return r;
   int processed = 0;
   for (vector<coll_t>::iterator i = collections.begin();
        i != collections.end();
@@ -246,17 +282,10 @@ static int do_convertfs(ObjectStore *store)
 
 int OSD::convertfs(const std::string &dev, const std::string &jdev)
 {
-  // N.B. at some point we should rewrite this to avoid playing games with
-  // g_conf here
-  char buf[16] = { 0 };
-  char *b = buf;
-  g_ceph_context->_conf->get_val("filestore_update_collections", &b, sizeof(buf));
-  g_ceph_context->_conf->set_val_or_die("filestore_update_collections", "true");
-  g_ceph_context->_conf->apply_changes(NULL);
-  boost::scoped_ptr<ObjectStore> store(new FileStore(dev, jdev));
+  boost::scoped_ptr<ObjectStore> store(
+    new FileStore(dev, jdev, "filestore", 
+		  true));
   int r = do_convertfs(store.get());
-  g_ceph_context->_conf->set_val_or_die("filestore_update_collections", buf);
-  g_ceph_context->_conf->apply_changes(NULL);
   return r;
 }
 
@@ -1077,14 +1106,11 @@ int OSD::read_superblock()
 
 
 
-void OSD::clear_temp(coll_t tmp)
+void OSD::clear_temp(ObjectStore *store, coll_t tmp)
 {
-  dout(10) << "clear_temp" << dendl;
-
   vector<hobject_t> objects;
   store->collection_list(tmp, objects);
 
-  dout(10) << objects.size() << " objects" << dendl;
   if (objects.empty())
     return;
 
@@ -1098,7 +1124,6 @@ void OSD::clear_temp(coll_t tmp)
   int r = store->queue_transaction(NULL, t);
   assert(r == 0);
   store->sync_and_flush();
-  dout(10) << "done" << dendl;
 }
 
 
@@ -1259,7 +1284,7 @@ void OSD::load_pgs()
     snapid_t snap;
     if (!it->is_pg(pgid, snap)) {
       if (it->is_temp(pgid))
-	clear_temp(*it);
+	clear_temp(store, *it);
       dout(10) << "load_pgs skipping non-pg " << *it << dendl;
       continue;
     }
@@ -4955,7 +4980,7 @@ void OSD::_remove_pg(PG *pg)
   }
 
   if (store->collection_exists(coll_t::make_temp_coll(pg->get_pgid()))) {
-    clear_temp(coll_t::make_temp_coll(pg->get_pgid()));
+    clear_temp(store, coll_t::make_temp_coll(pg->get_pgid()));
   }
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from 

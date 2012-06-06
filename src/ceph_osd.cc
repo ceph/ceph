@@ -23,6 +23,7 @@
 using namespace std;
 
 #include "osd/OSD.h"
+#include "os/FileStore.h"
 #include "include/ceph_features.h"
 
 #include "common/config.h"
@@ -252,13 +253,16 @@ int main(int argc, const char **argv)
   }
 
 
-  if (convertfilestore) {
+  if (convertfilestore ||
+      g_conf->filestore_update_to >= (int)FileStore::on_disk_version) {
     int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
+    if (convertfilestore)
+      exit(0);
   }
   
   string magic;
@@ -394,13 +398,6 @@ int main(int argc, const char **argv)
   global_init_daemonize(g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
   common_init_finish(g_ceph_context);
 
-  int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
-  if (err < 0) {
-    derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
-	 << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
-    exit(1);
-  }
-
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
@@ -410,7 +407,8 @@ int main(int argc, const char **argv)
 		messenger_hbclient, messenger_hbserver,
 		&mc,
 		g_conf->osd_data, g_conf->osd_journal);
-  err = osd->pre_init();
+
+  int err = osd->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: osd pre_init failed: " << cpp_strerror(-err)
 	 << TEXT_NORMAL << dendl;

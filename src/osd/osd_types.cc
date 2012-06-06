@@ -1302,7 +1302,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
   o.back()->log_tail = eversion_t(7, 8);
-  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456);
+  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1);
   list<pg_stat_t*> s;
   pg_stat_t::generate_test_instances(s);
   o.back()->stats = *s.back();
@@ -1461,7 +1461,7 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1475,7 +1475,7 @@ void pg_log_entry_t::encode(bufferlist &bl) const
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1494,6 +1494,8 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   ::decode(mtime, bl);
   if (op == CLONE)
     ::decode(snaps, bl);
+  if (struct_v < 5)
+    invalid_pool = true;
   DECODE_FINISH(bl);
 }
 
@@ -1510,7 +1512,7 @@ void pg_log_entry_t::dump(Formatter *f) const
 void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 {
   o.push_back(new pg_log_entry_t());
-  hobject_t oid(object_t("objname"), "key", 123, 456);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
   o.push_back(new pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
 				 osd_reqid_t(entity_name_t::CLIENT(777), 8, 999), utime_t(8,9)));
 }
@@ -1673,7 +1675,7 @@ void pg_missing_t::generate_test_instances(list<pg_missing_t*>& o)
 {
   o.push_back(new pg_missing_t);
   o.push_back(new pg_missing_t);
-  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456), eversion_t(5, 6), eversion_t(5, 1));
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0), eversion_t(5, 6), eversion_t(5, 1));
 }
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i) 
@@ -1773,6 +1775,13 @@ void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
     missing[oid] = item(need, eversion_t());
   }
   rmissing[need.version] = oid;
+}
+
+void pg_missing_t::revise_have(hobject_t oid, eversion_t have)
+{
+  if (missing.count(oid)) {
+    missing[oid].have = have;
+  }
 }
 
 void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
@@ -2086,7 +2095,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
 
 void object_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(9, 8, bl);
+  ENCODE_START(10, 8, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
   ::encode(category, bl);
@@ -2110,18 +2119,18 @@ void object_info_t::encode(bufferlist& bl) const
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 8, 8, bl);
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
     ::decode(obj, bl);
     ::decode(oloc, bl);
-    soid = hobject_t(obj.oid, oloc.key, obj.snap, 0);
+    soid = hobject_t(obj.oid, oloc.key, obj.snap, 0, 0);
     soid.hash = legacy_object_locator_to_ps(soid.oid, oloc);
   } else if (struct_v >= 6) {
     ::decode(soid, bl);
     ::decode(oloc, bl);
     if (struct_v == 6) {
-      hobject_t hoid(soid.oid, oloc.key, soid.snap, hoid.hash);
+      hobject_t hoid(soid.oid, oloc.key, soid.snap, hoid.hash, 0);
       soid = hoid;
     }
   }
@@ -2151,6 +2160,8 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(uses_tmap, bl);
   else
     uses_tmap = true;
+  if (struct_v < 10)
+    soid.pool = oloc.pool;
   DECODE_FINISH(bl);
 }
 
@@ -2422,9 +2433,9 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
   o.back()->attrs["bar"] = buffer::copy("barval", 6);
   list<object*> obj;
   object::generate_test_instances(obj);
-  o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456)] = *obj.back();
+  o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456, 0)] = *obj.back();
   obj.pop_back();
-  o.back()->objects[hobject_t(object_t("bar"), string(), 123, 456)] = *obj.back();
+  o.back()->objects[hobject_t(object_t("bar"), string(), 123, 456, 0)] = *obj.back();
 }
 
 // -- ScrubMap::object --
