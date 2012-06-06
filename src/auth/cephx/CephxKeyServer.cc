@@ -92,18 +92,20 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 }
 bool KeyServerData::get_auth(const EntityName& name, EntityAuth& auth) const {
   map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
-  if (iter == secrets.end())
-    return false;
-  auth = iter->second;
-  return true;
+  if (iter != secrets.end()) {
+    auth = iter->second;
+    return true;
+  }
+  return extra_secrets->get_auth(name, auth);
 }
 
 bool KeyServerData::get_secret(const EntityName& name, CryptoKey& secret) const {
   map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
-  if (iter == secrets.end())
-    return false;
-  secret = iter->second.key;
-  return true;
+  if (iter != secrets.end()) {
+    secret = iter->second.key;
+    return true;
+  }
+  return extra_secrets->get_secret(name, secret);
 }
 
 bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
@@ -113,16 +115,16 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
 
   ldout(cct, 10) << "get_caps: name=" << name.to_str() << dendl;
   map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
-  if (iter == secrets.end())
-    return false;
-
-  ldout(cct, 10) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
-  map<string, bufferlist>::const_iterator capsiter = iter->second.caps.find(type);
-  if (capsiter != iter->second.caps.end()) {
-    caps_info.caps = capsiter->second;
+  if (iter != secrets.end()) {
+    ldout(cct, 10) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
+    map<string, bufferlist>::const_iterator capsiter = iter->second.caps.find(type);
+    if (capsiter != iter->second.caps.end()) {
+      caps_info.caps = capsiter->second;
+    }
+    return true;
   }
 
-  return true;
+  return extra_secrets->get_caps(name, type, caps_info);
 }
 
 
