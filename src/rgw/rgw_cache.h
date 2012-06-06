@@ -6,6 +6,7 @@
 #include <map>
 #include "include/types.h"
 #include "include/utime.h"
+#include "include/assert.h"
 
 enum {
   UPDATE_OBJ,

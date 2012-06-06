@@ -29,6 +29,7 @@
 #include "include/types.h"
 #include "Client.h"
 #include "common/config.h"
+#include "include/assert.h"
 
 static Client *client;
 

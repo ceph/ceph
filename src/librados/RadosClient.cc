@@ -36,6 +36,8 @@
 #include "PoolAsyncCompletionImpl.h"
 #include "RadosClient.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "

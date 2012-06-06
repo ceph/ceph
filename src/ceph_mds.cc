@@ -45,6 +45,8 @@ using namespace std;
 
 #include "auth/KeyRing.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_mds
 
 void usage()

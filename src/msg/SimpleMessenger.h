@@ -34,6 +34,7 @@ using namespace __gnu_cxx;
 #include "Messenger.h"
 #include "Message.h"
 #include "tcp.h"
+#include "include/assert.h"
 
 
 /*

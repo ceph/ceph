@@ -24,6 +24,7 @@
 #include "buffer.h"
 
 #include "ceph_frag.h"
+#include "include/assert.h"
 
 /*
  * 
