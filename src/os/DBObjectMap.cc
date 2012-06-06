@@ -19,6 +19,8 @@
 
 #include "common/debug.h"
 #include "common/config.h"
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore "

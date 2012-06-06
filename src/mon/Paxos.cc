@@ -19,6 +19,7 @@
 #include "messages/MMonPaxos.h"
 
 #include "common/config.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix

@@ -12,6 +12,7 @@
  * 
  */
 
+#include <sstream>
 
 #include "AuthMonitor.h"
 #include "Monitor.h"
@@ -31,7 +32,7 @@
 #include "osd/osd_types.h"
 
 #include "common/config.h"
-#include <sstream>
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

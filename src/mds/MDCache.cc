@@ -12,7 +12,12 @@
  * 
  */
 
-
+#include <errno.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <map>
 
 #include "MDCache.h"
 #include "MDS.h"
@@ -86,17 +91,12 @@
 
 #include "common/Timer.h"
 
-#include <errno.h>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <map>
 using namespace std;
 
 extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/config.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

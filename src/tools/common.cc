@@ -17,6 +17,19 @@
 #include <string>
 using namespace std;
 
+#if !defined(DARWIN) && !defined(__FreeBSD__)
+#include <envz.h>
+#endif // DARWIN
+
+#include <memory>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+extern "C" {
+#include <histedit.h>
+}
+
 #include "acconfig.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
@@ -33,18 +46,8 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN
 
-#include <memory>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
-extern "C" {
-#include <histedit.h>
-}
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_
 
