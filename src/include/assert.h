@@ -105,9 +105,14 @@ using namespace ceph;
 # undef assert
 #endif
 
+// make _ASSERT_H something that *must* have a value other than what
+// /usr/include/assert.h gives it (nothing!), so that we detect when
+// our assert is clobbered.
+#undef _ASSERT_H
+#define _ASSERT_H _dout_cct
+
 #define assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
 
-#undef _ASSERT_H
