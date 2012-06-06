@@ -130,8 +130,10 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
 #define dout_prefix *_dout << "cephx keyserver: "
 
 
-KeyServer::KeyServer(CephContext *cct_)
-  : cct(cct_), lock("KeyServer::lock")
+KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
+  : cct(cct_),
+    data(extra_secrets),
+    lock("KeyServer::lock")
 {
 }
 
