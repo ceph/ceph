@@ -58,6 +58,17 @@ public:
 			  CryptoKey& secret) const {
     return false;
   }
+  bool get_caps(const EntityName& name,
+		const std::string& type, AuthCapsInfo& caps) const {
+    map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
+    if (k == keys.end())
+      return false;
+    map<string,bufferlist>::const_iterator i = k->second.caps.find(type);
+    if (i != k->second.caps.end()) {
+      caps.caps = i->second;
+    }
+    return true;
+  }
 
   // modifiers
   void add(const EntityName& name, EntityAuth &a) {
