@@ -214,10 +214,12 @@ bool MonClient::ms_dispatch(Message *m)
 
 void MonClient::send_log()
 {
-  Message *lm = log_client->get_mon_log_message();
-  if (lm)
-    _send_mon_message(lm);
-  more_log_pending = log_client->are_pending();
+  if (log_client) {
+    Message *lm = log_client->get_mon_log_message();
+    if (lm)
+      _send_mon_message(lm);
+    more_log_pending = log_client->are_pending();
+  }
 }
 
 void MonClient::handle_monmap(MMonMap *m)
@@ -527,8 +529,7 @@ void MonClient::tick()
 
     messenger->send_keepalive(cur_con);
    
-    if (state == MC_STATE_HAVE_SESSION &&
-	log_client) {
+    if (state == MC_STATE_HAVE_SESSION) {
       send_log();
     }
   }
