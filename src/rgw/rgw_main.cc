@@ -198,10 +198,14 @@ void RGWProcess::run()
     int fd = open(path_str.c_str(), O_CREAT, 0644);
     if (fd < 0) {
       int err = errno;
-      dout(0) << "ERROR: cannot create socket: path=" << path_str << " error=" << cpp_strerror(err) << dendl;
-      return;
+      /* ENXIO is actually expected, we'll get that if we try to open a unix domain socket */
+      if (err != ENXIO) {
+        dout(0) << "ERROR: cannot create socket: path=" << path_str << " error=" << cpp_strerror(err) << dendl;
+        return;
+      }
+    } else {
+      close(fd);
     }
-    close(fd);
 
     const char *path = path_str.c_str();
     s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
