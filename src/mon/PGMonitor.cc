@@ -1217,6 +1217,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	    stuck_pgs.count(p->first) == 0) {
 	  ostringstream ss;
 	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
+	  ss << ", acting " << p->second.acting;
 	  if (p->second.stats.sum.num_objects_unfound)
 	    ss << ", " << p->second.stats.sum.num_objects_unfound << " unfound";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
