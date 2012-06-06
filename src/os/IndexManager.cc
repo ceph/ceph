@@ -83,7 +83,7 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
 
 int IndexManager::build_index(coll_t c, const char *path, Index *index) {
   int r;
-  if (g_conf->filestore_update_collections) {
+  if (upgrade) {
     // Need to check the collection generation
     uint32_t version = 0;
     r = get_version(path, &version);
@@ -97,7 +97,8 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
       return 0;
     }
     case CollectionIndex::HASH_INDEX_TAG: // fall through
-    case CollectionIndex::HASH_INDEX_TAG_2: {
+    case CollectionIndex::HASH_INDEX_TAG_2: // fall through
+    case CollectionIndex::HOBJECT_WITH_POOL: {
       // Must be a HashIndex
       *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				   g_conf->filestore_split_multiple, version), 
@@ -111,7 +112,7 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
     // No need to check
     *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				 g_conf->filestore_split_multiple,
-				 CollectionIndex::HASH_INDEX_TAG_2), 
+				 CollectionIndex::HOBJECT_WITH_POOL), 
 		   RemoveOnDelete(c, this));
     return 0;
   }
