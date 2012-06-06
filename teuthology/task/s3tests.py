@@ -24,7 +24,7 @@ def download(ctx, config):
             args=[
                 'git', 'clone',
 #                'https://github.com/ceph/s3-tests.git',
-                'http://ceph.com/git/s3-tests.git',
+                'git://ceph.com/git/s3-tests.git',
                 '/tmp/cephtest/s3-tests',
                 ],
             )
