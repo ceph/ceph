@@ -39,28 +39,6 @@
 
 #define dout_subsys ceph_subsys_monc
 
-/*
- * Given a clog log_type, return the equivalent syslog priority
- */
-static inline int clog_type_to_syslog_prio(clog_type t)
-{
-  switch (t) {
-    case CLOG_DEBUG:
-      return LOG_DEBUG;
-    case CLOG_INFO:
-      return LOG_INFO;
-    case CLOG_WARN:
-      return LOG_WARNING;
-    case CLOG_ERROR:
-      return LOG_ERR;
-    case CLOG_SEC:
-      return LOG_CRIT;
-    default:
-      assert(0);
-      return 0;
-  }
-}
-
 LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 		     enum logclient_flag_t flags)
   : cct(cct), messenger(m), monmap(mm), is_mon(flags & FLAG_MON),

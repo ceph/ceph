@@ -32,6 +32,12 @@ typedef enum {
   CLOG_ERROR = 4,
 } clog_type;
 
+/*
+ * Given a clog log_type, return the equivalent syslog priority
+ */
+int clog_type_to_syslog_prio(clog_type t);
+
+
 struct LogEntryKey {
   entity_inst_t who;
   utime_t stamp;

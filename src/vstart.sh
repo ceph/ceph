@@ -285,7 +285,7 @@ $COSDDEBUG
 [mon]
 $DAEMONOPTS
 $CMONDEBUG
-
+        mon cluster log file = out/cluster.mon.\$id.log
 EOF
 		fi
 
