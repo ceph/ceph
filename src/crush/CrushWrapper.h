@@ -253,6 +253,10 @@ public:
   }
   void reweight(CephContext *cct);
 
+  /// check if item id is present in the map hierarchy
+  bool check_item_present(int id);
+
+
   /*** devices ***/
   int get_max_devices() const {
     if (!crush) return 0;
