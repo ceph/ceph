@@ -30,7 +30,8 @@ To generate a keyring in the default location, use the ``ceph-authtool`` and
 specify the same path you specified in the ``[global]`` section of your 
 ``ceph.conf`` file. For example::
 
-	sudo ceph-authtool --create-keyring /etc/ceph/keyring.bin	
+	sudo ceph-authtool --create-keyring /etc/ceph/keyring.bin
+	sudo chmod +r /etc/ceph/keyring.bin	
 
 Specify Keyrings for each Daemon
 --------------------------------
@@ -46,6 +47,22 @@ automatically. ::
 
 	[mds]
 		keyring = /etc/ceph/keyring.$name		
+
+The ``client.admin`` Key
+------------------------
+Each Ceph command you execute on the command line assumes that you are
+the ``client.admin`` default user. When running Ceph with ``cephx`` enabled,
+you need to have a ``client.admin`` key to run ``ceph`` commands.
+
+.. important: To continue to run Ceph commands on the command line with
+   ``cephx`` enabled, you need to create a key for the ``client.admin`` 
+   user, and create a secret file under ``/etc/ceph``. 
+   
+::
+   
+	sudo ceph-authtool /etc/ceph/keyring.bin -n client.admin --gen-key
+	sudo ceph-authtool -n client.admin --cap mds 'allow' --cap osd 'allow *' --cap mon 'allow *' /etc/ceph/keyring.bin
+	sudo ceph auth add client.admin -i /etc/ceph/keyring.bin
 
 Generate a Key
 --------------
@@ -97,25 +114,12 @@ For example::
 
 	sudo ceph auth add client.whirlpool -i /etc/ceph/keyring.bin
 	
+
+List Keys in your Cluster
+-------------------------
 To list the keys in your cluster, execute the following:: 
 
 	sudo ceph auth list
-
-The ``client.admin`` Key
-------------------------
-Each Ceph command you execute on the command line assumes that you are
-the ``client.admin`` default user. When running Ceph with ``cephx`` enabled,
-you need to have a ``client.admin`` key to run ``ceph`` commands.
-
-.. important: To continue to run Ceph commands on the command line with
-   ``cephx`` enabled, you need to create a key for the ``client.admin`` 
-   user, and create a secret file under ``/etc/ceph``. 
-   
-::
-   
-	sudo ceph-authtool /etc/ceph/keyring.bin -n client.admin --gen-key
-	sudo ceph-authtool -n client.admin --cap mds 'allow' --cap osd 'allow *' --cap mon 'allow *' /etc/ceph/keyring.bin
-	sudo ceph auth add client.admin -i /etc/ceph/keyring.bin
 
 
 .. _ceph-authtool: http://ceph.com/docs/master/man/8/ceph-authtool/
