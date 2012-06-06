@@ -61,8 +61,10 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout
 #define lgeneric_derr(cct) dout_impl(cct, ceph_subsys_, -1) *_dout
 
+// NOTE: depend on magic value in _ASSERT_H so that we detect when
+// /usr/include/assert.h clobbers our fancier version.
 #define dendl std::flush;				\
-      _dout_cct->_log->submit_entry(_dout_e);		\
+  _ASSERT_H->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
 
