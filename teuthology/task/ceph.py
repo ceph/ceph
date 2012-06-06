@@ -689,24 +689,12 @@ def cluster(ctx, config):
         yield
     finally:
         (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-        if ctx.archive is not None:
-            log.info('Grabbing cluster log from %s %s...' % (mon0_remote,
-                                                             firstmon))
-            dest = os.path.join(ctx.archive, 'ceph.log')
-            mon0_remote.run(
-                args = [
-                    'cat',
-                    '--',
-                    '/tmp/cephtest/data/%s/log' % firstmon
-                    ],
-                stdout=file(dest, 'wb'),
-                )
 
-        log.info('Checking cluster ceph.log for badness...')
+        log.info('Checking cluster log for badness...')
         def first_in_ceph_log(pattern, excludes):
             args = [
                 'egrep', pattern,
-                '/tmp/cephtest/data/%s/log' % firstmon,
+                '/tmp/cephtest/archive/log/cluster.%s.log' % firstmon,
                 ]
             for exclude in excludes:
                 args.extend([run.Raw('|'), 'egrep', '-v', exclude])
