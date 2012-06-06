@@ -65,6 +65,9 @@ extern CephInitParameters ceph_argparse_early_args
 extern bool ceph_argparse_withint(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostream *oss, ...);
+extern bool ceph_argparse_withfloat(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, float *ret,
+	std::ostream *oss, ...);
 extern bool ceph_argparse_withlonglong(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, long long *ret,
 	std::ostream *oss, ...);
