@@ -42,6 +42,9 @@ OPTION(log_flush_on_exit, OPT_BOOL, true)
 OPTION(clog_to_monitors, OPT_BOOL, true)
 OPTION(clog_to_syslog, OPT_BOOL, false)
 
+OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false)
+OPTION(mon_cluster_log_file, OPT_STR, "/var/log/ceph/$cluster.log")
+
 DEFAULT_SUBSYS(0, 5)
 SUBSYS(lockdep, 0, 5)
 SUBSYS(context, 0, 5)

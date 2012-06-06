@@ -1,6 +1,31 @@
 
+#include <syslog.h>
+
 #include "LogEntry.h"
 #include "Formatter.h"
+
+
+int clog_type_to_syslog_prio(clog_type t)
+{
+  switch (t) {
+    case CLOG_DEBUG:
+      return LOG_DEBUG;
+    case CLOG_INFO:
+      return LOG_INFO;
+    case CLOG_WARN:
+      return LOG_WARNING;
+    case CLOG_ERROR:
+      return LOG_ERR;
+    case CLOG_SEC:
+      return LOG_CRIT;
+    default:
+      assert(0);
+      return 0;
+  }
+}
+
+// ----
+// LogEntryKey
 
 void LogEntryKey::encode(bufferlist& bl) const
 {
