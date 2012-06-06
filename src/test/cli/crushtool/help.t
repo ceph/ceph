@@ -12,6 +12,8 @@
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r]
         [--num-rep n]
+        [--batches b]
+      --simulate           simulate placements using a RNG
         [--weight|-w devno weight]
                            where weight is 0 to 1.0
      -i mapfn --add-item id weight name [--loc type name ...]
@@ -26,4 +28,7 @@
                            reweight a given item (and adjust ancestor
                            weights as needed)
      -i mapfn --reweight   recalculate all bucket weights
+     --output-utilization       output OSD usage
+     --output utilization-all   include zero weight items
+     --output-statistics        output chi squared statistics
   [1]
