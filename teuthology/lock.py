@@ -6,6 +6,7 @@ import subprocess
 import urllib
 import yaml
 import re
+import collections
 
 from teuthology import misc as teuthology
 
@@ -147,6 +148,12 @@ Lock, unlock, or query lock status of machines.
         default=False,
         help='update the description or status of some machines',
         )
+    group.add_argument(
+        '--summary',
+        action='store_true',
+        default=False,
+        help='summarize locked-machine counts by owner',
+        )
     parser.add_argument(
         '-a', '--all',
         action='store_true',
@@ -180,6 +187,12 @@ Lock, unlock, or query lock status of machines.
         default=None,
         choices=['true', 'false'],
         help='whether a machine is locked',
+        )
+    parser.add_argument(
+        '--brief',
+        action='store_true',
+        default=False,
+        help='Shorten information reported from --list',
         )
     parser.add_argument(
         '-t', '--targets',
@@ -227,10 +240,11 @@ Lock, unlock, or query lock status of machines.
         assert ctx.lock or ctx.unlock, \
             '-f is only supported by --lock and --unlock'
     if ctx.machines:
-        assert ctx.lock or ctx.unlock or ctx.list or ctx.list_targets or ctx.update, \
+        assert ctx.lock or ctx.unlock or ctx.list or ctx.list_targets \
+			or ctx.update, \
             'machines cannot be specified with that operation'
     else:
-        assert ctx.num_to_lock or ctx.list or ctx.list_targets, \
+        assert ctx.num_to_lock or ctx.list or ctx.list_targets or ctx.summary,\
             'machines must be specified for that operation'
     if ctx.all:
         assert ctx.list or ctx.list_targets, \
@@ -239,6 +253,9 @@ Lock, unlock, or query lock status of machines.
             '--all and --owner are mutually exclusive'
         assert not machines, \
             '--all and listing specific machines are incompatible'
+
+    if ctx.brief:
+        assert ctx.list, '--brief only applies to --list'
 
     if ctx.list or ctx.list_targets:
         assert ctx.desc is None, '--desc does nothing with --list'
@@ -261,7 +278,16 @@ Lock, unlock, or query lock status of machines.
                 statuses = [status for status in statuses \
                                 if status['locked'] == (ctx.locked == 'true')]
             if ctx.list:
-                print json.dumps(statuses, indent=4)
+                if ctx.brief:
+                    for s in statuses:
+                        lock = "un" if s['locked'] == 0 else "  "
+                        mo = re.match('\w+@(\w+?)\..*', s['name'])
+                        host = mo.group(1) if mo else s['name']
+                        print '{host} {lock}locked {owner} "{desc}"'.format(
+                            lock = lock, host = host,
+                            owner=s['locked_by'], desc=s['description'])
+                else:
+                    print json.dumps(statuses, indent=4)
             else:
                 frag = { 'targets': {} }
                 for f in statuses:
@@ -270,6 +296,19 @@ Lock, unlock, or query lock status of machines.
         else:
             log.error('error retrieving lock statuses')
             ret = 1
+    elif ctx.summary:
+        lockd = collections.defaultdict(lambda: [0,0])
+        for l in list_locks(ctx):
+            if l['locked'] == 1:
+                who = l['locked_by']
+                lockd[who][0] += 1
+                lockd[who][1] += l['up']         # up is 1 or 0
+        locks = sorted([p for p in lockd.iteritems()], key=lambda (k,v): v[0])
+        print "LOCKED  UP  OWNER"
+        for (owner, (count, upcnt)) in locks:
+            print "{count:4d}  {upcnt:4d}  {owner}".format(count = count,
+                upcnt = upcnt, owner = owner)
+
     elif ctx.lock:
         for machine in machines:
             if not lock(ctx, machine, user):
