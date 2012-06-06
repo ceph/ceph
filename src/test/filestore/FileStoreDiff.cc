@@ -65,6 +65,29 @@ bool FileStoreDiff::diff_attrs(std::map<std::string,bufferptr>& b,
   return ret;
 }
 
+static bool diff_omap(std::map<std::string,bufferlist>& b,
+		      std::map<std::string,bufferlist>& a)
+{
+  bool ret = false;
+  std::map<std::string, bufferlist>::iterator b_it = b.begin();
+  std::map<std::string, bufferlist>::iterator a_it = a.begin();
+  for (; b_it != b.end(); ++b_it, ++a_it) {
+    if (b_it->first != a_it->first) {
+      dout(0) << "diff_attrs name mismatch (verify: " << b_it->first
+          << ", store: " << a_it->first << ")" << dendl;
+      ret = true;
+      continue;
+    }
+
+    if (!(b_it->second == a_it->second)) {
+      dout(0) << "diff_attrs contents mismatch on attr " << b_it->first << dendl;
+      ret = true;
+      continue;
+    }
+  }
+  return ret;
+}
+
 bool FileStoreDiff::diff_objects_stat(struct stat& a, struct stat& b)
 {
   bool ret = false;
@@ -188,6 +211,39 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
       dout(0) << "diff_objects attrs mismatch on A object "
           << coll << "/" << a_obj << " and B object "
           << coll << "/" << b_obj << dendl;
+      ret = true;
+    }
+
+    std::map<std::string, bufferlist> a_obj_omap, b_obj_omap;
+    std::set<std::string> a_omap_keys, b_omap_keys;
+    err = a_store->omap_get_keys(coll, a_obj, &a_omap_keys);
+    if (err < 0) {
+      dout(0) << "diff_objects getomap on A object " << coll << "/" << a_obj
+              << " returns " << err << dendl;
+      ret = true;
+    }
+    err = a_store->omap_get_values(coll, a_obj, a_omap_keys, &a_obj_omap);
+    if (err < 0) {
+      dout(0) << "diff_objects getomap on A object " << coll << "/" << a_obj
+              << " returns " << err << dendl;
+      ret = true;
+    }
+    err = b_store->omap_get_keys(coll, b_obj, &b_omap_keys);
+    if (err < 0) {
+      dout(0) << "diff_objects getomap on A object " << coll << "/" << b_obj
+              << " returns " << err << dendl;
+      ret = true;
+    }
+    err = b_store->omap_get_values(coll, b_obj, b_omap_keys, &b_obj_omap);
+    if (err < 0) {
+      dout(0) << "diff_objects getomap on A object " << coll << "/" << b_obj
+              << " returns " << err << dendl;
+      ret = true;
+    }
+    if (diff_omap(a_obj_omap, b_obj_omap)) {
+      dout(0) << "diff_objects omap mismatch on A object "
+	      << coll << "/" << a_obj << " and B object "
+	      << coll << "/" << b_obj << dendl;
       ret = true;
     }
   }
