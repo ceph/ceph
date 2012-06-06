@@ -12,6 +12,8 @@
  * 
  */
 
+#include <sstream>
+#include <syslog.h>
 
 #include "LogMonitor.h"
 #include "Monitor.h"
@@ -24,9 +26,8 @@
 #include "common/Timer.h"
 
 #include "osd/osd_types.h"
-
+#include "common/errno.h"
 #include "common/config.h"
-#include <sstream>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -97,11 +98,6 @@ void LogMonitor::update_from_paxos()
   assert(paxosv >= summary.version);
 
   bufferlist blog;
-  bufferlist blogdebug;
-  bufferlist bloginfo;
-  bufferlist blogwarn;
-  bufferlist blogerr;
-  bufferlist blogsec;
 
   if (summary.version != paxos->get_stashed_version()) {
     bufferlist latest;
@@ -127,21 +123,14 @@ void LogMonitor::update_from_paxos()
 
       stringstream ss;
       ss << le;
-      string s;
-      getline(ss, s);
-      s += "\n";
+      string s = ss.str();
 
-      blog.append(s);
-      if (le.type >= CLOG_DEBUG)
-	blogdebug.append(s);
-      if (le.type >= CLOG_INFO)
-	bloginfo.append(s);
-      if (le.type == CLOG_SEC)
-        blogsec.append(s);
-      if (le.type >= CLOG_WARN)
-	blogwarn.append(s);
-      if (le.type >= CLOG_ERROR)
-	blogerr.append(s);
+      if (g_conf->mon_cluster_log_to_syslog) {
+	syslog(clog_type_to_syslog_prio(le.type) | LOG_USER, "%s", s.c_str());
+      }
+      if (g_conf->mon_cluster_log_file.length()) {
+	blog.append(s + "\n");
+      }
 
       summary.add(le);
     }
@@ -153,19 +142,16 @@ void LogMonitor::update_from_paxos()
   ::encode(summary, bl);
   paxos->stash_latest(paxosv, bl);
 
-  if (blog.length())
-    mon->store->append_bl_ss(blog, "log", NULL);
-  if (blogdebug.length())
-    mon->store->append_bl_ss(blogdebug, "log.debug", NULL);
-  if (bloginfo.length())
-    mon->store->append_bl_ss(bloginfo, "log.info", NULL);
-  if (blogsec.length())
-    mon->store->append_bl_ss(bloginfo, "log.security", NULL);
-  if (blogwarn.length())
-    mon->store->append_bl_ss(blogwarn, "log.warn", NULL);
-  if (blogerr.length())
-    mon->store->append_bl_ss(blogerr, "log.err", NULL);
-
+  if (blog.length()) {
+    int fd = ::open(g_conf->mon_cluster_log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
+    if (fd < 0) {
+      int err = -errno;
+      dout(1) << "unable to write to " << g_conf->mon_cluster_log_file << ": " << cpp_strerror(err) << dendl;
+    } else {
+      blog.write_fd(fd);
+      TEMP_FAILURE_RETRY(::close(fd));
+    }
+  }
 
   // trim
   unsigned max = g_conf->mon_max_log_epochs;
