@@ -386,6 +386,11 @@ int main(int argc, const char **argv)
                         Messenger::Policy::stateless_server(supported,
                                                             CEPH_FEATURE_PGID64 |
                                                             CEPH_FEATURE_OSDENC));
+  messenger->set_policy(entity_name_t::TYPE_CLIENT,
+			Messenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MDS,
+			Messenger::Policy::stateless_server(supported, 0));
+
 
   // throttle client traffic
   Throttle client_throttler(g_ceph_context, "mon_client_bytes",
