@@ -39,12 +39,12 @@ struct FailedAssertion {
    C9x has a similar variable called __func__, but prefer the GCC one since
    it demangles C++ function names.  */
 # if defined __cplusplus ? __GNUC_PREREQ (2, 6) : __GNUC_PREREQ (2, 4)
-#   define __ASSERT_FUNCTION	__PRETTY_FUNCTION__
+#   define __CEPH_ASSERT_FUNCTION	__PRETTY_FUNCTION__
 # else
 #  if defined __STDC_VERSION__ && __STDC_VERSION__ >= 199901L
-#   define __ASSERT_FUNCTION	__func__
+#   define __CEPH_ASSERT_FUNCTION	__func__
 #  else
-#   define __ASSERT_FUNCTION	((__const char *) 0)
+#   define __CEPH_ASSERT_FUNCTION	((__const char *) 0)
 #  endif
 # endif
 
@@ -56,12 +56,12 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 #define ceph_assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 #define assert_warn(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+   : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 /*
 #define assert(expr)							\
@@ -111,8 +111,13 @@ using namespace ceph;
 #undef _ASSERT_H
 #define _ASSERT_H _dout_cct
 
+// make __ASSERT_FUNCTION empty (/usr/include/assert.h makes it a function)
+// and make our encoding macros break if it non-empty.
+#undef __ASSERT_FUNCTION
+#define __ASSERT_FUNCTION
+
 #define assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 

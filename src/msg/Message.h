@@ -15,8 +15,17 @@
 #ifndef CEPH_MESSAGE_H
 #define CEPH_MESSAGE_H
  
-/* public message types */
+#include <stdlib.h>
+#include <ostream>
+
 #include "include/types.h"
+#include "include/buffer.h"
+#include "common/Throttle.h"
+#include "msg_types.h"
+
+#include "common/RefCountedObj.h"
+
+#include "common/debug.h"
 #include "common/config.h"
 
 // monitor internal
@@ -127,24 +136,6 @@
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
 
-
-#include <stdlib.h>
-
-#include <iostream>
-#include <list>
-using std::list;
-
-#include <ext/hash_map>
-
-
-#include "include/types.h"
-#include "include/buffer.h"
-#include "common/Throttle.h"
-#include "msg_types.h"
-
-#include "common/RefCountedObj.h"
-
-#include "common/debug.h"
 
 
 
