@@ -31,4 +31,11 @@
      --output-utilization       output OSD usage
      --output utilization-all   include zero weight items
      --output-statistics        output chi squared statistics
+     --set-choose-local-tries N
+                           set choose local retries before re-descent
+     --set-choose-local-fallback-tries N
+                           set choose local retries using fallback
+                           permutation before re-descent
+     --set-choose-total-tries N
+                           set choose total descent attempts
   [1]
