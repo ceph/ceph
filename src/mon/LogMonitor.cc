@@ -28,6 +28,7 @@
 #include "osd/osd_types.h"
 #include "common/errno.h"
 #include "common/config.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

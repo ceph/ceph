@@ -14,7 +14,6 @@
 #include <string.h>
 #include <iostream>
 #include <sstream>
-#include <assert.h>
 #include <time.h>
 #include <stdlib.h>
 #include "common/ceph_argparse.h"
@@ -26,6 +25,7 @@
 #include "FileStoreDiff.h"
 
 #include "common/config.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_
 #undef dout_prefix

@@ -46,6 +46,8 @@ using namespace std;
 
 #include "perfglue/heap_profiler.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_osd
 
 OSD *osd = NULL;

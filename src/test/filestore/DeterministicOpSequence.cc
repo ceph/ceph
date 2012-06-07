@@ -14,7 +14,6 @@
 #include <string.h>
 #include <iostream>
 #include <fstream>
-#include <assert.h>
 #include <time.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -29,6 +28,7 @@
 #include "DeterministicOpSequence.h"
 
 #include "common/config.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix

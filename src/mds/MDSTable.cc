@@ -22,6 +22,7 @@
 #include "include/types.h"
 
 #include "common/config.h"
+#include "include/assert.h"
 
 
 #define dout_subsys ceph_subsys_mds

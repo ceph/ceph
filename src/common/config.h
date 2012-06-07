@@ -26,7 +26,6 @@ extern struct ceph_file_layout g_default_file_layout;
 #include "common/entity_name.h"
 #include "common/Mutex.h"
 #include "log/SubsystemMap.h"
-#include "include/assert.h" // TODO: remove
 #include "common/config_obs.h"
 #include "msg/msg_types.h"
 

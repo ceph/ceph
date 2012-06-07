@@ -28,6 +28,7 @@
 #include <boost/lexical_cast.hpp>
 #include "workload_generator.h"
 #include "common/debug.h"
+#include "include/assert.h"
 
 #include "TestFileStoreState.h"
 

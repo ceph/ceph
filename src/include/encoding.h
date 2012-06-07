@@ -15,13 +15,13 @@
 #ifndef CEPH_ENCODING_H
 #define CEPH_ENCODING_H
 
+#include <tr1/memory>
+
 #include "inttypes.h"
 #include "byteorder.h"
 #include "buffer.h"
 
 using namespace ceph;
-
-#include <tr1/memory>
 
 /*
  * Notes on feature encoding:
