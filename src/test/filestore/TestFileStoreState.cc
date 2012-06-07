@@ -13,7 +13,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
-#include <assert.h>
 #include <time.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -24,6 +23,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include "TestFileStoreState.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix

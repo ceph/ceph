@@ -12,6 +12,10 @@
  * 
  */
 
+#include <inttypes.h>
+#include <string>
+#include <stdio.h>
+
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
@@ -35,12 +39,9 @@
 #include "messages/MLock.h"
 #include "messages/MClientCaps.h"
 
-#include <inttypes.h>
-#include <string>
-#include <stdio.h>
-
 #include "common/config.h"
 #include "global/global_context.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

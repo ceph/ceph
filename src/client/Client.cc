@@ -82,6 +82,8 @@ using namespace std;
 #include "MetaRequest.h"
 #include "ObjecterWriteback.h"
 
+#include "include/assert.h"
+
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
 

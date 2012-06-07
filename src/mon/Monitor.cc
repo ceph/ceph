@@ -12,6 +12,11 @@
  * 
  */
 
+
+#include <sstream>
+#include <stdlib.h>
+#include <signal.h>
+
 #include "Monitor.h"
 
 #include "osd/OSDMap.h"
@@ -64,10 +69,7 @@
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
-
-#include <sstream>
-#include <stdlib.h>
-#include <signal.h>
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
