@@ -13,8 +13,8 @@ int main(int argc, const char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-
-  KeyServer server(g_ceph_context);
+  KeyRing extra;
+  KeyServer server(g_ceph_context, &extra);
 
   generic_dout(0) << "server created" << dendl;
 
