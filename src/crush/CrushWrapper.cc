@@ -346,6 +346,11 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(type_map, bl);
   ::encode(name_map, bl);
   ::encode(rule_name_map, bl);
+
+  // tunables
+  ::encode(crush->choose_local_tries, bl);
+  ::encode(crush->choose_local_fallback_tries, bl);
+  ::encode(crush->choose_total_tries, bl);
 }
 
 void CrushWrapper::decode(bufferlist::iterator& blp)
@@ -393,6 +398,12 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     ::decode(rule_name_map, blp);
     build_rmaps();
 
+    // tunables
+    if (!blp.end()) {
+      ::decode(crush->choose_local_tries, blp);
+      ::decode(crush->choose_local_fallback_tries, blp);
+      ::decode(crush->choose_total_tries, blp);
+    }
     finalize();
   }
   catch (...) {

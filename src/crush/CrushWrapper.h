@@ -91,6 +91,28 @@ public:
     assert(crush);
   }
 
+  // tunables
+  int get_choose_local_tries() const {
+    return crush->choose_local_tries;
+  }
+  void set_choose_local_tries(int n) {
+    crush->choose_local_tries = n;
+  }
+
+  int get_choose_local_fallback_tries() const {
+    return crush->choose_local_fallback_tries;
+  }
+  void set_choose_local_fallback_tries(int n) {
+    crush->choose_local_fallback_tries = n;
+  }
+
+  int get_choose_total_tries() const {
+    return crush->choose_total_tries;
+  }
+  void set_choose_total_tries(int n) {
+    crush->choose_total_tries = n;
+  }
+
   // bucket types
   int get_num_type_names() const {
     return type_map.size();
