@@ -359,6 +359,7 @@ int main(int argc, const char **argv)
   /* alternative default for module */
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=20");
+  def_args.push_back("--keyring=$rgw_data/keyring");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
