@@ -28,6 +28,7 @@ class CrushTester {
   bool output_utilization;
   bool output_utilization_all;
   bool output_statistics;
+  bool output_bad_mappings;
 
 public:
   CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
@@ -45,10 +46,14 @@ public:
       down_range(1)
   { }
 
-  void set_output(bool set_output_utilization, bool set_output_utilization_all, bool set_output_statistics) {
+  void set_output(bool set_output_utilization,
+		  bool set_output_utilization_all,
+		  bool set_output_statistics,
+		  bool set_output_bad_mappings) {
     output_utilization = set_output_utilization;
     output_utilization_all = set_output_utilization_all;
     output_statistics = set_output_statistics;
+    output_bad_mappings = set_output_bad_mappings;
   }
   void set_batches(int b) {
     num_batches = b;
