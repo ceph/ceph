@@ -789,7 +789,7 @@ protected:
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
-	       PGPool *_pool, pg_t p, const hobject_t& oid,
+	       PGPool _pool, pg_t p, const hobject_t& oid,
 	       const hobject_t& ioid);
   ~ReplicatedPG() {}
 

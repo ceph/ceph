@@ -582,7 +582,7 @@ void ReplicatedPG::calc_trim_to()
 }
 
 ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
-			   PGPool *_pool, pg_t p, const hobject_t& oid,
+			   PGPool _pool, pg_t p, const hobject_t& oid,
 			   const hobject_t& ioid) :
   PG(o, curmap, _pool, p, oid, ioid), temp_created(false),
   temp_coll(coll_t::make_temp_coll(p)), snap_trimmer_machine(this)
@@ -820,9 +820,9 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   if (m->may_write()) {
     // snap
-    if (pool->info.is_pool_snaps_mode()) {
+    if (pool.info.is_pool_snaps_mode()) {
       // use pool's snapc
-      ctx->snapc = pool->snapc;
+      ctx->snapc = pool.snapc;
     } else {
       // client specified snapc
       ctx->snapc.seq = m->get_snap_seq();
@@ -1316,7 +1316,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
   // trim clone's snaps
   vector<snapid_t> newsnaps;
   for (unsigned i=0; i<snaps.size(); i++)
-    if (!pool->info.is_removed_snap(snaps[i]))
+    if (!pool.info.is_removed_snap(snaps[i]))
       newsnaps.push_back(snaps[i]);
 
   if (newsnaps.empty()) {
