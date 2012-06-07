@@ -12,13 +12,14 @@
  *
  */
 
+#include <limits.h>
+
 #include "IoCtxImpl.h"
 
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
-
-#include <limits.h>
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix

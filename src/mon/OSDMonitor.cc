@@ -12,6 +12,8 @@
  * 
  */
 
+#include <sstream>
+
 #include "OSDMonitor.h"
 #include "Monitor.h"
 #include "MDSMonitor.h"
@@ -42,8 +44,7 @@
 #include "common/errno.h"
 
 #include "include/compat.h"
-
-#include <sstream>
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

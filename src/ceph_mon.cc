@@ -41,6 +41,8 @@ using namespace std;
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_mon
 
 extern CompatSet get_ceph_mon_feature_compat_set();

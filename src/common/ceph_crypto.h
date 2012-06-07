@@ -48,7 +48,7 @@ namespace ceph {
 // the crypto operations. We don't want to contaminate too much code
 // with error checking, and just say these really should never fail.
 // This assert MUST NOT be compiled out, even on non-debug builds.
-# include "assert.h"
+# include "include/assert.h"
 
 // ugly bit of CryptoPP that we have to emulate here :(
 typedef unsigned char byte;

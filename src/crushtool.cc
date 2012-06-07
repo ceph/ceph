@@ -19,6 +19,8 @@
 
 #include <sys/stat.h>
 
+#include <fstream>
+
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/config.h"
@@ -29,8 +31,7 @@
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
 #include "crush/CrushTester.h"
-
-#include <fstream>
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_crush
 

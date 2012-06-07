@@ -13,14 +13,6 @@
  *
  */
 
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/errno.h"
-#include "common/safe_io.h"
-#include "common/config.h"
-#include "tools/common.h"
-
-#include "include/compat.h"
 
 #include <limits.h>
 #include <errno.h>
@@ -34,6 +26,16 @@
 #include <linux/un.h>
 #include <unistd.h>
 #include <string.h>
+
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
+#include "common/config.h"
+#include "tools/common.h"
+
+#include "include/compat.h"
+#include "include/assert.h"
 
 using std::vector;
 

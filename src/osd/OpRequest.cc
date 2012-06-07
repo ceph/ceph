@@ -9,6 +9,7 @@
 #include "msg/Message.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDSubOp.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix

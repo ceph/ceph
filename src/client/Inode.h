@@ -8,6 +8,7 @@
 #include "mds/mdstypes.h" // hrm
 
 #include "osdc/ObjectCacher.h"
+#include "include/assert.h"
 
 class MetaSession;
 class Dentry;

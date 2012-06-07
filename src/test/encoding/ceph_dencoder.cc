@@ -7,6 +7,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "msg/Message.h"
+#include "include/assert.h"
 
 #define TYPE(t)
 #define TYPEWITHSTRAYDATA(t)
