@@ -223,6 +223,10 @@ int CrushTester::test()
 	  
 	  batchPer[currentBatch] = temporary_per;
 	  sizes[out.size()]++;
+
+	  if (output_bad_mappings && out.size() != (unsigned)nr) {
+	    cout << "bad mapping rule " << r << " x " << x << " num_rep " << nr << " result " << out << std::endl;
+	  }
 	}
 	
         // compute chi squared statistic for device examining the uniformity this batch of placements

@@ -31,6 +31,7 @@
      --output-utilization       output OSD usage
      --output utilization-all   include zero weight items
      --output-statistics        output chi squared statistics
+     --output-bad-mappings      output bad mappings
      --set-choose-local-tries N
                            set choose local retries before re-descent
      --set-choose-local-fallback-tries N

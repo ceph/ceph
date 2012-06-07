@@ -78,6 +78,7 @@ void usage()
   cout << "   --output-utilization       output OSD usage\n";
   cout << "   --output utilization-all   include zero weight items\n";
   cout << "   --output-statistics        output chi squared statistics\n";
+  cout << "   --output-bad-mappings      output bad mappings\n";
   cout << "   --set-choose-local-tries N\n";
   cout << "                         set choose local retries before re-descent\n";
   cout << "   --set-choose-local-fallback-tries N\n";
@@ -119,6 +120,7 @@ int main(int argc, const char **argv)
   bool output_utilization = false;
   bool output_utilization_all = false;
   bool output_statistics = false;
+  bool output_bad_mappings = false;
 
   bool reweight = false;
   int add_item = -1;
@@ -170,6 +172,8 @@ int main(int argc, const char **argv)
       output_utilization_all = true;
     } else if (ceph_argparse_flag(args, i, "--output_statistics", (char*)NULL)) {
       output_statistics = true;
+    } else if (ceph_argparse_flag(args, i, "--output_bad_mappings", (char*)NULL)) {
+      output_bad_mappings = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
@@ -593,7 +597,8 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
-    tester.set_output(output_utilization, output_utilization_all, output_statistics);
+    tester.set_output(output_utilization, output_utilization_all, output_statistics,
+		      output_bad_mappings);
     int r = tester.test();
     if (r < 0)
       exit(1);
