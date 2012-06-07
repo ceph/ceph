@@ -4,7 +4,13 @@
 #ifndef CEPH_CRUSH_WRAPPER_H
 #define CEPH_CRUSH_WRAPPER_H
 
-#define BUG_ON(x) assert(!(x))
+#include <stdlib.h>
+#include <map>
+#include <set>
+#include <string>
+
+#include <iostream> //for testing, remove
+
 #include "include/types.h"
 
 extern "C" {
@@ -17,12 +23,8 @@ extern "C" {
 #include "include/err.h"
 #include "include/encoding.h"
 
-#include <stdlib.h>
-#include <map>
-#include <set>
-#include <string>
-
-#include <iostream> //for testing, remove
+#include "include/assert.h"
+#define BUG_ON(x) assert(!(x))
 
 namespace ceph {
   class Formatter;
