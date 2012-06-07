@@ -1,5 +1,5 @@
 ====================
- RADOS RDB Commands
+ RADOS RBD Commands
 ====================
 The ``rbd`` command enables you to create, list, introspect and remove block
 device images. You can also use it to clone images, create snapshots,
