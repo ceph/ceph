@@ -194,21 +194,21 @@ bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
 
   string::const_iterator current = in.begin();
   string::const_iterator end;
-  for (end = current; end != in.end() && *end != '.'; ++end);
+  for (end = current; end != in.end() && *end != '.'; ++end) ;
   if (end == in.end())
     return false;
   if (!append_unescaped(current, end, &coll))
     return false;
 
   current = ++end;
-  for (; end != in.end() && *end != '.'; ++end);
+  for (; end != in.end() && *end != '.'; ++end) ;
   if (end == in.end())
     return false;
   if (!append_unescaped(current, end, &name))
     return false;
 
   current = ++end;
-  for (; end != in.end() && *end != '.'; ++end);
+  for (; end != in.end() && *end != '.'; ++end) ;
   if (end == in.end())
     return false;
   if (!append_unescaped(current, end, &key))
@@ -220,13 +220,13 @@ bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
     return false;
 
   current = ++end;
-  for (; end != in.end() && *end != '.'; ++end);
+  for (; end != in.end() && *end != '.'; ++end) ;
   if (end == in.end())
     return false;
   string snap_str(current, end);
   
   current = ++end;
-  for (; end != in.end() && *end != '.'; ++end);
+  for (; end != in.end() && *end != '.'; ++end) ;
   if (end != in.end())
     return false;
   string hash_str(current, end);
