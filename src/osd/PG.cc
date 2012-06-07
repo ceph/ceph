@@ -40,8 +40,24 @@ static ostream& _prefix(std::ostream *_dout, const PG *pg) {
   return *_dout << pg->gen_prefix();
 }
 
+void PGPool::update(OSDMapRef map)
+{
+  const pg_pool_t *pi = map->get_pg_pool(id);
+  assert(pi);
+  info = *pi;
+  auid = pi->auid;
+  if (pi->get_snap_epoch() == map->get_epoch()) {
+    pi->build_removed_snaps(newly_removed_snaps);
+    newly_removed_snaps.subtract(cached_removed_snaps);
+    cached_removed_snaps.union_of(newly_removed_snaps);
+    snapc = pi->get_snap_context();
+  } else {
+    newly_removed_snaps.clear();
+  }
+}
+
 PG::PG(OSDService *o, OSDMapRef curmap,
-       PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) :
+       PGPool _pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) :
   osd(o), osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
   ref(0), deleting(false), dirty_info(false), dirty_log(false),
@@ -66,10 +82,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_reserved(false), scrub_reserve_failed(false),
   scrub_waiting_on(0),
   active_rep_scrub(0),
-  recovery_state(this)
-{
-  pool->get();
-}
+  recovery_state(this) {}
 
 void PG::lock(bool no_lockdep)
 {
@@ -1244,11 +1257,11 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // -- crash recovery?
   if (is_primary() &&
-      pool->info.crash_replay_interval > 0 &&
+      pool.info.crash_replay_interval > 0 &&
       may_need_replay(get_osdmap())) {
     replay_until = ceph_clock_now(g_ceph_context);
-    replay_until += pool->info.crash_replay_interval;
-    dout(10) << "activate starting replay interval for " << pool->info.crash_replay_interval
+    replay_until += pool.info.crash_replay_interval;
+    dout(10) << "activate starting replay interval for " << pool.info.crash_replay_interval
 	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
 
@@ -1297,7 +1310,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   
   // initialize snap_trimq
   if (is_primary()) {
-    snap_trimq = pool->cached_removed_snaps;
+    snap_trimq = pool.cached_removed_snaps;
     snap_trimq.subtract(info.purged_snaps);
     dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
     if (!snap_trimq.empty() && is_clean())
@@ -4194,6 +4207,7 @@ void PG::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
   assert(lastmap == osdmap_ref);
   dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;
   osdmap_ref = osdmap;
+  pool.update(osdmap);
   AdvMap evt(osdmap, lastmap, newup, newacting);
   recovery_state.handle_event(evt, rctx);
 }
@@ -4582,8 +4596,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active advmap" << dendl;
-  if (!pg->pool->newly_removed_snaps.empty()) {
-    pg->snap_trimq.union_of(pg->pool->newly_removed_snaps);
+  if (!pg->pool.newly_removed_snaps.empty()) {
+    pg->snap_trimq.union_of(pg->pool.newly_removed_snaps);
     dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
     pg->dirty_info = true;
   }
