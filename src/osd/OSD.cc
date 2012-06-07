@@ -2759,14 +2759,14 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
       dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
     }
 
+    s->entity_name = name;
     s->caps.set_allow_all(caps_info.allow_all);
     s->caps.set_auid(auid);
-    s->caps.set_peer_type(peer_type);
  
     if (caps_info.caps.length() > 0) {
       bufferlist::iterator iter = caps_info.caps.begin();
       s->caps.parse(iter);
-      dout(10) << " session " << s << " has caps " << s->caps << dendl;
+      dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << dendl;
     }
     
     s->put();
@@ -2883,8 +2883,8 @@ void OSD::_dispatch(Message *m)
   case CEPH_MSG_SHUTDOWN:
     session = (Session *)m->get_connection()->get_priv();
     if (!session ||
-	session->caps.is_mon() ||
-	session->caps.is_osd()) shutdown();
+	session->entity_name.is_mon() ||
+	session->entity_name.is_osd()) shutdown();
     else dout(0) << "shutdown message from connection with insufficient privs!"
 		 << m->get_connection() << dendl;
     m->put();
@@ -3160,7 +3160,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   Session *session = (Session *)m->get_connection()->get_priv();
-  if (session && !(session->caps.is_mon() || session->caps.is_osd())) {
+  if (session && !(session->entity_name.is_mon() || session->entity_name.is_osd())) {
     //not enough perms!
     m->put();
     session->put();
