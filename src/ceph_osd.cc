@@ -24,12 +24,12 @@ using namespace std;
 
 #include "osd/OSD.h"
 #include "os/FileStore.h"
+#include "mon/MonClient.h"
 #include "include/ceph_features.h"
 
 #include "common/config.h"
 
 #include "mon/MonMap.h"
-#include "mon/MonClient.h"
 
 
 #include "msg/Messenger.h"

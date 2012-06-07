@@ -16,6 +16,19 @@
 #ifndef CEPH_FILESTORE_H
 #define CEPH_FILESTORE_H
 
+#include "include/types.h"
+
+#include <map>
+#include <deque>
+#include <boost/scoped_ptr.hpp>
+#include <fstream>
+using namespace std;
+
+#include <ext/hash_map>
+using namespace __gnu_cxx;
+
+#include "include/assert.h"
+
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
 
@@ -30,14 +43,6 @@
 
 #include "include/uuid.h"
 
-#include <map>
-#include <deque>
-#include <boost/scoped_ptr.hpp>
-#include <fstream>
-using namespace std;
-
-#include <ext/hash_map>
-using namespace __gnu_cxx;
 
 // from include/linux/falloc.h:
 #ifndef FALLOC_FL_PUNCH_HOLE

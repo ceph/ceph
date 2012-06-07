@@ -66,11 +66,12 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-#include "assert.h"
 #include "object.h"
 #include "intarith.h"
 
 #include "acconfig.h"
+
+#include "assert.h"
 
 // DARWIN compatibility
 #ifdef DARWIN
