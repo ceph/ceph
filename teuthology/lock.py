@@ -241,7 +241,7 @@ Lock, unlock, or query lock status of machines.
             '-f is only supported by --lock and --unlock'
     if ctx.machines:
         assert ctx.lock or ctx.unlock or ctx.list or ctx.list_targets \
-			or ctx.update, \
+            or ctx.update, \
             'machines cannot be specified with that operation'
     else:
         assert ctx.num_to_lock or ctx.list or ctx.list_targets or ctx.summary,\
@@ -296,18 +296,10 @@ Lock, unlock, or query lock status of machines.
         else:
             log.error('error retrieving lock statuses')
             ret = 1
+
     elif ctx.summary:
-        lockd = collections.defaultdict(lambda: [0,0])
-        for l in list_locks(ctx):
-            if l['locked'] == 1:
-                who = l['locked_by']
-                lockd[who][0] += 1
-                lockd[who][1] += l['up']         # up is 1 or 0
-        locks = sorted([p for p in lockd.iteritems()], key=lambda (k,v): v[0])
-        print "LOCKED  UP  OWNER"
-        for (owner, (count, upcnt)) in locks:
-            print "{count:4d}  {upcnt:4d}  {owner}".format(count = count,
-                upcnt = upcnt, owner = owner)
+        do_summary(ctx)
+        return 0
 
     elif ctx.lock:
         for machine in machines:
@@ -439,3 +431,26 @@ to run on, or use -a to check all of them automatically.
                 ret = 1
 
     return ret
+
+def do_summary(ctx):
+    lockd = collections.defaultdict(lambda: [0,0])
+    for l in list_locks(ctx):
+        who = l['locked_by'] if l['locked'] == 1 else '(free)'
+        lockd[who][0] += 1
+        lockd[who][1] += l['up']         # up is 1 or 0
+
+    # locks = [('owner', (cnt, up)), ...]
+    def sortfn(x,y):
+        if x[0] == '(free)': return 1       # (free) sorts last
+        return cmp(x[1][0], y[1][0])        # otherwise order by cnt
+    locks = sorted([p for p in lockd.iteritems()], cmp=sortfn)
+
+    total_count, total_up = 0, 0
+    print "COUNT  UP  OWNER"
+    for (owner, (count, upcount)) in locks:
+        print "{count:3d}  {up:3d}  {owner}".format(count = count,
+            up = upcount, owner = owner)
+        total_count += count
+        total_up += upcount
+    print "---  ---"
+    print "{cnt:3d}  {up:3d}".format(cnt = total_count, up = total_up)
