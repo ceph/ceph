@@ -717,7 +717,7 @@ protected:
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
-			  vector<int>& lastup, vector<int>& lastacting);
+			  const vector<int>& lastup, const vector<int>& lastacting);
 
   void wake_pg_waiters(pg_t pgid) {
     if (waiting_for_pg.count(pgid)) {
