@@ -17,7 +17,9 @@
 
 #include "include/object.h"
 #include "include/cmp.h"
+
 #include "json_spirit/json_spirit_value.h"
+#include "include/assert.h"   // spirit clobbers it!
 
 typedef uint64_t filestore_hobject_key_t;
 
