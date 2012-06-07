@@ -19,6 +19,11 @@ struct crush_map *crush_create()
         if (!m)
           return NULL;
 	memset(m, 0, sizeof(*m));
+
+	/* initialize legacy tunable values */
+	m->choose_local_tries = 2;
+	m->choose_local_fallback_tries = 5;
+	m->choose_total_tries = 19;
 	return m;
 }
 
