@@ -12,10 +12,10 @@ using namespace std;
 #include "include/types.h"
 
 #include "Message.h"
+#include "messages/MPGStats.h"
 
 #include "messages/MGenericMessage.h"
 
-#include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
 
 #include "messages/MStatfs.h"
@@ -23,6 +23,7 @@ using namespace std;
 
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
+
 
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"

@@ -17,7 +17,6 @@
 
 #include <sstream>
 #include <stdio.h>
-#include <stdexcept>
 #include <memory>
 
 #include "msg/msg_types.h"
