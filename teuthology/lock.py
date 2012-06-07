@@ -280,11 +280,11 @@ Lock, unlock, or query lock status of machines.
             if ctx.list:
                 if ctx.brief:
                     for s in statuses:
-                        lock = "un" if s['locked'] == 0 else "  "
+                        locked = "un" if s['locked'] == 0 else "  "
                         mo = re.match('\w+@(\w+?)\..*', s['name'])
                         host = mo.group(1) if mo else s['name']
-                        print '{host} {lock}locked {owner} "{desc}"'.format(
-                            lock = lock, host = host,
+                        print '{host} {locked}locked {owner} "{desc}"'.format(
+                            locked = locked, host = host,
                             owner=s['locked_by'], desc=s['description'])
                 else:
                     print json.dumps(statuses, indent=4)
