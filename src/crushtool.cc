@@ -78,6 +78,13 @@ void usage()
   cout << "   --output-utilization       output OSD usage\n";
   cout << "   --output utilization-all   include zero weight items\n";
   cout << "   --output-statistics        output chi squared statistics\n";
+  cout << "   --set-choose-local-tries N\n";
+  cout << "                         set choose local retries before re-descent\n";
+  cout << "   --set-choose-local-fallback-tries N\n";
+  cout << "                         set choose local retries using fallback\n";
+  cout << "                         permutation before re-descent\n";
+  cout << "   --set-choose-total-tries N\n";
+  cout << "                         set choose total descent attempts\n";
   exit(1);
 }
 
@@ -120,9 +127,15 @@ int main(int argc, const char **argv)
   map<string,string> add_loc;
   float reweight_weight = 0;
 
+  bool adjust = false;
+
   int build = 0;
   int num_osds =0;
   vector<layer_t> layers;
+
+  int choose_local_tries = -1;
+  int choose_local_fallback_tries = -1;
+  int choose_total_tries = -1;
 
   CrushWrapper crush;
 
@@ -164,6 +177,15 @@ int main(int argc, const char **argv)
       test = true;
     } else if (ceph_argparse_flag(args, i, "-s", "--simulate", (char*)NULL)) {
       tester.set_random_placement();
+    } else if (ceph_argparse_withint(args, i, &choose_local_tries, &err,
+				     "--set_choose_local_tries", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &choose_local_fallback_tries, &err,
+				     "--set_choose_local_fallback_tries", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &choose_total_tries, &err,
+				     "--set_choose_total_tries", (char*)NULL)) {
+      adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
     } else if (ceph_argparse_withint(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
@@ -300,7 +322,8 @@ int main(int argc, const char **argv)
   if (decompile + compile + build > 1) {
     usage();
   }
-  if (!compile && !decompile && !build && !test && !reweight && add_item < 0 &&
+  if (!compile && !decompile && !build && !test && !reweight && !adjust &&
+      add_item < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     usage();
   }
@@ -538,7 +561,18 @@ int main(int argc, const char **argv)
     crush.reweight(g_ceph_context);
     modified = true;
   }
-
+  if (choose_local_tries >= 0) {
+    crush.set_choose_local_tries(choose_local_tries);
+    modified = true;
+  }
+  if (choose_local_fallback_tries >= 0) {
+    crush.set_choose_local_fallback_tries(choose_local_fallback_tries);
+    modified = true;
+  }
+  if (choose_total_tries >= 0) {
+    crush.set_choose_total_tries(choose_total_tries);
+    modified = true;
+  }
   if (modified) {
     crush.finalize();
 
