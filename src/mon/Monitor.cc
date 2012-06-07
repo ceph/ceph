@@ -100,7 +100,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
   clog(cct_, messenger, monmap, LogClient::FLAG_MON),
-  key_server(cct),
+  key_server(cct, &keyring),
   auth_supported(cct),
   store(s),
   
