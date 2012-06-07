@@ -118,8 +118,6 @@ struct PGRecoveryStats {
 
 struct PGPool {
   int id;
-  atomic_t nref;
-  int num_pg;
   string name;
   uint64_t auid;
 
@@ -130,18 +128,13 @@ struct PGPool {
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
   PGPool(int i, const char *_name, uint64_t au) :
-    id(i), num_pg(0), auid(au) {
+    id(i), auid(au) {
     if (_name)
       name = _name;
   }
 
-  void get() { nref.inc(); }
-  void put() {
-    if (nref.dec() == 0)
-      delete this;
-  }
+  void update(OSDMapRef map);
 };
-
 
 /** PG - Replica Placement Group
  *
@@ -338,7 +331,7 @@ public:
 protected:
   OSDService *osd;
   OSDMapRef osdmap_ref;
-  PGPool *pool;
+  PGPool pool;
 
   OSDMapRef get_osdmap() const {
     assert(is_locked());
@@ -1362,11 +1355,9 @@ public:
 
  public:
   PG(OSDService *o, OSDMapRef curmap,
-     PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid);
-  virtual ~PG() {
-    pool->put();
-  }
-  
+     PGPool pool, pg_t p, const hobject_t& loid, const hobject_t& ioid);
+  virtual ~PG() {}
+
  private:
   // Prevent copying
   PG(const PG& rhs);

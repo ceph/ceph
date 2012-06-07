@@ -1172,44 +1172,24 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
 // ======================================================
 // PG's
 
-PGPool* OSD::_get_pool(int id)
+PGPool OSD::_get_pool(int id, OSDMapRef createmap)
 {
-  map<int, PGPool*>::iterator pm = pool_map.find(id);
-  PGPool *p = (pm == pool_map.end()) ? NULL : pm->second;
+  if (!createmap->have_pg_pool(id)) {
+    dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
+	    << id << dendl;
+    assert(0);
+  }
 
-  if (!p) {
-    if (!osdmap->have_pg_pool(id)) {
-      dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
-	      << id << dendl;
-      return NULL;
-    }
-
-    p = new PGPool(id, osdmap->get_pool_name(id),
-		   osdmap->get_pg_pool(id)->auid);
-    pool_map[id] = p;
-    p->get();
+  PGPool p = PGPool(id, createmap->get_pool_name(id),
+		    createmap->get_pg_pool(id)->auid);
     
-    const pg_pool_t *pi = osdmap->get_pg_pool(id);
-    p->info = *pi;
-    p->snapc = pi->get_snap_context();
+  const pg_pool_t *pi = createmap->get_pg_pool(id);
+  p.info = *pi;
+  p.snapc = pi->get_snap_context();
 
-    pi->build_removed_snaps(p->cached_removed_snaps);
-  }
-  dout(10) << "_get_pool " << p->id << " " << p->num_pg << " -> " << (p->num_pg+1) << dendl;
-  p->num_pg++;
+  pi->build_removed_snaps(p.cached_removed_snaps);
+  dout(10) << "_get_pool " << p.id << dendl;
   return p;
-}
-
-void OSD::_put_pool(PGPool *p)
-{
-  dout(10) << "_put_pool " << p->id << " " << p->num_pg
-	   << " -> " << (p->num_pg-1) << dendl;
-  assert(p->num_pg > 0);
-  p->num_pg--;
-  if (!p->num_pg) {
-    pool_map.erase(p->id);
-    p->put();
-  }
 }
 
 PG *OSD::_open_lock_pg(
@@ -1219,8 +1199,7 @@ PG *OSD::_open_lock_pg(
   assert(osd_lock.is_locked());
 
   dout(10) << "_open_lock_pg " << pgid << dendl;
-  PGPool *pool = _get_pool(pgid.pool());
-  assert(pool);
+  PGPool pool = _get_pool(pgid.pool(), createmap);
 
   // create
   PG *pg;
@@ -3549,48 +3528,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
 
   map<int64_t, int> pool_resize;  // poolid -> old size
 
-  // update pools
-  for (map<int, PGPool*>::iterator p = pool_map.begin();
-       p != pool_map.end();
-       p++) {
-    const pg_pool_t *pi = osdmap->get_pg_pool(p->first);
-    if (pi == NULL) {
-      dout(10) << " pool " << p->first << " appears to have been deleted" << dendl;
-      continue;
-    }
-    PGPool *pool = p->second;
-    bool changed = false;
-    
-    // make sure auid stays up to date
-    pool->auid = pi->auid;
-
-    // split?
-    if (pool->info.get_pg_num() != pi->get_pg_num()) {
-      dout(1) << " pool " << p->first << " pg_num " << pool->info.get_pg_num()
-	      << " -> " << pi->get_pg_num() << dendl;
-      pool_resize[p->first] = pool->info.get_pg_num();
-      changed = true;
-    }
-    
-    if (pi->get_snap_epoch() == osdmap->get_epoch()) {
-      pi->build_removed_snaps(pool->newly_removed_snaps);
-      pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
-      pool->cached_removed_snaps.union_of(pool->newly_removed_snaps);
-      dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
-	       << ", newly so are " << pool->newly_removed_snaps << ")"
-	       << dendl;
-      pool->snapc = pi->get_snap_context();
-      changed = true;
-    } else {
-      dout(10) << " pool " << p->first << " removed snaps " << pool->cached_removed_snaps
-	       << ", unchanged (snap_epoch = " << pi->get_snap_epoch() << ")" << dendl;
-      pool->newly_removed_snaps.clear();
-    }
-    if (changed)
-      pool->info = *pi;
-  }
-
-  
   // scan pg creations
   hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
   while (n != creating_pgs.end()) {
@@ -4750,7 +4687,6 @@ void OSD::_remove_pg(PG *pg)
   pg->put(); // since we've taken it out of map
 
   service.unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-  _put_pool(pg->pool);
 }
 
 
@@ -5111,11 +5047,11 @@ bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
   if (key.length() == 0)
     key = op->get_oid().name;
 
-  bool cap = caps.is_capable(pg->pool->name, pg->pool->auid, key,
+  bool cap = caps.is_capable(pg->pool.name, pg->pool.auid, key,
 			     op->may_read(), op->may_write(), op->require_exec_caps());
 
-  dout(20) << "op_has_sufficient_caps pool=" << pg->pool->id << " (" << pg->pool->name
-	   << ") owner=" << pg->pool->auid
+  dout(20) << "op_has_sufficient_caps pool=" << pg->pool.id << " (" << pg->pool.name
+	   << ") owner=" << pg->pool.auid
 	   << " may_read=" << op->may_read()
 	   << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec()

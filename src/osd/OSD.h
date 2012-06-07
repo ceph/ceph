@@ -685,13 +685,11 @@ protected:
 
 protected:
   // -- placement groups --
-  map<int, PGPool*> pool_map;
   hash_map<pg_t, PG*> pg_map;
   map<pg_t, list<OpRequestRef> > waiting_for_pg;
   PGRecoveryStats pg_recovery_stats;
 
-  PGPool *_get_pool(int id);
-  void _put_pool(PGPool *p);
+  PGPool _get_pool(int id, OSDMapRef createmap);
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
