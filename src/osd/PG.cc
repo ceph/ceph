@@ -4018,9 +4018,21 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
 
 boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
 {
+  PG *pg = context< RecoveryMachine >().pg;
+
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
+
+  q.f->open_array_section("past_intervals");
+  for (map<epoch_t,pg_interval_t>::iterator p = pg->past_intervals.begin();
+       p != pg->past_intervals.end();
+       ++p) {
+    q.f->open_object_section("past_interval");
+    p->second.dump(q.f);
+    q.f->close_section();
+  }
+  q.f->close_section();
 
   q.f->open_array_section("probing_osds");
   for (set<int>::iterator p = prior_set->probe.begin(); p != prior_set->probe.end(); ++p)
