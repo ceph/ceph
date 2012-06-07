@@ -4768,7 +4768,7 @@ void OSD::do_recovery(PG *pg)
     recovery_wq.queue(pg);
   } else {
     pg->lock();
-    if (pg->deleting) {
+    if (pg->deleting || !(pg->is_active() && pg->is_primary())) {
       pg->unlock();
       pg->put();
       return;
