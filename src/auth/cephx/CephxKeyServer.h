@@ -29,12 +29,16 @@ struct KeyServerData {
 
   /* for each entity */
   map<EntityName, EntityAuth> secrets;
+  KeyRing *extra_secrets;
 
   /* for each service type */
   version_t rotating_ver;
   map<uint32_t, RotatingSecrets> rotating_secrets;
 
-  KeyServerData() : version(0), rotating_ver(0) {}
+  KeyServerData(KeyRing *extra)
+    : version(0),
+      extra_secrets(extra),
+      rotating_ver(0) {}
 
   void encode(bufferlist& bl) const {
      __u8 struct_v = 1;
@@ -195,7 +199,7 @@ class KeyServer : public KeyStore {
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
-  KeyServer(CephContext *cct_);
+  KeyServer(CephContext *cct_, KeyRing *extra_secrets);
   bool generate_secret(CryptoKey& secret);
 
   bool get_secret(const EntityName& name, CryptoKey& secret) const;
@@ -282,9 +286,6 @@ public:
 
 };
 WRITE_CLASS_ENCODER(KeyServer);
-
-
-
 
 
 #endif
