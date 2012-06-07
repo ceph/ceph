@@ -12,3 +12,4 @@ one metadata server in your ``ceph.conf`` configuration file.
 
 	Mount Ceph FS<kernel>
 	Mount Ceph FS as FUSE <fuse>
+	Mount Ceph FS in ``fstab`` <fstab>
