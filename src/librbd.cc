@@ -1205,14 +1205,15 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
+  ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
+		 << size << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  if (size < ictx->header.image_size && ictx->object_cacher) {
+  if (size < ictx->size && ictx->object_cacher) {
     // need to invalidate since we're deleting objects, and
     // ObjectCacher doesn't track non-existent objects
     ictx->invalidate_cache();
