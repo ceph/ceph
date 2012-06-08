@@ -790,19 +790,13 @@ int touch_rbd_info(IoCtx& io_ctx, const string& info_oid)
 
 int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id)
 {
-  bufferlist bl, out;
-  *id = 0;
-
   int r = touch_rbd_info(io_ctx, info_oid);
   if (r < 0)
     return r;
 
-  r = io_ctx.exec(info_oid, "rbd", "assign_bid", bl, out);
+  r = cls_client::assign_bid(&io_ctx, info_oid, id);
   if (r < 0)
     return r;
-
-  bufferlist::iterator iter = out.begin();
-  ::decode(*id, iter);
 
   return 0;
 }
@@ -1130,24 +1124,30 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
-  if (size == ictx->header.image_size) {
-    ldout(cct, 2) << "no change in size (" << ictx->header.image_size << " -> " << size << ")" << dendl;
+  if (size == ictx->size) {
+    ldout(cct, 2) << "no change in size (" << ictx->size << " -> " << size << ")" << dendl;
     return 0;
   }
 
-  if (size > ictx->header.image_size) {
-    ldout(cct, 2) << "expanding image " << ictx->header.image_size << " -> " << size << dendl;
-    ictx->header.image_size = size;
+  if (size > ictx->size) {
+    ldout(cct, 2) << "expanding image " << ictx->size << " -> " << size << dendl;
+    // TODO: make ictx->set_size 
   } else {
-    ldout(cct, 2) << "shrinking image " << ictx->header.image_size << " -> " << size << dendl;
-    ictx->header.image_size = size;
+    ldout(cct, 2) << "shrinking image " << ictx->size << " -> " << size << dendl;
     trim_image(ictx, size, prog_ctx);
   }
+  ictx->size = size;
 
-  // rewrite header
-  bufferlist bl;
-  bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  int r = ictx->md_ctx.write(ictx->header_oid, bl, bl.length(), 0);
+  int r;
+  if (ictx->old_format) {
+    // rewrite header
+    bufferlist bl;
+    ictx->header.image_size = size;
+    bl.append((const char *)&(ictx->header), sizeof(ictx->header));
+    r = ictx->md_ctx.write(ictx->header_oid, bl, bl.length(), 0);
+  } else {
+    r = cls_client::set_size(&(ictx->md_ctx), ictx->header_oid, size);
+  }
 
   if (r == -ERANGE)
     lderr(cct) << "operation might have conflicted with another client!" << dendl;
@@ -1210,7 +1210,6 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 {
   assert(ictx->lock.is_locked());
 
-  bufferlist bl, bl2;
   uint64_t snap_id;
 
   int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
@@ -1219,12 +1218,17 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
     return r;
   }
 
-  ::encode(snap_name, bl);
-  ::encode(snap_id, bl);
+  if (ictx->old_format) {
+    r = cls_client::old_snapshot_add(&ictx->md_ctx, ictx->header_oid,
+				     snap_id, snap_name);
+  } else {
+    r = cls_client::snapshot_add(&ictx->md_ctx, ictx->header_oid,
+				 snap_id, snap_name);
+  }
 
-  r = ictx->md_ctx.exec(ictx->header_oid, "rbd", "snap_add", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << cpp_strerror(-r) << dendl;
+    lderr(ictx->cct) << "adding snapshot to header failed: "
+		     << cpp_strerror(r) << dendl;
     return r;
   }
   notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
@@ -1236,12 +1240,19 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 {
   assert(ictx->lock.is_locked());
 
-  bufferlist bl, bl2;
-  ::encode(snap_name, bl);
+  int r;
+  if (ictx->old_format) {
+    r = cls_client::old_snapshot_remove(&ictx->md_ctx,
+					ictx->header_oid, snap_name);
+  } else {
+    r = cls_client::snapshot_remove(&ictx->md_ctx,
+				    ictx->header_oid,
+				    ictx->get_snapid(snap_name));
+  }
 
-  int r = ictx->md_ctx.exec(ictx->header_oid, "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << cpp_strerror(-r) << dendl;
+    lderr(ictx->cct) << "removing snapshot from header failed: "
+		     << cpp_strerror(r) << dendl;
     return r;
   }
 
