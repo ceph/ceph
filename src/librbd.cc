@@ -582,8 +582,7 @@ namespace librbd {
   int open_image(ImageCtx *ictx);
   void close_image(ImageCtx *ictx);
 
-  void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
-		  ProgressContext& prog_ctx);
+  void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
 
   int touch_rbd_info(IoCtx& io_ctx, const string& info_oid);
@@ -596,12 +595,11 @@ namespace librbd {
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx);
   void image_info(const ImageCtx& ictx, image_info_t& info, size_t info_size);
-  string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num);
-  uint64_t get_max_block(uint64_t size, int obj_order);
-  uint64_t get_max_block(const rbd_obj_header_ondisk &header);
-  uint64_t get_block_size(const rbd_obj_header_ondisk &header);
-  uint64_t get_block_num(const rbd_obj_header_ondisk &header, uint64_t ofs);
-  uint64_t get_block_ofs(const rbd_obj_header_ondisk &header, uint64_t ofs);
+  string get_block_oid(const string &object_prefix, uint64_t num);
+  uint64_t get_max_block(uint64_t size, uint8_t obj_order);
+  uint64_t get_block_size(uint8_t order);
+  uint64_t get_block_num(uint8_t order, uint64_t ofs);
+  uint64_t get_block_ofs(uint8_t order, uint64_t ofs);
   int check_io(ImageCtx *ictx, uint64_t off, uint64_t len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
@@ -685,52 +683,46 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 
 void image_info(const ImageCtx& ictx, image_info_t& info, size_t infosize)
 {
-  int obj_order = ictx.header.options.order;
+  int obj_order = ictx.order;
   info.size = ictx.get_image_size();
   info.obj_size = 1 << obj_order;
   info.num_objs = ictx.get_image_size() >> obj_order;
   info.order = obj_order;
-  memcpy(&info.block_name_prefix, &ictx.header.block_name, RBD_MAX_BLOCK_NAME_SIZE);
+  memcpy(&info.block_name_prefix, ictx.object_prefix.c_str(),
+	 RBD_MAX_BLOCK_NAME_SIZE);
   info.parent_pool = -1;
   bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
 }
 
-string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num)
+string get_block_oid(const string &object_prefix, uint64_t num)
 {
   char o[RBD_MAX_BLOCK_NAME_SIZE];
   snprintf(o, RBD_MAX_BLOCK_NAME_SIZE,
-       "%s.%012" PRIx64, header.block_name, num);
+	   "%s.%012" PRIx64, object_prefix.c_str(), num);
   return o;
 }
 
-uint64_t get_max_block(uint64_t size, int obj_order)
+uint64_t get_max_block(uint64_t size, uint8_t obj_order)
 {
   uint64_t block_size = 1 << obj_order;
   uint64_t numseg = (size + block_size - 1) >> obj_order;
   return numseg;
 }
 
-uint64_t get_max_block(const rbd_obj_header_ondisk &header)
+uint64_t get_block_ofs(uint8_t order, uint64_t ofs)
 {
-  return get_max_block(header.image_size, header.options.order);
-}
-
-uint64_t get_block_ofs(const rbd_obj_header_ondisk &header, uint64_t ofs)
-{
-  int obj_order = header.options.order;
-  uint64_t block_size = 1 << obj_order;
+  uint64_t block_size = 1 << order;
   return ofs & (block_size - 1);
 }
 
-uint64_t get_block_size(const rbd_obj_header_ondisk &header)
+uint64_t get_block_size(uint8_t order)
 {
-  return 1 << header.options.order;
+  return 1 << order;
 }
 
-uint64_t get_block_num(const rbd_obj_header_ondisk &header, uint64_t ofs)
+uint64_t get_block_num(uint8_t order, uint64_t ofs)
 {
-  int obj_order = header.options.order;
-  uint64_t num = ofs >> obj_order;
+  uint64_t num = ofs >> order;
 
   return num;
 }
@@ -741,28 +733,29 @@ int init_rbd_info(struct rbd_info *info)
   return 0;
 }
 
-void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
-		ProgressContext& prog_ctx)
+void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
 {
-  CephContext *cct = (CephContext *)io_ctx.cct();
-  uint64_t bsize = get_block_size(header);
-  uint64_t numseg = get_max_block(header);
-  uint64_t start = get_block_num(header, newsize);
+  CephContext *cct = (CephContext *)ictx->data_ctx.cct();
+  uint64_t bsize = get_block_size(ictx->order);
+  uint64_t numseg = get_max_block(ictx->size, ictx->order);
+  uint64_t start = get_block_num(ictx->order, newsize);
 
-  uint64_t block_ofs = get_block_ofs(header, newsize);
+  uint64_t block_ofs = get_block_ofs(ictx->order, newsize);
   if (block_ofs) {
-    ldout(cct, 2) << "trim_image object " << numseg << " truncate to " << block_ofs << dendl;
-    string oid = get_block_oid(header, start);
+    ldout(cct, 2) << "trim_image object " << numseg << " truncate to "
+		  << block_ofs << dendl;
+    string oid = get_block_oid(ictx->object_prefix, start);
     librados::ObjectWriteOperation write_op;
     write_op.truncate(block_ofs);
-    io_ctx.operate(oid, &write_op);
+    ictx->data_ctx.operate(oid, &write_op);
     start++;
   }
   if (start < numseg) {
-    ldout(cct, 2) << "trim_image objects " << start << " to " << (numseg-1) << dendl;
-    for (uint64_t i=start; i<numseg; i++) {
-      string oid = get_block_oid(header, i);
-      io_ctx.remove(oid);
+    ldout(cct, 2) << "trim_image objects " << start << " to "
+		  << (numseg - 1) << dendl;
+    for (uint64_t i = start; i < numseg; ++i) {
+      string oid = get_block_oid(ictx->object_prefix, i);
+      ictx->data_ctx.remove(oid);
       prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
     }
   }
@@ -906,12 +899,12 @@ int tmap_rm(IoCtx& io_ctx, const string& imgname)
 int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
 {
   assert(ictx->lock.is_locked());
-  uint64_t numseg = get_max_block(ictx->header);
-  uint64_t bsize = get_block_size(ictx->header);
+  uint64_t numseg = get_max_block(ictx->size, ictx->order);
+  uint64_t bsize = get_block_size(ictx->order);
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
-    string oid = get_block_oid(ictx->header, i);
+    string oid = get_block_oid(ictx->object_prefix, i);
     r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
     ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
     prog_ctx.update_progress(i * bsize, numseg * bsize);
@@ -1096,46 +1089,27 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   return 0;
 }
 
-bool has_snaps(IoCtx& io_ctx, const std::string& md_oid)
-{
-  CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "has_snaps " << &io_ctx << " " << md_oid << dendl;
-
-  bufferlist bl, bl2;
-  int r = io_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
-  if (r < 0) {
-    lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
-    return true;
-  }
-  uint32_t num_snaps;
-  uint64_t snap_seq;
-  bufferlist::iterator iter = bl2.begin();
-  ::decode(snap_seq, iter);
-  ::decode(num_snaps, iter);
-  return num_snaps > 0;
-}
-
 int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
-  string md_oid = imgname;
-  md_oid += RBD_SUFFIX;
-
-  struct rbd_obj_header_ondisk header;
-  int r = read_header(io_ctx, md_oid, &header, NULL);
+  ImageCtx *ictx = new ImageCtx(imgname, NULL, io_ctx);
+  int r = open_image(ictx);
   if (r < 0) {
-    ldout(cct, 2) << "error reading header: " << cpp_strerror(-r) << dendl;
-  }
-  if (r >= 0) {
-    if (has_snaps(io_ctx, md_oid)) {
+    ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+  } else {
+    if (ictx->snaps.size()) {
       lderr(cct) << "image has snapshots - not removing" << dendl;
+      close_image(ictx);
       return -ENOTEMPTY;
     }
-    trim_image(io_ctx, header, 0, prog_ctx);
+    string header_oid = ictx->header_oid;
+    trim_image(ictx, 0, prog_ctx);
+    close_image(ictx);
+
     ldout(cct, 2) << "removing header..." << dendl;
-    r = io_ctx.remove(md_oid);
+    r = io_ctx.remove(header_oid);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
       return r;
@@ -1166,8 +1140,8 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
     ictx->header.image_size = size;
   } else {
     ldout(cct, 2) << "shrinking image " << ictx->header.image_size << " -> " << size << dendl;
-    trim_image(ictx->data_ctx, ictx->header, size, prog_ctx);
     ictx->header.image_size = size;
+    trim_image(ictx, size, prog_ctx);
   }
 
   // rewrite header
@@ -1620,9 +1594,9 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   int64_t ret;
   int64_t total_read = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1630,8 +1604,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
+    string oid = get_block_oid(ictx->object_prefix, i);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
     uint64_t bytes_read;
@@ -1709,9 +1683,9 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
@@ -1723,8 +1697,8 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
@@ -1766,9 +1740,9 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1779,8 +1753,8 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   start_time = ceph_clock_now(ictx->cct);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
 
@@ -1979,9 +1953,9 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
@@ -1997,8 +1971,8 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   c->init_time(ictx, AIO_TYPE_WRITE);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
 
     uint64_t write_len = min(block_size - block_ofs, left);
@@ -2045,9 +2019,9 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -2063,8 +2037,8 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   c->init_time(ictx, AIO_TYPE_DISCARD);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
 
     AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
@@ -2133,9 +2107,9 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   int64_t ret;
   int total_read = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -2144,8 +2118,8 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
+    string oid = get_block_oid(ictx->object_prefix, i);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
 
