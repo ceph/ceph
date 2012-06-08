@@ -4098,10 +4098,8 @@ bool PG::must_delay_request(OpRequestRef op)
 
 void PG::queue_op(OpRequestRef op)
 {
-  if (must_delay_request(op)) {
-    op_waiters.push_back(op);
-    return;
-  } else if (can_discard_request(op)) {
+  if (!must_delay_request(op) &&
+      can_discard_request(op)) {
     return;
   }
   op_queue.push_back(op);
