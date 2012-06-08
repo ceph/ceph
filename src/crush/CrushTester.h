@@ -25,6 +25,8 @@ class CrushTester {
   float mark_down_percentage;
   int mark_down_start;
   int down_range;
+
+public:
   bool output_utilization;
   bool output_utilization_all;
   bool output_statistics;
@@ -44,20 +46,30 @@ public:
       down_range_marked(false),
       mark_down_percentage(0.0),
       mark_down_start(0),
-      down_range(1)
+      down_range(1),
+      output_utilization(false),
+      output_utilization_all(false),
+      output_statistics(false),
+      output_bad_mappings(false),
+      output_choose_tries(false)
   { }
 
-  void set_output(bool set_output_utilization,
-		  bool set_output_utilization_all,
-		  bool set_output_statistics,
-		  bool set_output_bad_mappings,
-		  bool set_output_choose_tries) {
-    output_utilization = set_output_utilization;
-    output_utilization_all = set_output_utilization_all;
-    output_statistics = set_output_statistics;
-    output_bad_mappings = set_output_bad_mappings;
-    output_choose_tries = set_output_choose_tries;
+  void set_output_utilization(bool b) {
+    output_utilization = b;
   }
+  void set_output_utilization_all(bool b) {
+    output_utilization_all = b;
+  }
+  void set_output_statistics(bool b) {
+    output_statistics = b;
+  }
+  void set_output_bad_mappings(bool b) {
+    output_bad_mappings = b;
+  }
+  void set_output_choose_tries(bool b) {
+    output_choose_tries = b;
+  }
+
   void set_batches(int b) {
     num_batches = b;
   }
