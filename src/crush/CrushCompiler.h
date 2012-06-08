@@ -15,6 +15,7 @@ class CrushCompiler {
   CrushWrapper& crush;
   ostream& err;
   int verbose;
+  bool unsafe_tunables;
 
   // decompile
   enum dcb_state_t {
@@ -43,6 +44,7 @@ class CrushCompiler {
   int int_node(node_t &node); 
   float float_node(node_t &node);
 
+  int parse_tunable(iter_t const& i);
   int parse_device(iter_t const& i);
   int parse_bucket_type(iter_t const& i);
   int parse_bucket(iter_t const& i);
@@ -55,8 +57,13 @@ class CrushCompiler {
 
 public:
   CrushCompiler(CrushWrapper& c, ostream& eo, int verbosity=0)
-    : crush(c), err(eo), verbose(verbosity) {}
+    : crush(c), err(eo), verbose(verbosity),
+      unsafe_tunables(false) {}
   ~CrushCompiler() {}
+
+  void enable_unsafe_tunables() {
+    unsafe_tunables = true;
+  }
 
   int decompile(ostream& out);
   int compile(istream& in, const char *infn=0);
