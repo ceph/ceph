@@ -75,11 +75,12 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
-  cout << "   --output-utilization       output OSD usage\n";
-  cout << "   --output utilization-all   include zero weight items\n";
-  cout << "   --output-statistics        output chi squared statistics\n";
-  cout << "   --output-bad-mappings      output bad mappings\n";
-  cout << "   --output-choose-tries      output choose tries histogram\n";
+  cout << "   --show-utilization    show OSD usage\n";
+  cout << "   --show utilization-all\n";
+  cout << "                         include zero weight items\n";
+  cout << "   --show-statistics     show chi squared statistics\n";
+  cout << "   --show-bad-mappings   show bad mappings\n";
+  cout << "   --show-choose-tries   show choose tries histogram\n";
   cout << "   --set-choose-local-tries N\n";
   cout << "                         set choose local retries before re-descent\n";
   cout << "   --set-choose-local-fallback-tries N\n";
@@ -163,15 +164,15 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
-    } else if (ceph_argparse_flag(args, i, "--output_utilization", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_utilization", (char*)NULL)) {
       tester.set_output_utilization(true);
-    } else if (ceph_argparse_flag(args, i, "--output_utilization_all", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_utilization_all", (char*)NULL)) {
       tester.set_output_utilization_all(true);
-    } else if (ceph_argparse_flag(args, i, "--output_statistics", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_statistics", (char*)NULL)) {
       tester.set_output_statistics(true);
-    } else if (ceph_argparse_flag(args, i, "--output_bad_mappings", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_bad_mappings", (char*)NULL)) {
       tester.set_output_bad_mappings(true);
-    } else if (ceph_argparse_flag(args, i, "--output_choose_tries", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_choose_tries", (char*)NULL)) {
       tester.set_output_choose_tries(true);
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
