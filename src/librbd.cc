@@ -1306,44 +1306,70 @@ int ictx_refresh(ImageCtx *ictx)
   ictx->needs_refresh = false;
   ictx->refresh_lock.Unlock();
 
-  int r = read_header(ictx->md_ctx, ictx->header_oid, &(ictx->header), NULL);
-  if (r < 0) {
-    lderr(cct) << "Error reading header: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-  r = ictx->md_ctx.exec(ictx->header_oid, "rbd", "snap_list", bl, bl2);
-  if (r < 0) {
-    lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-  r = 0;
+  int r;
+  ::SnapContext new_snapc;
+  bool new_snap;
+  vector<string> snap_names;
+  vector<uint64_t> snap_sizes;
+  vector<uint64_t> snap_features;
+  if (ictx->old_format) {
+    r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
+    if (r < 0) {
+      lderr(cct) << "Error reading header: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
+				      &snap_names, &snap_sizes, &new_snapc);
+    if (r < 0) {
+      lderr(cct) << "Error listing snapshots: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    ictx->order = ictx->header.options.order;
+    ictx->size = ictx->header.image_size;
+    ictx->object_prefix = ictx->header.block_name;
+  } else {
+    do {
+      uint64_t incompatible_features;
+      r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
+					   &ictx->size, &ictx->features,
+					   &incompatible_features,
+					   &new_snapc);
+      if (r < 0) {
+	lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
+		   << dendl;
+	return r;
+      }
 
-  std::map<snap_t, std::string> old_snap_ids;
-  for (std::map<std::string, struct SnapInfo>::iterator it =
-	 ictx->snaps_by_name.begin(); it != ictx->snaps_by_name.end(); ++it) {
-    old_snap_ids[it->second.id] = it->first;
+      uint64_t unsupported = incompatible_features & ~RBD_FEATURES_ALL;
+      if (unsupported) {
+	lderr(ictx->cct) << "Image uses unsupported features: "
+			 << unsupported << dendl;
+	return -ENOSYS;
+      }
+      r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
+				    new_snapc.snaps, &snap_names,
+				    &snap_sizes, &snap_features);
+      // -ENOENT here means we raced with snapshot deletion
+      if (r < 0 && r != -ENOENT) {
+	lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
+	lderr(ictx->cct) << "Error listing snapshots: " << cpp_strerror(r) << dendl;
+	return r;
+      }
+    } while (r == -ENOENT);
   }
-  bool new_snap = false;
 
   ictx->snaps.clear();
-  ictx->snapc.snaps.clear();
   ictx->snaps_by_name.clear();
-
-  uint32_t num_snaps;
-  bufferlist::iterator iter = bl2.begin();
-  ::decode(ictx->snapc.seq, iter);
-  ::decode(num_snaps, iter);
-  for (uint32_t i=0; i < num_snaps; i++) {
-    uint64_t id, image_size;
-    string s;
-    ::decode(id, iter);
-    ::decode(image_size, iter);
-    ::decode(s, iter);
-    ictx->add_snap(s, id, image_size);
-    std::map<snap_t, std::string>::const_iterator it = old_snap_ids.find(id);
-    if (it == old_snap_ids.end()) {
+  for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
+    uint64_t features = ictx->old_format ? 0 : snap_features[i];
+    ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
+		   snap_sizes[i], features);
+    std::vector<snap_t>::const_iterator it =
+      find(ictx->snaps.begin(), ictx->snaps.end(), new_snapc.snaps[i].val);
+    if (it == ictx->snaps.end()) {
       new_snap = true;
-      ldout(cct, 20) << "new snapshot " << s << " size " << image_size << dendl;
+      ldout(cct, 20) << "new snapshot id " << *it << " size " << snap_sizes[i]
+		     << dendl;
     }
   }
 
@@ -1358,6 +1384,8 @@ int ictx_refresh(ImageCtx *ictx)
     ictx->refresh_lock.Unlock();
     return -EIO;
   }
+
+  ictx->snapc = new_snapc;
 
   if (ictx->snapid != CEPH_NOSNAP &&
       ictx->get_snapid(ictx->snapname) == CEPH_NOSNAP) {
