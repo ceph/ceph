@@ -353,6 +353,7 @@ endif
 # librbd
 librbd_la_SOURCES = \
 	librbd.cc \
+	librbd/cls_rbd_client.cc \
 	librbd/LibrbdWriteback.cc \
 	osdc/ObjectCacher.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
