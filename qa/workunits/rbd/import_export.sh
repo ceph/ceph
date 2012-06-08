@@ -10,7 +10,7 @@ dd if=/bin/grep of=/tmp/img bs=1k seek=1000000
 
 rbd rm testimg || true
 
-rbd import /tmp/img testimg
+rbd import $RBD_CREATE_ARGS /tmp/img testimg
 rbd export testimg /tmp/img2
 
 cmp /tmp/img /tmp/img2
