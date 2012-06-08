@@ -1388,7 +1388,7 @@ int ictx_refresh(ImageCtx *ictx)
   ictx->snapc = new_snapc;
 
   if (ictx->snapid != CEPH_NOSNAP &&
-      ictx->get_snapid(ictx->snapname) == CEPH_NOSNAP) {
+      ictx->get_snapid(ictx->snapname) != ictx->snapid) {
     lderr(cct) << "tried to read from a snapshot that no longer exists: "
 	       << ictx->snapname << dendl;
     ictx->snap_exists = false;
