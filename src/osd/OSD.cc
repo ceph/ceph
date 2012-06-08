@@ -5190,6 +5190,7 @@ void OSD::process_peering_events(const list<PG*> &pgs)
        ++i) {
     PG *pg = *i;
     pg->lock();
+    curmap = service.get_osdmap();
     if (pg->deleting) {
       pg->unlock();
       continue;
