@@ -452,6 +452,9 @@ reject:
 		dprintk("CHOOSE got %d\n", item);
 		out[outpos] = item;
 		outpos++;
+
+		if (map->choose_tries)
+			map->choose_tries[ftotal]++;
 	}
 
 	dprintk("CHOOSE returns %d\n", outpos);

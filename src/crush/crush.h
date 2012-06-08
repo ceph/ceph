@@ -167,6 +167,8 @@ struct crush_map {
 	__u32 choose_local_fallback_tries;
 	/* choose attempts before giving up */ 
 	__u32 choose_total_tries;
+
+	__u32 *choose_tries;
 };
 
 
