@@ -119,6 +119,7 @@ int main(int argc, const char **argv)
   bool decompile = false;
   bool test = false;
   bool verbose = false;
+  bool unsafe_tunables = false;
 
   bool reweight = false;
   int add_item = -1;
@@ -181,6 +182,8 @@ int main(int argc, const char **argv)
       test = true;
     } else if (ceph_argparse_flag(args, i, "-s", "--simulate", (char*)NULL)) {
       tester.set_random_placement();
+    } else if (ceph_argparse_flag(args, i, "--enable-unsafe-tunables", (char*)NULL)) {
+      unsafe_tunables = true;
     } else if (ceph_argparse_withint(args, i, &choose_local_tries, &err,
 				     "--set_choose_local_tries", (char*)NULL)) {
       adjust = true;
@@ -566,14 +569,26 @@ int main(int argc, const char **argv)
     modified = true;
   }
   if (choose_local_tries >= 0) {
+    if (!unsafe_tunables) {
+      cerr << me << " tunables NOT FULLY IMPLEMENTED; --enable-unsafe-tunables to enable" << std::endl;
+      return -1;
+    }
     crush.set_choose_local_tries(choose_local_tries);
     modified = true;
   }
   if (choose_local_fallback_tries >= 0) {
+    if (!unsafe_tunables) {
+      cerr << me << " tunables NOT FULLY IMPLEMENTED; --enable-unsafe-tunables to enable" << std::endl;
+      return -1;
+    }
     crush.set_choose_local_fallback_tries(choose_local_fallback_tries);
     modified = true;
   }
   if (choose_total_tries >= 0) {
+    if (!unsafe_tunables) {
+      cerr << me << " tunables NOT FULLY IMPLEMENTED; --enable-unsafe-tunables to enable" << std::endl;
+      return -1;
+    }
     crush.set_choose_total_tries(choose_total_tries);
     modified = true;
   }
