@@ -801,15 +801,15 @@ int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id)
   return 0;
 }
 
-
-int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint64_t *ver)
+int read_header_bl(IoCtx& io_ctx, const string& header_oid,
+		   bufferlist& header, uint64_t *ver)
 {
   int r;
   uint64_t off = 0;
 #define READ_SIZE 4096
   do {
     bufferlist bl;
-    r = io_ctx.read(md_oid, bl, READ_SIZE, off);
+    r = io_ctx.read(header_oid, bl, READ_SIZE, off);
     if (r < 0)
       return r;
     header.claim_append(bl);
@@ -848,10 +848,11 @@ int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ic
   return 0;
 }
 
-int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
+int read_header(IoCtx& io_ctx, const string& header_oid,
+		struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
-  int r = read_header_bl(io_ctx, md_oid, header_bl, ver);
+  int r = read_header_bl(io_ctx, header_oid, header_bl, ver);
   if (r < 0)
     return r;
   if (header_bl.length() < (int)sizeof(*header))
@@ -861,12 +862,12 @@ int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondis
   return 0;
 }
 
-int write_header(IoCtx& io_ctx, const string& md_oid, bufferlist& header)
+int write_header(IoCtx& io_ctx, const string& header_oid, bufferlist& header)
 {
   bufferlist bl;
-  int r = io_ctx.write(md_oid, header, header.length(), 0);
+  int r = io_ctx.write(header_oid, header, header.length(), 0);
 
-  notify_change(io_ctx, md_oid, NULL, NULL);
+  notify_change(io_ctx, header_oid, NULL, NULL);
 
   return r;
 }
