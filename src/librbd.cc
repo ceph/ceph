@@ -24,7 +24,13 @@
 #include "include/rbd/librbd.hpp"
 #include "osdc/ObjectCacher.h"
 
+#include "librbd/cls_rbd_client.h"
 #include "librbd/LibrbdWriteback.h"
+
+#include <algorithm>
+#include <map>
+#include <string>
+#include <vector>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -86,8 +92,38 @@ namespace librbd {
   struct SnapInfo {
     snap_t id;
     uint64_t size;
-    SnapInfo(snap_t _id, uint64_t _size) : id(_id), size(_size) {};
+    uint64_t features;
+    SnapInfo(snap_t _id, uint64_t _size, uint64_t _features) :
+      id(_id), size(_size), features(_features) {};
   };
+
+  const string md_oid(const string &name, bool old_format)
+  {
+    if (old_format)
+      return name + RBD_SUFFIX;
+    else
+      return RBD_HEADER_PREFIX + name;
+  }
+
+  int detect_format(IoCtx &io_ctx, const string &name, bool *old_format,
+		    uint64_t *size)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    if (old_format)
+      *old_format = true;
+    int r = io_ctx.stat(md_oid(name, true), size, NULL);
+    if (r < 0) {
+      if (old_format)
+	*old_format = false;
+      r = io_ctx.stat(md_oid(name, false), size, NULL);
+      if (r < 0)
+	return r;
+    }
+
+    ldout(cct, 20) << "detect format of " << name << " : "
+		   << (*old_format ? "old" : "new") << dendl;
+    return 0;
+  }
 
   struct AioCompletion;
 
@@ -114,7 +150,8 @@ namespace librbd {
     PerfCounters *perfcounter;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
-    vector<snap_t> snaps;
+    vector<snap_t> snaps; // this mirrors snapc.snaps, but is in a
+			  // format librados can understand
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     bool snap_exists; // false if our snapid was deleted
@@ -126,6 +163,13 @@ namespace librbd {
     Mutex refresh_lock;
     Mutex lock; // protects access to snapshot and header information
     Mutex cache_lock; // used as client_lock for the ObjectCacher
+
+    bool old_format;
+    uint8_t order;
+    uint64_t size;
+    uint64_t features;
+    string object_prefix;
+    string header_oid;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -141,6 +185,8 @@ namespace librbd {
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
 	lock("librbd::ImageCtx::lock"),
 	cache_lock("librbd::ImageCtx::cache_lock"),
+	old_format(true),
+	order(0), size(0), features(0),
 	object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
     {
       md_ctx.dup(p);
@@ -183,6 +229,26 @@ namespace librbd {
 	delete object_set;
 	object_set = NULL;
       }
+    }
+
+    int init() {
+      int r = detect_format(md_ctx, name, &old_format, NULL);
+      if (r < 0) {
+	lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      if (!old_format) {
+	r = cls_client::get_immutable_metadata(&md_ctx, md_oid(name, false),
+					       &object_prefix, &order);
+	if (r < 0) {
+	  lderr(cct) << "error reading immutable metadata: "
+		     << cpp_strerror(r) << dendl;
+	  return r;
+	}
+      }
+      header_oid = md_oid(name, old_format);
+      return 0;
     }
 
     void perf_start(string name) {
@@ -258,23 +324,17 @@ namespace librbd {
       return -ENOENT;
     }
 
-    void add_snap(std::string snap_name, snap_t id, uint64_t size)
+    void add_snap(std::string snap_name, snap_t id, uint64_t size, uint64_t features)
     {
-      snapc.snaps.push_back(id);
       snaps.push_back(id);
-      struct SnapInfo info(id, size);
+      struct SnapInfo info(id, size, features);
       snaps_by_name.insert(std::pair<std::string, struct SnapInfo>(snap_name, info));
-    }
-
-    const string md_oid() const
-    {
-      return name + RBD_SUFFIX;
     }
 
     uint64_t get_image_size() const
     {
       if (snapname.length() == 0) {
-	return header.image_size;
+	return size;
       } else {
 	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snapname);
 	if (p == snaps_by_name.end())
@@ -895,7 +955,7 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   ictx->perfcounter->inc(l_librbd_snap_create);
   return 0;
@@ -923,7 +983,7 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   ictx->perfcounter->inc(l_librbd_snap_remove);
   return 0;
@@ -1113,7 +1173,7 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  int r = ictx->md_ctx.write(ictx->md_oid(), bl, bl.length(), 0);
+  int r = ictx->md_ctx.write(ictx->header_oid, bl, bl.length(), 0);
 
   if (r == -ERANGE)
     lderr(cct) << "operation might have conflicted with another client!" << dendl;
@@ -1121,7 +1181,7 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
     lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
     return r;
   } else {
-    notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
   }
 
   return 0;
@@ -1188,12 +1248,12 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
   ::encode(snap_name, bl);
   ::encode(snap_id, bl);
 
-  r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_add", bl, bl2);
+  r = ictx->md_ctx.exec(ictx->header_oid, "rbd", "snap_add", bl, bl2);
   if (r < 0) {
     lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << cpp_strerror(-r) << dendl;
     return r;
   }
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   return 0;
 }
@@ -1205,7 +1265,7 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
   bufferlist bl, bl2;
   ::encode(snap_name, bl);
 
-  int r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_remove", bl, bl2);
+  int r = ictx->md_ctx.exec(ictx->header_oid, "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
     lderr(ictx->cct) << "rbd.snap_remove execution failed: " << cpp_strerror(-r) << dendl;
     return r;
@@ -1246,12 +1306,12 @@ int ictx_refresh(ImageCtx *ictx)
   ictx->needs_refresh = false;
   ictx->refresh_lock.Unlock();
 
-  int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
+  int r = read_header(ictx->md_ctx, ictx->header_oid, &(ictx->header), NULL);
   if (r < 0) {
     lderr(cct) << "Error reading header: " << cpp_strerror(-r) << dendl;
     return r;
   }
-  r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_list", bl, bl2);
+  r = ictx->md_ctx.exec(ictx->header_oid, "rbd", "snap_list", bl, bl2);
   if (r < 0) {
     lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
     return r;
@@ -1391,7 +1451,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
   snap_t new_snapid = ictx->get_snapid(snap_name);
   ldout(cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
 
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   ictx->perfcounter->inc(l_librbd_snap_rollback);
   return r;
@@ -1478,9 +1538,12 @@ int open_image(ImageCtx *ictx)
   ldout(ictx->cct, 20) << "open_image: ictx =  " << ictx
 		       << " name =  '" << ictx->name << "' snap_name = '"
 		       << ictx->snapname << "'" << dendl;
+  int r = ictx->init();
+  if (r < 0)
+    return r;
 
   ictx->lock.Lock();
-  int r = ictx_refresh(ictx);
+  r = ictx_refresh(ictx);
   ictx->lock.Unlock();
   if (r < 0)
     return r;
@@ -1491,7 +1554,7 @@ int open_image(ImageCtx *ictx)
   WatchCtx *wctx = new WatchCtx(ictx);
   ictx->wctx = wctx;
 
-  r = ictx->md_ctx.watch(ictx->md_oid(), 0, &(wctx->cookie), wctx);
+  r = ictx->md_ctx.watch(ictx->header_oid, 0, &(wctx->cookie), wctx);
   return r;
 }
 
@@ -1504,7 +1567,7 @@ void close_image(ImageCtx *ictx)
     flush(ictx);
   ictx->lock.Lock();
   ictx->wctx->invalidate();
-  ictx->md_ctx.unwatch(ictx->md_oid(), ictx->wctx->cookie);
+  ictx->md_ctx.unwatch(ictx->header_oid, ictx->wctx->cookie);
   delete ictx->wctx;
   ictx->lock.Unlock();
   delete ictx;
