@@ -30,7 +30,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 2
+#define LIBRBD_VER_EXTRA 3
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -67,6 +67,8 @@ void rbd_version(int *major, int *minor, int *extra);
 /* images */
 int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
+int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
+		uint64_t features, int *order);
 int rbd_remove(rados_ioctx_t io, const char *name);
 int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			     librbd_progress_fn_t cb, void *cbdata);
