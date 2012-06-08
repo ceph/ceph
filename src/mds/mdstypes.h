@@ -21,6 +21,7 @@ using namespace std;
 #include "inode_backtrace.h"
 
 #include <boost/pool/pool.hpp>
+#include "include/assert.h"
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 
