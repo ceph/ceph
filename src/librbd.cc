@@ -992,6 +992,14 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
     return -EEXIST;
   }
 
+  if (!order)
+    return -EINVAL;
+
+  if (*order && (*order > 255 || *order < 12)) {
+    lderr(cct) << "order must be in the range [12, 255]" << dendl;
+    return -EDOM;
+  }
+
   uint64_t bid;
   string dir_info = RBD_INFO;
   r = rbd_assign_bid(io_ctx, dir_info, &bid);
