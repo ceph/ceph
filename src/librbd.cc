@@ -563,7 +563,8 @@ namespace librbd {
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(IoCtx& io_ctx, std::vector<string>& names);
-  int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order);
+  int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order,
+	     bool old_format);
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx);
@@ -667,9 +668,6 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   memcpy(&ondisk.version, RBD_HEADER_VERSION, sizeof(RBD_HEADER_VERSION));
 
   snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%x.%x", hi, lo);
-
-  if (!*order)
-    *order = RBD_DEFAULT_OBJ_ORDER;
 
   ondisk.image_size = size;
   ondisk.options.order = *order;
@@ -977,18 +975,25 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
+int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
+	   bool old_format, uint64_t features, int *order)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
-  ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
+  ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
+		 << " size = " << size << " old_format = " << old_format
+		 << " features = " << features << " order = " << *order
+		 << dendl;
 
-  string md_oid = imgname;
-  md_oid += RBD_SUFFIX;
 
-  // make sure it doesn't already exist
-  int r = io_ctx.stat(md_oid, NULL, NULL);
-  if (r == 0) {
-    lderr(cct) << "rbd image header " << md_oid << " already exists" << dendl;
+  if (features & ~RBD_FEATURES_ALL) {
+    lderr(cct) << "librbd does not support requested features." << dendl;
+    return -ENOSYS;
+  }
+
+  // make sure it doesn't already exist, in either format
+  int r = detect_format(io_ctx, imgname, NULL, NULL);
+  if (r != -ENOENT) {
+    lderr(cct) << "rbd image " << imgname << " already exists" << dendl;
     return -EEXIST;
   }
 
@@ -1008,23 +1013,33 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
     return r;
   }
 
-  struct rbd_obj_header_ondisk header;
-  init_rbd_header(header, size, order, bid);
-
-  bufferlist bl;
-  bl.append((const char *)&header, sizeof(header));
-
   ldout(cct, 2) << "adding rbd image to directory..." << dendl;
   r = tmap_set(io_ctx, imgname);
   if (r < 0) {
-    lderr(cct) << "error adding img to directory: " << cpp_strerror(-r)<< dendl;
+    lderr(cct) << "error adding img to directory: " << cpp_strerror(r)<< dendl;
     return r;
   }
 
+  if (!*order)
+    *order = RBD_DEFAULT_OBJ_ORDER;
+
   ldout(cct, 2) << "creating rbd image..." << dendl;
-  r = io_ctx.write(md_oid, bl, bl.length(), 0);
+  string header_oid = md_oid(imgname, old_format);
+  if (old_format) {
+    struct rbd_obj_header_ondisk header;
+    init_rbd_header(header, size, order, bid);
+
+    bufferlist bl;
+    bl.append((const char *)&header, sizeof(header));
+    r = io_ctx.write(header_oid, bl, bl.length(), 0);
+  } else {
+    ostringstream oss;
+    oss << RBD_DATA_PREFIX << std::hex << bid;
+    r = cls_client::create_image(&io_ctx, header_oid, size, *order, features,
+				 oss.str());
+  }
   if (r < 0) {
-    lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1541,8 +1556,9 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
   uint64_t src_size = ictx.get_image_size();
   int64_t r;
 
-  int order = ictx.header.options.order;
-  r = create(dest_md_ctx, destname, src_size, &order);
+  int order = ictx.order;
+  r = create(dest_md_ctx, destname, src_size, ictx.old_format,
+	     ictx.features, &order);
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
     return r;
@@ -2251,8 +2267,13 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapnam
 
 int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
 {
-  int r = librbd::create(io_ctx, name, size, order);
-  return r;
+  return librbd::create(io_ctx, name, size, true, 0, order);
+}
+
+int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
+		 uint64_t features, int *order)
+{
+  return librbd::create(io_ctx, name, size, false, features, order);
 }
 
 int RBD::remove(IoCtx& io_ctx, const char *name)
@@ -2506,7 +2527,16 @@ extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int 
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::create(io_ctx, name, size, order);
+  return librbd::create(io_ctx, name, size, true, 0, order);
+}
+
+extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
+			   uint64_t size, uint64_t features,
+			   int *order)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::create(io_ctx, name, size, false, features, order);
 }
 
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
