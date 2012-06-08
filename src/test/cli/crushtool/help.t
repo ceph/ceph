@@ -28,7 +28,17 @@
                            reweight a given item (and adjust ancestor
                            weights as needed)
      -i mapfn --reweight   recalculate all bucket weights
-     --output-utilization       output OSD usage
-     --output utilization-all   include zero weight items
-     --output-statistics        output chi squared statistics
+     --show-utilization    show OSD usage
+     --show utilization-all
+                           include zero weight items
+     --show-statistics     show chi squared statistics
+     --show-bad-mappings   show bad mappings
+     --show-choose-tries   show choose tries histogram
+     --set-choose-local-tries N
+                           set choose local retries before re-descent
+     --set-choose-local-fallback-tries N
+                           set choose local retries using fallback
+                           permutation before re-descent
+     --set-choose-total-tries N
+                           set choose total descent attempts
   [1]

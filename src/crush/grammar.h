@@ -50,6 +50,7 @@ struct crush_grammar : public grammar<crush_grammar>
     _step,
     _crushrule,
     _crushmap,
+    _tunable,
   };
 
   template <typename ScannerT>
@@ -59,6 +60,8 @@ struct crush_grammar : public grammar<crush_grammar>
     rule<ScannerT, parser_context<>, parser_tag<_posint> >      posint;
     rule<ScannerT, parser_context<>, parser_tag<_negint> >      negint;
     rule<ScannerT, parser_context<>, parser_tag<_name> >      name;
+
+    rule<ScannerT, parser_context<>, parser_tag<_tunable> >      tunable;
 
     rule<ScannerT, parser_context<>, parser_tag<_device> >      device;
 
@@ -88,6 +91,9 @@ struct crush_grammar : public grammar<crush_grammar>
       posint     =   leaf_node_d[ lexeme_d[ +digit_p ] ];
       negint     =   leaf_node_d[ lexeme_d[ ch_p('-') >> +digit_p ] ];
       name = leaf_node_d[ lexeme_d[ +( alnum_p || ch_p('-') || ch_p('_') || ch_p('.')) ] ];
+
+      // tunables
+      tunable = str_p("tunable") >> name >> posint;
 
       // devices
       device = str_p("device") >> posint >> name;
@@ -132,7 +138,7 @@ struct crush_grammar : public grammar<crush_grammar>
 			   >> '}';
 
       // the whole crush map
-      crushmap = *(device | bucket_type) >> *bucket >> *crushrule;
+      crushmap = *(tunable | device | bucket_type) >> *bucket >> *crushrule;
     }
 
     rule<ScannerT, parser_context<>, parser_tag<_crushmap> > const&
