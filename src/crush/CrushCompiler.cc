@@ -179,9 +179,17 @@ int CrushCompiler::decompile_bucket(int cur,
 
 int CrushCompiler::decompile(ostream &out)
 {
-  out << "# begin crush map\n\n";
+  out << "# begin crush map\n";
 
-  out << "# devices\n";
+  // only dump tunables if they differ from the defaults
+  if (crush.get_choose_local_tries() != 2)
+    out << "tunable choose_local_tries " << crush.get_choose_local_tries() << "\n";
+  if (crush.get_choose_local_fallback_tries() != 5)
+    out << "tunable choose_local_fallback_tries " << crush.get_choose_local_fallback_tries() << "\n";
+  if (crush.get_choose_total_tries() != 19)
+    out << "tunable choose_total_tries " << crush.get_choose_total_tries() << "\n";
+
+  out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
     out << "device " << i << " ";
     print_item_name(out, i, crush);
@@ -319,6 +327,31 @@ int CrushCompiler::parse_device(iter_t const& i)
   id_item[id] = name;
 
   if (verbose) err << "device " << id << " '" << name << "'" << std::endl;
+  return 0;
+}
+
+int CrushCompiler::parse_tunable(iter_t const& i)
+{
+  string name = string_node(i->children[1]);
+  int val = int_node(i->children[2]);
+
+  if (name == "choose_local_tries")
+    crush.set_choose_local_tries(val);
+  else if (name == "choose_local_fallback_tries")
+    crush.set_choose_local_fallback_tries(val);
+  else if (name == "choose_total_tries")
+    crush.set_choose_total_tries(val);
+  else {
+    err << "tunable " << name << " not recognized" << std::endl;
+    return -1;
+  }
+
+  if (!unsafe_tunables) {
+    err << "tunables are NOT FULLY IMPLEMENTED; enable with --enable-unsafe-tunables to enable this feature" << std::endl;
+    return -1;
+  }
+
+  if (verbose) err << "tunable " << name << " " << val << std::endl;
   return 0;
 }
 
@@ -595,6 +628,9 @@ int CrushCompiler::parse_crush(iter_t const& i)
   int r = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     switch (p->value.id().to_long()) {
+    case crush_grammar::_tunable:
+      r = parse_tunable(p);
+      break;
     case crush_grammar::_device: 
       r = parse_device(p);
       break;
