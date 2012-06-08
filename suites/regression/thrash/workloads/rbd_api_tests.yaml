@@ -1,5 +1,4 @@
 tasks:
-- ceph:
 - ceph-fuse:
 - workunit:
     client.0:
