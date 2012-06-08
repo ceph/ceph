@@ -91,6 +91,28 @@ public:
     assert(crush);
   }
 
+  // tunables
+  int get_choose_local_tries() const {
+    return crush->choose_local_tries;
+  }
+  void set_choose_local_tries(int n) {
+    crush->choose_local_tries = n;
+  }
+
+  int get_choose_local_fallback_tries() const {
+    return crush->choose_local_fallback_tries;
+  }
+  void set_choose_local_fallback_tries(int n) {
+    crush->choose_local_fallback_tries = n;
+  }
+
+  int get_choose_total_tries() const {
+    return crush->choose_total_tries;
+  }
+  void set_choose_total_tries(int n) {
+    crush->choose_total_tries = n;
+  }
+
   // bucket types
   int get_num_type_names() const {
     return type_map.size();
@@ -468,6 +490,26 @@ public:
     assert(crush);
     crush_finalize(crush);
   }
+
+  void start_choose_profile() {
+    free(crush->choose_tries);
+    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * crush->choose_total_tries);
+    memset(crush->choose_tries, 0,
+	   sizeof(*crush->choose_tries) * crush->choose_total_tries);
+  }
+  void stop_choose_profile() {
+    free(crush->choose_tries);
+    crush->choose_tries = 0;
+  }
+
+  int get_choose_profile(__u32 **vec) {
+    if (crush->choose_tries) {
+      *vec = crush->choose_tries;
+      return crush->choose_total_tries;
+    }
+    return 0;
+  }
+
 
   void set_max_devices(int m) {
     crush->max_devices = m;
