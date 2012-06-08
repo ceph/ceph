@@ -60,6 +60,7 @@ core
 src/ocf/ceph
 src/ocf/rbd
 src/omapbench
+src/kvstorebench
 
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/
