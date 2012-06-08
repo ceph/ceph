@@ -32,6 +32,7 @@
      --output utilization-all   include zero weight items
      --output-statistics        output chi squared statistics
      --output-bad-mappings      output bad mappings
+     --output-choose-tries      output choose tries histogram
      --set-choose-local-tries N
                            set choose local retries before re-descent
      --set-choose-local-fallback-tries N

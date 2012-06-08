@@ -90,7 +90,8 @@ int CrushTester::test()
   if (verbose > 3 )
     err << "devices weights (hex): " << hex << weight << dec << std::endl;
 
-
+  if (output_choose_tries)
+    crush.start_choose_profile();
   
   for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
       
@@ -312,5 +313,20 @@ int CrushTester::test()
 #endif
     }
   }
+
+  if (output_choose_tries) {
+    __u32 *v;
+    int n = crush.get_choose_profile(&v);
+    for (int i=0; i<n; i++) {
+      cout.setf(std::ios::right);
+      cout << std::setw(2)
+	   << i << ": " << std::setw(9) << v[i];
+      cout.unsetf(std::ios::right);
+      cout << std::endl;
+    }
+
+    crush.stop_choose_profile();
+  }
+
   return 0;
 }

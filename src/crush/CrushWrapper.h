@@ -491,6 +491,26 @@ public:
     crush_finalize(crush);
   }
 
+  void start_choose_profile() {
+    free(crush->choose_tries);
+    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * crush->choose_total_tries);
+    memset(crush->choose_tries, 0,
+	   sizeof(*crush->choose_tries) * crush->choose_total_tries);
+  }
+  void stop_choose_profile() {
+    free(crush->choose_tries);
+    crush->choose_tries = 0;
+  }
+
+  int get_choose_profile(__u32 **vec) {
+    if (crush->choose_tries) {
+      *vec = crush->choose_tries;
+      return crush->choose_total_tries;
+    }
+    return 0;
+  }
+
+
   void set_max_devices(int m) {
     crush->max_devices = m;
   }
