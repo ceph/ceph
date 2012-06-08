@@ -884,18 +884,23 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = pending_mdsmap.remove_data_pg_pool(poolid);
       if (r == 0)
 	ss << "removed data pool " << poolid << " from mdsmap";
-    } else if (m->cmd[1] == "newfs" && m->cmd.size() == 4) {
+    } else if (m->cmd[1] == "newfs" && m->cmd.size() >= 4) {
       MDSMap newmap;
       int metadata = atoi(m->cmd[2].c_str());
       int data = atoi(m->cmd[3].c_str());
-      pending_mdsmap = newmap;
-      pending_mdsmap.epoch = mdsmap.epoch + 1;
-      create_new_fs(pending_mdsmap, metadata, data);
-      ss << "new fs with metadata pool " << metadata << " and data pool " << data;
-      string rs;
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      if (m->cmd.size() < 5 || m->cmd[4] != "--yes-i-really-mean-it") {
+	ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
+	r = -EPERM;
+      } else {
+	pending_mdsmap = newmap;
+	pending_mdsmap.epoch = mdsmap.epoch + 1;
+	create_new_fs(pending_mdsmap, metadata, data);
+	ss << "new fs with metadata pool " << metadata << " and data pool " << data;
+	string rs;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      }
     }    
   }
   if (r == -EINVAL) 
