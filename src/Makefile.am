@@ -701,6 +701,13 @@ test_librbd_fsx_LDADD =  librbd.la librados.la
 test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += test_librbd_fsx
 
+test_cls_rbd_SOURCES = test/rbd/test_cls_rbd.cc \
+	test/rados-api/test.cc \
+	librbd/cls_rbd_client.cc
+test_cls_rbd_LDADD = librados.la ${UNITTEST_STATIC_LDADD}
+test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cls_rbd
+
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
@@ -1365,6 +1372,7 @@ noinst_HEADERS = \
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
+	librbd/cls_rbd_client.h\
 	librbd/LibrbdWriteback.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
