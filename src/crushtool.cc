@@ -570,9 +570,13 @@ int main(int argc, const char **argv)
     crush.reweight(g_ceph_context);
     modified = true;
   }
+
+  const char *scary_tunables_message =
+    "** tunables are DANGEROUS and NOT YET RECOMMENDED.  DO NOT USE without\n"
+    "** confirming with developers that your use-case is safe and correct.";
   if (choose_local_tries >= 0) {
     if (!unsafe_tunables) {
-      cerr << me << " tunables NOT FULLY IMPLEMENTED; --enable-unsafe-tunables to enable" << std::endl;
+      cerr << scary_tunables_message << std::endl;
       return -1;
     }
     crush.set_choose_local_tries(choose_local_tries);
@@ -580,7 +584,7 @@ int main(int argc, const char **argv)
   }
   if (choose_local_fallback_tries >= 0) {
     if (!unsafe_tunables) {
-      cerr << me << " tunables NOT FULLY IMPLEMENTED; --enable-unsafe-tunables to enable" << std::endl;
+      cerr << scary_tunables_message << std::endl;
       return -1;
     }
     crush.set_choose_local_fallback_tries(choose_local_fallback_tries);
@@ -588,7 +592,7 @@ int main(int argc, const char **argv)
   }
   if (choose_total_tries >= 0) {
     if (!unsafe_tunables) {
-      cerr << me << " tunables NOT FULLY IMPLEMENTED; --enable-unsafe-tunables to enable" << std::endl;
+      cerr << scary_tunables_message << std::endl;
       return -1;
     }
     crush.set_choose_total_tries(choose_total_tries);
