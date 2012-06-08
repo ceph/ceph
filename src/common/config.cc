@@ -875,21 +875,30 @@ void md_config_t::expand_all_meta()
   }
 }
 
-bool md_config_t::expand_meta(std::string &val) const
+bool md_config_t::expand_meta(std::string &origval) const
 {
   assert(lock.is_locked());
   bool found_meta = false;
+
+  set<string> resolved;
+
+  string::size_type sz;
+  string val = origval;
+
+ restart:
+  sz = val.size();
   string out;
-  string::size_type sz = val.size();
   out.reserve(sz);
+
   for (string::size_type s = 0; s < sz; ) {
     if (val[s] != '$') {
       out += val[s++];
       continue;
     }
     string::size_type rem = sz - (s + 1);
-    int i;
-    for (i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
+
+    // special metavariable?
+    for (int i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
       size_t clen = strlen(CONF_METAVARIABLES[i]);
       if (rem < clen)
 	continue;
@@ -910,14 +919,43 @@ bool md_config_t::expand_meta(std::string &val) const
       else
 	assert(0); // unreachable
       found_meta = true;
-      break;
-    }
-    if (i == NUM_CONF_METAVARIABLES)
-      out += val[s++];
-    else
       s += strlen(CONF_METAVARIABLES[i]) + 1;
+      out += val.substr(s);
+      val = out;
+      goto restart;
+    }
+
+    // config option?
+    for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+      config_option *opt = &config_optionsp[i];
+      size_t clen = strlen(opt->name);
+      if (rem < clen)
+	continue;
+      if (strncmp(val.c_str() + s + 1, opt->name, clen))
+	continue;
+
+      // avoid loops
+      if (resolved.count(opt->name))
+	continue;	// loop; skip
+      resolved.insert(opt->name);
+
+      found_meta = true;
+      char *vv = NULL;
+      _get_val(opt->name, &vv, -1);
+      out += vv;
+      s += strlen(opt->name) + 1;
+      out += val.substr(s);
+      //cout << "val '" << val << "' s " << s << " out '" << out << "' after sub " << opt->name << " -> " << vv << std::endl;
+      val = out;
+      free(vv);
+      goto restart;
+    }
+
+    // pass it thru
+    out += val[s++];
   }
-  val = out;
+  //cout << "done '" << origval << "' -> '" << out << "'" << std::endl;
+  origval = out;
   return found_meta;
 }
 
