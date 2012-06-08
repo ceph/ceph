@@ -1026,45 +1026,77 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
-  ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> " << dstname << dendl;
+  ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> "
+		 << dstname << dendl;
 
-  string md_oid = srcname;
-  md_oid += RBD_SUFFIX;
-  string dst_md_oid = dstname;
-  dst_md_oid += RBD_SUFFIX;
-  string dstname_str = dstname;
-  string imgname_str = srcname;
-  uint64_t ver;
-  bufferlist header;
-  int r = read_header_bl(io_ctx, md_oid, header, &ver);
+  bool old_format;
+  uint64_t header_size;
+  int r = detect_format(io_ctx, srcname, &old_format, &header_size);
   if (r < 0) {
-    lderr(cct) << "error reading header: " << md_oid << ": " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = io_ctx.stat(dst_md_oid, NULL, NULL);
+
+  string header_oid = md_oid(srcname, old_format);
+  string dst_header_oid = md_oid(dstname, old_format);
+  bufferlist headerbl;
+  map<string, bufferlist> omap_values;
+  r = io_ctx.read(header_oid, headerbl, header_size, 0);
+  if (r < 0) {
+    lderr(cct) << "error reading header: " << header_oid << ": "
+	       << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  int MAX_READ = 1024;
+  string last_read = "";
+  do {
+    map<string, bufferlist> outbl;
+    r = io_ctx.omap_get_vals(header_oid, last_read, MAX_READ, &outbl);
+    if (r < 0) {
+      lderr(cct) << "error reading header omap values: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    omap_values.insert(outbl.begin(), outbl.end());
+    if (outbl.size() > 0)
+      last_read = outbl.rbegin()->first;
+  } while (r == MAX_READ);
+
+  r = io_ctx.stat(dst_header_oid, NULL, NULL);
   if (r == 0) {
-    lderr(cct) << "rbd image header " << dst_md_oid << " already exists" << dendl;
+    lderr(cct) << "rbd image header " << dst_header_oid
+	       << " already exists" << dendl;
     return -EEXIST;
   }
-  r = write_header(io_ctx, dst_md_oid, header);
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  op.write_full(headerbl);
+  op.omap_set(omap_values);
+  r = io_ctx.operate(dst_header_oid, &op);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << dst_md_oid << ": " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << dst_header_oid << ": "
+	       << cpp_strerror(r) << dendl;
     return r;
   }
-  r = tmap_set(io_ctx, dstname_str);
-  if (r < 0) {
-    io_ctx.remove(dst_md_oid);
-    lderr(cct) << "can't add " << dst_md_oid << " to directory" << dendl;
-    return r;
-  }
-  r = tmap_rm(io_ctx, imgname_str);
-  if (r < 0)
-    lderr(cct) << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
 
-  r = io_ctx.remove(md_oid);
+  r = tmap_set(io_ctx, dstname);
+  if (r < 0) {
+    io_ctx.remove(dst_header_oid);
+    lderr(cct) << "couldn't add " << dstname << " to directory: "
+	       << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = tmap_rm(io_ctx, srcname);
+  if (r < 0)
+    lderr(cct) << "warning: couldn't remove old entry from directory ("
+	       << srcname << ")" << dendl;
+
+  r = io_ctx.remove(header_oid);
   if (r < 0 && r != -ENOENT)
-    lderr(cct) << "warning: couldn't remove old metadata" << dendl;
-  notify_change(io_ctx, md_oid, NULL, NULL);
+    lderr(cct) << "warning: couldn't remove old header object ("
+	       << header_oid << ")" << dendl;
+  notify_change(io_ctx, header_oid, NULL, NULL);
 
   return 0;
 }
