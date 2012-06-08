@@ -17,7 +17,7 @@ dd if=/bin/ls of=/tmp/img1 bs=1k seek=10000
 dd if=/bin/ln of=/tmp/img1 bs=1k seek=100000
 
 # import, snapshot
-rbd import /tmp/img1 testimg1
+rbd import $RBD_CREATE_ARGS /tmp/img1 testimg1
 rbd resize testimg1 --size=256
 rbd export testimg1 /tmp/img2
 rbd snap create testimg1 --snap=snap1
