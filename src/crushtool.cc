@@ -118,11 +118,6 @@ int main(int argc, const char **argv)
   bool decompile = false;
   bool test = false;
   bool verbose = false;
-  bool output_utilization = false;
-  bool output_utilization_all = false;
-  bool output_statistics = false;
-  bool output_bad_mappings = false;
-  bool output_choose_tries = false;
 
   bool reweight = false;
   int add_item = -1;
@@ -169,15 +164,15 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
     } else if (ceph_argparse_flag(args, i, "--output_utilization", (char*)NULL)) {
-      output_utilization = true;
+      tester.set_output_utilization(true);
     } else if (ceph_argparse_flag(args, i, "--output_utilization_all", (char*)NULL)) {
-      output_utilization_all = true;
+      tester.set_output_utilization_all(true);
     } else if (ceph_argparse_flag(args, i, "--output_statistics", (char*)NULL)) {
-      output_statistics = true;
+      tester.set_output_statistics(true);
     } else if (ceph_argparse_flag(args, i, "--output_bad_mappings", (char*)NULL)) {
-      output_bad_mappings = true;
+      tester.set_output_bad_mappings(true);
     } else if (ceph_argparse_flag(args, i, "--output_choose_tries", (char*)NULL)) {
-      output_choose_tries = true;
+      tester.set_output_choose_tries(true);
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
@@ -601,8 +596,6 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
-    tester.set_output(output_utilization, output_utilization_all, output_statistics,
-		      output_bad_mappings, output_choose_tries);
     int r = tester.test();
     if (r < 0)
       exit(1);
