@@ -27,7 +27,6 @@ class CrushTester {
   float mark_down_device_ratio;
   float mark_down_bucket_ratio;
 
-public:
   bool output_utilization;
   bool output_utilization_all;
   bool output_statistics;

@@ -28,10 +28,11 @@ typedef boost::mt19937 generator;
 
 generator gen(42); // repeatable
 //generator gen(static_cast<unsigned int>(std::time(0))); // non-repeatable (ish)
-#endif
 
 // create another random number generator to pick buckets when we want to mark devices down
 generator bucket_gen(42);
+#endif
+
 
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -62,15 +63,15 @@ int CrushTester::test()
 
   // check that all the devices we think we have are actually in buckets
   int num_devices_active = 0;
-  for (int o = 0; o < crush.get_max_devices(); o++){
+  for (int o = 0; o < crush.get_max_devices(); o++) {
     if (!crush.check_item_present(o))
       device_weight[o] = 0;
     else
       num_devices_active++;
   }
   
-  if (down_ratio_marked){
-    for (int i = 1; i <= crush.get_max_buckets(); i++ ){
+  if (down_ratio_marked) {
+    for (int i = 1; i <= crush.get_max_buckets(); i++) {
 
       int id = -1 - i;
 
@@ -87,7 +88,7 @@ int CrushTester::test()
     // get the number of buckets that are one level above a device
     int num_eligible_buckets = 0;
 
-    for (int i = 0; i < num_buckets_active; i++){
+    for (int i = 0; i < num_buckets_active; i++) {
       // grab the first child object of a bucket and check if it's ID is less than 0
       int id = bucket_ids[i];
       int first_child = crush.get_bucket_item(id, 0); // returns the ID of the bucket or device
@@ -114,7 +115,7 @@ int CrushTester::test()
     // we could keep track of what buckets we have already visited
     vector<int> buckets_reaped;
 
-    for (int i = 0; i < num_buckets_to_visit; i++){
+    for (int i = 0; i < num_buckets_to_visit; i++) {
 
 
 #ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
@@ -163,7 +164,7 @@ int CrushTester::test()
       }
     }
 
-    if (num_devices_to_visit > 0){
+    if (num_devices_to_visit > 0) {
       err << "warning not all requested devices marked out" << std::endl;
       // possible debugging message
       //err << " we visited " << buckets_reaped << std::endl;
@@ -195,7 +196,6 @@ int CrushTester::test()
     crush.start_choose_profile();
   
   for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
-      
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
@@ -207,7 +207,6 @@ int CrushTester::test()
       maxr = crush.get_rule_mask_max_size(r);
     }
     
-
     if (output_statistics)
       err << "rule " << r << " (" << crush.get_rule_name(r)
       << "), x = " << min_x << ".." << max_x
@@ -332,13 +331,14 @@ int CrushTester::test()
         }
 
         // compute chi squared statistic for device examining the uniformity this batch of placements
-         for (unsigned i = 0; i < per.size(); i++)
-            deviceTestChi[i] += pow( (temporary_per[i] - batch_num_objects_expected[i]), 2) / batch_num_objects_expected[i];
+	for (unsigned i = 0; i < per.size(); i++)
+	  deviceTestChi[i] += pow( (temporary_per[i] - batch_num_objects_expected[i]), 2) /
+	    batch_num_objects_expected[i];
 
-         batch_min = batch_max + 1;
-         batch_max = batch_min + objects_per_batch - 1;
+	batch_min = batch_max + 1;
+	batch_max = batch_min + objects_per_batch - 1;
       }
-      
+
       for (unsigned i = 0; i < per.size(); i++)
         if (output_utilization && !output_statistics)
           err << "  device " << i
