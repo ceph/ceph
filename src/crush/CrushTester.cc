@@ -114,11 +114,6 @@ int CrushTester::test()
       for (int o = 0; o < local_devices_to_visit; o++){
         int item = crush.get_bucket_item(id, o);
 
-        // the following two statements are NOT equivalent because if we adjust the item weight we spread the change over the remaining
-        // buckets which is a change we can detect in the chi squared testing, we need to decide which behavior to use
-        //crush.adjust_item_weightf(g_ceph_context, item, 0.0); // parent bucket weight unchanged
-        //crush.set_bucket_item_weightf(id, item, 0.0);       // parent bucket weight reduced by the weight of the lost device
-
        // possible debugging statement
        //err << "device in position " << o << " in bucket " << id << " now has weight " << crush.get_bucket_item_weight(id, o) << std::endl;
 
