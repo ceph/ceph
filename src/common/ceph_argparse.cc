@@ -392,7 +392,7 @@ CephInitParameters ceph_argparse_early_args
 	     (ceph_argparse_witharg(args, i, &val, "-i", (char*)NULL))) {
       iparams.name.set_id(val);
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--id", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--id", "--user", (char*)NULL)) {
       iparams.name.set_id(val);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", (char*)NULL)) {
