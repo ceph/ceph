@@ -13,7 +13,7 @@
 //random number generator
 # include <boost/random/mersenne_twister.hpp>
 # include <boost/random/discrete_distribution.hpp>
-#include <boost/random/uniform_int_distribution.hpp>
+# include <boost/random/uniform_int_distribution.hpp>
 
 // needed to compute chi squared value
 using boost::math::chi_squared;
@@ -31,8 +31,8 @@ generator gen(42); // repeatable
 
 // create another random number generator to pick buckets when we want to mark devices down
 generator bucket_gen(42);
-#endif
 
+#endif
 
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -43,6 +43,80 @@ void CrushTester::set_device_weight(int dev, float f)
   if (w > 0x10000)
     w = 0x10000;
   device_weight[dev] = w;
+}
+
+void CrushTester::adjust_weights(vector<__u32>& weight)
+{
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+  //err << "start " << weight << std::endl;
+
+  if (mark_down_device_ratio > 0) {
+    // active buckets
+    vector<int> bucket_ids;
+    for (int i = 0; i < crush.get_max_buckets(); i++) {
+      int id = -1 - i;
+      if (crush.get_bucket_weight(id) > 0) {
+        bucket_ids.push_back(id);
+      }
+    }
+
+    // get buckets that are one level above a device
+    vector<int> buckets_above_devices;
+    for (unsigned i = 0; i < bucket_ids.size(); i++) {
+      // grab the first child object of a bucket and check if it's ID is less than 0
+      int id = bucket_ids[i];
+      if (crush.get_bucket_size(id) == 0)
+	continue;
+      int first_child = crush.get_bucket_item(id, 0); // returns the ID of the bucket or device
+      if (first_child >= 0) {
+        buckets_above_devices.push_back(id);
+      }
+    }
+
+    // create the uniform distribution on the number of buckets to visit
+    boost::random::uniform_int_distribution<> bucket_choose(0, buckets_above_devices.size() - 1);
+
+    // permute bucket list
+    for (unsigned i = 0; i < buckets_above_devices.size(); i++) {
+      unsigned j = bucket_choose(bucket_gen);
+      std::swap(buckets_above_devices[i], buckets_above_devices[j]);
+    }
+
+    // calculate how many buckets and devices we need to reap...
+    int num_buckets_to_visit = (int) (mark_down_bucket_ratio * buckets_above_devices.size());
+
+    for (int i = 0; i < num_buckets_to_visit; i++) {
+      int id = buckets_above_devices[i];
+      int size = crush.get_bucket_size(id);
+      vector<int> items;
+      for (int o = 0; o < size; o++)
+	items.push_back(crush.get_bucket_item(id, o));
+
+      // permute items
+      boost::random::uniform_int_distribution<> item_choose(0, size - 1);
+      for (int o = 0; o < size; o++) {
+	int j = item_choose(bucket_gen);
+	std::swap(items[o], items[j]);
+      }
+
+      int local_devices_to_visit = (int) (mark_down_device_ratio*size);
+      for (int o = 0; o < local_devices_to_visit; o++){
+        int item = crush.get_bucket_item(id, o);
+	//err << "device " << item << " in bucket " << id << " weight " << crush.get_bucket_item_weight(id, o) << std::endl;
+	weight[item] = 10;
+      }
+    }
+  }
+#else
+  err << "WARNING: boost::random not compiled in, mark down ratios not working" << std::endl;
+#endif
+
+  // allow for the user to mark a range of devices down
+  if (down_range_marked) {
+    for (int o = mark_down_start; o <= (mark_down_start + down_range); o++) {
+      device_weight[o] = 0;
+    }
+  }
 }
 
 int CrushTester::test()
@@ -56,141 +130,26 @@ int CrushTester::test()
     max_x = 1023;
   }
 
-  // get the ID's of active buckets
-  vector<int> bucket_ids;
-  vector<int> buckets_above_devices;
-  int num_buckets_active = 0;
-
-  // check that all the devices we think we have are actually in buckets
-  int num_devices_active = 0;
-  for (int o = 0; o < crush.get_max_devices(); o++) {
-    if (!crush.check_item_present(o))
-      device_weight[o] = 0;
-    else
-      num_devices_active++;
-  }
-  
-  if (down_ratio_marked) {
-    for (int i = 1; i <= crush.get_max_buckets(); i++) {
-
-      int id = -1 - i;
-
-      if (crush.get_bucket_weight(id) > 0){
-        bucket_ids.push_back(id);
-        num_buckets_active++;
-      }
-    }
-
-    // possible debugging statement
-    //err << "number of buckets with devices" << num_buckets_active << std::endl;
-
-
-    // get the number of buckets that are one level above a device
-    int num_eligible_buckets = 0;
-
-    for (int i = 0; i < num_buckets_active; i++) {
-      // grab the first child object of a bucket and check if it's ID is less than 0
-      int id = bucket_ids[i];
-      int first_child = crush.get_bucket_item(id, 0); // returns the ID of the bucket or device
-
-      // possible debugging statement
-      //err << "bucket ID " << id << " has first child " << first_child << std::endl;
-
-      if (first_child >= 0){
-        buckets_above_devices.push_back(id);
-        num_eligible_buckets++;
-      }
-    }
-
-    // possible debugging statement
-    //err << "number of eligible buckets " << num_eligible_buckets << std::endl;
-
-    // calculate how many buckets and devices we need to reap...
-    int num_buckets_to_visit = (int) (mark_down_bucket_ratio * num_eligible_buckets);
-    int num_devices_to_visit = (int) (mark_down_device_ratio * num_devices_active);
-
-    // create the uniform distribution on the number of buckets to visit
-    boost::random::uniform_int_distribution<> bucket_choose(0, buckets_above_devices.size() - 1);
-
-    // we could keep track of what buckets we have already visited
-    vector<int> buckets_reaped;
-
-    for (int i = 0; i < num_buckets_to_visit; i++) {
-
-
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-
-      bool check_already_reaped;
-      int trial_bucket_position;
-
-      do {
-
-        trial_bucket_position = bucket_choose(bucket_gen);
-
-        for (unsigned j = 0; j < buckets_reaped.size(); j++){
-          if (buckets_reaped[j] == trial_bucket_position){
-            check_already_reaped = true;
-            break;
-          }
-          else {
-            check_already_reaped = false;
-
-          }
-        }
-
-      } while(check_already_reaped);
-
-      buckets_reaped.push_back(trial_bucket_position);
-
-      //int id = buckets_above_devices[i]; // choose buckets sequentially
-      int id = buckets_above_devices[ trial_bucket_position ];   // choose buckets sort of randomly
-
-#endif
-
-      int local_devices_to_visit = (int) (mark_down_device_ratio*crush.get_bucket_size(id));
-
-      // possible debugging statement
-      //err << "device " << id << " is set to mark down " << local_devices_to_visit << " devices" << std::endl;
-
-      for (int o = 0; o < local_devices_to_visit; o++){
-        int item = crush.get_bucket_item(id, o);
-
-       // possible debugging statement
-       //err << "device in position " << o << " in bucket " << id << " now has weight " << crush.get_bucket_item_weight(id, o) << std::endl;
-
-       device_weight[item] = 0;
-       num_devices_to_visit--;
-       num_devices_active--;
-      }
-    }
-
-    if (num_devices_to_visit > 0) {
-      err << "warning not all requested devices marked out" << std::endl;
-      // possible debugging message
-      //err << " we visited " << buckets_reaped << std::endl;
-    }
-  }
-
-
-
-  // allow for the user to mark a range of devices down
-  if (down_range_marked) {
-    for (int o = mark_down_start; o <= (mark_down_start + down_range); o++) {
-      device_weight[o] = 0;
-      num_devices_active--;
-    }
-  }
-
-
-  // all osds in
+  // initial osd weights
   vector<__u32> weight;
-  for (int o = 0; o < crush.get_max_devices(); o++)
-    if (device_weight.count(o))
+  for (int o = 0; o < crush.get_max_devices(); o++) {
+    if (device_weight.count(o)) {
       weight.push_back(device_weight[o]);
-    else
+    } else if (crush.check_item_present(o)) {
       weight.push_back(0x10000);
+    } else {
+      weight.push_back(0);
+    }
+  }
   if (output_utilization_all)
     err << "devices weights (hex): " << hex << weight << dec << std::endl;
+
+  // make adjustments
+  adjust_weights(weight);
+
+  int num_devices_active = 0;
+  for (vector<__u32>::iterator p = weight.begin(); p != weight.end(); ++p)
+    num_devices_active++;
 
   if (output_choose_tries)
     crush.start_choose_profile();

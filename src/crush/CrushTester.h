@@ -34,6 +34,8 @@ class CrushTester {
   bool output_choose_tries;
 
 
+  void adjust_weights(vector<__u32>& weight);
+
 public:
   CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
     : crush(c), err(eo), verbose(verbosity),
