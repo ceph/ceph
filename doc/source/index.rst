@@ -11,6 +11,7 @@ will save you time.
 
    Prerequisites <build-prerequisites>
    Get a Tarball <get-tarballs>
+   Set Up Git <git>
    Clone the Source <clone-source>
    Build the Source <building-ceph>
    Build a Package <build-packages>
