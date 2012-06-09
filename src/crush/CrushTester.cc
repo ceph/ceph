@@ -51,30 +51,96 @@ int CrushTester::test()
     max_x = 1023;
   }
 
+  // get the ID's of active buckets
+  vector<int> bucket_ids;
+  vector<int> buckets_above_devices;
+  int num_buckets_active = 0;
+
   // check that all the devices we think we have are actually in buckets
   int num_devices_active = 0;
-  for (int o = 0; o < crush.get_max_devices(); o++)
+  for (int o = 0; o < crush.get_max_devices(); o++){
     if (!crush.check_item_present(o))
       device_weight[o] = 0;
     else
       num_devices_active++;
+  }
   
-  // allow for the user to mark a range or a percentage of the total devices down
-//  if (batch_mark_down) {
-//    if (down_percentage_marked) {
-//      for (int o = 0; o < mark_down_percentage*crush.get_max_devices(); o++) {
-//        device_weight[(o*crush.get_max_devices()*mark_down_percentage)] = 0;
-//        num_devices_active--;
-//      }
-//    } else if (down_range_marked) {
-//      for (int o = mark_down_start; o <= (mark_down_start + down_range); o++) {
-//        device_weight[o] = 0;
-//        num_devices_active--;
-//      }
-//    }
-//  }
+  if (down_ratio_marked){
+    for (int i = 1; i <= crush.get_max_buckets(); i++ ){
+
+      int id = -1 - i;
+
+      if (crush.get_bucket_weight(id) > 0){
+        bucket_ids.push_back(id);
+        num_buckets_active++;
+      }
+    }
+
+    // possible debugging statement
+    //err << "number of buckets with devices" << num_buckets_active << std::endl;
 
 
+    // get the number of buckets that are one level above a device
+    int num_eligible_buckets = 0;
+
+    for (int i = 0; i < num_buckets_active; i++){
+      // grab the first child object of a bucket and check if it's ID is less than 0
+      int id = bucket_ids[i];
+      int first_child = crush.get_bucket_item(id, 0); // returns the ID of the bucket or device
+
+      // possible debugging statement
+      //err << "bucket ID " << id << " has first child " << first_child << std::endl;
+
+      if (first_child >= 0){
+        buckets_above_devices.push_back(id);
+        num_eligible_buckets++;
+      }
+    }
+
+    // possible debugging statement
+    //err << "number of eligible buckets " << num_eligible_buckets << std::endl;
+
+    // calculate how many buckets and devices we need to reap...
+    int num_buckets_to_visit = (int) (mark_down_bucket_ratio * num_eligible_buckets);
+    int num_devices_to_visit = (int) (mark_down_device_ratio * num_devices_active);
+
+    for (int i = 0; i < num_buckets_to_visit; i++){
+      int id = buckets_above_devices[i];
+      int local_devices_to_visit = (int) (mark_down_device_ratio*crush.get_bucket_size(id));
+
+      // possible debugging statement
+      //err << "device " << id << " is set to mark down " << local_devices_to_visit << " devices" << std::endl;
+
+      for (int o = 0; o < local_devices_to_visit; o++){
+        int item = crush.get_bucket_item(id, o);
+
+        // the following two statements are NOT equivalent because if we adjust the item weight we spread the change over the remaining
+        // buckets which is a change we can detect in the chi squared testing, we need to decide which behavior to use
+        //crush.adjust_item_weightf(g_ceph_context, item, 0.0); // parent bucket weight unchanged
+        //crush.set_bucket_item_weightf(id, item, 0.0);       // parent bucket weight reduced by the weight of the lost device
+
+       // possible debugging statement
+       //err << "device in position " << o << " in bucket " << id << " now has weight " << crush.get_bucket_item_weight(id, o) << std::endl;
+
+       device_weight[item] = 0; // we really shouldn't have to do this if things worked perfectly... FIXME
+       num_devices_to_visit--;
+       num_devices_active--;
+      }
+    }
+
+    if (num_devices_to_visit > 0)
+      err << "warning not all requested devices marked out" << std::endl;
+  }
+
+
+
+  // allow for the user to mark a range of devices down
+  if (down_range_marked) {
+    for (int o = mark_down_start; o <= (mark_down_start + down_range); o++) {
+      device_weight[o] = 0;
+      num_devices_active--;
+    }
+  }
 
 
   // all osds in
