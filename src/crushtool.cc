@@ -303,12 +303,18 @@ int main(int argc, const char **argv)
       int range = atof(*i);
       i = args.erase(i);
       tester.set_range_down(start, range);
-    } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-percentage-down", (char*)NULL)) {
+    } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-down-ratio", (char*)NULL)) {
       if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+        cerr << err.str() << std::endl;
+        exit(EXIT_FAILURE);
       }
-      tester.set_percentage_down(y);
+      tester.set_device_down_ratio(y);
+    } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-down-bucket-ratio", (char*)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      tester.set_bucket_down_ratio(y);
     } else if (ceph_argparse_withint(args, i, &tmp, &err, "--weight", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
