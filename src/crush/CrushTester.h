@@ -24,7 +24,6 @@ class CrushTester {
   bool down_range_marked;
   int mark_down_start;
   int down_range;
-  bool down_ratio_marked;
   float mark_down_device_ratio;
   float mark_down_bucket_ratio;
 
@@ -47,7 +46,6 @@ public:
       down_range_marked(false),
       mark_down_start(0),
       down_range(1),
-      down_ratio_marked(false),
       mark_down_device_ratio(0.0),
       mark_down_bucket_ratio(1.0),
       output_utilization(false),
@@ -88,7 +86,6 @@ public:
     mark_down_bucket_ratio = bucket_ratio;
   }
   void set_device_down_ratio(float device_ratio) {
-    down_ratio_marked = true;
     mark_down_device_ratio = device_ratio;
   }
   void set_device_weight(int dev, float f);

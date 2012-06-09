@@ -186,7 +186,7 @@ int CrushTester::test()
 #ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
       float test_chi_statistic = 0.0; // our observed chi squared statistic
       
-      // look up the chi squared statistic for the 5% and 1% confidence levels
+      // look up the maximum expected chi squared statistic for the 5% and 1% confidence levels
       float chi_statistic_five_percent = quantile(complement(chi_squared(num_devices_active-1), 0.05));
       float chi_statistic_one_percent = quantile(complement(chi_squared(num_devices_active-1), 0.01));
 #endif
@@ -362,8 +362,8 @@ int CrushTester::test()
           << " (vs " << chi_statistic_five_percent << " / "
           << chi_statistic_one_percent
           << " for 5% / 1% confidence level) " << std::endl;
-      //err << " total system weight (dec) = " << (total_weight / (float) 0x10000) << std::endl;
-      //err << " number of buckets = " << num_buckets << std::endl;
+      if (output_utilization || output_utilization_all)
+        err << " total system weight (dec) = " << (total_weight / (float) 0x10000) << std::endl;
 
       if (num_batches > 1 && output_statistics) {
         err << " " << num_devices_failing_at_five_percent << "/" << num_devices_active << " ("
@@ -383,7 +383,7 @@ int CrushTester::test()
     for (int i=0; i<n; i++) {
       cout.setf(std::ios::right);
       cout << std::setw(2)
-	   << i << ": " << std::setw(9) << v[i];
+           << i << ": " << std::setw(9) << v[i];
       cout.unsetf(std::ios::right);
       cout << std::endl;
     }
