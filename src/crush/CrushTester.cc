@@ -13,6 +13,7 @@
 //random number generator
 # include <boost/random/mersenne_twister.hpp>
 # include <boost/random/discrete_distribution.hpp>
+#include <boost/random/uniform_int_distribution.hpp>
 
 // needed to compute chi squared value
 using boost::math::chi_squared;
@@ -28,6 +29,9 @@ typedef boost::mt19937 generator;
 generator gen(42); // repeatable
 //generator gen(static_cast<unsigned int>(std::time(0))); // non-repeatable (ish)
 #endif
+
+// create another random number generator to pick buckets when we want to mark devices down
+generator bucket_gen(42);
 
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -104,8 +108,44 @@ int CrushTester::test()
     int num_buckets_to_visit = (int) (mark_down_bucket_ratio * num_eligible_buckets);
     int num_devices_to_visit = (int) (mark_down_device_ratio * num_devices_active);
 
+    // create the uniform distribution on the number of buckets to visit
+    boost::random::uniform_int_distribution<> bucket_choose(0, buckets_above_devices.size() - 1);
+
+    // we could keep track of what buckets we have already visited
+    vector<int> buckets_reaped;
+
     for (int i = 0; i < num_buckets_to_visit; i++){
-      int id = buckets_above_devices[i];
+
+
+#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+
+      bool check_already_reaped;
+      int trial_bucket_position;
+
+      do {
+
+        trial_bucket_position = bucket_choose(bucket_gen);
+
+        for (unsigned j = 0; j < buckets_reaped.size(); j++){
+          if (buckets_reaped[j] == trial_bucket_position){
+            check_already_reaped = true;
+            break;
+          }
+          else {
+            check_already_reaped = false;
+
+          }
+        }
+
+      } while(check_already_reaped);
+
+      buckets_reaped.push_back(trial_bucket_position);
+
+      //int id = buckets_above_devices[i]; // choose buckets sequentially
+      int id = buckets_above_devices[ trial_bucket_position ];   // choose buckets sort of randomly
+
+#endif
+
       int local_devices_to_visit = (int) (mark_down_device_ratio*crush.get_bucket_size(id));
 
       // possible debugging statement
@@ -117,14 +157,17 @@ int CrushTester::test()
        // possible debugging statement
        //err << "device in position " << o << " in bucket " << id << " now has weight " << crush.get_bucket_item_weight(id, o) << std::endl;
 
-       device_weight[item] = 0; // we really shouldn't have to do this if things worked perfectly... FIXME
+       device_weight[item] = 0;
        num_devices_to_visit--;
        num_devices_active--;
       }
     }
 
-    if (num_devices_to_visit > 0)
+    if (num_devices_to_visit > 0){
       err << "warning not all requested devices marked out" << std::endl;
+      // possible debugging message
+      //err << " we visited " << buckets_reaped << std::endl;
+    }
   }
 
 
