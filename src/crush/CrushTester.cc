@@ -110,13 +110,6 @@ void CrushTester::adjust_weights(vector<__u32>& weight)
 #else
   err << "WARNING: boost::random not compiled in, mark down ratios not working" << std::endl;
 #endif
-
-  // allow for the user to mark a range of devices down
-  if (down_range_marked) {
-    for (int o = mark_down_start; o <= (mark_down_start + down_range); o++) {
-      device_weight[o] = 0;
-    }
-  }
 }
 
 int CrushTester::test()

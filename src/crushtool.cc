@@ -292,17 +292,6 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_batches(x);
-    } else if (ceph_argparse_withint(args, i, &tmp, &err, "--mark-range-down", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
-      int start = tmp;
-      if (i == args.end())
-	usage();
-      int range = atof(*i);
-      i = args.erase(i);
-      tester.set_range_down(start, range);
     } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-down-ratio", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;

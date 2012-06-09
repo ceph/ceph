@@ -21,9 +21,6 @@ class CrushTester {
   int num_batches;
   bool use_crush;
 
-  bool down_range_marked;
-  int mark_down_start;
-  int down_range;
   float mark_down_device_ratio;
   float mark_down_bucket_ratio;
 
@@ -44,9 +41,6 @@ public:
       min_rep(-1), max_rep(-1),
       num_batches(1),
       use_crush(true),
-      down_range_marked(false),
-      mark_down_start(0),
-      down_range(1),
       mark_down_device_ratio(0.0),
       mark_down_bucket_ratio(1.0),
       output_utilization(false),
@@ -77,11 +71,6 @@ public:
   }
   void set_random_placement() {
     use_crush = false;
-  }
-  void set_range_down(int start, int range){
-    down_range_marked = true;
-    mark_down_start = start;
-    down_range = range;
   }
   void set_bucket_down_ratio(float bucket_ratio) {
     mark_down_bucket_ratio = bucket_ratio;
