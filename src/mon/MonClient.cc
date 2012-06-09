@@ -263,7 +263,7 @@ int MonClient::init()
 
   // keyring
   keyring = new KeyRing;
-  int r = KeyRing::from_ceph_context(cct, keyring);
+  int r = keyring->from_ceph_context(cct);
   if (r == -ENOENT) {
     // do we care?
     string method;

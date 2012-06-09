@@ -34,14 +34,14 @@
 using std::auto_ptr;
 using namespace std;
 
-int KeyRing::from_ceph_context(CephContext *cct, KeyRing *keyring)
+int KeyRing::from_ceph_context(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;
 
   int ret = 0;
   string filename;
   if (ceph_resolve_file_search(conf->keyring, filename)) {
-    ret = keyring->load(cct, filename);
+    ret = load(cct, filename);
     if (ret == 0)
       return 0;
 
@@ -53,7 +53,7 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing *keyring)
     EntityAuth ea;
     try {
       ea.key.decode_base64(conf->key);
-      keyring->add(conf->name, ea);
+      add(conf->name, ea);
       return 0;
     }
     catch (buffer::error& e) {
@@ -74,7 +74,7 @@ int KeyRing::from_ceph_context(CephContext *cct, KeyRing *keyring)
     EntityAuth ea;
     try {
       ea.key.decode_base64(k);
-      keyring->add(conf->name, ea);
+      add(conf->name, ea);
     }
     catch (buffer::error& e) {
       lderr(cct) << "failed to decode key '" << k << "'" << dendl;
