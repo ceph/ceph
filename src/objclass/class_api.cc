@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "common/config.h"
 
@@ -249,7 +251,7 @@ int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>* vals)
+int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>* vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -280,8 +282,35 @@ int cls_cxx_map_read_all_keys(cls_method_context_t hctx, map<string, bufferlist>
   return vals->size();
 }
 
-int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj,
-                          string& filter_prefix, uint64_t max, map<string, bufferlist>* vals)
+int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
+			 uint64_t max_to_get, set<string> *keys)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  int ret;
+
+  ::encode(start_obj, op.indata);
+  ::encode(max_to_get, op.indata);
+
+  op.op.op = CEPH_OSD_OP_OMAPGETKEYS;
+
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
+  if (ret < 0)
+    return ret;
+
+  bufferlist::iterator iter = op.outdata.begin();
+  try {
+    ::decode(*keys, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return keys->size();
+}
+
+int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
+			 const string &filter_prefix, uint64_t max_to_get,
+			 map<string, bufferlist> *vals)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -292,7 +321,7 @@ int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_obj,
   bufferlist inbl;
 
   ::encode(start_obj, op.indata);
-  ::encode(max, op.indata);
+  ::encode(max_to_get, op.indata);
   ::encode(filter_prefix, op.indata);
 
   op.op.op = CEPH_OSD_OP_OMAPGETVALS;
@@ -325,7 +354,9 @@ int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 
   return 0;
 }
-int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl)
+
+int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
+			bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -357,7 +388,8 @@ int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outb
   return 0;
 }
 
-int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl)
+int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
+			bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -366,6 +398,20 @@ int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inb
   map<string, bufferlist> m;
   m[key] = *inbl;
   ::encode(m, update_bl);
+
+  op.op.op = CEPH_OSD_OP_OMAPSETVALS;
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
+int cls_cxx_map_set_vals(cls_method_context_t hctx,
+			 std::map<string, bufferlist> *map)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  bufferlist& update_bl = op.indata;
+  ::encode(*map, update_bl);
 
   op.op.op = CEPH_OSD_OP_OMAPSETVALS;
 
@@ -395,7 +441,7 @@ int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-int cls_cxx_map_remove_key(cls_method_context_t hctx, string key)
+int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);

@@ -98,6 +98,27 @@ Pool specific commands
   object size is 4 KB, and the default number of simulated threads
   (parallel writes) is 16.
 
+:command:`listomapkeys` *name*
+  List all the keys stored in the object map of object name.
+
+:command:`listomapvals` *name*
+  List all key/value pairs stored in the object map of object name.
+  The values are dumped in hexadecimal.
+
+:command:`getomapval` *name* *key*
+  Dump the hexadecimal value of key in the object map of object name.
+
+:command:`setomapval` *name* *key* *value*
+  Set the value of key in the object map of object name.
+
+:command:`rmomapkey` *name* *key*
+  Remove key from the object map of object name.
+
+:command:`getomapheader` *name*
+  Dump the hexadecimal value of the object map header of object name.
+
+:command:`setomapheader` *name* *value*
+  Set the value of the object map header of object name.
 
 Examples
 ========
