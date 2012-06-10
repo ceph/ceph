@@ -596,7 +596,7 @@ namespace librbd {
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx);
   void image_info(const ImageCtx& ictx, image_info_t& info, size_t info_size);
-  string get_block_oid(const string &object_prefix, uint64_t num);
+  string get_block_oid(const string &object_prefix, uint64_t num, bool old_format);
   uint64_t get_max_block(uint64_t size, uint8_t obj_order);
   uint64_t get_block_size(uint8_t order);
   uint64_t get_block_num(uint8_t order, uint64_t ofs);
@@ -692,12 +692,13 @@ void image_info(const ImageCtx& ictx, image_info_t& info, size_t infosize)
   bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
 }
 
-string get_block_oid(const string &object_prefix, uint64_t num)
+string get_block_oid(const string &object_prefix, uint64_t num, bool old_format)
 {
-  char o[RBD_MAX_BLOCK_NAME_SIZE];
-  snprintf(o, RBD_MAX_BLOCK_NAME_SIZE,
-	   "%s.%012" PRIx64, object_prefix.c_str(), num);
-  return o;
+  ostringstream oss;
+  int width = old_format ? 12 : 16;
+  oss << object_prefix << "."
+      << std::hex << std::setw(width) << std::setfill('0') << num;
+  return oss.str();
 }
 
 uint64_t get_max_block(uint64_t size, uint8_t obj_order)
@@ -742,7 +743,7 @@ void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
   if (block_ofs) {
     ldout(cct, 2) << "trim_image object " << numseg << " truncate to "
 		  << block_ofs << dendl;
-    string oid = get_block_oid(ictx->object_prefix, start);
+    string oid = get_block_oid(ictx->object_prefix, start, ictx->old_format);
     librados::ObjectWriteOperation write_op;
     write_op.truncate(block_ofs);
     ictx->data_ctx.operate(oid, &write_op);
@@ -752,7 +753,7 @@ void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
     ldout(cct, 2) << "trim_image objects " << start << " to "
 		  << (numseg - 1) << dendl;
     for (uint64_t i = start; i < numseg; ++i) {
-      string oid = get_block_oid(ictx->object_prefix, i);
+      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
       ictx->data_ctx.remove(oid);
       prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
     }
@@ -897,7 +898,7 @@ int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
     ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
     prog_ctx.update_progress(i * bsize, numseg * bsize);
@@ -1673,7 +1674,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
@@ -1766,7 +1767,7 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
@@ -1822,7 +1823,7 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   start_time = ceph_clock_now(ictx->cct);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
@@ -2040,7 +2041,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   c->init_time(ictx, AIO_TYPE_WRITE);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
 
@@ -2106,7 +2107,7 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   c->init_time(ictx, AIO_TYPE_DISCARD);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
 
@@ -2187,7 +2188,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->object_prefix, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
