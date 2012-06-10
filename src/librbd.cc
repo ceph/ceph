@@ -1289,7 +1289,6 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 		     << cpp_strerror(r) << dendl;
     return r;
   }
-  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   return 0;
 }
