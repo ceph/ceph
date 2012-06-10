@@ -28,11 +28,64 @@
 #include <unistd.h>
 #include <iostream>
 #include <algorithm>
+#include <sstream>
 
-#include "rados-api/test.cc"
+#include "rados-api/test.h"
 #include "common/errno.h"
 
 using namespace std;
+
+static int get_features(bool *old_format, uint64_t *features)
+{
+  const char *c = getenv("RBD_FEATURES");
+  if (c) {
+    stringstream ss;
+    ss << c;
+    ss >> *features;
+    if (ss.fail())
+      return -EINVAL;
+    *old_format = false;
+    cout << "using new format!" << std::endl;
+  } else {
+    *old_format = true;
+    cout << "using old format" << std::endl;
+  }
+
+  return 0;
+}
+
+static int create_image(rados_ioctx_t ioctx, const char *name,
+			uint64_t size, int *order)
+{
+  bool old_format;
+  uint64_t features;
+  int r = get_features(&old_format, &features);
+  if (r < 0)
+    return r;
+
+  if (old_format) {
+    return rbd_create(ioctx, name, size, order);
+  } else {
+    return rbd_create2(ioctx, name, size, features, order);
+  }
+}
+
+static int create_image_pp(librbd::RBD &rbd,
+			   librados::IoCtx &ioctx,
+			   const char *name,
+			   uint64_t size, int *order) {
+  bool old_format;
+  uint64_t features;
+  int r = get_features(&old_format, &features);
+  if (r < 0)
+    return r;
+
+  if (old_format) {
+    return rbd.create(ioctx, name, size, order);
+  } else {
+    return rbd.create2(ioctx, name, size, features, order);
+  }
+}
 
 TEST(LibRBD, CreateAndStat)
 {
@@ -48,7 +101,7 @@ TEST(LibRBD, CreateAndStat)
   const char *name = "testimg";
   uint64_t size = 2 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
   ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
@@ -77,7 +130,7 @@ TEST(LibRBD, CreateAndStatPP)
     const char *name = "testimg";
     uint64_t size = 2 << 20;
     
-    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
     ASSERT_EQ(0, image.stat(info, sizeof(info)));
     ASSERT_EQ(info.size, size);
@@ -102,7 +155,7 @@ TEST(LibRBD, ResizeAndStat)
   const char *name = "testimg";
   uint64_t size = 2 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
 
   ASSERT_EQ(0, rbd_resize(image, size * 4));
@@ -136,7 +189,7 @@ TEST(LibRBD, ResizeAndStatPP)
     const char *name = "testimg";
     uint64_t size = 2 << 20;
     
-    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
     
     ASSERT_EQ(0, image.resize(size * 4));
@@ -211,9 +264,9 @@ TEST(LibRBD, TestCreateLsDelete)
   const char *name2 = "testimg2";
   uint64_t size = 2 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(1, test_ls(ioctx, 1, name));
-  ASSERT_EQ(0, rbd_create(ioctx, name2, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name2, size, &order));
   ASSERT_EQ(2, test_ls(ioctx, 2, name, name2));
   ASSERT_EQ(0, rbd_remove(ioctx, name));
   ASSERT_EQ(1, test_ls(ioctx, 1, name2));
@@ -271,7 +324,7 @@ TEST(LibRBD, TestCreateLsDeletePP)
     const char *name2 = "testimg2";
     uint64_t size = 2 << 20;  
     
-    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name));
     ASSERT_EQ(0, rbd.create(ioctx, name2, size, &order));
     ASSERT_EQ(2, test_ls_pp(rbd, ioctx, 2, name, name2));
@@ -308,7 +361,7 @@ TEST(LibRBD, TestCopy)
 
   uint64_t size = 2 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
   ASSERT_EQ(1, test_ls(ioctx, 1, name));
   ASSERT_EQ(0, rbd_copy(image, ioctx, name2));
@@ -352,7 +405,7 @@ TEST(LibRBD, TestCopyPP)
     uint64_t size = 2 << 20;
     PrintProgress pp;
 
-    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
     ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name));
     ASSERT_EQ(0, image.copy(ioctx, name2));
@@ -422,7 +475,7 @@ TEST(LibRBD, TestCreateLsDeleteSnap)
   uint64_t size = 2 << 20;
   uint64_t size2 = 4 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
 
   ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
@@ -500,7 +553,7 @@ TEST(LibRBD, TestCreateLsDeleteSnapPP)
     uint64_t size = 2 << 20;
     uint64_t size2 = 4 << 20;
     
-    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
 
     ASSERT_EQ(0, image.snap_create("snap1"));
@@ -628,7 +681,7 @@ TEST(LibRBD, TestIO)
   const char *name = "testimg";
   uint64_t size = 2 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
 
   char test_data[TEST_IO_SIZE + 1];
@@ -778,7 +831,7 @@ TEST(LibRBD, TestIOPP)
     const char *name = "testimg";
     uint64_t size = 2 << 20;
     
-    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
 
     char test_data[TEST_IO_SIZE + 1];
@@ -833,7 +886,7 @@ TEST(LibRBD, TestIOToSnapshot)
   const char *name = "testimg";
   uint64_t isize = 2 << 20;
   
-  ASSERT_EQ(0, rbd_create(ioctx, name, isize, &order));
+  ASSERT_EQ(0, create_image(ioctx, name, isize, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
 
   int i, r;

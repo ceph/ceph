@@ -1,3 +1,6 @@
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "common/config.h"
 
 #include "common/debug.h"
@@ -11,7 +14,7 @@
 
 #define dout_subsys ceph_subsys_objclass
 
-int cls_log(const char *format, ...)
+int cls_log(int level, const char *format, ...)
 {
    int size = 256, n;
    va_list ap;
@@ -22,7 +25,7 @@ int cls_log(const char *format, ...)
      va_end(ap);
 #define MAX_SIZE 8196
      if ((n > -1 && n < size) || size > MAX_SIZE) {
-       dout(1) << buf << dendl;
+       dout(level) << buf << dendl;
        return n;
      }
      size *= 2;

@@ -24,6 +24,7 @@ using namespace librados;
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/debug.h"
+#include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/obj_bencher.h"
 #include "mds/inode_backtrace.h"
@@ -78,8 +79,13 @@ void usage(ostream& out)
 "   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "   load-gen [options]               generate load on the cluster\n"
-"   listomap <obj-name>              list the keys in the object map\n"
-"   getomap <obj-name> <key>         show the value for the specified key in the object's object map"
+"   listomapkeys <obj-name>          list the keys in the object map\n"
+"   getomapval <obj-name> <key>      show the value for the specified key in the object's object map"
+"   setomapval <obj-name> <key> <val>\n"
+"   listomapvals <obj-name> <key> <val>\n"
+"   rmomapkey <obj-name> <key> <val>\n"
+"   getomapheader <obj-name>\n"
+"   setomapheader <obj-name> <val>\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   import [options] <local-directory> <rados-pool>\n"
@@ -1104,6 +1110,129 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
          iter != attrset.end(); ++iter) {
       cout << iter->first << std::endl;
     }
+  } else if (strcmp(nargs[0], "getomapheader") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+
+    string oid(nargs[1]);
+
+    bufferlist header;
+    ret = io_ctx.omap_get_header(oid, &header);
+    if (ret < 0) {
+      cerr << "error getting omap header " << pool_name << "/" << oid
+	   << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    } else {
+      cout << "header (" << header.length() << " bytes) :\n";
+      header.hexdump(cout);
+      cout << std::endl;
+      ret = 0;
+    }
+  } else if (strcmp(nargs[0], "setomapheader") == 0) {
+    if (!pool_name || nargs.size() < 3)
+      usage_exit();
+
+    string oid(nargs[1]);
+    string val(nargs[2]);
+
+    bufferlist bl;
+    bl.append(val);
+
+    ret = io_ctx.omap_set_header(oid, bl);
+    if (ret < 0) {
+      cerr << "error setting omap value " << pool_name << "/" << oid
+	   << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    } else {
+      ret = 0;
+    }
+  } else if (strcmp(nargs[0], "setomapval") == 0) {
+    if (!pool_name || nargs.size() < 4)
+      usage_exit();
+
+    string oid(nargs[1]);
+    string key(nargs[2]);
+    string val(nargs[3]);
+
+    map<string, bufferlist> values;
+    bufferlist bl;
+    bl.append(val);
+    values[key] = bl;
+
+    ret = io_ctx.omap_set(oid, values);
+    if (ret < 0) {
+      cerr << "error setting omap value " << pool_name << "/" << oid << "/"
+	   << key << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    } else {
+      ret = 0;
+    }
+  } else if (strcmp(nargs[0], "getomapval") == 0) {
+    if (!pool_name || nargs.size() < 3)
+      usage_exit();
+
+    string oid(nargs[1]);
+    string key(nargs[2]);
+
+    map<string, bufferlist> values;
+    ret = io_ctx.omap_get_vals(oid, key, 1, &values);
+    if (ret < 0) {
+      cerr << "error getting omap value " << pool_name << "/" << oid << "/"
+	   << key << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    } else {
+      ret = 0;
+    }
+
+    if (values.size() && values.begin()->first == key) {
+      cout << " (length " << values.begin()->second.length() << ") : ";
+      values.begin()->second.hexdump(cout);
+      cout << std::endl;
+    } else {
+      cout << "No such key: " << pool_name << "/" << oid << "/" << key
+	   << std::endl;
+      return 1;
+    }
+  } else if (strcmp(nargs[0], "rmomapkey") == 0) {
+    if (!pool_name || nargs.size() < 3)
+      usage_exit();
+
+    string oid(nargs[1]);
+    string key(nargs[2]);
+    set<string> keys;
+    keys.insert(key);
+
+    ret = io_ctx.omap_rm_keys(oid, keys);
+    if (ret < 0) {
+      cerr << "error removing omap key " << pool_name << "/" << oid << "/"
+	   << key << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    } else {
+      ret = 0;
+    }
+  } else if (strcmp(nargs[0], "listomapvals") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+
+    string oid(nargs[1]);
+    string last_read = "";
+    int MAX_READ = 512;
+    do {
+      map<string, bufferlist> values;
+      ret = io_ctx.omap_get_vals(oid, last_read, MAX_READ, &values);
+      if (ret < 0) {
+	cerr << "error getting omap keys " << pool_name << "/" << oid << ": "
+	     << cpp_strerror(ret) << std::endl;
+	return 1;
+      }
+      for (map<string, bufferlist>::const_iterator it = values.begin();
+	   it != values.end(); ++it) {
+	cout << it->first << " (" << it->second.length() << " bytes) :\n";
+	it->second.hexdump(cout);
+	cout << std::endl;
+      }
+    } while (ret == MAX_READ);
+    ret = 0;
   }
   else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
@@ -1357,7 +1486,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "load-gen will run " << lg.run_length << " seconds" << std::endl;
     lg.run();
     lg.cleanup();
-  } else if (strcmp(nargs[0], "listomap") == 0) {
+  } else if (strcmp(nargs[0], "listomapkeys") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
 
@@ -1366,8 +1495,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     read.omap_get_keys("", LONG_MAX, &out_keys, &ret);
     io_ctx.operate(nargs[1], &read, NULL);
     if (ret < 0) {
-      cerr << "error getting omap key set " << pool_name << "/" << nargs[1] << ": "
-	  << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      cerr << "error getting omap key set " << pool_name << "/"
+	   << nargs[1] << ": "  << cpp_strerror(ret) << std::endl;
       return 1;
     }
 
@@ -1375,25 +1504,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	 iter != out_keys.end(); ++iter) {
       cout << *iter << std::endl;
     }
-  } else if (strcmp(nargs[0],"getomap") == 0){
-      if (!pool_name || nargs.size() < 3)
-	usage_exit();
-      librados::ObjectReadOperation read;
-      set<string> in_keys;
-      map<string,bufferlist> out_map;
-      in_keys.insert(nargs[2]);
-      read.omap_get_vals_by_keys(in_keys, &out_map, &ret);
-      io_ctx.operate(nargs[1], &read, NULL);
-      if (ret < 0) {
-	cerr << "error getting omap key set " << pool_name << "/" << nargs[1] << ": "
-	    << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-	return 1;
-      }
-      for (map<string,bufferlist>::iterator iter = out_map.begin();
-	       iter != out_map.end(); ++iter) {
-      cout << iter->second <<std::endl;
-      }
-    } else {
+  } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage_exit();
   }

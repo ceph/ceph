@@ -19,11 +19,26 @@
 #include <sys/types.h>
 #endif
 
+
+
+/* New-style rbd image 'foo' consists of objects
+ *   rbd_header.foo         - image metadata
+ *   rbd_data.<id>.00000000
+ *   rbd_data.<id>.00000001
+ *   ...                    - data
+ */
+
+#define RBD_HEADER_PREFIX      "rbd_header."
+#define RBD_DATA_PREFIX        "rbd_data."
+
+#define RBD_FEATURES_INCOMPATIBLE 0
+#define RBD_FEATURES_ALL 0
+
 /*
- * rbd image 'foo' consists of objects
+ * old-style rbd image 'foo' consists of objects
  *   foo.rbd      - image metadata
- *   foo.00000000
- *   foo.00000001
+ *   rb.<idhi>.<idlo>.00000000
+ *   rb.<idhi>.<idlo>.00000001
  *   ...          - data
  */
 

@@ -353,6 +353,7 @@ endif
 # librbd
 librbd_la_SOURCES = \
 	librbd.cc \
+	librbd/cls_rbd_client.cc \
 	librbd/LibrbdWriteback.cc \
 	osdc/ObjectCacher.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
@@ -691,7 +692,7 @@ unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_ipaddr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ipaddr
 
-test_librbd_SOURCES = test/test_librbd.cc
+test_librbd_SOURCES = test/test_librbd.cc test/rados-api/test.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
@@ -700,6 +701,13 @@ test_librbd_fsx_SOURCES = test/rbd/fsx.c
 test_librbd_fsx_LDADD =  librbd.la librados.la
 test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += test_librbd_fsx
+
+test_cls_rbd_SOURCES = test/rbd/test_cls_rbd.cc \
+	test/rados-api/test.cc \
+	librbd/cls_rbd_client.cc
+test_cls_rbd_LDADD = librados.la ${UNITTEST_STATIC_LDADD}
+test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cls_rbd
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
@@ -1365,6 +1373,7 @@ noinst_HEADERS = \
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
+	librbd/cls_rbd_client.h\
 	librbd/LibrbdWriteback.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
