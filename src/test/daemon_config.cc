@@ -43,7 +43,39 @@ TEST(DaemonConfig, Substitution) {
   ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(ret, 0);
-  ret = g_ceph_context->_conf->set_val("public_network", "bar$hostbaz", false);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar$host.baz", false);
+  ASSERT_EQ(ret, 0);
+  g_ceph_context->_conf->apply_changes(NULL);
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  char *tmp = buf;
+  ret = g_ceph_context->_conf->get_val("public_network", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("barfoo.baz"), string(buf));
+}
+
+TEST(DaemonConfig, SubstitutionTrailing) {
+  int ret;
+  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ret = g_ceph_context->_conf->set_val("host", "foo");
+  ASSERT_EQ(ret, 0);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar$host", false);
+  ASSERT_EQ(ret, 0);
+  g_ceph_context->_conf->apply_changes(NULL);
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  char *tmp = buf;
+  ret = g_ceph_context->_conf->get_val("public_network", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("barfoo"), string(buf));
+}
+
+TEST(DaemonConfig, SubstitutionBraces) {
+  int ret;
+  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ret = g_ceph_context->_conf->set_val("host", "foo");
+  ASSERT_EQ(ret, 0);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar${host}baz", false);
   ASSERT_EQ(ret, 0);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
@@ -52,6 +84,21 @@ TEST(DaemonConfig, Substitution) {
   ret = g_ceph_context->_conf->get_val("public_network", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("barfoobaz"), string(buf));
+}
+TEST(DaemonConfig, SubstitutionBracesTrailing) {
+  int ret;
+  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ret = g_ceph_context->_conf->set_val("host", "foo");
+  ASSERT_EQ(ret, 0);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar${host}", false);
+  ASSERT_EQ(ret, 0);
+  g_ceph_context->_conf->apply_changes(NULL);
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  char *tmp = buf;
+  ret = g_ceph_context->_conf->get_val("public_network", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("barfoo"), string(buf));
 }
 
 TEST(DaemonConfig, SubstitutionLoop) {

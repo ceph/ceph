@@ -882,73 +882,91 @@ bool md_config_t::expand_meta(std::string &origval) const
 
   set<string> resolved;
 
-  string::size_type sz;
   string val = origval;
 
  restart:
-  sz = val.size();
   string out;
-  out.reserve(sz);
+  out.reserve(val.size());
 
-  for (string::size_type s = 0; s < sz; ) {
+  for (string::size_type s = 0; s < val.size(); ) {
     if (val[s] != '$') {
       out += val[s++];
       continue;
     }
-    string::size_type rem = sz - (s + 1);
 
-    // special metavariable?
-    for (int i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
-      size_t clen = strlen(CONF_METAVARIABLES[i]);
-      if (rem < clen)
-	continue;
-      if (strncmp(val.c_str() + s + 1, CONF_METAVARIABLES[i], clen))
-	continue;
-      if (strcmp(CONF_METAVARIABLES[i], "type")==0)
-	out += name.get_type_name();
-      else if (strcmp(CONF_METAVARIABLES[i], "cluster")==0)
-	out += cluster;
-      else if (strcmp(CONF_METAVARIABLES[i], "name")==0)
-	out += name.to_cstr();
-      else if (strcmp(CONF_METAVARIABLES[i], "host")==0)
-	out += host;
-      else if (strcmp(CONF_METAVARIABLES[i], "num")==0)
-	out += name.get_id().c_str();
-      else if (strcmp(CONF_METAVARIABLES[i], "id")==0)
-	out += name.get_id().c_str();
+    // try to parse the variable name into var, either \$\{(.+)\} or
+    // \$([a-z\_]+)
+    const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
+    string var;
+    size_t endpos = 0;
+    if (val[s+1] == '{') {
+      // ...${foo_bar}...
+      endpos = val.find_first_not_of(valid_chars, s+2);
+      if (endpos != std::string::npos &&
+	  val[endpos] == '}') {
+	var = val.substr(s+2, endpos-s-2);
+	endpos++;
+      }
+    } else {
+      // ...$foo...
+      endpos = val.find_first_not_of(valid_chars, s+1);
+      if (endpos != std::string::npos)
+	var = val.substr(s+1, endpos-s-1);
       else
-	assert(0); // unreachable
-      found_meta = true;
-      s += strlen(CONF_METAVARIABLES[i]) + 1;
-      out += val.substr(s);
-      val = out;
-      goto restart;
+	var = val.substr(s+1);
     }
+    //cout << "var='" << var << "'" << std::endl;
 
-    // config option?
-    for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-      config_option *opt = &config_optionsp[i];
-      size_t clen = strlen(opt->name);
-      if (rem < clen)
-	continue;
-      if (strncmp(val.c_str() + s + 1, opt->name, clen))
-	continue;
+    if (var.length()) {
+      // special metavariable?
+      for (int i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
+	if (var != CONF_METAVARIABLES[i])
+	  continue;
+	//cout << "  meta match of " << var << " " << CONF_METAVARIABLES[i] << std::endl;
+	if (var == "type")
+	  out += name.get_type_name();
+	else if (var == "cluster")
+	  out += cluster;
+	else if (var == "name")
+	  out += name.to_cstr();
+	else if (var == "host")
+	  out += host;
+	else if (var == "num")
+	  out += name.get_id().c_str();
+	else if (var == "id")
+	  out += name.get_id().c_str();
+	else
+	  assert(0); // unreachable
+	found_meta = true;
+	if (endpos != std::string::npos)
+	  out += val.substr(endpos);
+	//cout << "val '" << val << "' s " << s << " out '" << out << "'"  << std::endl;
+	val = out;
+	goto restart;
+      }
 
-      // avoid loops
-      if (resolved.count(opt->name))
-	continue;	// loop; skip
-      resolved.insert(opt->name);
+      // config option?
+      for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+	config_option *opt = &config_optionsp[i];
+	if (var != opt->name)
+	  continue;
+	
+	// avoid loops
+	if (resolved.count(opt->name))
+	  continue;	// loop; skip
+	resolved.insert(opt->name);
 
-      found_meta = true;
-      char *vv = NULL;
-      _get_val(opt->name, &vv, -1);
-      out += vv;
-      s += strlen(opt->name) + 1;
-      out += val.substr(s);
-      //cout << "val '" << val << "' s " << s << " out '" << out << "' after sub " << opt->name << " -> " << vv << std::endl;
-      val = out;
-      free(vv);
-      goto restart;
+	found_meta = true;
+	char *vv = NULL;
+	_get_val(opt->name, &vv, -1);
+	out += vv;
+	if (endpos != std::string::npos)
+	  out += val.substr(endpos);
+	//cout << "val '" << val << "' s " << s << " out '" << out << "' after sub " << opt->name << " -> " << vv << std::endl;
+	val = out;
+	free(vv);
+	goto restart;
+      }
     }
 
     // pass it thru
