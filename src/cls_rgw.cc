@@ -1,3 +1,6 @@
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <iostream>
 
 #include <string.h>
@@ -38,7 +41,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   try {
     ::decode(op, iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_list(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode request\n");
     return -EINVAL;
   }
 
@@ -52,14 +55,14 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   try {
     ::decode(new_dir.header, header_iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_list(): failed to decode header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode header\n");
     return -EINVAL;
   }
 
   bufferlist bl;
 
   map<string, bufferlist> keys;
-  rc = cls_cxx_map_read_keys(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
+  rc = cls_cxx_map_get_vals(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
 
@@ -74,7 +77,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     try {
       ::decode(entry, eiter);
     } catch (buffer::error& err) {
-      CLS_LOG("ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
+      CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
       return -EINVAL;
     }
     
@@ -105,7 +108,7 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   if (header_bl.length() != 0) {
-    CLS_LOG("ERROR: index already initialized\n");
+    CLS_LOG(1, "ERROR: index already initialized\n");
     return -EINVAL;
   }
 
@@ -123,20 +126,20 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   try {
     ::decode(op, iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to decode request\n");
     return -EINVAL;
   }
 
   if (op.tag.empty()) {
-    CLS_LOG("ERROR: tag is empty\n");
+    CLS_LOG(1, "ERROR: tag is empty\n");
     return -EINVAL;
   }
 
-  CLS_LOG("rgw_bucket_prepare_op(): request: op=%d name=%s tag=%s\n", op.op, op.name.c_str(), op.tag.c_str());
+  CLS_LOG(1, "rgw_bucket_prepare_op(): request: op=%d name=%s tag=%s\n", op.op, op.name.c_str(), op.tag.c_str());
 
   // get on-disk state
   bufferlist cur_value;
-  int rc = cls_cxx_map_read_key(hctx, op.name, &cur_value);
+  int rc = cls_cxx_map_get_val(hctx, op.name, &cur_value);
   if (rc < 0 && rc != -ENOENT)
     return rc;
 
@@ -151,7 +154,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
       bufferlist::iterator biter = cur_value.begin();
       ::decode(entry, biter);
     } catch (buffer::error& err) {
-      CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode entry\n");
+      CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to decode entry\n");
       /* ignoring error */
 
       noent = true;
@@ -174,7 +177,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // write out new key to disk
   bufferlist info_bl;
   ::encode(entry, info_bl);
-  cls_cxx_map_write_key(hctx, op.name, &info_bl);
+  cls_cxx_map_set_val(hctx, op.name, &info_bl);
   return rc;
 }
 
@@ -186,10 +189,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   try {
     ::decode(op, iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_complete_op(): request: op=%d name=%s epoch=%lld tag=%s\n", op.op, op.name.c_str(), op.epoch, op.tag.c_str());
+  CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s epoch=%lld tag=%s\n", op.op, op.name.c_str(), op.epoch, op.tag.c_str());
 
   bufferlist header_bl;
   struct rgw_bucket_dir_header header;
@@ -200,14 +203,14 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   try {
     ::decode(header, header_iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode header\n");
     return -EINVAL;
   }
 
   bufferlist current_entry;
   struct rgw_bucket_dir_entry entry;
   bool ondisk = true;
-  rc = cls_cxx_map_read_key(hctx, op.name, &current_entry);
+  rc = cls_cxx_map_get_val(hctx, op.name, &current_entry);
   if (rc < 0) {
     if (rc != -ENOENT) {
       return rc;
@@ -223,16 +226,16 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     bufferlist::iterator cur_iter = current_entry.begin();
     try {
       ::decode(entry, cur_iter);
-      CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld name=%s locator=%s\n", entry.epoch, entry.name.c_str(), entry.locator.c_str());
+      CLS_LOG(1, "rgw_bucket_complete_op(): existing entry: epoch=%lld name=%s locator=%s\n", entry.epoch, entry.name.c_str(), entry.locator.c_str());
     } catch (buffer::error& err) {
-      CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode entry\n");
+      CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode entry\n");
     }
   }
 
   if (op.tag.size()) {
     map<string, struct rgw_bucket_pending_info>::iterator pinter = entry.pending_map.find(op.tag);
     if (pinter == entry.pending_map.end()) {
-      CLS_LOG("ERROR: couldn't find tag for pending operation\n");
+      CLS_LOG(1, "ERROR: couldn't find tag for pending operation\n");
       return -EINVAL;
     }
     entry.pending_map.erase(pinter);
@@ -242,10 +245,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   bufferlist update_bl;
 
   if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
-    CLS_LOG("rgw_bucket_complete_op(): cancel requested\n");
+    CLS_LOG(1, "rgw_bucket_complete_op(): cancel requested\n");
     cancel = true;
   } else if (op.epoch <= entry.epoch) {
-    CLS_LOG("rgw_bucket_complete_op(): skipping request, old epoch\n");
+    CLS_LOG(1, "rgw_bucket_complete_op(): skipping request, old epoch\n");
     cancel = true;
   }
 
@@ -254,7 +257,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (op.tag.size()) {
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
-      return cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+      return cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
     } else {
       return 0;
     }
@@ -278,7 +281,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
         entry.exists = false;
         bufferlist new_key_bl;
         ::encode(entry, new_key_bl);
-	int ret = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+	int ret = cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
 	if (ret < 0)
 	  return ret;
       }
@@ -299,7 +302,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       stats.total_size_rounded += get_rounded_size(meta.size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
-      int ret = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+      int ret = cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
       if (ret < 0)
 	return ret;
     }
@@ -313,7 +316,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG("rgw_dir_suggest_changes()");
+  CLS_LOG(1, "rgw_dir_suggest_changes()");
 
   bufferlist header_bl;
   struct rgw_bucket_dir_header header;
@@ -326,7 +329,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     bufferlist::iterator header_iter = header_bl.begin();
     ::decode(header, header_iter);
   } catch (buffer::error& error) {
-    CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode header\n");
+    CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to decode header\n");
     return -EINVAL;
   }
 
@@ -341,12 +344,12 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       ::decode(op, in_iter);
       ::decode(cur_change, in_iter);
     } catch (buffer::error& err) {
-      CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode request\n");
+      CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to decode request\n");
       return -EINVAL;
     }
 
     bufferlist cur_disk_bl;
-    int ret = cls_cxx_map_read_key(hctx, cur_change.name, &cur_disk_bl);
+    int ret = cls_cxx_map_get_val(hctx, cur_change.name, &cur_disk_bl);
     if (ret < 0 && ret != -ENOENT)
       return -EINVAL;
 
@@ -355,7 +358,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       try {
         ::decode(cur_disk, cur_disk_iter);
       } catch (buffer::error& error) {
-        CLS_LOG("ERROR: rgw_dir_suggest_changes(): failed to decode cur_disk\n");
+        CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to decode cur_disk\n");
         return -EINVAL;
       }
 
@@ -391,7 +394,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
         bufferlist cur_state_bl;
         ::encode(cur_change, cur_state_bl);
-        ret = cls_cxx_map_write_key(hctx, cur_change.name, &cur_state_bl);
+        ret = cls_cxx_map_set_val(hctx, cur_change.name, &cur_state_bl);
         if (ret < 0)
 	  return ret;
         break;
@@ -410,7 +413,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 void __cls_init()
 {
-  CLS_LOG("Loaded rgw class!");
+  CLS_LOG(1, "Loaded rgw class!");
 
   cls_register("rgw", &h_class);
   cls_register_cxx_method(h_class, "bucket_init_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_init_index, &h_rgw_bucket_init_index);

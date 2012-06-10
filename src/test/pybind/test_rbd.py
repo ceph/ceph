@@ -1,5 +1,6 @@
 import random
 import struct
+import os
 
 from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
@@ -29,7 +30,12 @@ def tearDown():
     rados.shutdown()
 
 def create_image():
-    RBD().create(ioctx, IMG_NAME, IMG_SIZE, IMG_ORDER)
+    features = os.getenv("RBD_FEATURES")
+    if features is not None:
+        RBD().create(ioctx, IMG_NAME, IMG_SIZE, IMG_ORDER, old_format=False,
+                     features=int(features))
+    else:
+        RBD().create(ioctx, IMG_NAME, IMG_SIZE, IMG_ORDER, old_format=True)
 
 def remove_image():
     RBD().remove(ioctx, IMG_NAME)

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_OBJCLASS_H
 #define CEPH_OBJCLASS_H
 
@@ -22,8 +25,9 @@ const char *__cls_name = #name;
 #define CLS_METHOD_PUBLIC	0x4
 
 
-#define CLS_LOG(fmt, ...) \
-	cls_log("<cls> %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+#define CLS_LOG(level, fmt, ...)					\
+  cls_log(level, "<cls> %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+#define CLS_ERR(fmt, ...) CLS_LOG(0, fmt, ##__VA_ARGS__)
 
 void __cls_init();
 
@@ -39,7 +43,7 @@ typedef struct {
 } cls_deps_t;
 
 /* class utils */
-extern int cls_log(const char *format, ...);
+extern int cls_log(int level, const char *format, ...);
 extern void *cls_alloc(size_t size);
 extern void cls_free(void *p);
 
@@ -94,15 +98,27 @@ extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
-extern int cls_cxx_map_read_all_keys(cls_method_context_t hctx, std::map<string, bufferlist> *keys);
-extern int cls_cxx_map_read_keys(cls_method_context_t hctx, string& start_after, string& filter_prefix,
-				 uint64_t max, std::map<string, bufferlist> *keys);
+extern int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
+                                    std::map<string, bufferlist> *vals);
+extern int cls_cxx_map_get_keys(cls_method_context_t hctx,
+                                const string &start_after,
+                                uint64_t max_to_get,
+                                std::set<string> *keys);
+extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
+                                const string &start_after,
+                                const string &filter_prefix,
+                                uint64_t max_to_get,
+                                std::map<string, bufferlist> *vals);
 extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
-extern int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl);
-extern int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl);
+extern int cls_cxx_map_get_val(cls_method_context_t hctx,
+                               const string &key, bufferlist *outbl);
+extern int cls_cxx_map_set_val(cls_method_context_t hctx,
+                               const string &key, bufferlist *inbl);
+extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
+                                std::map<string, bufferlist> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
-extern int cls_cxx_map_remove_key(cls_method_context_t hctx, string key);
-extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist* inbl);
+extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key);
+extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist *inbl);
 
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'

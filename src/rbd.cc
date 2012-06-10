@@ -166,9 +166,14 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
 }
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, uint64_t size, int *order)
+		     const char *imgname, uint64_t size, int *order,
+		     bool old_format, uint64_t features)
 {
-  int r = rbd.create(io_ctx, imgname, size, order);
+  int r;
+  if (old_format)
+    r = rbd.create(io_ctx, imgname, size, order);
+  else
+    r = rbd.create2(io_ctx, imgname, size, features, order);
   if (r < 0)
     return r;
   return 0;
@@ -403,11 +408,10 @@ done_img:
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, int *order, const char *path,
-		     int64_t size)
+		     bool old_format, uint64_t features, int64_t size)
 {
   int fd, r;
   struct stat stat_buf;
-  string md_oid;
   struct fiemap *fiemap;
   MyProgressContext pc("Importing image");
 
@@ -442,10 +446,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   assert(imgname);
 
-  md_oid = imgname;
-  md_oid += RBD_SUFFIX;
-
-  r = do_create(rbd, io_ctx, imgname, size, order);
+  r = do_create(rbd, io_ctx, imgname, size, order, old_format, features);
   if (r < 0) {
     cerr << "image creation failed" << std::endl;
     return r;
@@ -592,10 +593,22 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
   uint64_t cookie;
   RbdWatchCtx ctx(imgname);
 
-  md_oid = imgname;
-  md_oid += RBD_SUFFIX;
+  string old_header_oid = imgname;
+  old_header_oid += RBD_SUFFIX;
+  string new_header_oid = RBD_HEADER_PREFIX;
+  new_header_oid += imgname;
+  bool old_format = true;
 
-  int r = pp.watch(md_oid, 0, &cookie, &ctx);
+  int r = pp.stat(old_header_oid, NULL, NULL);
+  if (r < 0) {
+    r = pp.stat(new_header_oid, NULL, NULL);
+    if (r < 0)
+      return r;
+    old_format = false;
+  }
+
+  r = pp.watch(old_format ? old_header_oid : new_header_oid,
+	       0, &cookie, &ctx);
   if (r < 0) {
     cerr << "watch failed" << std::endl;
     return r;
@@ -943,6 +956,7 @@ int main(int argc, const char **argv)
   const char *poolname = NULL;
   uint64_t size = 0;  // in bytes
   int order = 0;
+  bool old_format = true;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
 
   std::string val;
@@ -955,6 +969,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       exit(0);
+    } else if (ceph_argparse_flag(args, i, "--new-format", (char*)NULL)) {
+      old_format = false;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       poolname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-pool", (char*)NULL)) {
@@ -1186,7 +1202,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_create(rbd, io_ctx, imgname, size, &order);
+    r = do_create(rbd, io_ctx, imgname, size, &order, old_format, 0);
     if (r < 0) {
       cerr << "create error: " << cpp_strerror(-r) << std::endl;
       exit(1);
@@ -1311,11 +1327,12 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_IMPORT:
-     if (!path) {
+    if (!path) {
       cerr << "pathname should be specified" << std::endl;
       exit(1);
     }
-    r = do_import(rbd, dest_io_ctx, destname, &order, path, size);
+    r = do_import(rbd, dest_io_ctx, destname, &order, path,
+		  old_format, 0, size);
     if (r < 0) {
       cerr << "import failed: " << cpp_strerror(-r) << std::endl;
       exit(1);

@@ -120,7 +120,8 @@ class RBD(object):
         self.librbd.rbd_version(byref(major), byref(minor), byref(extra))
         return (major.value, minor.value, extra.value)
 
-    def create(self, ioctx, name, size, order=None):
+    def create(self, ioctx, name, size, order=None, old_format=True,
+               features=0):
         """
         Create an rbd image.
 
@@ -132,14 +133,27 @@ class RBD(object):
         :type size: int
         :param order: the image is split into (2**order) byte objects
         :type order: int
+        :param old_format: whether to create an old-style image that
+                           is accessible by old clients, but can't
+                           use more advanced features like layering.
+        :type old_format: bool
+        :param features: bitmask of features to enable
+        :type features: int
         :raises: :class:`ImageExists`
         """
         if order is None:
             order = 0
         if not isinstance(name, str):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_create(ioctx.io, c_char_p(name), c_uint64(size),
-                                     byref(c_int(order)))
+        if old_format:
+            ret = self.librbd.rbd_create(ioctx.io, c_char_p(name),
+                                         c_uint64(size),
+                                         byref(c_int(order)))
+        else:
+            ret = self.librbd.rbd_create2(ioctx.io, c_char_p(name),
+                                          c_uint64(size),
+                                          c_uint64(features),
+                                          byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating image')
 

@@ -24,7 +24,13 @@
 #include "include/rbd/librbd.hpp"
 #include "osdc/ObjectCacher.h"
 
+#include "librbd/cls_rbd_client.h"
 #include "librbd/LibrbdWriteback.h"
+
+#include <algorithm>
+#include <map>
+#include <string>
+#include <vector>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -86,8 +92,38 @@ namespace librbd {
   struct SnapInfo {
     snap_t id;
     uint64_t size;
-    SnapInfo(snap_t _id, uint64_t _size) : id(_id), size(_size) {};
+    uint64_t features;
+    SnapInfo(snap_t _id, uint64_t _size, uint64_t _features) :
+      id(_id), size(_size), features(_features) {};
   };
+
+  const string md_oid(const string &name, bool old_format)
+  {
+    if (old_format)
+      return name + RBD_SUFFIX;
+    else
+      return RBD_HEADER_PREFIX + name;
+  }
+
+  int detect_format(IoCtx &io_ctx, const string &name, bool *old_format,
+		    uint64_t *size)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    if (old_format)
+      *old_format = true;
+    int r = io_ctx.stat(md_oid(name, true), size, NULL);
+    if (r < 0) {
+      if (old_format)
+	*old_format = false;
+      r = io_ctx.stat(md_oid(name, false), size, NULL);
+      if (r < 0)
+	return r;
+    }
+
+    ldout(cct, 20) << "detect format of " << name << " : "
+		   << (*old_format ? "old" : "new") << dendl;
+    return 0;
+  }
 
   struct AioCompletion;
 
@@ -114,7 +150,8 @@ namespace librbd {
     PerfCounters *perfcounter;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
-    vector<snap_t> snaps;
+    vector<snap_t> snaps; // this mirrors snapc.snaps, but is in a
+			  // format librados can understand
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     bool snap_exists; // false if our snapid was deleted
@@ -126,6 +163,13 @@ namespace librbd {
     Mutex refresh_lock;
     Mutex lock; // protects access to snapshot and header information
     Mutex cache_lock; // used as client_lock for the ObjectCacher
+
+    bool old_format;
+    uint8_t order;
+    uint64_t size;
+    uint64_t features;
+    string object_prefix;
+    string header_oid;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -141,6 +185,8 @@ namespace librbd {
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
 	lock("librbd::ImageCtx::lock"),
 	cache_lock("librbd::ImageCtx::cache_lock"),
+	old_format(true),
+	order(0), size(0), features(0),
 	object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
     {
       md_ctx.dup(p);
@@ -183,6 +229,26 @@ namespace librbd {
 	delete object_set;
 	object_set = NULL;
       }
+    }
+
+    int init() {
+      int r = detect_format(md_ctx, name, &old_format, NULL);
+      if (r < 0) {
+	lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      if (!old_format) {
+	r = cls_client::get_immutable_metadata(&md_ctx, md_oid(name, false),
+					       &object_prefix, &order);
+	if (r < 0) {
+	  lderr(cct) << "error reading immutable metadata: "
+		     << cpp_strerror(r) << dendl;
+	  return r;
+	}
+      }
+      header_oid = md_oid(name, old_format);
+      return 0;
     }
 
     void perf_start(string name) {
@@ -258,23 +324,17 @@ namespace librbd {
       return -ENOENT;
     }
 
-    void add_snap(std::string snap_name, snap_t id, uint64_t size)
+    void add_snap(std::string snap_name, snap_t id, uint64_t size, uint64_t features)
     {
-      snapc.snaps.push_back(id);
       snaps.push_back(id);
-      struct SnapInfo info(id, size);
+      struct SnapInfo info(id, size, features);
       snaps_by_name.insert(std::pair<std::string, struct SnapInfo>(snap_name, info));
-    }
-
-    const string md_oid() const
-    {
-      return name + RBD_SUFFIX;
     }
 
     uint64_t get_image_size() const
     {
       if (snapname.length() == 0) {
-	return header.image_size;
+	return size;
       } else {
 	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snapname);
 	if (p == snaps_by_name.end())
@@ -503,7 +563,8 @@ namespace librbd {
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(IoCtx& io_ctx, std::vector<string>& names);
-  int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order);
+  int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order,
+	     bool old_format);
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx);
@@ -522,8 +583,7 @@ namespace librbd {
   int open_image(ImageCtx *ictx);
   void close_image(ImageCtx *ictx);
 
-  void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
-		  ProgressContext& prog_ctx);
+  void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
 
   int touch_rbd_info(IoCtx& io_ctx, const string& info_oid);
@@ -536,12 +596,11 @@ namespace librbd {
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx);
   void image_info(const ImageCtx& ictx, image_info_t& info, size_t info_size);
-  string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num);
-  uint64_t get_max_block(uint64_t size, int obj_order);
-  uint64_t get_max_block(const rbd_obj_header_ondisk &header);
-  uint64_t get_block_size(const rbd_obj_header_ondisk &header);
-  uint64_t get_block_num(const rbd_obj_header_ondisk &header, uint64_t ofs);
-  uint64_t get_block_ofs(const rbd_obj_header_ondisk &header, uint64_t ofs);
+  string get_block_oid(const string &object_prefix, uint64_t num, bool old_format);
+  uint64_t get_max_block(uint64_t size, uint8_t obj_order);
+  uint64_t get_block_size(uint8_t order);
+  uint64_t get_block_num(uint8_t order, uint64_t ofs);
+  uint64_t get_block_ofs(uint8_t order, uint64_t ofs);
   int check_io(ImageCtx *ictx, uint64_t off, uint64_t len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
@@ -610,9 +669,6 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 
   snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%x.%x", hi, lo);
 
-  if (!*order)
-    *order = RBD_DEFAULT_OBJ_ORDER;
-
   ondisk.image_size = size;
   ondisk.options.order = *order;
   ondisk.options.crypt_type = RBD_CRYPT_NONE;
@@ -625,52 +681,47 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 
 void image_info(const ImageCtx& ictx, image_info_t& info, size_t infosize)
 {
-  int obj_order = ictx.header.options.order;
+  int obj_order = ictx.order;
   info.size = ictx.get_image_size();
   info.obj_size = 1 << obj_order;
   info.num_objs = ictx.get_image_size() >> obj_order;
   info.order = obj_order;
-  memcpy(&info.block_name_prefix, &ictx.header.block_name, RBD_MAX_BLOCK_NAME_SIZE);
+  memcpy(&info.block_name_prefix, ictx.object_prefix.c_str(),
+	 RBD_MAX_BLOCK_NAME_SIZE);
   info.parent_pool = -1;
   bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
 }
 
-string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num)
+string get_block_oid(const string &object_prefix, uint64_t num, bool old_format)
 {
-  char o[RBD_MAX_BLOCK_NAME_SIZE];
-  snprintf(o, RBD_MAX_BLOCK_NAME_SIZE,
-       "%s.%012" PRIx64, header.block_name, num);
-  return o;
+  ostringstream oss;
+  int width = old_format ? 12 : 16;
+  oss << object_prefix << "."
+      << std::hex << std::setw(width) << std::setfill('0') << num;
+  return oss.str();
 }
 
-uint64_t get_max_block(uint64_t size, int obj_order)
+uint64_t get_max_block(uint64_t size, uint8_t obj_order)
 {
   uint64_t block_size = 1 << obj_order;
   uint64_t numseg = (size + block_size - 1) >> obj_order;
   return numseg;
 }
 
-uint64_t get_max_block(const rbd_obj_header_ondisk &header)
+uint64_t get_block_ofs(uint8_t order, uint64_t ofs)
 {
-  return get_max_block(header.image_size, header.options.order);
-}
-
-uint64_t get_block_ofs(const rbd_obj_header_ondisk &header, uint64_t ofs)
-{
-  int obj_order = header.options.order;
-  uint64_t block_size = 1 << obj_order;
+  uint64_t block_size = 1 << order;
   return ofs & (block_size - 1);
 }
 
-uint64_t get_block_size(const rbd_obj_header_ondisk &header)
+uint64_t get_block_size(uint8_t order)
 {
-  return 1 << header.options.order;
+  return 1 << order;
 }
 
-uint64_t get_block_num(const rbd_obj_header_ondisk &header, uint64_t ofs)
+uint64_t get_block_num(uint8_t order, uint64_t ofs)
 {
-  int obj_order = header.options.order;
-  uint64_t num = ofs >> obj_order;
+  uint64_t num = ofs >> order;
 
   return num;
 }
@@ -681,28 +732,29 @@ int init_rbd_info(struct rbd_info *info)
   return 0;
 }
 
-void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
-		ProgressContext& prog_ctx)
+void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
 {
-  CephContext *cct = (CephContext *)io_ctx.cct();
-  uint64_t bsize = get_block_size(header);
-  uint64_t numseg = get_max_block(header);
-  uint64_t start = get_block_num(header, newsize);
+  CephContext *cct = (CephContext *)ictx->data_ctx.cct();
+  uint64_t bsize = get_block_size(ictx->order);
+  uint64_t numseg = get_max_block(ictx->size, ictx->order);
+  uint64_t start = get_block_num(ictx->order, newsize);
 
-  uint64_t block_ofs = get_block_ofs(header, newsize);
+  uint64_t block_ofs = get_block_ofs(ictx->order, newsize);
   if (block_ofs) {
-    ldout(cct, 2) << "trim_image object " << numseg << " truncate to " << block_ofs << dendl;
-    string oid = get_block_oid(header, start);
+    ldout(cct, 2) << "trim_image object " << numseg << " truncate to "
+		  << block_ofs << dendl;
+    string oid = get_block_oid(ictx->object_prefix, start, ictx->old_format);
     librados::ObjectWriteOperation write_op;
     write_op.truncate(block_ofs);
-    io_ctx.operate(oid, &write_op);
+    ictx->data_ctx.operate(oid, &write_op);
     start++;
   }
   if (start < numseg) {
-    ldout(cct, 2) << "trim_image objects " << start << " to " << (numseg-1) << dendl;
-    for (uint64_t i=start; i<numseg; i++) {
-      string oid = get_block_oid(header, i);
-      io_ctx.remove(oid);
+    ldout(cct, 2) << "trim_image objects " << start << " to "
+		  << (numseg - 1) << dendl;
+    for (uint64_t i = start; i < numseg; ++i) {
+      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+      ictx->data_ctx.remove(oid);
       prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
     }
   }
@@ -737,32 +789,26 @@ int touch_rbd_info(IoCtx& io_ctx, const string& info_oid)
 
 int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id)
 {
-  bufferlist bl, out;
-  *id = 0;
-
   int r = touch_rbd_info(io_ctx, info_oid);
   if (r < 0)
     return r;
 
-  r = io_ctx.exec(info_oid, "rbd", "assign_bid", bl, out);
+  r = cls_client::assign_bid(&io_ctx, info_oid, id);
   if (r < 0)
     return r;
-
-  bufferlist::iterator iter = out.begin();
-  ::decode(*id, iter);
 
   return 0;
 }
 
-
-int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint64_t *ver)
+int read_header_bl(IoCtx& io_ctx, const string& header_oid,
+		   bufferlist& header, uint64_t *ver)
 {
   int r;
   uint64_t off = 0;
 #define READ_SIZE 4096
   do {
     bufferlist bl;
-    r = io_ctx.read(md_oid, bl, READ_SIZE, off);
+    r = io_ctx.read(header_oid, bl, READ_SIZE, off);
     if (r < 0)
       return r;
     header.claim_append(bl);
@@ -801,10 +847,11 @@ int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ic
   return 0;
 }
 
-int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
+int read_header(IoCtx& io_ctx, const string& header_oid,
+		struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
-  int r = read_header_bl(io_ctx, md_oid, header_bl, ver);
+  int r = read_header_bl(io_ctx, header_oid, header_bl, ver);
   if (r < 0)
     return r;
   if (header_bl.length() < (int)sizeof(*header))
@@ -814,12 +861,12 @@ int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondis
   return 0;
 }
 
-int write_header(IoCtx& io_ctx, const string& md_oid, bufferlist& header)
+int write_header(IoCtx& io_ctx, const string& header_oid, bufferlist& header)
 {
   bufferlist bl;
-  int r = io_ctx.write(md_oid, header, header.length(), 0);
+  int r = io_ctx.write(header_oid, header, header.length(), 0);
 
-  notify_change(io_ctx, md_oid, NULL, NULL);
+  notify_change(io_ctx, header_oid, NULL, NULL);
 
   return r;
 }
@@ -846,12 +893,12 @@ int tmap_rm(IoCtx& io_ctx, const string& imgname)
 int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
 {
   assert(ictx->lock.is_locked());
-  uint64_t numseg = get_max_block(ictx->header);
-  uint64_t bsize = get_block_size(ictx->header);
+  uint64_t numseg = get_max_block(ictx->size, ictx->order);
+  uint64_t bsize = get_block_size(ictx->order);
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
-    string oid = get_block_oid(ictx->header, i);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
     r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
     ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
     prog_ctx.update_progress(i * bsize, numseg * bsize);
@@ -895,7 +942,7 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   ictx->perfcounter->inc(l_librbd_snap_create);
   return 0;
@@ -923,25 +970,40 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   ictx->perfcounter->inc(l_librbd_snap_remove);
   return 0;
 }
 
-int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
+int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
+	   bool old_format, uint64_t features, int *order)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
-  ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
+  ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
+		 << " size = " << size << " old_format = " << old_format
+		 << " features = " << features << " order = " << *order
+		 << dendl;
 
-  string md_oid = imgname;
-  md_oid += RBD_SUFFIX;
 
-  // make sure it doesn't already exist
-  int r = io_ctx.stat(md_oid, NULL, NULL);
-  if (r == 0) {
-    lderr(cct) << "rbd image header " << md_oid << " already exists" << dendl;
+  if (features & ~RBD_FEATURES_ALL) {
+    lderr(cct) << "librbd does not support requested features." << dendl;
+    return -ENOSYS;
+  }
+
+  // make sure it doesn't already exist, in either format
+  int r = detect_format(io_ctx, imgname, NULL, NULL);
+  if (r != -ENOENT) {
+    lderr(cct) << "rbd image " << imgname << " already exists" << dendl;
     return -EEXIST;
+  }
+
+  if (!order)
+    return -EINVAL;
+
+  if (*order && (*order > 255 || *order < 12)) {
+    lderr(cct) << "order must be in the range [12, 255]" << dendl;
+    return -EDOM;
   }
 
   uint64_t bid;
@@ -952,23 +1014,33 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
     return r;
   }
 
-  struct rbd_obj_header_ondisk header;
-  init_rbd_header(header, size, order, bid);
-
-  bufferlist bl;
-  bl.append((const char *)&header, sizeof(header));
-
   ldout(cct, 2) << "adding rbd image to directory..." << dendl;
   r = tmap_set(io_ctx, imgname);
   if (r < 0) {
-    lderr(cct) << "error adding img to directory: " << cpp_strerror(-r)<< dendl;
+    lderr(cct) << "error adding img to directory: " << cpp_strerror(r)<< dendl;
     return r;
   }
 
+  if (!*order)
+    *order = RBD_DEFAULT_OBJ_ORDER;
+
   ldout(cct, 2) << "creating rbd image..." << dendl;
-  r = io_ctx.write(md_oid, bl, bl.length(), 0);
+  string header_oid = md_oid(imgname, old_format);
+  if (old_format) {
+    struct rbd_obj_header_ondisk header;
+    init_rbd_header(header, size, order, bid);
+
+    bufferlist bl;
+    bl.append((const char *)&header, sizeof(header));
+    r = io_ctx.write(header_oid, bl, bl.length(), 0);
+  } else {
+    ostringstream oss;
+    oss << RBD_DATA_PREFIX << std::hex << bid;
+    r = cls_client::create_image(&io_ctx, header_oid, size, *order, features,
+				 oss.str());
+  }
   if (r < 0) {
-    lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -979,45 +1051,77 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
-  ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> " << dstname << dendl;
+  ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> "
+		 << dstname << dendl;
 
-  string md_oid = srcname;
-  md_oid += RBD_SUFFIX;
-  string dst_md_oid = dstname;
-  dst_md_oid += RBD_SUFFIX;
-  string dstname_str = dstname;
-  string imgname_str = srcname;
-  uint64_t ver;
-  bufferlist header;
-  int r = read_header_bl(io_ctx, md_oid, header, &ver);
+  bool old_format;
+  uint64_t header_size;
+  int r = detect_format(io_ctx, srcname, &old_format, &header_size);
   if (r < 0) {
-    lderr(cct) << "error reading header: " << md_oid << ": " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = io_ctx.stat(dst_md_oid, NULL, NULL);
+
+  string header_oid = md_oid(srcname, old_format);
+  string dst_header_oid = md_oid(dstname, old_format);
+  bufferlist headerbl;
+  map<string, bufferlist> omap_values;
+  r = io_ctx.read(header_oid, headerbl, header_size, 0);
+  if (r < 0) {
+    lderr(cct) << "error reading header: " << header_oid << ": "
+	       << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  int MAX_READ = 1024;
+  string last_read = "";
+  do {
+    map<string, bufferlist> outbl;
+    r = io_ctx.omap_get_vals(header_oid, last_read, MAX_READ, &outbl);
+    if (r < 0) {
+      lderr(cct) << "error reading header omap values: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    omap_values.insert(outbl.begin(), outbl.end());
+    if (outbl.size() > 0)
+      last_read = outbl.rbegin()->first;
+  } while (r == MAX_READ);
+
+  r = io_ctx.stat(dst_header_oid, NULL, NULL);
   if (r == 0) {
-    lderr(cct) << "rbd image header " << dst_md_oid << " already exists" << dendl;
+    lderr(cct) << "rbd image header " << dst_header_oid
+	       << " already exists" << dendl;
     return -EEXIST;
   }
-  r = write_header(io_ctx, dst_md_oid, header);
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  op.write_full(headerbl);
+  op.omap_set(omap_values);
+  r = io_ctx.operate(dst_header_oid, &op);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << dst_md_oid << ": " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << dst_header_oid << ": "
+	       << cpp_strerror(r) << dendl;
     return r;
   }
-  r = tmap_set(io_ctx, dstname_str);
-  if (r < 0) {
-    io_ctx.remove(dst_md_oid);
-    lderr(cct) << "can't add " << dst_md_oid << " to directory" << dendl;
-    return r;
-  }
-  r = tmap_rm(io_ctx, imgname_str);
-  if (r < 0)
-    lderr(cct) << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
 
-  r = io_ctx.remove(md_oid);
+  r = tmap_set(io_ctx, dstname);
+  if (r < 0) {
+    io_ctx.remove(dst_header_oid);
+    lderr(cct) << "couldn't add " << dstname << " to directory: "
+	       << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = tmap_rm(io_ctx, srcname);
+  if (r < 0)
+    lderr(cct) << "warning: couldn't remove old entry from directory ("
+	       << srcname << ")" << dendl;
+
+  r = io_ctx.remove(header_oid);
   if (r < 0 && r != -ENOENT)
-    lderr(cct) << "warning: couldn't remove old metadata" << dendl;
-  notify_change(io_ctx, md_oid, NULL, NULL);
+    lderr(cct) << "warning: couldn't remove old header object ("
+	       << header_oid << ")" << dendl;
+  notify_change(io_ctx, header_oid, NULL, NULL);
 
   return 0;
 }
@@ -1036,46 +1140,27 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   return 0;
 }
 
-bool has_snaps(IoCtx& io_ctx, const std::string& md_oid)
-{
-  CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "has_snaps " << &io_ctx << " " << md_oid << dendl;
-
-  bufferlist bl, bl2;
-  int r = io_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
-  if (r < 0) {
-    lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
-    return true;
-  }
-  uint32_t num_snaps;
-  uint64_t snap_seq;
-  bufferlist::iterator iter = bl2.begin();
-  ::decode(snap_seq, iter);
-  ::decode(num_snaps, iter);
-  return num_snaps > 0;
-}
-
 int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
-  string md_oid = imgname;
-  md_oid += RBD_SUFFIX;
-
-  struct rbd_obj_header_ondisk header;
-  int r = read_header(io_ctx, md_oid, &header, NULL);
+  ImageCtx *ictx = new ImageCtx(imgname, NULL, io_ctx);
+  int r = open_image(ictx);
   if (r < 0) {
-    ldout(cct, 2) << "error reading header: " << cpp_strerror(-r) << dendl;
-  }
-  if (r >= 0) {
-    if (has_snaps(io_ctx, md_oid)) {
+    ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+  } else {
+    if (ictx->snaps.size()) {
       lderr(cct) << "image has snapshots - not removing" << dendl;
+      close_image(ictx);
       return -ENOTEMPTY;
     }
-    trim_image(io_ctx, header, 0, prog_ctx);
+    string header_oid = ictx->header_oid;
+    trim_image(ictx, 0, prog_ctx);
+    close_image(ictx);
+
     ldout(cct, 2) << "removing header..." << dendl;
-    r = io_ctx.remove(md_oid);
+    r = io_ctx.remove(header_oid);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
       return r;
@@ -1096,24 +1181,30 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
-  if (size == ictx->header.image_size) {
-    ldout(cct, 2) << "no change in size (" << ictx->header.image_size << " -> " << size << ")" << dendl;
+  if (size == ictx->size) {
+    ldout(cct, 2) << "no change in size (" << ictx->size << " -> " << size << ")" << dendl;
     return 0;
   }
 
-  if (size > ictx->header.image_size) {
-    ldout(cct, 2) << "expanding image " << ictx->header.image_size << " -> " << size << dendl;
-    ictx->header.image_size = size;
+  if (size > ictx->size) {
+    ldout(cct, 2) << "expanding image " << ictx->size << " -> " << size << dendl;
+    // TODO: make ictx->set_size 
   } else {
-    ldout(cct, 2) << "shrinking image " << ictx->header.image_size << " -> " << size << dendl;
-    trim_image(ictx->data_ctx, ictx->header, size, prog_ctx);
-    ictx->header.image_size = size;
+    ldout(cct, 2) << "shrinking image " << ictx->size << " -> " << size << dendl;
+    trim_image(ictx, size, prog_ctx);
   }
+  ictx->size = size;
 
-  // rewrite header
-  bufferlist bl;
-  bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  int r = ictx->md_ctx.write(ictx->md_oid(), bl, bl.length(), 0);
+  int r;
+  if (ictx->old_format) {
+    // rewrite header
+    bufferlist bl;
+    ictx->header.image_size = size;
+    bl.append((const char *)&(ictx->header), sizeof(ictx->header));
+    r = ictx->md_ctx.write(ictx->header_oid, bl, bl.length(), 0);
+  } else {
+    r = cls_client::set_size(&(ictx->md_ctx), ictx->header_oid, size);
+  }
 
   if (r == -ERANGE)
     lderr(cct) << "operation might have conflicted with another client!" << dendl;
@@ -1121,7 +1212,7 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
     lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
     return r;
   } else {
-    notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
   }
 
   return 0;
@@ -1130,14 +1221,15 @@ int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
+  ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
+		 << size << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  if (size < ictx->header.image_size && ictx->object_cacher) {
+  if (size < ictx->size && ictx->object_cacher) {
     // need to invalidate since we're deleting objects, and
     // ObjectCacher doesn't track non-existent objects
     ictx->invalidate_cache();
@@ -1176,7 +1268,6 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 {
   assert(ictx->lock.is_locked());
 
-  bufferlist bl, bl2;
   uint64_t snap_id;
 
   int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
@@ -1185,15 +1276,19 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
     return r;
   }
 
-  ::encode(snap_name, bl);
-  ::encode(snap_id, bl);
+  if (ictx->old_format) {
+    r = cls_client::old_snapshot_add(&ictx->md_ctx, ictx->header_oid,
+				     snap_id, snap_name);
+  } else {
+    r = cls_client::snapshot_add(&ictx->md_ctx, ictx->header_oid,
+				 snap_id, snap_name);
+  }
 
-  r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_add", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << cpp_strerror(-r) << dendl;
+    lderr(ictx->cct) << "adding snapshot to header failed: "
+		     << cpp_strerror(r) << dendl;
     return r;
   }
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
   return 0;
 }
@@ -1202,12 +1297,19 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 {
   assert(ictx->lock.is_locked());
 
-  bufferlist bl, bl2;
-  ::encode(snap_name, bl);
+  int r;
+  if (ictx->old_format) {
+    r = cls_client::old_snapshot_remove(&ictx->md_ctx,
+					ictx->header_oid, snap_name);
+  } else {
+    r = cls_client::snapshot_remove(&ictx->md_ctx,
+				    ictx->header_oid,
+				    ictx->get_snapid(snap_name));
+  }
 
-  int r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << cpp_strerror(-r) << dendl;
+    lderr(ictx->cct) << "removing snapshot from header failed: "
+		     << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1246,44 +1348,70 @@ int ictx_refresh(ImageCtx *ictx)
   ictx->needs_refresh = false;
   ictx->refresh_lock.Unlock();
 
-  int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
-  if (r < 0) {
-    lderr(cct) << "Error reading header: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-  r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_list", bl, bl2);
-  if (r < 0) {
-    lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-  r = 0;
+  int r;
+  ::SnapContext new_snapc;
+  bool new_snap;
+  vector<string> snap_names;
+  vector<uint64_t> snap_sizes;
+  vector<uint64_t> snap_features;
+  if (ictx->old_format) {
+    r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
+    if (r < 0) {
+      lderr(cct) << "Error reading header: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
+				      &snap_names, &snap_sizes, &new_snapc);
+    if (r < 0) {
+      lderr(cct) << "Error listing snapshots: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    ictx->order = ictx->header.options.order;
+    ictx->size = ictx->header.image_size;
+    ictx->object_prefix = ictx->header.block_name;
+  } else {
+    do {
+      uint64_t incompatible_features;
+      r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
+					   &ictx->size, &ictx->features,
+					   &incompatible_features,
+					   &new_snapc);
+      if (r < 0) {
+	lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
+		   << dendl;
+	return r;
+      }
 
-  std::map<snap_t, std::string> old_snap_ids;
-  for (std::map<std::string, struct SnapInfo>::iterator it =
-	 ictx->snaps_by_name.begin(); it != ictx->snaps_by_name.end(); ++it) {
-    old_snap_ids[it->second.id] = it->first;
+      uint64_t unsupported = incompatible_features & ~RBD_FEATURES_ALL;
+      if (unsupported) {
+	lderr(ictx->cct) << "Image uses unsupported features: "
+			 << unsupported << dendl;
+	return -ENOSYS;
+      }
+      r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
+				    new_snapc.snaps, &snap_names,
+				    &snap_sizes, &snap_features);
+      // -ENOENT here means we raced with snapshot deletion
+      if (r < 0 && r != -ENOENT) {
+	lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
+	lderr(ictx->cct) << "Error listing snapshots: " << cpp_strerror(r) << dendl;
+	return r;
+      }
+    } while (r == -ENOENT);
   }
-  bool new_snap = false;
 
   ictx->snaps.clear();
-  ictx->snapc.snaps.clear();
   ictx->snaps_by_name.clear();
-
-  uint32_t num_snaps;
-  bufferlist::iterator iter = bl2.begin();
-  ::decode(ictx->snapc.seq, iter);
-  ::decode(num_snaps, iter);
-  for (uint32_t i=0; i < num_snaps; i++) {
-    uint64_t id, image_size;
-    string s;
-    ::decode(id, iter);
-    ::decode(image_size, iter);
-    ::decode(s, iter);
-    ictx->add_snap(s, id, image_size);
-    std::map<snap_t, std::string>::const_iterator it = old_snap_ids.find(id);
-    if (it == old_snap_ids.end()) {
+  for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
+    uint64_t features = ictx->old_format ? 0 : snap_features[i];
+    ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
+		   snap_sizes[i], features);
+    std::vector<snap_t>::const_iterator it =
+      find(ictx->snaps.begin(), ictx->snaps.end(), new_snapc.snaps[i].val);
+    if (it == ictx->snaps.end()) {
       new_snap = true;
-      ldout(cct, 20) << "new snapshot " << s << " size " << image_size << dendl;
+      ldout(cct, 20) << "new snapshot id " << *it << " size " << snap_sizes[i]
+		     << dendl;
     }
   }
 
@@ -1299,8 +1427,10 @@ int ictx_refresh(ImageCtx *ictx)
     return -EIO;
   }
 
+  ictx->snapc = new_snapc;
+
   if (ictx->snapid != CEPH_NOSNAP &&
-      ictx->get_snapid(ictx->snapname) == CEPH_NOSNAP) {
+      ictx->get_snapid(ictx->snapname) != ictx->snapid) {
     lderr(cct) << "tried to read from a snapshot that no longer exists: "
 	       << ictx->snapname << dendl;
     ictx->snap_exists = false;
@@ -1391,7 +1521,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
   snap_t new_snapid = ictx->get_snapid(snap_name);
   ldout(cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
 
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
   ictx->perfcounter->inc(l_librbd_snap_rollback);
   return r;
@@ -1426,8 +1556,9 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
   uint64_t src_size = ictx.get_image_size();
   int64_t r;
 
-  int order = ictx.header.options.order;
-  r = create(dest_md_ctx, destname, src_size, &order);
+  int order = ictx.order;
+  r = create(dest_md_ctx, destname, src_size, ictx.old_format,
+	     ictx.features, &order);
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
     return r;
@@ -1478,9 +1609,12 @@ int open_image(ImageCtx *ictx)
   ldout(ictx->cct, 20) << "open_image: ictx =  " << ictx
 		       << " name =  '" << ictx->name << "' snap_name = '"
 		       << ictx->snapname << "'" << dendl;
+  int r = ictx->init();
+  if (r < 0)
+    return r;
 
   ictx->lock.Lock();
-  int r = ictx_refresh(ictx);
+  r = ictx_refresh(ictx);
   ictx->lock.Unlock();
   if (r < 0)
     return r;
@@ -1489,11 +1623,9 @@ int open_image(ImageCtx *ictx)
   ictx->data_ctx.snap_set_read(ictx->snapid);
 
   WatchCtx *wctx = new WatchCtx(ictx);
-  if (!wctx)
-    return -ENOMEM;
   ictx->wctx = wctx;
 
-  r = ictx->md_ctx.watch(ictx->md_oid(), 0, &(wctx->cookie), wctx);
+  r = ictx->md_ctx.watch(ictx->header_oid, 0, &(wctx->cookie), wctx);
   return r;
 }
 
@@ -1506,7 +1638,7 @@ void close_image(ImageCtx *ictx)
     flush(ictx);
   ictx->lock.Lock();
   ictx->wctx->invalidate();
-  ictx->md_ctx.unwatch(ictx->md_oid(), ictx->wctx->cookie);
+  ictx->md_ctx.unwatch(ictx->header_oid, ictx->wctx->cookie);
   delete ictx->wctx;
   ictx->lock.Unlock();
   delete ictx;
@@ -1531,9 +1663,9 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   int64_t ret;
   int64_t total_read = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1541,8 +1673,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
     uint64_t bytes_read;
@@ -1620,9 +1752,9 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
@@ -1634,8 +1766,8 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
@@ -1677,9 +1809,9 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1690,8 +1822,8 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   start_time = ceph_clock_now(ictx->cct);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
 
@@ -1890,9 +2022,9 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   snapid_t snap = ictx->snapid;
   ictx->lock.Unlock();
   uint64_t left = len;
@@ -1908,8 +2040,8 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   c->init_time(ictx, AIO_TYPE_WRITE);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
 
     uint64_t write_len = min(block_size - block_ofs, left);
@@ -1956,9 +2088,9 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
 
   size_t total_write = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1974,8 +2106,8 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   c->init_time(ictx, AIO_TYPE_DISCARD);
   for (uint64_t i = start_block; i <= end_block; i++) {
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_write);
     ictx->lock.Unlock();
 
     AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
@@ -2044,9 +2176,9 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   int64_t ret;
   int total_read = 0;
   ictx->lock.Lock();
-  uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(ictx->header);
+  uint64_t start_block = get_block_num(ictx->order, off);
+  uint64_t end_block = get_block_num(ictx->order, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->order);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -2055,8 +2187,8 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
-    string oid = get_block_oid(ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
+    string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
 
@@ -2124,8 +2256,6 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name)
 int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname)
 {
   ImageCtx *ictx = new ImageCtx(name, snapname, io_ctx);
-  if (!ictx)
-    return -ENOMEM;
 
   int r = librbd::open_image(ictx);
   if (r < 0)
@@ -2137,8 +2267,13 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapnam
 
 int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
 {
-  int r = librbd::create(io_ctx, name, size, order);
-  return r;
+  return librbd::create(io_ctx, name, size, true, 0, order);
+}
+
+int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
+		 uint64_t features, int *order)
+{
+  return librbd::create(io_ctx, name, size, false, features, order);
 }
 
 int RBD::remove(IoCtx& io_ctx, const char *name)
@@ -2392,7 +2527,16 @@ extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int 
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::create(io_ctx, name, size, order);
+  return librbd::create(io_ctx, name, size, true, 0, order);
+}
+
+extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
+			   uint64_t size, uint64_t features,
+			   int *order)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::create(io_ctx, name, size, false, features, order);
 }
 
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
@@ -2444,8 +2588,6 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image, c
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, snap_name, io_ctx);
-  if (!ictx)
-    return -ENOMEM;
   int r = librbd::open_image(ictx);
   *image = (rbd_image_t)ictx;
   return r;
