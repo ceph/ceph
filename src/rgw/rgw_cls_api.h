@@ -434,17 +434,6 @@ struct rgw_user_bucket {
   rgw_user_bucket() {}
   rgw_user_bucket(string &u, string& b) : user(u), bucket(b) {}
 
-  bool operator()(const rgw_user_bucket& ub1, const rgw_user_bucket& ub2) const
-  {
-    int comp = ub1.user.compare(ub2.user);
-    if (comp < 0)
-      return true;
-    else if (!comp)
-      return ub1.bucket.compare(ub2.bucket) < 0;
-  
-    return false;
-  }
-
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(user, bl);
