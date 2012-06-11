@@ -335,20 +335,37 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
   return 1;
 }
 
+/**
+ * usage_log_hash: get usage log key hash, based on name and index
+ *
+ * Get the usage object name. Since a user may have more than 1
+ * object holding that info (multiple shards), we use index to
+ * specify that shard number. Once index exceeds max shards it
+ * wraps.
+ * If name is not being set, results for all users will be returned
+ * and index will wrap only after total shards number.
+ *
+ * @param cct [in] ceph context
+ * @param name [in] user name
+ * @param hash [out] hash value
+ * @param index [in] shard index number 
+ */
 static void usage_log_hash(CephContext *cct, const string& name, string& hash, uint32_t index)
 {
   uint32_t val = index;
 
   if (!name.empty()) {
-    val %= cct->_conf->rgw_usage_max_user_shards;
+    int max_user_shards = max(cct->_conf->rgw_usage_max_user_shards, 1);
+    val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[16];
-  snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % cct->_conf->rgw_usage_max_shards));
+  int max_shards = max(cct->_conf->rgw_usage_max_shards, 1);
+  snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
 
-int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageInfo>& usage_info)
+int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
 {
   uint32_t index = 0;
 
@@ -358,10 +375,10 @@ int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageInfo>& usage_info)
   string last_user;
 
   /* restructure usage map, cluster by object hash */
-  map<rgw_user_bucket, RGWUsageInfo>::iterator iter;
+  map<rgw_user_bucket, RGWUsageBatch>::iterator iter;
   for (iter = usage_info.begin(); iter != usage_info.end(); ++iter) {
     const rgw_user_bucket& ub = iter->first;
-    RGWUsageInfo& info = iter->second;
+    RGWUsageBatch& info = iter->second;
 
     if (ub.user.empty()) {
       ldout(cct, 0) << "WARNING: RGWRados::log_usage(): user name empty (bucket=" << ub.bucket << "), skipping" << dendl;
@@ -437,7 +454,7 @@ int RGWRados::trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch)
 {
   uint32_t index = 0;
   string hash, first_hash;
-  usage_log_hash(cct, user, first_hash, 0);
+  usage_log_hash(cct, user, first_hash, index);
 
   hash = first_hash;
 
