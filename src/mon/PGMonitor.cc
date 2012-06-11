@@ -96,13 +96,13 @@ void PGMonitor::update_logger()
   for (hash_map<int,int>::iterator p = pg_map.num_pg_by_state.begin();
        p != pg_map.num_pg_by_state.end();
        ++p) {
-    if (p->second & PG_STATE_ACTIVE) {
-      active++;
-      if (p->second & PG_STATE_CLEAN)
-	active_clean++;
+    if (p->first & PG_STATE_ACTIVE) {
+      active += p->second;
+      if (p->first & PG_STATE_CLEAN)
+	active_clean += p->second;
     }
-    if (p->second & PG_STATE_PEERING)
-      peering++;
+    if (p->first & PG_STATE_PEERING)
+      peering += p->second;
   }
   mon->cluster_logger->set(l_cluster_num_pg_active_clean, active_clean);
   mon->cluster_logger->set(l_cluster_num_pg_active, active);
