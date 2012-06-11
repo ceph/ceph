@@ -324,9 +324,11 @@ struct rgw_usage_log_entry {
   uint64_t epoch;
   uint64_t bytes_sent;
   uint64_t bytes_received;
+  uint64_t ops;
+  uint64_t successful_ops;
 
-  rgw_usage_log_entry() : bytes_sent(0), bytes_received(0) {}
-  rgw_usage_log_entry(string& o, string& b, uint64_t s, uint64_t r) : owner(o), bucket(b), bytes_sent(s), bytes_received(r) {}
+  rgw_usage_log_entry() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
+  rgw_usage_log_entry(string& o, string& b, uint64_t s, uint64_t r) : owner(o), bucket(b), bytes_sent(s), bytes_received(r), ops(0), successful_ops(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -335,6 +337,8 @@ struct rgw_usage_log_entry {
     ::encode(epoch, bl);
     ::encode(bytes_sent, bl);
     ::encode(bytes_received, bl);
+    ::encode(ops, bl);
+    ::encode(successful_ops, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -346,6 +350,8 @@ struct rgw_usage_log_entry {
     ::decode(epoch, bl);
     ::decode(bytes_sent, bl);
     ::decode(bytes_received, bl);
+    ::decode(ops, bl);
+    ::decode(successful_ops, bl);
     DECODE_FINISH(bl);
   }
 
@@ -357,6 +363,8 @@ struct rgw_usage_log_entry {
     }
     bytes_sent += e.bytes_sent;
     bytes_received += e.bytes_received;
+    ops += e.ops;
+    successful_ops += e.successful_ops;
   }
 };
 WRITE_CLASS_ENCODER(rgw_usage_log_entry)
