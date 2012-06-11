@@ -87,10 +87,9 @@ class UsageLogger {
   utime_t round_timestamp;
 
   class C_UsageLogTimeout : public Context {
-    CephContext *cct;
     UsageLogger *logger;
   public:
-    C_UsageLogTimeout(CephContext *_cct, UsageLogger *_l) : cct(_cct), logger(_l) {}
+    C_UsageLogTimeout(UsageLogger *_l) : logger(_l) {}
     void finish(int r) {
       logger->flush();
       logger->set_timer();
@@ -98,7 +97,7 @@ class UsageLogger {
   };
 
   void set_timer() {
-    timer.add_event_after(cct->_conf->rgw_usage_log_tick_interval, new C_UsageLogTimeout(cct, this));
+    timer.add_event_after(cct->_conf->rgw_usage_log_tick_interval, new C_UsageLogTimeout(this));
   }
 public:
 
@@ -118,20 +117,14 @@ public:
   }
 
   void recalc_round_timestamp(utime_t& ts) {
-    struct tm bdt;
-    time_t tt = ts.sec();
-    gmtime_r(&tt, &bdt);
-    bdt.tm_sec = 0;
-    bdt.tm_min = 0;
-    tt = mktime(&bdt);
-    round_timestamp = utime_t(tt, 0);
+    round_timestamp = ts.round_to_hour();
   }
 
   void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+    lock.Lock();
     if (timestamp.sec() > round_timestamp + 3600)
       recalc_round_timestamp(timestamp);
     entry.epoch = round_timestamp.sec();
-    lock.Lock();
     bool account;
     rgw_user_bucket ub(entry.owner, entry.bucket);
     usage_map[ub].insert(round_timestamp, entry, &account);
