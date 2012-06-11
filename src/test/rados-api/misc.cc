@@ -1,5 +1,6 @@
 #include "mds/mdstypes.h"
 #include "include/buffer.h"
+#include "include/rbd_types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "test/rados-api/test.h"
@@ -135,15 +136,15 @@ TEST(LibRadosMisc, Exec) {
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   char buf2[512];
-  int res = rados_exec(ioctx, "foo", "rbd", "test_exec",
+  int res = rados_exec(ioctx, "foo", "rbd", "get_all_features",
 			  NULL, 0, buf2, sizeof(buf2));
   ASSERT_GT(res, 0);
   bufferlist bl;
   bl.append(buf2, res);
   bufferlist::iterator iter = bl.begin();
-  std::string outstring;
-  ::decode(outstring, iter);
-  ASSERT_EQ(outstring, string("testing123"));
+  uint64_t all_features;
+  ::decode(all_features, iter);
+  ASSERT_EQ(all_features, (uint64_t)RBD_FEATURES_ALL);
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
@@ -157,12 +158,12 @@ TEST(LibRadosMisc, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
-  int r = ioctx.exec("foo", "rbd", "test_exec", bl2, out);
-  ASSERT_EQ((int)out.length(), r);
+  int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out);
+  ASSERT_EQ(0, r);
   bufferlist::iterator iter = out.begin();
-  std::string outstring;
-  ::decode(outstring, iter);
-  ASSERT_EQ(outstring, string("testing123"));
+  uint64_t all_features;
+  ::decode(all_features, iter);
+  ASSERT_EQ(all_features, (uint64_t)RBD_FEATURES_ALL);
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }

@@ -53,6 +53,7 @@ cls_method_handle_t h_get_object_prefix;
 cls_method_handle_t h_get_snapshot_name;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
+cls_method_handle_t h_get_all_features;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -616,6 +617,16 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Returns a uint64_t of all the features supported by this class.
+ */
+int get_all_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t all_features = RBD_FEATURES_ALL;
+  ::encode(all_features, *out);
+  return 0;
+}
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -887,6 +898,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "snapshot_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
 			  snapshot_remove, &h_snapshot_remove);
+  cls_register_cxx_method(h_class, "get_all_features",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  get_all_features, &h_get_all_features);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
