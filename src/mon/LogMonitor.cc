@@ -17,7 +17,7 @@
 
 #include "LogMonitor.h"
 #include "Monitor.h"
-#include "MonitorStore.h"
+#include "MonitorDBStore.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
@@ -29,10 +29,11 @@
 #include "common/errno.h"
 #include "common/config.h"
 #include "include/assert.h"
+#include <sstream>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, paxos->get_version())
+#define dout_prefix _prefix(_dout, mon, get_version())
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -68,8 +69,7 @@ ostream& operator<<(ostream& out, LogMonitor& pm)
 
 void LogMonitor::tick() 
 {
-  if (!paxos->is_active())
-    return;
+  if (!is_active()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
@@ -94,26 +94,34 @@ void LogMonitor::create_initial()
 
 void LogMonitor::update_from_paxos()
 {
-  version_t paxosv = paxos->get_version();
-  if (paxosv == summary.version)
+  dout(10) << __func__ << dendl;
+  version_t version = get_version();
+  dout(10) << __func__ << " version " << version
+           << " summary v " << summary.version << dendl;
+  if (version == summary.version)
     return;
-  assert(paxosv >= summary.version);
+  assert(version >= summary.version);
 
   bufferlist blog;
 
-  if (summary.version != paxos->get_stashed_version()) {
-    bufferlist latest;
-    version_t v = paxos->get_stashed(latest);
-    dout(7) << "update_from_paxos loading summary e" << v << dendl;
-    bufferlist::iterator p = latest.begin();
-    ::decode(summary, p);
-  } 
+  version_t latest_full = get_version_latest_full();
+  dout(10) << __func__ << " latest full " << latest_full << dendl;
+  if ((latest_full > 0) && (latest_full > summary.version)) {
+      bufferlist latest_bl;
+      get_version_full(latest_full, latest_bl);
+      assert(latest_bl.length() != 0);
+      dout(7) << __func__ << " loading summary e" << latest_full << dendl;
+      bufferlist::iterator p = latest_bl.begin();
+      ::decode(summary, p);
+      dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
+  }
 
   // walk through incrementals
-  while (paxosv > summary.version) {
+  while (version > summary.version) {
     bufferlist bl;
-    bool success = paxos->read(summary.version+1, bl);
-    assert(success);
+    int err = get_version(summary.version+1, bl);
+    assert(err == 0);
+    assert(bl.length());
 
     bufferlist::iterator p = bl.begin();
     __u8 v;
@@ -140,9 +148,6 @@ void LogMonitor::update_from_paxos()
     summary.version++;
   }
 
-  bufferlist bl;
-  ::encode(summary, bl);
-  paxos->stash_latest(paxosv, bl);
 
   if (blog.length()) {
     int fd = ::open(g_conf->mon_cluster_log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
@@ -161,28 +166,49 @@ void LogMonitor::update_from_paxos()
 
   // trim
   unsigned max = g_conf->mon_max_log_epochs;
-  if (mon->is_leader() && paxosv > max)
-    paxos->trim_to(paxosv - max);
+  if (mon->is_leader() && version > max)
+    trim_to(version - max);
 
   check_subs();
+}
+
+void LogMonitor::store_do_append(MonitorDBStore::Transaction *t,
+    const string& key, bufferlist& bl)
+{
+  bufferlist existing_bl;
+  int err = get_value(key, existing_bl);
+  assert(err == 0);
+
+  existing_bl.append(bl);
+  put_value(t, key, existing_bl);
 }
 
 void LogMonitor::create_pending()
 {
   pending_log.clear();
   pending_summary = summary;
-  dout(10) << "create_pending v " << (paxos->get_version() + 1) << dendl;
+  dout(10) << "create_pending v " << (get_version() + 1) << dendl;
 }
 
-void LogMonitor::encode_pending(bufferlist &bl)
+void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
-  dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
+  version_t version = get_version() + 1;
+  bufferlist bl;
+  dout(10) << __func__ << " v" << version << dendl;
   __u8 v = 1;
   ::encode(v, bl);
-  for (multimap<utime_t,LogEntry>::iterator p = pending_log.begin();
-       p != pending_log.end();
-       p++)
+  multimap<utime_t,LogEntry>::iterator p;
+  for (p = pending_log.begin(); p != pending_log.end(); p++)
     p->second.encode(bl);
+
+  bufferlist summary_bl;
+  ::encode(summary, summary_bl);
+
+  put_version(t, version, bl);
+  put_last_committed(t, version);
+
+  put_version_full(t, version, summary_bl);
+  put_version_latest_full(t, version);
 }
 
 bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
@@ -303,7 +329,7 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, paxos->get_version());
+    mon->reply_command(m, r, rs, rdata, get_version());
     return true;
   } else
     return false;
@@ -320,7 +346,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   ss << "unrecognized command";
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs, paxos->get_version());
+  mon->reply_command(m, err, rs, get_version());
   return false;
 }
 
@@ -439,17 +465,17 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   dout(10) << __func__ << " level " << level << " ver " << sv 
 	  << " cur summary ver " << summary.version << dendl; 
 
-  if (sv < paxos->get_first_committed()) {
+  if (sv < get_first_committed()) {
     dout(10) << __func__ << " skipped from " << sv
-	     << " to first_committed " << paxos->get_first_committed() << dendl;
+	     << " to first_committed " << get_first_committed() << dendl;
     LogEntry le;
     le.stamp = ceph_clock_now(NULL);
     le.type = CLOG_WARN;
     ostringstream ss;
-    ss << "skipped log messages from " << sv << " to " << paxos->get_first_committed();
+    ss << "skipped log messages from " << sv << " to " << get_first_committed();
     le.msg = ss.str();
     mlog->entries.push_back(le);
-    sv = paxos->get_first_committed();
+    sv = get_first_committed();
   }
 
   version_t summary_ver = summary.version;

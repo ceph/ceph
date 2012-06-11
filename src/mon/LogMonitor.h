@@ -36,8 +36,8 @@ private:
   void create_initial();
   void update_from_paxos();
   void create_pending();  // prepare a new pending
-  void encode_pending(bufferlist &bl);  // propose pending update to peers
-
+  // propose pending update to peers
+  void encode_pending(MonitorDBStore::Transaction *t);
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
 
@@ -67,8 +67,12 @@ private:
   bool _create_sub_summary(MLog *mlog, int level);
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
 
+  void store_do_append(MonitorDBStore::Transaction *t,
+		       const string& key, bufferlist& bl);
+
  public:
-  LogMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
+  LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 
+    : PaxosService(mn, p, service_name) { }
   
   void tick();  // check state, take actions
 

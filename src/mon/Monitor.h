@@ -44,12 +44,13 @@
 #include "perfglue/heap_profiler.h"
 
 #include "messages/MMonCommand.h"
+#include "mon/MonitorDBStore.h"
 
 #include <memory>
 #include <errno.h>
 
 
-#define CEPH_MON_PROTOCOL     9 /* cluster internal */
+#define CEPH_MON_PROTOCOL     10 /* cluster internal */
 
 
 enum {
@@ -78,8 +79,6 @@ enum {
   l_cluster_mds_epoch,
   l_cluster_last,
 };
-
-class MonitorStore;
 
 class PaxosService;
 
@@ -136,7 +135,8 @@ private:
 
   // -- local storage --
 public:
-  MonitorStore *store;
+  MonitorDBStore *store;
+  static const string MONITOR_NAME;
 
   // -- monitor state --
 private:
@@ -175,6 +175,7 @@ public:
 
   // -- elector --
 private:
+  Paxos *paxos;
   Elector elector;
   friend class Elector;
   
@@ -298,12 +299,11 @@ public:
 
   void update_logger();
 
-  // -- paxos -- These vector indices are matched
-  list<Paxos*> paxos;
+  /**
+   * Vector holding the Services serviced by this Monitor.
+   */
   vector<PaxosService*> paxos_service;
 
-  Paxos *add_paxos(int type);
-  Paxos *get_paxos_by_name(const string& name);
   PaxosService *get_paxos_service_by_name(const string& name);
 
   class PGMonitor *pgmon() {
@@ -490,13 +490,14 @@ public:
   static CompatSet get_supported_features();
   static CompatSet get_legacy_features();
   void read_features();
-  void write_features();
+  void write_features(MonitorDBStore::Transaction &t);
 
  public:
-  Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
+  Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
+	  Messenger *m, MonMap *map);
   ~Monitor();
 
-  static int check_features(MonitorStore *store);
+  static int check_features(MonitorDBStore *store);
 
   int preinit();
   int init();
@@ -522,6 +523,7 @@ public:
    * @return 0 on success, or negative error code
    */
   int write_fsid();
+  int write_fsid(MonitorDBStore::Transaction &t);
 
   void do_admin_command(std::string command, std::string args, ostream& ss);
 

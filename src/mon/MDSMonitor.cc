@@ -15,7 +15,7 @@
 
 #include "MDSMonitor.h"
 #include "Monitor.h"
-#include "MonitorStore.h"
+#include "MonitorDBStore.h"
 #include "OSDMonitor.h"
 
 #include "common/strtol.h"
@@ -35,6 +35,8 @@
 
 #include "common/config.h"
 #include "include/assert.h"
+
+#include "MonitorDBStore.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -83,23 +85,20 @@ void MDSMonitor::create_initial()
 
 void MDSMonitor::update_from_paxos()
 {
-  version_t paxosv = paxos->get_version();
-  if (paxosv == mdsmap.epoch)
+  version_t version = get_version();
+  if (version == mdsmap.epoch)
     return;
-  assert(paxosv >= mdsmap.epoch);
+  assert(version >= mdsmap.epoch);
 
-  dout(10) << "update_from_paxos paxosv " << paxosv 
+  dout(10) << __func__ << " version " << version
 	   << ", my e " << mdsmap.epoch << dendl;
 
   // read and decode
   mdsmap_bl.clear();
-  bool success = paxos->read(paxosv, mdsmap_bl);
-  assert(success);
-  dout(10) << "update_from_paxos  got " << paxosv << dendl;
+  get_version(version, mdsmap_bl);
+  assert(mdsmap_bl.length() > 0);
+  dout(10) << __func__ << " got " << version << dendl;
   mdsmap.decode(mdsmap_bl);
-
-  // save as 'latest', too.
-  paxos->stash_latest(paxosv, mdsmap_bl);
 
   // new map
   dout(4) << "new map" << dendl;
@@ -116,7 +115,7 @@ void MDSMonitor::create_pending()
   dout(10) << "create_pending e" << pending_mdsmap.epoch << dendl;
 }
 
-void MDSMonitor::encode_pending(bufferlist &bl)
+void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
   dout(10) << "encode_pending e" << pending_mdsmap.epoch << dendl;
 
@@ -125,8 +124,13 @@ void MDSMonitor::encode_pending(bufferlist &bl)
   //print_map(pending_mdsmap);
 
   // apply to paxos
-  assert(paxos->get_version() + 1 == pending_mdsmap.epoch);
-  pending_mdsmap.encode(bl);
+  assert(get_version() + 1 == pending_mdsmap.epoch);
+  bufferlist mdsmap_bl;
+  pending_mdsmap.encode(mdsmap_bl);
+
+  /* put everything in the transaction */
+  put_version(t, pending_mdsmap.epoch, mdsmap_bl);
+  put_last_committed(t, pending_mdsmap.epoch);
 }
 
 void MDSMonitor::update_logger()
@@ -519,7 +523,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       (!session->caps.get_allow_all() &&
        !session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R) &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
 
@@ -555,7 +559,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       MDSMap *p = &mdsmap;
       if (epoch) {
 	bufferlist b;
-	mon->store->get_bl_sn_safe(b, "mdsmap", epoch);
+	get_version(epoch, b);
 	if (!b.length()) {
 	  p = 0;
 	  r = -ENOENT;
@@ -597,7 +601,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	}
 	epoch_t e = l;
 	bufferlist b;
-	mon->store->get_bl_sn_safe(b,"mdsmap",e);
+	get_version(e, b);
 	if (!b.length()) {
 	  r = -ENOENT;
 	} else {
@@ -622,7 +626,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	for (map<uint64_t, MDSMap::mds_info_t>::const_iterator i = mds_info.begin();
 	     i != mds_info.end();
 	     ++i) {
-	  mon->send_command(i->second.get_inst(), m->cmd, paxos->get_version());
+	  mon->send_command(i->second.get_inst(), m->cmd, get_version());
 	  r = 0;
 	}
 	if (r == -ENOENT) {
@@ -636,7 +640,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	m->cmd.erase(m->cmd.begin()); //done with target num now
 	if (!errno && who >= 0) {
 	  if (mdsmap.is_up(who)) {
-	    mon->send_command(mdsmap.get_inst(who), m->cmd, paxos->get_version());
+	    mon->send_command(mdsmap.get_inst(who), m->cmd, get_version());
 	    r = 0;
 	    ss << "ok";
 	  } else {
@@ -666,7 +670,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, paxos->get_version());
+    mon->reply_command(m, r, rs, rdata, get_version());
     return true;
   } else
     return false;
@@ -712,7 +716,7 @@ int MDSMonitor::cluster_fail(std::ostream &ss)
     ss << "mdsmap must be marked DOWN first ('mds cluster_down')";
     return -EPERM;
   }
-  if (pending_mdsmap.up.size() && !mon->osdmon()->paxos->is_writeable()) {
+  if (pending_mdsmap.up.size() && !mon->osdmon()->is_writeable()) {
     ss << "osdmap not writeable, can't blacklist up mds's";
     return -EAGAIN;
   }
@@ -752,7 +756,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       (!session->caps.get_allow_all() &&
        !session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_W) &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
 
@@ -802,7 +806,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
 	pending_mdsmap = map;
 	string rs = "set mds map";
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       } else
 	ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -824,7 +828,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
 	string rs;
 	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       }
     }
@@ -849,7 +853,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "removed mds gid " << gid;
 	string rs;
 	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       }
     }
@@ -862,7 +866,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "removed failed mds." << w;
       string rs;
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd[1] == "cluster_fail") {
@@ -943,7 +947,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 	string rs;
 	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       }
     }    
@@ -956,11 +960,11 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (r >= 0) {
     // success.. delay reply
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs, paxos->get_version()));
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs, get_version()));
     return true;
   } else {
     // reply immediately
-    mon->reply_command(m, r, rs, rdata, paxos->get_version());
+    mon->reply_command(m, r, rs, rdata, get_version());
     return false;
   }
 }
@@ -995,8 +999,7 @@ void MDSMonitor::tick()
 {
   // make sure mds's are still alive
   // ...if i am an active leader
-  if (!paxos->is_active())
-    return;
+  if (!is_active()) return;
 
   update_from_paxos();
   dout(10) << mdsmap << dendl;
@@ -1050,7 +1053,7 @@ void MDSMonitor::tick()
     }
   }
 
-  if (mon->osdmon()->paxos->is_writeable()) {
+  if (mon->osdmon()->is_writeable()) {
 
     bool propose_osdmap = false;
 
@@ -1255,7 +1258,7 @@ void MDSMonitor::do_stop()
 {
   // hrm...
   if (!mon->is_leader() ||
-      !paxos->is_active()) {
+      !is_active()) {
     dout(0) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
     return;
   }

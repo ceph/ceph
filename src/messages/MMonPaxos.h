@@ -49,7 +49,6 @@ class MMonPaxos : public Message {
 
   epoch_t epoch;   // monitor epoch
   __s32 op;          // paxos op
-  __s32 machine_id;  // which state machine?
 
   version_t first_committed;  // i've committed to
   version_t last_committed;  // i've committed to
@@ -65,10 +64,10 @@ class MMonPaxos : public Message {
   map<version_t,bufferlist> values;
 
   MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
-  MMonPaxos(epoch_t e, int o, int mid, utime_t now) : 
+  MMonPaxos(epoch_t e, int o, utime_t now) : 
     Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e),
-    op(o), machine_id(mid),
+    op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
     sent_timestamp(now),
     latest_version(0) {
@@ -81,8 +80,7 @@ public:
   const char *get_type_name() const { return "paxos"; }
   
   void print(ostream& out) const {
-    out << "paxos(" << get_paxos_name(machine_id)
-	<< " " << get_opname(op) 
+    out << "paxos(" << get_opname(op) 
 	<< " lc " << last_committed
 	<< " fc " << first_committed
 	<< " pn " << pn << " opn " << uncommitted_pn;
@@ -96,7 +94,6 @@ public:
       header.version = 0;
     ::encode(epoch, payload);
     ::encode(op, payload);
-    ::encode(machine_id, payload);
     ::encode(first_committed, payload);
     ::encode(last_committed, payload);
     ::encode(pn_from, payload);
@@ -113,7 +110,6 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(op, p);
-    ::decode(machine_id, p);
     ::decode(first_committed, p);
     ::decode(last_committed, p);
     ::decode(pn_from, p);   

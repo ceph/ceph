@@ -22,8 +22,9 @@ using namespace std;
 #include "include/ceph_features.h"
 #include "include/types.h"
 #include "msg/Messenger.h"
-#include "PaxosService.h"
+#include "mon/PaxosService.h"
 #include "mon/Monitor.h"
+#include "mon/MonitorDBStore.h"
 
 class MMonCommand;
 class MAuth;
@@ -131,7 +132,8 @@ private:
   bool prepare_global_id(MMonGlobalID *m);
   void increase_max_global_id();
   uint64_t assign_global_id(MAuth *m, bool should_increase_max);
-  void encode_pending(bufferlist &bl);  // propose pending update to peers
+  // propose pending update to peers
+  void encode_pending(MonitorDBStore::Transaction *t);
 
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
@@ -143,7 +145,10 @@ private:
 
   void check_rotate();
  public:
-  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0), max_global_id(0), last_allocated_id(0) {}
+  AuthMonitor(Monitor *mn, Paxos *p, const string& service_name)
+    : PaxosService(mn, p, service_name), last_rotating_ver(0),
+      max_global_id(0), last_allocated_id(0) {}
+
   void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions
