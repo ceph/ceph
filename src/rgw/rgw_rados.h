@@ -29,7 +29,7 @@ static inline void get_obj_bucket_and_oid_key(rgw_obj& obj, rgw_bucket& bucket, 
   prepend_bucket_marker(bucket, obj.key, key);
 }
 
-struct RGWUsageInfo {
+struct RGWUsageBatch {
   map<utime_t, rgw_usage_log_entry> m;
 
   void insert(utime_t& t, rgw_usage_log_entry& entry, bool *account) {
@@ -320,7 +320,7 @@ public:
   int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
 
   // log bandwidth info
-  int log_usage(map<rgw_user_bucket, RGWUsageInfo>& usage_info);
+  int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info);
   int read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
   int trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch);
