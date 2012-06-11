@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    all:
-      - suites/tiobench.sh
+    clients:
+      all:
+        - suites/tiobench.sh

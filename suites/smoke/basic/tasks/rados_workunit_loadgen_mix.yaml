@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    all:
-      - rados/load-gen-mix.sh
+    clients:
+      all:
+        - rados/load-gen-mix.sh

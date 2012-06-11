@@ -3,5 +3,6 @@ tasks:
 - rbd:
     all:
 - workunit:
-    all:
-      - suites/dbench.sh
+    clients:
+      all:
+        - suites/dbench.sh

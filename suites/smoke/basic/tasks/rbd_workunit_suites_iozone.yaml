@@ -4,5 +4,6 @@ tasks:
     all:
       image_size: 20480
 - workunit:
-    all:
-      - suites/iozone.sh
+    clients:
+      all:
+        - suites/iozone.sh

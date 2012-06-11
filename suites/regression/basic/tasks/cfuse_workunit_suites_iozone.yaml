@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - ceph-fuse: [client.0]
 - workunit:
-    all:
-      - suites/iozone.sh
+    clients:
+      all:
+        - suites/iozone.sh

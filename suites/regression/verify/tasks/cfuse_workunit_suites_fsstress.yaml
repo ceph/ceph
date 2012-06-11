@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    all:
-      - suites/fsstress.sh
+    clients:
+      all:
+        - suites/fsstress.sh

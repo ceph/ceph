@@ -4,5 +4,6 @@ tasks:
     all:
       image_size: 20480
 - workunit:
-    all:
-      - suites/ffsb.sh
+    clients:
+      all:
+        - suites/ffsb.sh

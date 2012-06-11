@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    all:
-      - suites/dbench.sh
+    clients:
+      all:
+        - suites/dbench.sh

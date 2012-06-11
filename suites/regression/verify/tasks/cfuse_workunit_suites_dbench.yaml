@@ -6,5 +6,6 @@ tasks:
         debug ms: 0/10
 - ceph-fuse:
 - workunit:
-    all:
-      - suites/dbench.sh
+    clients:
+      all:
+        - suites/dbench.sh

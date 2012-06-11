@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    client.0:
-      - rbd/copy.sh
+    clients:
+      client.0:
+        - rbd/copy.sh

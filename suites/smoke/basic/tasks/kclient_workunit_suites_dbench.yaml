@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - kclient:
 - workunit:
-    all:
-      - suites/dbench.sh
+    clients:
+      all:
+        - suites/dbench.sh

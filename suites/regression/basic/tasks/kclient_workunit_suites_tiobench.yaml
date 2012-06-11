@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - kclient:
 - workunit:
-    all:
-      - suites/tiobench.sh
+    clients:
+      all:
+        - suites/tiobench.sh

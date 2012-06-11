@@ -6,5 +6,6 @@ tasks:
         debug ms: 1
 - kclient:
 - workunit:
-    all:
-      - misc
+    clients:
+      all:
+        - misc

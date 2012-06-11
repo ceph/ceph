@@ -3,5 +3,6 @@ tasks:
 - rbd:
     all:
 - workunit:
-    all:
-      - suites/fsx.sh
+    clients:
+      all:
+        - suites/fsx.sh

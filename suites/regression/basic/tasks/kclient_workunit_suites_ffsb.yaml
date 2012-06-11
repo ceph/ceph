@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - kclient:
 - workunit:
-    all:
-      - suites/ffsb.sh
+    clients:
+      all:
+        - suites/ffsb.sh

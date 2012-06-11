@@ -2,5 +2,6 @@ tasks:
 - ceph:
 - kclient:
 - workunit:
-    all:
-      - suites/pjd.sh
+    clients:
+      all:
+        - suites/pjd.sh

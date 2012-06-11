@@ -2,4 +2,5 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    all: [misc/trivial_sync.sh]
+    clients:
+      all: [misc/trivial_sync.sh]

@@ -18,5 +18,6 @@ tasks:
     chance_down: .5
 - ceph-fuse:
 - workunit:
-    all:
-    - rados/load-gen-mix-small.sh
+    clients:
+      all:
+      - rados/load-gen-mix-small.sh

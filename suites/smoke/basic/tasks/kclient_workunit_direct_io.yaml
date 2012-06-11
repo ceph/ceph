@@ -2,6 +2,6 @@ tasks:
 - ceph:
 - kclient:
 - workunit:
-    all:
-      - direct_io
-
+    clients:
+      all:
+        - direct_io

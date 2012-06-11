@@ -1,5 +1,6 @@
 tasks:
 - ceph-fuse:
 - workunit:
-    client.0:
-      - rados/test.sh
+    clients:
+      client.0:
+        - rados/test.sh

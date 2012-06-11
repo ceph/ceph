@@ -3,4 +3,5 @@ tasks:
 - rbd:
     all:
 - workunit:
-    all: [misc/trivial_sync.sh]
+    clients:
+      all: [misc/trivial_sync.sh]

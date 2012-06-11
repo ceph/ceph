@@ -3,5 +3,6 @@ tasks:
 - rbd:
     all:
 - workunit:
-    all:
-      - kernel_untar_build.sh
+    clients:
+      all:
+        - kernel_untar_build.sh

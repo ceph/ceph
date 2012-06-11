@@ -3,5 +3,6 @@ tasks:
 - rbd:
     all:
 - workunit:
-    all:
-      - suites/fsstress.sh
+    clients:
+      all:
+        - suites/fsstress.sh

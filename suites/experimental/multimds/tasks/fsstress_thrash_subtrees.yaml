@@ -8,6 +8,7 @@ tasks:
         mds verify scatter: 1
 - ceph-fuse:
 - workunit:
-    client.0:
-      - suites/fsstress.sh
+    clients:
+      client.0:
+        - suites/fsstress.sh
 
