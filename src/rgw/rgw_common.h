@@ -250,9 +250,10 @@ protected:
   void init(CephContext *cct, RGWEnv * env);
 public:
   RGWConf() :
-    enable_ops_log(1) {}
+    enable_ops_log(1), enable_usage_log(1) {}
 
   int enable_ops_log;
+  int enable_usage_log;
 };
 
 enum http_op {
@@ -544,6 +545,7 @@ struct req_state {
    uint64_t bytes_received; // data received
    uint64_t obj_size;
    bool enable_ops_log;
+   bool enable_usage_log;
    uint32_t perm_mask;
    utime_t header_time;
 
