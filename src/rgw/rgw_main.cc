@@ -428,8 +428,12 @@ int main(int argc, const char **argv)
   init_timer.shutdown();
   mutex.Unlock();
 
+  rgw_log_usage_init(g_ceph_context);
+
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
   process.run();
+
+  rgw_log_usage_finalize();
 
   rgw_perf_stop(g_ceph_context);
 
