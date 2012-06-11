@@ -1,4 +1,5 @@
 import logging
+import pipes
 import os
 
 from teuthology import misc as teuthology
@@ -17,24 +18,42 @@ def task(ctx, config):
         - ceph:
         - cfuse: [client.0]
         - workunit:
-            client.0: [direct_io, xattrs.sh]
-            client.1: [snaps]
+            clients:
+              client.0: [direct_io, xattrs.sh]
+              client.1: [snaps]
 
     You can also run a list of workunits on all clients:
         tasks:
         - ceph:
         - cfuse:
         - workunit:
-            all: [direct_io, xattrs.sh, snaps]
+            clients:
+              all: [direct_io, xattrs.sh, snaps]
 
     If you have an "all" section it will run all the workunits
     on each client simultaneously, AFTER running any workunits specified
     for individual clients. (This prevents unintended simultaneous runs.)
+
+    To customize tests, you can specify environment variables as a dict::
+
+        tasks:
+        - ceph:
+        - cfuse:
+        - workunit:
+            clients:
+              all: [snaps]
+            env:
+              FOO: bar
+              BAZ: quux
     """
     assert isinstance(config, dict)
-
+    assert isinstance(config.get('clients'), dict), \
+        'configuration must contain a dictionary of clients'
+    if config.get('env') is not None:
+        assert isinstance(config['env'], dict), 'env must be a dictionary'
+    clients = config['clients']
     log.info('Making a separate scratch dir for every client...')
-    for role in config.iterkeys():
+    for role in clients.iterkeys():
         assert isinstance(role, basestring)
         if role == "all":
             continue
@@ -43,15 +62,15 @@ def task(ctx, config):
         _make_scratch_dir(ctx, role)
     all_spec = False #is there an all grouping?
     with parallel() as p:
-        for role, tests in config.iteritems():
+        for role, tests in clients.iteritems():
             if role != "all":
-                p.spawn(_run_tests, ctx, role, tests)
+                p.spawn(_run_tests, ctx, role, tests, config.get('env'))
             else:
                 all_spec = True
 
     if all_spec:
         all_tasks = config["all"]
-        _spawn_on_all_clients(ctx, all_tasks)
+        _spawn_on_all_clients(ctx, all_tasks, config.get('env'))
 
 def _make_scratch_dir(ctx, role):
     PREFIX = 'client.'
@@ -78,7 +97,7 @@ def _make_scratch_dir(ctx, role):
             ],
         )
 
-def _spawn_on_all_clients(ctx, tests):
+def _spawn_on_all_clients(ctx, tests, env):
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
     for client in client_generator:
@@ -89,9 +108,9 @@ def _spawn_on_all_clients(ctx, tests):
     for unit in tests:
         with parallel() as p:
             for remote, role in client_remotes:
-                p.spawn(_run_tests, ctx, role, [unit])
+                p.spawn(_run_tests, ctx, role, [unit], env)
 
-def _run_tests(ctx, role, tests):
+def _run_tests(ctx, role, tests, env):
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
@@ -148,19 +167,24 @@ def _run_tests(ctx, role, tests):
                 raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
             for workunit in to_run:
                 log.info('Running workunit %s...', workunit)
-                remote.run(
-                    logger=log.getChild(role),
-                    args=[
-                        'mkdir', '--', scratch_tmp,
-                        run.Raw('&&'),
-                        'cd', '--', scratch_tmp,
-                        run.Raw('&&'),
-                        run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
-                        run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
-                        run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
-                        run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
-                        run.Raw('CEPH_ID="{id}"'.format(id=id_)),
-                        run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.7/dist-packages:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
+                args = [
+                    'mkdir', '--', scratch_tmp,
+                    run.Raw('&&'),
+                    'cd', '--', scratch_tmp,
+                    run.Raw('&&'),
+                    run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
+                    run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
+                    run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
+                    run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
+                    run.Raw('CEPH_ID="{id}"'.format(id=id_)),
+                    run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.7/dist-packages:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
+                    ]
+                if env is not None:
+                    for var, val in env.iteritems():
+                        quoted_val = pipes.quote(val)
+                        env_arg = '{var}={val}'.format(var=var, val=quoted_val)
+                        args.append(run.Raw(env_arg))
+                args.extend([
                         '/tmp/cephtest/enable-coredump',
                         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                         '/tmp/cephtest/archive/coverage',
@@ -170,7 +194,10 @@ def _run_tests(ctx, role, tests):
                             ),
                         run.Raw('&&'),
                         'rm', '-rf', '--', scratch_tmp,
-                        ],
+                        ])
+                remote.run(
+                    logger=log.getChild(role),
+                    args=args,
                     )
     finally:
         remote.run(
