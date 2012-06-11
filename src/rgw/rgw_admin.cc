@@ -1424,6 +1424,8 @@ next:
           formatter->dump_int("epoch", entry.epoch);
           formatter->dump_int("bytes_sent", entry.bytes_sent);
           formatter->dump_int("bytes_received", entry.bytes_received);
+          formatter->dump_int("ops", entry.ops);
+          formatter->dump_int("successful_ops", entry.successful_ops);
           formatter->close_section(); // bucket
           formatter->flush(cout);
         }
@@ -1448,6 +1450,8 @@ next:
         formatter->dump_string("user", siter->first);
         formatter->dump_int("bytes_sent", entry.bytes_sent);
         formatter->dump_int("bytes_received", entry.bytes_received);
+        formatter->dump_int("ops", entry.ops);
+        formatter->dump_int("successful_ops", entry.successful_ops);
         formatter->close_section();
         formatter->flush(cout);
       }

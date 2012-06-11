@@ -172,6 +172,10 @@ static void log_usage(struct req_state *s)
 
   rgw_usage_log_entry entry(s->bucket_owner, s->bucket.name, s->bytes_sent, s->bytes_received);
 
+  entry.ops = 1;
+  if (!s->err.is_err())
+    entry.successful_ops = 1;
+
   utime_t ts = ceph_clock_now(s->cct);
 
   usage_logger->insert(ts, entry);

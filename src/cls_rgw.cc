@@ -481,8 +481,7 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
       if (ret < 0)
         return ret;
       CLS_LOG("rgw_user_usage_log_add aggregating existing bucket\n");
-      entry.bytes_sent += e.bytes_sent;
-      entry.bytes_received += e.bytes_received;
+      entry.aggregate(e);
     }
 
     bufferlist new_record_bl;
@@ -590,11 +589,7 @@ static int usage_log_read_cb(cls_method_context_t hctx, const string& key, rgw_u
   map<rgw_user_bucket, rgw_usage_log_entry> *usage = (map<rgw_user_bucket, rgw_usage_log_entry> *)param;
   rgw_user_bucket ub(entry.owner, entry.bucket);
   rgw_usage_log_entry& le = (*usage)[ub];
-  le.bytes_sent += entry.bytes_sent;
-  le.bytes_received += entry.bytes_received;
-  le.epoch = entry.epoch;
-  le.owner = entry.owner;
-  le.bucket = entry.bucket;
+  le.aggregate(entry);
  
   return 0;
 }
