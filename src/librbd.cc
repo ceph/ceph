@@ -160,6 +160,7 @@ namespace librbd {
     IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;
     bool needs_refresh;
+    int refresh_seq;
     Mutex refresh_lock;
     Mutex lock; // protects access to snapshot and header information
     Mutex cache_lock; // used as client_lock for the ObjectCacher
@@ -182,6 +183,7 @@ namespace librbd {
 	snap_exists(true),
 	name(imgname),
 	needs_refresh(true),
+	refresh_seq(0),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
 	lock("librbd::ImageCtx::lock"),
 	cache_lock("librbd::ImageCtx::cache_lock"),
@@ -652,6 +654,7 @@ void WatchCtx::notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
   if (valid) {
     Mutex::Locker lictx(ictx->refresh_lock);
     ictx->needs_refresh = true;
+    ++ictx->refresh_seq;
     ictx->perfcounter->inc(l_librbd_notify);
   }
 }
@@ -835,6 +838,7 @@ int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ic
     assert(ictx->lock.is_locked());
     ictx->refresh_lock.Lock();
     ictx->needs_refresh = true;
+    ++ictx->refresh_seq;
     ictx->refresh_lock.Unlock();
   }
 
@@ -1345,7 +1349,7 @@ int ictx_refresh(ImageCtx *ictx)
   ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
 
   ictx->refresh_lock.Lock();
-  ictx->needs_refresh = false;
+  int refresh_seq = ictx->refresh_seq;
   ictx->refresh_lock.Unlock();
 
   int r;
@@ -1421,9 +1425,6 @@ int ictx_refresh(ImageCtx *ictx)
 
   if (!ictx->snapc.is_valid()) {
     lderr(cct) << "image snap context is invalid!" << dendl;
-    ictx->refresh_lock.Lock();
-    ictx->needs_refresh = true;
-    ictx->refresh_lock.Unlock();
     return -EIO;
   }
 
@@ -1437,6 +1438,12 @@ int ictx_refresh(ImageCtx *ictx)
   }
 
   ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+
+  ictx->refresh_lock.Lock();
+  if (refresh_seq == ictx->refresh_seq) {
+    ictx->needs_refresh = false;
+  }
+  ictx->refresh_lock.Unlock();
 
   return 0;
 }
