@@ -5,5 +5,3 @@ tasks:
     clients:
       client.0:
         - rbd/copy.sh
-    env:
-      RBD_CREATE_ARGS: --new-format
