@@ -483,6 +483,7 @@ public:
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
+  int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
 
   // features
