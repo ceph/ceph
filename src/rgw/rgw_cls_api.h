@@ -317,4 +317,202 @@ struct rgw_cls_list_ret
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_ret)
 
+
+struct rgw_usage_log_entry {
+  string owner;
+  string bucket;
+  uint64_t epoch;
+  uint64_t bytes_sent;
+  uint64_t bytes_received;
+
+  rgw_usage_log_entry() : bytes_sent(0), bytes_received(0) {}
+  rgw_usage_log_entry(string& o, string& b, uint64_t s, uint64_t r) : owner(o), bucket(b), bytes_sent(s), bytes_received(r) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(owner, bl);
+    ::encode(bucket, bl);
+    ::encode(epoch, bl);
+    ::encode(bytes_sent, bl);
+    ::encode(bytes_received, bl);
+    ENCODE_FINISH(bl);
+  }
+
+
+   void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(owner, bl);
+    ::decode(bucket, bl);
+    ::decode(epoch, bl);
+    ::decode(bytes_sent, bl);
+    ::decode(bytes_received, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void aggregate(const rgw_usage_log_entry& e) {
+    if (owner.empty()) {
+      owner = e.owner;
+      bucket = e.bucket;
+      epoch = e.epoch;
+    }
+    bytes_sent += e.bytes_sent;
+    bytes_received += e.bytes_received;
+  }
+};
+WRITE_CLASS_ENCODER(rgw_usage_log_entry)
+
+struct rgw_usage_log_info {
+  vector<rgw_usage_log_entry> entries;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    DECODE_FINISH(bl);
+  }
+
+  rgw_usage_log_info() {}
+};
+WRITE_CLASS_ENCODER(rgw_usage_log_info)
+
+struct rgw_cls_usage_log_add_op {
+  rgw_usage_log_info info;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(info, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(info, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_usage_log_add_op)
+
+struct rgw_cls_usage_log_read_op {
+  uint64_t start_epoch;
+  uint64_t end_epoch;
+  string owner;
+
+  string iter;  // should be empty for the first call, non empty for subsequent calls
+  uint32_t max_entries;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(start_epoch, bl);
+    ::encode(end_epoch, bl);
+    ::encode(owner, bl);
+    ::encode(iter, bl);
+    ::encode(max_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(start_epoch, bl);
+    ::decode(end_epoch, bl);
+    ::decode(owner, bl);
+    ::decode(iter, bl);
+    ::decode(max_entries, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_usage_log_read_op)
+
+struct rgw_user_bucket {
+  string user;
+  string bucket;
+
+  rgw_user_bucket() {}
+  rgw_user_bucket(string &u, string& b) : user(u), bucket(b) {}
+
+  bool operator()(const rgw_user_bucket& ub1, const rgw_user_bucket& ub2) const
+  {
+    int comp = ub1.user.compare(ub2.user);
+    if (comp < 0)
+      return true;
+    else if (!comp)
+      return ub1.bucket.compare(ub2.bucket) < 0;
+  
+    return false;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(user, bl);
+    ::encode(bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(user, bl);
+    ::decode(bucket, bl);
+    DECODE_FINISH(bl);
+  }
+
+  bool operator<(const rgw_user_bucket& ub2) const {
+    int comp = user.compare(ub2.user);
+    if (comp < 0)
+      return true;
+    else if (!comp)
+      return bucket.compare(ub2.bucket) < 0;
+  
+    return false;
+  }
+};
+WRITE_CLASS_ENCODER(rgw_user_bucket)
+
+struct rgw_cls_usage_log_read_ret {
+  map<rgw_user_bucket, rgw_usage_log_entry> usage;
+  bool truncated;
+  string next_iter;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(usage, bl);
+    ::encode(truncated, bl);
+    ::encode(next_iter, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(usage, bl);
+    ::decode(truncated, bl);
+    ::decode(next_iter, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_usage_log_read_ret)
+
+struct rgw_cls_usage_log_trim_op {
+  uint64_t start_epoch;
+  uint64_t end_epoch;
+  string user;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(start_epoch, bl);
+    ::encode(end_epoch, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(start_epoch, bl);
+    ::decode(end_epoch, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_usage_log_trim_op)
+
 #endif
