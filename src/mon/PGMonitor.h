@@ -30,6 +30,7 @@ using namespace std;
 #include "include/utime.h"
 #include "msg/Messenger.h"
 #include "common/config.h"
+#include "mon/MonitorDBStore.h"
 
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
@@ -52,8 +53,8 @@ private:
   void update_from_paxos();
   void handle_osd_timeouts();
   void create_pending();  // prepare a new pending
-  void encode_pending(bufferlist &bl);  // propose pending update to peers
-
+  // propose pending update to peers
+  void encode_pending(MonitorDBStore::Transaction *t);
   void update_logger();
 
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
@@ -125,8 +126,9 @@ private:
 			  vector<const char*>& args) const;
 
 public:
-  PGMonitor(Monitor *mn, Paxos *p);
-  virtual ~PGMonitor();
+  PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
+  : PaxosService(mn, p, service_name), need_check_down_pgs(false) { }
+  ~PGMonitor() { }
 
   virtual void on_restart();
 

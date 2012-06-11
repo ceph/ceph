@@ -15,32 +15,29 @@
 #include "PaxosService.h"
 #include "common/Clock.h"
 #include "Monitor.h"
+#include "MonitorDBStore.h"
+
 
 #include "common/config.h"
 #include "include/assert.h"
+#include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, paxos, paxos->machine_id)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, int machine_id) {
+#define dout_prefix _prefix(_dout, mon, paxos, service_name)
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string service_name) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
-		<< ").paxosservice(" << get_paxos_name(machine_id) << ") ";
+		<< ").paxosservice(" << service_name << ") ";
 }
-
-const char *PaxosService::get_machine_name()
-{
-  return paxos->get_machine_name();
-}
-
 
 bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
   // make sure our map is readable and up to date
-  if (!paxos->is_readable(m->version)) {
+  if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
-    paxos->wait_for_readable(new C_RetryMessage(this, m));
+    wait_for_readable(new C_RetryMessage(this, m), m->version);
     return true;
   }
 
@@ -58,9 +55,9 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   }
   
   // writeable?
-  if (!paxos->is_writeable()) {
+  if (!is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
-    paxos->wait_for_writeable(new C_RetryMessage(this, m));
+    wait_for_writeable(new C_RetryMessage(this, m));
     return true;
   }
 
@@ -90,7 +87,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
 bool PaxosService::should_propose(double& delay)
 {
   // simple default policy: quick startup, then some damping.
-  if (paxos->last_committed <= 1)
+  if (get_last_committed() <= 1)
     delay = 0.0;
   else {
     utime_t now = ceph_clock_now(g_ceph_context);
@@ -108,7 +105,10 @@ void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
-  assert(mon->is_leader() && paxos->is_active());
+  assert(mon->is_leader());
+  assert(is_active());
+  if (!is_active())
+    return;
 
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);
@@ -123,13 +123,23 @@ void PaxosService::propose_pending()
    *	   to encode whatever is pending on the implementation class into a
    *	   bufferlist, so we can then propose that as a value through Paxos.
    */
+  MonitorDBStore::Transaction t;
   bufferlist bl;
-  encode_pending(bl);
+  encode_pending(&t);
   have_pending = false;
 
+  JSONFormatter f(true);
+  t.dump(&f);
+  dout(30) << __func__ << " transaction dump:\n";
+  f.flush(*_dout);
+  *_dout << dendl;
+  
+
+  t.encode(bl);
+
   // apply to paxos
-  paxos->wait_for_commit_front(new C_Active(this));
-  paxos->propose_new_value(bl);
+  proposing.set(1);
+  paxos->propose_new_value(bl, new C_Committed(this));
 }
 
 
@@ -141,6 +151,8 @@ void PaxosService::restart()
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
+  // ignore any callbacks waiting for us to finish our proposal
+  waiting_for_finished_proposal.clear();
 
   on_restart();
 }
@@ -158,19 +170,23 @@ void PaxosService::election_finished()
     discard_pending();
     have_pending = false;
   }
+  proposing.set(0);
+
+  // ignore any callbacks waiting for us to finish our proposal
+  waiting_for_finished_proposal.clear();
 
   // make sure we update our state
-  if (paxos->is_active())
+  if (is_active())
     _active();
   else
-    paxos->wait_for_active(new C_Active(this));
+    wait_for_active(new C_Active(this));
 }
 
 void PaxosService::_active()
 {
-  if (!paxos->is_active()) {
+  if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
-    paxos->wait_for_active(new C_Active(this));
+    wait_for_active(new C_Active(this));
     return;
   }
   dout(10) << "_active" << dendl;
@@ -179,35 +195,103 @@ void PaxosService::_active()
   update_from_paxos();
 
   // create pending state?
-  if (mon->is_leader() && paxos->is_active()) {
+  if (mon->is_leader() && is_active()) {
     dout(7) << "_active creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
       have_pending = true;
     }
 
-    if (paxos->get_version() == 0) {
+    if (get_version() == 0) {
       // create initial state
       create_initial();
       propose_pending();
       return;
     }
+  } else {
+    if (!mon->is_leader()) {
+      dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
+    } else if (!is_active()) {
+      dout(7) << __func__ << " we are not active, hence we propose nothing!" << dendl;
+    }
   }
 
+  /* wake people up before calling on_active(). We don't know how long we'll be
+   * on the service's on_active(), and we really should wake people up!
+   */
+  wakeup_proposing_waiters();
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
-  if (paxos->is_active())
+  if (is_active())
     on_active();
 }
 
 
 void PaxosService::shutdown()
 {
-  paxos->cancel_events();
-  paxos->shutdown();
+  cancel_events();
 
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
+  // ignore any callbacks waiting for us to finish our proposal
+  waiting_for_finished_proposal.clear();
 }
+
+void PaxosService::put_version(MonitorDBStore::Transaction *t,
+			       const string& prefix, version_t ver,
+			       bufferlist& bl)
+{
+  ostringstream os;
+  os << ver;
+  string key = mon->store->combine_strings(prefix, os.str());
+  t->put(get_service_name(), key, bl);
+}
+
+int PaxosService::get_version(const string& prefix, version_t ver,
+			      bufferlist& bl)
+{
+  ostringstream os;
+  os << ver;
+  string key = mon->store->combine_strings(prefix, os.str());
+  return mon->store->get(get_service_name(), key, bl);
+}
+
+void PaxosService::wakeup_proposing_waiters()
+{
+  finish_contexts(g_ceph_context, waiting_for_finished_proposal);
+}
+
+void PaxosService::trim_to(version_t first, bool force)
+{
+  version_t first_committed = get_first_committed();
+  version_t latest_full = get_version("full", "latest");
+
+  string latest_key = mon->store->combine_strings("full", latest_full);
+  bool has_full = mon->store->exists(get_service_name(), latest_key);
+
+  dout(10) << __func__ << " " << first << " (was " << first_committed << ")"
+	   << ", latest full " << latest_full << dendl;
+
+  if (first_committed >= first)
+    return;
+
+  MonitorDBStore::Transaction t;
+  while ((first_committed < first)
+      && (force || (first_committed < latest_full))) {
+    dout(20) << __func__ << first_committed << dendl;
+    t.erase(get_service_name(), first_committed);
+
+    if (has_full) {
+      latest_key = mon->store->combine_strings("full", first_committed);
+      if (mon->store->exists(get_service_name(), latest_key))
+	t.erase(get_service_name(), latest_key);
+    }
+
+    first_committed++;
+  }
+  put_first_committed(&t, first_committed);
+  mon->store->apply_transaction(t);
+}
+
