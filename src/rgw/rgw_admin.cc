@@ -54,6 +54,8 @@ void _usage()
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
   cerr << "                             + bucket-id)\n";
   cerr << "  log rm                     remove log object\n";
+  cerr << "  usage show                 show usage (by user, date range)\n";
+  cerr << "  usage trim                 show usage (by user, date range)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
@@ -73,6 +75,8 @@ void _usage()
   cerr << "   --pool=<pool>\n";
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
+  cerr << "   --start-date=<yyyy-mm-dd>\n";
+  cerr << "   --end-date=<yyyy-mm-dd>\n";
   cerr << "   --time=<HH:MM:SS>\n";
   cerr << "   --bucket-id=<bucket-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
@@ -85,6 +89,7 @@ void _usage()
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
+  cerr << "   --yes-i-really-mean-it    required for certain operations\n";
   generic_client_usage();
 }
 
@@ -124,6 +129,8 @@ enum {
   OPT_LOG_LIST,
   OPT_LOG_SHOW,
   OPT_LOG_RM,
+  OPT_USAGE_SHOW,
+  OPT_USAGE_TRIM,
   OPT_TEMP_REMOVE,
 };
 
@@ -195,6 +202,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "log") == 0 ||
+      strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "temp") == 0) {
     *need_more = true;
     return 0;
@@ -250,6 +258,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_LOG_SHOW;
     if (strcmp(cmd, "rm") == 0)
       return OPT_LOG_RM;
+  } else if (strcmp(prev_cmd, "usage") == 0) {
+    if (strcmp(cmd, "show") == 0)
+      return OPT_USAGE_SHOW;
+    if (strcmp(cmd, "trim") == 0)
+      return OPT_USAGE_TRIM;
   } else if (strcmp(prev_cmd, "temp") == 0) {
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
@@ -500,6 +513,19 @@ enum ObjectKeyType {
   KEY_TYPE_S3,
 };
 
+static void parse_date(string& date, uint64_t *epoch)
+{
+  struct tm tm;
+
+  memset(&tm, 0, sizeof(tm));
+
+  const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
+  if (p && !*p) { // success!
+    time_t t = timegm(&tm);
+    *epoch = (uint64_t)t;
+  }
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -512,6 +538,7 @@ int main(int argc, char **argv)
   std::string user_id, access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
   std::string date, time, subuser, access, format;
+  std::string start_date, end_date;
   std::string key_type_str;
   ObjectKeyType key_type = KEY_TYPE_S3;
   rgw_bucket bucket;
@@ -537,6 +564,7 @@ int main(int argc, char **argv)
   int show_log_sum = true;
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
+  int yes_i_really_mean_it = false;
 
   std::string val;
   std::ostringstream errs;
@@ -593,6 +621,12 @@ int main(int argc, char **argv)
       auid = tmp;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", (char*)NULL)) {
       date = val;
+      if (end_date.empty())
+        end_date = date;
+    } else if (ceph_argparse_witharg(args, i, &val, "--start-date", (char*)NULL)) {
+      start_date = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--end-date", (char*)NULL)) {
+      end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--time", (char*)NULL)) {
       time = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
@@ -611,6 +645,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
       // do nothing
     } else {
       ++i;
@@ -1327,6 +1363,120 @@ next:
       return 1;
     }
   } 
+
+  if (opt_cmd == OPT_USAGE_SHOW) {
+    uint64_t start_epoch = 0;
+    uint64_t end_epoch = (uint64_t)-1;
+
+    parse_date(start_date, &start_epoch);
+    parse_date(end_date, &end_epoch);
+
+    uint32_t max_entries = 1000;
+
+    bool is_truncated = true;
+
+    RGWUsageIter usage_iter;
+
+    map<rgw_user_bucket, rgw_usage_log_entry> usage;
+
+    formatter->open_object_section("usage");
+    if (show_log_entries) {
+      formatter->open_array_section("entries");
+    }
+    string last_owner;
+    bool user_section_open = false;
+    map<string, rgw_usage_log_entry> summary_map;
+    while (is_truncated) {
+      int ret = rgwstore->read_usage(user_id, start_epoch, end_epoch, max_entries,
+                                     &is_truncated, usage_iter, usage);
+
+      if (ret == -ENOENT) {
+        ret = 0;
+        is_truncated = false;
+      }
+
+      if (ret < 0) {
+        cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
+        break;
+      }
+
+      map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
+      for (iter = usage.begin(); iter != usage.end(); ++iter) {
+        const rgw_user_bucket& ub = iter->first;
+        const rgw_usage_log_entry& entry = iter->second;
+
+        if (show_log_entries) {
+          if (ub.user.compare(last_owner) != 0) {
+            if (user_section_open) {
+              formatter->close_section();
+              formatter->close_section();
+            }
+            formatter->open_object_section("user");
+            formatter->dump_string("owner", ub.user);
+            formatter->open_array_section("buckets");
+            user_section_open = true;
+            last_owner = ub.user;
+          }
+          formatter->open_object_section("bucket");
+          formatter->dump_string("bucket", ub.bucket);
+          utime_t ut(entry.epoch, 0);
+          ut.gmtime(formatter->dump_stream("time"));
+          formatter->dump_int("epoch", entry.epoch);
+          formatter->dump_int("bytes_sent", entry.bytes_sent);
+          formatter->dump_int("bytes_received", entry.bytes_received);
+          formatter->close_section(); // bucket
+          formatter->flush(cout);
+        }
+
+        summary_map[ub.user].aggregate(entry);
+      }
+    }
+    if (show_log_entries) {
+      if (user_section_open) {
+        formatter->close_section(); // buckets
+        formatter->close_section(); //user
+      }
+      formatter->close_section(); // entries
+    }
+
+    if (show_log_sum) {
+      formatter->open_array_section("summary");
+      map<string, rgw_usage_log_entry>::iterator siter;
+      for (siter = summary_map.begin(); siter != summary_map.end(); ++siter) {
+        const rgw_usage_log_entry& entry = siter->second;
+        formatter->open_object_section("user");
+        formatter->dump_string("user", siter->first);
+        formatter->dump_int("bytes_sent", entry.bytes_sent);
+        formatter->dump_int("bytes_received", entry.bytes_received);
+        formatter->close_section();
+        formatter->flush(cout);
+      }
+
+      formatter->close_section(); // summary
+    }
+
+    formatter->close_section(); // usage
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_USAGE_TRIM) {
+    if (user_id.empty() && !yes_i_really_mean_it) {
+      cerr << "usage trim without user specified will remove *all* users data" << std::endl;
+      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return 1;
+    }
+    uint64_t start_epoch = 0;
+    uint64_t end_epoch = (uint64_t)-1;
+
+    parse_date(start_date, &start_epoch);
+    parse_date(end_date, &end_epoch);
+
+    int ret = rgwstore->trim_usage(user_id, start_epoch, end_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
+      return 1;
+    }   
+  }
 
   return 0;
 }
