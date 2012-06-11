@@ -79,7 +79,7 @@ string render_log_object_name(const string& format,
 /* usage logger */
 class UsageLogger {
   CephContext *cct;
-  map<rgw_user_bucket, RGWUsageInfo> usage_map;
+  map<rgw_user_bucket, RGWUsageBatch> usage_map;
   Mutex lock;
   int32_t num_entries;
   Mutex timer_lock;
@@ -146,7 +146,7 @@ public:
   }
 
   void flush() {
-    map<rgw_user_bucket, RGWUsageInfo> old_map;
+    map<rgw_user_bucket, RGWUsageBatch> old_map;
     lock.Lock();
     old_map.swap(usage_map);
     num_entries = 0;
