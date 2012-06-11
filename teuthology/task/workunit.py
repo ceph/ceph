@@ -69,7 +69,7 @@ def task(ctx, config):
                 all_spec = True
 
     if all_spec:
-        all_tasks = config["all"]
+        all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, all_tasks, config.get('env'))
 
 def _make_scratch_dir(ctx, role):
