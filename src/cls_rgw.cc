@@ -473,7 +473,7 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG(10, "rgw_user_usage_log_add user=%s bucket=%s\n", entry.owner.c_str(), entry.bucket.c_str());
 
     bufferlist record_bl;
-    int ret = cls_cxx_map_read_key(hctx, key_by_time, &record_bl);
+    int ret = cls_cxx_map_get_val(hctx, key_by_time, &record_bl);
     if (ret < 0 && ret != -ENOENT) {
       CLS_LOG(1, "ERROR: rgw_user_usage_log_add(): cls_cxx_map_read_key returned %d\n", ret);
       return -EINVAL;
@@ -489,13 +489,13 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     bufferlist new_record_bl;
     ::encode(entry, new_record_bl);
-    ret = cls_cxx_map_write_key(hctx, key_by_time, &new_record_bl);
+    ret = cls_cxx_map_set_val(hctx, key_by_time, &new_record_bl);
     if (ret < 0)
       return ret;
 
     string key_by_user;
     usage_record_name_by_user(entry.owner, entry.epoch, entry.bucket, key_by_user);
-    ret = cls_cxx_map_write_key(hctx, key_by_user, &new_record_bl);
+    ret = cls_cxx_map_set_val(hctx, key_by_user, &new_record_bl);
     if (ret < 0)
       return ret;
   }
@@ -539,7 +539,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   }
 
   do {
-    int ret = cls_cxx_map_read_keys(hctx, start_key, filter_prefix, NUM_KEYS, &keys);
+    int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, NUM_KEYS, &keys);
     if (ret < 0)
       return ret;
 
