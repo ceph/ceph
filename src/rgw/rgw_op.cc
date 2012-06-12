@@ -1214,6 +1214,12 @@ int RGWCopyObj::init_common()
   attrs[RGW_ATTR_ACL] = aclbl;
   rgw_get_request_metadata(s, attrs);
 
+  if (s->content_type) {
+    bufferlist bl;
+    bl.append(s->content_type, strlen(s->content_type) + 1);
+    attrs[RGW_ATTR_CONTENT_TYPE] = bl;
+  }
+
   return 0;
 }
 
@@ -1237,6 +1243,7 @@ void RGWCopyObj::execute()
                         unmod_ptr,
                         if_match,
                         if_nomatch,
+                        replace_attrs,
                         attrs, RGW_OBJ_CATEGORY_MAIN, &s->err);
 
 done:
@@ -1374,7 +1381,6 @@ int RGWInitMultipart::verify_permission()
 
 void RGWInitMultipart::execute()
 {
-  bufferlist bl;
   bufferlist aclbl;
   map<string, bufferlist> attrs;
   rgw_obj obj;
@@ -1390,6 +1396,7 @@ void RGWInitMultipart::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   if (s->content_type) {
+    bufferlist bl;
     bl.append(s->content_type, strlen(s->content_type) + 1);
     attrs[RGW_ATTR_CONTENT_TYPE] = bl;
   }

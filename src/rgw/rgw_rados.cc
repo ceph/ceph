@@ -1043,13 +1043,9 @@ bool RGWRados::aio_completed(void *handle)
 }
 /**
  * Copy an object.
- * dest_bucket: the bucket to copy into
  * dest_obj: the object to copy into
- * src_bucket: the bucket to copy from
  * src_obj: the object to copy from
- * mod_ptr, unmod_ptr, if_match, if_nomatch: as used in get_obj
- * attrs: these are placed on the new object IN ADDITION to
- *    (or overwriting) any attrs copied from the original object
+ * attrs: if replace_attrs is set then these are placed on the new object
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
@@ -1061,7 +1057,8 @@ int RGWRados::copy_obj(void *ctx,
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               map<string, bufferlist>& attrs,  /* in/out */
+               bool replace_attrs,
+               map<string, bufferlist>& attrs,
                RGWObjCategory category,
                struct rgw_err *err)
 {
@@ -1133,12 +1130,11 @@ int RGWRados::copy_obj(void *ctx,
   }
   manifest.obj_size = ofs;
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    attrset[iter->first] = iter->second;
+  if (replace_attrs) {
+    attrset = attrs;
   }
-  attrs = attrset;
 
-  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, false, NULL, &first_chunk, &manifest);
+  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
 
