@@ -411,13 +411,9 @@ public:
 
   /**
    * Copy an object.
-   * dest_bucket: the bucket to copy into
    * dest_obj: the object to copy into
-   * src_bucket: the bucket to copy from
    * src_obj: the object to copy from
-   * mod_ptr, unmod_ptr, if_match, if_nomatch: as used in get_obj
-   * attrs: these are placed on the new object IN ADDITION to
-   *    (or overwriting) any attrs copied from the original object
+   * attrs: if replace_attrs is set then these are placed on the new object
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
@@ -428,6 +424,7 @@ public:
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
+               bool replace_attrs,
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                struct rgw_err *err);
