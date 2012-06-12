@@ -582,8 +582,10 @@ void ReplicatedPG::calc_trim_to()
   }
 }
 
-ReplicatedPG::ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, const hobject_t& ioid) : 
-  PG(o, _pool, p, oid, ioid), temp_created(false),
+ReplicatedPG::ReplicatedPG(OSD *o, OSDMapRef curmap,
+			   PGPool *_pool, pg_t p, const hobject_t& oid,
+			   const hobject_t& ioid) :
+  PG(o, curmap, _pool, p, oid, ioid), temp_created(false),
   temp_coll(coll_t::make_temp_coll(p)), snap_trimmer_machine(this)
 { 
   snap_trimmer_machine.initiate();
@@ -1053,6 +1055,10 @@ void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
 void ReplicatedPG::do_sub_op(OpRequestRef op)
 {
   MOSDSubOp *m = (MOSDSubOp*)op->request;
+  if (!require_same_or_newer_map(m->map_epoch)) {
+    op_waiters.push_back(op);
+    return;
+  }
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->request << dendl;
 

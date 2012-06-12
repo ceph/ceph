@@ -337,9 +337,9 @@ public:
   /*** PG ****/
 protected:
   OSD *osd;
+  OSDMapRef osdmap_ref;
   PGPool *pool;
 
-  OSDMapRef osdmap_ref;
   OSDMapRef get_osdmap() const {
     assert(is_locked());
     assert(osdmap_ref);
@@ -361,7 +361,10 @@ public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
   void lock(bool no_lockdep = false);
-  void unlock();
+  void unlock() {
+    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+    _lock.Unlock();
+  }
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
    * *_with_map_lock_held assume that the map_lock is already held */
@@ -397,6 +400,7 @@ public:
   }
 
 
+  list<OpRequestRef> op_waiters;
   list<OpRequestRef> op_queue;  // op queue
 
   bool dirty_info, dirty_log;
@@ -799,6 +803,7 @@ public:
   };
   typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
   list<CephPeeringEvtRef> peering_queue;  // op queue
+  list<CephPeeringEvtRef> peering_waiters;
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -1243,8 +1248,9 @@ public:
 
 
  public:  
-  PG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) : 
-    osd(o), pool(_pool),
+  PG(OSD *o, OSDMapRef curmap,
+     PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) :
+    osd(o), osdmap_ref(curmap), pool(_pool),
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
     info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
@@ -1377,6 +1383,9 @@ public:
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
+  }
+  bool require_same_or_newer_map(epoch_t e) {
+    return e <= get_osdmap()->get_epoch();
   }
 
   // recovery bits
