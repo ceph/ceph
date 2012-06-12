@@ -99,6 +99,25 @@ public:
     tv.tv_nsec = t->tv_nsec;
   }
 
+  utime_t round_to_minute() {
+    struct tm bdt;
+    time_t tt = sec();
+    gmtime_r(&tt, &bdt);
+    bdt.tm_sec = 0;
+    tt = mktime(&bdt);
+    return utime_t(tt, 0);
+  }
+
+  utime_t round_to_hour() {
+    struct tm bdt;
+    time_t tt = sec();
+    gmtime_r(&tt, &bdt);
+    bdt.tm_sec = 0;
+    bdt.tm_min = 0;
+    tt = mktime(&bdt);
+    return utime_t(tt, 0);
+  }
+
   // cast to double
   operator double() {
     return (double)sec() + ((double)nsec() / 1000000000.0L);

@@ -404,7 +404,12 @@ OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70)
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
+OPTION(rgw_usage_max_shards, OPT_INT, 32)
+OPTION(rgw_usage_max_user_shards, OPT_INT, 1)
 OPTION(rgw_enable_ops_log, OPT_BOOL, true) // enable logging every rgw operation
+OPTION(rgw_enable_usage_log, OPT_BOOL, true) // enable logging bandwidth usage
+OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pending log data
+OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
 OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
 OPTION(rgw_init_timeout, OPT_INT, 30) // time in seconds

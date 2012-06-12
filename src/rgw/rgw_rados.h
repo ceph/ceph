@@ -29,6 +29,23 @@ static inline void get_obj_bucket_and_oid_key(rgw_obj& obj, rgw_bucket& bucket, 
   prepend_bucket_marker(bucket, obj.key, key);
 }
 
+struct RGWUsageBatch {
+  map<utime_t, rgw_usage_log_entry> m;
+
+  void insert(utime_t& t, rgw_usage_log_entry& entry, bool *account) {
+    bool exists = m.find(t) != m.end();
+    *account = !exists;
+    m[t].aggregate(entry);
+  }
+};
+
+struct RGWUsageIter {
+  string read_iter;
+  uint32_t index;
+
+  RGWUsageIter() : index(0) {}
+};
+
 class RGWAccessListFilter {
 public:
   virtual ~RGWAccessListFilter() {}
@@ -302,6 +319,11 @@ public:
   int log_show_init(const string& name, RGWAccessHandle *handle);
   int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
 
+  // log bandwidth info
+  int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info);
+  int read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+                 bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
+  int trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch);
 
   /**
    * get listing of the objects in a bucket.
@@ -555,6 +577,11 @@ public:
   int complete_update_index_cancel(rgw_bucket& bucket, string& oid, string& tag) {
     return cls_obj_complete_cancel(bucket, tag, oid);
   }
+
+  int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
+  int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+                             string& read_iter, rgw_cls_usage_log_read_ret& result, bool *is_truncated);
+  int cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch);
 
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
