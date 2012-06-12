@@ -55,8 +55,13 @@ struct EntityName
   void set_name(entity_name_t n);
 
   const char* get_type_str() const;
-  bool is_admin() const;
-  uint32_t get_type() const;
+
+  uint32_t get_type() const { return type; }
+  bool is_osd() const { return get_type() == CEPH_ENTITY_TYPE_OSD; }
+  bool is_mds() const { return get_type() == CEPH_ENTITY_TYPE_MDS; }
+  bool is_client() const { return get_type() == CEPH_ENTITY_TYPE_CLIENT; }
+  bool is_mon() const { return get_type() == CEPH_ENTITY_TYPE_MON; }
+
   const char * get_type_name() const;
   const std::string &get_id() const;
   bool has_default_id() const;
