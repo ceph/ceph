@@ -453,7 +453,7 @@ reject:
 		out[outpos] = item;
 		outpos++;
 
-		if (map->choose_tries)
+		if (map->choose_tries && ftotal <= map->choose_local_tries)
 			map->choose_tries[ftotal]++;
 	}
 
