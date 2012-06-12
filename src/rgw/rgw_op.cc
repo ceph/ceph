@@ -533,6 +533,17 @@ int RGWCreateBucket::verify_permission()
   if (!rgw_user_is_authenticated(s->user))
     return -EACCES;
 
+  if (s->user.max_buckets) {
+    RGWUserBuckets buckets;
+    int ret = rgw_read_user_buckets(s->user.user_id, buckets, false);
+    if (ret < 0)
+      return ret;
+
+    if (buckets.count() >= s->user.max_buckets) {
+      return -ERR_TOO_MANY_BUCKETS;
+    }
+  }
+
   return 0;
 }
 
