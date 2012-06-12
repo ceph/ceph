@@ -314,6 +314,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->dump_string("display_name", info.display_name);
   formatter->dump_string("email", info.user_email);
   formatter->dump_int("suspended", (int)info.suspended);
+  formatter->dump_int("max_buckets", (int)info.max_buckets);
 
   // subusers
   formatter->open_array_section("subusers");
@@ -565,6 +566,7 @@ int main(int argc, char **argv)
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
   int yes_i_really_mean_it = false;
+  int max_buckets = -1;
 
   std::string val;
   std::ostringstream errs;
@@ -619,6 +621,8 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
       auid = tmp;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
+      max_buckets = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--date", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -876,6 +880,8 @@ int main(int argc, char **argv)
   case OPT_KEY_CREATE:
     if (!user_id.empty())
       info.user_id = user_id;
+    if (max_buckets >= 0)
+      info.max_buckets = max_buckets;
     if (key_type == KEY_TYPE_SWIFT) {
       access_key = info.user_id;
       access_key.append(":");

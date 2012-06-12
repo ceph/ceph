@@ -49,6 +49,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
     { ERR_REQUEST_TIMEOUT, 400, "RequestTimeout" },
     { ERR_TOO_LARGE, 400, "EntityTooLarge" },
+    { ERR_TOO_MANY_BUCKETS, 400, "TooManyBuckets" },
     { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
