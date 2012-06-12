@@ -40,6 +40,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { STATUS_PARTIAL_CONTENT, 206, "" },
     { ERR_NOT_MODIFIED, 304, "NotModified" },
     { EINVAL, 400, "InvalidArgument" },
+    { ERR_INVALID_REQUEST, 400, "InvalidRequest" },
     { ERR_INVALID_DIGEST, 400, "InvalidDigest" },
     { ERR_BAD_DIGEST, 400, "BadDigest" },
     { ERR_INVALID_BUCKET_NAME, 400, "InvalidBucketName" },
