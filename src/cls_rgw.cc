@@ -441,7 +441,7 @@ static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
   try {
     ::decode(e, kiter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: usage_record_decode(): failed to decode record_bl\n");
+    CLS_LOG(1, "ERROR: usage_record_decode(): failed to decode record_bl\n");
     return -EINVAL;
   }
 
@@ -450,7 +450,7 @@ static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
 
 int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG("rgw_user_usage_log_add()");
+  CLS_LOG(10, "rgw_user_usage_log_add()");
 
   bufferlist::iterator in_iter = in->begin();
   rgw_cls_usage_log_add_op op;
@@ -458,7 +458,7 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_user_usage_log_add(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: rgw_user_usage_log_add(): failed to decode request\n");
     return -EINVAL;
   }
 
@@ -470,12 +470,12 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
     string key_by_time;
     usage_record_name_by_time(entry.epoch, entry.owner, entry.bucket, key_by_time);
 
-    CLS_LOG("rgw_user_usage_log_add user=%s bucket=%s\n", entry.owner.c_str(), entry.bucket.c_str());
+    CLS_LOG(10, "rgw_user_usage_log_add user=%s bucket=%s\n", entry.owner.c_str(), entry.bucket.c_str());
 
     bufferlist record_bl;
     int ret = cls_cxx_map_read_key(hctx, key_by_time, &record_bl);
     if (ret < 0 && ret != -ENOENT) {
-      CLS_LOG("ERROR: rgw_user_usage_log_add(): cls_cxx_map_read_key returned %d\n", ret);
+      CLS_LOG(1, "ERROR: rgw_user_usage_log_add(): cls_cxx_map_read_key returned %d\n", ret);
       return -EINVAL;
     }
     if (ret >= 0) {
@@ -483,7 +483,7 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
       ret = usage_record_decode(record_bl, e);
       if (ret < 0)
         return ret;
-      CLS_LOG("rgw_user_usage_log_add aggregating existing bucket\n");
+      CLS_LOG(10, "rgw_user_usage_log_add aggregating existing bucket\n");
       entry.aggregate(e);
     }
 
@@ -508,7 +508,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
                             int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
                             void *param)
 {
-  CLS_LOG("usage_iterate_range");
+  CLS_LOG(10, "usage_iterate_range");
 
   map<string, bufferlist> keys;
 #define NUM_KEYS 32
@@ -599,7 +599,7 @@ static int usage_log_read_cb(cls_method_context_t hctx, const string& key, rgw_u
 
 int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG("rgw_user_usage_log_read()");
+  CLS_LOG(10, "rgw_user_usage_log_read()");
 
   bufferlist::iterator in_iter = in->begin();
   rgw_cls_usage_log_read_op op;
@@ -607,7 +607,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_user_usage_log_read(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: rgw_user_usage_log_read(): failed to decode request\n");
     return -EINVAL;
   }
 
@@ -644,7 +644,7 @@ static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_u
 
 int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG("rgw_user_usage_log_trim()");
+  CLS_LOG(10, "rgw_user_usage_log_trim()");
 
   /* only continue if object exists! */
   int ret = cls_cxx_stat(hctx, NULL, NULL);
@@ -657,7 +657,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_user_log_usage_log_trim(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: rgw_user_log_usage_log_trim(): failed to decode request\n");
     return -EINVAL;
   }
 
