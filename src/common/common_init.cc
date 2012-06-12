@@ -53,6 +53,14 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf->set_val_or_die("daemonize", "true");
     conf->set_val_or_die("log_to_stderr", "false");
     conf->set_val_or_die("err_to_stderr", "true");
+
+    // different default keyring locations for osd and mds.  this is
+    // for backward compatibility.  moving forward, we want all keyrings
+    // in these locations.  the mon already forces $mon_data/keyring.
+    if (conf->name.is_mds())
+      conf->set_val("keyring", "$mds_data/keyring", false);
+    else if (conf->name.is_osd())
+      conf->set_val("keyring", "$osd_data/keyring", false);
     break;
 
   case CODE_ENVIRONMENT_LIBRARY:
