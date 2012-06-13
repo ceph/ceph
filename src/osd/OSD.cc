@@ -1392,13 +1392,13 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
     // ok, create PG locally using provided Info and History
     t = new ObjectStore::Transaction;
     fin = new C_Contexts(g_ceph_context);
-    map< int, vector<pair<pg_info_t, pg_interval_map_t> > >  notify_list;  // primary -> list
+    map< int, vector<pair<pg_notify_t, pg_interval_map_t> > >  notify_list;  // primary -> list
     map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
     map<int,MOSDPGInfo*> info_map;  // peer -> message
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &fin->contexts, t);
     pg = _create_lock_pg(info.pgid, create, false, role, up, acting, history, pi, *t);
     pg->handle_create(&rctx);
-    do_notifies(notify_list, osdmap->get_epoch());
+    do_notifies(notify_list);
     do_queries(query_map);
     do_infos(info_map);
       
@@ -3540,14 +3540,13 @@ void OSD::advance_pg(epoch_t osd_epoch, PG *pg, PG::RecoveryCtx *rctx)
     OSDMapRef nextmap = get_map(next_epoch);
     vector<int> newup, newacting;
     nextmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
-    pg->handle_advance_map(lastmap, nextmap, newup, newacting, rctx);
+    pg->handle_advance_map(nextmap, lastmap, newup, newacting, rctx);
     lastmap = nextmap;
   }
   pg->handle_activate_map(rctx);
   if (pg->dirty_info)
     pg->write_info(*rctx->transaction);
 }
-
 
 /** 
  * scan placement groups, initiate any replication
@@ -3665,7 +3664,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  map< int, vector<pair<pg_info_t,pg_interval_map_t> > >  notify_list;  // primary -> list
+  map< int, vector<pair<pg_notify_t,pg_interval_map_t> > >  notify_list;  // primary -> list
   map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
@@ -3994,7 +3993,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
   split_pg(parent, children, t); 
 
   // reset pg
-  map< int, vector<pair<pg_info_t,pg_interval_map_t> > >  notify_list;  // primary -> list
+  map< int, vector<pair<pg_notify_t, pg_interval_map_t> > >  notify_list;  // primary -> list
   map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
   PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin->contexts, &t);
@@ -4013,7 +4012,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
     pg->unlock();
   }
 
-  do_notifies(notify_list, osdmap->get_epoch());
+  do_notifies(notify_list);
   do_queries(query_map);
   do_infos(info_map);
 }
@@ -4219,7 +4218,8 @@ void OSD::handle_pg_create(OpRequestRef op)
 	     << " : querying priors " << pset << dendl;
     for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
       if (osdmap->is_up(*p))
-	query_map[*p][pgid] = pg_query_t(pg_query_t::INFO, history);
+	query_map[*p][pgid] = pg_query_t(pg_query_t::INFO, history,
+					 osdmap->get_epoch());
     
     if (can_create_pg(pgid)) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -4260,10 +4260,9 @@ void OSD::handle_pg_create(OpRequestRef op)
  */
 
 void OSD::do_notifies(
-  map< int,vector<pair<pg_info_t,pg_interval_map_t> > >& notify_list,
-  epoch_t query_epoch)
+  map< int,vector<pair<pg_notify_t,pg_interval_map_t> > >& notify_list)
 {
-  for (map< int, vector<pair<pg_info_t,pg_interval_map_t> > >::iterator it = notify_list.begin();
+  for (map< int, vector<pair<pg_notify_t,pg_interval_map_t> > >::iterator it = notify_list.begin();
        it != notify_list.end();
        it++) {
     if (it->first == whoami) {
@@ -4273,8 +4272,7 @@ void OSD::do_notifies(
     dout(7) << "do_notify osd." << it->first
 	    << " on " << it->second.size() << " PGs" << dendl;
     MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(),
-				       it->second,
-				       query_epoch);
+				       it->second);
     _share_map_outgoing(osdmap->get_cluster_inst(it->first));
     cluster_messenger->send_message(m, osdmap->get_cluster_inst(it->first));
   }
@@ -4304,7 +4302,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
        ++p) { 
-    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator i = p->second->pg_list.begin();
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator i = p->second->pg_list.begin();
 	 i != p->second->pg_list.end();
 	 ++i) {
       dout(20) << "Sending info " << *i << " to osd." << p->first << dendl;
@@ -4340,16 +4338,17 @@ void OSD::handle_pg_notify(OpRequestRef op)
        it++) {
     PG *pg = 0;
 
-    if (it->first.pgid.preferred() >= 0) {
-      dout(20) << "ignoring localized pg " << it->first.pgid << dendl;
+    if (it->first.info.pgid.preferred() >= 0) {
+      dout(20) << "ignoring localized pg " << it->first.info.pgid << dendl;
       continue;
     }
 
-    pg = get_or_create_pg(it->first, it->second,
-			  m->get_epoch(), from, created, true);
+    int created = 0;
+    pg = get_or_create_pg(it->first.info, it->second,
+			  it->first.query_epoch, from, created, true);
     if (!pg)
       continue;
-    pg->queue_notify(m->get_epoch(), m->get_query_epoch(), from, it->first);
+    pg->queue_notify(it->first.epoch_sent, it->first.query_epoch, from, it->first);
     pg->unlock();
   }
 }
@@ -4397,19 +4396,19 @@ void OSD::handle_pg_info(OpRequestRef op)
 
   int created = 0;
 
-  for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
+  for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
        p != m->pg_list.end();
        ++p) {
-    if (p->first.pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << p->first.pgid << dendl;
+    if (p->first.info.pgid.preferred() >= 0) {
+      dout(10) << "ignoring localized pg " << p->first.info.pgid << dendl;
       continue;
     }
 
-    PG *pg = get_or_create_pg(p->first, p->second, m->get_epoch(), 
+    PG *pg = get_or_create_pg(p->first.info, p->second, m->get_epoch(), 
 			      from, created, false);
     if (!pg)
       continue;
-    pg->queue_info(m->get_epoch(), m->get_epoch(), from,  p->first);
+    pg->queue_info(m->get_epoch(), m->get_epoch(), from,  p->first.info);
     pg->unlock();
   }
 }
@@ -4549,7 +4548,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 
   op->mark_started();
 
-  map< int, vector<pair<pg_info_t,pg_interval_map_t> > > notify_list;
+  map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > notify_list;
   
   for (map<pg_t,pg_query_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
@@ -4563,44 +4562,52 @@ void OSD::handle_pg_query(OpRequestRef op)
 
     PG *pg = 0;
 
-    if (pg_map.count(pgid) == 0) {
-      // get active crush mapping
-      vector<int> up, acting;
-      osdmap->pg_to_up_acting_osds(pgid, up, acting);
-      int role = osdmap->calc_pg_role(whoami, acting, acting.size());
-
-      // same primary?
-      pg_history_t history = it->second.history;
-      project_pg_history(pgid, history, m->get_epoch(), up, acting);
-
-      if (m->get_epoch() < history.same_interval_since) {
-        dout(10) << " pg " << pgid << " dne, and pg has changed in "
-                 << history.same_interval_since << " (msg from " << m->get_epoch() << ")" << dendl;
-        continue;
-      }
-
-      assert(role != 0);
-      dout(10) << " pg " << pgid << " dne" << dendl;
-      pg_info_t empty(pgid);
-      if (it->second.type == pg_query_t::LOG ||
-	  it->second.type == pg_query_t::FULLLOG) {
-	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
-					m->get_epoch());
-	_share_map_outgoing(osdmap->get_cluster_inst(from));
-	cluster_messenger->send_message(mlog,
-					osdmap->get_cluster_inst(from));
+    if (pg_map.count(pgid)) {
+      pg = _lookup_lock_pg(pgid);
+      if (!pg->deleting) {
+	pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
+			from, it->second);
+	pg->unlock();
+	continue;
       } else {
-	notify_list[from].push_back(make_pair(empty, pg_interval_map_t()));
+	pg->unlock();
       }
+    }
+
+    // get active crush mapping
+    vector<int> up, acting;
+    osdmap->pg_to_up_acting_osds(pgid, up, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
+
+    // same primary?
+    pg_history_t history = it->second.history;
+    project_pg_history(pgid, history, it->second.epoch_sent, up, acting);
+
+    if (it->second.epoch_sent < history.same_interval_since) {
+      dout(10) << " pg " << pgid << " dne, and pg has changed in "
+	       << history.same_interval_since
+	       << " (msg from " << it->second.epoch_sent << ")" << dendl;
       continue;
     }
 
-    pg = _lookup_lock_pg(pgid);
-    pg->queue_query(m->get_epoch(), m->get_epoch(),
-		    from, it->second);
-    pg->unlock();
+    assert(role != 0);
+    dout(10) << " pg " << pgid << " dne" << dendl;
+    pg_info_t empty(pgid);
+    if (it->second.type == pg_query_t::LOG ||
+	it->second.type == pg_query_t::FULLLOG) {
+      MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
+				      it->second.epoch_sent);
+      _share_map_outgoing(osdmap->get_cluster_inst(from));
+      cluster_messenger->send_message(mlog,
+				      osdmap->get_cluster_inst(from));
+    } else {
+      notify_list[from].push_back(make_pair(pg_notify_t(it->second.epoch_sent,
+							osdmap->get_epoch(),
+							empty),
+					    pg_interval_map_t()));
+    }
   }
-  do_notifies(notify_list, m->get_epoch());
+  do_notifies(notify_list);
 }
 
 
@@ -4892,7 +4899,7 @@ void OSD::do_recovery(PG *pg)
     
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts(g_ceph_context);
-    map< int, vector<pair<pg_info_t,pg_interval_map_t> > >  notify_list;  // primary -> list
+    map< int, vector<pair<pg_notify_t, pg_interval_map_t> > >  notify_list;  // primary -> list
     map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
     map<int,MOSDPGInfo*> info_map;  // peer -> message
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
@@ -4919,7 +4926,7 @@ void OSD::do_recovery(PG *pg)
       }
     }
 
-    do_notifies(notify_list, pg->get_osdmap()->get_epoch());  // notify? (residual|replica)
+    do_notifies(notify_list);
     do_queries(query_map);
     do_infos(info_map);
 
@@ -5324,16 +5331,18 @@ void OSD::queue_for_peering(PG *pg)
 void OSD::process_peering_event(PG *pg)
 {
   map< int, map<pg_t, pg_query_t> > query_map;
-  map< int, vector<pair<pg_info_t, pg_interval_map_t> > > notify_list;
+  map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > notify_list;
   map<int,MOSDPGInfo*> info_map;  // peer -> message
   OSDMapRef curmap;
   {
     map_lock.get_read();
+    pg->lock();
     curmap = osdmap;
     map_lock.put_read();
-  }
-  {
-    pg->lock();
+    if (pg->peering_queue.empty()) {
+      pg->unlock();
+      return;
+    }
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *pfin = new C_Contexts(g_ceph_context);
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list,
@@ -5355,13 +5364,7 @@ void OSD::process_peering_event(PG *pg)
     }
     pg->unlock();
   }
-  epoch_t current_epoch;
-  {
-    map_lock.get_read();
-    current_epoch = osdmap->get_epoch();
-    map_lock.put_read();
-  }
-  do_notifies(notify_list, current_epoch);
+  do_notifies(notify_list);
   do_queries(query_map);
   do_infos(info_map);
   {
