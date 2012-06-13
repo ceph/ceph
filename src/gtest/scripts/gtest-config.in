@@ -214,7 +214,7 @@ if test "${this_bindir}" = "${this_bindir%${bindir}}"; then
   # TODO(chandlerc@google.com): This is a dangerous dependency on libtool, we
   # should work to remove it, and/or remove libtool altogether, replacing it
   # with direct references to the library and a link path.
-  gtest_libs="${build_dir}/lib/libgtest.la @PTHREAD_CFLAGS@ @PTHREAD_LIBS@"
+  gtest_libs="${build_dir}/lib/libgtest.a @PTHREAD_CFLAGS@ @PTHREAD_LIBS@"
   gtest_ldflags=""
 
   # We provide hooks to include from either the source or build dir, where the
