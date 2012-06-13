@@ -5383,7 +5383,7 @@ bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
   if (key.length() == 0)
     key = op->get_oid().name;
 
-  const OSDCapSpec *spec = caps.get_cap(session->auid, pg->pool->name, pg->pool->auid, key);
+  const OSDCapSpec *spec = caps.get_cap(pg->pool->name, pg->pool->auid, key);
   // just do the rwx, for now!
   rwxa_t perm = spec ? spec->allow : 0;
 
