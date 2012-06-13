@@ -368,7 +368,7 @@ int CrushTester::test()
   }
 
   if (output_choose_tries) {
-    __u32 *v;
+    __u32 *v = 0;
     int n = crush.get_choose_profile(&v);
     for (int i=0; i<n; i++) {
       cout.setf(std::ios::right);
