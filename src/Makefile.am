@@ -504,14 +504,11 @@ unittests:: $(check_PROGRAMS)
 UNITTEST_CXXFLAGS = \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_builddir)/src/gtest/include
-UNITTEST_LDADD = \
-	$(top_builddir)/src/gtest/lib/libgtest.la \
-	$(top_builddir)/src/gtest/lib/libgtest_main.la \
-	$(PTHREAD_LIBS)
 UNITTEST_STATIC_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.a \
 	$(top_builddir)/src/gtest/lib/libgtest_main.a \
 	$(PTHREAD_LIBS)
+UNITTEST_LDADD = ${UNITTEST_STATIC_LDADD}
 
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libcephfs.la librados.la $(PTHREAD_LIBS) -lm \
