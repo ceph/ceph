@@ -174,6 +174,7 @@ OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
 OPTION(journaler_batch_interval, OPT_DOUBLE, .001)   // seconds.. max add'l latency we artificially incur
 OPTION(journaler_batch_max, OPT_U64, 0)  // max bytes we'll delay flushing; disable, for now....
+OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40)
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
@@ -386,6 +387,7 @@ OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
 OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
+OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
@@ -404,7 +406,12 @@ OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70)
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
+OPTION(rgw_usage_max_shards, OPT_INT, 32)
+OPTION(rgw_usage_max_user_shards, OPT_INT, 1)
 OPTION(rgw_enable_ops_log, OPT_BOOL, true) // enable logging every rgw operation
+OPTION(rgw_enable_usage_log, OPT_BOOL, true) // enable logging bandwidth usage
+OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pending log data
+OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
 OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
 OPTION(rgw_init_timeout, OPT_INT, 30) // time in seconds
