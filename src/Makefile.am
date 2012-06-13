@@ -217,6 +217,10 @@ omapbench_SOURCES = test/omap_bench.cc
 omapbench_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += omapbench
 
+kvstoretest_SOURCES = key_value_store/kv_flat_btree.cc test/kv_store_test.cc
+kvstoretest_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += kvstoretest
+
 multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += multi_stress_watch 
@@ -1455,6 +1459,8 @@ noinst_HEADERS = \
 	json_spirit/json_spirit_writer.h\
 	json_spirit/json_spirit_writer_options.h\
 	json_spirit/json_spirit_writer_template.h\
+	key_value_store/key_value_structure.h
+	key_value_store/kv_flat_btree.h
 	log/Entry.h\
 	log/EntryQueue.h\
 	log/Log.h\
@@ -1698,6 +1704,8 @@ noinst_HEADERS = \
 	global/pidfile.h\
 	common/sync_filesystem.h \
 	test/encoding/types.h \
+	test/kv_store_test.h \
+	test/omap_bench.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \
