@@ -70,7 +70,7 @@ ostream& operator<<(ostream& out, const OSDCapMatch& m)
   return out;
 }
 
-bool OSDCapMatch::is_match(int64_t a, const string& pn, int64_t pool_auid, const string& object) const
+bool OSDCapMatch::is_match(const string& pn, int64_t pool_auid, const string& object) const
 {
   if (auid >= 0) {
     if (auid != pool_auid)
@@ -107,10 +107,10 @@ void OSDCap::set_allow_all()
   grants.push_back(OSDCapGrant(OSDCapMatch(), OSDCapSpec(OSD_CAP_ANY)));
 }
 
-const OSDCapSpec *OSDCap::get_cap(int64_t auid, const string& pool_name, int64_t pool_auid, const string& object) const
+const OSDCapSpec *OSDCap::get_cap(const string& pool_name, int64_t pool_auid, const string& object) const
 {
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p) {
-    if (p->match.is_match(auid, pool_name, pool_auid, object))
+    if (p->match.is_match(pool_name, pool_auid, object))
       return &p->spec;
   }
   return NULL;
