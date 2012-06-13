@@ -2339,10 +2339,10 @@ void OSD::handle_command(MCommand *m)
     return;
   }
 
-  OSDCaps& caps = session->caps;
+  OSDCap& caps = session->caps;
   session->put();
 
-  if (!caps.allow_all || m->get_source().is_mon()) {
+  if (!caps.allow_all() || m->get_source().is_mon()) {
     client_messenger->send_message(new MCommandReply(m, -EPERM), con);
     m->put();
     return;
@@ -2760,13 +2760,23 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     }
 
     s->entity_name = name;
-    s->caps.set_allow_all(caps_info.allow_all);
-    s->caps.set_auid(auid);
+    if (caps_info.allow_all)
+      s->caps.set_allow_all();
+    s->auid = auid;
  
     if (caps_info.caps.length() > 0) {
-      bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter);
-      dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << dendl;
+      bufferlist::iterator p = caps_info.caps.begin();
+      string str;
+      try {
+	::decode(str, p);
+      }
+      catch (buffer::error& e) {
+      }
+      bool success = s->caps.parse(str);
+      if (success)
+	dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << " '" << str << "'" << dendl;
+      else
+	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
     }
     
     s->put();
@@ -5366,24 +5376,31 @@ bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
     dout(0) << "op_has_sufficient_caps: no session for op " << *op << dendl;
     return false;
   }
-  OSDCaps& caps = session->caps;
+  OSDCap& caps = session->caps;
   session->put();
+  
+  string key = op->get_object_locator().key;
+  if (key.length() == 0)
+    key = op->get_oid().name;
 
-  int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
+  const OSDCapSpec *spec = caps.get_cap(session->auid, pg->pool->name, pg->pool->auid, key);
+  // just do the rwx, for now!
+  rwxa_t perm = spec ? spec->allow : 0;
+
   dout(20) << "op_has_sufficient_caps pool=" << pg->pool->id << " (" << pg->pool->name
-	   << ") owner=" << pg->pool->auid << " perm=" << perm
+	   << ") owner=" << pg->pool->auid << " allow=" << perm
 	   << " may_read=" << op->may_read()
 	   << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec()
            << " require_exec_caps=" << op->require_exec_caps() << dendl;
 
-  if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
+  if (op->may_read() && !(perm & OSD_CAP_R)) {
     dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
     return false;
-  } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
+  } else if (op->may_write() && !(perm & OSD_CAP_W)) {
     dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
     return false;
-  } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
+  } else if (op->require_exec_caps() && !(perm & OSD_CAP_X)) {
     dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
     return false;
   }
