@@ -4000,7 +4000,7 @@ void PG::take_waiters()
 
 void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
 {
-  dout(10) << "handle_peering_event" << dendl;
+  dout(10) << "handle_peering_event: " << evt->get_desc() << dendl;
   if (!require_same_or_newer_map(evt->get_epoch_sent())) {
     peering_waiters.push_back(evt);
     return;
@@ -4023,7 +4023,7 @@ void PG::queue_notify(epoch_t msg_epoch,
 		      epoch_t query_epoch,
 		      int from, pg_info_t& i)
 {
-  dout(10) << "handle_notify " << i << " from osd." << from << dendl;
+  dout(10) << "notify " << i << " from osd." << from << dendl;
   queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 MNotifyRec(from, i))));
@@ -4033,7 +4033,7 @@ void PG::queue_info(epoch_t msg_epoch,
 		     epoch_t query_epoch,
 		     int from, pg_info_t& i)
 {
-  dout(10) << "handle_info " << i << " from osd." << from << dendl;
+  dout(10) << "info " << i << " from osd." << from << dendl;
   queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 MInfoRec(from, i))));
@@ -4044,7 +4044,7 @@ void PG::queue_log(epoch_t msg_epoch,
 		   int from,
 		   MOSDPGLog *msg)
 {
-  dout(10) << "handle_log " << *msg << " from osd." << from << dendl;
+  dout(10) << "log " << *msg << " from osd." << from << dendl;
   queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 MLogRec(from, msg))));
@@ -4053,7 +4053,7 @@ void PG::queue_log(epoch_t msg_epoch,
 void PG::queue_null(epoch_t msg_epoch,
 		    epoch_t query_epoch)
 {
-  dout(10) << "handle_null" << dendl;
+  dout(10) << "null" << dendl;
   queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
 					 NullEvt())));
