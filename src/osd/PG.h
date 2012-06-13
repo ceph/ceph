@@ -790,16 +790,25 @@ public:
   class CephPeeringEvt {
     epoch_t epoch_sent;
     epoch_t epoch_requested;
-    boost::intrusive_ptr< const boost::statechart::event_base> evt;
+    boost::intrusive_ptr< const boost::statechart::event_base > evt;
+    string desc;
   public:
+    template <class T>
     CephPeeringEvt(epoch_t epoch_sent,
 		   epoch_t epoch_requested,
-		   const boost::statechart::event_base &evt) :
+		   const T &evt_) :
       epoch_sent(epoch_sent), epoch_requested(epoch_requested),
-      evt(evt.intrusive_from_this()) {}
+      evt(evt_.intrusive_from_this()) {
+      stringstream out;
+      out << "epoch_sent: " << epoch_sent
+	  << " epoch_requested: " << epoch_requested << " ";
+      evt_.print(&out);
+      desc = out.str();
+    }
     epoch_t get_epoch_sent() { return epoch_sent; }
     epoch_t get_epoch_requested() { return epoch_requested; }
     const boost::statechart::event_base &get_event() { return *evt; }
+    string get_desc() { return desc; }
   };
   typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
   list<CephPeeringEvtRef> peering_queue;  // op queue
@@ -808,6 +817,9 @@ public:
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
     QueryState(Formatter *f) : f(f) {}
+    void print(std::ostream *out) const {
+      *out << "Query" << std::endl;
+    }
   };
 
   struct MInfoRec : boost::statechart::event< MInfoRec > {
@@ -815,6 +827,11 @@ public:
     pg_info_t info;
     MInfoRec(int from, pg_info_t &info) :
       from(from), info(info) {}
+    void print(std::ostream *out) const {
+      *out << "MInfoRec from " << from
+	   << " info: " << info
+	   << std::endl;
+    }
   };
 
   struct MLogRec : boost::statechart::event< MLogRec > {
@@ -822,6 +839,10 @@ public:
     MOSDPGLog *msg;
     MLogRec(int from, MOSDPGLog *msg) :
       from(from), msg(msg) {}
+    void print(std::ostream *out) const {
+      *out << "MLogRec from " << from
+	   << std::endl;
+    }
   };
 
   struct MNotifyRec : boost::statechart::event< MNotifyRec > {
@@ -829,6 +850,11 @@ public:
     pg_info_t info;
     MNotifyRec(int from, pg_info_t &info) :
       from(from), info(info) {}
+    void print(std::ostream *out) const {
+      *out << "MNotifyRec from " << from
+	   << " info: " << info
+	   << std::endl;
+    }
   };
 
   struct MQuery : boost::statechart::event< MQuery > {
@@ -837,6 +863,12 @@ public:
     epoch_t query_epoch;
     MQuery(int from, const pg_query_t &query, epoch_t query_epoch):
       from(from), query(query), query_epoch(query_epoch) {}
+    void print(std::ostream *out) const {
+      *out << "MQuery from " << from
+	   << " query_epoch " << query_epoch
+	   << " query: " << query
+	   << std::endl;
+    }
   };
 
   struct AdvMap : boost::statechart::event< AdvMap > {
@@ -845,31 +877,58 @@ public:
     vector<int> newup, newacting;
     AdvMap(OSDMapRef osdmap, OSDMapRef lastmap, vector<int>& newup, vector<int>& newacting):
       osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
+    void print(std::ostream *out) const {
+      *out << "AdvMap" << std::endl;
+    }
   };
 
   struct RecoveryComplete : boost::statechart::event< RecoveryComplete > {
     RecoveryComplete() : boost::statechart::event< RecoveryComplete >() {}
+    void print(std::ostream *out) const {
+      *out << "RecoveryComplete" << std::endl;
+    }
   };
   struct ActMap : boost::statechart::event< ActMap > {
     ActMap() : boost::statechart::event< ActMap >() {}
+    void print(std::ostream *out) const {
+      *out << "ActMap" << std::endl;
+    }
   };
   struct Activate : boost::statechart::event< Activate > {
     Activate() : boost::statechart::event< Activate >() {}
+    void print(std::ostream *out) const {
+      *out << "Activate" << std::endl;
+    }
   };
   struct Initialize : boost::statechart::event< Initialize > {
     Initialize() : boost::statechart::event< Initialize >() {}
+    void print(std::ostream *out) const {
+      *out << "Initialize" << std::endl;
+    }
   };
   struct Load : boost::statechart::event< Load > {
     Load() : boost::statechart::event< Load >() {}
+    void print(std::ostream *out) const {
+      *out << "Load" << std::endl;
+    }
   };
   struct GotInfo : boost::statechart::event< GotInfo > {
     GotInfo() : boost::statechart::event< GotInfo >() {}
+    void print(std::ostream *out) const {
+      *out << "GotInfo" << std::endl;
+    }
   };
   struct NeedUpThru : boost::statechart::event< NeedUpThru > {
     NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
+    void print(std::ostream *out) const {
+      *out << "NeedUpThru" << std::endl;
+    }
   };
   struct NullEvt : boost::statechart::event< NullEvt > {
     NullEvt() : boost::statechart::event< NullEvt >() {};
+    void print(std::ostream *out) const {
+      *out << "NullEvt" << std::endl;
+    }
   };
 
   /* Encapsulates PG recovery process */
