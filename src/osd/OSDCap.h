@@ -77,7 +77,7 @@ struct OSDCapMatch {
    * @param object object name
    * @return true if we match, false otherwise
    */
-  bool is_match(int64_t auid, const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
+  bool is_match(const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
 };
 
 ostream& operator<<(ostream& out, const OSDCapMatch& m);
@@ -104,7 +104,7 @@ struct OSDCap {
   void set_allow_all();
   bool parse(const std::string& str, ostream *err=NULL);
 
-  const OSDCapSpec *get_cap(int64_t auid, const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
+  const OSDCapSpec *get_cap(const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 
