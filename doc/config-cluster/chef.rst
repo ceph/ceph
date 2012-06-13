@@ -50,7 +50,7 @@ Create a role file for the Ceph monitor. ::
 	name "ceph-mon"
 	description "Ceph monitor server"
 	run_list(
-		'recipe[ceph::single_mon]'
+		'recipe[ceph::mon]'
 	)
 	EOF
 
