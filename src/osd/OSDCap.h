@@ -30,12 +30,10 @@ using std::ostream;
 
 #include "include/types.h"
 
-
-#define OSD_CAP_R 0x01
-#define OSD_CAP_W 0x02
-#define OSD_CAP_X 0x04
-#define OSD_CAP_ANY 0xff
-#define OSD_CAP_ALL (OSD_CAP_R | OSD_CAP_W | OSD_CAP_X)
+static const __u8 OSD_CAP_R = 0x01;      // read
+static const __u8 OSD_CAP_W = 0x02;      // write
+static const __u8 OSD_CAP_X = 0x04;      // (class) execute
+static const __u8 OSD_CAP_ANY = 0xff;    // *
 
 typedef __u8 rwxa_t;
 
