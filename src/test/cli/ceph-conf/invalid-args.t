@@ -8,7 +8,7 @@
   [1]
 
   $ ceph-conf -c test.conf --name total.garbage
-  You must pass a string of the form TYPE.ID to the --name option. Valid types are: auth, mon, osd, mds, client
+  error parsing 'total.garbage': expected string of the form TYPE.ID, valid types are: auth, mon, osd, mds, client
   [1]
 
   $ ceph-conf -c test.conf -s bar
