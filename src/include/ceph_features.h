@@ -20,6 +20,7 @@
 #define CEPH_FEATURE_OSDENC         (1<<13)
 #define CEPH_FEATURE_OMAP           (1<<14)
 #define CEPH_FEATURE_MONENC         (1<<15)
+#define CEPH_FEATURE_QUERY_T        (1<<16)
 
 /*
  * Features supported.  Should be everything above.
@@ -39,7 +40,8 @@
 	 CEPH_FEATURE_PGPOOL3 |		 \
 	 CEPH_FEATURE_OSDREPLYMUX |	 \
 	 CEPH_FEATURE_OSDENC |		 \
-	 CEPH_FEATURE_OMAP |		 \
+	 CEPH_FEATURE_OMAP | \
+	 CEPH_FEATURE_QUERY_T | \
 	 CEPH_FEATURE_MONENC)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
