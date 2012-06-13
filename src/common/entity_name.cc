@@ -121,18 +121,6 @@ get_type_str() const
   return ceph_entity_type_name(type);
 }
 
-bool EntityName::
-is_admin() const
-{
-  return (id.compare("admin") == 0);
-}
-
-uint32_t EntityName::
-get_type() const
-{
-  return type;
-}
-
 const char *EntityName::
 get_type_name() const
 {

@@ -1809,7 +1809,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    break;
 	  string key(s, 0, pos-s);
 	  string value(pos+1);
-	  loc[key] = value;
+	  if (value.length())
+	    loc[key] = value;
+	  else
+	    loc.erase(key);
 	}
 
 	dout(0) << "adding/updating crush item id " << id << " name '" << name << "' weight " << weight

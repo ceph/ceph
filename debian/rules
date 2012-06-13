@@ -45,6 +45,9 @@ endif
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
+	./autogen.sh
+	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
+	  --sysconfdir=/etc $(extraopts) $(confflags)
 	touch $@
 
 build-arch: build
@@ -54,9 +57,6 @@ build: build-stamp
 build-stamp: configure-stamp  
 	dh_testdir
 
-	./autogen.sh
-	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
-	  --sysconfdir=/etc $(extraopts) $(confflags)
 	$(MAKE)
 
 	cp src/init-ceph debian/ceph.init

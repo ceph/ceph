@@ -833,7 +833,7 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-shell_scripts = init-ceph mkcephfs ceph-debugpack ceph-coverage ceph-kdump-copy
+shell_scripts = init-ceph mkcephfs ceph-debugpack ceph-coverage
 
 $(shell_scripts): Makefile
 
@@ -850,8 +850,6 @@ sbin_SCRIPTS += mkcephfs
 bin_SCRIPTS += obsync/obsync
 bin_SCRIPTS += obsync/boto_tool
 bin_SCRIPTS += ceph-coverage
-
-bin_SCRIPTS += ceph-kdump-copy
 
 CLEANFILES += $(shell_scripts)
 

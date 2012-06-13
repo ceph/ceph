@@ -106,14 +106,22 @@ Examples
 
 Generate a new user::
 
-        $ radosgw-admin user gen --display-name="johnny rotten" --email=johnny@rotten.com
-        User ID: CHBQFRTG26I8DGJDGQLW
-        Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
-        Display Name: johnny rotten
+        $ radosgw-admin user create --display-name="johnny rotten" --uid=johnny
+        { "user_id": "johnny",
+          "rados_uid": 0,
+          "display_name": "johnny rotten",
+          "email": "",
+          "suspended": 0,
+          "subusers": [],
+          "keys": [
+                { "user": "johnny",
+                  "access_key": "TCICW53D9BQ2VGC46I44",
+                  "secret_key": "tfm9aHMI8X76L3UdgE+ZQaJag1vJQmE6HDb5Lbrz"}],
+          "swift_keys": []}
 
 Remove a user::
 
-        $ radosgw-admin user rm --uid=CHBQFRTG26I8DGJDGQLW
+        $ radosgw-admin user rm --uid=johnny
 
 Remove a bucket::
 

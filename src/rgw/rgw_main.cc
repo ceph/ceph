@@ -198,10 +198,14 @@ void RGWProcess::run()
     int fd = open(path_str.c_str(), O_CREAT, 0644);
     if (fd < 0) {
       int err = errno;
-      dout(0) << "ERROR: cannot create socket: path=" << path_str << " error=" << cpp_strerror(err) << dendl;
-      return;
+      /* ENXIO is actually expected, we'll get that if we try to open a unix domain socket */
+      if (err != ENXIO) {
+        dout(0) << "ERROR: cannot create socket: path=" << path_str << " error=" << cpp_strerror(err) << dendl;
+        return;
+      }
+    } else {
+      close(fd);
     }
-    close(fd);
 
     const char *path = path_str.c_str();
     s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
@@ -355,6 +359,7 @@ int main(int argc, const char **argv)
   /* alternative default for module */
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=20");
+  def_args.push_back("--keyring=$rgw_data/keyring");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -428,8 +433,12 @@ int main(int argc, const char **argv)
   init_timer.shutdown();
   mutex.Unlock();
 
+  rgw_log_usage_init(g_ceph_context);
+
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
   process.run();
+
+  rgw_log_usage_finalize();
 
   rgw_perf_stop(g_ceph_context);
 

@@ -121,7 +121,7 @@ public:
 
   // Set a configuration value.
   // Metavariables will be expanded.
-  int set_val(const char *key, const char *val);
+  int set_val(const char *key, const char *val, bool meta=true);
 
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)

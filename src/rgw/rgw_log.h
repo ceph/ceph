@@ -6,6 +6,7 @@
 
 #define RGW_LOG_POOL_NAME ".log"
 #define RGW_INTENT_LOG_POOL_NAME ".intent-log"
+#define RGW_USAGE_LOG_POOL_NAME ".usage"
 
 struct rgw_log_entry {
   string object_owner;
@@ -118,6 +119,8 @@ WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 
 int rgw_log_op(struct req_state *s);
 int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
+void rgw_log_usage_init(CephContext *cct);
+void rgw_log_usage_finalize();
 
 #endif
 

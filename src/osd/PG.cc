@@ -1707,6 +1707,7 @@ void PG::purge_strays()
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;
     }
     peer_info.erase(*p);
+    peer_purged.insert(*p);
     removed = true;
   }
 
@@ -3596,6 +3597,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   state_clear(PG_STATE_RECOVERING);
 
   peer_missing.clear();
+  peer_purged.clear();
 
   // reset primary state?
   if (oldrole == 0 || get_role() == 0)
@@ -4146,6 +4148,10 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
   if (pg->peer_info.count(notevt.from)) {
     dout(10) << "Active: got notify from " << notevt.from 
 	     << ", already have info from that osd, ignoring" 
+	     << dendl;
+  } else if (pg->peer_purged.count(notevt.from)) {
+    dout(10) << "Active: got notify from " << notevt.from
+	     << ", already purged that peer, ignoring"
 	     << dendl;
   } else {
     dout(10) << "Active: got notify from " << notevt.from 
