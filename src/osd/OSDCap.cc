@@ -147,8 +147,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
     // match := [pool <poolname> | uid <123>] [object_prefix <prefix>]
     pool_name %= -(lit("pool") >> str);
     object_prefix %= -(lit("object_prefix") >> str);
-    match = ( (lit("auid") >> int_ >> object_prefix)[_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
-	      (pool_name >> object_prefix)[_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
+    match = ( (lit("auid") >> int_ >> object_prefix)   [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
+	      (pool_name >> object_prefix)             [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
 	      
 
     // rwxa := * | [r][w][x]
@@ -161,15 +161,15 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
 
     // capspec := * | rwx | class <name> [classcap]
     capspec =
-      rwxa[_val = phoenix::construct<OSDCapSpec>(_1)] |
-      ( lit("class") >> ((str >> str)[_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
-			 str[_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
+      rwxa                                            [_val = phoenix::construct<OSDCapSpec>(_1)] |
+      ( lit("class") >> ((str >> str)                 [_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
+			 str                          [_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
 
     // grant := allow match capspec
-    grant = lit("allow") >> ((match >> capspec)[_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
+    grant = lit("allow") >> ((match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
 
     // osdcap := grant [grant ...]
-    osdcap %= (grant % (lit(';') | lit(',')))[_val = phoenix::construct<OSDCap>(_1)];
+    osdcap %= (grant % (lit(';') | lit(',')))         [_val = phoenix::construct<OSDCap>(_1)];
   }
   qi::rule<Iterator, unsigned(), ascii::space_type> rwxa;
   qi::rule<Iterator, string(), ascii::space_type> quoted_string;

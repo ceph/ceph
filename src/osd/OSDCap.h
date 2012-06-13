@@ -58,8 +58,10 @@ ostream& operator<<(ostream& out, const OSDCapSpec& s);
 
 
 struct OSDCapMatch {
+  // auid and pool_name are mutually exclusive
   int64_t auid;
   std::string pool_name;
+
   std::string object_prefix;
 
   OSDCapMatch() : auid(CEPH_AUTH_UID_DEFAULT) {}
