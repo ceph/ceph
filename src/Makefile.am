@@ -55,7 +55,7 @@ endif
 
 LIBGLOBAL_LDA = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
-LIBOS_LDA = libos.a leveldb/libleveldb.a
+LIBOS_LDA = libos.a
 
 if WITH_LIBAIO
 LIBOS_LDA += -laio
