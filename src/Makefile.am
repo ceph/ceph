@@ -63,9 +63,11 @@ endif
 
 if WITH_SYSTEM_LEVELDB
 LIBOS_LDA += -lleveldb -lsnappy
+LEVELDB_INCLUDE =
 else
 LIBOS_LDA += leveldb/libleveldb.a
 SUBDIRS += leveldb
+LEVELDB_INCLUDE = -I$(top_srcdir)/src/leveldb/include
 endif
 
 
@@ -81,13 +83,8 @@ bin_PROGRAMS += ceph-mon
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 ceph_osd_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_PROGRAMS += ceph-osd
-
-if WITH_SYSTEM_LEVELDB
-else
-ceph_osd_CXXFLAGS += -I$(top_srcdir)/src/leveldb/include
-endif
 
 if LINUX
 ceph_osd_LDADD += -ldl
@@ -763,8 +760,7 @@ bin_DEBUGPROGRAMS += test_libcephfs_readdir
 test_filestore_SOURCES = test/filestore/store_test.cc
 test_filestore_LDFLAGS = ${AM_LDFLAGS}
 test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
+test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_filestore
 
 test_filestore_workloadgen_SOURCES = \
@@ -776,7 +772,7 @@ bin_DEBUGPROGRAMS += test_filestore_workloadgen
 
 test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
 test_filestore_idempotent_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_filestore_idempotent_CXXFLAGS = -I$(top_srcdir)/src/leveldb/include
+test_filestore_idempotent_CXXFLAGS =  $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_filestore_idempotent
 
 test_filestore_idempotent_sequence_SOURCES = \
@@ -790,8 +786,7 @@ bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
 xattr_bench_SOURCES = test/xattr_bench.cc
 xattr_bench_LDFLAGS = ${AM_LDFLAGS}
 xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
+xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}  $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += xattr_bench
 
 test_filejournal_SOURCES = test/test_filejournal.cc
@@ -809,15 +804,13 @@ bin_DEBUGPROGRAMS += test_stress_watch
 test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
 test_object_map_LDFLAGS = ${AM_LDFLAGS}
 test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
+test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_object_map
 
 test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc os/LevelDBStore.cc
 test_keyvaluedb_atomicity_LDFLAGS = ${AM_LDFLAGS}
 test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
+test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_keyvaluedb_atomicity
 
 
@@ -1151,8 +1144,7 @@ libos_a_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc
-libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} \
-	-I$(top_srcdir)/src/leveldb/include
+libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
 noinst_LIBRARIES += libos.a
 
 libosd_a_SOURCES = \
