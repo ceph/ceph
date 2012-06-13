@@ -25,27 +25,25 @@
 
 class MOSDPGNotify : public Message {
 
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 2;
 
   epoch_t epoch;
   /// query_epoch is the epoch of the query being responded to, or
   /// the current epoch if this is not being sent in response to a
   /// query. This allows the recipient to disregard responses to old
   /// queries.
-  epoch_t query_epoch;
-  vector<pair<pg_info_t,pg_interval_map_t> > pg_list;   // pgid -> version
+  vector<pair<pg_notify_t,pg_interval_map_t> > pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
-  vector<pair<pg_info_t,pg_interval_map_t> >& get_pg_list() { return pg_list; }
-  epoch_t get_query_epoch() { return query_epoch; }
+  vector<pair<pg_notify_t,pg_interval_map_t> >& get_pg_list() { return pg_list; }
 
   MOSDPGNotify()
     : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDPGNotify(epoch_t e, vector<pair<pg_info_t,pg_interval_map_t> >& l, epoch_t query_epoch)
+  MOSDPGNotify(epoch_t e, vector<pair<pg_notify_t,pg_interval_map_t> >& l)
     : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
-      epoch(e), query_epoch(query_epoch) {
+      epoch(e) {
     pg_list.swap(l);
   }
 private:
@@ -55,25 +53,39 @@ public:
   const char *get_type_name() const { return "PGnot"; }
 
   void encode_payload(uint64_t features) {
+    // Use query_epoch for first entry for backwards compatibility
+    epoch_t query_epoch = epoch;
+    if (pg_list.size())
+      query_epoch = pg_list.begin()->first.query_epoch;
+    
     ::encode(epoch, payload);
 
     // v2 was vector<pg_info_t>
     __u32 n = pg_list.size();
     ::encode(n, payload);
-    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = pg_list.begin();
 	 p != pg_list.end();
 	 p++)
-      ::encode(p->first, payload);
+      ::encode(p->first.info, payload);
 
     ::encode(query_epoch, payload);
 
     // v3 needs the pg_interval_map_t for each record
-    for (vector<pair<pg_info_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = pg_list.begin();
 	 p != pg_list.end();
 	 p++)
       ::encode(p->second, payload);
+
+    // v4 needs epoch_sent, query_epoch
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = pg_list.begin();
+	 p != pg_list.end();
+	 p++)
+      ::encode(pair<epoch_t, epoch_t>(
+	  p->first.epoch_sent, p->first.query_epoch),
+	payload);
   }
   void decode_payload() {
+    epoch_t query_epoch;
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
 
@@ -81,31 +93,46 @@ public:
     __u32 n;
     ::decode(n, p);
     pg_list.resize(n);
-    for (unsigned i=0; i<n; i++)
-      ::decode(pg_list[i].first, p);
-    
-    if (header.version >= 2) {
-      ::decode(query_epoch, p);
+    for (unsigned i=0; i<n; i++) {
+      ::decode(pg_list[i].first.info, p);
     }
+
+    ::decode(query_epoch, p);
+
     if (header.version >= 3) {
       // get the pg_interval_map_t portion
-      for (unsigned i=0; i<n; i++)
+      for (unsigned i=0; i<n; i++) {
 	::decode(pg_list[i].second, p);
+      }
+    }
+
+    // v3 needs epoch_sent, query_epoch
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator i = pg_list.begin();
+	 i != pg_list.end();
+	 i++) {
+      if (header.version >= 4) {
+	pair<epoch_t, epoch_t> dec;
+	::decode(dec, p);
+	i->first.epoch_sent = dec.first;
+	i->first.query_epoch = dec.second;
+      } else {
+	i->first.epoch_sent = epoch;
+	i->first.query_epoch = query_epoch;
+      }
     }
   }
   void print(ostream& out) const {
     out << "pg_notify(";
-    for (vector<pair<pg_info_t,pg_interval_map_t> >::const_iterator i = pg_list.begin();
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       if (i != pg_list.begin())
 	out << ",";
-      out << i->first.pgid;
+      out << i->first.info.pgid;
       if (i->second.size())
 	out << "(" << i->second.size() << ")";
     }
     out << " epoch " << epoch
-	<< " query_epoch " << query_epoch
 	<< ")";
   }
 };
