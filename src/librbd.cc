@@ -155,6 +155,8 @@ namespace librbd {
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     bool snap_exists; // false if our snapid was deleted
+    std::set<std::pair<std::string, std::string> > locks;
+    bool exclusive_locked;
     std::string name;
     std::string snapname;
     IoCtx data_ctx, md_ctx;
@@ -180,6 +182,7 @@ namespace librbd {
 	perfcounter(NULL),
 	snapid(CEPH_NOSNAP),
 	snap_exists(true),
+	exclusive_locked(false),
 	name(imgname),
 	needs_refresh(true),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
@@ -1375,7 +1378,9 @@ int ictx_refresh(ImageCtx *ictx)
       r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
 					   &ictx->size, &ictx->features,
 					   &incompatible_features,
-					   &new_snapc);
+                                           &ictx->locks,
+                                           &ictx->exclusive_locked,
+                                           &new_snapc);
       if (r < 0) {
 	lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
 		   << dendl;
