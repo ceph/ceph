@@ -56,8 +56,8 @@ using namespace __gnu_cxx;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 
-
 class OSD;
+class OSDService;
 class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
@@ -336,7 +336,7 @@ public:
 
   /*** PG ****/
 protected:
-  OSD *osd;
+  OSDService *osd;
   OSDMapRef osdmap_ref;
   PGPool *pool;
 
@@ -617,6 +617,7 @@ protected:
   map<eversion_t,OpRequestRef>   replay_queue;
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
+  void requeue_ops(list<OpRequestRef> &l);
 
   // stats
   Mutex pg_stats_lock;
@@ -1320,8 +1321,8 @@ public:
   } recovery_state;
 
 
- public:  
-  PG(OSD *o, OSDMapRef curmap,
+ public:
+  PG(OSDService *o, OSDMapRef curmap,
      PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) :
     osd(o), osdmap_ref(curmap), pool(_pool),
     _lock("PG::_lock"),

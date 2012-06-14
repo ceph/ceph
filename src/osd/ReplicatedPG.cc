@@ -581,7 +581,7 @@ void ReplicatedPG::calc_trim_to()
   }
 }
 
-ReplicatedPG::ReplicatedPG(OSD *o, OSDMapRef curmap,
+ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
 			   PGPool *_pool, pg_t p, const hobject_t& oid,
 			   const hobject_t& ioid) :
   PG(o, curmap, _pool, p, oid, ioid), temp_created(false),
@@ -3087,7 +3087,8 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	if (notif->obc == obc) {
 	  dout(10) << " acking pending notif " << notif->id << " by " << by << dendl;
 	  session->del_notif(notif);
-	  osd->ack_notification(entity, notif, obc, this);
+	  // TODOSAM: osd->osd-> not good
+	  osd->osd->ack_notification(entity, notif, obc, this);
 	}
       }
     }
@@ -3129,12 +3130,14 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 
       notif->reply = new MWatchNotify(p->cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE, notif->bl);
       if (notif->watchers.empty()) {
-	osd->complete_notify(notif, obc);
+	// TODOSAM: osd->osd-> not good
+	osd->osd->complete_notify(notif, obc);
       } else {
 	obc->notifs[notif] = true;
 	obc->ref++;
 	notif->obc = obc;
-	notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
+	// TODOSAM: osd->osd not good
+	notif->timeout = new Watch::C_NotifyTimeout(osd->osd, notif);
 	osd->watch_timer.add_event_after(p->timeout, notif->timeout);
       }
     }
@@ -3150,7 +3153,8 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       assert(notif);
 
       session->del_notif(notif);
-      osd->ack_notification(entity, notif, obc, this);
+      // TODOSAM: osd->osd-> not good
+      osd->osd->ack_notification(entity, notif, obc, this);
     }
 
     osd->watch_lock.Unlock();
@@ -3448,7 +3452,7 @@ void ReplicatedPG::op_commit(RepGather *repop)
     
     last_update_ondisk = repop->v;
     if (waiting_for_ondisk.count(repop->v)) {
-      osd->requeue_ops(this, waiting_for_ondisk[repop->v]);
+      requeue_ops(waiting_for_ondisk[repop->v]);
       waiting_for_ondisk.erase(repop->v);
     }
 
@@ -3767,7 +3771,7 @@ void ReplicatedPG::register_unconnected_watcher(void *_obc,
   pgid.set_ps(obc->obs.oi.soid.hash);
   get();
   obc->ref++;
-  Watch::C_WatchTimeout *cb = new Watch::C_WatchTimeout(osd,
+  Watch::C_WatchTimeout *cb = new Watch::C_WatchTimeout(osd->osd,
 							static_cast<void *>(obc),
 							this,
 							entity, expire);
@@ -4021,7 +4025,7 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 	   << obc->ref << " -> " << (obc->ref-1) << dendl;
 
   if (mode.wake) {
-    osd->requeue_ops(this, mode.waiting);
+    requeue_ops(mode.waiting);
     for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); p++)
       (*p)->Signal();
     mode.wake = false;
@@ -4971,10 +4975,10 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
     update_stats();
     if (waiting_for_missing_object.count(hoid)) {
       dout(20) << " kicking waiters on " << hoid << dendl;
-      osd->requeue_ops(this, waiting_for_missing_object[hoid]);
+      requeue_ops(waiting_for_missing_object[hoid]);
       waiting_for_missing_object.erase(hoid);
       if (missing.missing.size() == 0) {
-	osd->requeue_ops(this, waiting_for_all_missing);
+	requeue_ops(waiting_for_all_missing);
 	waiting_for_all_missing.clear();
       }
     }
@@ -5190,7 +5194,7 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
 	dout(10) << "pushed " << soid << " to all replicas" << dendl;
 	finish_recovery_op(soid);
 	if (waiting_for_degraded_object.count(soid)) {
-	  osd->requeue_ops(this, waiting_for_degraded_object[soid]);
+	  requeue_ops(waiting_for_degraded_object[soid]);
 	  waiting_for_degraded_object.erase(soid);
 	}
 	finish_degraded_object(soid);
@@ -5478,7 +5482,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transac
   map<hobject_t, list<OpRequestRef> >::iterator wmo =
     waiting_for_missing_object.find(oid);
   if (wmo != waiting_for_missing_object.end()) {
-    osd->requeue_ops(this, wmo->second);
+    requeue_ops(wmo->second);
   }
 
   // Add log entry
@@ -5617,7 +5621,7 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
   lock();
   dout(10) << "_finish_mark_all_unfound_lost " << dendl;
 
-  osd->requeue_ops(this, waiting_for_all_missing);
+  requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
   while (!obcs.empty()) {
@@ -5706,10 +5710,10 @@ void ReplicatedPG::on_change()
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
        waiting_for_degraded_object.erase(p++)) {
-    osd->requeue_ops(this, p->second);
+    requeue_ops(p->second);
     finish_degraded_object(p->first);
   }
-  osd->requeue_ops(this, waiting_for_all_missing);
+  requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
   // clear pushing/pulling maps
@@ -5729,7 +5733,7 @@ void ReplicatedPG::on_role_change()
   for (map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.begin();
        p != waiting_for_ondisk.end();
        p++)
-    osd->requeue_ops(this, p->second);
+    requeue_ops(p->second);
   waiting_for_ondisk.clear();
 }
 
@@ -6236,8 +6240,7 @@ int ReplicatedPG::recover_backfill(int max)
       to_remove[pbi.begin] = pbi.objects.begin()->second;
       // Object was degraded, but won't be recovered
       if (waiting_for_degraded_object.count(pbi.begin)) {
-	osd->requeue_ops(
-	  this,
+	requeue_ops(
 	  waiting_for_degraded_object[pbi.begin]);
 	waiting_for_degraded_object.erase(pbi.begin);
       }
@@ -6259,8 +6262,7 @@ int ReplicatedPG::recover_backfill(int max)
 		 << pbi.objects.begin()->second << dendl;
 	// Object was degraded, but won't be recovered
 	if (waiting_for_degraded_object.count(pbi.begin)) {
-	  osd->requeue_ops(
-	    this,
+	  requeue_ops(
 	    waiting_for_degraded_object[pbi.begin]);
 	  waiting_for_degraded_object.erase(pbi.begin);
 	}

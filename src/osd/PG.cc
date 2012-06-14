@@ -584,7 +584,7 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing
       map<hobject_t, list<OpRequestRef> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
-	osd->requeue_ops(this, wmo->second);
+	requeue_ops(wmo->second);
       }
       stats_updated = true;
       missing_loc[soid].insert(fromosd);
@@ -724,7 +724,7 @@ void PG::generate_past_intervals()
 
   epoch_t cur_epoch = MAX(MAX(info.history.epoch_created,
 			      info.history.last_epoch_clean),
-			  osd->superblock.oldest_map);
+			  osd->get_superblock().oldest_map);
   OSDMapRef last_map, cur_map;
   if (cur_epoch >= end_epoch) {
     dout(10) << __func__ << " start epoch " << cur_epoch
@@ -1219,9 +1219,11 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     dout(10) << "activate starting replay interval for " << pool->info.crash_replay_interval
 	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
-    osd->replay_queue_lock.Lock();
-    osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
-    osd->replay_queue_lock.Unlock();
+
+    // TODOSAM: osd->osd-> is no good
+    osd->osd->replay_queue_lock.Lock();
+    osd->osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
+    osd->osd->replay_queue_lock.Unlock();
   }
 
   // twiddle pg state
@@ -1423,7 +1425,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // waiters
   if (!is_replay()) {
-    osd->requeue_ops(this, waiting_for_active);
+    requeue_ops(waiting_for_active);
   }
 
   on_activate();
@@ -1509,8 +1511,8 @@ void PG::replay_queued_ops()
     replay.push_back(p->second);
   }
   replay_queue.clear();
-  osd->requeue_ops(this, replay);
-  osd->requeue_ops(this, waiting_for_active);
+  requeue_ops(replay);
+  requeue_ops(waiting_for_active);
 
   update_stats();
 }
@@ -1576,7 +1578,7 @@ void PG::all_activated_and_committed()
 
 void PG::queue_snap_trim()
 {
-  if (osd->snap_trim_wq.queue(this))
+  if (osd->queue_for_snap_trim(this))
     dout(10) << "queue_snap_trim -- queuing" << dendl;
   else
     dout(10) << "queue_snap_trim -- already trimming" << dendl;
@@ -1589,7 +1591,7 @@ bool PG::queue_scrub()
     return false;
   }
   state_set(PG_STATE_SCRUBBING);
-  osd->scrub_wq.queue(this);
+  osd->queue_for_scrub(this);
   return true;
 }
 
@@ -1677,7 +1679,8 @@ void PG::start_recovery_op(const hobject_t& soid)
   assert(recovering_oids.count(soid) == 0);
   recovering_oids.insert(soid);
 #endif
-  osd->start_recovery_op(this, soid);
+  // TODOSAM: osd->osd-> not good
+  osd->osd->start_recovery_op(this, soid);
 }
 
 void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
@@ -1693,13 +1696,15 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   assert(recovering_oids.count(soid));
   recovering_oids.erase(soid);
 #endif
-  osd->finish_recovery_op(this, soid, dequeue);
+  // TODOSAM: osd->osd-> not good
+  osd->osd->finish_recovery_op(this, soid, dequeue);
 }
 
 
 void PG::defer_recovery()
 {
-  osd->defer_recovery(this);
+  // TODOSAM: osd->osd-> not good
+  osd->osd->defer_recovery(this);
 }
 
 void PG::clear_recovery_state() 
@@ -2548,8 +2553,17 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
   for (map<hobject_t, list<OpRequestRef> >::iterator it = m.begin();
        it != m.end();
        it++)
-    osd->requeue_ops(this, it->second);
+    requeue_ops(it->second);
   m.clear();
+}
+
+void PG::requeue_ops(list<OpRequestRef> &ls)
+{
+  dout(15) << " requeue_ops " << ls << dendl;
+  assert(&ls != &op_queue);
+  size_t requeue_size = ls.size();
+  op_queue.splice(op_queue.begin(), ls, ls.begin(), ls.end());
+  for (size_t i = 0; i < requeue_size; ++i) osd->queue_for_op(this);
 }
 
 
@@ -3139,7 +3153,7 @@ void PG::scrub_clear_state()
   // active -> nothing.
   osd->dec_scrubs_active();
 
-  osd->requeue_ops(this, waiting_for_active);
+  requeue_ops(waiting_for_active);
 
   finalizing_scrub = false;
   scrub_block_writes = false;
@@ -3503,7 +3517,7 @@ void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 
   dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
 
-  osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
+  osd->osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
   osd->cluster_messenger->send_message(mlog, 
 				       get_osdmap()->get_cluster_inst(from));
 }
@@ -3733,13 +3747,13 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 	   it++)
 	ls.push_back(it->second);
       replay_queue.clear();
-      osd->requeue_ops(this, ls);
+      requeue_ops(ls);
     }
 
     on_role_change();
 
     // take active waiters
-    osd->requeue_ops(this, waiting_for_active);
+    requeue_ops(waiting_for_active);
 
     // new primary?
     if (role == 0) {
@@ -4014,7 +4028,7 @@ void PG::queue_op(OpRequestRef op)
 void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
-  osd->requeue_ops(this, op_waiters);
+  requeue_ops(op_waiters);
   for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
        i != peering_waiters.end();
        ++i) osd->queue_for_peering(this);

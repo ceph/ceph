@@ -788,7 +788,7 @@ protected:
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
 public:
-  ReplicatedPG(OSD *o, OSDMapRef curmap,
+  ReplicatedPG(OSDService *o, OSDMapRef curmap,
 	       PGPool *_pool, pg_t p, const hobject_t& oid,
 	       const hobject_t& ioid);
   ~ReplicatedPG() {}
