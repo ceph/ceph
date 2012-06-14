@@ -62,12 +62,31 @@ cls_method_handle_t h_assign_bid;
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 
-typedef struct cls_rbd_snap {
+struct cls_rbd_snap {
   snapid_t id;
   string name;
   uint64_t image_size;
   uint64_t features;
-} cls_rbd_snap;
+
+  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0) {}
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(id, bl);
+    ::encode(name, bl);
+    ::encode(image_size, bl);
+    ::encode(features, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(id, p);
+    ::decode(name, p);
+    ::decode(image_size, p);
+    ::decode(features, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rbd_snap)
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -123,9 +142,7 @@ static int decode_snapshot_metadata(uint64_t snap_id, bufferlist *in,
 {
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(snap->name, iter);
-    ::decode(snap->image_size, iter);
-    ::decode(snap->features, iter);
+    ::decode(*snap, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("error decoding snapshot metadata for snap_id: %llu", snap_id);
     return -EIO;
@@ -490,20 +507,19 @@ int get_snapshot_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist snap_namebl, snap_idbl;
-  snapid_t snap_id;
-  string snap_name;
+  cls_rbd_snap snap_meta;
 
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(snap_name, iter);
-    ::decode(snap_id, iter);
+    ::decode(snap_meta.name, iter);
+    ::decode(snap_meta.id, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
-  CLS_LOG(20, "snapshot_add name=%s id=%llu", snap_name.c_str(), snap_id.val);
+  CLS_LOG(20, "snapshot_add name=%s id=%llu", snap_meta.name.c_str(), snap_meta.id.val);
 
-  if (snap_id > CEPH_MAXSNAP)
+  if (snap_meta.id > CEPH_MAXSNAP)
     return -EINVAL;
 
   uint64_t cur_snap_seq;
@@ -513,15 +529,13 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   // client lost a race with another snapshot creation.
   // snap_seq must be monotonically increasing.
-  if (snap_id < cur_snap_seq)
+  if (snap_meta.id < cur_snap_seq)
     return -ESTALE;
 
-  uint64_t size;
-  r = read_key(hctx, "size", &size);
+  r = read_key(hctx, "size", &snap_meta.image_size);
   if (r < 0)
     return r;
-  uint64_t features;
-  r = read_key(hctx, "features", &features);
+  r = read_key(hctx, "features", &snap_meta.features);
   if (r < 0)
     return r;
 
@@ -530,22 +544,22 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   do {
     map<string, bufferlist> vals;
     r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
-			      max_read, &vals);
+			     max_read, &vals);
     if (r < 0)
       return r;
 
     for (map<string, bufferlist>::iterator it = vals.begin();
 	 it != vals.end(); ++it) {
       snapid_t cur_snap_id = snap_id_from_key(it->first);
-      cls_rbd_snap snap_meta;
-      r = decode_snapshot_metadata(cur_snap_id, &it->second, &snap_meta);
+      cls_rbd_snap old_meta;
+      r = decode_snapshot_metadata(cur_snap_id, &it->second, &old_meta);
       if (r < 0)
 	return r;
 
-      if (snap_meta.name == snap_name || snap_meta.id == snap_id) {
+      if (snap_meta.name == old_meta.name || snap_meta.id == old_meta.id) {
 	CLS_LOG(20, "snap_name %s or snap_id %llu matches existing snap %s %llu",
-		snap_name.c_str(), snap_id.val,
-		snap_meta.name.c_str(), snap_meta.id.val);
+		snap_meta.name.c_str(), snap_meta.id.val,
+		old_meta.name.c_str(), old_meta.id.val);
 	return -EEXIST;
       }
     }
@@ -555,14 +569,11 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   } while (r == RBD_MAX_KEYS_READ);
 
   bufferlist snap_metabl, snap_seqbl;
-  ::encode(snap_name, snap_metabl);
-  ::encode(size, snap_metabl);
-  ::encode(features, snap_metabl);
-
-  ::encode(snap_id, snap_seqbl);
+  ::encode(snap_meta, snap_metabl);
+  ::encode(snap_meta.id, snap_seqbl);
 
   string snapshot_key;
-  key_from_snap_id(snap_id, &snapshot_key);
+  key_from_snap_id(snap_meta.id, &snapshot_key);
   map<string, bufferlist> vals;
   vals["snap_seq"] = snap_seqbl;
   vals[snapshot_key] = snap_metabl;
