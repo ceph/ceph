@@ -6603,16 +6603,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       fixed++;
       info.stats.stats = cstat;
       update_stats();
-
-      // tell replicas
-      for (unsigned i=1; i<acting.size(); i++) {
-	MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
-	m->pg_list.push_back(make_pair(pg_notify_t(get_osdmap()->get_epoch(),
-						   get_osdmap()->get_epoch(),
-						   info),
-				       pg_interval_map_t()));
-	osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(acting[i]));
-      }
+      share_pg_info();
     }
   }
 

@@ -1207,7 +1207,7 @@ struct C_PG_ActivateCommitted : public Context {
 
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map< int, map<pg_t,pg_query_t> >& query_map,
-		  map<int, MOSDPGInfo*> *activator_map)
+		  map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map)
 {
   assert(!is_active());
 
@@ -1327,12 +1327,13 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
         // empty log
 	if (!pi.is_empty() && activator_map) {
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
-	  if (activator_map->count(peer) == 0)
-	    (*activator_map)[peer] = new MOSDPGInfo(get_osdmap()->get_epoch());
-	  (*activator_map)[peer]->pg_list.push_back(make_pair(pg_notify_t(get_osdmap()->get_epoch(),
-									  get_osdmap()->get_epoch(),
-									  info),
-							      past_intervals));
+	  (*activator_map)[peer].push_back(
+	    make_pair(
+	      pg_notify_t(
+		get_osdmap()->get_epoch(),
+		get_osdmap()->get_epoch(),
+		info),
+	      past_intervals));
 	} else {
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
@@ -1529,9 +1530,11 @@ void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
   } else {
     dout(10) << "_activate_committed " << e << " telling primary" << dendl;
     MOSDPGInfo *m = new MOSDPGInfo(e);
-    pg_info_t i = info;
-    i.history.last_epoch_started = e;
-    m->pg_list.push_back(make_pair(pg_notify_t(e, e, i), pg_interval_map_t()));
+    pg_notify_t i = pg_notify_t(get_osdmap()->get_epoch(),
+				get_osdmap()->get_epoch(),
+				info);
+    i.info.history.last_epoch_started = e;
+    m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, primary);
   }
 
@@ -3409,10 +3412,13 @@ void PG::share_pg_info()
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
-    m->pg_list.push_back(make_pair(pg_notify_t(get_osdmap()->get_epoch(),
-					       get_osdmap()->get_epoch(),
-					       info),
-				   pg_interval_map_t()));
+    m->pg_list.push_back(
+      make_pair(
+	pg_notify_t(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  info),
+	pg_interval_map_t()));
     osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
   }
 }
