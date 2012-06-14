@@ -1388,7 +1388,7 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
     fin = new C_Contexts(g_ceph_context);
     map< int, vector<pair<pg_notify_t, pg_interval_map_t> > >  notify_list;  // primary -> list
     map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
-    map<int,MOSDPGInfo*> info_map;  // peer -> message
+    map<int,vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;  // peer -> message
     PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &fin->contexts, t);
     pg = _create_lock_pg(info.pgid, create, false, role, up, acting, history, pi, *t);
     pg->handle_create(&rctx);
@@ -3913,7 +3913,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
   // reset pg
   map< int, vector<pair<pg_notify_t, pg_interval_map_t> > >  notify_list;  // primary -> list
   map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
-  map<int,MOSDPGInfo*> info_map;  // peer -> message
+  map<int,vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;  // peer -> message
   PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin->contexts, &t);
 
   // FIXME: this breaks if we have a map discontinuity
@@ -4061,7 +4061,7 @@ void OSD::handle_pg_create(OpRequestRef op)
   op->mark_started();
 
   map< int, map<pg_t,pg_query_t> > query_map;
-  map<int, MOSDPGInfo*> info_map;
+  map<int,vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;
 
   int num_created = 0;
 
@@ -4215,17 +4215,19 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map)
 }
 
 
-void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
+void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info_map)
 {
-  for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
+  for (map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >::iterator p = info_map.begin();
        p != info_map.end();
        ++p) { 
-    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator i = p->second->pg_list.begin();
-	 i != p->second->pg_list.end();
+    for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator i = p->second.begin();
+	 i != p->second.end();
 	 ++i) {
-      dout(20) << "Sending info " << *i << " to osd." << p->first << dendl;
+      dout(20) << "Sending info " << i->first.info << " to osd." << p->first << dendl;
     }
-    cluster_messenger->send_message(p->second, osdmap->get_cluster_inst(p->first));
+    MOSDPGInfo *m = new MOSDPGInfo(osdmap->get_epoch());
+    m->pg_list = p->second;
+    cluster_messenger->send_message(m, osdmap->get_cluster_inst(p->first));
   }
   info_map.clear();
 }
@@ -4322,11 +4324,12 @@ void OSD::handle_pg_info(OpRequestRef op)
       continue;
     }
 
-    PG *pg = get_or_create_pg(p->first.info, p->second, m->get_epoch(), 
+    PG *pg = get_or_create_pg(p->first.info, p->second, p->first.epoch_sent,
 			      from, created, false);
     if (!pg)
       continue;
-    pg->queue_info(m->get_epoch(), m->get_epoch(), from,  p->first.info);
+    pg->queue_info(p->first.epoch_sent, p->first.query_epoch, from,
+		   p->first.info);
     pg->unlock();
   }
 }
@@ -4815,7 +4818,7 @@ void OSD::do_recovery(PG *pg)
     C_Contexts *fin = new C_Contexts(g_ceph_context);
     map< int, vector<pair<pg_notify_t, pg_interval_map_t> > >  notify_list;  // primary -> list
     map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
-    map<int,MOSDPGInfo*> info_map;  // peer -> message
+    map<int,vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;  // peer -> message
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
 
     int started = pg->start_recovery_ops(max, &rctx);
@@ -5234,7 +5237,7 @@ void OSD::process_peering_event(PG *pg)
 {
   map< int, map<pg_t, pg_query_t> > query_map;
   map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > notify_list;
-  map<int,MOSDPGInfo*> info_map;  // peer -> message
+  map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;  // peer -> message
   bool need_up_thru = false;
   epoch_t same_interval_since;
   OSDMapRef curmap;

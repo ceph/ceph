@@ -651,7 +651,7 @@ protected:
   // -- generic pg peering --
   void do_notifies(map< int,vector<pair<pg_notify_t, pg_interval_map_t> > >& notify_list);
   void do_queries(map< int, map<pg_t,pg_query_t> >& query_map);
-  void do_infos(map<int, MOSDPGInfo*>& info_map);
+  void do_infos(map<int, vector<pair<pg_notify_t, pg_interval_map_t> > >& info_map);
   void repeer(PG *pg, map< int, map<pg_t,pg_query_t> >& query_map);
 
   bool require_mon_peer(Message *m);
