@@ -5383,28 +5383,18 @@ bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
   if (key.length() == 0)
     key = op->get_oid().name;
 
-  const OSDCapSpec *spec = caps.get_cap(pg->pool->name, pg->pool->auid, key);
-  // just do the rwx, for now!
-  rwxa_t perm = spec ? spec->allow : 0;
+  bool cap = caps.is_capable(pg->pool->name, pg->pool->auid, key,
+			     op->may_read(), op->may_write(), op->require_exec_caps());
 
   dout(20) << "op_has_sufficient_caps pool=" << pg->pool->id << " (" << pg->pool->name
-	   << ") owner=" << pg->pool->auid << " allow=" << perm
+	   << ") owner=" << pg->pool->auid
 	   << " may_read=" << op->may_read()
 	   << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec()
-           << " require_exec_caps=" << op->require_exec_caps() << dendl;
-
-  if (op->may_read() && !(perm & OSD_CAP_R)) {
-    dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
-    return false;
-  } else if (op->may_write() && !(perm & OSD_CAP_W)) {
-    dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
-    return false;
-  } else if (op->require_exec_caps() && !(perm & OSD_CAP_X)) {
-    dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
-    return false;
-  }
-  return true;
+           << " require_exec_caps=" << op->require_exec_caps()
+	   << " -> " << (cap ? "yes" : "NO")
+	   << dendl;
+  return cap;
 }
 
 void OSD::handle_sub_op(OpRequestRef op)
