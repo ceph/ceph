@@ -19,7 +19,7 @@ Add our package repository to your system's list of APT sources.
 See `the Debian repository`_ for a complete list of distributions 
 supported. ::
 
-	echo deb http://ceph.com/debian/ ${lsb_release -sc} main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://ceph.com/debian/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Add Development Packages
 ------------------------
@@ -36,17 +36,14 @@ Add our package repository to your system's list of APT sources, but replace ``{
 with the branch you'd like to use (e.g., chef-3, wip-hack, master, stable).
 We support ``maveric``, ``oneiric``, and ``precise`` distributions. ::
 
-	echo deb http://gitbuilder.ceph.com/ceph-deb-${lsb_release -sc}-x86_64-basic/ref/{BRANCH} ${lsb_release -sc} main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://gitbuilder.ceph.com/ceph-deb-$(lsb_release -sc)-x86_64-basic/ref/{BRANCH} $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Installing Packages
 -------------------
 Once you have added either release or development packages to APT, 
-you should update APT's database::
+you should update APT's database and install Ceph::
 
-	sudo apt-get update
+	sudo apt-get update && sudo apt-get install ceph
 
-Install Ceph::
-
-	sudo apt-get install ceph
 
 .. _the Debian repository: http://ceph.com/debian/dists
