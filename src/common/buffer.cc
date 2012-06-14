@@ -381,6 +381,17 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     return 0;
   }
 
+  bool buffer::ptr::is_zero() const
+  {
+    const char *data = c_str();
+    for (size_t p = 0; p < _len; p++) {
+      if (data[p] != 0) {
+	return false;
+      }
+    }
+    return true;
+  }
+
   void buffer::ptr::append(char c)
   {
     assert(_raw);
@@ -695,6 +706,17 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 	 it++) 
       if (!it->is_n_page_sized())
 	return false;
+    return true;
+  }
+
+  bool buffer::list::is_zero() const {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 it++) {
+      if (!it->is_zero()) {
+	return false;
+      }
+    }
     return true;
   }
 

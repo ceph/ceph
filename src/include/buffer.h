@@ -197,6 +197,7 @@ public:
     unsigned wasted();
 
     int cmp(const ptr& o);
+    bool is_zero() const;
 
     // modifiers
     void set_offset(unsigned o) { _off = o; }
@@ -329,6 +330,8 @@ public:
 
     bool is_page_aligned() const;
     bool is_n_page_sized() const;
+
+    bool is_zero() const;
 
     // modifiers
     void clear() {
