@@ -176,7 +176,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
 			 str                          [_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
 
     // grant := allow match capspec
-    grant = lit("allow") >> ((match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
+    grant = lit("allow") >> ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
+			     (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
 
     // osdcap := grant [grant ...]
     osdcap %= (grant % (lit(';') | lit(',')))         [_val = phoenix::construct<OSDCap>(_1)];
