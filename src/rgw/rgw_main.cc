@@ -418,20 +418,22 @@ int main(int argc, const char **argv)
   sighandler_term = signal(SIGTERM, godown_alarm);
   
   RGWStoreManager store_manager;
-  
+
+  int r = 0;
   if (!store_manager.init(g_ceph_context)) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
-    return EIO;
+    r = EIO;
   }
-  
-  int r = rgw_perf_start(g_ceph_context);
-  if (r < 0)
-    return 1;
+  if (!r)
+    r = rgw_perf_start(g_ceph_context);
 
   mutex.Lock();
   init_timer.cancel_all_events();
   init_timer.shutdown();
   mutex.Unlock();
+
+  if (r) 
+    return 1;
 
   rgw_log_usage_init(g_ceph_context);
 
