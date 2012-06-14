@@ -149,7 +149,7 @@ def task(ctx, config):
 
     # TESTCASE 'add-swift-key','key','create','swift key','succeeds'
     (err, out) = rgwadmin(ctx, client, [
-            'key', 'create', '--subuser', subuser1,
+            'subuser', 'create', '--subuser', subuser1,
             '--secret', swift_secret1,
             '--key-type', 'swift',
             ])
@@ -164,7 +164,7 @@ def task(ctx, config):
 
     # TESTCASE 'add-swift-subuser','key','create','swift sub-user key','succeeds'
     (err, out) = rgwadmin(ctx, client, [
-            'key', 'create', '--subuser', subuser2,
+            'subuser', 'create', '--subuser', subuser2,
             '--secret', swift_secret2,
             '--key-type', 'swift',
             ])
@@ -185,13 +185,21 @@ def task(ctx, config):
     assert not err
     assert len(out['swift_keys']) == 1
 
-    # TESTCASE 'rm-swift-key2','key','rm','subuser','succeeds, second key is removed'
+    # TESTCASE 'rm-subuser','subuser','rm','subuser','success, subuser is removed'
     (err, out) = rgwadmin(ctx, client, [
-            'key', 'rm', '--subuser', subuser2,
-            '--key-type', 'swift',
+            'subuser', 'rm', '--subuser', subuser1,
+            ])
+    assert not err
+    assert len(out['subusers']) == 1
+
+    # TESTCASE 'rm-subuser-with-keys','subuser','rm','subuser','succeeds, second subser and key is removed'
+    (err, out) = rgwadmin(ctx, client, [
+            'subuser', 'rm', '--subuser', subuser2,
+            '--key-type', 'swift', '--purge-keys',
             ])
     assert not err
     assert len(out['swift_keys']) == 0
+    assert len(out['subusers']) == 0
 
     # TESTCASE 'bucket-stats','bucket','stats','no session/buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user])
