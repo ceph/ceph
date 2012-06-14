@@ -90,7 +90,8 @@ def task(ctx, config):
             '--display-name', display_name,
             '--email', email,
             '--access-key', access_key,
-            '--secret', secret_key
+            '--secret', secret_key,
+            '--max-buckets', '4',
             ])
     assert not err
 
@@ -232,6 +233,23 @@ def task(ctx, config):
     assert len(out) == 1
     assert out[0] == bucket_name
 
+    # TESTCASE 'max-bucket-limit,'bucket','create','4 buckets','5th bucket fails due to max buckets == 4'
+    bucket2 = connection.create_bucket(bucket_name + '2')
+    bucket3 = connection.create_bucket(bucket_name + '3')
+    bucket4 = connection.create_bucket(bucket_name + '4')
+    # the 5th should fail.
+    failed = False
+    try:
+        bucket5 = connection.create_bucket(bucket_name + '5')
+    except:
+        failed = True
+    assert failed
+
+    # delete the buckets
+    bucket2.delete()
+    bucket3.delete()
+    bucket4.delete()
+   
     # TESTCASE 'bucket-stats3','bucket','stats','new empty bucket','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, [
             'bucket', 'stats', '--bucket', bucket_name])
@@ -278,12 +296,12 @@ def task(ctx, config):
         (err, log) = rgwadmin(ctx, client, ['log', 'show', '--object', obj])
         assert not err
         assert len(log) > 0
-        assert log['bucket'] == bucket_name
-        assert log['bucket_id'] == bucket_id
-        assert log['bucket_owner'] == user
+        assert log['bucket'].find(bucket_name) == 0
+        assert log['bucket'] != bucket_name or log['bucket_id'] == bucket_id 
+        assert log['bucket_owner'] == user or log['bucket'] == bucket_name + '5'
         for entry in log['log_entries']:
-            assert entry['bucket'] == bucket_name
-            assert entry['user'] == user
+            assert entry['bucket'] == log['bucket']
+            assert entry['user'] == user or log['bucket'] == bucket_name + '5'
 
         # TESTCASE 'log-rm','log','rm','delete log objects','succeeds'
         (err, out) = rgwadmin(ctx, client, ['log', 'rm', '--object', obj])
@@ -313,6 +331,7 @@ def task(ctx, config):
     # TESTCASE 'rm-user-buckets','user','rm','existing user','fails, still has buckets'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
     assert err
+
     # delete should fail
     fails = False
     try:
