@@ -179,10 +179,8 @@ else
 endif
 
 # Build rules for libraries.
-lib_LTLIBRARIES = lib/libgtest.la lib/libgtest_main.la
-lib_LTLIBRARIES += lib/libgtest.a lib/libgtest_main.a
+lib_LIBRARIES = lib/libgtest.a lib/libgtest_main.a
 
-lib_libgtest_la_SOURCES = src/gtest-all.cc
 lib_libgtest_a_SOURCES = src/gtest-all.cc
 
 pkginclude_HEADERS = include/gtest/gtest.h \
@@ -207,9 +205,6 @@ pkginclude_internal_HEADERS = \
   include/gtest/internal/gtest-string.h \
   include/gtest/internal/gtest-tuple.h \
   include/gtest/internal/gtest-type-util.h
-
-lib_libgtest_main_la_SOURCES = src/gtest_main.cc
-lib_libgtest_main_la_LIBADD = lib/libgtest.la
 
 lib_libgtest_main_a_SOURCES = src/gtest_main.cc
 lib_libgtest_main_a_LIBADD = lib/libgtest.a
@@ -247,7 +242,7 @@ samples_sample1_unittest_LDADD = lib/libgtest_main.la \
 TESTS += samples/sample10_unittest
 check_PROGRAMS += samples/sample10_unittest
 samples_sample10_unittest_SOURCES = samples/sample10_unittest.cc
-samples_sample10_unittest_LDADD = lib/libgtest.la
+samples_sample10_unittest_LDADD = lib/libgtest.a
 
 # This tests most constructs of gtest and verifies that libgtest_main
 # works.
