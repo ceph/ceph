@@ -1,0 +1,7 @@
+roles:
+- [mon.a, mds.a, osd.0, client.0, osd.1]
+tasks:
+- ceph:
+- rgw:
+    client.0:
+- radosgw-admin:
