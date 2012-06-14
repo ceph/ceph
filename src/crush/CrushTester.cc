@@ -45,6 +45,26 @@ void CrushTester::set_device_weight(int dev, float f)
   device_weight[dev] = w;
 }
 
+vector <__u32> CrushTester::compact_device_weights(vector <__u32> weight)
+{
+  vector<__u32> compact_weight;
+  __u32 num_to_check = weight.size();
+  int last_id_used = 0;
+
+  for (__u32 i = 0; i < num_to_check; i++){
+    if (weight[i] > 0){
+      compact_weight.push_back( weight[i]);
+    }
+    else if (weight[i] == 0){
+
+    }
+  }
+
+  return compact_weight;
+}
+
+
+
 void CrushTester::adjust_weights(vector<__u32>& weight)
 {
 #ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
@@ -103,7 +123,7 @@ void CrushTester::adjust_weights(vector<__u32>& weight)
       for (int o = 0; o < local_devices_to_visit; o++){
         int item = crush.get_bucket_item(id, o);
 	//err << "device " << item << " in bucket " << id << " weight " << crush.get_bucket_item_weight(id, o) << std::endl;
-	weight[item] = 10;
+	weight[item] = 0;  // changed from "10" possible bug?
       }
     }
   }
@@ -137,8 +157,16 @@ int CrushTester::test()
   if (output_utilization_all)
     err << "devices weights (hex): " << hex << weight << dec << std::endl;
 
+  // test ability to retrieve item parent information
+  if (output_utilization_all)
+    for (int j = 0; j < weight.size(); j++)
+      err << "device " << j << " is located at " << crush.get_loc(j) << endl;
+
   // make adjustments
   adjust_weights(weight);
+
+  // create a temporary vector to hold a weight vector with no devices marked out
+  vector<__u32> compacted_weight = compact_device_weights(weight);
 
   int num_devices_active = 0;
   for (vector<__u32>::iterator p = weight.begin(); p != weight.end(); ++p)
@@ -253,7 +281,7 @@ int CrushTester::test()
           if (use_crush) {
             if (output_statistics)
               err << "CRUSH"; // prepend CRUSH to placement output
-            crush.do_rule(r, x, out, nr, weight);
+            crush.do_rule(r, x, out, nr, compacted_weight);
           } else {
             if (output_statistics)
               err << "RNG"; // prepend RNG to placement output to denote simulation
