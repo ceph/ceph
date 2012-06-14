@@ -104,7 +104,23 @@ struct OSDCap {
   void set_allow_all();
   bool parse(const std::string& str, ostream *err=NULL);
 
-  const OSDCapSpec *get_cap(const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
+  /**
+   * check if we are capable of something
+   *
+   * This method actually checks a description of a particular operation against
+   * what the capability has specified.  Currently that is just rwx with matches
+   * against pool, pool auid, and object name prefix.
+   *
+   * @param pool_name name of the pool we are accessing
+   * @param pool_auid owner of the pool we are accessing
+   * @param object name of the object we are accessing
+   * @param op_may_read whether the operation may need to read
+   * @param op_may_write whether the operation may need to write
+   * @param op_may_exec whether the operation needs to execute a class
+   * @return true if the operation is allowed, false otherwise
+   */
+  bool is_capable(const string& pool_name, int64_t pool_auid, const string& object,
+		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 

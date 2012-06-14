@@ -107,13 +107,21 @@ void OSDCap::set_allow_all()
   grants.push_back(OSDCapGrant(OSDCapMatch(), OSDCapSpec(OSD_CAP_ANY)));
 }
 
-const OSDCapSpec *OSDCap::get_cap(const string& pool_name, int64_t pool_auid, const string& object) const
+bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid, const string& object,
+			bool op_may_read, bool op_may_write, bool op_may_exec) const
 {
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p) {
-    if (p->match.is_match(pool_name, pool_auid, object))
-      return &p->spec;
+    if (p->match.is_match(pool_name, pool_auid, object)) {
+      if (op_may_read && !(p->spec.allow & OSD_CAP_R))
+	continue;
+      if (op_may_write && !(p->spec.allow & OSD_CAP_W))
+	continue;
+      if (op_may_exec && !(p->spec.allow & OSD_CAP_X))
+	continue;
+      return true;
+    }
   }
-  return NULL;
+  return false;
 }
 
 
