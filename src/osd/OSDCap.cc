@@ -110,13 +110,15 @@ void OSDCap::set_allow_all()
 bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid, const string& object,
 			bool op_may_read, bool op_may_write, bool op_may_exec) const
 {
+  rwxa_t allow = 0;
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p) {
     if (p->match.is_match(pool_name, pool_auid, object)) {
-      if (op_may_read && !(p->spec.allow & OSD_CAP_R))
+      allow |= p->spec.allow;
+      if (op_may_read && !(allow & OSD_CAP_R))
 	continue;
-      if (op_may_write && !(p->spec.allow & OSD_CAP_W))
+      if (op_may_write && !(allow & OSD_CAP_W))
 	continue;
-      if (op_may_exec && !(p->spec.allow & OSD_CAP_X))
+      if (op_may_exec && !(allow & OSD_CAP_X))
 	continue;
       return true;
     }
