@@ -310,7 +310,21 @@ def task(ctx, config):
     key = boto.s3.key.Key(bucket)
     key.set_contents_from_string('three')
 
-    # TESTCASE 'rm-user','user','rm','existing user','succeeds'
+    # TESTCASE 'rm-user-buckets','user','rm','existing user','fails, still has buckets'
+    (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
+    assert err
+    # delete should fail
+    fails = False
+    try:
+        bucket.delete()
+    except:
+        fails = True
+    assert fails
+
+    key.delete()
+    bucket.delete()
+    
+    # TESTCASE 'rm-user','user','rm','existing user','fails, still has buckets'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
     assert not err
 
