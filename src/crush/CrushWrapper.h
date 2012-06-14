@@ -216,6 +216,10 @@ public:
     return ret;
   }
 
+
+  map<string,string> get_loc(int id);
+
+
   /**
    * insert an item into the map at a specific position
    *
