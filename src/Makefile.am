@@ -673,6 +673,12 @@ unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_daemon_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_daemon_config
 
+unittest_osd_osdcap_SOURCES = test/osd/osdcap.cc
+unittest_osd_osdcap_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+unittest_osd_osdcap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA} libosd.a
+unittest_osd_osdcap_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_osd_osdcap
+
 #if WITH_RADOSGW
 #unittest_librgw_SOURCES = test/librgw.cc
 #unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
@@ -1155,7 +1161,7 @@ libosd_a_SOURCES = \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
 	osd/OSD.cc \
-	osd/OSDCaps.cc \
+	osd/OSDCap.cc \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc
@@ -1574,7 +1580,7 @@ noinst_HEADERS = \
         osd/Ager.h\
 	osd/ClassHandler.h\
         osd/OSD.h\
-        osd/OSDCaps.h\
+        osd/OSDCap.h\
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
 	osd/OpRequest.h\
