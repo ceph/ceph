@@ -31,8 +31,10 @@
 #define RBD_HEADER_PREFIX      "rbd_header."
 #define RBD_DATA_PREFIX        "rbd_data."
 
-#define RBD_FEATURES_INCOMPATIBLE 0
-#define RBD_FEATURES_ALL 0
+#define RBD_FEATURE_LAYERING      1
+
+#define RBD_FEATURES_INCOMPATIBLE (RBD_FEATURE_LAYERING)
+#define RBD_FEATURES_ALL          (RBD_FEATURE_LAYERING)
 
 /*
  * old-style rbd image 'foo' consists of objects

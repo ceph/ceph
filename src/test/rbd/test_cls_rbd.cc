@@ -285,8 +285,15 @@ TEST(cls_rbd, parents)
   uint64_t size;
 
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "doesnotexist", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  
+  // old image should fail
+  ASSERT_EQ(0, create_image(&ioctx, "old", 1000, 22, 0, "old_blk."));
+  ASSERT_EQ(-ENOEXEC, get_parent(&ioctx, "old", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, "old", -1, "parent", 3, 10<<20));
+  ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, "old"));
 
-  ASSERT_EQ(0, create_image(&ioctx, "foo", 1000, 22, 0, "foo."));
+  // new image will work
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 1000, 22, RBD_FEATURE_LAYERING, "foo."));
 
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 123, &pool, &parent, &snapid, &size));
