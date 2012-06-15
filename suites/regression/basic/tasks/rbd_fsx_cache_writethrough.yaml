@@ -6,4 +6,4 @@ tasks:
         rbd cache max dirty: 0
 - rbd_fsx:
     clients: [client.0]
-    ops: 15000
+    ops: 20000

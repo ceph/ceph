@@ -5,4 +5,4 @@ tasks:
         rbd cache: false
 - rbd_fsx:
     clients: [client.0]
-    ops: 2000
+    ops: 20000
