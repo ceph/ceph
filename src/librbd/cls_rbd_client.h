@@ -30,17 +30,17 @@ namespace librbd {
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix);
     int get_features(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t snap_id, uint64_t *features);
+		     snapid_t snap_id, uint64_t *features);
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix);
     int get_size(librados::IoCtx *ioctx, const std::string &oid,
-		 uint64_t snap_id, uint64_t *size, uint8_t *order);
+		 snapid_t snap_id, uint64_t *size, uint8_t *order);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t snap_id, const std::string &snap_name);
+		     snapid_t snap_id, const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
-			uint64_t snap_id);
+			snapid_t snap_id);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -66,7 +66,7 @@ namespace librbd {
     // class operations on the old format, kept for
     // backwards compatability
     int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-			 uint64_t snap_id, const std::string &snap_name);
+			 snapid_t snap_id, const std::string &snap_name);
     int old_snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
 			    const std::string &snap_name);
     int old_snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
