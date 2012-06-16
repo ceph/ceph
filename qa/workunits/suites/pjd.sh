@@ -2,7 +2,7 @@
 
 set -e
 
-wget http://ceph.newdream.net/qa/pjd.tgz
+wget http://ceph.com/qa/pjd.tgz
 tar zxvf pjd*.tgz
 cd pjd*
 make

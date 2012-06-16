@@ -3,7 +3,7 @@
 set -e
 
 do_tarball() {
-    wget http://ceph.newdream.net/qa/$1
+    wget http://ceph.com/qa/$1
     tar xvf$2 $1
     mkdir .snap/k
     sync

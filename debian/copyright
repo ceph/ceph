@@ -1,7 +1,7 @@
 Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135
 Name: ceph
 Maintainer: Sage Weil <sage@newdream.net>
-Source: http://ceph.newdream.net/
+Source: http://ceph.com/
 
 Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>

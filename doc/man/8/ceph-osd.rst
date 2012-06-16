@@ -99,7 +99,7 @@ Availability
 ============
 
 **ceph-osd** is part of the Ceph distributed file system. Please refer to
-the Ceph wiki at http://ceph.newdream.net/wiki for more information.
+the Ceph documentation at http://ceph.com/docs for more information.
 
 See also
 ========
