@@ -1112,7 +1112,8 @@ int FileStore::mkjournal()
     if (ret < 0) {
       ret = journal->create();
       if (ret)
-	dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
+	dout(0) << "mkjournal error creating journal on " << journalpath
+		<< ": " << cpp_strerror(ret) << dendl;
       else
 	dout(0) << "mkjournal created journal on " << journalpath << dendl;
     }
