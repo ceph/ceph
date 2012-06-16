@@ -53,7 +53,7 @@ fi
 
 ##
 stamp=`date +%Y-%m-%d_%H:%M:%S`
-name=`whoami`"-$stamp-$ceph-$kernel-$flavor"
+name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor"
 
 ~/src/teuthology/virtualenv/bin/teuthology-suite -v $fn \
     --collections ~/src/ceph-qa-suite/suites/$suite/* \
