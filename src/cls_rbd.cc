@@ -415,11 +415,11 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-// image locking
 /**
  * helper function to add a lock and update disk state.
- * @param lock_type The type of lock, either RBD_LOCK_EXCLUSIVE
- * or RBD_LOCK_SHARED
+ *
+ * Input:
+ * @param lock_type The type of lock, either RBD_LOCK_EXCLUSIVE or RBD_LOCK_SHARED
  * @param cookie The cookie to set in the lock
  *
  * @return 0 on success, or -errno on failure
@@ -428,6 +428,7 @@ int lock_image(cls_method_context_t hctx, string lock_type,
                const string &cookie)
 {
   bool exclusive = lock_type == RBD_LOCK_EXCLUSIVE;
+
   // see if there's already a locker
   set<pair<string, string> > lockers;
   string existing_lock_type;
@@ -476,8 +477,10 @@ int lock_image(cls_method_context_t hctx, string lock_type,
   }
   return r;
 }
+
 /**
  * Set an exclusive lock on an image for the activating client, if possible.
+ *
  * Input:
  * @param lock_cookie A string cookie, defined by the locker.
  *
@@ -501,6 +504,7 @@ int lock_image_exclusive(cls_method_context_t hctx,
 
 /**
  * Set an exclusive lock on an image, if possible.
+ *
  * Input:
  * @param lock_cookie A string cookie, defined by the locker.
  *
@@ -521,8 +525,10 @@ int lock_image_shared(cls_method_context_t hctx,
 
   return lock_image(hctx, RBD_LOCK_SHARED, lock_cookie);
 }
+
 /**
  *  helper function to remove a lock from on disk and clean up state.
+ *
  *  @param inst The string representation of the locker's entity.
  *  @param cookie The user-defined cookie associated with the lock.
  *
@@ -556,8 +562,10 @@ int remove_lock(cls_method_context_t hctx, const string& inst,
 
   return 0;
 }
+
 /**
  * Unlock an image which the activating client currently has locked.
+ *
  * Input:
  * @param lock_cookie The user-defined cookie associated with the lock.
  *
@@ -584,8 +592,10 @@ int unlock_image(cls_method_context_t hctx,
   inst_stringstream << inst;
   return remove_lock(hctx, inst_stringstream.str(), lock_cookie);
 }
+
 /**
  * Break the lock on an image held by any client.
+ *
  * Input:
  * @param locker The string representation of the locking client's entity.
  * @param lock_cookie The user-defined cookie associated with the lock.
@@ -593,7 +603,8 @@ int unlock_image(cls_method_context_t hctx,
  * @return 0 on success, -EINVAL if it can't decode the locker and
  * cookie, -ENOENT if there is no such lock (either entity or cookie
  * is wrong), or -errno on other (unexpected) error.
- */int break_lock(cls_method_context_t hctx,
+ */
+int break_lock(cls_method_context_t hctx,
                bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "break_lock");
@@ -613,7 +624,10 @@ int unlock_image(cls_method_context_t hctx,
  /**
  * Retrieve a list of clients locking this object (presumably an rbd header),
  * as well as whether the lock is shared or exclusive.
+ *
+ * Input:
  * @param in is ignored.
+ *
  * Output:
  * @param set<pair<string, string> > lockers The set of clients holding locks,
  * as <client, cookie> pairs.
@@ -664,6 +678,8 @@ int check_exists(cls_method_context_t hctx)
 }
 
 /**
+ * get the current parent, if any
+ *
  * Input:
  * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
  *
@@ -672,7 +688,8 @@ int check_exists(cls_method_context_t hctx)
  * @param image parent image id
  * @param snapid parent snapid
  * @param size portion of parent mapped under the child
- * @returns 0 on success, negative error code on failure
+ *
+ * @returns 0 on success, -ENOENT if no parent, other negative error code on failure
  */
 int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -723,10 +740,12 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 /**
  * set the image parent
  *
+ * Input:
  * @param pool parent pool
  * @param id parent image id
  * @param snapid parent snapid
  * @param size parent size
+ *
  * @returns 0 on success, or negative error code
  */
 int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
