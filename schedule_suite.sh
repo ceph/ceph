@@ -36,6 +36,8 @@ tasks:
 overrides:
   ceph:
     branch: $ceph
+    log-whitelist:
+    - slow request
 EOF
 
 if [ "$flavor" = "gcov" ]; then
