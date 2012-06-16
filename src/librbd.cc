@@ -155,6 +155,8 @@ namespace librbd {
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     bool snap_exists; // false if our snapid was deleted
+    std::set<std::pair<std::string, std::string> > locks;
+    bool exclusive_locked;
     std::string name;
     std::string snapname;
     IoCtx data_ctx, md_ctx;
@@ -181,6 +183,7 @@ namespace librbd {
 	perfcounter(NULL),
 	snapid(CEPH_NOSNAP),
 	snap_exists(true),
+	exclusive_locked(false),
 	name(imgname),
 	needs_refresh(true),
 	refresh_seq(0),
@@ -584,6 +587,16 @@ namespace librbd {
 
   int open_image(ImageCtx *ictx);
   void close_image(ImageCtx *ictx);
+
+  /* cooperative locking */
+  int list_locks(ImageCtx *ictx,
+                 std::set<std::pair<std::string, std::string> > &locks,
+                 bool &exclusive);
+  int lock_exclusive(ImageCtx *ictx, const std::string& cookie);
+  int lock_shared(ImageCtx *ictx, const std::string& cookie);
+  int unlock(ImageCtx *ictx, const std::string& cookie);
+  int break_lock(ImageCtx *ictx, const std::string& lock_holder,
+                 const std::string& cookie);
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
@@ -1379,7 +1392,9 @@ int ictx_refresh(ImageCtx *ictx)
       r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
 					   &ictx->size, &ictx->features,
 					   &incompatible_features,
-					   &new_snapc);
+                                           &ictx->locks,
+                                           &ictx->exclusive_locked,
+                                           &new_snapc);
       if (r < 0) {
 	lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
 		   << dendl;
@@ -1650,6 +1665,52 @@ void close_image(ImageCtx *ictx)
   ictx->lock.Unlock();
   delete ictx;
 }
+
+int list_locks(ImageCtx *ictx,
+               std::set<std::pair<std::string, std::string> > &locks,
+               bool &exclusive)
+{
+  ldout(ictx->cct, 20) << "list_locks on image " << ictx << dendl;
+
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  Mutex::Locker locker(ictx->lock);
+  locks = ictx->locks;
+  exclusive = ictx->exclusive_locked;
+  return 0;
+}
+
+int lock_exclusive(ImageCtx *ictx, const std::string& cookie)
+{
+  /**
+   * If we wanted we could do something more intelligent, like local
+   * checks that we think we will succeed. But for now, let's not
+   * duplicate that code.
+   */
+  return cls_client::lock_image_exclusive(&ictx->md_ctx,
+                                          ictx->header_oid, cookie);
+}
+
+int lock_shared(ImageCtx *ictx, const std::string& cookie)
+{
+  return cls_client::lock_image_shared(&ictx->md_ctx,
+                                       ictx->header_oid, cookie);
+}
+
+int unlock(ImageCtx *ictx, const std::string& cookie)
+{
+  return cls_client::unlock_image(&ictx->md_ctx, ictx->header_oid, cookie);
+}
+
+int break_lock(ImageCtx *ictx, const std::string& lock_holder,
+               const std::string& cookie)
+{
+  return cls_client::break_lock(&ictx->md_ctx, ictx->header_oid,
+                                lock_holder, cookie);
+}
+
 
 int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 		     int (*cb)(uint64_t, size_t, const char *, void *),
@@ -2355,67 +2416,86 @@ int Image::resize(uint64_t size)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::resize(ictx, size, prog_ctx);
-  return r;
+  return librbd::resize(ictx, size, prog_ctx);
 }
 
 int Image::resize_with_progress(uint64_t size, librbd::ProgressContext& pctx)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::resize(ictx, size, pctx);
-  return r;
+  return librbd::resize(ictx, size, pctx);
 }
 
 int Image::stat(image_info_t& info, size_t infosize)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::info(ictx, info, infosize);
-  return r;
+  return librbd::info(ictx, info, infosize);
 }
 
 int Image::copy(IoCtx& dest_io_ctx, const char *destname)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::copy(*ictx, dest_io_ctx, destname, prog_ctx);
-  return r;
+  return librbd::copy(*ictx, dest_io_ctx, destname, prog_ctx);
 }
 
 int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			      librbd::ProgressContext &pctx)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::copy(*ictx, dest_io_ctx, destname, pctx);
-  return r;
+  return librbd::copy(*ictx, dest_io_ctx, destname, pctx);
+}
+
+int Image::list_locks(std::set<std::pair<std::string, std::string> > &locks,
+                      bool &exclusive)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::list_locks(ictx, locks, exclusive);
+}
+
+int Image::lock_exclusive(const std::string& cookie)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::lock_exclusive(ictx, cookie);
+}
+int Image::lock_shared(const std::string& cookie)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::lock_shared(ictx, cookie);
+}
+int Image::unlock(const std::string& cookie)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::unlock(ictx, cookie);
+}
+int Image::break_lock(const std::string& other_locker, const std::string& cookie)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::break_lock(ictx, other_locker, cookie);
 }
 
 int Image::snap_create(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_create(ictx, snap_name);
-  return r;
+  return librbd::snap_create(ictx, snap_name);
 }
 
 int Image::snap_remove(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_remove(ictx, snap_name);
-  return r;
+  return librbd::snap_remove(ictx, snap_name);
 }
 
 int Image::snap_rollback(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::snap_rollback(ictx, snap_name, prog_ctx);
-  return r;
+  return librbd::snap_rollback(ictx, snap_name, prog_ctx);
 }
 
 int Image::snap_rollback_with_progress(const char *snap_name, ProgressContext& prog_ctx)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_rollback(ictx, snap_name, prog_ctx);
-  return r;
+  return librbd::snap_rollback(ictx, snap_name, prog_ctx);
 }
 
 int Image::snap_list(std::vector<librbd::snap_info_t>& snaps)
@@ -2703,6 +2783,65 @@ extern "C" int rbd_snap_set(rbd_image_t image, const char *snapname)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::snap_set(ictx, snapname);
+}
+
+extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,
+                                char **lockers_and_cookies, int *max_entries)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  std::set<std::pair<std::string, std::string> > locks;
+  bool exclusive_bool;
+
+  if (*max_entries <= 0) {
+    return -ERANGE;
+  }
+
+  int r = list_locks(ictx, locks, exclusive_bool);
+  if (r < 0) {
+    return r;
+  }
+  *exclusive = (int)exclusive_bool;
+  bool fits = locks.size() * 2 <= (size_t)*max_entries;
+  *max_entries = locks.size() * 2;
+  if (!fits) {
+    return -ERANGE;
+  }
+
+  std::set<std::pair<std::string, std::string> >::iterator p;
+  int i = 0;
+  for (p = locks.begin();
+      p != locks.end();
+      ++p) {
+    lockers_and_cookies[i] = strdup(p->first.c_str());
+    lockers_and_cookies[i+1] = strdup(p->second.c_str());
+    i+=2;
+  }
+  return 0;
+}
+
+extern "C" int rbd_lock_exclusive(rbd_image_t image, const char *cookie)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::lock_exclusive(ictx, cookie);
+}
+
+extern "C" int rbd_lock_shared(rbd_image_t image, const char *cookie)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::lock_shared(ictx, cookie);
+}
+
+extern "C" int rbd_unlock(rbd_image_t image, const char *cookie)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::unlock(ictx, cookie);
+}
+
+extern "C" int rbd_break_lock(rbd_image_t image, const char *locker,
+                              const char *cookie)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::break_lock(ictx, locker, cookie);
 }
 
 /* I/O */

@@ -93,6 +93,14 @@ public:
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
 
+  /* cooperative locking */
+  int list_locks(std::set<std::pair<std::string, std::string> > &locks,
+                 bool &exclusive);
+  int lock_exclusive(const std::string& cookie);
+  int lock_shared(const std::string& cookie);
+  int unlock(const std::string& cookie);
+  int break_lock(const std::string& other_locker, const std::string& cookie);
+
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
   int snap_create(const char *snapname);

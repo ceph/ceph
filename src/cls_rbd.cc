@@ -54,6 +54,11 @@ cls_method_handle_t h_get_snapshot_name;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
 cls_method_handle_t h_get_all_features;
+cls_method_handle_t h_lock_image_exclusive;
+cls_method_handle_t h_lock_image_shared;
+cls_method_handle_t h_unlock_image;
+cls_method_handle_t h_break_lock;
+cls_method_handle_t h_list_locks;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -61,6 +66,11 @@ cls_method_handle_t h_assign_bid;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
+#define RBD_LOCK_PREFIX "lock_"
+#define RBD_LOCK_TYPE_KEY RBD_LOCK_PREFIX "type"
+#define RBD_LOCKS_KEY RBD_LOCK_PREFIX "lockers"
+#define RBD_LOCK_EXCLUSIVE "exclusive"
+#define RBD_LOCK_SHARED "shared"
 
 typedef struct cls_rbd_snap {
   snapid_t id;
@@ -157,7 +167,9 @@ static int read_key(cls_method_context_t hctx, const string &key, T *out)
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, key, &bl);
   if (r < 0) {
-    CLS_ERR("error reading omap key %s: %d", key.c_str(), r);
+    if (r != -ENOENT) {
+      CLS_ERR("error reading omap key %s: %d", key.c_str(), r);
+    }
     return r;
   }
 
@@ -280,8 +292,10 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   if (snap_id == CEPH_NOSNAP) {
     int r = read_key(hctx, "features", &features);
-    if (r < 0)
+    if (r < 0) {
+      CLS_ERR("failed to read features off disk: %s", strerror(r));
       return r;
+    }
   } else {
     cls_rbd_snap snap;
     int r = read_snapshot_metadata(hctx, snap_id, &snap);
@@ -322,13 +336,17 @@ int get_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "get_size snap_id=%llu", snap_id);
 
   int r = read_key(hctx, "order", &order);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("failed to read the order off of disk: %s", strerror(r));
     return r;
+  }
 
   if (snap_id == CEPH_NOSNAP) {
     r = read_key(hctx, "size", &size);
-    if (r < 0)
+    if (r < 0) {
+      CLS_ERR("failed to read the image's size off of disk: %s", strerror(r));
       return r;
+    }
   } else {
     cls_rbd_snap snap;
     int r = read_snapshot_metadata(hctx, snap_id, &snap);
@@ -368,8 +386,10 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // that was created correctly
   uint64_t orig_size;
   int r = read_key(hctx, "size", &orig_size);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's size off disk: %s", strerror(r));
     return r;
+  }
 
   bufferlist sizebl;
   ::encode(size, sizebl);
@@ -381,6 +401,241 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   return 0;
+}
+
+// image locking
+/**
+ * helper function to add a lock and update disk state.
+ * @param lock_type The type of lock, either RBD_LOCK_EXCLUSIVE
+ * or RBD_LOCK_SHARED
+ * @param cookie The cookie to set in the lock
+ *
+ * @return 0 on success, or -errno on failure
+ */
+int lock_image(cls_method_context_t hctx, string lock_type,
+               const string &cookie)
+{
+  bool exclusive = lock_type == RBD_LOCK_EXCLUSIVE;
+  // see if there's already a locker
+  set<pair<string, string> > lockers;
+  string existing_lock_type;
+  int r = read_key(hctx, RBD_LOCKS_KEY, &lockers);
+  if (r != 0 && r != -ENOENT) {
+    CLS_ERR("Could not read list of current lockers: %s", strerror(r));
+    return r;
+  }
+  if (exclusive && r != -ENOENT && lockers.size()) {
+    CLS_LOG(20, "could not exclusive-lock image, already locked");
+    return -EBUSY;
+  }
+  if (lockers.size() && !exclusive) {
+    // make sure existing lock is a shared lock
+    r = read_key(hctx, RBD_LOCK_TYPE_KEY, &existing_lock_type);
+    if (r != 0) {
+      CLS_ERR("Could not read type of current locks off disk: %s", strerror(r));
+      return r;
+    }
+    if (existing_lock_type != lock_type) {
+      CLS_LOG(20, "cannot take shared lock on image, existing exclusive lock");
+      return -EBUSY;
+    }
+  }
+
+  // lock the image
+  entity_inst_t locker;
+  r = cls_get_request_origin(hctx, &locker);
+  assert(r == 0);
+  stringstream locker_stringstream;
+  locker_stringstream << locker;
+  pair<set<pair<string, string> >::iterator, bool> result;
+  result = lockers.insert(make_pair(locker_stringstream.str(), cookie));
+  if (!result.second) { // we didn't insert, because it already existed
+    CLS_LOG(20, "could not insert locker -- already present");
+    return -EEXIST;
+  }
+
+  map<string, bufferlist> lock_keys;
+  ::encode(lockers, lock_keys[RBD_LOCKS_KEY]);
+  ::encode(lock_type, lock_keys[RBD_LOCK_TYPE_KEY]);
+
+  r = cls_cxx_map_set_vals(hctx, &lock_keys);
+  if (r != 0) {
+    CLS_ERR("error writing new lock state");
+  }
+  return r;
+}
+/**
+ * Set an exclusive lock on an image for the activating client, if possible.
+ * Input:
+ * @param lock_cookie A string cookie, defined by the locker.
+ *
+ * @returns 0 on success, -EINVAL if it can't decode the lock_cookie,
+ * -EBUSY if the image is already locked, or -errno on (unexpected) failure.
+ */
+int lock_image_exclusive(cls_method_context_t hctx,
+                         bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "lock_image_exclusive");
+  string lock_cookie;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(lock_cookie, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  return lock_image(hctx, RBD_LOCK_EXCLUSIVE, lock_cookie);
+}
+
+/**
+ * Set an exclusive lock on an image, if possible.
+ * Input:
+ * @param lock_cookie A string cookie, defined by the locker.
+ *
+ * @returns 0 on success, -EINVAL if it can't decode the lock_cookie,
+ * -EBUSY if the image is exclusive locked, or -errno on (unexpected) failure.
+ */
+int lock_image_shared(cls_method_context_t hctx,
+                      bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "lock_image_shared");
+  string lock_cookie;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(lock_cookie, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  return lock_image(hctx, RBD_LOCK_SHARED, lock_cookie);
+}
+/**
+ *  helper function to remove a lock from on disk and clean up state.
+ *  @param inst The string representation of the locker's entity.
+ *  @param cookie The user-defined cookie associated with the lock.
+ *
+ *  @return 0 on success, -ENOENT if there is no such lock (either
+ *  entity or cookie is wrong), or -errno on other error.
+ */
+int remove_lock(cls_method_context_t hctx, const string& inst,
+                const string& cookie)
+{
+  // get current lockers
+  set<pair<string, string> > lockers;
+  string location = RBD_LOCKS_KEY;
+  int r = read_key(hctx, location, &lockers);
+  if (r != 0) {
+    CLS_ERR("Could not read list of current lockers off disk: %s", strerror(r));
+    return r;
+  }
+
+  // remove named locker from set
+  pair<string, string> locker(inst, cookie);
+  set<pair<string, string> >::iterator iter = lockers.find(locker);
+  if (iter == lockers.end()) { // no such key
+    return -ENOENT;
+  }
+  lockers.erase(iter);
+
+  // encode and write new set to disk
+  bufferlist locker_bufferlist;
+  ::encode(lockers, locker_bufferlist);
+  cls_cxx_map_set_val(hctx, location, &locker_bufferlist);
+
+  return 0;
+}
+/**
+ * Unlock an image which the activating client currently has locked.
+ * Input:
+ * @param lock_cookie The user-defined cookie associated with the lock.
+ *
+ * @return 0 on success, -EINVAL if it can't decode the cookie, -ENOENT
+ * if there is no such lock (either entity or cookie is wrong), or
+ * -errno on other (unexpected) error.
+ */
+int unlock_image(cls_method_context_t hctx,
+                 bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "unlock_image");
+  string lock_cookie;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(lock_cookie, iter);
+  } catch (const buffer::error& err) {
+    return -EINVAL;
+  }
+
+  entity_inst_t inst;
+  int r = cls_get_request_origin(hctx, &inst);
+  assert(r == 0);
+  stringstream inst_stringstream;
+  inst_stringstream << inst;
+  return remove_lock(hctx, inst_stringstream.str(), lock_cookie);
+}
+/**
+ * Break the lock on an image held by any client.
+ * Input:
+ * @param locker The string representation of the locking client's entity.
+ * @param lock_cookie The user-defined cookie associated with the lock.
+ *
+ * @return 0 on success, -EINVAL if it can't decode the locker and
+ * cookie, -ENOENT if there is no such lock (either entity or cookie
+ * is wrong), or -errno on other (unexpected) error.
+ */int break_lock(cls_method_context_t hctx,
+               bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "break_lock");
+  string locker;
+  string lock_cookie;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(locker, iter);
+    ::decode(lock_cookie, iter);
+  } catch (const buffer::error& err) {
+    return -EINVAL;
+  }
+
+  return remove_lock(hctx, locker, lock_cookie);
+}
+
+ /**
+ * Retrieve a list of clients locking this object (presumably an rbd header),
+ * as well as whether the lock is shared or exclusive.
+ * @param in is ignored.
+ * Output:
+ * @param set<pair<string, string> > lockers The set of clients holding locks,
+ * as <client, cookie> pairs.
+ * @param exclusive_lock A bool, true if the lock is exclusive. If there are no
+ * lockers, this is meaningless.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "list_locks");
+  string key = RBD_LOCKS_KEY;
+  string exclusive_string;
+  bool have_locks = true;
+  int r = cls_cxx_map_get_val(hctx, key, out);
+  if (r != 0 && r != -ENOENT) {
+    CLS_ERR("Failure in reading list of current lockers: %s", strerror(r));
+    return r;
+  }
+  if (r == -ENOENT) { // none listed
+    set<pair<string, string> > empty_lockers;
+    ::encode(empty_lockers, *out);
+    have_locks = false;
+    r = 0;
+  }
+  if (have_locks) {
+    key = RBD_LOCK_TYPE_KEY;
+    r = read_key(hctx, key, &exclusive_string);
+    if (r < 0) {
+      CLS_ERR("Failed to read lock type off disk: %s", strerror(r));
+    }
+  }
+  ::encode((exclusive_string == RBD_LOCK_EXCLUSIVE), *out);
+  return r;
 }
 
 /**
@@ -418,8 +673,10 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   uint64_t snap_seq;
   r = read_key(hctx, "snap_seq", &snap_seq);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("could not read the image's snap_seq off disk: %s", strerror(r));
     return r;
+  }
 
   // snap_ids must be descending in a snap context
   std::reverse(snap_ids.begin(), snap_ids.end());
@@ -441,8 +698,11 @@ int get_object_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   string object_prefix;
   int r = read_key(hctx, "object_prefix", &object_prefix);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("failed to read the image's object prefix off of disk: %s",
+            strerror(r));
     return r;
+  }
 
   ::encode(object_prefix, *out);
 
@@ -508,8 +768,10 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   uint64_t cur_snap_seq;
   int r = read_key(hctx, "snap_seq", &cur_snap_seq);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's snap_seq off disk: %s", strerror(r));
     return r;
+  }
 
   // client lost a race with another snapshot creation.
   // snap_seq must be monotonically increasing.
@@ -518,12 +780,16 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   uint64_t size;
   r = read_key(hctx, "size", &size);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's size off disk: %s", strerror(r));
     return r;
+  }
   uint64_t features;
   r = read_key(hctx, "features", &features);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's features off disk: %s", strerror(r));
     return r;
+  }
 
   int max_read = RBD_MAX_KEYS_READ;
   string last_read = RBD_SNAP_KEY_PREFIX;
@@ -901,6 +1167,21 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_all_features",
 			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
 			  get_all_features, &h_get_all_features);
+  cls_register_cxx_method(h_class, "lock_exclusive",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          lock_image_exclusive, &h_lock_image_exclusive);
+  cls_register_cxx_method(h_class, "lock_shared",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          lock_image_shared, &h_lock_image_shared);
+  cls_register_cxx_method(h_class, "unlock_image",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          unlock_image, &h_unlock_image);
+  cls_register_cxx_method(h_class, "break_lock",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          break_lock, &h_break_lock);
+  cls_register_cxx_method(h_class, "list_locks",
+                          CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+                          list_locks, &h_list_locks);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",

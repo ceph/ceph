@@ -21,7 +21,9 @@ namespace librbd {
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
-			     ::SnapContext *snapc);
+                             std::set<std::pair<std::string, std::string> >* lockers,
+                             bool *exclusive_lock,
+                             ::SnapContext *snapc);
 
     // low-level interface (mainly for testing)
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -49,6 +51,17 @@ namespace librbd {
     int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
 		   uint64_t *id);
 
+    int list_locks(librados::IoCtx *ioctx, const std::string &oid,
+                   std::set<std::pair<std::string, std::string> > &locks,
+                   bool &exclusive);
+    int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
+                             const std::string &cookie);
+    int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
+                          const std::string &cookie);
+    int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
+                     const std::string &cookie);
+    int break_lock(librados::IoCtx *ioctx, const std::string& oid,
+                   const std::string &locker, const std::string &cookie);
 
     // class operations on the old format, kept for
     // backwards compatability
