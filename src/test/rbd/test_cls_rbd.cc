@@ -287,13 +287,13 @@ TEST(cls_rbd, parents)
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "doesnotexist", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
   
   // old image should fail
-  ASSERT_EQ(0, create_image(&ioctx, "old", 1000, 22, 0, "old_blk."));
+  ASSERT_EQ(0, create_image(&ioctx, "old", 33<<20, 22, 0, "old_blk."));
   ASSERT_EQ(-ENOEXEC, get_parent(&ioctx, "old", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
   ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, "old", -1, "parent", 3, 10<<20));
   ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, "old"));
 
   // new image will work
-  ASSERT_EQ(0, create_image(&ioctx, "foo", 1000, 22, RBD_FEATURE_LAYERING, "foo."));
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 33<<20, 22, RBD_FEATURE_LAYERING, "foo."));
 
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 123, &pool, &parent, &snapid, &size));
@@ -352,6 +352,71 @@ TEST(cls_rbd, parents)
   ASSERT_EQ(snapid, snapid_t(6));
   ASSERT_EQ(size, 5ull<<20);
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 12, &pool, &parent, &snapid, &size));
+
+  // make sure set_parent takes min of our size and parent's size
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 1<<20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 1ull<<20);
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 100<<20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 33ull<<20);
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+
+  // make sure resize adjust parent overlap
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 14, "snap4"));
+  ASSERT_EQ(0, set_size(&ioctx, "foo", 3 << 20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 3ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 14, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 15, "snap5"));
+  ASSERT_EQ(0, set_size(&ioctx, "foo", 30 << 20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 3ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 14, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 15, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 3ull<<20);
+
+  ASSERT_EQ(0, set_size(&ioctx, "foo", 2 << 20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 2ull<<20);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 16, "snap6"));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 16, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 2ull<<20);
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
