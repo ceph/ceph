@@ -26,11 +26,6 @@
  * in each one that they take an input and an output bufferlist.
  */
 
-#include "include/types.h"
-#include "objclass/objclass.h"
-
-#include "include/rbd_types.h"
-
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -39,6 +34,13 @@
 #include <map>
 #include <sstream>
 #include <vector>
+
+#include "include/types.h"
+#include "objclass/objclass.h"
+#include "include/rbd_types.h"
+
+#include "librbd/cls_rbd.h"
+
 
 CLS_VER(2,0)
 CLS_NAME(rbd)
@@ -74,76 +76,6 @@ cls_method_handle_t h_assign_bid;
 #define RBD_LOCKS_KEY RBD_LOCK_PREFIX "lockers"
 #define RBD_LOCK_EXCLUSIVE "exclusive"
 #define RBD_LOCK_SHARED "shared"
-
-
-/// information about our parent image, if any
-struct cls_rbd_parent {
-  int64_t pool;        ///< parent pool id
-  string id;           ///< parent image id
-  snapid_t snapid;     ///< parent snapid we refer to
-  uint64_t overlap;    ///< portion of this image mapped onto parent
-
-  /// true if our parent pointer information is defined
-  bool exists() const {
-    return snapid != CEPH_NOSNAP && pool >= 0 && id.length() > 0;
-  }
-
-  cls_rbd_parent() : pool(-1), snapid(CEPH_NOSNAP), size(0) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(pool, bl);
-    ::encode(id, bl);
-    ::encode(snapid, bl);
-    ::encode(overlap, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(pool, bl);
-    ::decode(id, bl);
-    ::decode(snapid, bl);
-    ::decode(overlap, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(cls_rbd_parent)
-
-struct cls_rbd_snap {
-  snapid_t id;
-  string name;
-  uint64_t image_size;
-  uint64_t features;
-  cls_rbd_parent parent;
-
-  /// true if we have a parent
-  bool has_parent() const {
-    return parent.exists();
-  }
-
-  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0) {}
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
-    ::encode(image_size, bl);
-    ::encode(features, bl);
-    ::encode(parent, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    DECODE_START(2, p);
-    ::decode(id, p);
-    ::decode(name, p);
-    ::decode(image_size, p);
-    ::decode(features, p);
-    if (struct_v >= 2) {
-      ::decode(parent, p);
-    }
-    DECODE_FINISH(p);
-  }
-};
-WRITE_CLASS_ENCODER(cls_rbd_snap)
 
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
