@@ -30,7 +30,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 3
+#define LIBRBD_VER_EXTRA 4
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -93,6 +93,27 @@ int rbd_snap_rollback(rbd_image_t image, const char *snapname);
 int rbd_snap_rollback_with_progress(rbd_image_t image, const char *snapname,
 				    librbd_progress_fn_t cb, void *cbdata);
 int rbd_snap_set(rbd_image_t image, const char *snapname);
+
+/* cooperative locking */
+/**
+ * in params:
+ * @param lockers_and_cookies: array of char* which will be filled in
+ * @param max_entries: the size of the lockers_and_cookies array
+ * out params:
+ * @param exclusive: non-zero if the lock is an exclusive one. Only
+ * meaningfull if there are a non-zero number of lockers.
+ * @param lockers_and_cookies: alternating the address of the locker with
+ * the locker's cookie.
+ * @param max_entries: the number of lockers -- double for the number of
+ * spaces required.
+ */
+int rbd_list_lockers(rbd_image_t image, int *exclusive,
+                     char **lockers_and_cookies, int *max_entries);
+int rbd_lock_exclusive(rbd_image_t image, const char *cookie);
+int rbd_lock_shared(rbd_image_t image, const char *cookie);
+int rbd_unlock(rbd_image_t image, const char *cookie);
+int rbd_break_lock(rbd_image_t image, const char *locker, const char *cookie);
+
 
 /* I/O */
 typedef void *rbd_completion_t;

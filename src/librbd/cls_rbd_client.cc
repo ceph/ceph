@@ -42,6 +42,8 @@ namespace librbd {
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
+                             std::set<std::pair<std::string, std::string> > *lockers,
+                             bool *exclusive_lock,
 			     ::SnapContext *snapc)
     {
       assert(size);
@@ -57,6 +59,7 @@ namespace librbd {
       op.exec("rbd", "get_size", sizebl);
       op.exec("rbd", "get_features", featuresbl);
       op.exec("rbd", "get_snapcontext", empty);
+      op.exec("rbd", "list_locks", empty);
 
       bufferlist outbl;
       ioctx->operate(oid, &op, &outbl);
@@ -69,6 +72,8 @@ namespace librbd {
 	::decode(*features, iter);
 	::decode(*incompatible_features, iter);
 	::decode(*snapc, iter);
+	::decode(*lockers, iter);
+	::decode(*exclusive_lock, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -314,5 +319,58 @@ namespace librbd {
 
       return 0;
     }
+
+    int list_locks(librados::IoCtx *ioctx, const std::string &oid,
+                   std::set<std::pair<std::string, std::string> > &locks,
+                   bool &exclusive)
+    {
+      bufferlist in, out;
+      int r = ioctx->exec(oid, "rbd", "list_locks", in, out);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator iter = out.begin();
+      try {
+        ::decode(locks, iter);
+        ::decode(exclusive, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
+                             const std::string &cookie)
+    {
+      bufferlist in, out;
+      ::encode(cookie, in);
+      return ioctx->exec(oid, "rbd", "lock_exclusive", in, out);
+    }
+
+    int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
+                          const std::string &cookie)
+    {
+      bufferlist in, out;
+      ::encode(cookie, in);
+      return ioctx->exec(oid, "rbd", "lock_shared", in, out);
+    }
+
+    int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
+                         const std::string &cookie)
+    {
+      bufferlist in, out;
+      ::encode(cookie, in);
+      return ioctx->exec(oid, "rbd", "unlock_image", in, out);
+    }
+    int break_lock(librados::IoCtx *ioctx, const std::string& oid,
+                   const std::string &locker, const std::string &cookie)
+    {
+      bufferlist in, out;
+      ::encode(locker, in);
+      ::encode(cookie, in);
+      return ioctx->exec(oid, "rbd", "break_lock", in, out);
+    }
+
   } // namespace cls_client
 } // namespace librbd
