@@ -1688,5 +1688,5 @@ project.tgz: clean
 	tar czvf project.tgz README emit output
 
 submit-coverity:
-	scp project.tgz ceph.newdream.net:ceph.newdream.net/coverity/`git describe`.tgz
-	echo "v2;ceph;"`cat .coverity.build.pass`";MAIL;http://ceph.newdream.net/coverity/"`git describe`.tgz | mail build@submit.scan.coverity.com
+	scp project.tgz ceph.newdream.net:ceph.com/coverity/`git describe`.tgz
+	echo "v2;ceph;"`cat .coverity.build.pass`";MAIL;http://ceph.com/coverity/"`git describe`.tgz | mail build@submit.scan.coverity.com

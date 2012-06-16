@@ -46,7 +46,7 @@ Many PGs can map to one OSD.
 
 A PG represents nothing but a grouping of objects; you configure the
 number of PGs you want (see
-http://ceph.newdream.net/wiki/Changing_the_number_of_PGs ), number of
+http://ceph.com/wiki/Changing_the_number_of_PGs ), number of
 OSDs * 100 is a good starting point, and all of your stored objects
 are pseudo-randomly evenly distributed to the PGs. So a PG explicitly
 does NOT represent a fixed amount of storage; it represents 1/pg_num
