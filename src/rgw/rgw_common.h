@@ -120,6 +120,7 @@ using ceph::crypto::MD5;
 #define ERR_UNPROCESSABLE_ENTITY 2018
 #define ERR_TOO_LARGE            2019
 #define ERR_TOO_MANY_BUCKETS     2020
+#define ERR_INVALID_REQUEST      2021
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
