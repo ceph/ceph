@@ -33,7 +33,7 @@ Availability
 ============
 
 **librados-config** is part of the Ceph distributed file system.
-Please refer to the Ceph wiki at http://ceph.newdream.net/wiki for
+Please refer to the Ceph documentation at http://ceph.com/docs for
 more information.
 
 
