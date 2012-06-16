@@ -2409,100 +2409,86 @@ int Image::resize(uint64_t size)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::resize(ictx, size, prog_ctx);
-  return r;
+  return librbd::resize(ictx, size, prog_ctx);
 }
 
 int Image::resize_with_progress(uint64_t size, librbd::ProgressContext& pctx)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::resize(ictx, size, pctx);
-  return r;
+  return librbd::resize(ictx, size, pctx);
 }
 
 int Image::stat(image_info_t& info, size_t infosize)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::info(ictx, info, infosize);
-  return r;
+  return librbd::info(ictx, info, infosize);
 }
 
 int Image::copy(IoCtx& dest_io_ctx, const char *destname)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::copy(*ictx, dest_io_ctx, destname, prog_ctx);
-  return r;
+  return librbd::copy(*ictx, dest_io_ctx, destname, prog_ctx);
 }
 
 int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			      librbd::ProgressContext &pctx)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::copy(*ictx, dest_io_ctx, destname, pctx);
-  return r;
+  return librbd::copy(*ictx, dest_io_ctx, destname, pctx);
 }
 
 int Image::list_locks(std::set<std::pair<std::string, std::string> > &locks,
                       bool &exclusive)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::list_locks(ictx, locks, exclusive);
-  return r;
+  return librbd::list_locks(ictx, locks, exclusive);
 }
 
 int Image::lock_exclusive(const std::string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::lock_exclusive(ictx, cookie);
-  return r;
+  return librbd::lock_exclusive(ictx, cookie);
 }
 int Image::lock_shared(const std::string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::lock_shared(ictx, cookie);
-  return r;
+  return librbd::lock_shared(ictx, cookie);
 }
 int Image::unlock(const std::string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::unlock(ictx, cookie);
-  return r;
+  return librbd::unlock(ictx, cookie);
 }
 int Image::break_lock(const std::string& other_locker, const std::string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::break_lock(ictx, other_locker, cookie);
-  return r;
+  return librbd::break_lock(ictx, other_locker, cookie);
 }
 
 int Image::snap_create(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_create(ictx, snap_name);
-  return r;
+  return librbd::snap_create(ictx, snap_name);
 }
 
 int Image::snap_remove(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_remove(ictx, snap_name);
-  return r;
+  return librbd::snap_remove(ictx, snap_name);
 }
 
 int Image::snap_rollback(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::snap_rollback(ictx, snap_name, prog_ctx);
-  return r;
+  return librbd::snap_rollback(ictx, snap_name, prog_ctx);
 }
 
 int Image::snap_rollback_with_progress(const char *snap_name, ProgressContext& prog_ctx)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_rollback(ictx, snap_name, prog_ctx);
-  return r;
+  return librbd::snap_rollback(ictx, snap_name, prog_ctx);
 }
 
 int Image::snap_list(std::vector<librbd::snap_info_t>& snaps)
