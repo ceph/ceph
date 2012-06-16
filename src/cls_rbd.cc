@@ -291,8 +291,10 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   if (snap_id == CEPH_NOSNAP) {
     int r = read_key(hctx, "features", &features);
-    if (r < 0)
+    if (r < 0) {
+      CLS_ERR("failed to read features off disk: %s", strerror(r));
       return r;
+    }
   } else {
     cls_rbd_snap snap;
     int r = read_snapshot_metadata(hctx, snap_id, &snap);
@@ -333,13 +335,17 @@ int get_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "get_size snap_id=%llu", snap_id);
 
   int r = read_key(hctx, "order", &order);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("failed to read the order off of disk: %s", strerror(r));
     return r;
+  }
 
   if (snap_id == CEPH_NOSNAP) {
     r = read_key(hctx, "size", &size);
-    if (r < 0)
+    if (r < 0) {
+      CLS_ERR("failed to read the image's size off of disk: %s", strerror(r));
       return r;
+    }
   } else {
     cls_rbd_snap snap;
     int r = read_snapshot_metadata(hctx, snap_id, &snap);
@@ -379,8 +385,10 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // that was created correctly
   uint64_t orig_size;
   int r = read_key(hctx, "size", &orig_size);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's size off disk: %s", strerror(r));
     return r;
+  }
 
   bufferlist sizebl;
   ::encode(size, sizebl);
@@ -412,7 +420,7 @@ int lock_image(cls_method_context_t hctx, string lock_type,
   string existing_lock_type;
   int r = read_key(hctx, RBD_LOCKS_KEY, &lockers);
   if (r != 0 && r != -ENOENT) {
-    CLS_ERR("Could not read list of current lockers");
+    CLS_ERR("Could not read list of current lockers: %s", strerror(r));
     return r;
   }
   if (exclusive && r != -ENOENT && lockers.size()) {
@@ -423,7 +431,7 @@ int lock_image(cls_method_context_t hctx, string lock_type,
     // make sure existing lock is a shared lock
     r = read_key(hctx, RBD_LOCK_TYPE_KEY, &existing_lock_type);
     if (r != 0) {
-      CLS_ERR("Could not read type of current locks");
+      CLS_ERR("Could not read type of current locks off disk: %s", strerror(r));
       return r;
     }
     if (existing_lock_type != lock_type) {
@@ -516,7 +524,7 @@ int remove_lock(cls_method_context_t hctx, const string& inst,
   string location = RBD_LOCKS_KEY;
   int r = read_key(hctx, location, &lockers);
   if (r != 0) {
-    CLS_ERR("Could not read list of current lockers");
+    CLS_ERR("Could not read list of current lockers off disk: %s", strerror(r));
     return r;
   }
 
@@ -609,7 +617,7 @@ int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bool have_locks = true;
   int r = cls_cxx_map_get_val(hctx, key, out);
   if (r != 0 && r != -ENOENT) {
-    CLS_ERR("Failure in reading list of current lockers");
+    CLS_ERR("Failure in reading list of current lockers: %s", strerror(r));
     return r;
   }
   if (r == -ENOENT) { // none listed
@@ -621,6 +629,9 @@ int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (have_locks) {
     key = RBD_LOCK_TYPE_KEY;
     r = read_key(hctx, key, &exclusive_string);
+    if (r < 0) {
+      CLS_ERR("Failed to read lock type off disk: %s", strerror(r));
+    }
   }
   ::encode((exclusive_string == RBD_LOCK_EXCLUSIVE), *out);
   return r;
@@ -661,8 +672,10 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   uint64_t snap_seq;
   r = read_key(hctx, "snap_seq", &snap_seq);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("could not read the image's snap_seq off disk: %s", strerror(r));
     return r;
+  }
 
   // snap_ids must be descending in a snap context
   std::reverse(snap_ids.begin(), snap_ids.end());
@@ -684,8 +697,11 @@ int get_object_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   string object_prefix;
   int r = read_key(hctx, "object_prefix", &object_prefix);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("failed to read the image's object prefix off of disk: %s",
+            strerror(r));
     return r;
+  }
 
   ::encode(object_prefix, *out);
 
@@ -751,8 +767,10 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   uint64_t cur_snap_seq;
   int r = read_key(hctx, "snap_seq", &cur_snap_seq);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's snap_seq off disk: %s", strerror(r));
     return r;
+  }
 
   // client lost a race with another snapshot creation.
   // snap_seq must be monotonically increasing.
@@ -761,12 +779,16 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   uint64_t size;
   r = read_key(hctx, "size", &size);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's size off disk: %s", strerror(r));
     return r;
+  }
   uint64_t features;
   r = read_key(hctx, "features", &features);
-  if (r < 0)
+  if (r < 0) {
+    CLS_ERR("Could not read image's features off disk: %s", strerror(r));
     return r;
+  }
 
   int max_read = RBD_MAX_KEYS_READ;
   string last_read = RBD_SNAP_KEY_PREFIX;
