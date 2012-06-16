@@ -1,7 +1,7 @@
 Source: ceph
 Section: admin
 Priority: optional
-Homepage: http://ceph.newdream.net/
+Homepage: http://ceph.com/
 Vcs-Git: git://github.com/ceph/ceph.git
 Vcs-Browser: https://github.com/ceph/ceph
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
