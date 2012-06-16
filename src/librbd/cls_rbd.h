@@ -14,7 +14,7 @@ struct cls_rbd_parent {
 
   /// true if our parent pointer information is defined
   bool exists() const {
-    return snapid != CEPH_NOSNAP && pool >= 0 && id.length() > 0;
+    return snapid != CEPH_NOSNAP && pool >= 0 && id.length() > 0 && overlap > 0;
   }
 
   cls_rbd_parent() : pool(-1), snapid(CEPH_NOSNAP), overlap(0) {}
@@ -47,6 +47,7 @@ struct cls_rbd_parent {
     t->pool = 1;
     t->id = "foo";
     t->snapid = 3;
+    t->overlap = 500;
     o.push_back(t);
   }
 };
