@@ -440,8 +440,6 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "set_size size=%llu", size);
-
   // check that size exists to make sure this is a header object
   // that was created correctly
   uint64_t orig_size;
@@ -451,13 +449,35 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  CLS_LOG(20, "set_size size=%llu orig_size=%llu", size);
+
   bufferlist sizebl;
   ::encode(size, sizebl);
-
   r = cls_cxx_map_set_val(hctx, "size", &sizebl);
   if (r < 0) {
     CLS_ERR("error writing snapshot metadata: %d", r);
     return r;
+  }
+
+  // if we are shrinking, and have a parent, shrink our overlap with
+  // the parent, too.
+  if (size < orig_size) {
+    cls_rbd_parent parent;
+    r = read_key(hctx, "parent", &parent);
+    if (r == -ENOENT)
+      r = 0;
+    if (r < 0)
+      return r;
+    if (parent.exists() && parent.size > size) {
+      bufferlist parentbl;
+      parent.size = size;
+      ::encode(parent, parentbl);
+      r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
+      if (r < 0) {
+	CLS_ERR("error writing parent: %d", r);
+	return r;
+      }
+    }
   }
 
   return 0;
@@ -818,6 +838,14 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	    parent.size);
     return -EEXIST;
   }
+
+  // our overlap is the min of our size and the parent's size.
+  uint64_t our_size;
+  r = read_key(hctx, "size", &our_size);
+  if (r < 0)
+    return r;
+  if (our_size < size)
+    size = our_size;
 
   bufferlist parentbl;
   parent.pool = pool;
