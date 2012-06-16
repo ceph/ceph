@@ -309,6 +309,23 @@ int RGWCopyObj_REST_S3::get_params()
   dest_bucket_name = s->bucket.name;
   dest_object = s->object_str;
 
+  const char *md_directive = s->env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  if (md_directive) {
+    if (strcasecmp(md_directive, "COPY") == 0) {
+      replace_attrs = false;
+    } else if (strcasecmp(md_directive, "REPLACE") == 0) {
+      replace_attrs = true;
+    } else {
+      return -EINVAL;
+    }
+  }
+
+  if ((dest_bucket_name.compare(src_bucket_name) == 0) &&
+      (dest_object.compare(src_object) == 0) &&
+      !replace_attrs) {
+    /* can only copy object into itself if replacing attrs */
+    return -ERR_INVALID_REQUEST;
+  }
   return 0;
 }
 
