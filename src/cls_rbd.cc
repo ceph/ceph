@@ -81,7 +81,7 @@ struct cls_rbd_parent {
   int64_t pool;        ///< parent pool id
   string id;           ///< parent image id
   snapid_t snapid;     ///< parent snapid we refer to
-  uint64_t size;       ///< portion of this image mapped onto parent
+  uint64_t overlap;    ///< portion of this image mapped onto parent
 
   /// true if our parent pointer information is defined
   bool exists() const {
@@ -95,7 +95,7 @@ struct cls_rbd_parent {
     ::encode(pool, bl);
     ::encode(id, bl);
     ::encode(snapid, bl);
-    ::encode(size, bl);
+    ::encode(overlap, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -103,7 +103,7 @@ struct cls_rbd_parent {
     ::decode(pool, bl);
     ::decode(id, bl);
     ::decode(snapid, bl);
-    ::decode(size, bl);
+    ::decode(overlap, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -468,9 +468,9 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       r = 0;
     if (r < 0)
       return r;
-    if (parent.exists() && parent.size > size) {
+    if (parent.exists() && parent.overlap > size) {
       bufferlist parentbl;
-      parent.size = size;
+      parent.overlap = size;
       ::encode(parent, parentbl);
       r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
       if (r < 0) {
@@ -784,7 +784,7 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode(parent.pool, *out);
   ::encode(parent.id, *out);
   ::encode(parent.snapid, *out);
-  ::encode(parent.size, *out);
+  ::encode(parent.overlap, *out);
   return 0;
 }
 
@@ -833,9 +833,9 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   cls_rbd_parent parent;
   r = read_key(hctx, "parent", &parent);
   if (r == 0) {
-    CLS_LOG(20, "set_parent existing parent pool=%lld id=%s snapid=%llu size=%llu",
+    CLS_LOG(20, "set_parent existing parent pool=%lld id=%s snapid=%llu overlap=%llu",
 	    parent.pool, parent.id.c_str(), parent.snapid.val,
-	    parent.size);
+	    parent.overlap);
     return -EEXIST;
   }
 
@@ -844,14 +844,12 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   r = read_key(hctx, "size", &our_size);
   if (r < 0)
     return r;
-  if (our_size < size)
-    size = our_size;
 
   bufferlist parentbl;
   parent.pool = pool;
   parent.id = id;
   parent.snapid = snapid;
-  parent.size = size;
+  parent.overlap = MIN(our_size, size);
   ::encode(parent, parentbl);
   r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
   if (r < 0) {
