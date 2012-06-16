@@ -165,7 +165,7 @@ namespace librbd {
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   snapid_t snap_id, int64_t *parent_pool,
 		   string *parent_image, snapid_t *parent_snap_id,
-		   uint64_t *parent_size)
+		   uint64_t *parent_overlap)
     {
       bufferlist inbl, outbl;
       ::encode(snap_id, inbl);
@@ -179,7 +179,7 @@ namespace librbd {
 	::decode(*parent_pool, iter);
 	::decode(*parent_image, iter);
 	::decode(*parent_snap_id, iter);
-	::decode(*parent_size, iter);
+	::decode(*parent_overlap, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -189,13 +189,13 @@ namespace librbd {
 
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   int64_t parent_pool, const string& parent_image,
-		   snapid_t parent_snap_id, uint64_t parent_size)
+		   snapid_t parent_snap_id, uint64_t parent_overlap)
     {
       bufferlist inbl, outbl;
       ::encode(parent_pool, inbl);
       ::encode(parent_image, inbl);
       ::encode(parent_snap_id, inbl);
-      ::encode(parent_size, inbl);
+      ::encode(parent_overlap, inbl);
 
       return ioctx->exec(oid, "rbd", "set_parent", inbl, outbl);
     }
