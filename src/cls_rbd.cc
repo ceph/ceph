@@ -1051,6 +1051,15 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       last_read = vals.rbegin()->first;
   } while (r == RBD_MAX_KEYS_READ);
 
+  // snapshot inherits parent, if any
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r < 0 && r != -ENOENT)
+    return r;
+  if (r == 0) {
+    snap_meta.parent = parent;
+  }
+
   bufferlist snap_metabl, snap_seqbl;
   ::encode(snap_meta, snap_metabl);
   ::encode(snap_meta.id, snap_seqbl);
