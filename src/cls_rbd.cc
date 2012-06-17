@@ -797,7 +797,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	::decode(old_meta, iter);
       } catch (const buffer::error &err) {
 	snapid_t snap_id = snap_id_from_key(it->first);
-	CLS_ERR("error decoding snapshot metadata for snap_id: %llu", snap_id);
+	CLS_ERR("error decoding snapshot metadata for snap_id: %llu", snap_id.val);
 	return -EIO;
       }
       if (snap_meta.name == old_meta.name || snap_meta.id == old_meta.id) {
