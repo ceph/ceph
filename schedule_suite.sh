@@ -33,6 +33,7 @@ kernel:
 nuke-on-error: true
 tasks:
 - chef:
+- clock:
 overrides:
   ceph:
     branch: $ceph
