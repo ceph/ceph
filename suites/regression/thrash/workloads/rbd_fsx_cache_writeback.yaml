@@ -1,1 +1,9 @@
-../../basic/tasks/rbd_fsx_cache_writeback.yaml
+tasks:
+- rbd_fsx:
+    clients: [client.0]
+    ops: 20000
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd cache: true

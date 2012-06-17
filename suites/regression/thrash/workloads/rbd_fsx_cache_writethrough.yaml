@@ -1,1 +1,10 @@
-../../basic/tasks/rbd_fsx_cache_writethrough.yaml
+tasks:
+- rbd_fsx:
+    clients: [client.0]
+    ops: 20000
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd cache: true
+        rbd cache max dirty: 0
