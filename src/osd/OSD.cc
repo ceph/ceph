@@ -692,7 +692,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   admin_ops_hook(NULL),
   op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
-  peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
+  peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp, 200),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   outstanding_pg_stats(false),
@@ -3497,8 +3497,6 @@ void OSD::advance_pg(epoch_t osd_epoch, PG *pg, PG::RecoveryCtx *rctx)
     lastmap = nextmap;
   }
   pg->handle_activate_map(rctx);
-  if (pg->dirty_info)
-    pg->write_info(*rctx->transaction);
 }
 
 /** 
@@ -5181,20 +5179,20 @@ void OSDService::queue_for_op(PG *pg)
   op_wq.queue(pg);
 }
 
-void OSD::process_peering_event(PG *pg)
+void OSD::process_peering_events(const list<PG*> &pgs)
 {
   bool need_up_thru = false;
-  epoch_t same_interval_since;
-  OSDMapRef curmap;
+  epoch_t same_interval_since = 0;
+  OSDMapRef curmap = service.get_osdmap();
   PG::RecoveryCtx rctx = create_context();
-  {
-    map_lock.get_read();
+  for (list<PG*>::const_iterator i = pgs.begin();
+       i != pgs.end();
+       ++i) {
+    PG *pg = *i;
     pg->lock();
-    curmap = osdmap;
-    map_lock.put_read();
     if (pg->deleting) {
       pg->unlock();
-      return;
+      continue;
     }
     advance_pg(curmap->get_epoch(), pg, &rctx);
     if (!pg->peering_queue.empty()) {
@@ -5203,8 +5201,9 @@ void OSD::process_peering_event(PG *pg)
       pg->handle_peering_event(evt, &rctx);
     }
     dispatch_context_transaction(rctx, pg);
-    need_up_thru = pg->need_up_thru;
-    same_interval_since = pg->info.history.same_interval_since;
+    need_up_thru = pg->need_up_thru || need_up_thru;
+    same_interval_since = MAX(pg->info.history.same_interval_since,
+			      same_interval_since);
     pg->unlock();
   }
   if (need_up_thru)
