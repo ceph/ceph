@@ -5201,10 +5201,11 @@ void OSD::process_peering_events(const list<PG*> &pgs)
       pg->peering_queue.pop_front();
       pg->handle_peering_event(evt, &rctx);
     }
-    dispatch_context_transaction(rctx, pg);
     need_up_thru = pg->need_up_thru || need_up_thru;
     same_interval_since = MAX(pg->info.history.same_interval_since,
 			      same_interval_since);
+    pg->write_if_dirty(*rctx.transaction);
+    dispatch_context_transaction(rctx, pg);
     pg->unlock();
   }
   if (need_up_thru)

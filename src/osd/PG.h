@@ -356,6 +356,8 @@ public:
   void lock(bool no_lockdep = false);
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+    assert(!dirty_info);
+    assert(!dirty_log);
     _lock.Unlock();
   }
 
