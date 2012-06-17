@@ -168,7 +168,7 @@ public:
   PerfCounters *&logger;
   MonClient   *&monc;
   ThreadPool::WorkQueue<PG> &op_wq;
-  ThreadPool::WorkQueue<PG> &peering_wq;
+  ThreadPool::BatchWorkQueue<PG> &peering_wq;
   ThreadPool::WorkQueue<PG> &recovery_wq;
   ThreadPool::WorkQueue<PG> &snap_trim_wq;
   ThreadPool::WorkQueue<PG> &scrub_wq;
@@ -566,12 +566,12 @@ private:
   };
 
   // -- peering queue --
-  struct PeeringWQ : public ThreadPool::WorkQueue<PG> {
+  struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {
     list<PG*> peering_queue;
     OSD *osd;
-    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>(
-	"OSD::PeeringWQ", ti, ti*10, tp), osd(o) {}
+    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp, size_t batch_size)
+      : ThreadPool::BatchWorkQueue<PG>(
+	"OSD::PeeringWQ", ti, ti*10, tp, batch_size), osd(o) {}
 
     void _dequeue(PG *pg) {
       for (list<PG*>::iterator i = peering_queue.begin();
@@ -598,16 +598,20 @@ private:
       peering_queue.pop_front();
       return retval;
     }
-    void _process(PG *pg) {
-      osd->process_peering_event(pg);
-      pg->put();
+    void _process(const list<PG *> &pgs) {
+      osd->process_peering_events(pgs);
+      for (list<PG *>::const_iterator i = pgs.begin();
+	   i != pgs.end();
+	   ++i) {
+	(*i)->put();
+      }
     }
     void _clear() {
       assert(peering_queue.empty());
     }
   } peering_wq;
 
-  void process_peering_event(PG *pg);
+  void process_peering_events(const list<PG*> &pg);
 
   friend class PG;
   friend class ReplicatedPG;
