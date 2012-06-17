@@ -50,22 +50,16 @@ public:
   template<class T>
   class BatchWorkQueue : public WorkQueue_ {
     ThreadPool *pool;
-    const size_t batch_size;
 
     virtual bool _enqueue(T *) = 0;
     virtual void _dequeue(T *) = 0;
-    virtual T *_dequeue() = 0;
+    virtual void _dequeue(list<T*> *) = 0;
     virtual void _process(const list<T*> &) = 0;
     virtual void _process_finish(const list<T*> &) {}
 
     void *_void_dequeue() {
       list<T*> *out(new list<T*>);
-      while (out->size() < batch_size) {
-	T *val = _dequeue();
-	if (!val)
-	  break;
-	out->push_back(val);
-      }
+      _dequeue(out);
       if (out->size()) {
 	return (void *)out;
       } else {
@@ -82,9 +76,8 @@ public:
     }
 
   public:
-    BatchWorkQueue(string n, time_t ti, time_t sti, ThreadPool* p,
-		   size_t batch_size) :
-      WorkQueue_(n, ti, sti), pool(p), batch_size(batch_size) {
+    BatchWorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
+      : WorkQueue_(n, ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
     ~BatchWorkQueue() {
