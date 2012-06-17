@@ -1243,7 +1243,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   assert(!is_active());
 
   // -- crash recovery?
-  if (pool->info.crash_replay_interval > 0 &&
+  if (is_primary() &&
+      pool->info.crash_replay_interval > 0 &&
       may_need_replay(get_osdmap())) {
     replay_until = ceph_clock_now(g_ceph_context);
     replay_until += pool->info.crash_replay_interval;
@@ -3852,7 +3853,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     }
   }
   // make sure we clear out any pg_temp change requests
-  osd->pg_temp_wanted.erase(info.pgid);
+  osd->remove_want_pg_temp(info.pgid);
   cancel_recovery();
 
   if (acting.empty() && up.size() && up[0] == osd->whoami) {
@@ -4267,6 +4268,7 @@ boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& no
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(notify.from, notify.notify.info);
   pg->update_heartbeat_peers();
+  pg->set_last_peering_reset();
   return transit< Primary >();
 }
 
@@ -4288,8 +4290,6 @@ boost::statechart::result PG::RecoveryState::Initial::react(const MLogRec& i)
 
 void PG::RecoveryState::Initial::exit()
 {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
