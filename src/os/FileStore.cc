@@ -4410,7 +4410,8 @@ int FileStore::list_collections(vector<coll_t>& ls)
       }
     } else if (de->d_type != DT_DIR) {
       continue;
-    } else if (strcmp(de->d_name, "omap") == 0) {
+    }
+    if (strcmp(de->d_name, "omap") == 0) {
       continue;
     }
     if (de->d_name[0] == '.' &&

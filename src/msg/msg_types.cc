@@ -69,7 +69,7 @@ bool entity_addr_t::parse(const char *s, const char **end)
   }
   *o = 0;
 
-  char buf6[39];
+  char buf6[64];  // actually 39 + null is sufficient.
   o = buf6;
   p = start;
   while (o < buf6 + sizeof(buf6) &&
