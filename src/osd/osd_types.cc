@@ -282,10 +282,10 @@ bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
 
 bool coll_t::is_removal(uint64_t *seq, pg_t *pgid) const
 {
-  if (str.substr(0, 12) != string("FORREMOVAL_"))
+  if (str.substr(0, 11) != string("FORREMOVAL_"))
     return false;
 
-  stringstream ss(str.substr(12));
+  stringstream ss(str.substr(11));
   ss >> *seq;
   char sep;
   ss >> sep;
