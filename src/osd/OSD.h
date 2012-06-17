@@ -630,7 +630,8 @@ private:
 
   bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 			   Session *session = 0);
-  void _share_map_outgoing(const entity_inst_t& inst);
+  void _share_map_outgoing(const entity_inst_t& inst,
+			   OSDMapRef map = OSDMapRef());
 
   void wait_for_new_map(OpRequestRef op);
   void handle_osd_map(class MOSDMap *m);

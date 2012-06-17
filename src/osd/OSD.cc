@@ -1695,7 +1695,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (osdmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
 	if (locked && is_active())
-	  _share_map_outgoing(osdmap->get_cluster_inst(from));
+	  _share_map_outgoing(service.get_osdmap()->get_cluster_inst(from));
       }
     }
     break;
@@ -1713,10 +1713,10 @@ void OSD::handle_osd_ping(MOSDPing *m)
       }
 
       if (m->map_epoch &&        // peer may not have gotten map_lock on ping reply
-	  osdmap->is_up(from)) {
+	  service.get_osdmap()->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
 	if (locked && is_active())
-	  _share_map_outgoing(osdmap->get_cluster_inst(from));
+	  _share_map_outgoing(service.get_osdmap()->get_cluster_inst(from));
       }
     }
     break;
@@ -2732,8 +2732,11 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 }
 
 
-void OSD::_share_map_outgoing(const entity_inst_t& inst) 
+void OSD::_share_map_outgoing(const entity_inst_t& inst,
+			      OSDMapRef map)
 {
+  if (!map)
+    map = service.get_osdmap();
   assert(inst.name.is_osd());
 
   int peer = inst.name.num();
@@ -2743,9 +2746,9 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
   // send map?
   epoch_t pe = get_peer_epoch(peer);
   if (pe) {
-    if (pe < osdmap->get_epoch()) {
+    if (pe < map->get_epoch()) {
       send_incremental_map(pe, inst);
-      note_peer_epoch(peer, osdmap->get_epoch());
+      note_peer_epoch(peer, map->get_epoch());
     } else
       dout(20) << "_share_map_outgoing " << inst << " already has epoch " << pe << dendl;
   } else {
