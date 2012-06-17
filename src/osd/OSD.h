@@ -259,6 +259,10 @@ public:
   Mutex pg_temp_lock;
   map<pg_t, vector<int> > pg_temp_wanted;
   void queue_want_pg_temp(pg_t pgid, vector<int>& want);
+  void remove_want_pg_temp(pg_t pgid) {
+    Mutex::Locker l(pg_temp_lock);
+    pg_temp_wanted.erase(pgid);
+  }
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
@@ -693,11 +697,16 @@ protected:
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
   PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
-  PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false, bool hold_map_lock=false);
-  PG   *_create_lock_pg(pg_t pgid, bool newly_created, bool hold_map_lock,
-			int role, vector<int>& up, vector<int>& acting,
+  PG   *_open_lock_pg(OSDMapRef createmap,
+		      pg_t pg, bool no_lockdep_check=false,
+		      bool hold_map_lock=false);
+  PG   *_create_lock_pg(OSDMapRef createmap,
+			pg_t pgid, bool newly_created,
+			bool hold_map_lock, int role,
+			vector<int>& up, vector<int>& acting,
 			pg_history_t history,
-			pg_interval_map_t& pi, ObjectStore::Transaction& t);
+			pg_interval_map_t& pi,
+			ObjectStore::Transaction& t);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 

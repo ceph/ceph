@@ -1048,9 +1048,6 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Reset >,
 	boost::statechart::transition< Load, Reset >,
-	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::custom_reaction< MInfoRec >,
-	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
