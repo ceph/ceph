@@ -3556,7 +3556,8 @@ void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 
   dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
 
-  osd->osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
+  osd->osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from),
+				get_osdmap());
   osd->cluster_messenger->send_message(mlog, 
 				       get_osdmap()->get_cluster_inst(from));
 }
