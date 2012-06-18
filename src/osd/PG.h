@@ -481,18 +481,20 @@ public:
     map< int, map<pg_t, pg_query_t> > *query_map;
     map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > *info_map;
     map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > *notify_list;
-    list< Context* > *context_list;
+    C_Contexts *on_applied;
+    C_Contexts *on_safe;
     ObjectStore::Transaction *transaction;
-    RecoveryCtx() : query_map(0), info_map(0), notify_list(0),
-		    context_list(0), transaction(0) {}
     RecoveryCtx(map< int, map<pg_t, pg_query_t> > *query_map,
 		map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > *info_map,
 		map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > *notify_list,
-		list< Context* > *context_list,
+		C_Contexts *on_applied,
+		C_Contexts *on_safe,
 		ObjectStore::Transaction *transaction)
       : query_map(query_map), info_map(info_map), 
 	notify_list(notify_list),
-	context_list(context_list), transaction(transaction) {}
+	on_applied(on_applied),
+	on_safe(on_safe),
+	transaction(transaction) {}
   };
 
   struct NamedState {
@@ -991,9 +993,14 @@ public:
 	return state->rctx->info_map;
       }
 
-      list< Context* > *get_context_list() {
-	assert(state->rctx->context_list);
-	return state->rctx->context_list;
+      list< Context* > *get_on_safe_context_list() {
+	assert(state->rctx->on_safe);
+	return &(state->rctx->on_safe->contexts);
+      }
+
+      list< Context * > *get_on_applied_context_list() {
+	assert(state->rctx->on_applied);
+	return &(state->rctx->on_applied->contexts);
       }
 
       void send_notify(int to, const pg_notify_t &info, const pg_interval_map_t &pi) {
