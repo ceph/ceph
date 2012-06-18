@@ -697,7 +697,9 @@ public:
   bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
   void replay_queued_ops();
-  void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
+  void activate(ObjectStore::Transaction& t,
+		epoch_t query_epoch,
+		list<Context*>& tfin,
 		map< int, map<pg_t,pg_query_t> >& query_map,
 		map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map=0);
   void _activate_committed(epoch_t e, entity_inst_t& primary);
@@ -826,8 +828,9 @@ public:
   struct MInfoRec : boost::statechart::event< MInfoRec > {
     int from;
     pg_info_t info;
-    MInfoRec(int from, pg_info_t &info) :
-      from(from), info(info) {}
+    epoch_t msg_epoch;
+    MInfoRec(int from, pg_info_t &info, epoch_t msg_epoch) :
+      from(from), info(info), msg_epoch(msg_epoch) {}
     void print(std::ostream *out) const {
       *out << "MInfoRec from " << from
 	   << " info: " << info
@@ -896,9 +899,11 @@ public:
     }
   };
   struct Activate : boost::statechart::event< Activate > {
-    Activate() : boost::statechart::event< Activate >() {}
+    epoch_t query_epoch;
+    Activate(epoch_t q) : boost::statechart::event< Activate >(),
+			  query_epoch(q) {}
     void print(std::ostream *out) const {
-      *out << "Activate" << std::endl;
+      *out << "Activate from " << query_epoch << std::endl;
     }
   };
   struct Initialize : boost::statechart::event< Initialize > {
@@ -1214,13 +1219,15 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MInfoRec >,
-	boost::statechart::custom_reaction< MLogRec >
+	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< Activate >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
+      boost::statechart::result react(const Activate&);
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
@@ -1233,8 +1240,7 @@ public:
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
-	boost::statechart::custom_reaction< ActMap >,
-	boost::statechart::transition< Activate, ReplicaActive >
+	boost::statechart::custom_reaction< ActMap >
 	> reactions;
       boost::statechart::result react(const MQuery& query);
       boost::statechart::result react(const MLogRec& logevt);
