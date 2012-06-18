@@ -52,8 +52,41 @@ class SharedPtrRegistry {
 public:
   SharedPtrRegistry() : lock("SharedPtrRegistry::lock") {}
 
+  VPtr lookup(const K &key) {
+    Mutex::Locker l(lock);
+    while (1) {
+      if (contents.count(key)) {
+	VPtr retval = contents[key].lock();
+	if (retval)
+	  return retval;
+      } else {
+	break;
+      }
+      cond.Wait(lock);
+    Mutex::Locker l(lock);
+    }
+    return VPtr();
+  }
+
+  VPtr lookup_or_create(const K &key) {
+    Mutex::Locker l(lock);
+    while (1) {
+      if (contents.count(key)) {
+	VPtr retval = contents[key].lock();
+	if (retval)
+	  return retval;
+      } else {
+	break;
+      }
+      cond.Wait(lock);
+    }
+    VPtr retval(new V(), OnRemoval(this, key));
+    contents[key] = retval;
+    return retval;
+  }
+
   template<class A>
-  VPtr lookup(const K &key, const A &arg) {
+  VPtr lookup_or_create(const K &key, const A &arg) {
     Mutex::Locker l(lock);
     while (1) {
       if (contents.count(key)) {
