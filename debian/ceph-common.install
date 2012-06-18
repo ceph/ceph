@@ -1,6 +1,4 @@
-sbin/mount.ceph
 usr/bin/ceph
-usr/bin/cephfs
 usr/bin/ceph-conf
 usr/bin/ceph-syn
 usr/bin/ceph-authtool
@@ -14,7 +12,5 @@ usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/rbd.8
-usr/share/man/man8/mount.ceph.8
-usr/share/man/man8/cephfs.8
 etc/bash_completion.d/rados
 etc/bash_completion.d/rbd

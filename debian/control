@@ -67,11 +67,10 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools
 Suggests: ceph
-Description: common utilities to mount and interact with a ceph filesystem
- Ceph is a distributed network file system designed to provide
+Description: common utilities to mount and interact with a ceph storage cluster
+ Ceph is a distributed storage and file system designed to provide
  excellent performance, reliability, and scalability.  This is a collection
- of common tools, including the mount utility, that allows one to mount the
- ceph fs with the kernel client.
+ of common tools that allow one to interact with and administer a Ceph cluster.
 
 Package: ceph-common-dbg
 Architecture: linux-any
@@ -81,12 +80,37 @@ Replaces: ceph-client-tools-dbg
 Section: debug
 Priority: extra
 Description: debugging symbols for ceph-common
+ Ceph is a distributed storage and file system designed to provide
+ excellent performance, reliability, and scalability.  This is a collection
+ of common tools that allow one to interact with and administer a Ceph cluster.
+ .
+ This package contains the debugging symbols for ceph-common.
+
+Package: ceph-fs-common
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Conflicts: ceph-client-tools
+Suggests: ceph
+Description: common utilities to mount and interact with a ceph file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a collection
  of common tools, including the mount utility, that allows one to mount the
- ceph fs with the kernel client.
+ Ceph file system with the kernel client.
+
+Package: ceph-fs-common-dbg
+Architecture: linux-any
+Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
+Conflicts: ceph-client-tools-dbg
+Replaces: ceph-client-tools-dbg
+Section: debug
+Priority: extra
+Description: debugging symbols for ceph-fs-common
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is a collection
+ of common tools, including the mount utility, that allows one to mount the
+ Ceph file system with the kernel client.
  .
- This package contains the debugging symbols for ceph-common.
+ This package contains the debugging symbols for ceph-fs-common.
 
 Package: ceph-resource-agents
 Architecture: linux-any
