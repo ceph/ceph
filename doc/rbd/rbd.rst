@@ -26,6 +26,7 @@ the Ceph FS filesystem, and RADOS block devices simultaneously.
 	RADOS Commands <rados-rbd-cmds>
 	Kernel Objects <rbd-ko>
 	QEMU and RBD <qemu-rbd>
+	libvirt <libvirt>
 	
 	
 	
