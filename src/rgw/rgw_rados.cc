@@ -38,7 +38,8 @@ static RGWRados rados_provider;
 RGWRados* RGWRados::store;
 
 
-static string notify_oid = "notify";
+static string notify_oid_prefix = "notify";
+static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
@@ -120,7 +121,20 @@ int RGWRados::initialize()
 
 void RGWRados::finalize_watch()
 {
-  control_pool_ctx.unwatch(notify_oid, watch_handle);
+  for (int i = 0; i < num_watchers; i++) {
+    string& notify_oid = notify_oids[i];
+    if (notify_oid.empty())
+      continue;
+    uint64_t watch_handle = watch_handles[i];
+    control_pool_ctx.unwatch(notify_oid, watch_handle);
+
+    RGWWatcher *watcher = watchers[i];
+    delete watcher;
+  }
+
+  delete[] notify_oids;
+  delete[] watch_handles;
+  delete[] watchers;
 }
 
 /**
@@ -158,14 +172,50 @@ int RGWRados::init_watch()
       return r;
   }
 
-  r = control_pool_ctx.create(notify_oid, false);
-  if (r < 0 && r != -EEXIST)
-    return r;
+  num_watchers = cct->_conf->rgw_num_control_oids;
 
-  watcher = new RGWWatcher(this);
-  r = control_pool_ctx.watch(notify_oid, 0, &watch_handle, watcher);
+  bool compat_oid = (num_watchers == 0);
 
-  return r;
+  if (num_watchers <= 0)
+    num_watchers = 1;
+
+  notify_oids = new string[num_watchers];
+  watchers = new RGWWatcher *[num_watchers];
+  watch_handles = new uint64_t[num_watchers];
+
+  for (int i=0; i < num_watchers; i++) {
+    string& notify_oid = notify_oids[i];
+    notify_oid = notify_oid_prefix;
+    if (!compat_oid) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), ".%d", i);
+      notify_oid.append(buf);
+    }
+    r = control_pool_ctx.create(notify_oid, false);
+    if (r < 0 && r != -EEXIST)
+      return r;
+
+    RGWWatcher *watcher = new RGWWatcher(this);
+    watchers[i] = watcher;
+
+    r = control_pool_ctx.watch(notify_oid, 0, &watch_handles[i], watcher);
+    if (r < 0)
+      return r;
+  }
+
+  return 0;
+}
+
+void RGWRados::pick_control_oid(const string& key, string& notify_oid)
+{
+  uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
+
+  int i = r % num_watchers;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ".%d", i);
+
+  notify_oid = notify_oid_prefix;
+  notify_oid.append(buf);
 }
 
 int RGWRados::open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx)
@@ -2429,8 +2479,11 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
   return r;
 }
 
-int RGWRados::distribute(bufferlist& bl)
+int RGWRados::distribute(const string& key, bufferlist& bl)
 {
+  string notify_oid;
+  pick_control_oid(key, notify_oid);
+
   ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   int r = control_pool_ctx.notify(notify_oid, 0, bl);
   return r;
