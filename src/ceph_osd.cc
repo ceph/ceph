@@ -255,16 +255,14 @@ int main(int argc, const char **argv)
   }
 
 
-  if (convertfilestore ||
-      g_conf->filestore_update_to >= (int)FileStore::on_disk_version) {
+  if (convertfilestore) {
     int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    if (convertfilestore)
-      exit(0);
+    exit(0);
   }
   
   string magic;
@@ -399,6 +397,15 @@ int main(int argc, const char **argv)
   // Leave stderr open in case we need to report errors.
   global_init_daemonize(g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
   common_init_finish(g_ceph_context);
+
+  if (g_conf->filestore_update_to >= (int)FileStore::on_disk_version) {
+    int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
+    if (err < 0) {
+      derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+      exit(1);
+    }
+  }
 
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
