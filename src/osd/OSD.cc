@@ -1334,11 +1334,15 @@ void OSD::load_pgs()
 	continue;
       }
       uint64_t seq;
-      if (it->is_removal(&seq)) {
+      if (it->is_removal(&seq, &pgid)) {
 	if (seq >= next_removal_seq)
 	  next_removal_seq = seq + 1;
-	pair<coll_t, SequencerRef> *to_queue = new pair<coll_t, SequencerRef>;
-	to_queue->first = *it;
+	boost::tuple<coll_t, SequencerRef, DeletingStateRef> *to_queue =
+	  new boost::tuple<coll_t, SequencerRef, DeletingStateRef>;
+	to_queue->get<0>() = *it;
+	to_queue->get<1>() = service.osr_registry.lookup_or_create(
+	  pgid, stringify(pgid));
+	to_queue->get<2>() = service.deleting_pgs.lookup_or_create(pgid);
 	remove_wq.queue(to_queue);
 	continue;
       }
@@ -1952,11 +1956,12 @@ void OSD::dump_ops_in_flight(ostream& ss)
 }
 
 // =========================================
-void OSD::RemoveWQ::_process(pair<coll_t, SequencerRef> *item)
+void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item)
 {
-  coll_t &coll = item->first;
-  ObjectStore::Sequencer *osr = item->second.get();
-  store->flush();
+  coll_t &coll = item->get<0>();
+  ObjectStore::Sequencer *osr = item->get<1>().get();
+  if (osr)
+    osr->flush();
   vector<hobject_t> olist;
   store->collection_list(coll, olist);
   //*_dout << "OSD::RemoveWQ::_process removing coll " << coll << std::endl;
@@ -1968,7 +1973,7 @@ void OSD::RemoveWQ::_process(pair<coll_t, SequencerRef> *item)
     if (num % 20 == 0) {
       store->queue_transaction(
 	osr, t,
-	new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->second));
+	new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->get<1>()));
       t = new ObjectStore::Transaction;
     }
     t->remove(coll, *i);
@@ -1976,7 +1981,7 @@ void OSD::RemoveWQ::_process(pair<coll_t, SequencerRef> *item)
   t->remove_collection(coll);
   store->queue_transaction(
     osr, t,
-    new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->second));
+    new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->get<1>()));
   delete item;
 }
 // =========================================
@@ -4683,16 +4688,16 @@ void OSD::_remove_pg(PG *pg)
     for (snapid_t cur = p.get_start();
 	 cur < p.get_start() + p.get_len();
 	 ++cur) {
-      coll_t to_remove = get_next_removal_coll();
+      coll_t to_remove = get_next_removal_coll(pg->info.pgid);
       removals.push_back(to_remove);
       rmt->collection_rename(coll_t(pg->info.pgid, cur), to_remove);
     }
   }
-  coll_t to_remove = get_next_removal_coll();
+  coll_t to_remove = get_next_removal_coll(pg->info.pgid);
   removals.push_back(to_remove);
   rmt->collection_rename(coll_t(pg->info.pgid), to_remove);
   if (pg->have_temp_coll()) {
-    to_remove = get_next_removal_coll();
+    to_remove = get_next_removal_coll(pg->info.pgid);
     removals.push_back(to_remove);
     rmt->collection_rename(pg->get_temp_coll(), to_remove);
   }
@@ -4710,10 +4715,12 @@ void OSD::_remove_pg(PG *pg)
   // and handle_notify_timeout
   pg->on_removal();
 
+  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
   for (vector<coll_t>::iterator i = removals.begin();
        i != removals.end();
        ++i) {
-    remove_wq.queue(new pair<coll_t, SequencerRef>(*i, pg->osr));
+    remove_wq.queue(new boost::tuple<coll_t, SequencerRef, DeletingStateRef>(
+		      *i, pg->osr, deleting));
   }
 
   recovery_wq.dequeue(pg);

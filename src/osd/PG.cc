@@ -58,7 +58,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   backfill_target(-1),
   pg_stats_lock("PG::pg_stats_lock"),
   pg_stats_valid(false),
-  osr(osd->osr_registry.lookup(p, (stringify(p)))),
+  osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
   finish_sync_event(NULL),
   finalizing_scrub(false),
   scrub_block_writes(false),
@@ -3710,6 +3710,9 @@ void PG::start_flush(ObjectStore::Transaction *t,
   flushed = false;
   on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
   on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
+  DeletingStateRef del = osd->deleting_pgs.lookup(info.pgid);
+  if (del)
+    del->register_on_delete(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
 /* Called before initializing peering during advance_map */
