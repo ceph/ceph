@@ -4471,7 +4471,7 @@ PG::RecoveryState::Active::Active(my_context ctx)
   assert(pg->is_primary());
   dout(10) << "In Active, about to call activate" << dendl;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
-	       *context< RecoveryMachine >().get_context_list(),
+	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map());
   assert(pg->is_active());
@@ -4611,7 +4611,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
   assert(!pg->needs_recovery());
   pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
-		      *context< RecoveryMachine >().get_context_list());
+		      *context< RecoveryMachine >().get_on_safe_context_list());
   return discard_event();
 }
 
@@ -4695,7 +4695,7 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   pg->last_peering_reset = pg->get_osdmap()->get_epoch();
 
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
-	       *context< RecoveryMachine >().get_context_list(),
+	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       query_map, NULL);
   dout(10) << "Activate Finished" << dendl;
 }
