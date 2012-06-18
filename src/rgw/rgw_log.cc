@@ -167,10 +167,14 @@ static void log_usage(struct req_state *s)
   if (!usage_logger)
     return;
 
-  if (s->bucket_owner.empty())
-    return;
+  string user;
 
-  rgw_usage_log_entry entry(s->bucket_owner, s->bucket.name, s->bytes_sent, s->bytes_received);
+  if (s->bucket_name)
+    user = s->bucket_owner;
+  else
+    user = s->user.user_id;
+
+  rgw_usage_log_entry entry(user, s->bucket.name, s->bytes_sent, s->bytes_received);
 
   entry.ops = 1;
   if (!s->err.is_err())
