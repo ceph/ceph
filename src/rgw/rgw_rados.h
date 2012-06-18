@@ -224,8 +224,9 @@ class RGWRados
   };
 
 
-  RGWWatcher *watcher;
-  uint64_t watch_handle;
+  int num_watchers;
+  RGWWatcher **watchers;
+  uint64_t *watch_handles;
   librados::IoCtx root_pool_ctx;      // .rgw
   librados::IoCtx control_pool_ctx;   // .rgw.control
 
@@ -280,7 +281,7 @@ protected:
   CephContext *cct;
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0),
+  RGWRados() : lock("rados_timer_lock"), timer(NULL), num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0) {}
   virtual ~RGWRados() {}
 
@@ -521,8 +522,9 @@ public:
 
   virtual int init_watch();
   virtual void finalize_watch();
-  virtual int distribute(bufferlist& bl);
+  virtual int distribute(const string& key, bufferlist& bl);
   virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
+  void pick_control_oid(const string& key, string& notify_oid);
 
   void *create_context(void *user_ctx) {
     RGWRadosCtx *rctx = new RGWRadosCtx();
