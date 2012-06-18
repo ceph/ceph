@@ -161,8 +161,8 @@ namespace librbd {
     std::string snapname;
     IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;
-    bool needs_refresh;
-    int refresh_seq;
+    int refresh_seq;    ///< sequence for refresh requests
+    int last_refresh;   ///< last completed refresh
     Mutex refresh_lock;
     Mutex lock; // protects access to snapshot and header information
     Mutex cache_lock; // used as client_lock for the ObjectCacher
@@ -185,8 +185,8 @@ namespace librbd {
 	snap_exists(true),
 	exclusive_locked(false),
 	name(imgname),
-	needs_refresh(true),
 	refresh_seq(0),
+	last_refresh(0),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
 	lock("librbd::ImageCtx::lock"),
 	cache_lock("librbd::ImageCtx::cache_lock"),
@@ -666,7 +666,6 @@ void WatchCtx::notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
   ldout(ictx->cct, 1) <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << dendl;
   if (valid) {
     Mutex::Locker lictx(ictx->refresh_lock);
-    ictx->needs_refresh = true;
     ++ictx->refresh_seq;
     ictx->perfcounter->inc(l_librbd_notify);
   }
@@ -850,7 +849,6 @@ int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ic
   if (ictx) {
     assert(ictx->lock.is_locked());
     ictx->refresh_lock.Lock();
-    ictx->needs_refresh = true;
     ++ictx->refresh_seq;
     ictx->refresh_lock.Unlock();
   }
@@ -1338,7 +1336,7 @@ int ictx_check(ImageCtx *ictx)
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx_check " << ictx << dendl;
   ictx->refresh_lock.Lock();
-  bool needs_refresh = ictx->needs_refresh;
+  bool needs_refresh = ictx->last_refresh != ictx->refresh_seq;
   ictx->refresh_lock.Unlock();
 
   if (needs_refresh) {
@@ -1455,9 +1453,7 @@ int ictx_refresh(ImageCtx *ictx)
   ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
 
   ictx->refresh_lock.Lock();
-  if (refresh_seq == ictx->refresh_seq) {
-    ictx->needs_refresh = false;
-  }
+  ictx->last_refresh = refresh_seq;
   ictx->refresh_lock.Unlock();
 
   return 0;
