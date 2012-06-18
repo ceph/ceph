@@ -3621,6 +3621,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dout(10) << *this << " canceling deletion!" << dendl;
     deleting = false;
     osd->remove_wq.dequeue(this);
+    osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   }
     
   if (role != oldrole) {
