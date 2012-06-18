@@ -1249,7 +1249,9 @@ struct C_PG_ActivateCommitted : public Context {
   }
 };
 
-void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
+void PG::activate(ObjectStore::Transaction& t,
+		  epoch_t query_epoch,
+		  list<Context*>& tfin,
 		  map< int, map<pg_t,pg_query_t> >& query_map,
 		  map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map)
 {
@@ -1305,7 +1307,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // find out when we commit
   get();   // for callback
-  tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_interval_since,
+  tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch,
 					    get_osdmap()->get_cluster_inst(acting[0])));
   
   // initialize snap_trimq
@@ -4155,7 +4157,7 @@ void PG::queue_info(epoch_t msg_epoch,
   dout(10) << "info " << i << " from osd." << from << dendl;
   queue_peering_event(
     CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MInfoRec(from, i))));
+					 MInfoRec(from, i, msg_epoch))));
 }
 
 void PG::queue_log(epoch_t msg_epoch,
@@ -4583,6 +4585,7 @@ PG::RecoveryState::Active::Active(my_context ctx)
   assert(pg->is_primary());
   dout(10) << "In Active, about to call activate" << dendl;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
+	       pg->get_osdmap()->get_epoch(),
 	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map());
@@ -4796,13 +4799,20 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   state_name = "Started/ReplicaActive";
 
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(
+  const Activate& actevt) {
   dout(10) << "In ReplicaActive, about to call activate" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   map< int, map< pg_t, pg_query_t> > query_map;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
+	       actevt.query_epoch,
 	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       query_map, NULL);
   dout(10) << "Activate Finished" << dendl;
+  return discard_event();
 }
 
 boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt)
@@ -4897,8 +4907,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
-  post_event(Activate());
-  return discard_event();
+  post_event(Activate(logevt.msg->get_epoch()));
+  return transit<ReplicaActive>();
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoevt)
@@ -4916,8 +4926,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
-  post_event(Activate());
-  return discard_event();
+  post_event(Activate(infoevt.msg_epoch));
+  return transit<ReplicaActive>();
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
@@ -5417,9 +5427,10 @@ PG::RecoveryState::WaitFlushedPeering::WaitFlushedPeering(my_context ctx)
   : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/WaitFlushedPeering";
+  PG *pg = context< RecoveryMachine >().pg;
   context< RecoveryMachine >().log_enter(state_name);
   if (context< RecoveryMachine >().pg->flushed)
-    post_event(Activate());
+    post_event(Activate(pg->get_osdmap()->get_epoch()));
 }
 
 boost::statechart::result
