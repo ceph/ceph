@@ -21,6 +21,9 @@ using ::librbd::cls_client::get_features;
 using ::librbd::cls_client::get_size;
 using ::librbd::cls_client::get_object_prefix;
 using ::librbd::cls_client::set_size;
+using ::librbd::cls_client::get_parent;
+using ::librbd::cls_client::set_parent;
+using ::librbd::cls_client::remove_parent;
 using ::librbd::cls_client::snapshot_add;
 using ::librbd::cls_client::snapshot_remove;
 using ::librbd::cls_client::get_snapcontext;
@@ -262,6 +265,49 @@ TEST(cls_rbd, set_size)
   ASSERT_EQ(0, get_size(&ioctx, "foo", CEPH_NOSNAP, &size, &order));
   ASSERT_EQ(3u << 22, size);
   ASSERT_EQ(22, order);
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, parents)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  int64_t pool;
+  string parent;
+  snapid_t snapid;
+  uint64_t size;
+
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "doesnotexist", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 1000, 22, 0, "foo."));
+
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 123, &pool, &parent, &snapid, &size));
+
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", -1, "parent", 3, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "", 3, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "parent", CEPH_NOSNAP, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "parent", 3, 0));
+
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+  ASSERT_EQ(-EEXIST, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+  ASSERT_EQ(-EEXIST, set_parent(&ioctx, "foo", 2, "parent", 34, 10<<20));
+
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+  ASSERT_EQ(-ENOENT, remove_parent(&ioctx, "foo"));
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));

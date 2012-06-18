@@ -37,6 +37,16 @@ namespace librbd {
 		 snapid_t snap_id, uint64_t *size, uint8_t *order);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
+    int set_size(librados::IoCtx *ioctx, const std::string &oid,
+		 uint64_t size);
+    int get_parent(librados::IoCtx *ioctx, const std::string &oid,
+		   snapid_t snap_id, int64_t *parent_pool,
+		   std::string *parent_image, snapid_t *parent_snap_id,
+		   uint64_t *parent_size);
+    int set_parent(librados::IoCtx *ioctx, const std::string &oid,
+		   int64_t parent_pool, const std::string& parent_image, snapid_t parent_snap_id,
+		   uint64_t parent_size);
+    int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,

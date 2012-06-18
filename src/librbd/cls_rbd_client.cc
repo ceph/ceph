@@ -162,6 +162,50 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "set_size", bl, bl2);
     }
 
+    int get_parent(librados::IoCtx *ioctx, const std::string &oid,
+		   snapid_t snap_id, int64_t *parent_pool,
+		   string *parent_image, snapid_t *parent_snap_id,
+		   uint64_t *parent_size)
+    {
+      bufferlist inbl, outbl;
+      ::encode(snap_id, inbl);
+
+      int r = ioctx->exec(oid, "rbd", "get_parent", inbl, outbl);
+      if (r < 0)
+	return r;
+
+      try {
+	bufferlist::iterator iter = outbl.begin();
+	::decode(*parent_pool, iter);
+	::decode(*parent_image, iter);
+	::decode(*parent_snap_id, iter);
+	::decode(*parent_size, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_parent(librados::IoCtx *ioctx, const std::string &oid,
+		   int64_t parent_pool, const string& parent_image,
+		   snapid_t parent_snap_id, uint64_t parent_size)
+    {
+      bufferlist inbl, outbl;
+      ::encode(parent_pool, inbl);
+      ::encode(parent_image, inbl);
+      ::encode(parent_snap_id, inbl);
+      ::encode(parent_size, inbl);
+
+      return ioctx->exec(oid, "rbd", "set_parent", inbl, outbl);
+    }
+
+    int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
+    {
+      bufferlist inbl, outbl;
+      return ioctx->exec(oid, "rbd", "remove_parent", inbl, outbl);
+    }
+
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name)
     {
