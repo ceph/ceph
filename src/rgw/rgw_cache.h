@@ -185,7 +185,7 @@ class RGWCache  : public T
   void finalize() {
     T::finalize_watch();
   }
-  int distribute(rgw_obj& obj, ObjectCacheInfo& obj_info, int op);
+  int distribute(const string& normal_name, rgw_obj& obj, ObjectCacheInfo& obj_info, int op);
   int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
 public:
   RGWCache() {}
@@ -223,7 +223,7 @@ int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)
   cache.remove(name);
 
   ObjectCacheInfo info;
-  distribute(obj, info, REMOVE_OBJ);
+  distribute(name, obj, info, REMOVE_OBJ);
 
   return T::delete_obj(ctx, obj, sync);
 }
@@ -292,7 +292,7 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
       cache.put(name, info);
-      int r = distribute(obj, info, UPDATE_OBJ);
+      int r = distribute(name, obj, info, UPDATE_OBJ);
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
@@ -326,7 +326,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
       cache.put(name, info);
-      int r = distribute(obj, info, UPDATE_OBJ);
+      int r = distribute(name, obj, info, UPDATE_OBJ);
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
@@ -362,7 +362,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
       cache.put(name, info);
-      int r = distribute(obj, info, UPDATE_OBJ);
+      int r = distribute(name, obj, info, UPDATE_OBJ);
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
@@ -397,7 +397,7 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
       cache.put(name, info);
-      int r = distribute(obj, info, UPDATE_OBJ);
+      int r = distribute(name, obj, info, UPDATE_OBJ);
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
@@ -456,7 +456,7 @@ done:
 }
 
 template <class T>
-int RGWCache<T>::distribute(rgw_obj& obj, ObjectCacheInfo& obj_info, int op)
+int RGWCache<T>::distribute(const string& normal_name, rgw_obj& obj, ObjectCacheInfo& obj_info, int op)
 {
   RGWCacheNotifyInfo info;
 
@@ -466,7 +466,7 @@ int RGWCache<T>::distribute(rgw_obj& obj, ObjectCacheInfo& obj_info, int op)
   info.obj = obj;
   bufferlist bl;
   ::encode(info, bl);
-  int ret = T::distribute(bl);
+  int ret = T::distribute(normal_name, bl);
   return ret;
 }
 
