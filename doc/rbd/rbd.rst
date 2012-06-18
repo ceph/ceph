@@ -27,6 +27,7 @@ the Ceph FS filesystem, and RADOS block devices simultaneously.
 	Kernel Objects <rbd-ko>
 	QEMU and RBD <qemu-rbd>
 	libvirt <libvirt>
+	RBD and OpenStack <rbd-openstack>
 	
 	
 	
