@@ -10,7 +10,7 @@ Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, libfuse
 Standards-Version: 3.9.3
 
 Package: ceph
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, sdparm | hdparm, binutils, ceph-common, uuid-runtime, python
 Recommends: ceph-fuse, libcephfs1, librados2, librbd1, btrfs-tools
 Description: distributed storage and file system
@@ -21,7 +21,7 @@ Description: distributed storage and file system
  running, and administering a Ceph storage cluster.
 
 Package: ceph-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph (= ${binary:Version}), ${misc:Depends}
@@ -32,7 +32,7 @@ Description: debugging symbols for ceph
  This package contains the debugging symbols for ceph.
 
 Package: ceph-fuse
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Recommends: fuse-utils
 Suggests: ceph
@@ -49,7 +49,7 @@ Description: FUSE-based client for the Ceph distributed file system
  do.
 
 Package: ceph-fuse-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph-fuse (= ${binary:Version}), ${misc:Depends}
@@ -62,7 +62,7 @@ Description: debugging symbols for ceph-fuse
  This package contains the debugging symbols for ceph-fuse.
 
 Package: ceph-common
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools
@@ -74,7 +74,7 @@ Description: common utilities to mount and interact with a ceph filesystem
  ceph fs with the kernel client.
 
 Package: ceph-common-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
 Conflicts: ceph-client-tools-dbg
 Replaces: ceph-client-tools-dbg
@@ -89,7 +89,7 @@ Description: debugging symbols for ceph-common
  This package contains the debugging symbols for ceph-common.
 
 Package: ceph-resource-agents
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Recommends: pacemaker
 Priority: extra
 Depends: ceph (= ${binary:Version}), ${misc:Depends}, resource-agents
@@ -104,7 +104,7 @@ Description: OCF-compliant resource agents for Ceph
 Package: librados2
 Conflicts: librados, librados1
 Replaces: librados, librados1
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: RADOS distributed object store client library
@@ -116,7 +116,7 @@ Description: RADOS distributed object store client library
 Package: librados2-dbg
 Conflicts: librados1-dbg
 Replaces: librados1-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: librados2 (= ${binary:Version}), ${misc:Depends}
@@ -129,7 +129,7 @@ Description: debugging symbols for librados
  This package contains debugging symbols for librados.
 
 Package: librados-dev
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: libdevel
 Depends: ${misc:Depends}, librados2 (= ${binary:Version})
 Conflicts: librados1-dev, librados2-dev
@@ -144,7 +144,7 @@ Description: RADOS distributed object store client library (development files)
  link against librados.
 
 Package: librbd1
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Description: RADOS block device client library
@@ -154,7 +154,7 @@ Description: RADOS block device client library
  shared library allowing applications to manage these block devices.
 
 Package: librbd1-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: librbd1 (= ${binary:Version}), ${misc:Depends}
@@ -167,7 +167,7 @@ Description: debugging symbols for librbd1
  This package contains debugging symbols for librbd1.
 
 Package: librbd-dev
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: libdevel
 Depends: ${misc:Depends}, librbd1 (= ${binary:Version}), librados-dev
 Conflicts: librbd1-dev
@@ -184,7 +184,7 @@ Description: RADOS block device client library (development files)
 Package: libcephfs1
 Conflicts: libcephfs, libceph, libceph1
 Replaces: libcephfs, libceph, libceph1
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Ceph distributed file system client library
@@ -194,7 +194,7 @@ Description: Ceph distributed file system client library
  file system via a POSIX-like interface.
 
 Package: libcephfs1-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
@@ -209,7 +209,7 @@ Description: debugging symbols for libcephfs1
  This package contains debugging symbols for libcephfs1.
 
 Package: libcephfs-dev
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: libdevel
 Depends: ${misc:Depends}, libcephfs1 (= ${binary:Version})
 Conflicts: libcephfs1-dev, libceph1-dev, libceph-dev
@@ -224,7 +224,7 @@ Description: Ceph distributed file system client library (development files)
  link against libcephfs.
 
 Package: radosgw
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
@@ -235,7 +235,7 @@ Description: REST gateway for RADOS distributed object store
  This package contains the proxy daemon and related tools only.
 
 Package: radosgw-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: radosgw (= ${binary:Version}), ${misc:Depends}
@@ -248,13 +248,13 @@ Description: debugging symbols for radosgw
  This package contains debugging symbols for radosgw.
 
 Package: rest-bench
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
 Description: RESTful bencher that can be used to benchmark
  radosgw performance.
 
 Package: rest-bench-dbg
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
@@ -262,7 +262,7 @@ Description: RESTful bencher that can be used to benchmark
  radosgw performance.
 
 Package: obsync
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Depends: ${misc:Depends}, python, python-boto, python-ceph, python-pyxattr, python-lxml
 Description: synchronize data between cloud object storage providers or a local directory
  obsync is a tool to synchronize objects between cloud object
@@ -270,7 +270,7 @@ Description: synchronize data between cloud object storage providers or a local 
  Ceph RADOS cluster, or a local directory.
 
 Package: python-ceph
-Architecture: amd64 armel armhf i386 ia64 mipsel
+Architecture: linux-any
 Section: python
 Depends: ${misc:Depends}, ${python:Depends}, librados2, librbd1
 Description: Python libraries for the Ceph distributed filesystem
