@@ -48,6 +48,9 @@ cls_method_handle_t h_create;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
+cls_method_handle_t h_get_parent;
+cls_method_handle_t h_set_parent;
+cls_method_handle_t h_remove_parent;
 cls_method_handle_t h_get_snapcontext;
 cls_method_handle_t h_get_object_prefix;
 cls_method_handle_t h_get_snapshot_name;
@@ -72,31 +75,76 @@ cls_method_handle_t h_assign_bid;
 #define RBD_LOCK_EXCLUSIVE "exclusive"
 #define RBD_LOCK_SHARED "shared"
 
+
+/// information about our parent image, if any
+struct cls_rbd_parent {
+  int64_t pool;        ///< parent pool id
+  string id;           ///< parent image id
+  snapid_t snapid;     ///< parent snapid we refer to
+  uint64_t size;       ///< portion of this image mapped onto parent
+
+  /// true if our parent pointer information is defined
+  bool exists() const {
+    return snapid != CEPH_NOSNAP && pool >= 0 && id.length() > 0;
+  }
+
+  cls_rbd_parent() : pool(-1), snapid(CEPH_NOSNAP), size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(pool, bl);
+    ::encode(id, bl);
+    ::encode(snapid, bl);
+    ::encode(size, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(pool, bl);
+    ::decode(id, bl);
+    ::decode(snapid, bl);
+    ::decode(size, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rbd_parent)
+
 struct cls_rbd_snap {
   snapid_t id;
   string name;
   uint64_t image_size;
   uint64_t features;
+  cls_rbd_parent parent;
+
+  /// true if we have a parent
+  bool has_parent() const {
+    return parent.exists();
+  }
 
   cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0) {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
     ::encode(features, bl);
+    ::encode(parent, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
     ::decode(features, p);
+    if (struct_v >= 2) {
+      ::decode(parent, p);
+    }
     DECODE_FINISH(p);
   }
 };
 WRITE_CLASS_ENCODER(cls_rbd_snap)
+
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -627,6 +675,163 @@ int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode((exclusive_string == RBD_LOCK_EXCLUSIVE), *out);
   return r;
 }
+
+
+/**
+ * verify that the header object exists
+ *
+ * @return 0 if the object exists, -ENOENT if it does not, or other error
+ */
+int check_exists(cls_method_context_t hctx)
+{
+  uint64_t size;
+  time_t mtime;
+  return cls_cxx_stat(hctx, &size, &mtime);
+}
+
+/**
+ * Input:
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ *
+ * Output:
+ * @param pool parent pool id
+ * @param image parent image id
+ * @param snapid parent snapid
+ * @param size portion of parent mapped under the child
+ * @returns 0 on success, negative error code on failure
+ */
+int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_parent snap_id=%llu", snap_id);
+
+  cls_rbd_parent parent;
+  if (snap_id == CEPH_NOSNAP) {
+    r = read_key(hctx, "parent", &parent);
+    if (r < 0)
+      return r;
+  } else {
+    cls_rbd_snap snap;
+    string snapshot_key;
+    key_from_snap_id(snap_id, &snapshot_key);
+    r = read_key(hctx, snapshot_key, &snap);
+    if (r < 0)
+      return r;
+    parent = snap.parent;
+  }
+
+  if (!parent.exists())
+    return -ENOENT;
+
+  ::encode(parent.pool, *out);
+  ::encode(parent.id, *out);
+  ::encode(parent.snapid, *out);
+  ::encode(parent.size, *out);
+  return 0;
+}
+
+/**
+ * set the image parent
+ *
+ * @param pool parent pool
+ * @param id parent image id
+ * @param snapid parent snapid
+ * @param size parent size
+ * @returns 0 on success, or negative error code
+ */
+int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int64_t pool;
+  string id;
+  snapid_t snapid;
+  uint64_t size;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(pool, iter);
+    ::decode(id, iter);
+    ::decode(snapid, iter);
+    ::decode(size, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "set_parent pool=%lld id=%s snapid=%llu size=%llu",
+	  pool, id.c_str(), snapid.val, size);
+
+  if (pool < 0 || id.length() == 0 || snapid == CEPH_NOSNAP || size == 0) {
+    return -EINVAL;
+  }
+
+  // make sure there isn't already a parent
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r == 0) {
+    CLS_LOG(20, "set_parent existing parent pool=%lld id=%s snapid=%llu size=%llu",
+	    parent.pool, parent.id.c_str(), parent.snapid.val,
+	    parent.size);
+    return -EEXIST;
+  }
+
+  bufferlist parentbl;
+  parent.pool = pool;
+  parent.id = id;
+  parent.snapid = snapid;
+  parent.size = size;
+  ::encode(parent, parentbl);
+  r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
+  if (r < 0) {
+    CLS_ERR("error writing parent: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+
+/**
+ * remove the parent pointer
+ *
+ * This can only happen on the head, not on a snapshot.  No arguments.
+ *
+ * @returns 0 on success, negative error code on failure.
+ */
+int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r < 0)
+    return r;
+
+  r = cls_cxx_map_remove_key(hctx, "parent");
+  if (r < 0) {
+    CLS_ERR("error removing parent: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
 
 /**
  * Get the information needed to create a rados snap context for doing
@@ -1171,6 +1376,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "list_locks",
                           CLS_METHOD_RD | CLS_METHOD_PUBLIC,
                           list_locks, &h_list_locks);
+  cls_register_cxx_method(h_class, "get_parent",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  get_parent, &h_get_parent);
+  cls_register_cxx_method(h_class, "set_parent",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  set_parent, &h_set_parent);
+  cls_register_cxx_method(h_class, "remove_parent",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  remove_parent, &h_remove_parent);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
