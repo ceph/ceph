@@ -270,13 +270,13 @@ int OSD::do_convertfs(ObjectStore *store)
       derr << "collection " << *i << " updated" << dendl;
     }
   }
-  cerr << "All collections up to date, updating version stamp..." << std::endl;
+  derr << "All collections up to date, updating version stamp..." << dendl;
   r = store->update_version_stamp();
   if (r < 0)
     return r;
   store->sync_and_flush();
   store->sync();
-  cerr << "Version stamp updated, done!" << std::endl;
+  derr << "Version stamp updated, done with upgrade!" << dendl;
   return store->umount();
 }
 
