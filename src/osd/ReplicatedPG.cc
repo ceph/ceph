@@ -5318,8 +5318,13 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
       missing_loc.erase(oid);
       
     // raise last_complete?
+    if (missing.missing.empty()) {
+      log.complete_to = log.log.end();
+      info.last_complete = info.last_update;
+    }
     while (log.complete_to != log.log.end()) {
-      if (missing.missing.count(log.complete_to->soid))
+      if (missing.missing[missing.rmissing.begin()->second].need <=
+	  log.complete_to->version)
 	break;
       if (info.last_complete < log.complete_to->version)
 	info.last_complete = log.complete_to->version;
