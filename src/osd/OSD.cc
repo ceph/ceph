@@ -1115,13 +1115,21 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
     return;
 
   // delete them.
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
+  unsigned removed = 0;
   for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
-       p++)
-    t->collection_remove(tmp, *p);
-  t->remove_collection(tmp);
-  int r = store->queue_transaction(NULL, t);
+       p++, removed++) {
+    t.collection_remove(tmp, *p);
+    if (removed > 300) {
+      int r = store->apply_transaction(t);
+      assert(r == 0);
+      t = ObjectStore::Transaction();
+      removed = 0;
+    }
+  }
+  t.remove_collection(tmp);
+  int r = store->apply_transaction(t);
   assert(r == 0);
   store->sync_and_flush();
 }
