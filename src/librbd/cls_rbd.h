@@ -10,7 +10,7 @@ struct cls_rbd_parent {
   int64_t pool;        ///< parent pool id
   string id;           ///< parent image id
   snapid_t snapid;     ///< parent snapid we refer to
-  uint64_t overlap;    ///< portion of this image mapped onto parent
+  uint64_t overlap;    ///< portion of this image mapped onto parent (bytes)
 
   /// true if our parent pointer information is defined
   bool exists() const {
