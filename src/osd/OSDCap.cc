@@ -180,7 +180,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
 			     (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
 
     // osdcap := grant [grant ...]
-    osdcap %= (grant % (lit(';') | lit(',')))         [_val = phoenix::construct<OSDCap>(_1)];
+    grants %= (grant % (lit(';') | lit(',')));
+    osdcap = grants  [_val = phoenix::construct<OSDCap>(_1)]; 
   }
   qi::rule<Iterator, unsigned(), ascii::space_type> rwxa;
   qi::rule<Iterator, string(), ascii::space_type> quoted_string;
@@ -191,6 +192,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
   qi::rule<Iterator, string(), ascii::space_type> object_prefix;
   qi::rule<Iterator, OSDCapMatch(), ascii::space_type> match;
   qi::rule<Iterator, OSDCapGrant(), ascii::space_type> grant;
+  qi::rule<Iterator, std::vector<OSDCapGrant>(), ascii::space_type> grants;
   qi::rule<Iterator, OSDCap(), ascii::space_type> osdcap;
 };
 
