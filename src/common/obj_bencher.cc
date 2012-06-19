@@ -26,17 +26,26 @@
 
 
 const char *BENCH_DATA = "benchmark_write_data";
+const std::string BENCH_PREFIX = "benchmark_data";
 
-static void generate_object_name(char *s, size_t size, int objnum, int pid = 0)
-{
+static std::string generate_object_prefix(int pid = 0) {
   char hostname[30];
   gethostname(hostname, sizeof(hostname)-1);
   hostname[sizeof(hostname)-1] = 0;
-  if (pid) {
-    snprintf(s, size, "%s_%d_object%d", hostname, pid, objnum);
-  } else {
-    snprintf(s, size, "%s_%d_object%d", hostname, getpid(), objnum);
-  }
+
+  if (!pid)
+    pid = getpid();
+
+  std::ostringstream oss;
+  oss << BENCH_PREFIX << "_" << hostname << "_" << pid;
+  return oss.str();
+}
+
+static std::string generate_object_name(int objnum, int pid = 0)
+{
+  std::ostringstream oss;
+  oss << generate_object_prefix(pid) << "_object" << objnum;
+  return oss.str();
 }
 
 static void sanitize_object_contents (bench_data *data, int length) {
@@ -239,7 +248,11 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
        << data.object_size << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
 
-  char* name[concurrentios];
+  std::string prefix = generate_object_prefix();
+  out(cout) << "Object prefix: " << prefix << std::endl;
+
+  std::string name[concurrentios];
+  std::string newName;
   bufferlist* contents[concurrentios];
   double total_latency = 0;
   utime_t start_times[concurrentios];
@@ -254,9 +267,8 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
 
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
-    name[i] = new char[128];
+    name[i] = generate_object_name(i);
     contents[i] = new bufferlist();
-    generate_object_name(name[i], 128, i);
     snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", i);
     contents[i]->append(data.object_contents, data.object_size);
   }
@@ -285,7 +297,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
   bufferlist* newContents;
-  char* newName;
 
   //don't need locking for reads because other thread doesn't write
 
@@ -314,8 +325,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     lock.Unlock();
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
-    newName = new char[128];
-    generate_object_name(newName, 128, data.started);
+    newName = generate_object_name(data.started);
     snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", data.started);
     newContents->append(data.object_contents, data.object_size);
     completion_wait(slot);
@@ -351,7 +361,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     ++data.started;
     ++data.in_flight;
     lock.Unlock();
-    delete[] name[slot];
     delete contents[slot];
     name[slot] = newName;
     contents[slot] = newContents;
@@ -376,7 +385,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     --data.in_flight;
     lock.Unlock();
     release_completion(slot);
-    delete[] name[slot];
     delete contents[slot];
   }
 
@@ -427,7 +435,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   data.finished = 0;
 
   lock_cond lc(&lock);
-  char* name[concurrentios];
+  std::string name[concurrentios];
+  std::string newName;
   bufferlist* contents[concurrentios];
   int index[concurrentios];
   int errors = 0;
@@ -447,8 +456,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = new char[128];
-    generate_object_name(name[i], 128, i, pid);
+    name[i] = generate_object_name(i, pid);
     contents[i] = new bufferlist();
   }
 
@@ -477,7 +485,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //keep on adding new reads as old ones complete
   int slot;
-  char* newName;
   bufferlist *cur_contents;
 
   slot = 0;
@@ -503,8 +510,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       lc.cond.Wait(lock);
     }
     lock.Unlock();
-    newName = new char[128];
-    generate_object_name(newName, 128, data.started, pid);
+    newName = generate_object_name(data.started, pid);
     int current_index = index[slot];
     index[slot] = data.started;
     completion_wait(slot);
@@ -543,7 +549,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       cerr << name[slot] << " is not correct!" << std::endl;
       ++errors;
     }
-    delete name[slot];
     name[slot] = newName;
     delete cur_contents;
   }
@@ -573,7 +578,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       cerr << name[slot] << " is not correct!" << std::endl;
       ++errors;
     }
-    delete[] name[slot];
     delete contents[slot];
   }
 
