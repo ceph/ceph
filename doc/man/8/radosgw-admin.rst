@@ -46,6 +46,12 @@ Commands
 :command:`log show`
   Show the log of a bucket (with a specified date)
 
+:command:`usage show`
+  Show the usage information (with optional user and date range)
+
+:command:`usage trim`
+  Trim usage information (with optional user and date range)
+
 
 Options
 =======
@@ -86,7 +92,15 @@ Options
 
 .. option:: --date=yyyy-mm-dd
 
-   The date need for some commands
+   The date needed for some commands
+
+.. option:: --start-date=yyyy-mm-dd
+
+   The start date needed for some commands
+
+.. option:: --end-date=yyyy-mm-dd
+
+   The end date needed for some commands
 
 .. option:: --os-user=group:name
 
