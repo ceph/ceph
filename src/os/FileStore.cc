@@ -1679,8 +1679,7 @@ int FileStore::mount()
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
 	   << ". Proceeding, do_update "
-	   << "is set, DO NOT USE THIS OPTION IF YOU DO NOT KNOW WHAT IT DOES."
-	   << " More details can be found on the wiki."
+	   << "is set, performing disk format upgrade."
 	   << dendl;
     } else {
       ret = -EINVAL;

@@ -417,6 +417,13 @@ public:
 
   eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
+  static eversion_t max() {
+    eversion_t max;
+    max.version -= 1;
+    max.epoch -= 1;
+    return max;
+  }
+
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = epoch;

@@ -1230,7 +1230,8 @@ void Monitor::handle_command(MMonCommand *m)
       get_health(health, NULL);
       stringstream ss;
       ss << "   health " << health << "\n";
-      ss << "   monmap " << *monmap << "\n";
+      ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
+	 << " " << get_quorum_names() << "\n";
       ss << "   osdmap " << osdmon()->osdmap << "\n";
       ss << "    pgmap " << pgmon()->pg_map << "\n";
       ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
