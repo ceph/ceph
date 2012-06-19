@@ -783,6 +783,10 @@ protected:
     return io_ctx.aio_write(oid, completions[slot], bl, len, 0);
   }
 
+  int aio_remove(const std::string& oid, int slot) {
+    return io_ctx.aio_remove(oid, completions[slot]);
+  }
+
   int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
     return io_ctx.read(oid, bl, len, 0);
   }

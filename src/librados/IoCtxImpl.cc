@@ -829,6 +829,28 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   return 0;
 }
 
+int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
+{
+  utime_t ut = ceph_clock_now(client->cct);
+
+  /* can't write to a snapshot */
+  if (snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
+  c->io = this;
+  queue_aio_write(c);
+
+  Context *onack = new C_aio_Ack(c);
+  Context *onsafe = new C_aio_Safe(c);
+
+  Mutex::Locker l(*lock);
+  objecter->remove(oid, oloc,
+		   snapc, ut, 0,
+		   onack, onsafe, &c->objver);
+
+  return 0;
+}
+
 int librados::IoCtxImpl::remove(const object_t& oid)
 {
   utime_t ut = ceph_clock_now(client->cct);

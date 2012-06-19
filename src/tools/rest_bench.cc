@@ -72,6 +72,7 @@ enum OpType {
   OP_NONE    = 0,
   OP_GET_OBJ = 1,
   OP_PUT_OBJ = 2,
+  OP_DELETE_OBJ = 3,
 };
 
 struct req_context : public RefCountedObject {
@@ -404,6 +405,18 @@ protected:
     ctx->oid = oid;
     ctx->len = len;
     ctx->op = OP_PUT_OBJ;
+
+    dispatcher->queue(ctx);
+    return 0;
+  }
+
+  int aio_remove(const std::string& oid, int slot) {
+    struct req_context *ctx = completions[slot];
+
+    ctx->get();
+    ctx->bucket_ctx = &bucket_ctx;
+    ctx->oid = oid;
+    ctx->op = OP_DELETE_OBJ;
 
     dispatcher->queue(ctx);
     return 0;

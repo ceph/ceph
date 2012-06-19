@@ -953,6 +953,11 @@ int librados::IoCtx::aio_write_full(const std::string& oid, librados::AioComplet
   return io_ctx_impl->aio_write_full(obj, c->pc, bl);
 }
 
+int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion *c)
+{
+  return io_ctx_impl->aio_remove(oid, c->pc);
+}
+
 int librados::IoCtx::aio_flush()
 {
   io_ctx_impl->flush_aio_writes();
@@ -2132,6 +2137,14 @@ extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
   bufferlist bl;
   bl.append(buf, len);
   return ctx->aio_write_full(oid, (librados::AioCompletionImpl*)completion, bl);
+}
+
+extern "C" int rados_aio_remove(rados_ioctx_t io, const char *o,
+				rados_completion_t completion)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  return ctx->aio_remove(oid, (librados::AioCompletionImpl*)completion);
 }
 
 extern "C" int rados_aio_flush(rados_ioctx_t io)

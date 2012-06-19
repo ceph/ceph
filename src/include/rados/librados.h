@@ -1391,6 +1391,23 @@ int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			 const char *buf, size_t len);
 
 /**
+ * Asychronously remove an object
+ *
+ * Queues the remove and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param completion what to do when the remove is safe and complete
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than CEPH_NOSNAP
+ */
+int rados_aio_remove(rados_ioctx_t io, const char *oid,
+		     rados_completion_t completion);
+
+/**
  * Asychronously read data from an object
  *
  * The io context determines the snapshot to read from, if any was set

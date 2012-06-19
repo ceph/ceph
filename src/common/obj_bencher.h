@@ -73,6 +73,7 @@ protected:
 
   virtual int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len) = 0;
   virtual int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len) = 0;
+  virtual int aio_remove(const std::string& oid, int slot) = 0;
   virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
 
