@@ -97,6 +97,37 @@ Now you can start Apache and the radosgw daemon::
         /etc/init.d/apache2 start
         /etc/init.d/radosgw start
 
+Usage Logging
+=============
+
+The **radosgw** maintains an asynchronous usage log. It accumulates
+statistics about user operations and flushes it periodically. The
+logs can be accessed and managed through **radosgw-admin**.
+
+The information that is being logged contains total data transfr,
+total operations, and total successful operations. The data is being
+accounted under the bucket owner, unless the operation was done on
+the service (e.g., when listing a bucket) in which case it is
+accounted under the operating user.
+
+Following is an example configuration::
+
+        [client.radosgw.gateway]
+            rgw enable usage log = true
+            rgw usage log tick interval = 30
+            rgw usage log flush threshold = 1024
+            rgw usage max shards = 32
+            rgw usage max user shards = 1
+
+
+The total number of shards determines how many total objects hold the
+usage log information. The per-user number of shards specify how many
+objects hold usage information for a single user. The tick interval
+configures the number of seconds between log flushes, and the flush
+threshold specify how many entries can be kept before resorting to
+synchronous flush.
+
+
 Availability
 ============
 
@@ -109,3 +140,4 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8)
+:doc:`radosgw-admin <radosgw-admin>`\(8)
