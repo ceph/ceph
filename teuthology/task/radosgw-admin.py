@@ -12,6 +12,8 @@ import boto.exception
 import boto.s3.connection
 import boto.s3.acl
 
+import time
+
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -308,6 +310,41 @@ def task(ctx, config):
         assert not err
 
     # TODO: show log by bucket+date
+
+    # need to wait for all usage data to get flushed, should take up to 30 seconds
+    timestamp = time.time()
+    while time.time() - timestamp <= 45:
+        (err, out) = rgwadmin(ctx, client, ['usage', 'show'])
+        if len(out['entries']) > 0:
+            break;
+        time.sleep(1)
+
+    assert time.time() - timestamp <= 45
+
+    # TESTCASE 'usage-show' 'usage' 'show' 'all usage' 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['usage', 'show'])
+    assert not err
+    assert len(out['entries']) > 0
+    assert len(out['summary']) > 0
+    for entry in out['summary']:
+        assert entry['successful_ops'] > 0
+
+    # TESTCASE 'usage-show2' 'usage' 'show' 'user usage' 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user])
+    assert not err
+    assert len(out['entries']) > 0
+    assert len(out['summary']) > 0
+    for entry in out['summary']:
+        assert entry['successful_ops'] > 0
+        assert entry['user'] == user
+
+    # TESTCASE 'usage-trim' 'usage' 'trim' 'user usage' 'succeeds, usage removed'
+    (err, out) = rgwadmin(ctx, client, ['usage', 'trim', '--uid', user])
+    assert not err
+    (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user])
+    assert not err
+    assert len(out['entries']) == 0
+    assert len(out['summary']) == 0
 
     # TESTCASE 'user-suspend2','user','suspend','existing user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'suspend', '--uid', user])
