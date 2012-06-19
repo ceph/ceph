@@ -393,9 +393,9 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
+
   // Set up crypto, daemonize, etc.
-  // Leave stderr open in case we need to report errors.
-  global_init_daemonize(g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
+  global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
 
   if (g_conf->filestore_update_to >= (int)FileStore::on_disk_version) {
