@@ -434,6 +434,22 @@ namespace librados
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
+
+    /**
+     * Asychronously remove an object
+     *
+     * Queues the remove and returns.
+     *
+     * The return value of the completion will be 0 on success, negative
+     * error code on failure.
+     *
+     * @param io the context to operate in
+     * @param oid the name of the object
+     * @param completion what to do when the remove is safe and complete
+     * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+     * other than CEPH_NOSNAP
+     */
+    int aio_remove(const std::string& oid, AioCompletion *c);
     
     int aio_flush();
 
