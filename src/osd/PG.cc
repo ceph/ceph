@@ -332,12 +332,20 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
       }
     }
   } else {
-    if (oe.is_delete()) {
-      dout(20) << "merge_old_entry  had " << oe << " new dne : ok" << dendl;      
-    } else {
-      dout(20) << "merge_old_entry  had " << oe << " new dne : deleting" << dendl;
+    if (!oe.is_delete()) {
+      dout(20) << "merge_old_entry  had " << oe << " deleting" << dendl;
       t.remove(coll, oe.soid);
-      missing.rm(oe.soid, oe.version);
+    }
+    dout(20) << "merge_old_entry  had " << oe << " reverting to "
+	     << oe.prior_version << dendl;
+    if (oe.prior_version > eversion_t()) {
+      if (!missing.is_missing(oe.soid) ||
+	  missing.missing[oe.soid].need > info.log_tail) {
+	assert(oe.prior_version < info.log_tail);
+	missing.revise_need(oe.soid, oe.prior_version);
+      }
+    } else if (missing.is_missing(oe.soid)) {
+      missing.rm(oe.soid, missing.missing[oe.soid].need);
     }
   }
   return false;
@@ -1276,24 +1284,27 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   adjust_local_snaps();
 
   // init complete pointer
-  if (missing.num_missing() == 0 &&
-      info.last_complete != info.last_update) {
+  if (missing.num_missing() == 0) {
     dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
 	     << " -> " << info.last_update << dendl;
     info.last_complete = info.last_update;
-  }
-
-  if (info.last_complete == info.last_update) {
-    dout(10) << "activate - complete" << dendl;
-    log.reset_recovery_pointers();
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
     log.complete_to = log.log.begin();
-    while (log.complete_to->version <= info.last_complete)
+    while (log.complete_to->version <
+	   missing.missing[missing.rmissing.begin()->second].need)
       log.complete_to++;
     assert(log.complete_to != log.log.end());
+    if (log.complete_to == log.log.begin()) {
+      info.last_complete = eversion_t();
+    } else {
+      log.complete_to--;
+      info.last_complete = log.complete_to->version;
+      log.complete_to++;
+    }
     log.last_requested = 0;
-    dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
+    dout(10) << "activate -     complete_to = " << log.complete_to->version
+	     << dendl;
     if (is_primary()) {
       dout(10) << "activate - starting recovery" << dendl;
       osd->queue_for_recovery(this);
@@ -1301,7 +1312,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	discover_all_missing(query_map);
     }
   }
-
+    
   log_weirdness();
 
   // if primary..
