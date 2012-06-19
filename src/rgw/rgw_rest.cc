@@ -234,8 +234,8 @@ void end_header(struct req_state *s, const char *content_type)
     dump_content_length(s, s->formatter->get_len());
   }
   CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
-  flush_formatter_to_req_state(s, s->formatter);
   s->header_ended = true;
+  flush_formatter_to_req_state(s, s->formatter);
 }
 
 void abort_early(struct req_state *s, int err_no)

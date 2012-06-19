@@ -364,21 +364,19 @@ void LogMonitor::check_sub(Subscription *s)
   } 
  
   int sub_level = types[s->type];
-  bool ret = true;
   MLog *mlog = new MLog(mon->monmap->fsid);
 
   if (s->next == 0) { 
     /* First timer, heh? */
-    ret = _create_sub_summary(mlog, sub_level);
+    bool ret = _create_sub_summary(mlog, sub_level);
+    if (!ret) {
+      dout(1) << __func__ << " ret = " << ret << dendl;
+      mlog->put();
+      return;
+    }
   } else {
     /* let us send you an incremental log... */
-    ret = _create_sub_incremental(mlog, sub_level, s->next);
-  }
-
-  if (!ret) {
-    dout(1) << __func__ << " ret = " << ret << dendl;
-    mlog->put();
-    return;
+    _create_sub_incremental(mlog, sub_level, s->next);
   }
 
   dout(1) << __func__ << " sending message to " << s->session->inst 
@@ -430,23 +428,30 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
  *		since version @sv, inclusive.
  * @param level	The max log level of the messages the client is interested in.
  * @param sv	The version the client is looking for.
- * @return	'true' if we consider we successfully populated @mlog; 
- *		'false' otherwise.
  */
-bool LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
+void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
 {
   dout(10) << __func__ << " level " << level << " ver " << sv 
 	  << " cur summary ver " << summary.version << dendl; 
 
-  bool success = true;
+  if (sv < paxos->get_first_committed()) {
+    dout(10) << __func__ << " skipped from " << sv
+	     << " to first_committed " << paxos->get_first_committed() << dendl;
+    LogEntry le;
+    le.stamp = ceph_clock_now(NULL);
+    le.type = CLOG_WARN;
+    ostringstream ss;
+    ss << "skipped log messages from " << sv << " to " << paxos->get_first_committed();
+    le.msg = ss.str();
+    mlog->entries.push_back(le);
+    sv = paxos->get_first_committed();
+  }
+
   version_t summary_ver = summary.version;
   while (sv <= summary_ver) {
     bufferlist bl;
-    success = paxos->read(sv, bl);
-    if (!success) {
-      dout(10) << __func__ << " paxos->read() unsuccessful" << dendl;
-      break;
-    }
+    bool success = paxos->read(sv, bl);
+    assert(success);
     bufferlist::iterator p = bl.begin();
     __u8 v;
     ::decode(v,p);
@@ -466,8 +471,6 @@ bool LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   }
 
   dout(10) << __func__ << " incremental message ready (" 
-	  << mlog->entries.size() << " entries)" << dendl;
-
-  return success;
+	   << mlog->entries.size() << " entries)" << dendl;
 }
 
