@@ -26,11 +26,6 @@
  * in each one that they take an input and an output bufferlist.
  */
 
-#include "include/types.h"
-#include "objclass/objclass.h"
-
-#include "include/rbd_types.h"
-
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -40,6 +35,13 @@
 #include <sstream>
 #include <vector>
 
+#include "include/types.h"
+#include "objclass/objclass.h"
+#include "include/rbd_types.h"
+
+#include "librbd/cls_rbd.h"
+
+
 CLS_VER(2,0)
 CLS_NAME(rbd)
 
@@ -48,6 +50,9 @@ cls_method_handle_t h_create;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
+cls_method_handle_t h_get_parent;
+cls_method_handle_t h_set_parent;
+cls_method_handle_t h_remove_parent;
 cls_method_handle_t h_get_snapcontext;
 cls_method_handle_t h_get_object_prefix;
 cls_method_handle_t h_get_snapshot_name;
@@ -72,31 +77,6 @@ cls_method_handle_t h_assign_bid;
 #define RBD_LOCK_EXCLUSIVE "exclusive"
 #define RBD_LOCK_SHARED "shared"
 
-struct cls_rbd_snap {
-  snapid_t id;
-  string name;
-  uint64_t image_size;
-  uint64_t features;
-
-  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0) {}
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
-    ::encode(image_size, bl);
-    ::encode(features, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    DECODE_START(1, p);
-    ::decode(id, p);
-    ::decode(name, p);
-    ::decode(image_size, p);
-    ::decode(features, p);
-    DECODE_FINISH(p);
-  }
-};
-WRITE_CLASS_ENCODER(cls_rbd_snap)
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -301,6 +281,28 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
+ * check that given feature(s) are set
+ *
+ * @param hctx context
+ * @param need features needed
+ * @return 0 if features are set, negative error (like ENOEXEC) otherwise
+ */
+int require_feature(cls_method_context_t hctx, uint64_t need)
+{
+  uint64_t features;
+  int r = read_key(hctx, "features", &features);
+  if (r == -ENOENT)   // this implies it's an old-style image with no features
+    return -ENOEXEC;
+  if (r < 0)
+    return r;
+  if ((features & need) != need) {
+    CLS_LOG(10, "require_feature missing feature %llx, have %llx", need, features);
+    return -ENOEXEC;
+  }
+  return 0;
+}
+
+/**
  * Input:
  * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
  *
@@ -370,8 +372,6 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "set_size size=%llu", size);
-
   // check that size exists to make sure this is a header object
   // that was created correctly
   uint64_t orig_size;
@@ -381,23 +381,45 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  CLS_LOG(20, "set_size size=%llu orig_size=%llu", size);
+
   bufferlist sizebl;
   ::encode(size, sizebl);
-
   r = cls_cxx_map_set_val(hctx, "size", &sizebl);
   if (r < 0) {
     CLS_ERR("error writing snapshot metadata: %d", r);
     return r;
   }
 
+  // if we are shrinking, and have a parent, shrink our overlap with
+  // the parent, too.
+  if (size < orig_size) {
+    cls_rbd_parent parent;
+    r = read_key(hctx, "parent", &parent);
+    if (r == -ENOENT)
+      r = 0;
+    if (r < 0)
+      return r;
+    if (parent.exists() && parent.overlap > size) {
+      bufferlist parentbl;
+      parent.overlap = size;
+      ::encode(parent, parentbl);
+      r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
+      if (r < 0) {
+	CLS_ERR("error writing parent: %d", r);
+	return r;
+      }
+    }
+  }
+
   return 0;
 }
 
-// image locking
 /**
  * helper function to add a lock and update disk state.
- * @param lock_type The type of lock, either RBD_LOCK_EXCLUSIVE
- * or RBD_LOCK_SHARED
+ *
+ * Input:
+ * @param lock_type The type of lock, either RBD_LOCK_EXCLUSIVE or RBD_LOCK_SHARED
  * @param cookie The cookie to set in the lock
  *
  * @return 0 on success, or -errno on failure
@@ -406,6 +428,7 @@ int lock_image(cls_method_context_t hctx, string lock_type,
                const string &cookie)
 {
   bool exclusive = lock_type == RBD_LOCK_EXCLUSIVE;
+
   // see if there's already a locker
   set<pair<string, string> > lockers;
   string existing_lock_type;
@@ -454,8 +477,10 @@ int lock_image(cls_method_context_t hctx, string lock_type,
   }
   return r;
 }
+
 /**
  * Set an exclusive lock on an image for the activating client, if possible.
+ *
  * Input:
  * @param lock_cookie A string cookie, defined by the locker.
  *
@@ -479,6 +504,7 @@ int lock_image_exclusive(cls_method_context_t hctx,
 
 /**
  * Set an exclusive lock on an image, if possible.
+ *
  * Input:
  * @param lock_cookie A string cookie, defined by the locker.
  *
@@ -499,8 +525,10 @@ int lock_image_shared(cls_method_context_t hctx,
 
   return lock_image(hctx, RBD_LOCK_SHARED, lock_cookie);
 }
+
 /**
  *  helper function to remove a lock from on disk and clean up state.
+ *
  *  @param inst The string representation of the locker's entity.
  *  @param cookie The user-defined cookie associated with the lock.
  *
@@ -534,8 +562,10 @@ int remove_lock(cls_method_context_t hctx, const string& inst,
 
   return 0;
 }
+
 /**
  * Unlock an image which the activating client currently has locked.
+ *
  * Input:
  * @param lock_cookie The user-defined cookie associated with the lock.
  *
@@ -562,8 +592,10 @@ int unlock_image(cls_method_context_t hctx,
   inst_stringstream << inst;
   return remove_lock(hctx, inst_stringstream.str(), lock_cookie);
 }
+
 /**
  * Break the lock on an image held by any client.
+ *
  * Input:
  * @param locker The string representation of the locking client's entity.
  * @param lock_cookie The user-defined cookie associated with the lock.
@@ -571,7 +603,8 @@ int unlock_image(cls_method_context_t hctx,
  * @return 0 on success, -EINVAL if it can't decode the locker and
  * cookie, -ENOENT if there is no such lock (either entity or cookie
  * is wrong), or -errno on other (unexpected) error.
- */int break_lock(cls_method_context_t hctx,
+ */
+int break_lock(cls_method_context_t hctx,
                bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "break_lock");
@@ -591,7 +624,10 @@ int unlock_image(cls_method_context_t hctx,
  /**
  * Retrieve a list of clients locking this object (presumably an rbd header),
  * as well as whether the lock is shared or exclusive.
+ *
+ * Input:
  * @param in is ignored.
+ *
  * Output:
  * @param set<pair<string, string> > lockers The set of clients holding locks,
  * as <client, cookie> pairs.
@@ -627,6 +663,186 @@ int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode((exclusive_string == RBD_LOCK_EXCLUSIVE), *out);
   return r;
 }
+
+
+/**
+ * verify that the header object exists
+ *
+ * @return 0 if the object exists, -ENOENT if it does not, or other error
+ */
+int check_exists(cls_method_context_t hctx)
+{
+  uint64_t size;
+  time_t mtime;
+  return cls_cxx_stat(hctx, &size, &mtime);
+}
+
+/**
+ * get the current parent, if any
+ *
+ * Input:
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ *
+ * Output:
+ * @param pool parent pool id
+ * @param image parent image id
+ * @param snapid parent snapid
+ * @param size portion of parent mapped under the child
+ *
+ * @returns 0 on success, -ENOENT if no parent, other negative error code on failure
+ */
+int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_parent snap_id=%llu", snap_id);
+
+  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r < 0)
+    return r;
+
+  cls_rbd_parent parent;
+  if (snap_id == CEPH_NOSNAP) {
+    r = read_key(hctx, "parent", &parent);
+    if (r < 0)
+      return r;
+  } else {
+    cls_rbd_snap snap;
+    string snapshot_key;
+    key_from_snap_id(snap_id, &snapshot_key);
+    r = read_key(hctx, snapshot_key, &snap);
+    if (r < 0)
+      return r;
+    parent = snap.parent;
+  }
+
+  if (!parent.exists())
+    return -ENOENT;
+
+  ::encode(parent.pool, *out);
+  ::encode(parent.id, *out);
+  ::encode(parent.snapid, *out);
+  ::encode(parent.overlap, *out);
+  return 0;
+}
+
+/**
+ * set the image parent
+ *
+ * Input:
+ * @param pool parent pool
+ * @param id parent image id
+ * @param snapid parent snapid
+ * @param size parent size
+ *
+ * @returns 0 on success, or negative error code
+ */
+int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int64_t pool;
+  string id;
+  snapid_t snapid;
+  uint64_t size;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(pool, iter);
+    ::decode(id, iter);
+    ::decode(snapid, iter);
+    ::decode(size, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "set_parent pool=%lld id=%s snapid=%llu size=%llu",
+	  pool, id.c_str(), snapid.val, size);
+
+  if (pool < 0 || id.length() == 0 || snapid == CEPH_NOSNAP || size == 0) {
+    return -EINVAL;
+  }
+
+  // make sure there isn't already a parent
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r == 0) {
+    CLS_LOG(20, "set_parent existing parent pool=%lld id=%s snapid=%llu overlap=%llu",
+	    parent.pool, parent.id.c_str(), parent.snapid.val,
+	    parent.overlap);
+    return -EEXIST;
+  }
+
+  // our overlap is the min of our size and the parent's size.
+  uint64_t our_size;
+  r = read_key(hctx, "size", &our_size);
+  if (r < 0)
+    return r;
+
+  bufferlist parentbl;
+  parent.pool = pool;
+  parent.id = id;
+  parent.snapid = snapid;
+  parent.overlap = MIN(our_size, size);
+  ::encode(parent, parentbl);
+  r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
+  if (r < 0) {
+    CLS_ERR("error writing parent: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+
+/**
+ * remove the parent pointer
+ *
+ * This can only happen on the head, not on a snapshot.  No arguments.
+ *
+ * @returns 0 on success, negative error code on failure.
+ */
+int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r < 0)
+    return r;
+
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r < 0)
+    return r;
+
+  r = cls_cxx_map_remove_key(hctx, "parent");
+  if (r < 0) {
+    CLS_ERR("error removing parent: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
 
 /**
  * Get the information needed to create a rados snap context for doing
@@ -811,6 +1027,15 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     if (vals.size() > 0)
       last_read = vals.rbegin()->first;
   } while (r == RBD_MAX_KEYS_READ);
+
+  // snapshot inherits parent, if any
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r < 0 && r != -ENOENT)
+    return r;
+  if (r == 0) {
+    snap_meta.parent = parent;
+  }
 
   bufferlist snap_metabl, snap_seqbl;
   ::encode(snap_meta, snap_metabl);
@@ -1171,6 +1396,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "list_locks",
                           CLS_METHOD_RD | CLS_METHOD_PUBLIC,
                           list_locks, &h_list_locks);
+  cls_register_cxx_method(h_class, "get_parent",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  get_parent, &h_get_parent);
+  cls_register_cxx_method(h_class, "set_parent",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  set_parent, &h_set_parent);
+  cls_register_cxx_method(h_class, "remove_parent",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  remove_parent, &h_remove_parent);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
