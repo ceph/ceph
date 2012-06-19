@@ -20,6 +20,8 @@ RADOS OSD clusters--the same storage system for ``librados`` object stores and
 the Ceph FS filesystem. You can use the same cluster to operate object stores, 
 the Ceph FS filesystem, and RADOS block devices simultaneously.
 
+.. important:: To use RBD, you must have a running Ceph cluster.
+
 .. toctree::
 	:maxdepth: 1
 

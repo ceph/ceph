@@ -5,9 +5,11 @@
 Ceph integrates with the QEMU virtual machine. For details on QEMU, see 
 `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
 `QEMU Manual`_. 
+
+.. important:: To use RBD with QEMU, you must have a running Ceph cluster.
    
-Installing QEMU on Ubuntu 12.04Precise
---------------------------------------
+Installing QEMU on Ubuntu 12.04 Precise
+---------------------------------------
 QEMU packages are incorporated into the Ubuntu 12.04 precise distribution. To 
 install QEMU on precise, execute the following:: 
 
@@ -41,7 +43,7 @@ Resizing RBD Images with QEMU
 -----------------------------
 You can resize an RBD image from QEMU. You must specify ``rbd``, 
 the pool name, and the name of the image you wish to resize. You must also
-specify the size of the image.
+specify the size of the image. ::
 
 	qemu-img resize -f rbd rbd:{pool-name}/{image-name} {size}
 

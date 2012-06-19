@@ -9,6 +9,7 @@ OpenStack, install it now. See `Installing OpenStack`_ for details.
 
 .. _Installing OpenStack: ../../install/openstack
 
+.. important:: To use RBD with OpenStack, you must have a running Ceph cluster.
 .. tip: To get started quickly, turn off cephx authentication. 
 
 Create a Pool

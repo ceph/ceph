@@ -2,6 +2,8 @@
  RBD Kernel Object Operations
 ==============================
 
+.. important:: To use kernel object operations, you must have a running Ceph cluster.
+
 Add a Block Device
 ------------------
 To add an RBD image as a kernel object, first load the Ceph RBD module:: 
