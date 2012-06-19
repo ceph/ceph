@@ -928,7 +928,22 @@ void PG::clear_primary_state()
  */
 map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t> &infos) const
 {
-  epoch_t last_epoch_started = 0;
+  eversion_t min_last_update_acceptable = eversion_t::max();
+  epoch_t max_last_epoch_started_found = 0;
+  for (map<int, pg_info_t>::const_iterator i = infos.begin();
+       i != infos.end();
+       ++i) {
+    if (max_last_epoch_started_found < i->second.history.last_epoch_started) {
+      min_last_update_acceptable = eversion_t::max();
+      max_last_epoch_started_found = i->second.history.last_epoch_started;
+    }
+    if (max_last_epoch_started_found == i->second.history.last_epoch_started) {
+      if (min_last_update_acceptable > i->second.last_update)
+	min_last_update_acceptable = i->second.last_update;
+    }
+  }
+  assert(min_last_update_acceptable != eversion_t::max());
+
   map<int, pg_info_t>::const_iterator best = infos.end();
   // find osd with newest last_update.  if there are multiples, prefer
   //  - a longer tail, if it brings another peer into log contiguity
@@ -936,15 +951,9 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
   for (map<int, pg_info_t>::const_iterator p = infos.begin();
        p != infos.end();
        ++p) {
-    // Only consider peers with the most recent last_epoch_started found
-    if (p->second.history.last_epoch_started > last_epoch_started) {
-      last_epoch_started = p->second.history.last_epoch_started;
-      if (best != infos.end() &&
-	  last_epoch_started > best->second.history.last_epoch_started)
-	best = infos.end();
-    } else if (p->second.history.last_epoch_started < last_epoch_started) {
+    // Only consider peers with last_update >= min_last_update_acceptable
+    if (p->second.last_update < min_last_update_acceptable)
       continue;
-    }
     // Disquality anyone who is incomplete (not fully backfilled)
     if (p->second.is_incomplete())
       continue;
