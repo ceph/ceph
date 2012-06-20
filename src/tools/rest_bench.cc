@@ -47,6 +47,8 @@ void usage(ostream& out)
 "        set the size of write ops for put or benchmarking\n"
 "   --show-time\n"
 "        prefix output lines with date and time\n"
+"   --no-cleanup\n"
+"        do not clean up data after write bench\n"
 "REST CONFIG OPTIONS\n"
 "   --api-host=bhost\n"
 "        host name\n"
@@ -252,6 +254,7 @@ public:
   void process_context(req_context *ctx);
   void get_obj(req_context *ctx);
   void put_obj(req_context *ctx);
+  void delete_obj(req_context *ctx);
 
   void queue(req_context *ctx) {
     req_wq.queue(ctx);
@@ -272,6 +275,9 @@ void RESTDispatcher::process_context(req_context *ctx)
       break;
     case OP_PUT_OBJ:
       put_obj(ctx);
+      break;
+    case OP_DELETE_OBJ:
+      delete_obj(ctx);
       break;
     default:
       assert(0);
@@ -307,6 +313,13 @@ void RESTDispatcher::get_obj(req_context *ctx)
 {
   S3_get_object(ctx->bucket_ctx, ctx->oid.c_str(), NULL, 0, ctx->len, ctx->ctx,
                 &get_obj_handler, ctx);
+}
+
+void RESTDispatcher::delete_obj(req_context *ctx)
+{
+
+  S3_delete_object(ctx->bucket_ctx, ctx->oid.c_str(),
+                   ctx->ctx, &response_handler, ctx);
 }
 
 class RESTBencher : public ObjBencher {
@@ -457,6 +470,22 @@ protected:
     ctx->put();
     return ret;
   }
+  int sync_remove(const std::string& oid) {
+    struct req_context *ctx = new req_context;
+    int ret = ctx->init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+    ctx->get();
+    ctx->bucket_ctx = &bucket_ctx;
+    ctx->oid = oid;
+    ctx->op = OP_DELETE_OBJ;
+
+    dispatcher->process_context(ctx);
+    ret = ctx->ret();
+    ctx->put();
+    return ret;
+  }
 
   bool completion_is_done(int slot) {
     return completions[slot]->complete;
@@ -565,6 +594,7 @@ int main(int argc, const char **argv)
   int seconds = 60;
 
   bool show_time = false;
+  bool cleanup = true;
 
 
   for (i = args.begin(); i != args.end(); ) {
@@ -575,6 +605,8 @@ int main(int argc, const char **argv)
       exit(0);
     } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
       show_time = true;
+    } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
+      cleanup = false;
     } else if (ceph_argparse_witharg(args, i, &user_agent, "--agent", (char*)NULL)) {
       /* nothing */
     } else if (ceph_argparse_witharg(args, i, &access_key, "--access-key", (char*)NULL)) {
@@ -662,7 +694,7 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
+  ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
   if (ret != 0) {
       cerr << "error during benchmark: " << ret << std::endl;
   }

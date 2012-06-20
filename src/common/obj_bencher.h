@@ -58,8 +58,12 @@ protected:
 
   struct bench_data data;
 
+  int fetch_bench_metadata(int* object_size, int* num_objects, int* prevPid);
+
   int write_bench(int secondsToRun, int concurrentios);
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
+
+  int clean_up(int num_objects, int prevPid);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;
@@ -76,13 +80,14 @@ protected:
   virtual int aio_remove(const std::string& oid, int slot) = 0;
   virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
+  virtual int sync_remove(const std::string& oid) = 0;
 
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
 public:
   ObjBencher() : show_time(false), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
-  int aio_bench(int operation, int secondsToRun, int concurrentios, int op_size);
+  int aio_bench(int operation, int secondsToRun, int concurrentios, int op_size, bool cleanup);
 
   void set_show_time(bool dt) {
     show_time = dt;
