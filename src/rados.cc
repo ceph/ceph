@@ -84,8 +84,9 @@ void usage(ostream& out)
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
-"   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
+"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
+"                                    default is to clean up after write benchmark\n"
 "   load-gen [options]               generate load on the cluster\n"
 "   listomapkeys <obj-name>          list the keys in the object map\n"
 "   getomapval <obj-name> <key>      show the value for the specified key\n"
@@ -794,6 +795,10 @@ protected:
     return io_ctx.write(oid, bl, len, 0);
   }
 
+  int sync_remove(const std::string& oid) {
+    return io_ctx.remove(oid);
+  }
+
   bool completion_is_done(int slot) {
     return completions[slot]->is_safe();
   }
@@ -980,6 +985,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   string oloc, target_oloc;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
+  bool cleanup = true;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
@@ -1084,6 +1090,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("show-time");
   if (i != opts.end()) {
     show_time = true;
+  }
+  i = opts.find("no-cleanup");
+  if (i != opts.end()) {
+    cleanup = false;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -1822,7 +1832,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     RadosBencher bencher(rados, io_ctx);
     bencher.set_show_time(show_time);
-    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
+    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
@@ -1952,6 +1962,8 @@ int main(int argc, const char **argv)
       opts["pretty-format"] = "true";
     } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
       opts["show-time"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
+      opts["no-cleanup"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
