@@ -157,9 +157,9 @@ OSDService::OSDService(OSD *osd) :
   publish_lock("OSDService::publish_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
-  watch_lock(osd->watch_lock),
-  watch_timer(osd->watch_timer),
-  watch(osd->watch),
+  watch_lock("OSD::watch_lock"),
+  watch_timer(osd->client_messenger->cct, watch_lock),
+  watch(NULL),
   last_tid(0),
   tid_lock("OSDService::tid_lock"),
   pg_temp_lock("OSDService::pg_temp_lock"),
@@ -710,8 +710,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   rep_scrub_wq(this, g_conf->osd_scrub_thread_timeout, &disk_tp),
   remove_wq(store, g_conf->osd_remove_thread_timeout, &disk_tp),
   next_removal_seq(0),
-  watch_lock("OSD::watch_lock"),
-  watch_timer(external_messenger->cct, watch_lock),
   service(this)
 {
   monc->set_messenger(client_messenger);
@@ -772,8 +770,8 @@ int OSD::init()
   Mutex::Locker lock(osd_lock);
 
   timer.init();
-  watch_timer.init();
-  watch = new Watch();
+  service.watch_timer.init();
+  service.watch = new Watch();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -982,9 +980,9 @@ int OSD::shutdown()
 
   timer.shutdown();
 
-  watch_lock.Lock();
-  watch_timer.shutdown();
-  watch_lock.Unlock();
+  service.watch_lock.Lock();
+  service.watch_timer.shutdown();
+  service.watch_lock.Unlock();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
@@ -1085,7 +1083,7 @@ int OSD::shutdown()
 
   monc->shutdown();
 
-  delete watch;
+  delete service.watch;
 
   return r;
 }
@@ -2008,9 +2006,9 @@ void OSD::complete_notify(void *_notif, void *_obc)
   client_messenger->send_message(reply, notif->session->con);
   notif->session->put();
   notif->session->con->put();
-  watch->remove_notification(notif);
+  service.watch->remove_notification(notif);
   if (notif->timeout)
-    watch_timer.cancel_event(notif->timeout);
+    service.watch_timer.cancel_event(notif->timeout);
   map<Watch::Notification *, bool>::iterator iter = obc->notifs.find(notif);
   if (iter != obc->notifs.end())
     obc->notifs.erase(iter);
@@ -2019,10 +2017,10 @@ void OSD::complete_notify(void *_notif, void *_obc)
 
 void OSD::ack_notification(entity_name_t& name, void *_notif, void *_obc, ReplicatedPG *pg)
 {
-  assert(watch_lock.is_locked());
+  assert(service.watch_lock.is_locked());
   pg->assert_locked();
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  if (watch->ack_notification(name, notif)) {
+  if (service.watch->ack_notification(name, notif)) {
     complete_notify(notif, _obc);
     pg->put_object_context(static_cast<ReplicatedPG::ObjectContext *>(_obc));
   }
@@ -2034,9 +2032,9 @@ void OSD::handle_watch_timeout(void *obc,
 			       utime_t expire)
 {
   // watch_lock is inside pg->lock; handle_watch_timeout checks for the race.
-  watch_lock.Unlock();
+  service.watch_lock.Unlock();
   pg->lock();
-  watch_lock.Lock();
+  service.watch_lock.Lock();
 
   pg->handle_watch_timeout(obc, entity, expire);
   pg->unlock();
@@ -2047,12 +2045,12 @@ void OSD::disconnect_session_watches(Session *session)
 {
   // get any watched obc's
   map<ReplicatedPG::ObjectContext *, pg_t> obcs;
-  watch_lock.Lock();
+  service.watch_lock.Lock();
   for (map<void *, pg_t>::iterator iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
     obcs[obc] = iter->second;
   }
-  watch_lock.Unlock();
+  service.watch_lock.Unlock();
 
   for (map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
@@ -2060,7 +2058,7 @@ void OSD::disconnect_session_watches(Session *session)
 
     ReplicatedPG *pg = static_cast<ReplicatedPG *>(lookup_lock_raw_pg(oiter->second));
     assert(pg);
-    watch_lock.Lock();
+    service.watch_lock.Lock();
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
        entity_name_t. */
@@ -2084,7 +2082,7 @@ void OSD::disconnect_session_watches(Session *session)
         break;
       ++witer;
     }
-    watch_lock.Unlock();
+    service.watch_lock.Unlock();
     pg->unlock();
   }
 }
@@ -2102,17 +2100,17 @@ bool OSD::ms_handle_reset(Connection *con)
 
 void OSD::handle_notify_timeout(void *_notif)
 {
-  assert(watch_lock.is_locked());
+  assert(service.watch_lock.is_locked());
   Watch::Notification *notif = (Watch::Notification *)_notif;
   dout(10) << "OSD::handle_notify_timeout notif " << notif->id << dendl;
 
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
 
   complete_notify(_notif, obc);
-  watch_lock.Unlock(); /* drop lock to change locking order */
+  service.watch_lock.Unlock(); /* drop lock to change locking order */
 
   put_object_context(obc, notif->pgid);
-  watch_lock.Lock();
+  service.watch_lock.Lock();
   /* exiting with watch_lock held */
 }
 
