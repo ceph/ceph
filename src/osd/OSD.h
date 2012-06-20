@@ -239,8 +239,8 @@ public:
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
   // -- Watch --
-  Mutex &watch_lock;
-  SafeTimer &watch_timer;
+  Mutex watch_lock;
+  SafeTimer watch_timer;
   Watch *watch;
 
   // -- tids --
@@ -698,11 +698,6 @@ private:
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
   void send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy);
-
-
-protected:
-  Watch *watch; /* notify-watch handler */
-
 
 protected:
   // -- placement groups --
@@ -1308,8 +1303,6 @@ public:
   void complete_notify(void *notif, void *obc);
   void ack_notification(entity_name_t& peer_addr, void *notif, void *obc,
 			ReplicatedPG *pg);
-  Mutex watch_lock;
-  SafeTimer watch_timer;
   void handle_notify_timeout(void *notif);
   void disconnect_session_watches(Session *session);
   void handle_watch_timeout(void *obc,
