@@ -158,8 +158,13 @@ public:
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
     bool sobject_encoding;
+    int64_t pool_override;
+    bool use_pool_override;
 
   public:
+    void set_pool_override(int64_t pool) {
+      pool_override = pool;
+    }
 
     void swap(Transaction& other) {
       std::swap(ops, other.ops);
@@ -225,10 +230,14 @@ public:
     class iterator {
       bufferlist::iterator p;
       bool sobject_encoding;
+      int64_t pool_override;
+      bool use_pool_override;
 
       iterator(Transaction *t)
 	: p(t->tbl.begin()),
-	  sobject_encoding(t->sobject_encoding) {}
+	  sobject_encoding(t->sobject_encoding),
+	  pool_override(t->pool_override),
+	  use_pool_override(t->use_pool_override) {}
 
       friend class Transaction;
 
@@ -253,6 +262,10 @@ public:
 	  hoid.oid = soid.oid;
 	} else {
 	  ::decode(hoid, p);
+	  if (use_pool_override && pool_override != -1 &&
+	      hoid.pool == -1) {
+	    hoid.pool = pool_override;
+	  }
 	}
 	return hoid;
       }
@@ -531,7 +544,7 @@ public:
     // etc.
     Transaction() :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false) {}
+      sobject_encoding(false), pool_override(-1), use_pool_override(false) {}
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false) {
@@ -545,7 +558,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(5, 5, bl);
+      ENCODE_START(6, 5, bl);
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
@@ -555,7 +568,7 @@ public:
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
       DECODE_OLDEST(2);
       if (struct_v < 4)
 	sobject_encoding = true;
@@ -570,6 +583,9 @@ public:
       }
       ::decode(tbl, bl);
       DECODE_FINISH(bl);
+      if (struct_v < 6) {
+	use_pool_override = true;
+      }
     }
 
     void dump(ceph::Formatter *f);

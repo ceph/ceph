@@ -70,8 +70,8 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(info, p);
-    ::decode(log, p);
-    ::decode(missing, p);
+    log.decode(p, info.pgid.pool());
+    missing.decode(p, info.pgid.pool());
     if (header.version >= 2) {
       ::decode(query_epoch, p);
     }

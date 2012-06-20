@@ -2622,12 +2622,12 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   bufferlist::iterator p = m->get_data().begin();
   if (scrub_received_maps.count(from)) {
     ScrubMap incoming;
-    incoming.decode(p);
+    incoming.decode(p, info.pgid.pool());
     dout(10) << "from replica " << from << dendl;
     dout(10) << "map version is " << incoming.valid_through << dendl;
     scrub_received_maps[from].merge_incr(incoming);
   } else {
-    scrub_received_maps[from].decode(p);
+    scrub_received_maps[from].decode(p, info.pgid.pool());
   }
 
   if (--scrub_waiting_on == 0) {

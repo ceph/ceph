@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 6;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -83,6 +83,9 @@ public:
   map<string,bufferlist> omap_entries;
   bufferlist omap_header;
 
+  // indicates that we must fix hobject_t encoding
+  bool hobject_incorrect_pool;
+
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
@@ -125,7 +128,7 @@ public:
       ::decode(oloc, p);
     if (header.version >= 4) {
       ::decode(data_included, p);
-      ::decode(recovery_info, p);
+      recovery_info.decode(p, pgid.pool());
       ::decode(recovery_progress, p);
       ::decode(current_progress, p);
     }
@@ -133,6 +136,13 @@ public:
       ::decode(omap_entries, p);
     if (header.version >= 6)
       ::decode(omap_header, p);
+
+    if (header.version < 7) {
+      // Handle hobject_t format change
+      if (poid.pool == -1)
+	poid.pool = pgid.pool();
+      hobject_incorrect_pool = true;
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -192,7 +202,8 @@ public:
       noop(noop_),   
       old_exists(false), old_size(0),
       version(v),
-      first(false), complete(false) {
+      first(false), complete(false),
+      hobject_incorrect_pool(false) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
