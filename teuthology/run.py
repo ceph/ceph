@@ -96,6 +96,18 @@ def main():
     from teuthology.misc import read_config
     read_config(ctx)
 
+    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
+
+    ctx.summary = dict(success=True)
+
+    if ctx.owner is None:
+        from teuthology.misc import get_user
+        ctx.owner = get_user()
+    ctx.summary['owner'] = ctx.owner
+
+    if ctx.description is not None:
+        ctx.summary['description'] = ctx.description
+
     if ctx.archive is not None:
         os.mkdir(ctx.archive)
 
@@ -112,17 +124,8 @@ def main():
         with file(os.path.join(ctx.archive, 'pid'), 'w') as f:
             f.write('%d' % os.getpid())
 
-    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
-
-    ctx.summary = dict(success=True)
-
-    if ctx.owner is None:
-        from teuthology.misc import get_user
-        ctx.owner = get_user()
-    ctx.summary['owner'] = ctx.owner
-
-    if ctx.description is not None:
-        ctx.summary['description'] = ctx.description
+        with file(os.path.join(ctx.archive, 'owner'), 'w') as f:
+            f.write(ctx.owner + '\n')
 
     for task in ctx.config['tasks']:
         assert 'kernel' not in task, \
