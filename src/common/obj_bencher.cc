@@ -20,12 +20,14 @@
 #include <iostream>
 #include <fstream>
 
+#include <cerrno>
+
 #include <stdlib.h>
 #include <time.h>
 #include <sstream>
 
 
-const char *BENCH_DATA = "benchmark_write_data";
+const char *BENCH_METADATA = "benchmark_write_metadata";
 const std::string BENCH_PREFIX = "benchmark_data";
 
 static std::string generate_object_prefix(int pid = 0) {
@@ -145,7 +147,7 @@ void *ObjBencher::status_printer(void *_bencher) {
   return NULL;
 }
 
-int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size) {
+int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size, bool cleanup) {
   int object_size = op_size;
   int num_objects = 0;
   char* contentsChars = new char[op_size];
@@ -154,18 +156,13 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
-    bufferlist object_data;
-    r = sync_read(BENCH_DATA, object_data, sizeof(int)*3);
+    r = fetch_bench_metadata(&object_size, &num_objects, &prevPid);
     if (r <= 0) {
       delete[] contentsChars;
-      if (r == -2)
+      if (r == -ENOENT)
 	cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
     }
-    bufferlist::iterator p = object_data.begin();
-    ::decode(object_size, p);
-    ::decode(num_objects, p);
-    ::decode(prevPid, p);
   } else {
     object_size = op_size;
   }
@@ -199,6 +196,20 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
   else if (OP_RAND_READ == operation) {
     cerr << "Random test not implemented yet!" << std::endl;
     r = -1;
+  }
+
+  if (OP_WRITE == operation && cleanup) {
+    r = fetch_bench_metadata(&object_size, &num_objects, &prevPid);
+    if (r <= 0) {
+      if (r == -ENOENT)
+	cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
+      goto out;
+    }
+ 
+    r = clean_up(num_objects, prevPid);
+    if (r != 0) goto out;
+
+    r = sync_remove(BENCH_METADATA);
   }
 
  out:
@@ -241,6 +252,22 @@ static double vec_stddev(vector<double>& v)
   }
   stddev /= (v.size() - 1);
   return sqrt(stddev);
+}
+
+int ObjBencher::fetch_bench_metadata(int* object_size, int* num_objects, int* prevPid) {
+  int r = 0;
+  bufferlist object_data;
+
+  r = sync_read(BENCH_METADATA, object_data, sizeof(int)*3);
+  if (r <= 0) {
+    return r;
+  }
+  bufferlist::iterator p = object_data.begin();
+  ::decode(*object_size, p);
+  ::decode(*num_objects, p);
+  ::decode(*prevPid, p);
+
+  return 1;
 }
 
 int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
@@ -417,7 +444,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   ::encode(data.object_size, b_write);
   ::encode(data.finished, b_write);
   ::encode(getpid(), b_write);
-  sync_write(BENCH_DATA, b_write, sizeof(int)*3);
+  sync_write(BENCH_METADATA, b_write, sizeof(int)*3);
 
   completions_done();
 
@@ -612,6 +639,21 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   lock.Unlock();
   pthread_join(print_thread, NULL);
   return -5;
+}
+
+int ObjBencher::clean_up(int num_objects, int prevPid) {
+  int r = 0;
+
+  for (int i = 0; i < num_objects; ++i) {
+      std::string name = generate_object_name(i, prevPid);
+      r = sync_remove(name);
+
+      if (r < 0) {
+          return r;
+      }
+  }
+
+  return 0;
 }
 
 
