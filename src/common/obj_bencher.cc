@@ -50,6 +50,20 @@ static std::string generate_object_name(int objnum, int pid = 0)
   return oss.str();
 }
 
+static std::string generate_metadata_name(int pid = 0)
+{
+  if (!pid)
+    pid = getpid();
+
+  char hostname[30];
+  gethostname(hostname, sizeof(hostname)-1);
+  hostname[sizeof(hostname)-1] = 0;
+
+  std::ostringstream oss;
+  oss << BENCH_PREFIX << "_" << hostname << "_" << pid << "_metadata";
+  return oss.str();
+}
+
 static void sanitize_object_contents (bench_data *data, int length) {
   memset(data->object_contents, 'z', length);
 }
@@ -210,6 +224,9 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
     if (r != 0) goto out;
 
     r = sync_remove(BENCH_METADATA);
+    if (r != 0) goto out;
+
+    r = sync_remove(generate_metadata_name());
   }
 
  out:
@@ -445,6 +462,8 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   ::encode(data.finished, b_write);
   ::encode(getpid(), b_write);
   sync_write(BENCH_METADATA, b_write, sizeof(int)*3);
+
+  sync_write(generate_metadata_name(), b_write, sizeof(int)*3);
 
   completions_done();
 
