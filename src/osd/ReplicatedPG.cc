@@ -3910,15 +3910,6 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
 void ReplicatedPG::context_registry_on_change()
 {
   remove_watchers_and_notifies();
-  if (object_contexts.size()) {
-    for (map<hobject_t, ObjectContext *>::iterator p = object_contexts.begin();
-	 p != object_contexts.end();
-	 ++p) {
-      dout(0) << "Object " << p->second->obs.oi.soid << " still has ref count of " 
-	      << p->second->ref << dendl;
-    }
-    assert(!object_contexts.size());
-  }
 }
 
 
