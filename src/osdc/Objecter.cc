@@ -266,9 +266,9 @@ void Objecter::send_linger(LingerOp *info, bool first_send)
     }
 
     if (first_send) {
-      op_submit(o, info->session);
+      op_submit(o);
     } else {
-      _op_submit(o, info->session);
+      _op_submit(o);
     }
 
     OSDSession *s = o->session;
@@ -856,7 +856,7 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-tid_t Objecter::op_submit(Op *op, OSDSession *s)
+tid_t Objecter::op_submit(Op *op)
 {
   assert(client_lock.is_locked());
   assert(initialized);
@@ -869,10 +869,10 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
 
-  return _op_submit(op, s);
+  return _op_submit(op);
 }
 
-tid_t Objecter::_op_submit(Op *op, OSDSession *s)
+tid_t Objecter::_op_submit(Op *op)
 {
   // pick tid
   tid_t mytid = ++last_tid;
@@ -881,14 +881,9 @@ tid_t Objecter::_op_submit(Op *op, OSDSession *s)
 
   // pick target
   bool check_for_latest_map = false;
-  if (s) {
-    op->session = s;
-    s->ops.push_back(&op->session_item);
-  } else {
-    int r = recalc_op_target(op);
-    check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
-    num_homeless_ops++;  // initially!
-  }
+  num_homeless_ops++;  // initially; recalc_op_target() will decrement if it finds a target
+  int r = recalc_op_target(op);
+  check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
 
   // add to gather set(s)
   if (op->onack) {
