@@ -611,6 +611,7 @@ protected:
 
 
   // pg waiters
+  bool flushed;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
@@ -927,10 +928,22 @@ public:
       *out << "NeedUpThru" << std::endl;
     }
   };
+  struct CheckRepops : boost::statechart::event< CheckRepops > {
+    CheckRepops() : boost::statechart::event< CheckRepops >() {};
+    void print(std::ostream *out) const {
+      *out << "CheckRepops" << std::endl;
+    }
+  };
   struct NullEvt : boost::statechart::event< NullEvt > {
     NullEvt() : boost::statechart::event< NullEvt >() {};
     void print(std::ostream *out) const {
       *out << "NullEvt" << std::endl;
+    }
+  };
+  struct FlushedEvt : boost::statechart::event< FlushedEvt > {
+    FlushedEvt() : boost::statechart::event< FlushedEvt >() {};
+    void print(std::ostream *out) const {
+      *out << "FlushedEvt" << std::endl;
     }
   };
 
@@ -1043,7 +1056,7 @@ public:
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
-      boost::statechart::result react(const NullEvt&) {
+      boost::statechart::result react(const boost::statechart::event_base&) {
 	return discard_event();
       }
     };
@@ -1057,12 +1070,14 @@ public:
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< NullEvt >,
+	boost::statechart::custom_reaction< FlushedEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
-      boost::statechart::result react(const NullEvt&) {
+      boost::statechart::result react(const FlushedEvt&);
+      boost::statechart::result react(const boost::statechart::event_base&) {
 	return discard_event();
       }
     };
@@ -1077,11 +1092,13 @@ public:
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< NullEvt >,
+	boost::statechart::custom_reaction< FlushedEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
-      boost::statechart::result react(const NullEvt&) {
+      boost::statechart::result react(const FlushedEvt&);
+      boost::statechart::result react(const boost::statechart::event_base&) {
 	return discard_event();
       }
     };
@@ -1158,6 +1175,7 @@ public:
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
       std::auto_ptr< PriorSet > prior_set;
+      bool flushed;
 
       Peering(my_context ctx);
       void exit();
@@ -1271,6 +1289,7 @@ public:
     };
 
     struct WaitUpThru;
+    struct WaitFlushedPeering;
 
     struct GetMissing : boost::statechart::state< GetMissing, Peering >, NamedState {
       set<int> peer_missing_requested;
@@ -1281,10 +1300,23 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::transition< NeedUpThru, WaitUpThru >
+	boost::statechart::transition< NeedUpThru, WaitUpThru >,
+	boost::statechart::transition< CheckRepops, WaitFlushedPeering>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MLogRec& logevt);
+    };
+
+    struct WaitFlushedPeering :
+      boost::statechart::state< WaitFlushedPeering, Peering>, NamedState {
+      WaitFlushedPeering(my_context ctx);
+      void exit() {}
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >,
+	boost::statechart::custom_reaction< FlushedEvt >
+      > reactions;
+      boost::statechart::result react(const FlushedEvt& evt);
+      boost::statechart::result react(const QueryState& q);
     };
 
     struct WaitUpThru : boost::statechart::state< WaitUpThru, Peering >, NamedState {
@@ -1294,6 +1326,7 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::transition< CheckRepops, WaitFlushedPeering>,
 	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
@@ -1345,6 +1378,7 @@ public:
     last_peering_reset(0),
     heartbeat_peer_lock("PG::heartbeat_peer_lock"),
     backfill_target(-1),
+    flushed(true),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     osr(stringify(p)),
@@ -1443,6 +1477,9 @@ public:
   void start_peering_interval(const OSDMapRef lastmap,
 			      const vector<int>& newup,
 			      const vector<int>& newacting);
+  void start_flush(ObjectStore::Transaction *t,
+		   list<Context *> *on_applied,
+		   list<Context *> *on_safe);
   void set_last_peering_reset();
 
   void update_history_from_master(pg_history_t new_history);
@@ -1482,6 +1519,7 @@ public:
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   int from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
+  void queue_flushed(epoch_t started_at);
   void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			  vector<int>& newup, vector<int>& newacting,
 			  RecoveryCtx *rctx);
