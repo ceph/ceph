@@ -73,7 +73,7 @@ Set an ``EDITOR`` environment variable. ::
 
 	export EDITOR=vi
 
-Then exectute:: 
+Then execute::
 
 	knife create role {rolename}
 
