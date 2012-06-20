@@ -200,7 +200,7 @@ def ls():
             job=j,
             owner=summary.get('owner', '-'),
             desc=summary.get('description', '-'),
-            success='pass' if summary['success'] else 'FAIL',
+            success='pass' if summary.get('success', False) else 'FAIL',
             duration=int(summary.get('duration', 0)),
             )
         if args.verbose and 'failure_reason' in summary:
