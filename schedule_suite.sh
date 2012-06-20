@@ -29,6 +29,7 @@ fn="/tmp/schedule.suite.$$"
 trap "rm $fn" EXIT
 cat <<EOF > $fn
 kernel:
+  kdb: true
   branch: $kernel
 nuke-on-error: true
 tasks:
