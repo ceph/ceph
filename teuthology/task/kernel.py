@@ -19,23 +19,29 @@ def normalize_config(ctx, config):
 
          osd:
            tag: v3.0
+           kdb: true
          osd.1:
            branch: new_btrfs
+           kdb: false
 
     is transformed into::
 
          osd.0:
            tag: v3.0
+           kdb: true
          osd.1:
            branch: new_btrfs
+           kdb: false
          osd.2:
            tag: v3.0
+           kdb: true
 
     If config is None or just specifies a version to use,
     it is applied to all nodes.
     """
     if config is None or \
-            len(config) == 1 and config.keys() in [['tag'], ['branch'], ['sha1']]:
+            len(config) == 1 and config.keys() in [['tag'], ['branch'],
+                                                   ['sha1'], ['kdb']]:
         new_config = {}
         if config is None:
             config = {'branch': 'master'}
@@ -230,6 +236,26 @@ def install_and_reboot(ctx, config):
         log.debug('Waiting for install on %s to complete...', name)
         proc.exitstatus.get()
 
+def enable_disable_kdb(ctx, config):
+    for role, enable in config.iteritems():
+        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        if enable:
+            log.info('Enabling kdb on {role}...'.format(role=role))
+            proc = role_remote.run(
+                args=[
+                    'echo', 'ttyS1',
+                    run.Raw('|'),
+                    'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
+                    ])
+        else:
+            log.info('Disabling kdb on {role}...'.format(role=role))
+            proc = role_remote.run(
+                args=[
+                    'echo', '',
+                    run.Raw('|'),
+                    'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
+                    ])
+
 def wait_for_reboot(ctx, need_install, timeout):
     """
     Loop reconnecting and checking kernel versions until
@@ -250,6 +276,7 @@ def wait_for_reboot(ctx, need_install, timeout):
                 if time.time() - starttime > timeout:
                     raise
         time.sleep(1)
+
 
 def task(ctx, config):
     """
@@ -293,6 +320,12 @@ def task(ctx, config):
             branch: more_specific_branch
           osd.3:
             branch: master
+
+    To enable kdb::
+
+        kernel:
+          kdb: true
+
     """
     assert config is None or isinstance(config, dict), \
         "task kernel only supports a dictionary for configuration"
@@ -305,6 +338,7 @@ def task(ctx, config):
     validate_config(ctx, config)
 
     need_install = {}
+    kdb = {}
     for role, role_config in config.iteritems():
         sha1, _ = teuthology.get_ceph_binary_url(
             package='kernel',
@@ -321,7 +355,13 @@ def task(ctx, config):
         if need_to_install(ctx, role, sha1):
             need_install[role] = sha1
 
+        # enable or disable kdb if specified, otherwise do not touch
+        if role_config.get('kdb') is not None:
+            kdb[role] = role_config.get('kdb')
+
     if need_install:
         install_firmware(ctx, need_install)
         install_and_reboot(ctx, need_install)
         wait_for_reboot(ctx, need_install, timeout)
+
+    enable_disable_kdb(ctx, kdb)
