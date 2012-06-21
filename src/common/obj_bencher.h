@@ -64,7 +64,8 @@ protected:
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
-  int clean_up_slow(const std::string& prefix);
+  int clean_up_slow(const std::string& prefix, int concurrentios);
+  bool more_objects_matching_prefix(const std::string& prefix, std::list<std::string>* name);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;

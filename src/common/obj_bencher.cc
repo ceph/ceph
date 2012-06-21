@@ -682,7 +682,7 @@ int ObjBencher::clean_up(const std::string& prefix, int concurrentios) {
   if (r < 0) {
     // if the metadata file is not found we should try to do a linear search on the prefix
     if (r == -ENOENT) {
-      return clean_up_slow(prefix);
+      return clean_up_slow(prefix, concurrentios);
     }
     else {
       return r;
@@ -822,23 +822,187 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   return -5;
 }
 
-int ObjBencher::clean_up_slow(const std::string& prefix) {
-  std::list<string> objects;
-  int removed = 0;
+/**
+ * Return objects from the datastore which match a prefix.
+ *
+ * Clears the list and populates it with any objects which match the
+ * prefix. The list is guaranteed to have at least one item when the
+ * function returns true.
+ *
+ * @in
+ * @param prefix the prefix to match against
+ * @param objects return list of objects
+ * @returns true if there are any objects in the store which match
+ * the prefix, false if there are no more
+ */
+bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::list<std::string>* objects) {
+  std::list<std::string> unfiltered_objects;
 
-  out(cout) << "Warning: using slow linear search with sync remove" << std::endl;
+  objects->clear();
 
-  while (get_objects(&objects, 20)) {
-    std::list<std::string>::const_iterator i = objects.begin();
-    for ( ; i != objects.end(); ++i) {
-      if (i->substr(0, prefix.size()) == prefix) {
-        sync_remove(*i);
-        ++removed;
+  while (objects->size() == 0) {
+    bool objects_remain = get_objects(&unfiltered_objects, 20);
+    if (!objects_remain)
+      return false;
+
+    std::list<std::string>::const_iterator i = unfiltered_objects.begin();
+    for ( ; i != unfiltered_objects.end(); ++i) {
+      const std::string& next = *i;
+
+      if (next.substr(0, prefix.length()) == prefix) {
+        objects->push_back(next);
       }
     }
   }
 
-  out(cout) << "Removed " << removed << " object" << (removed != 1 ? "s" : "") << std::endl;
+  return true;
+}
+
+int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
+  lock_cond lc(&lock);
+  std::string name[concurrentios];
+  std::string newName;
+  int r = 0;
+  utime_t runtime;
+  int slot = 0;
+  std::list<std::string> objects;
+  bool objects_remain = true;
+
+  lock.Lock();
+  data.done = false;
+  data.in_flight = 0;
+  data.started = 0;
+  data.finished = 0;
+  lock.Unlock();
+
+  out(cout) << "Warning: using slow linear search" << std::endl;
+
+  r = completions_init(concurrentios);
+  if (r < 0)
+    return r;
+
+  //set up initial removes
+  for (int i = 0; i < concurrentios; ++i) {
+    if (objects.size() == 0) {
+      // if there are fewer objects than concurrent ios, don't generate extras
+      bool objects_found = more_objects_matching_prefix(prefix, &objects);
+      if (!objects_found) {
+        concurrentios = i;
+        objects_remain = false;
+        break;
+      }
+    }
+
+    name[i] = objects.front();
+    objects.pop_front();
+  }
+
+  //start initial removes
+  for (int i = 0; i < concurrentios; ++i) {
+    create_completion(i, _aio_cb, (void *)&lc);
+    r = aio_remove(name[i], i);
+    if (r < 0) { //naughty, doesn't clean up heap
+      cerr << "r = " << r << std::endl;
+      goto ERR;
+    }
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
+    lock.Unlock();
+  }
+
+  //keep on adding new removes as old ones complete
+  while (objects_remain) {
+    lock.Lock();
+    int old_slot = slot;
+    bool found = false;
+    while (1) {
+      do {
+	if (completion_is_done(slot)) {
+          found = true;
+	  break;
+	}
+        slot++;
+        if (slot == concurrentios) {
+          slot = 0;
+        }
+      } while (slot != old_slot);
+      if (found) {
+	break;
+      }
+      lc.cond.Wait(lock);
+    }
+    lock.Unlock();
+
+    // get more objects if necessary
+    if (objects.size() == 0) {
+      objects_remain = more_objects_matching_prefix(prefix, &objects);
+      // quit if there are no more
+      if (!objects_remain) {
+        break;
+      }
+    }
+
+    // get the next object
+    newName = objects.front();
+    objects.pop_front();
+
+    completion_wait(slot);
+    lock.Lock();
+    r = completion_ret(slot);
+    if (r != 0 && r != -ENOENT) { // file does not exist
+      cerr << "remove got " << r << std::endl;
+      lock.Unlock();
+      goto ERR;
+    }
+    ++data.finished;
+    --data.in_flight;
+    lock.Unlock();
+    release_completion(slot);
+
+    //start new remove and check data if requested
+    create_completion(slot, _aio_cb, (void *)&lc);
+    r = aio_remove(newName, slot);
+    if (r < 0) {
+      goto ERR;
+    }
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
+    lock.Unlock();
+    name[slot] = newName;
+  }
+
+  //wait for final removes to complete
+  while (data.finished < data.started) {
+    slot = data.finished % concurrentios;
+    completion_wait(slot);
+    lock.Lock();
+    r = completion_ret(slot);
+    if (r != 0 && r != -ENOENT) { // file does not exist
+      cerr << "remove got " << r << std::endl;
+      lock.Unlock();
+      goto ERR;
+    }
+    ++data.finished;
+    --data.in_flight;
+    release_completion(slot);
+    lock.Unlock();
+  }
+
+  lock.Lock();
+  data.done = true;
+  lock.Unlock();
+
+  completions_done();
+
+  out(cout) << "Removed " << data.finished << " object" << (data.finished != 1 ? "s" : "") << std::endl;
 
   return 0;
+
+ ERR:
+  lock.Lock();
+  data.done = 1;
+  lock.Unlock();
+  return -5;
 }
