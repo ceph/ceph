@@ -3579,6 +3579,8 @@ void OSD::activate_map()
 
   epoch_t oldest_last_clean = osdmap->get_epoch();
 
+  list<PG*> to_remove;
+
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
@@ -3598,15 +3600,24 @@ void OSD::activate_map()
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       pg->get();
-      _remove_pg(pg);
+      to_remove.push_back(pg);
       pg->unlock();
-      pg->put();
       continue;
     } else {
       pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
     }
     pg->unlock();
   }  
+
+  
+  for (list<PG*>::iterator i = to_remove.begin();
+       i != to_remove.end();
+       ++i) {
+    (*i)->lock();
+    _remove_pg((*i));
+    (*i)->unlock();
+    (*i)->put();
+  }
 
   logger->set(l_osd_pg, pg_map.size());
   logger->set(l_osd_pg_primary, num_pg_primary);
