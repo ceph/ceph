@@ -15,7 +15,9 @@
 #ifndef CEPH_MMONMAP_H
 #define CEPH_MMONMAP_H
 
+#include "include/ceph_features.h"
 #include "msg/Message.h"
+#include "mon/MonMap.h"
 
 class MMonMap : public Message {
 public:
@@ -32,6 +34,14 @@ public:
   const char *get_type_name() const { return "mon_map"; }
 
   void encode_payload(uint64_t features) { 
+    if (monmapbl.length() && (features & CEPH_FEATURE_MONENC) == 0) {
+      // reencode old-format monmap
+      MonMap t;
+      t.decode(monmapbl);
+      monmapbl.clear();
+      t.encode(monmapbl, features);
+    }
+
     ::encode(monmapbl, payload);
   }
   void decode_payload() { 
