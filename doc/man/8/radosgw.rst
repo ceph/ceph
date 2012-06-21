@@ -104,11 +104,11 @@ The **radosgw** maintains an asynchronous usage log. It accumulates
 statistics about user operations and flushes it periodically. The
 logs can be accessed and managed through **radosgw-admin**.
 
-The information that is being logged contains total data transfr,
+The information that is being logged contains total data transfer,
 total operations, and total successful operations. The data is being
-accounted under the bucket owner, unless the operation was done on
-the service (e.g., when listing a bucket) in which case it is
-accounted under the operating user.
+accounted in an hourly resolution under the bucket owner, unless the
+operation was done on the service (e.g., when listing a bucket) in
+which case it is accounted under the operating user.
 
 Following is an example configuration::
 

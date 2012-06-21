@@ -141,9 +141,22 @@ Remove a bucket::
 
         $ radosgw-admin bucket unlink --bucket=foo
 
-Show the logs of a bucket from April 1st 2011::
+Show the logs of a bucket from April 1st, 2012::
 
-        $ radosgw-admin log show --bucket=foo --date=2011=04-01
+        $ radosgw-admin log show --bucket=foo --date=2012=04-01
+
+Show usage information for user from March 1st to April 1st, 2012::
+
+        $ radosgw-admin usage show --uid=johnny \
+                        --start-date=2012-03-01 --end-date=2012-04-01
+
+Show only summary of usage information for all users::
+
+        $ radosgw-admin usage show --show-log-entries=false
+
+Trim usage information for user until March 1st, 2012::
+
+        $ radosgw-admin usage trim --uid=johnny --end-date=2012-04-01
 
 Availability
 ============
