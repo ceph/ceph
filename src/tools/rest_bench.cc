@@ -36,6 +36,7 @@ void usage(ostream& out)
 {
   out <<					\
 "usage: rest-bench [options] <write|seq>\n"
+"       rest-bench [options] cleanup <prefix>\n"
 "BENCHMARK OPTIONS\n"
 "   --seconds\n"
 "        benchmak length (default: 60)\n"
@@ -75,6 +76,7 @@ enum OpType {
   OP_GET_OBJ = 1,
   OP_PUT_OBJ = 2,
   OP_DELETE_OBJ = 3,
+  OP_CLEANUP = 4,
 };
 
 struct req_context : public RefCountedObject {
@@ -657,13 +659,19 @@ int main(int argc, const char **argv)
   if (args.size() < 1)
     usage_exit();
   int operation = 0;
+  const char *prefix = NULL;
   if (strcmp(args[0], "write") == 0)
     operation = OP_WRITE;
   else if (strcmp(args[0], "seq") == 0)
     operation = OP_SEQ_READ;
   else if (strcmp(args[0], "rand") == 0)
     operation = OP_RAND_READ;
-  else
+  else if (strcmp(args[0], "cleanup") == 0) {
+    if (args.size() < 2)
+      usage_exit();
+    operation = OP_CLEANUP;
+    prefix = argv[1];
+  } else
     usage_exit();
 
   if (host.empty()) {
@@ -694,9 +702,15 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
-  if (ret != 0) {
-      cerr << "error during benchmark: " << ret << std::endl;
+  if (operation == OP_CLEANUP) {
+    ret = bencher.clean_up(prefix, concurrent_ios);
+    if (ret != 0)
+      cerr << "error during cleanup: " << ret << std::endl;
+  } else {
+    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
+    if (ret != 0) {
+        cerr << "error during benchmark: " << ret << std::endl;
+    }
   }
 
   return 0;

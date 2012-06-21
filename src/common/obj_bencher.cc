@@ -27,7 +27,7 @@
 #include <sstream>
 
 
-const char *BENCH_METADATA = "benchmark_write_metadata";
+const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
 const std::string BENCH_PREFIX = "benchmark_data";
 
 static std::string generate_object_prefix(int pid = 0) {
@@ -170,8 +170,8 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
-    r = fetch_bench_metadata(&object_size, &num_objects, &prevPid);
-    if (r <= 0) {
+    r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
+    if (r < 0) {
       delete[] contentsChars;
       if (r == -ENOENT)
 	cerr << "Must write data before running a read benchmark!" << std::endl;
@@ -213,8 +213,8 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
   }
 
   if (OP_WRITE == operation && cleanup) {
-    r = fetch_bench_metadata(&object_size, &num_objects, &prevPid);
-    if (r <= 0) {
+    r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
+    if (r < 0) {
       if (r == -ENOENT)
 	cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
       goto out;
@@ -223,9 +223,11 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
     r = clean_up(num_objects, prevPid);
     if (r != 0) goto out;
 
-    r = sync_remove(BENCH_METADATA);
+    // lastrun file
+    r = sync_remove(BENCH_LASTRUN_METADATA);
     if (r != 0) goto out;
 
+    // prefix-based file
     r = sync_remove(generate_metadata_name());
   }
 
@@ -271,12 +273,16 @@ static double vec_stddev(vector<double>& v)
   return sqrt(stddev);
 }
 
-int ObjBencher::fetch_bench_metadata(int* object_size, int* num_objects, int* prevPid) {
+int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* object_size, int* num_objects, int* prevPid) {
   int r = 0;
   bufferlist object_data;
 
-  r = sync_read(BENCH_METADATA, object_data, sizeof(int)*3);
+  r = sync_read(metadata_file, object_data, sizeof(int)*3);
   if (r <= 0) {
+    // treat an empty file as a file that does not exist
+    if (r == 0) {
+      r = -ENOENT;
+    }
     return r;
   }
   bufferlist::iterator p = object_data.begin();
@@ -284,7 +290,7 @@ int ObjBencher::fetch_bench_metadata(int* object_size, int* num_objects, int* pr
   ::decode(*num_objects, p);
   ::decode(*prevPid, p);
 
-  return 1;
+  return 0;
 }
 
 int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
@@ -461,8 +467,11 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   ::encode(data.object_size, b_write);
   ::encode(data.finished, b_write);
   ::encode(getpid(), b_write);
-  sync_write(BENCH_METADATA, b_write, sizeof(int)*3);
 
+  // lastrun file
+  sync_write(BENCH_LASTRUN_METADATA, b_write, sizeof(int)*3);
+
+  // PID-specific run
   sync_write(generate_metadata_name(), b_write, sizeof(int)*3);
 
   completions_done();
@@ -671,6 +680,31 @@ int ObjBencher::clean_up(int num_objects, int prevPid) {
           return r;
       }
   }
+
+  return 0;
+}
+
+
+int ObjBencher::clean_up(const std::string& prefix, int concurrent_ios) {
+  int r = 0;
+  int object_size;
+  int num_objects;
+  int prevPid;
+
+  std::string metadata_name = prefix;
+  metadata_name.append("_metadata");
+
+  r = fetch_bench_metadata(metadata_name, &object_size, &num_objects, &prevPid);
+  if (r < 0) {
+    return r;
+  }
+  // if this file is not found we should try to do a linear search on the prefix
+
+  r = clean_up(num_objects, prevPid);
+  if (r != 0) return r;
+
+  r = sync_remove(metadata_name);
+  if (r != 0) return r;
 
   return 0;
 }
