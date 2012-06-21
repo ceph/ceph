@@ -55,7 +55,7 @@ void _usage()
   cerr << "                             + bucket-id)\n";
   cerr << "  log rm                     remove log object\n";
   cerr << "  usage show                 show usage (by user, date range)\n";
-  cerr << "  usage trim                 show usage (by user, date range)\n";
+  cerr << "  usage trim                 trim usage (by user, date range)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
