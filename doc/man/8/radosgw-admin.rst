@@ -145,7 +145,7 @@ Show the logs of a bucket from April 1st, 2012::
 
         $ radosgw-admin log show --bucket=foo --date=2012=04-01
 
-Show usage information for user from March 1st to April 1st, 2012::
+Show usage information for user from March 1st to (but not including) April 1st, 2012::
 
         $ radosgw-admin usage show --uid=johnny \
                         --start-date=2012-03-01 --end-date=2012-04-01
