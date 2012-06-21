@@ -87,6 +87,7 @@ void usage(ostream& out)
 "   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "                                    default is to clean up after write benchmark\n"
+"   cleanup <prefix>                 clean up a previous benchmark operation\n"
 "   load-gen [options]               generate load on the cluster\n"
 "   listomapkeys <obj-name>          list the keys in the object map\n"
 "   getomapval <obj-name> <key>      show the value for the specified key\n"
@@ -1835,6 +1836,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
+  }
+  else if (strcmp(nargs[0], "cleanup") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    const char *prefix = nargs[1];
+    RadosBencher bencher(rados, io_ctx);
+    ret = bencher.clean_up(prefix, concurrent_ios);
+    if (ret != 0)
+      cerr << "error during cleanup: " << ret << std::endl;
   }
   else if (strcmp(nargs[0], "watch") == 0) {
     if (!pool_name || nargs.size() < 2)
