@@ -314,8 +314,6 @@ public:
   int do_transactions(list<Transaction*> &tls, uint64_t op_seq);
   unsigned apply_transaction(Transaction& t, Context *ondisk=0);
   unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
-  int _transaction_start(uint64_t bytes, uint64_t ops);
-  void _transaction_finish(int id);
   unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
@@ -477,7 +475,6 @@ private:
 			  const std::set <std::string> &changed);
   bool m_filestore_btrfs_clone_range;
   bool m_filestore_btrfs_snap;
-  bool m_filestore_btrfs_trans;
   float m_filestore_commit_timeout;
   bool m_filestore_fiemap;
   bool m_filestore_flusher;
