@@ -239,7 +239,7 @@ Lock, unlock, or query lock status of machines.
     if ctx.f:
         assert ctx.lock or ctx.unlock, \
             '-f is only supported by --lock and --unlock'
-    if ctx.machines:
+    if machines:
         assert ctx.lock or ctx.unlock or ctx.list or ctx.list_targets \
             or ctx.update, \
             'machines cannot be specified with that operation'
