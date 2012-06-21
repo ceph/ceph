@@ -26,7 +26,7 @@
                                + bucket-id)
     log rm                     remove log object
     usage show                 show usage (by user, date range)
-    usage trim                 show usage (by user, date range)
+    usage trim                 trim usage (by user, date range)
     temp remove                remove temporary objects that were created up to
                                specified date (and optional time)
   options:
