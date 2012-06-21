@@ -690,7 +690,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   logger(NULL),
   m_filestore_btrfs_clone_range(g_conf->filestore_btrfs_clone_range),
   m_filestore_btrfs_snap (g_conf->filestore_btrfs_snap ),
-  m_filestore_btrfs_trans(g_conf->filestore_btrfs_trans),
   m_filestore_commit_timeout(g_conf->filestore_commit_timeout),
   m_filestore_fiemap(g_conf->filestore_fiemap),
   m_filestore_flusher (g_conf->filestore_flusher ),
@@ -2366,11 +2365,6 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
     ops += (*p)->get_num_ops();
   }
 
-  int id = _transaction_start(bytes, ops);
-  if (id < 0) {
-    return id;
-  }
-    
   int trans_num = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
@@ -2380,7 +2374,6 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
       break;
   }
   
-  _transaction_finish(id);
   return r;
 }
 
@@ -2413,52 +2406,6 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
   return r;
 }
 
-
-// btrfs transaction start/end interface
-
-int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
-{
-  if (!btrfs || !btrfs_trans_start_end ||
-      !m_filestore_btrfs_trans)
-    return 0;
-
-  int fd = ::open(basedir.c_str(), O_RDONLY);
-  if (fd < 0) {
-    int err = errno;
-    dout(0) << "transaction_start got " << cpp_strerror(err) << " from btrfs open" << dendl;
-    assert(0 == "couldn't open basedir");
-  }
-
-  int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
-  if (r < 0) {
-    int err = errno;
-    dout(0) << "transaction_start got " << cpp_strerror(err) << " from btrfs ioctl" << dendl;    
-    TEMP_FAILURE_RETRY(::close(fd));
-    return -err;
-  }
-  dout(10) << "transaction_start " << fd << dendl;
-
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/current/trans.%d", basedir.c_str(), fd);
-  ::mknod(fn, 0644, 0);
-
-  return fd;
-}
-
-void FileStore::_transaction_finish(int fd)
-{
-  if (!btrfs || !btrfs_trans_start_end ||
-      !m_filestore_btrfs_trans)
-    return;
-
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/current/trans.%d", basedir.c_str(), fd);
-  ::unlink(fn);
-  
-  dout(10) << "transaction_finish " << fd << dendl;
-  ::ioctl(fd, BTRFS_IOC_TRANS_END);
-  TEMP_FAILURE_RETRY(::close(fd));
-}
 
 void FileStore::_set_replay_guard(int fd,
 				  const SequencerPosition& spos,
