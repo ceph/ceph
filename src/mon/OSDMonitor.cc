@@ -2447,7 +2447,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
 
   if (!osdmap.get_pg_pool(m->pool)) {
     dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
-    _pool_op_reply(m, -ENODATA, osdmap.get_epoch());
+    _pool_op_reply(m, -ENOENT, osdmap.get_epoch());
     return true;
   }
   
