@@ -100,7 +100,7 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
-  pending_map.encode(bl, CEPH_FEATURES_ALL);
+  pending_map.encode(bl, mon->get_quorum_features());
 }
 
 void MonmapMonitor::on_active()
