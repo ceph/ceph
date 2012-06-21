@@ -927,7 +927,7 @@ void Monitor::win_standalone_election()
   assert(rank == 0);
   set<int> q;
   q.insert(rank);
-  win_election(1, q);
+  win_election(1, q, CEPH_FEATURES_ALL);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -941,7 +941,7 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active) 
+void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features) 
 {
   if (!is_electing())
     reset();
@@ -950,8 +950,11 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
+  quorum_features = features;
   outside_quorum.clear();
-  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
+  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum
+	   << " features are " << quorum_features
+	   << dendl;
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
