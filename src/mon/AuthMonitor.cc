@@ -223,7 +223,7 @@ void AuthMonitor::encode_pending(bufferlist &bl)
   for (vector<Incremental>::iterator p = pending_auth.begin();
        p != pending_auth.end();
        p++)
-    p->encode(bl);
+    p->encode(bl, mon->get_quorum_features());
 }
 
 bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
