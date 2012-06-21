@@ -73,7 +73,7 @@ void Elector::start()
     bump_epoch(epoch+1);  // odd == election cycle
   start_stamp = ceph_clock_now(g_ceph_context);
   electing_me = true;
-  acked_me.insert(mon->rank);
+  acked_me[mon->rank] = CEPH_FEATURES_ALL;
   leader_acked = -1;
 
   // bcast to everyone else
@@ -145,7 +145,13 @@ void Elector::victory()
 {
   leader_acked = -1;
   electing_me = false;
-  set<int> quorum = acked_me;
+
+  unsigned features = CEPH_FEATURES_ALL;
+  set<int> quorum;
+  for (map<int,unsigned>::iterator p = acked_me.begin(); p != acked_me.end(); ++p) {
+    quorum.insert(p->first);
+    features &= p->second;
+  }    
   
   cancel_timer();
   
@@ -163,7 +169,7 @@ void Elector::victory()
   }
     
   // tell monitor
-  mon->win_election(epoch, quorum);
+  mon->win_election(epoch, quorum, features);
 }
 
 
@@ -237,7 +243,7 @@ void Elector::handle_ack(MMonElection *m)
   
   if (electing_me) {
     // thanks
-    acked_me.insert(from);
+    acked_me[from] = m->get_connection()->get_features();
     dout(5) << " so far i have " << acked_me << dendl;
     
     // is that _everyone_?
