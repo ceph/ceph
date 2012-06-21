@@ -48,6 +48,9 @@ public:
   MMonElection(int o, epoch_t e, MonMap *m) : 
     Message(MSG_MON_ELECTION, HEAD_VERSION), 
     fsid(m->fsid), op(o), epoch(e) {
+
+    // encode using full feature set; we will reencode for dest later,
+    // if necessary
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
