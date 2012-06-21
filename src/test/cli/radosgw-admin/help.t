@@ -45,10 +45,9 @@
      --bucket=<bucket>
      --pool=<pool>
      --object=<object>
-     --date=<yyyy-mm-dd>
-     --start-date=<yyyy-mm-dd>
-     --end-date=<yyyy-mm-dd>
-     --time=<HH:MM:SS>
+     --date=<date>
+     --start-date=<date>
+     --end-date=<date>
      --bucket-id=<bucket-id>
      --format=<format>         specify output format for certain operations: xml,
                                json
@@ -61,6 +60,9 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --yes-i-really-mean-it    required for certain operations
+  
+  <date> := "YYYY-MM-DD[ hh:mm:ss]"
+  
     --conf/-c        Read configuration from the given configuration file
     -d               Run in foreground, log to stderr.
     -f               Run in foreground, log to usual location.
