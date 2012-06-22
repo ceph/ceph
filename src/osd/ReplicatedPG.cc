@@ -5691,8 +5691,6 @@ void ReplicatedPG::on_shutdown()
 
 void ReplicatedPG::on_activate()
 {
-  assert(object_contexts.empty());
-
   for (unsigned i = 1; i<acting.size(); i++) {
     if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
       assert(backfill_target == -1);
