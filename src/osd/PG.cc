@@ -1994,16 +1994,15 @@ void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
   bufferlist infobl;
-  __u8 struct_v = 3;
+  __u8 struct_v = 4;
   ::encode(struct_v, infobl);
-  ::encode(info, infobl);
-  dout(20) << "write_info info " << infobl.length() << dendl;
   t.collection_setattr(coll, "info", infobl);
  
   // potentially big stuff
   bufferlist bigbl;
   ::encode(past_intervals, bigbl);
   ::encode(snap_collections, bigbl);
+  ::encode(info, bigbl);
   dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   t.truncate(coll_t::META_COLL, biginfo_oid, 0);
   t.write(coll_t::META_COLL, biginfo_oid, 0, bigbl.length(), bigbl);
@@ -2434,7 +2433,8 @@ void PG::read_state(ObjectStore *store)
   store->collection_getattr(coll, "info", bl);
   p = bl.begin();
   ::decode(struct_v, p);
-  ::decode(info, p);
+  if (struct_v < 4)
+    ::decode(info, p);
   if (struct_v < 2) {
     ::decode(past_intervals, p);
   
@@ -2461,6 +2461,8 @@ void PG::read_state(ObjectStore *store)
     }
   } else {
     ::decode(snap_collections, p);
+    if (struct_v >= 4)
+      ::decode(info, p);
   }
 
   try {
