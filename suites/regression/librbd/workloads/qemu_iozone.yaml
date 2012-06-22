@@ -1,0 +1,4 @@
+tasks:
+- qemu:
+    all:
+      test: https://raw.github.com/ceph/ceph/master/qa/workunits/suites/iozone.sh
