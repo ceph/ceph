@@ -693,6 +693,7 @@ protected:
     bool applied, committed;
     int ackerosd;
     eversion_t last_complete;
+    epoch_t epoch_started;
 
     uint64_t bytes_written;
 
