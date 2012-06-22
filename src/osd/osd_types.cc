@@ -1549,7 +1549,6 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 
   // handle hobject_t format change
   if (struct_v < 4) {
-    assert(pool != -1);
     for (list<pg_log_entry_t>::iterator i = log.begin();
 	 i != log.end();
 	 ++i) {
@@ -1665,7 +1664,6 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
   DECODE_FINISH(bl);
 
   if (struct_v < 3) {
-    assert(pool != -1);
     // Handle hobject_t upgrade
     map<hobject_t, item> tmp;
     for (map<hobject_t, item>::iterator i = missing.begin();
@@ -2341,7 +2339,6 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   DECODE_FINISH(bl);
 
   if (struct_v < 2) {
-    assert(pool != -1);
     if (soid.pool == -1)
       soid.pool = pool;
     map<hobject_t, interval_set<uint64_t> > tmp;
@@ -2446,7 +2443,6 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 
   // handle hobject_t upgrade
   if (struct_v < 3) {
-    assert(pool != -1);
     map<hobject_t, object> tmp;
     tmp.swap(objects);
     for (map<hobject_t, object>::iterator i = tmp.begin();
