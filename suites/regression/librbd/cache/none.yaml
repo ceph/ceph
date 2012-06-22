@@ -1,8 +1,5 @@
-tasks:
+task:
 - ceph:
     conf:
       client:
         rbd cache: false
-- rbd_fsx:
-    clients: [client.0]
-    ops: 20000

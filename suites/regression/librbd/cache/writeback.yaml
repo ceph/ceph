@@ -1,0 +1,5 @@
+task:
+- ceph:
+    conf:
+      client:
+        rbd cache: true
