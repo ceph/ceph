@@ -29,16 +29,32 @@ Commands
   Modify a user
 
 :command:`user info`
-  Display information of a user
+  Display information of a user, and any potentially available
+  subusers and keys
 
 :command:`user rm`
   Remove a user
+
+:command:`subuser create`
+  Create a new subuser (primarily useful for clients using the Swift API)
+
+:command:`subuser modify`
+  Modify a subuser
+
+:command:`subuser rm`
+  Remove a subuser
 
 :command:`bucket list`
   List all buckets
 
 :command:`bucket unlink`
   Remove a bucket
+
+:command:`key create`
+  Create an access key
+
+:command:`key rm`
+  Remove an access key
 
 :command:`policy`
   Display bucket/object policy
@@ -68,11 +84,11 @@ Options
 
 .. option:: --uid=uid
 
-   The S3 user/access key.
+   The radosgw user ID.
 
 .. option:: --secret=secret
 
-   The S3 secret.
+   The secret associated with a given key.
 
 .. option:: --display-name=name
 
@@ -101,14 +117,6 @@ Options
 .. option:: --end-date=yyyy-mm-dd
 
    The end date needed for some commands
-
-.. option:: --os-user=group:name
-
-   The OpenStack user (only needed for use with OpenStack)
-
-.. option:: --os-secret=key
-
-   The OpenStack key
 
 .. option:: --auth-uid=auid
 
