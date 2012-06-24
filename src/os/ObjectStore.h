@@ -547,12 +547,12 @@ public:
       sobject_encoding(false), pool_override(-1), use_pool_override(false) {}
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false) {
+      sobject_encoding(false), pool_override(-1), use_pool_override(false) {
       decode(dp);
     }
     Transaction(bufferlist &nbl) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false) {
+      sobject_encoding(false), pool_override(-1), use_pool_override(false) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
     }
