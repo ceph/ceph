@@ -564,6 +564,7 @@ int main(int argc, char **argv)
   ObjectKeyType key_type = KEY_TYPE_S3;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
+  bool specified_perm_mask = false;
   uint64_t auid = -1;
   RGWUserInfo info;
   RGWRados *store;
@@ -654,6 +655,7 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = str_to_perm(access.c_str());
+      specified_perm_mask = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
       if (bucket_id.empty()) {
@@ -918,9 +920,10 @@ int main(int argc, char **argv)
     if (auid != (uint64_t)-1)
       info.auid = auid;
     if (!subuser.empty()) {
-      RGWSubUser u;
+      RGWSubUser u = info.subusers[subuser];
       u.name = subuser;
-      u.perm_mask = perm_mask;
+      if (specified_perm_mask)
+        u.perm_mask = perm_mask;
 
       info.subusers[subuser] = u;
     }
