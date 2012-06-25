@@ -888,7 +888,7 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
     if (keys.size() > 0)
       last_read = *(keys.rbegin());
-  } while (r == RBD_MAX_KEYS_READ);
+  } while (r == max_read);
 
   uint64_t snap_seq;
   r = read_key(hctx, "snap_seq", &snap_seq);
