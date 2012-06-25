@@ -1963,8 +1963,11 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
-    (*p)->tick();
+  if (!is_slurping()) {
+    for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
+      (*p)->tick();
+    }
+  }
   
   // trim sessions
   utime_t now = ceph_clock_now(g_ceph_context);
