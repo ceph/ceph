@@ -438,7 +438,7 @@ namespace librbd {
     int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id)
     {
       bufferlist in, out;
-      ::encode(*id, in);
+      ::encode(id, in);
       return ioctx->exec(oid, "rbd", "set_id", in, out);
     }
 
