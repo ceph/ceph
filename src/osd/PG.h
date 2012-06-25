@@ -722,7 +722,7 @@ public:
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
   void defer_recovery();
-  virtual bool check_recovery_sources(const OSDMapRef newmap) = 0;
+  virtual void check_recovery_sources(const OSDMapRef newmap) = 0;
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
 

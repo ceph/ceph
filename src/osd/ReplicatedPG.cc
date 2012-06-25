@@ -5744,7 +5744,7 @@ void ReplicatedPG::_clear_recovery_state()
   pull_from_peer.clear();
 }
 
-bool ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
+void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
 {
   /*
    * check that any peers we are planning to (or currently) pulling
@@ -5782,29 +5782,49 @@ bool ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
   }
   if (now_down.empty()) {
     dout(10) << "check_recovery_sources no source osds (" << missing_loc_sources << ") went down" << dendl;
-    return false;
+  } else {
+    dout(10) << "check_recovery_sources sources osds " << now_down << " now down, remaining sources are "
+	     << missing_loc_sources << dendl;
+    
+    // filter missing_loc
+    map<hobject_t, set<int> >::iterator p = missing_loc.begin();
+    while (p != missing_loc.end()) {
+      set<int>::iterator q = p->second.begin();
+      while (q != p->second.end())
+	if (now_down.count(*q)) {
+	  p->second.erase(q++);
+	} else {
+	  assert(missing_loc_sources.count(*q));
+	  q++;
+	}
+      if (p->second.empty())
+	missing_loc.erase(p++);
+      else
+	p++;
+    }
   }
-  dout(10) << "check_recovery_sources sources osds " << now_down << " now down, remaining sources are "
-	   << missing_loc_sources << dendl;
 
-  // filter missing_loc
-  map<hobject_t, set<int> >::iterator p = missing_loc.begin();
-  while (p != missing_loc.end()) {
-    set<int>::iterator q = p->second.begin();
-    while (q != p->second.end())
-      if (now_down.count(*q)) {
-	p->second.erase(q++);
-      } else {
-	assert(missing_loc_sources.count(*q));
-	q++;
-      }
-    if (p->second.empty())
-      missing_loc.erase(p++);
-    else
-      p++;
+  for (set<int>::iterator i = peer_log_requested.begin();
+       i != peer_log_requested.end();
+       ) {
+    if (!osdmap->is_up(*i)) {
+      dout(10) << "peer_log_requested removing " << *i << dendl;
+      peer_log_requested.erase(i++);
+    } else {
+      ++i;
+    }
   }
 
-  return true;
+  for (set<int>::iterator i = peer_missing_requested.begin();
+       i != peer_missing_requested.end();
+       ) {
+    if (!osdmap->is_up(*i)) {
+      dout(10) << "peer_missing_requested removing " << *i << dendl;
+      peer_missing_requested.erase(i++);
+    } else {
+      ++i;
+    }
+  }
 }
   
 
