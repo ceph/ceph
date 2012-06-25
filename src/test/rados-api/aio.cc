@@ -1,6 +1,7 @@
 #include "common/errno.h"
 #include "include/rados/librados.h"
 #include "test/rados-api/test.h"
+#include "include/types.h"
 
 #include "gtest/gtest.h"
 #include <errno.h>
@@ -8,9 +9,12 @@
 #include <sstream>
 #include <string>
 #include <boost/scoped_ptr.hpp>
+#include <utility>
 
 using std::ostringstream;
 using namespace librados;
+using std::pair;
+using std::make_pair;
 
 class AioTestData
 {
@@ -789,6 +793,25 @@ TEST(LibRadosAio, OmapPP) {
       TestAlarm alarm;
       ASSERT_EQ(0, my_completion->wait_for_complete());
     }
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectWriteOperation op;
+    map<string, pair<bufferlist, int> > assertions;
+    bufferlist val;
+    val.append(string("bar"));
+    assertions["foo"] = pair<bufferlist, int>(val, CEPH_OSD_CMPXATTR_OP_EQ);
+
+    int r;
+    op.omap_cmp(assertions, &r);
+
+    ioctx.aio_operate("test_obj", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    ASSERT_EQ(0, r);
   }
 
   {

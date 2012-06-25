@@ -143,6 +143,28 @@ namespace librados
      */
     void assert_version(uint64_t ver);
 
+    /**
+     * get key/value paris for specified keys
+     *
+     * @param assertions [in] comparison assertions
+     * @param prval [out] place error code in prval upon completion
+     *
+     * assertions has the form of mappings from keys to (comparison rval, assertion)
+     * The assertion field may be CEPH_OSD_CMPXATTR_OP_[GT|LT|EQ].
+     *
+     * That is, to assert that the value at key 'foo' is greater than 'bar':
+     *
+     * ObjectReadOperation op;
+     * int r;
+     * map<string, pair<bufferlist, int> > assertions;
+     * bufferlist bar(string('bar'));
+     * assertions['foo'] = make_pair(bar, CEPH_OSD_CMP_XATTR_OP_GT);
+     * op.omap_cmp(assertions, &r);
+     */
+    void omap_cmp(
+      const std::map<std::string, std::pair<bufferlist, int> > &assertions,
+      int *prval);
+
   protected:
     ObjectOperationImpl *impl;
     ObjectOperation(const ObjectOperation& rhs);
@@ -298,6 +320,7 @@ namespace librados
     void omap_get_vals_by_keys(const std::set<std::string> &keys,
 			       std::map<std::string, bufferlist> *map,
 			       int *prval);
+
   };
 
 
