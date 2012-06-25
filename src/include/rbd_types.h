@@ -22,14 +22,16 @@
 
 
 /* New-style rbd image 'foo' consists of objects
- *   rbd_header.foo         - image metadata
+ *   rbd_id.foo              - id of image
+ *   rbd_header.<id>         - image metadata
  *   rbd_data.<id>.00000000
  *   rbd_data.<id>.00000001
- *   ...                    - data
+ *   ...                     - data
  */
 
 #define RBD_HEADER_PREFIX      "rbd_header."
 #define RBD_DATA_PREFIX        "rbd_data."
+#define RBD_ID_PREFIX          "rbd_id."
 
 #define RBD_FEATURE_LAYERING      1
 
