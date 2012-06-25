@@ -1528,16 +1528,16 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
   ENCODE_FINISH(bl);
 }
  
-void pg_log_t::decode(bufferlist::iterator &bl)
+void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -1546,6 +1546,16 @@ void pg_log_t::decode(bufferlist::iterator &bl)
   }
   ::decode(log, bl);
   DECODE_FINISH(bl);
+
+  // handle hobject_t format change
+  if (struct_v < 4) {
+    for (list<pg_log_entry_t>::iterator i = log.begin();
+	 i != log.end();
+	 ++i) {
+      if (i->soid.pool == -1)
+	i->soid.pool = pool;
+    }
+  }
 }
 
 void pg_log_t::dump(Formatter *f) const
@@ -1642,16 +1652,34 @@ ostream& pg_log_t::print(ostream& out) const
 
 void pg_missing_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(missing, bl);
   ENCODE_FINISH(bl);
 }
 
-void pg_missing_t::decode(bufferlist::iterator &bl)
+void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(missing, bl);
   DECODE_FINISH(bl);
+
+  if (struct_v < 3) {
+    // Handle hobject_t upgrade
+    map<hobject_t, item> tmp;
+    for (map<hobject_t, item>::iterator i = missing.begin();
+	 i != missing.end();
+      ) {
+      if (i->first.pool == -1) {
+	hobject_t to_insert(i->first);
+	to_insert.pool = pool;
+	tmp[to_insert] = i->second;
+	missing.erase(i++);
+      } else {
+	++i;
+      }
+    }
+    missing.insert(tmp.begin(), tmp.end());
+  }
 
   for (map<hobject_t,item>::iterator it = missing.begin();
        it != missing.end();
@@ -2286,7 +2314,7 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
 
 void ObjectRecoveryInfo::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
@@ -2297,9 +2325,10 @@ void ObjectRecoveryInfo::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ObjectRecoveryInfo::decode(bufferlist::iterator &bl)
+void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
+				int64_t pool)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(soid, bl);
   ::decode(version, bl);
   ::decode(size, bl);
@@ -2308,6 +2337,21 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl)
   ::decode(copy_subset, bl);
   ::decode(clone_subset, bl);
   DECODE_FINISH(bl);
+
+  if (struct_v < 2) {
+    if (soid.pool == -1)
+      soid.pool = pool;
+    map<hobject_t, interval_set<uint64_t> > tmp;
+    tmp.swap(clone_subset);
+    for (map<hobject_t, interval_set<uint64_t> >::iterator i = tmp.begin();
+	 i != tmp.end();
+	 ++i) {
+      hobject_t first(i->first);
+      if (first.pool == -1)
+	first.pool = pool;
+      clone_subset[first].swap(i->second);
+    }
+  }
 }
 
 void ObjectRecoveryInfo::generate_test_instances(
@@ -2378,7 +2422,7 @@ void ScrubMap::merge_incr(const ScrubMap &l)
 
 void ScrubMap::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(objects, bl);
   ::encode(attrs, bl);
   ::encode(logbl, bl);
@@ -2387,15 +2431,29 @@ void ScrubMap::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void ScrubMap::decode(bufferlist::iterator& bl)
+void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(objects, bl);
   ::decode(attrs, bl);
   ::decode(logbl, bl);
   ::decode(valid_through, bl);
   ::decode(incr_since, bl);
   DECODE_FINISH(bl);
+
+  // handle hobject_t upgrade
+  if (struct_v < 3) {
+    map<hobject_t, object> tmp;
+    tmp.swap(objects);
+    for (map<hobject_t, object>::iterator i = tmp.begin();
+	 i != tmp.end();
+	 ++i) {
+      hobject_t first(i->first);
+      if (first.pool == -1)
+	first.pool = pool;
+      objects[first] = i->second;
+    }
+  }
 }
 
 void ScrubMap::dump(Formatter *f) const

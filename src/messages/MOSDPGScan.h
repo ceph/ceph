@@ -45,6 +45,12 @@ public:
     ::decode(pgid, p);
     ::decode(begin, p);
     ::decode(end, p);
+
+    // handle hobject_t format upgrade
+    if (begin.pool == -1)
+      begin.pool = pgid.pool();
+    if (end.pool == -1)
+      end.pool = pgid.pool();
   }
 
   virtual void encode_payload(uint64_t features) {

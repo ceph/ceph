@@ -48,6 +48,11 @@ public:
     ::decode(pgid, p);
     ::decode(last_backfill, p);
     ::decode(stats, p);
+
+    // Handle hobject_t format change
+    if (!last_backfill.is_max() &&
+	last_backfill.pool == -1)
+      last_backfill.pool = pgid.pool();
   }
 
   virtual void encode_payload(uint64_t features) {

@@ -7,11 +7,27 @@
 #include "common/debug.h"
 
 #include "common/Formatter.h"
+#include "include/ceph_features.h"
 
 // --
 
-void PGMap::Incremental::encode(bufferlist &bl) const
+void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
 {
+  if ((features & CEPH_FEATURE_MONENC) == 0) {
+    __u8 v = 4;
+    ::encode(v, bl);
+    ::encode(version, bl);
+    ::encode(pg_stat_updates, bl);
+    ::encode(osd_stat_updates, bl);
+    ::encode(osd_stat_rm, bl);
+    ::encode(osdmap_epoch, bl);
+    ::encode(pg_scan, bl);
+    ::encode(full_ratio, bl);
+    ::encode(nearfull_ratio, bl);
+    ::encode(pg_remove, bl);
+    return;
+  }
+
   ENCODE_START(5, 5, bl);
   ::encode(version, bl);
   ::encode(pg_stat_updates, bl);
@@ -312,8 +328,21 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
   return min;
 }
 
-void PGMap::encode(bufferlist &bl) const
+void PGMap::encode(bufferlist &bl, uint64_t features) const
 {
+  if ((features & CEPH_FEATURE_MONENC) == 0) {
+    __u8 v = 3;
+    ::encode(v, bl);
+    ::encode(version, bl);
+    ::encode(pg_stat, bl);
+    ::encode(osd_stat, bl);
+    ::encode(last_osdmap_epoch, bl);
+    ::encode(last_pg_scan, bl);
+    ::encode(full_ratio, bl);
+    ::encode(nearfull_ratio, bl);
+    return;
+  }
+
   ENCODE_START(4, 4, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
