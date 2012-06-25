@@ -391,6 +391,8 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'inconsistent lock state', # FIXME see #2523
                     run.Raw('|'),
+                    'grep', '-v', '*** DEADLOCK ***', # part of lockdep output
+                    run.Raw('|'),
                     'grep', '-v', 'INFO: possible irq lock inversion dependency detected', # FIXME see #2590 and #147
                     run.Raw('|'),
                     'head', '-n', '1',
