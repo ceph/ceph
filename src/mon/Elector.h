@@ -110,9 +110,10 @@ class Elector {
   /**
    * Set containing all those that acked our proposal to become the Leader.
    *
-   * If we are acked by everyone in the MonMap, we will declare victory.
+   * If we are acked by everyone in the MonMap, we will declare
+   * victory.  Also note each peer's feature set.
    */
-  set<int> acked_me;
+  map<int, unsigned> acked_me;
   /**
    * @}
    */

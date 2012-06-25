@@ -18,6 +18,7 @@
 #include "common/Formatter.h"
 #include "MonCaps.h"
 #include "mon_types.h"
+#include "include/ceph_features.h"
 
 #define dout_subsys ceph_subsys_auth
 
@@ -339,8 +340,21 @@ void MonCap::generate_test_instances(list<MonCap*>& o)
 
 // ----
 
-void MonCaps::encode(bufferlist& bl) const
+void MonCaps::encode(bufferlist& bl, uint64_t features) const
 {
+  if ((features & CEPH_FEATURE_MONENC) == 0) {
+    __u8 v = 2;
+    ::encode(v, bl);
+    ::encode(text, bl);
+    ::encode(default_action, bl);
+    ::encode(services_map, bl);
+    ::encode(pool_auid_map, bl);
+    ::encode(allow_all, bl);
+    ::encode(auid, bl);
+    ::encode(cmd_allow, bl);
+    return;
+  }
+
   ENCODE_START(3, 3, bl);
   ::encode(text, bl);
   ::encode(default_action, bl);

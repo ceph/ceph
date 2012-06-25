@@ -50,7 +50,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(info, p);
-    ::decode(missing, p);
+    missing.decode(p, info.pgid.pool());
   }
 };
 
