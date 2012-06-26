@@ -89,6 +89,10 @@ namespace librbd {
 		      const std::string &name, const std::string &id);
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
+    // atomic remove and add
+    int dir_rename_image(librados::IoCtx *ioctx, const std::string &oid,
+			 const std::string &src, const std::string &dest,
+			 const std::string &id);
 
     // class operations on the old format, kept for
     // backwards compatability
