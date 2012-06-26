@@ -614,7 +614,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   dout(10) << "do_op " << *m << (m->may_write() ? " may_write" : "") << dendl;
 
-  if (finalizing_scrub && m->may_write()) {
+  if (scrub_block_writes && m->may_write()) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
     op->mark_delayed();
@@ -1410,7 +1410,7 @@ bool ReplicatedPG::snap_trimmer()
       put();
       return true;
     }
-    if (!finalizing_scrub) {
+    if (!scrub_block_writes) {
       dout(10) << "snap_trimmer posting" << dendl;
       snap_trimmer_machine.process_event(SnapTrim());
     }
@@ -3408,8 +3408,11 @@ void ReplicatedPG::op_applied(RepGather *repop)
   assert(info.last_update >= repop->v);
   assert(last_update_applied < repop->v);
   last_update_applied = repop->v;
-  if (last_update_applied == info.last_update && finalizing_scrub) {
+  if (last_update_applied == info.last_update && scrub_block_writes) {
     dout(10) << "requeueing scrub for cleanup" << dendl;
+    finalizing_scrub = true;
+    scrub_gather_replica_maps();
+    ++scrub_waiting_on;
     osd->scrub_wq.queue(this);
   }
 
@@ -5680,7 +5683,7 @@ void ReplicatedPG::on_change()
   clear_scrub_reserved();
 
   // clear scrub state
-  if (finalizing_scrub) {
+  if (scrub_block_writes) {
     scrub_clear_state();
   } else if (is_scrubbing()) {
     state_clear(PG_STATE_SCRUBBING);
@@ -6630,7 +6633,7 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
   } else if (!pg->is_primary() || !pg->is_active() || !pg->is_clean()) {
     dout(10) << "NotTrimming not primary, active, clean" << dendl;
     return discard_event();
-  } else if (pg->finalizing_scrub) {
+  } else if (pg->scrub_block_writes) {
     dout(10) << "NotTrimming finalizing scrub" << dendl;
     pg->queue_snap_trim();
     return discard_event();
