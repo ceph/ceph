@@ -142,14 +142,12 @@ int CrushTester::test()
 
   // test ability to retrieve item parent information
   if (output_utilization_all)
-    for (int j = 0; j < weight.size(); j++)
+    for (unsigned j = 0; j < weight.size(); j++)
       err << "device " << j << " is located at " << crush.get_loc(j) << endl;
 
   // make adjustments
   adjust_weights(weight);
 
-  // create a temporary vector to hold a weight vector with no devices marked out
-  vector<__u32> compacted_weight = compact_device_weights(weight);
 
   int num_devices_active = 0;
   for (vector<__u32>::iterator p = weight.begin(); p != weight.end(); ++p)
@@ -264,7 +262,7 @@ int CrushTester::test()
           if (use_crush) {
             if (output_statistics)
               err << "CRUSH"; // prepend CRUSH to placement output
-            crush.do_rule(r, x, out, nr, compacted_weight);
+            crush.do_rule(r, x, out, nr, weight);
           } else {
             if (output_statistics)
               err << "RNG"; // prepend RNG to placement output to denote simulation
