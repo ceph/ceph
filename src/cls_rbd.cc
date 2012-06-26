@@ -64,6 +64,8 @@ cls_method_handle_t h_lock_image_shared;
 cls_method_handle_t h_unlock_image;
 cls_method_handle_t h_break_lock;
 cls_method_handle_t h_list_locks;
+cls_method_handle_t h_get_id;
+cls_method_handle_t h_set_id;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -148,6 +150,17 @@ static int read_key(cls_method_context_t hctx, const string &key, T *out)
   }
 
   return 0;
+}
+
+static bool is_valid_id(const string &id) {
+  if (!id.size())
+    return false;
+  for (size_t i = 0; i < id.size(); ++i) {
+    if (!isalnum(id[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -1107,6 +1120,88 @@ int get_all_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/************************ rbd_id object methods **************************/
+
+/**
+ * Input:
+ * @param in ignored
+ *
+ * Output:
+ * @param id the id stored in the object
+ * @returns 0 on success, negative error code on failure
+ */
+int get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t size;
+  int r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0)
+    return r;
+
+  if (size == 0)
+    return -ENOENT;
+
+  bufferlist read_bl;
+  r = cls_cxx_read(hctx, 0, size, &read_bl);
+  if (r < 0) {
+    CLS_ERR("get_id: could not read id: %d", r);
+    return r;
+  }
+
+  string id;
+  try {
+    bufferlist::iterator iter = read_bl.begin();
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EIO;
+  }
+
+  ::encode(id, *out);
+  return 0;
+};
+
+/**
+ * Set the id of an image. The object must already exist.
+ *
+ * Input:
+ * @param id the id of the image, as an alpha-numeric string
+ *
+ * Output:
+ * @returns 0 on success, -EEXIST if the atomic create fails,
+ *          negative error code on other error
+ */
+int set_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  string id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (!is_valid_id(id)) {
+    CLS_ERR("set_id: invalid id '%s'", id.c_str());
+    return -EINVAL;
+  }
+
+  uint64_t size;
+  r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0)
+    return r;
+  if (size != 0)
+    return -EEXIST;
+
+  CLS_LOG(20, "set_id: id=%s", id.c_str());
+
+  bufferlist write_bl;
+  ::encode(id, write_bl);
+  return cls_cxx_write(hctx, 0, write_bl.length(), &write_bl);
+}
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -1405,6 +1500,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "remove_parent",
 			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
 			  remove_parent, &h_remove_parent);
+
+  /* methods for the rbd_id.$image_name objects */
+  cls_register_cxx_method(h_class, "get_id",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  get_id, &h_get_id);
+  cls_register_cxx_method(h_class, "set_id",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  set_id, &h_set_id);
+
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
