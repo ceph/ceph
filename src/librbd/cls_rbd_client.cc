@@ -416,5 +416,31 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "break_lock", in, out);
     }
 
+    /************************ rbd_id object methods ************************/
+
+    int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id)
+    {
+      bufferlist in, out;
+      int r = ioctx->exec(oid, "rbd", "get_id", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*id, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id)
+    {
+      bufferlist in, out;
+      ::encode(*id, in);
+      return ioctx->exec(oid, "rbd", "set_id", in, out);
+    }
+
   } // namespace cls_client
 } // namespace librbd
