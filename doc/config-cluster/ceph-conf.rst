@@ -57,6 +57,8 @@ in a RADOS cluster.
 | Metadata Server | ``ceph-mds`` |  ``[mds]``   | Alphanumeric    | Settings affect MDS instances only.             |
 +-----------------+--------------+--------------+-----------------+-------------------------------------------------+
 
+
+
 Metavariables
 ~~~~~~~~~~~~~
 The configuration system supports certain 'metavariables,' which are typically
@@ -108,9 +110,13 @@ particular instance, the setting will apply to all OSDs, monitors or metadata
 daemons respectively.
 
 For details on settings for each type of daemon, 
-see `Configuration Reference`_.
+see the following sections. 
 
-.. _Configuration Reference: ../../config
+.. toctree::
+
+	OSD Settings <osd-config-ref>
+	Monitor Settings <mon-config-ref>
+	Metadata Server Settings <mds-config-ref>	
 
 Instance Settings
 ~~~~~~~~~~~~~~~~~
