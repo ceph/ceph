@@ -44,8 +44,8 @@ namespace librbd {
 		   std::string *parent_image, snapid_t *parent_snap_id,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   int64_t parent_pool, const std::string& parent_image, snapid_t parent_snap_id,
-		   uint64_t parent_overlap);
+		   int64_t parent_pool, const std::string& parent_image,
+		   snapid_t parent_snap_id, uint64_t parent_overlap);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
@@ -72,6 +72,10 @@ namespace librbd {
                      const std::string &cookie);
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
                    const std::string &locker, const std::string &cookie);
+
+    // operations on rbd_id objects
+    int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id);
 
     // class operations on the old format, kept for
     // backwards compatability
