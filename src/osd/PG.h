@@ -736,7 +736,9 @@ public:
   // -- scrub --
   set<int> scrub_reserved_peers;
   map<int,ScrubMap> scrub_received_maps;
-  bool finalizing_scrub; 
+  bool finalizing_scrub;
+  bool scrub_block_writes;
+  bool scrub_active;
   bool scrub_reserved, scrub_reserve_failed;
   int scrub_waiting_on;
   epoch_t scrub_epoch_start;
@@ -1243,6 +1245,8 @@ public:
     osr(stringify(p)),
     finish_sync_event(NULL),
     finalizing_scrub(false),
+    scrub_block_writes(false),
+    scrub_active(false),
     scrub_reserved(false), scrub_reserve_failed(false),
     scrub_waiting_on(0),
     active_rep_scrub(0),
