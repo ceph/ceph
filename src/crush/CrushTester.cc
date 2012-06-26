@@ -51,7 +51,7 @@ vector <__u32> CrushTester::compact_device_weights(vector <__u32> weight)
   __u32 num_to_check = weight.size();
   int last_id_used = 0;
 
-  for (__u32 i = 0; i < num_to_check; i++){
+  for (int i = 0; i < num_to_check; i++){
     if (weight[i] > 0){
       compact_weight.push_back( weight[i]);
     }
