@@ -173,6 +173,15 @@ int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
   return 0;
 }
 
+int cls_cxx_create(cls_method_context_t hctx, bool exclusive)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_CREATE;
+  ops[0].op.flags = (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0);
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
