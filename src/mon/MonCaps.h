@@ -96,12 +96,12 @@ public:
     return allow_all;
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MonCaps*>& o);
 };
-WRITE_CLASS_ENCODER(MonCaps);
+WRITE_CLASS_ENCODER_FEATURES(MonCaps);
 
 inline ostream& operator<<(ostream& out, const MonCaps& m) {
   return out << m.get_str();

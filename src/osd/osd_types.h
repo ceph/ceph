@@ -417,6 +417,13 @@ public:
 
   eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
+  static eversion_t max() {
+    eversion_t max;
+    max.version -= 1;
+    max.epoch -= 1;
+    return max;
+  }
+
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = epoch;
@@ -1323,7 +1330,7 @@ struct pg_log_t {
   ostream& print(ostream& out) const;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::iterator &bl, int64_t pool = -1);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_log_t*>& o);
 };
@@ -1394,7 +1401,7 @@ struct pg_missing_t {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::iterator &bl, int64_t pool = -1);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_missing_t*>& o);
 };
@@ -1698,7 +1705,7 @@ struct ObjectRecoveryInfo {
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::iterator &bl, int64_t pool = -1);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 };
@@ -1761,7 +1768,7 @@ struct ScrubMap {
   void merge_incr(const ScrubMap &l);
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::iterator& bl, int64_t pool=-1);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ScrubMap*>& o);
 };

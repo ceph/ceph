@@ -21,24 +21,36 @@ namespace librbd {
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
-			     ::SnapContext *snapc);
+                             std::set<std::pair<std::string, std::string> >* lockers,
+                             bool *exclusive_lock,
+                             ::SnapContext *snapc);
 
     // low-level interface (mainly for testing)
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix);
     int get_features(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t snap_id, uint64_t *features);
+		     snapid_t snap_id, uint64_t *features);
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix);
     int get_size(librados::IoCtx *ioctx, const std::string &oid,
-		 uint64_t snap_id, uint64_t *size, uint8_t *order);
+		 snapid_t snap_id, uint64_t *size, uint8_t *order);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
+    int set_size(librados::IoCtx *ioctx, const std::string &oid,
+		 uint64_t size);
+    int get_parent(librados::IoCtx *ioctx, const std::string &oid,
+		   snapid_t snap_id, int64_t *parent_pool,
+		   std::string *parent_image, snapid_t *parent_snap_id,
+		   uint64_t *parent_overlap);
+    int set_parent(librados::IoCtx *ioctx, const std::string &oid,
+		   int64_t parent_pool, const std::string& parent_image, snapid_t parent_snap_id,
+		   uint64_t parent_overlap);
+    int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t snap_id, const std::string &snap_name);
+		     snapid_t snap_id, const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
-			uint64_t snap_id);
+			snapid_t snap_id);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -49,11 +61,22 @@ namespace librbd {
     int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
 		   uint64_t *id);
 
+    int list_locks(librados::IoCtx *ioctx, const std::string &oid,
+                   std::set<std::pair<std::string, std::string> > &locks,
+                   bool &exclusive);
+    int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
+                             const std::string &cookie);
+    int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
+                          const std::string &cookie);
+    int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
+                     const std::string &cookie);
+    int break_lock(librados::IoCtx *ioctx, const std::string& oid,
+                   const std::string &locker, const std::string &cookie);
 
     // class operations on the old format, kept for
     // backwards compatability
     int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-			 uint64_t snap_id, const std::string &snap_name);
+			 snapid_t snap_id, const std::string &snap_name);
     int old_snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
 			    const std::string &snap_name);
     int old_snapshot_list(librados::IoCtx *ioctx, const std::string &oid,

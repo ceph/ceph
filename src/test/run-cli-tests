@@ -26,7 +26,8 @@ esac
 VENV="$BUILDDIR/virtualenv"
 CRAM_BIN="$VENV/bin/cram"
 if [ ! -e "$CRAM_BIN" ]; then
-    pip -E "$VENV" install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
+#    pip -E "$VENV" install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
+    virtualenv "$VENV" && $VENV/bin/pip install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
 fi
 
 SRCDIR_ABS="$(readlink -f "$SRCDIR")"

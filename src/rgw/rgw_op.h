@@ -373,6 +373,7 @@ protected:
   rgw_bucket dest_bucket;
   string dest_object;
   time_t mtime;
+  bool replace_attrs;
 
   int init_common();
 
@@ -398,6 +399,7 @@ public:
     src_bucket.clear();
     src_object.clear();
     mtime = 0;
+    replace_attrs = false;
     dest_policy.set_ctx(s->cct);
   }
   int verify_permission();

@@ -7,6 +7,7 @@ rollback an image to a snapshot, view a snapshot, etc. For details on using
 the ``rbd`` command, see `RBD – Manage RADOS Block Device (RBD) Images`_ for
 details. 
 
+.. important:: To use RBD commands, you must have a running Ceph cluster.
 
 Creating a Block Device Image
 -----------------------------
@@ -91,20 +92,6 @@ To remove a block device from a pool, execute the following, but replace
 For example:: 
 
 	rbd rm bar -p swimmingpool
-
-
-Snapshotting Block Device Images
---------------------------------
-One of the advanced features of RADOS block devices is that you can create 
-snapshots of the images to retain a history of an image's state. Ceph supports
-RBD snapshots from the ``rbd`` command, from a kernel object, from a 
-KVM, and from cloud solutions. Once you create snapshots of an image, you 
-can rollback to a snapshot, list snapshots, remove snapshots and purge 
-the snapshots.
-
-.. important:: Generally, you should stop i/o before snapshotting an image.
-   If the image contains a filesystem, the filesystem should be in a
-   consistent state before snapshotting too.
 
  
 
