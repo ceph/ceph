@@ -197,7 +197,7 @@ void PGMonitor::update_from_paxos()
 
   // save latest
   bufferlist bl;
-  pg_map.encode(bl);
+  pg_map.encode(bl, mon->get_quorum_features());
   paxos->stash_latest(paxosv, bl);
 
   // dump pgmap summaries?  (useful for debugging)
@@ -257,7 +257,7 @@ void PGMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << pending_inc.version << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
-  pending_inc.encode(bl);
+  pending_inc.encode(bl, mon->get_quorum_features());
 }
 
 bool PGMonitor::preprocess_query(PaxosServiceMessage *m)

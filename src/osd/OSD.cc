@@ -270,13 +270,13 @@ int OSD::do_convertfs(ObjectStore *store)
       derr << "collection " << *i << " updated" << dendl;
     }
   }
-  cerr << "All collections up to date, updating version stamp..." << std::endl;
+  derr << "All collections up to date, updating version stamp..." << dendl;
   r = store->update_version_stamp();
   if (r < 0)
     return r;
   store->sync_and_flush();
   store->sync();
-  cerr << "Version stamp updated, done!" << std::endl;
+  derr << "Version stamp updated, done with upgrade!" << dendl;
   return store->umount();
 }
 
@@ -1115,13 +1115,21 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
     return;
 
   // delete them.
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
+  unsigned removed = 0;
   for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
-       p++)
-    t->collection_remove(tmp, *p);
-  t->remove_collection(tmp);
-  int r = store->queue_transaction(NULL, t);
+       p++, removed++) {
+    t.collection_remove(tmp, *p);
+    if (removed > 300) {
+      int r = store->apply_transaction(t);
+      assert(r == 0);
+      t = ObjectStore::Transaction();
+      removed = 0;
+    }
+  }
+  t.remove_collection(tmp);
+  int r = store->apply_transaction(t);
   assert(r == 0);
   store->sync_and_flush();
 }
@@ -2339,10 +2347,10 @@ void OSD::handle_command(MCommand *m)
     return;
   }
 
-  OSDCaps& caps = session->caps;
+  OSDCap& caps = session->caps;
   session->put();
 
-  if (!caps.allow_all || m->get_source().is_mon()) {
+  if (!caps.allow_all() || m->get_source().is_mon()) {
     client_messenger->send_message(new MCommandReply(m, -EPERM), con);
     m->put();
     return;
@@ -2760,13 +2768,23 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     }
 
     s->entity_name = name;
-    s->caps.set_allow_all(caps_info.allow_all);
-    s->caps.set_auid(auid);
+    if (caps_info.allow_all)
+      s->caps.set_allow_all();
+    s->auid = auid;
  
     if (caps_info.caps.length() > 0) {
-      bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter);
-      dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << dendl;
+      bufferlist::iterator p = caps_info.caps.begin();
+      string str;
+      try {
+	::decode(str, p);
+      }
+      catch (buffer::error& e) {
+      }
+      bool success = s->caps.parse(str);
+      if (success)
+	dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << " '" << str << "'" << dendl;
+      else
+	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
     }
     
     s->put();
@@ -5366,28 +5384,25 @@ bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
     dout(0) << "op_has_sufficient_caps: no session for op " << *op << dendl;
     return false;
   }
-  OSDCaps& caps = session->caps;
+  OSDCap& caps = session->caps;
   session->put();
+  
+  string key = op->get_object_locator().key;
+  if (key.length() == 0)
+    key = op->get_oid().name;
 
-  int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
+  bool cap = caps.is_capable(pg->pool->name, pg->pool->auid, key,
+			     op->may_read(), op->may_write(), op->require_exec_caps());
+
   dout(20) << "op_has_sufficient_caps pool=" << pg->pool->id << " (" << pg->pool->name
-	   << ") owner=" << pg->pool->auid << " perm=" << perm
+	   << ") owner=" << pg->pool->auid
 	   << " may_read=" << op->may_read()
 	   << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec()
-           << " require_exec_caps=" << op->require_exec_caps() << dendl;
-
-  if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
-    dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
-    return false;
-  } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
-    dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
-    return false;
-  } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
-    dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
-    return false;
-  }
-  return true;
+           << " require_exec_caps=" << op->require_exec_caps()
+	   << " -> " << (cap ? "yes" : "NO")
+	   << dendl;
+  return cap;
 }
 
 void OSD::handle_sub_op(OpRequestRef op)

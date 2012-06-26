@@ -927,7 +927,7 @@ void Monitor::win_standalone_election()
   assert(rank == 0);
   set<int> q;
   q.insert(rank);
-  win_election(1, q);
+  win_election(1, q, CEPH_FEATURES_ALL);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -941,7 +941,7 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active) 
+void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features) 
 {
   if (!is_electing())
     reset();
@@ -950,8 +950,11 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
+  quorum_features = features;
   outside_quorum.clear();
-  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
+  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum
+	   << " features are " << quorum_features
+	   << dendl;
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
@@ -1230,7 +1233,8 @@ void Monitor::handle_command(MMonCommand *m)
       get_health(health, NULL);
       stringstream ss;
       ss << "   health " << health << "\n";
-      ss << "   monmap " << *monmap << "\n";
+      ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
+	 << " " << get_quorum_names() << "\n";
       ss << "   osdmap " << osdmon()->osdmap << "\n";
       ss << "    pgmap " << pgmon()->pg_map << "\n";
       ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
@@ -1959,8 +1963,11 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
-    (*p)->tick();
+  if (!is_slurping()) {
+    for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
+      (*p)->tick();
+    }
+  }
   
   // trim sessions
   utime_t now = ceph_clock_now(g_ceph_context);

@@ -19,7 +19,7 @@ Adding a new device (OSD) to the map
 
 Adding new devices can be done via the monitor.  The general form is::
 
-  $ ceph osd crush add <id> <name> <weight> [<loc> [<lo2> ...]]
+  $ ceph osd crush set <id> <name> <weight> [<loc> [<lo2> ...]]
 
 where
 
@@ -43,7 +43,7 @@ where
 For example, if the new OSD id is ``123``, we want a weight of ``1.0``
 and the new device is on host ``hostfoo`` and rack ``rackbar``::
 
-   $ ceph osd crush add 123 osd.123 1.0 pool=default rack=rackbar host=hostfoo
+   $ ceph osd crush set 123 osd.123 1.0 pool=default rack=rackbar host=hostfoo
 
 will add it to the hierarchy.  The rack ``rackbar`` and host
 ``hostfoo`` will be added as needed, as long as the pool ``default``
@@ -53,7 +53,7 @@ cluster creation).
 Note that if I later add another device in the same host but specify a
 different pool or rack::
 
-   $ ceph osd crush add 124 osd.124 1.0 pool=nondefault rack=weirdrack host=hostfoo
+   $ ceph osd crush set 124 osd.124 1.0 pool=nondefault rack=weirdrack host=hostfoo
 
 the device will still be placed in host ``hostfoo`` at its current
 location (rack ``rackbar`` and pool ``default``).

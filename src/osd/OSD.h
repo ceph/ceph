@@ -26,7 +26,7 @@
 #include "common/LogClient.h"
 
 #include "os/ObjectStore.h"
-#include "OSDCaps.h"
+#include "OSDCap.h"
 
 #include "common/DecayCounter.h"
 #include "osd/ClassHandler.h"
@@ -238,13 +238,14 @@ private:
 public:
   struct Session : public RefCountedObject {
     EntityName entity_name;
-    OSDCaps caps;
+    OSDCap caps;
+    int64_t auid;
     epoch_t last_sent_epoch;
     Connection *con;
     std::map<void *, pg_t> watches;
     std::map<void *, entity_name_t> notifs;
 
-    Session() : last_sent_epoch(0), con(0) {}
+    Session() : auid(-1), last_sent_epoch(0), con(0) {}
     void add_notif(void *n, entity_name_t& name) {
       notifs[n] = name;
     }

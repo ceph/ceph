@@ -55,7 +55,7 @@ void _usage()
   cerr << "                             + bucket-id)\n";
   cerr << "  log rm                     remove log object\n";
   cerr << "  usage show                 show usage (by user, date range)\n";
-  cerr << "  usage trim                 show usage (by user, date range)\n";
+  cerr << "  usage trim                 trim usage (by user, date range)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
@@ -74,10 +74,9 @@ void _usage()
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --pool=<pool>\n";
   cerr << "   --object=<object>\n";
-  cerr << "   --date=<yyyy-mm-dd>\n";
-  cerr << "   --start-date=<yyyy-mm-dd>\n";
-  cerr << "   --end-date=<yyyy-mm-dd>\n";
-  cerr << "   --time=<HH:MM:SS>\n";
+  cerr << "   --date=<date>\n";
+  cerr << "   --start-date=<date>\n";
+  cerr << "   --end-date=<date>\n";
   cerr << "   --bucket-id=<bucket-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
@@ -90,6 +89,9 @@ void _usage()
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
+  cerr << "\n";
+  cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cerr << "\n";
   generic_client_usage();
 }
 
@@ -314,6 +316,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->dump_string("display_name", info.display_name);
   formatter->dump_string("email", info.user_email);
   formatter->dump_int("suspended", (int)info.suspended);
+  formatter->dump_int("max_buckets", (int)info.max_buckets);
 
   // subusers
   formatter->open_array_section("subusers");
@@ -513,16 +516,34 @@ enum ObjectKeyType {
   KEY_TYPE_S3,
 };
 
-static void parse_date(string& date, uint64_t *epoch)
+static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL)
 {
   struct tm tm;
 
   memset(&tm, 0, sizeof(tm));
 
   const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
-  if (p && !*p) { // success!
-    time_t t = timegm(&tm);
+  if (p) {
+    if (*p == ' ') {
+      p++;
+      strptime(p, " %I:%M:%S", &tm);
+    }
+  } else {
+    return;
+  }
+  time_t t = timegm(&tm);
+  if (epoch)
     *epoch = (uint64_t)t;
+
+  if (out_date) {
+    char buf[32];
+    strftime(buf, sizeof(buf), "%F", &tm);
+    *out_date = buf;
+  }
+  if (out_time) {
+    char buf[32];
+    strftime(buf, sizeof(buf), "%T", &tm);
+    *out_time = buf;
   }
 }
 
@@ -537,7 +558,7 @@ int main(int argc, char **argv)
 
   std::string user_id, access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
-  std::string date, time, subuser, access, format;
+  std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
   ObjectKeyType key_type = KEY_TYPE_S3;
@@ -565,6 +586,7 @@ int main(int argc, char **argv)
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
   int yes_i_really_mean_it = false;
+  int max_buckets = -1;
 
   std::string val;
   std::ostringstream errs;
@@ -619,16 +641,16 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
       auid = tmp;
-    } else if (ceph_argparse_witharg(args, i, &val, "--date", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
+      max_buckets = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
         end_date = date;
-    } else if (ceph_argparse_witharg(args, i, &val, "--start-date", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--start-date", "--start-time", (char*)NULL)) {
       start_date = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--end-date", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--time", (char*)NULL)) {
-      time = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = str_to_perm(access.c_str());
@@ -876,6 +898,8 @@ int main(int argc, char **argv)
   case OPT_KEY_CREATE:
     if (!user_id.empty())
       info.user_id = user_id;
+    if (max_buckets >= 0)
+      info.max_buckets = max_buckets;
     if (key_type == KEY_TYPE_SWIFT) {
       access_key = info.user_id;
       access_key.append(":");
@@ -1087,7 +1111,9 @@ int main(int argc, char **argv)
       cerr << "date wasn't specified" << std::endl;
       return usage();
     }
-    int r = store->remove_temp_objects(date, time);
+    string parsed_date, parsed_time;
+    parse_date(date, NULL, &parsed_date, &parsed_time);
+    int r = store->remove_temp_objects(parsed_date, parsed_time);
     if (r < 0) {
       cerr << "failure removing temp objects: " << cpp_strerror(r) << std::endl;
       return 1;

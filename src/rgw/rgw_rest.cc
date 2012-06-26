@@ -40,6 +40,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { STATUS_PARTIAL_CONTENT, 206, "" },
     { ERR_NOT_MODIFIED, 304, "NotModified" },
     { EINVAL, 400, "InvalidArgument" },
+    { ERR_INVALID_REQUEST, 400, "InvalidRequest" },
     { ERR_INVALID_DIGEST, 400, "InvalidDigest" },
     { ERR_BAD_DIGEST, 400, "BadDigest" },
     { ERR_INVALID_BUCKET_NAME, 400, "InvalidBucketName" },
@@ -49,6 +50,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
     { ERR_REQUEST_TIMEOUT, 400, "RequestTimeout" },
     { ERR_TOO_LARGE, 400, "EntityTooLarge" },
+    { ERR_TOO_MANY_BUCKETS, 400, "TooManyBuckets" },
     { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
@@ -232,8 +234,8 @@ void end_header(struct req_state *s, const char *content_type)
     dump_content_length(s, s->formatter->get_len());
   }
   CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
-  flush_formatter_to_req_state(s, s->formatter);
   s->header_ended = true;
+  flush_formatter_to_req_state(s, s->formatter);
 }
 
 void abort_early(struct req_state *s, int err_no)

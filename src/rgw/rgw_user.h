@@ -120,6 +120,8 @@ public:
    * Cleanup data structure
    */
   void clear() { buckets.clear(); }
+
+  size_t count() { return buckets.size(); }
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 

@@ -21,10 +21,18 @@ using ::librbd::cls_client::get_features;
 using ::librbd::cls_client::get_size;
 using ::librbd::cls_client::get_object_prefix;
 using ::librbd::cls_client::set_size;
+using ::librbd::cls_client::get_parent;
+using ::librbd::cls_client::set_parent;
+using ::librbd::cls_client::remove_parent;
 using ::librbd::cls_client::snapshot_add;
 using ::librbd::cls_client::snapshot_remove;
 using ::librbd::cls_client::get_snapcontext;
 using ::librbd::cls_client::snapshot_list;
+using ::librbd::cls_client::list_locks;
+using ::librbd::cls_client::lock_image_exclusive;
+using ::librbd::cls_client::lock_image_shared;
+using ::librbd::cls_client::unlock_image;
+using ::librbd::cls_client::break_lock;
 
 TEST(cls_rbd, create)
 {
@@ -83,6 +91,98 @@ TEST(cls_rbd, get_features)
   ASSERT_EQ(0u, features);
 
   ASSERT_EQ(-ENOENT, get_features(&ioctx, "foo", 1, &features));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, image_locking)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  string oid = "test_locking_image";
+  uint64_t size = 20 << 30;
+  uint64_t features = 0;
+  uint8_t order = 22;
+  string object_prefix = "foo";
+  string cookies[4];
+  cookies[0] = "cookie0";
+  cookies[1] = "cookie1";
+  cookies[2] = "cookie2";
+  cookies[3] = "cookie3";
+
+  ASSERT_EQ(0, create_image(&ioctx, oid, size, order,
+                            features, object_prefix));
+
+  // test that we can lock
+  ASSERT_EQ(0, lock_image_exclusive(&ioctx, oid, cookies[0]));
+  // and that we can't lock again
+  ASSERT_EQ(-EBUSY, lock_image_exclusive(&ioctx, oid, cookies[1]));
+  // and that unlock works
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[0]));
+  // and that we can do shared locking
+  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[2]));
+  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[3]));
+  // and that you can't exclusive lock with shared lockers
+  ASSERT_EQ(-EBUSY, lock_image_exclusive(&ioctx, oid, cookies[1]));
+  // but that you can after unlocking the shared lockers
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[2]));
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[3]));
+  ASSERT_EQ(0, lock_image_exclusive(&ioctx, oid, cookies[1]));
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[1]));
+
+  // test that we can list locks
+  std::set<std::pair<std::string, std::string> > lockers;
+  bool exclusive;
+  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
+  // and that no locks makes for an empty set
+  int lockers_size = lockers.size();
+  ASSERT_EQ(0, lockers_size);
+
+  // test that two shared lockers compare properly
+  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[2]));
+  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[3]));
+  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
+  ASSERT_FALSE(exclusive);
+  lockers_size = lockers.size();
+  ASSERT_EQ(2, lockers_size);
+  std::set<std::pair<std::string, std::string> >::iterator first, second;
+  second = lockers.begin();
+  first = second++;
+  ASSERT_EQ(0, first->first.compare(second->first));
+  std::string our_entity = first->first; // saved for later
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[2]));
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[3]));
+
+  // and that a single exclusive looks right
+  ASSERT_EQ(0, lock_image_exclusive(&ioctx, oid, cookies[0]));
+  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
+  lockers_size = lockers.size();
+  ASSERT_EQ(1, lockers_size);
+  ASSERT_TRUE(exclusive);
+
+  // and do our best to test lock breaking
+  ASSERT_EQ(0, break_lock(&ioctx, oid, our_entity, cookies[0]));
+  // and that it actually removes the lock
+  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
+  lockers_size = lockers.size();
+  ASSERT_EQ(0, lockers_size);
+
+  // test that non-existent locks return errors correctly
+  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[1]));
+  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[0]));
+  ASSERT_EQ(-ENOENT, break_lock(&ioctx, oid, our_entity, cookies[0]));
+  // and make sure they still do that when somebody else does hold a lock
+  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[2]));
+  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[1]));
+  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[0]));
+  ASSERT_EQ(-ENOENT, break_lock(&ioctx, oid, our_entity, cookies[0]));
+  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[2]));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
@@ -165,6 +265,158 @@ TEST(cls_rbd, set_size)
   ASSERT_EQ(0, get_size(&ioctx, "foo", CEPH_NOSNAP, &size, &order));
   ASSERT_EQ(3u << 22, size);
   ASSERT_EQ(22, order);
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, parents)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  int64_t pool;
+  string parent;
+  snapid_t snapid;
+  uint64_t size;
+
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "doesnotexist", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  
+  // old image should fail
+  ASSERT_EQ(0, create_image(&ioctx, "old", 33<<20, 22, 0, "old_blk."));
+  ASSERT_EQ(-ENOEXEC, get_parent(&ioctx, "old", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, "old", -1, "parent", 3, 10<<20));
+  ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, "old"));
+
+  // new image will work
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 33<<20, 22, RBD_FEATURE_LAYERING, "foo."));
+
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 123, &pool, &parent, &snapid, &size));
+
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", -1, "parent", 3, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "", 3, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "parent", CEPH_NOSNAP, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "parent", 3, 0));
+
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+  ASSERT_EQ(-EEXIST, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+  ASSERT_EQ(-EEXIST, set_parent(&ioctx, "foo", 2, "parent", 34, 10<<20));
+
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+  ASSERT_EQ(-ENOENT, remove_parent(&ioctx, "foo"));
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+
+  // snapshots
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 10, "snap1"));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 10, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 4, "parent2", 6, 5<<20));
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 11, "snap2"));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 10, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 11, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 4);
+  ASSERT_EQ(parent, "parent2");
+  ASSERT_EQ(snapid, snapid_t(6));
+  ASSERT_EQ(size, 5ull<<20);
+
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 12, "snap3"));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 10, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 11, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 4);
+  ASSERT_EQ(parent, "parent2");
+  ASSERT_EQ(snapid, snapid_t(6));
+  ASSERT_EQ(size, 5ull<<20);
+  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 12, &pool, &parent, &snapid, &size));
+
+  // make sure set_parent takes min of our size and parent's size
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 1<<20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 1ull<<20);
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 100<<20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 33ull<<20);
+  ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
+
+  // make sure resize adjust parent overlap
+  ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 14, "snap4"));
+  ASSERT_EQ(0, set_size(&ioctx, "foo", 3 << 20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 3ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 14, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 15, "snap5"));
+  ASSERT_EQ(0, set_size(&ioctx, "foo", 30 << 20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 3ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 14, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 10ull<<20);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 15, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 3ull<<20);
+
+  ASSERT_EQ(0, set_size(&ioctx, "foo", 2 << 20));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 2ull<<20);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 16, "snap6"));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 16, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(pool, 1);
+  ASSERT_EQ(parent, "parent");
+  ASSERT_EQ(snapid, snapid_t(3));
+  ASSERT_EQ(size, 2ull<<20);
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));

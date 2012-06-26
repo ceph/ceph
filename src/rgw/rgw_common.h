@@ -66,6 +66,8 @@ using ceph::crypto::MD5;
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
+#define RGW_DEFAULT_MAX_BUCKETS 1000
+
 #define CGI_PRINTF(state, format, ...) do { \
    int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
    if (state->header_ended) \
@@ -117,6 +119,8 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_UTF8         2017
 #define ERR_UNPROCESSABLE_ENTITY 2018
 #define ERR_TOO_LARGE            2019
+#define ERR_TOO_MANY_BUCKETS     2020
+#define ERR_INVALID_REQUEST      2021
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -328,11 +332,12 @@ struct RGWUserInfo
   map<string, RGWAccessKey> swift_keys;
   map<string, RGWSubUser> subusers;
   __u8 suspended;
+  uint32_t max_buckets;
 
-  RGWUserInfo() : auid(0), suspended(0) {}
+  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(9, 9, bl);
+     ENCODE_START(10, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -361,10 +366,11 @@ struct RGWUserInfo
      ::encode(subusers, bl);
      ::encode(suspended, bl);
      ::encode(swift_keys, bl);
+     ::encode(max_buckets, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(9, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(10, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -397,6 +403,11 @@ struct RGWUserInfo
     }
     if (struct_v >= 8) {
       ::decode(swift_keys, bl);
+    }
+    if (struct_v >= 10) {
+      ::decode(max_buckets, bl);
+    } else {
+      max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     }
     DECODE_FINISH(bl);
   }

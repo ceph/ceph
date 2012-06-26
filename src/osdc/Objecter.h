@@ -961,8 +961,8 @@ public:
 
 private:
   // low-level
-  tid_t op_submit(Op *op, OSDSession *s = NULL);
-  tid_t _op_submit(Op *op, OSDSession *s);
+  tid_t op_submit(Op *op);
+  tid_t _op_submit(Op *op);
 
   // public interface
  public:

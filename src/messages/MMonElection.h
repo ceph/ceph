@@ -48,6 +48,9 @@ public:
   MMonElection(int o, epoch_t e, MonMap *m) : 
     Message(MSG_MON_ELECTION, HEAD_VERSION), 
     fsid(m->fsid), op(o), epoch(e) {
+
+    // encode using full feature set; we will reencode for dest later,
+    // if necessary
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
@@ -60,6 +63,14 @@ public:
   }
   
   void encode_payload(uint64_t features) {
+    if (monmap_bl.length() && (features & CEPH_FEATURE_MONENC) == 0) {
+      // reencode old-format monmap
+      MonMap t;
+      t.decode(monmap_bl);
+      monmap_bl.clear();
+      t.encode(monmap_bl, features);
+    }
+
     ::encode(fsid, payload);
     ::encode(op, payload);
     ::encode(epoch, payload);

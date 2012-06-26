@@ -67,7 +67,7 @@ The subsystem is the name of a Ceph subsystem: ``mon``, ``mds``, or
 ``osd``.
 
 The capability is a string describing what the given user is allowed
-to do. This takes the form of a comma separated list of allow, deny
+to do. This takes the form of a comma separated list of allow
 clauses with a permission specifier containing one or more of rwx for
 read, write, and execute permission. The ``allow *`` grants full
 superuser permissions for the given subsystem.
@@ -131,7 +131,7 @@ Availability
 ============
 
 **ceph-authtool** is part of the Ceph distributed file system. Please
-refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
+refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 
 

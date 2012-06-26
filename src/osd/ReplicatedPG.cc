@@ -1140,6 +1140,20 @@ void ReplicatedPG::do_scan(OpRequestRef op)
       bufferlist::iterator p = m->get_data().begin();
       ::decode(bi.objects, p);
 
+      // handle hobject_t encoding change
+      if (bi.objects.size() && bi.objects.begin()->first.pool == -1) {
+	map<hobject_t, eversion_t> tmp;
+	tmp.swap(bi.objects);
+	for (map<hobject_t, eversion_t>::iterator i = tmp.begin();
+	     i != tmp.end();
+	     ++i) {
+	  hobject_t first(i->first);
+	  if (first.pool == -1)
+	    first.pool = info.pgid.pool();
+	  bi.objects[first] = i->second;
+	}
+      }
+
       backfill_pos = backfill_info.begin > peer_backfill_info.begin ?
 	peer_backfill_info.begin : backfill_info.begin;
       dout(10) << " backfill_pos now " << backfill_pos << dendl;
@@ -1709,7 +1723,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         ::decode(m, iter);
         map<uint64_t, uint64_t>::iterator miter;
         bufferlist data_bl;
+	uint64_t last = op.extent.offset;
         for (miter = m.begin(); miter != m.end(); ++miter) {
+	  // verify hole?
+	  if (g_conf->osd_verify_sparse_read_holes &&
+	      last < miter->first) {
+	    bufferlist t;
+	    uint64_t len = miter->first - last;
+	    r = osd->store->read(coll, soid, last, len, t);
+	    if (!t.is_zero()) {
+	      osd->clog.error() << coll << " " << soid << " sparse-read found data in hole "
+				<< last << "~" << len << "\n";
+	    }
+	  }
+
           bufferlist tmpbl;
           r = osd->store->read(coll, soid, miter->first, miter->second, tmpbl);
           if (r < 0)
@@ -1720,7 +1747,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           total_read += r;
           dout(10) << "sparse-read " << miter->first << "@" << miter->second << dendl;
 	  data_bl.claim_append(tmpbl);
+	  last = miter->first + r;
         }
+
+	// verify trailing hole?
+	if (g_conf->osd_verify_sparse_read_holes) {
+	  uint64_t end = MIN(op.extent.offset + op.extent.length, oi.size);
+	  if (last < end) {
+	    bufferlist t;
+	    uint64_t len = end - last;
+	    r = osd->store->read(coll, soid, last, len, t);
+	    if (!t.is_zero()) {
+	      osd->clog.error() << coll << " " << soid << " sparse-read found data in hole "
+				<< last << "~" << len << "\n";
+	    }
+	  }
+	}
 
         if (r < 0) {
           result = r;
@@ -4150,9 +4192,19 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
       vector<pg_log_entry_t> log;
       
       bufferlist::iterator p = m->get_data().begin();
+
       ::decode(rm->opt, p);
       p = m->logbl.begin();
       ::decode(log, p);
+      if (m->hobject_incorrect_pool) {
+	for (vector<pg_log_entry_t>::iterator i = log.begin();
+	     i != log.end();
+	     ++i) {
+	  if (i->soid.pool == -1)
+	    i->soid.pool = info.pgid.pool();
+	}
+	rm->opt.set_pool_override(info.pgid.pool());
+      }
       
       info.stats = m->pg_stats;
       update_snap_collections(log, rm->localt);

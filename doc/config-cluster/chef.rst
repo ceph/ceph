@@ -18,7 +18,7 @@ To get the cookbooks for Ceph, clone them from git.::
 
 	cd ~/.chef	
 	git clone https://github.com/ceph/ceph-cookbooks.git
-	knife cookbook upload parted btrfs ceph
+	knife cookbook upload ceph
 
 Install Apache Cookbooks
 ------------------------
@@ -73,7 +73,7 @@ Set an ``EDITOR`` environment variable. ::
 
 	export EDITOR=vi
 
-Then exectute:: 
+Then execute::
 
 	knife create role {rolename}
 

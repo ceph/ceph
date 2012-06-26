@@ -68,6 +68,9 @@ public:
     ::decode(last_complete_ondisk, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
+
+    if (poid.pool == -1)
+      poid.pool = pgid.pool();
   }
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);

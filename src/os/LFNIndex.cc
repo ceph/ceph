@@ -491,6 +491,8 @@ static void append_escaped(string::const_iterator begin,
       out->append("\\s");
     } else if (*i == '_') {
       out->append("\\u");
+    } else if (*i == '\0') {
+      out->append("\\n");
     } else {
       out->append(i, i+1);
     }
@@ -814,6 +816,8 @@ static bool append_unescaped(string::const_iterator begin,
 	out->append("\\");
       else if (*i == 's')
 	out->append("/");
+      else if (*i == 'n')
+	out->append('\0');
       else if (*i == 'u')
 	out->append("_");
       else

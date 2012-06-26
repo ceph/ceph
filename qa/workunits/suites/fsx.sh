@@ -2,7 +2,7 @@
 
 set -e
 
-wget http://ceph.newdream.net/qa/fsx.c
+wget http://ceph.com/qa/fsx.c
 gcc fsx.c -o fsx
 
 ./fsx   1MB -N 50000 -p 10000 -l 1048576

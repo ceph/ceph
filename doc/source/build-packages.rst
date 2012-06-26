@@ -37,7 +37,7 @@ Once you have installed the tools, setup an RPM compilation environment::
 
 Fetch the source tarball for the RPM compilation environment::
 
-	wget -P ~/rpmbuild/SOURCES/ http://ceph.newdream.net/download/ceph-<version>.tar.gz
+	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.gz
 
 Build the RPM packages::
 

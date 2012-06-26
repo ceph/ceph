@@ -177,6 +177,7 @@ private:
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
+  unsigned quorum_features;  ///< intersection of quorum member feature bits
 
   set<string> outside_quorum;
   entity_inst_t slurp_source;
@@ -212,12 +213,16 @@ public:
       q.insert(monmap->get_name(*p));
     return q;
   }
+  unsigned get_quorum_features() const {
+    return quorum_features;
+  }
 
   void bootstrap();
   void reset();
   void start_election();
   void win_standalone_election();
-  void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
+  void win_election(epoch_t epoch, set<int>& q,
+		    unsigned features);         // end election (called by Elector)
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
   void finish_election();
 
