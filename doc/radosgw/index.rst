@@ -19,6 +19,7 @@ cluster used to store data from Ceph FS clients or RADOS block devices.
 Each interface (S3 or Swift) provides its own namespace.
 
 .. toctree::
+	:maxdepth: 1
 
 	Manual Install <manual-install>
 	Configuration <config>
