@@ -77,6 +77,19 @@ namespace librbd {
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
     int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id);
 
+    // operations on rbd_directory objects
+    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
+		   const std::string &name, std::string *id);
+    int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &id, std::string *name);
+    int dir_list(librados::IoCtx *ioctx, const std::string &oid,
+		 const std::string &start, uint64_t max_return,
+		 map<string, string> *images);
+    int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id);
+    int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
+			 const std::string &name, const std::string &id);
+
     // class operations on the old format, kept for
     // backwards compatability
     int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
