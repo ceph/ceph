@@ -129,8 +129,8 @@ Disable the default site. ::
 	sudo a2dissite default
 	
 
-Add a 
--------
+Add a RADOS GW Script
+---------------------
 
 Add a ``s3gw.fcgi`` file (use the same name referenced in the first line 
 of ``rgw.conf``) to ``/var/www``. The contents of the file should include:: 
