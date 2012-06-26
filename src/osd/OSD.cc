@@ -2028,6 +2028,7 @@ void OSD::disconnect_session_watches(Session *session)
 	dout(10) << " disconnected watch " << w << " by " << entity << " session " << session
 		 << ", expires " << expire << dendl;
         obc->watchers.erase(witer++);
+	pg->put_object_context(obc);
 	session->put();
       }
       if (witer == obc->watchers.end())
@@ -2035,8 +2036,6 @@ void OSD::disconnect_session_watches(Session *session)
       ++witer;
     }
     watch_lock.Unlock();
-    pg->put_object_context(obc);
-    /* now drop a reference to that obc */
     pg->unlock();
   }
 }
