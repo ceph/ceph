@@ -16,6 +16,7 @@
 #ifndef CEPH_MMONPROBE_H
 #define CEPH_MMONPROBE_H
 
+#include "include/ceph_features.h"
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
@@ -81,6 +82,14 @@ public:
   }
   
   void encode_payload(uint64_t features) {
+    if (monmap_bl.length() && (features & CEPH_FEATURE_MONENC) == 0) {
+      // reencode old-format monmap
+      MonMap t;
+      t.decode(monmap_bl);
+      monmap_bl.clear();
+      t.encode(monmap_bl, features);
+    }
+
     ::encode(fsid, payload);
     ::encode(op, payload);
     ::encode(name, payload);

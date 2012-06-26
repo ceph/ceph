@@ -173,7 +173,7 @@ permissions for the user that installed the Chef server. Copy them from the
 ``/etc/chef`` directory to the ``~/.chef`` directory. Then, change their 
 ownership to the current user. ::
 	
-	sudo cp /etc/chef/validation.pem /etc/chef/webui.pem ~/.chef && sudo chown ${UID}:${GROUPS[0]} ~/.chef/*.pem
+	sudo cp /etc/chef/validation.pem /etc/chef/webui.pem ~/.chef && sudo chown $(id -u):$(id -g) ~/.chef/*.pem
 
 From the current user's home directory, configure ``knife`` with an initial 
 API client. :: 
@@ -208,6 +208,21 @@ default value so that it points to the ``.chef`` directory.
 
 *Please enter the path to a chef repository (or leave blank):*
 Leave the entry field blank and press **Enter**.
+
+
+Add a Cookbook Path
+-------------------
+Add ``cookbook_path`` to the ``~/.ceph/knife.rb`` configuration file
+on your Chef workstation. For example::
+
+	cookbook_path '/home/{user-name}/chef-cookbooks'
+	
+Then create the path if it doesn't already exist. 
+
+	mkdir /home/{user-name}/chef-cookbooks
+	
+This is where you will store local copies of cookbooks before uploading
+them to the Chef server.
 
 Copy ``validation.pem`` to Nodes
 --------------------------------

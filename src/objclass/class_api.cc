@@ -166,6 +166,13 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   return *outdatalen;
 }
 
+int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
+{
+  ReplicatedPG::OpContext **pctx = static_cast<ReplicatedPG::OpContext **>(hctx);
+  *origin = (*pctx)->op->request->get_orig_source_inst();
+  return 0;
+}
+
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;

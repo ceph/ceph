@@ -19,6 +19,7 @@
 #include <set>
 using namespace std;
 
+#include "include/ceph_features.h"
 #include "include/types.h"
 #include "msg/Messenger.h"
 #include "PaxosService.h"
@@ -47,7 +48,20 @@ public:
 
     Incremental() : inc_type(GLOBAL_ID), max_global_id(0), auth_type(0) {}
 
-    void encode(bufferlist& bl) const {
+    void encode(bufferlist& bl, uint64_t features=-1) const {
+      if ((features & CEPH_FEATURE_MONENC) == 0) {
+	__u8 v = 1;
+	::encode(v, bl);
+	__u32 _type = (__u32)inc_type;
+	::encode(_type, bl);
+	if (_type == GLOBAL_ID) {
+	  ::encode(max_global_id, bl);
+	} else {
+	  ::encode(auth_type, bl);
+	  ::encode(auth_data, bl);
+	}
+	return;
+      } 
       ENCODE_START(2, 2, bl);
       __u32 _type = (__u32)inc_type;
       ::encode(_type, bl);
@@ -138,6 +152,6 @@ private:
 };
 
 
-WRITE_CLASS_ENCODER(AuthMonitor::Incremental);
+WRITE_CLASS_ENCODER_FEATURES(AuthMonitor::Incremental);
 
 #endif

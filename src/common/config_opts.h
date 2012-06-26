@@ -335,6 +335,7 @@ OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in th
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
+OPTION(osd_verify_sparse_read_holes, OPT_BOOL, false)  // read fiemap-reported holes and verify they are zeros
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 // Use omap for xattrs for attrs over
@@ -346,11 +347,10 @@ OPTION(filestore_max_inline_xattrs, OPT_U32, 2)
 
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
-OPTION(filestore_btrfs_trans, OPT_BOOL, false)
 OPTION(filestore_btrfs_snap, OPT_BOOL, true)
 OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
 OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
-OPTION(filestore_fiemap, OPT_BOOL, true)     // (try to) use fiemap
+OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
 OPTION(filestore_flusher, OPT_BOOL, true)
 OPTION(filestore_flusher_max_fds, OPT_INT, 512)
 OPTION(filestore_sync_flush, OPT_BOOL, false)

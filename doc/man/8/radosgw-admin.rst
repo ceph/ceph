@@ -46,6 +46,12 @@ Commands
 :command:`log show`
   Show the log of a bucket (with a specified date)
 
+:command:`usage show`
+  Show the usage information (with optional user and date range)
+
+:command:`usage trim`
+  Trim usage information (with optional user and date range)
+
 
 Options
 =======
@@ -86,7 +92,15 @@ Options
 
 .. option:: --date=yyyy-mm-dd
 
-   The date need for some commands
+   The date needed for some commands
+
+.. option:: --start-date=yyyy-mm-dd
+
+   The start date needed for some commands
+
+.. option:: --end-date=yyyy-mm-dd
+
+   The end date needed for some commands
 
 .. option:: --os-user=group:name
 
@@ -127,15 +141,28 @@ Remove a bucket::
 
         $ radosgw-admin bucket unlink --bucket=foo
 
-Show the logs of a bucket from April 1st 2011::
+Show the logs of a bucket from April 1st, 2012::
 
-        $ radosgw-admin log show --bucket=foo --date=2011=04-01
+        $ radosgw-admin log show --bucket=foo --date=2012=04-01
+
+Show usage information for user from March 1st to (but not including) April 1st, 2012::
+
+        $ radosgw-admin usage show --uid=johnny \
+                        --start-date=2012-03-01 --end-date=2012-04-01
+
+Show only summary of usage information for all users::
+
+        $ radosgw-admin usage show --show-log-entries=false
+
+Trim usage information for user until March 1st, 2012::
+
+        $ radosgw-admin usage trim --uid=johnny --end-date=2012-04-01
 
 Availability
 ============
 
 **radosgw-admin** is part of the Ceph distributed file system.  Please
-refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
+refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 
 See also

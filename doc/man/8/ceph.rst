@@ -81,14 +81,14 @@ Monitor commands
 A more complete summary of commands understood by the monitor cluster can be found in the
 wiki, at
 
-       http://ceph.newdream.net/wiki/Monitor_commands
+       http://ceph.com/docs/control
 
 
 Availability
 ============
 
-**ceph** is part of the Ceph distributed file system. Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+**ceph** is part of the Ceph distributed file system. Please refer to the Ceph documentation at
+http://ceph.com/docs for more information.
 
 
 See also

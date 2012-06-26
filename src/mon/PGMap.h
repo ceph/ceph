@@ -53,7 +53,7 @@ public:
     float full_ratio;
     float nearfull_ratio;
 
-    void encode(bufferlist &bl) const;
+    void encode(bufferlist &bl, uint64_t features=-1) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
@@ -95,7 +95,7 @@ public:
   void stat_osd_add(const osd_stat_t &s);
   void stat_osd_sub(const osd_stat_t &s);
   
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator &bl);
 
   void dump(Formatter *f) const; 
@@ -121,8 +121,8 @@ public:
 
   static void generate_test_instances(list<PGMap*>& o);
 };
-WRITE_CLASS_ENCODER(PGMap::Incremental)
-WRITE_CLASS_ENCODER(PGMap)
+WRITE_CLASS_ENCODER_FEATURES(PGMap::Incremental)
+WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
 inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_summary(out);
