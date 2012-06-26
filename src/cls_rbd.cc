@@ -858,7 +858,7 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "get_snapcontext");
 
   int r;
-  uint64_t max_read = RBD_MAX_KEYS_READ;
+  int max_read = RBD_MAX_KEYS_READ;
   vector<snapid_t> snap_ids;
   string last_read = RBD_SNAP_KEY_PREFIX;
 
