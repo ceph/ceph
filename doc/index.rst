@@ -26,7 +26,6 @@ cluster to ensure that the storage hosts are running smoothly.
    radosgw/index
    ops/index
    rec/index
-   config
    control
    api/index
    source/index
