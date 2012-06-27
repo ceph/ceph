@@ -93,8 +93,10 @@ struct req_context : public RefCountedObject {
 
   OpType op;
 
+  bool used;
+
   req_context() : complete(false), status(S3StatusOK), ctx(NULL), cb(NULL), arg(NULL), in_bl(NULL), off(0), len(0),
-                  lock("req_context"), bucket_ctx(NULL), should_destroy_ctx(false), op(OP_NONE) {}
+                  lock("req_context"), bucket_ctx(NULL), should_destroy_ctx(false), op(OP_NONE), used(false) {}
   ~req_context() {
     if (should_destroy_ctx) {
       S3_destroy_request_context(ctx);
@@ -133,7 +135,6 @@ static void complete_callback(S3Status status, const S3ErrorDetails *details, vo
   struct req_context *ctx = (struct req_context *)cb_data;
 
   ctx->lock.Lock();
-  ctx->complete = true;
   ctx->status = status;
   ctx->lock.Unlock();
 
@@ -285,6 +286,7 @@ void RESTDispatcher::process_context(req_context *ctx)
   }
 
   ctx->lock.Lock();
+  ctx->complete = true;
   ctx->cond.SignalAll();
   ctx->lock.Unlock();
 
@@ -356,8 +358,12 @@ protected:
     handles = NULL;
   }
   int create_completion(int slot, void (*cb)(void *, void*), void *arg) {
+    assert (!completions[slot]);
+
     struct req_context *ctx = new req_context;
     ctx->ctx = handles[slot];
+    assert (!ctx->used);
+    ctx->used = true;
     ctx->cb = cb;
     ctx->arg = arg;
 
@@ -367,6 +373,8 @@ protected:
   }
   void release_completion(int slot) {
     struct req_context *ctx = completions[slot];
+
+    ctx->used = false;
 
     ctx->put();
     completions[slot] = 0;
