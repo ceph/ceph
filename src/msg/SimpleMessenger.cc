@@ -2452,10 +2452,13 @@ void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_a
     if (pipe) {
       pipe->pipe_lock.Lock();
       if (pipe->state == Pipe::STATE_CLOSED) {
-        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
+        ldout(cct,0) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe, dropping message " << m << dendl;
         pipe->unregister_pipe();
         pipe->pipe_lock.Unlock();
         pipe = 0;
+	assert(con);
+	con->put();
+	return;
       } else {
         ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
 
