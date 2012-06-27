@@ -389,6 +389,12 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT)
 	return r;
+    } else {
+      /* Ensure that replay of this op doesn't result in the object_map
+       * going away.
+       */
+      if (!btrfs_stable_commits)
+	object_map->sync(&o, &spos);
     }
   }
   return index->unlink(o);
