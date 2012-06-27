@@ -3413,6 +3413,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
     finalizing_scrub = true;
     scrub_gather_replica_maps();
     ++scrub_waiting_on;
+    scrub_waiting_on_whom.insert(osd->whoami);
     osd->scrub_wq.queue(this);
   }
 
