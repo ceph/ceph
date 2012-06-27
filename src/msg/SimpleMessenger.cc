@@ -662,6 +662,7 @@ int SimpleMessenger::Pipe::accept()
   bufferlist authorizer, authorizer_reply;
   bool authorizer_valid;
   uint64_t feat_missing;
+  bool replaced = false;
 
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
@@ -883,6 +884,7 @@ int SimpleMessenger::Pipe::accept()
   ldout(msgr->cct,10) << "accept replacing " << existing << dendl;
   existing->stop();
   existing->unregister_pipe();
+  replaced = true;
     
   if (!existing->policy.lossy) { /* if we're lossy, we can lose messages and
                                     should let the daemon handle it itself.
@@ -949,7 +951,7 @@ int SimpleMessenger::Pipe::accept()
       ldout(msgr->cct,2) << "accept write error on in_seq" << dendl;
       goto fail_unlocked;
     }
-    if(tcp_read(msgr->cct, sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
+    if (tcp_read(msgr->cct, sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
       ldout(msgr->cct,2) << "accept read error on newly_acked_seq" << dendl;
       goto fail_unlocked;
     }
@@ -967,14 +969,16 @@ int SimpleMessenger::Pipe::accept()
 
  fail_unlocked:
   pipe_lock.Lock();
-  {
+  if (state != STATE_CLOSED) {
     bool queued = is_queued();
-    if (queued && state != STATE_CLOSED)
+    if (queued)
       state = STATE_CONNECTING;
+    else if (replaced)
+      state = STATE_STANDBY;
     else
       state = STATE_CLOSED;
     fault();
-    if (queued)
+    if (queued || replaced)
       start_writer();
   }
   pipe_lock.Unlock();
