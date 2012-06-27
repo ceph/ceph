@@ -526,7 +526,7 @@ static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, s
   if (p) {
     if (*p == ' ') {
       p++;
-      strptime(p, " %I:%M:%S", &tm);
+      strptime(p, " %H:%M:%S", &tm);
     }
   } else {
     return;
