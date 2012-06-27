@@ -310,9 +310,17 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 	ss << "addr " << m->cmd[3] << "does not parse";
 	goto out;
       }
+
+      if (addr.get_port() == 0) {
+	ss << "port defaulted to " << CEPH_MON_PORT;
+	addr.set_port(CEPH_MON_PORT);
+      }
+
       if (pending_map.contains(addr) ||
 	  pending_map.contains(name)) {
 	err = -EEXIST;
+	if (!ss.str().empty())
+	  ss << "; ";
 	ss << "mon " << name << " " << addr << " already exists";
 	goto out;
       }
