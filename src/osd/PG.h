@@ -741,6 +741,7 @@ public:
   bool scrub_active;
   bool scrub_reserved, scrub_reserve_failed;
   int scrub_waiting_on;
+  set<int> scrub_waiting_on_whom;
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
   MOSDRepScrub *active_rep_scrub;
