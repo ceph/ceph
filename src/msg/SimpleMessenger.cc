@@ -824,7 +824,8 @@ int SimpleMessenger::Pipe::accept()
 			     << " == " << connect.connect_seq
 			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
-		 existing->state == STATE_OPEN); // this will win
+		 existing->state == STATE_OPEN ||
+		 existing->state == STATE_STANDBY);
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->pipe_lock.Unlock();
 	  msgr->lock.Unlock();
