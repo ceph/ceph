@@ -2631,6 +2631,7 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   }
 
   --scrub_waiting_on;
+  scrub_waiting_on_whom.erase(from);
   if (scrub_waiting_on == 0) {
     if (finalizing_scrub) { // incremental lists received
       osd->scrub_finalize_wq.queue(this);
@@ -2640,6 +2641,7 @@ void PG::sub_op_scrub_map(OpRequestRef op)
         finalizing_scrub = true;
         scrub_gather_replica_maps();
         ++scrub_waiting_on;
+        scrub_waiting_on_whom.insert(osd->whoami);
         osd->scrub_wq.queue(this);
       }
     }
@@ -3032,6 +3034,7 @@ void PG::scrub()
      * last_update_applied == info.last_update)
      */
     scrub_waiting_on = acting.size();
+    scrub_waiting_on_whom.insert(acting.begin(), acting.end());
 
     // request maps from replicas
     for (unsigned i=1; i<acting.size(); i++) {
@@ -3051,6 +3054,7 @@ void PG::scrub()
     }
 
     --scrub_waiting_on;
+    scrub_waiting_on_whom.erase(osd->whoami);
 
     if (scrub_waiting_on == 0) {
       // the replicas have completed their scrub map, so lock out writes
@@ -3072,6 +3076,7 @@ void PG::scrub()
     // request incrementals from replicas
     scrub_gather_replica_maps();
     ++scrub_waiting_on;
+    scrub_waiting_on_whom.insert(osd->whoami);
   }
     
   dout(10) << "clean up scrub" << dendl;
@@ -3094,6 +3099,7 @@ void PG::scrub()
   }
   
   --scrub_waiting_on;
+  scrub_waiting_on_whom.erase(osd->whoami);
   if (scrub_waiting_on == 0) {
     assert(last_update_applied == info.last_update);
     osd->scrub_finalize_wq.queue(this);
@@ -3117,6 +3123,8 @@ void PG::scrub_clear_state()
   finalizing_scrub = false;
   scrub_block_writes = false;
   scrub_active = false;
+  scrub_waiting_on = 0;
+  scrub_waiting_on_whom.clear();
   if (active_rep_scrub) {
     active_rep_scrub->put();
     active_rep_scrub = NULL;
@@ -3134,6 +3142,7 @@ bool PG::scrub_gather_replica_maps() {
     
     if (scrub_received_maps[p->first].valid_through != log.head) {
       scrub_waiting_on++;
+      scrub_waiting_on_whom.insert(p->first);
       // Need to request another incremental map
       _request_scrub_map(p->first, p->second.valid_through);
     }
