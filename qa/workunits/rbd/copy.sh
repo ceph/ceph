@@ -53,6 +53,24 @@ cmp /tmp/img2 /tmp/img1.snap1
 rbd snap rm --snap=snap1 testimg1
 rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
 
+test_rename() {
+    rbd rm foo || true
+    rbd rm bar || true
+    rbd rm foo2 || true
+    rbd rm bar2 || true
+
+    rbd create -s 1 foo
+    rbd create --new-format -s 1 bar
+    rbd rename foo foo2
+    rbd rename foo2 bar 2>&1 | grep exists
+    rbd rename bar bar2
+    rbd rename bar2 foo2 2>&1 | grep exists
+    rbd rm foo2
+    rbd rm bar2
+}
+
+test_rename
+
 rm -f $TMP_FILES
 
 echo OK
