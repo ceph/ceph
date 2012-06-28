@@ -111,6 +111,12 @@ void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
   cct->start_service_thread();
+
+  if (cct->_conf->lockdep) {
+    g_lockdep = true;
+    ldout(cct,0) << "lockdep is enabled" << dendl;
+    lockdep_register_ceph_context(cct);
+  }
 }
 
 void common_destroy_context(CephContext *cct)
