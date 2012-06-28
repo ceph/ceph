@@ -438,7 +438,6 @@ inline bool operator>(bufferlist& l, bufferlist& r) {
     if (l.length() == p) return false;
     if (l[p] > r[p]) return true;
     if (l[p] < r[p]) return false;
-    p++;
   }
 }
 inline bool operator>=(bufferlist& l, bufferlist& r) {
@@ -447,7 +446,6 @@ inline bool operator>=(bufferlist& l, bufferlist& r) {
     if (r.length() == p && l.length() == p) return true;
     if (l[p] > r[p]) return true;
     if (l[p] < r[p]) return false;
-    p++;
   }
 }
 
