@@ -108,7 +108,7 @@ Then, create a virtual host configuration as follows:
 
     <IfModule mod_rewrite.c>
       RewriteEngine On
-      RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /radosgw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+      RewriteRule  ^/(.*) /radosgw.fcgi?params=$1&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
     </IfModule>
 
     <IfModule mod_fastcgi.c>
