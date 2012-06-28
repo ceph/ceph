@@ -324,7 +324,6 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   OSDOp& op = ops[0];
   int ret;
 
-  string start_after;
   bufferlist inbl;
 
   ::encode(start_obj, op.indata);
