@@ -21,7 +21,7 @@ full ``root`` privileges. For example::
 	sudo useradd -d /home/chef -m chef
 	sudo passwd chef
 	
-To provide full privileges, add the following to ``/etc/sudoers.d/chef``. 
+To provide full privileges, add the following to ``/etc/sudoers.d/chef``. ::
 
 	echo "chef ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/chef
 	sudo chmod 0440 /etc/sudoers.d/chef
@@ -96,7 +96,7 @@ The key is only used by ``apt``, so remove it from the ``root`` keyring by
 typing ``Y`` when prompted to delete it.
 
 Install the Opscode keyring, Chef and Chef server on the host designated
-as your Chef Server.
+as your Chef Server. ::
 
 	sudo apt-get update && sudo apt-get upgrade && sudo apt-get install opscode-keyring chef chef-server
 
@@ -147,7 +147,7 @@ and paste the following line into your command line::
 The key is only used by ``apt``, so remove it from the ``root`` keyring by
 typing ``Y`` when prompted to delete it.
 
-Install the Opscode keyring and Chef on all hosts other than the Chef Server.
+Install the Opscode keyring and Chef on all hosts other than the Chef Server. ::
 
 	sudo apt-get update && sudo apt-get upgrade && sudo apt-get install opscode-keyring chef
 
@@ -212,12 +212,12 @@ Leave the entry field blank and press **Enter**.
 
 Add a Cookbook Path
 -------------------
-Add ``cookbook_path`` to the ``~/.ceph/knife.rb`` configuration file
+Add ``cookbook_path`` to the ``~/.chef/knife.rb`` configuration file
 on your Chef workstation. For example::
 
-	cookbook_path '/home/{user-name}/chef-cookbooks'
+	cookbook_path '/home/{user-name}/chef-cookbooks/'
 	
-Then create the path if it doesn't already exist. 
+Then create the path if it doesn't already exist. ::
 
 	mkdir /home/{user-name}/chef-cookbooks
 	
