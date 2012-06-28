@@ -335,7 +335,7 @@ def cluster(ctx, config):
                 devs = devs[len(roles_to_devs):]
             log.info('dev map: %s' % (str(roles_to_devs),))
             devs_to_clean[remote] = []
-
+            
         if config.get('block_journal'):
             log.info('block journal enabled')
             roles_to_journals = assign_devs(
@@ -598,6 +598,10 @@ def cluster(ctx, config):
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = remote_to_roles_to_devs[remote]
         roles_to_journals = remote_to_roles_to_journals[remote]
+        ctx.disk_config = argparse.Namespace()
+        ctx.disk_config.remote_to_roles_to_dev = remote_to_roles_to_devs
+        ctx.disk_config.remote_to_roles_to_journals = remote_to_roles_to_journals
+
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             log.info(str(roles_to_journals))
             log.info(id_)
