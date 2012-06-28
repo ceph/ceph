@@ -101,9 +101,9 @@ Then, create a virtual host configuration as follows:
 ::
 
   <VirtualHost *:80>
-    ServerName rgw.example1.com
-    ServerAlias rgw
-    ServerAdmin webmaster@example1.com
+    ServerName radosgw.example.com
+    ServerAlias rgw.example.com
+    ServerAdmin webmaster@example.com
     DocumentRoot /var/www
 
     <IfModule mod_rewrite.c>
