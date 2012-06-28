@@ -49,26 +49,6 @@ def execute(ctx, config):
                         ],
                     wait=False,   
                     )
-#    nodes = {}
-#    for client, properties in config.iteritems():
-#        if properties is None:
-#            properties = {}
-#        gen_movies = properties.get('gen_movies', 'false')
-#
-#        cluster = ctx.cluster.only(client)
-#        for remote in cluster.remotes.iterkeys():
-#            proc = remote.run(
-#                args=[
-#                    os.path.join(bin_dir, 'blktrace'),
-#                    '-t',
-#                    log_dir,
-#                    '-o'
-#                    '%s/%s' % (logdir, device),
-#                    '-F10',
-#                    ],
-#                wait=False,        
-#                )
-#            nodes[remote] = proc
     try:
         yield
     finally:
