@@ -113,9 +113,81 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
   return false;
 }
 
+map<string, string> CrushWrapper::get_full_location(int id){
+
+  map<string,string> full_location;
+  pair<string, string> parent_coord;
+  parent_coord = get_immediate_parent(id);
+  int parent_id;
+
+  // read the type map and get the name of the type with the largest ID
+  int high_type = 0;
+  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); it++){
+    if ( (*it).first > high_type )
+      high_type = (*it).first;
+  }
+
+  string high_type_name = type_map[high_type];
+
+  full_location[ parent_coord.first ] = parent_coord.second;
+  parent_id = get_item_id( (parent_coord.second).c_str() );
+
+
+  while (parent_coord.first != high_type_name) {
+    parent_coord = get_immediate_parent(parent_id);
+    full_location[ parent_coord.first ] = parent_coord.second;
+    if ( parent_coord.first != high_type_name ){
+      parent_id = get_item_id( (parent_coord.second).c_str() );
+    }
+  }
+
+  return full_location;
+}
+
+
+map<int, string> CrushWrapper::get_parent_hierarchy(int id)
+{
+  map<int,string> parent_hierarchy;
+  pair<string, string> parent_coord = get_immediate_parent(id);
+  int parent_id;
+
+  // get the integer type for id and create a counter from there
+  int type_counter = get_bucket_type(id);
+
+  // if we get a negative type then we can assume that we have an OSD
+  // change behavior in get_item_type FIXME
+  if (type_counter < 0)
+    type_counter = 0;
+
+  // read the type map and get the name of the type with the largest ID
+  int high_type = 0;
+  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); it++){
+    if ( (*it).first > high_type )
+      high_type = (*it).first;
+  }
+
+  parent_id = get_item_id((parent_coord.second).c_str());
+
+  while (type_counter < high_type) {
+    type_counter++;
+    parent_hierarchy[ type_counter ] = parent_coord.first;
+
+    if (type_counter < high_type){
+      // get the coordinate information for the next parent
+      parent_coord = get_immediate_parent(parent_id);
+      parent_id = get_item_id(parent_coord.second.c_str());
+    }
+  }
+
+  return parent_hierarchy;
+}
+
+
+
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
 			      map<string,string>& loc)  // typename -> bucketname
 {
+
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
 
@@ -152,7 +224,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
     // add to an existing bucket
     int id = get_item_id(loc[p->second].c_str());
     if (!bucket_exists(id)) {
-      ldout(cct, 1) << "insert_item don't have bucket " << id << dendl;
+      ldout(cct, 1) << "insert_item doesn't have bucket " << id << dendl;
       return -EINVAL;
     }
 
