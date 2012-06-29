@@ -253,6 +253,19 @@ public:
   int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
 
   /**
+   * move a bucket in the hierarchy to the given location
+   *
+   * This has the same location and ancestor creation behavior as
+   * insert_item(), but will relocate the specified existing bucket.
+   *
+   * @param cct cct
+   * @param id bucket id
+   * @param loc location (map of type to bucket names)
+   * @return 0 for success, negative on error
+   */
+  int move_bucket(CephContext *cct, int id, map<string,string>& loc);
+
+  /**
    * add or update an item's position in the map
    *
    * This is analogous to insert_item, except we will move an item if
@@ -422,6 +435,51 @@ private:
     if (ret == NULL)
       return (crush_bucket *)(-ENOENT);
     return ret;
+  }
+  /**
+   * detach a bucket from its parent and adjust the parent weight
+   *
+   * returns the weight of the detached bucket
+   **/
+  int detach_bucket(CephContext *cct, int item){
+    if (!crush)
+      return (-EINVAL);
+
+    if (item > 0)
+      return (-EINVAL);
+
+    // check that the bucket that we want to detach exists
+    assert( get_bucket(item) );
+
+    // get the bucket's weight
+    crush_bucket *b = get_bucket(item);
+    unsigned bucket_weight = b->weight;
+
+    // zero out the bucket weight
+    adjust_item_weight(cct, item, 0);
+
+    // get where the bucket is located
+    pair<string, string> bucket_location = get_immediate_parent(item);
+
+    // get the id of the parent bucket
+    int parent_id = get_item_id( (bucket_location.second).c_str() );
+
+    // get the parent bucket
+    crush_bucket *parent_bucket = get_bucket(parent_id);
+
+    // remove the bucket from the parent
+    crush_bucket_remove_item(parent_bucket, item);
+
+    // check that we're happy
+    int test_weight = 0;
+    map<string,string> test_location;
+    test_location[ bucket_location.first ] = (bucket_location.second);
+
+    bool successful_detach = !(check_item_loc(cct, item, test_location, &test_weight));
+    assert(successful_detach);
+    assert(test_weight == 0);
+
+    return bucket_weight;
   }
 
 public:

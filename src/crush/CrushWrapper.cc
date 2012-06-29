@@ -186,6 +186,31 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   return -EINVAL;
 }
 
+int CrushWrapper::move_bucket(CephContext *cct, int id, map<string,string>& loc)
+{
+  // sorry this only works for buckets
+  if (id >= 0)
+    return -EINVAL;
+
+  if (!item_exists(id))
+    return -ENOENT;
+
+  // get the name of the bucket we are trying to move for later
+  string id_name = get_item_name(id);
+
+  // detach the bucket
+  int bucket_weight = detach_bucket(cct, id);
+
+  // un-set the device name so we can use add_item later
+  build_rmap(name_map, name_rmap);
+  name_map.erase(id);
+  name_rmap.erase(id_name);
+
+  // insert the bucket back into the hierarchy
+  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+}
+
+
 int CrushWrapper::update_item(CephContext *cct, int item, float weight, string name,
 			      map<string,string>& loc)  // typename -> bucketname
 {
