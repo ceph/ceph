@@ -280,6 +280,15 @@ bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
   return true;
 }
 
+bool coll_t::is_removal(uint64_t *seq) const
+{
+  if (str.substr(0, 12) != string("FORREMOVAL_"))
+    return false;
+
+  stringstream ss(str.substr(12));
+  ss >> *seq;
+  return true;
+}
 
 void coll_t::encode(bufferlist& bl) const
 {

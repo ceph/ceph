@@ -49,6 +49,7 @@ using namespace __gnu_cxx;
 #include "OpRequest.h"
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
+#include "common/sharedptr_registry.hpp"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -128,10 +129,13 @@ class OpsFlightSocketHook;
 
 extern const coll_t meta_coll;
 
+typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
+
 class OSD;
 class OSDService {
 public:
   OSD *osd;
+  SharedPtrRegistry<pg_t, ObjectStore::Sequencer> osr_registry;
   const int whoami;
   ObjectStore *&store;
   LogClient &clog;
@@ -146,7 +150,6 @@ public:
   ThreadPool::WorkQueue<PG> &snap_trim_wq;
   ThreadPool::WorkQueue<PG> &scrub_wq;
   ThreadPool::WorkQueue<PG> &scrub_finalize_wq;
-  ThreadPool::WorkQueue<PG> &remove_wq;
   ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
   ClassHandler  *&class_handler;
 
@@ -499,7 +502,7 @@ private:
   OpsFlightSocketHook *admin_ops_hook;
 
   // -- op queue --
-  deque<PG*> op_queue;
+  list<PG*> op_queue;
   int op_queue_len;
 
   struct OpWQ : public ThreadPool::WorkQueue<PG> {
@@ -509,7 +512,14 @@ private:
 
     bool _enqueue(PG *pg);
     void _dequeue(PG *pg) {
-      assert(0);
+      for (list<PG*>::iterator i = osd->op_queue.begin();
+	   i != osd->op_queue.end();
+	   ) {
+	if (*i == pg)
+	  osd->op_queue.erase(i++);
+	else
+	  ++i;
+      }
     }
     bool _empty() {
       return osd->op_queue.empty();
@@ -531,14 +541,21 @@ private:
 
   // -- peering queue --
   struct PeeringWQ : public ThreadPool::WorkQueue<PG> {
-    deque<PG*> peering_queue;
+    list<PG*> peering_queue;
     OSD *osd;
     PeeringWQ(OSD *o, time_t ti, ThreadPool *tp)
       : ThreadPool::WorkQueue<PG>(
 	"OSD::PeeringWQ", ti, ti*10, tp), osd(o) {}
 
     void _dequeue(PG *pg) {
-      assert(0);
+      for (list<PG*>::iterator i = peering_queue.begin();
+	   i != peering_queue.end();
+	   ) {
+	if (*i == pg)
+	  peering_queue.erase(i++);
+	else
+	  ++i;
+      }
     }
     bool _enqueue(PG *pg) {
       pg->get();
@@ -809,7 +826,6 @@ protected:
   void handle_pg_backfill(OpRequestRef op);
 
   void handle_pg_remove(OpRequestRef op);
-  void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
 
   // -- commands --
@@ -1121,45 +1137,42 @@ protected:
   } rep_scrub_wq;
 
   // -- removing --
-  xlist<PG*> remove_queue;
-
-  struct RemoveWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    RemoveWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::RemoveWQ", ti, 0, tp), osd(o) {}
+  struct RemoveWQ : public ThreadPool::WorkQueue<pair<coll_t, SequencerRef> > {
+    ObjectStore *&store;
+    list<pair<coll_t, SequencerRef> *> remove_queue;
+    RemoveWQ(ObjectStore *&o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<pair<coll_t, SequencerRef> >("OSD::RemoveWQ", ti, 0, tp),
+	store(o) {}
 
     bool _empty() {
-      return osd->remove_queue.empty();
+      return remove_queue.empty();
     }
-    bool _enqueue(PG *pg) {
-      if (pg->remove_item.is_on_list())
-	return false;
-      pg->get();
-      osd->remove_queue.push_back(&pg->remove_item);
+    bool _enqueue(pair<coll_t, SequencerRef> *item) {
+      remove_queue.push_back(item);
       return true;
     }
-    void _dequeue(PG *pg) {
-      if (pg->remove_item.remove_myself())
-	pg->put();
+    void _dequeue(pair<coll_t, SequencerRef> *item) {
+      assert(0);
     }
-    PG *_dequeue() {
-      if (osd->remove_queue.empty())
+    pair<coll_t, SequencerRef> *_dequeue() {
+      if (remove_queue.empty())
 	return NULL;
-      PG *pg = osd->remove_queue.front();
-      osd->remove_queue.pop_front();
-      return pg;
+      pair<coll_t, SequencerRef> *item = remove_queue.front();
+      remove_queue.pop_front();
+      return item;
     }
-    void _process(PG *pg) {
-      osd->_remove_pg(pg);
-    }
+    void _process(pair<coll_t, SequencerRef> *item);
     void _clear() {
-      while (!osd->remove_queue.empty()) {
-	PG *pg = osd->remove_queue.front();
-	osd->remove_queue.pop_front();
-	pg->put();
+      while (!remove_queue.empty()) {
+	delete remove_queue.front();
+	remove_queue.pop_front();
       }
     }
   } remove_wq;
+  uint64_t next_removal_seq;
+  coll_t get_next_removal_coll() {
+    return coll_t::make_removal_coll(next_removal_seq++);
+  }
 
  private:
   bool ms_dispatch(Message *m);

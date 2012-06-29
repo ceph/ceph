@@ -40,6 +40,37 @@ static ostream& _prefix(std::ostream *_dout, const PG *pg) {
   return *_dout << pg->gen_prefix();
 }
 
+PG::PG(OSDService *o, OSDMapRef curmap,
+       PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) :
+  osd(o), osdmap_ref(curmap), pool(_pool),
+  _lock("PG::_lock"),
+  ref(0), deleting(false), dirty_info(false), dirty_log(false),
+  info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
+  recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
+  recovery_ops_active(0),
+  waiting_on_backfill(0),
+  role(0),
+  state(0),
+  need_up_thru(false),
+  need_flush(false),
+  last_peering_reset(0),
+  heartbeat_peer_lock("PG::heartbeat_peer_lock"),
+  backfill_target(-1),
+  pg_stats_lock("PG::pg_stats_lock"),
+  pg_stats_valid(false),
+  osr(osd->osr_registry.lookup(p, (stringify(p)))),
+  finish_sync_event(NULL),
+  finalizing_scrub(false),
+  scrub_block_writes(false),
+  scrub_active(false),
+  scrub_reserved(false), scrub_reserve_failed(false),
+  scrub_waiting_on(0),
+  active_rep_scrub(0),
+  recovery_state(this)
+{
+  pool->get();
+}
+
 void PG::lock(bool no_lockdep)
 {
   _lock.Lock(no_lockdep);
@@ -1436,7 +1467,7 @@ void PG::do_pending_flush()
   assert(is_locked());
   if (need_flush) {
     dout(10) << "do_pending_flush doing pending flush" << dendl;
-    osr.flush();
+    osr->flush();
     need_flush = false;
     dout(10) << "do_pending_flush done" << dendl;
   }
@@ -1546,7 +1577,7 @@ void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     write_info(*t);
-    int tr = osd->store->queue_transaction(&osr, t);
+    int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -1566,7 +1597,6 @@ void PG::all_activated_and_committed()
   assert(peer_activated.size() == acting.size());
 
   info.history.last_epoch_started = get_osdmap()->get_epoch();
-  dirty_info = true;
 
   // make sure CLEAN is marked if we've been clean in this interval
   if (info.last_complete == info.last_update &&
@@ -2860,7 +2890,7 @@ void PG::build_scrub_map(ScrubMap &map)
 
   // wait for any writes on our pg to flush to disk first.  this avoids races
   // with scrub starting immediately after trim or recovery completion.
-  osr.flush();
+  osr->flush();
 
   // objects
   vector<hobject_t> ls;
@@ -3039,6 +3069,11 @@ void PG::scrub()
 {
 
   lock();
+  if (deleting) {
+    unlock();
+    put();
+    return;
+  }
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
@@ -3292,6 +3327,11 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 
 void PG::scrub_finalize() {
   lock();
+  if (deleting) {
+    unlock();
+    return;
+  }
+
   assert(last_update_applied == info.last_update);
 
   if (scrub_epoch_start != info.history.same_interval_since) {
@@ -3406,7 +3446,7 @@ void PG::scrub_finalize() {
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     write_info(*t);
-    int tr = osd->store->queue_transaction(&osr, t);
+    int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -3633,7 +3673,6 @@ void PG::on_removal()
   osd->scrub_wq.dequeue(this);
   osd->scrub_finalize_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
-  osd->remove_wq.dequeue(this);
   osd->pg_stat_queue_dequeue(this);
 
   remove_watchers_and_notifies();
@@ -3758,13 +3797,8 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   // pg->on_*
   on_change();
 
-  if (deleting) {
-    dout(10) << *this << " canceling deletion!" << dendl;
-    deleting = false;
-    osd->remove_wq.dequeue(this);
-    osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-  }
-    
+  assert(!deleting);
+
   if (role != oldrole) {
     // old primary?
     if (oldrole == 0) {
@@ -3923,8 +3957,6 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.snap_trimq.size())
     out << " snaptrimq=" << pg.snap_trimq;
 
-  if (pg.deleting)
-    out << " DELETING";
   out << "]";
 
 
@@ -4077,7 +4109,6 @@ void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
   }
   if (old_peering_evt(evt))
     return;
-  assert(!deleting);
   recovery_state.handle_event(evt, rctx);
 }
 
