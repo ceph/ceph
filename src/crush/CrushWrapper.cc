@@ -256,28 +256,23 @@ bool CrushWrapper::check_item_present(int id)
 }
 
 
-map<string,string> CrushWrapper::get_loc(int id)
+pair<string,string> CrushWrapper::get_immediate_parent(int id)
 {
-  map <string, string> loc;
+  pair <string, string> loc;
 
-  if (id < 0){
-    loc["device"] = "0"; // add an actual error condition FIXME
-    return loc;
+
+  for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
+    crush_bucket *b = crush->buckets[bidx];
+    if (b == 0)
+      continue;
+    for (unsigned i = 0; i < b->size; i++)
+      if (b->items[i] == id){
+        string parent_id = name_map[b->id];
+        string parent_bucket_type = type_map[b->type];
+        loc = make_pair(parent_bucket_type, parent_id);
+      }
   }
 
-  else if (id >= 0){
-    for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
-      crush_bucket *b = crush->buckets[bidx];
-      if (b == 0)
-        continue;
-      for (unsigned i = 0; i < b->size; i++)
-        if (b->items[i] == id){
-          string parent_id = name_map[b->id];
-          string parent_bucket_type = type_map[b->type];
-          loc[parent_bucket_type] = parent_id;
-        }
-    }
-  }
 
   return loc;
 }
