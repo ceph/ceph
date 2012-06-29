@@ -201,7 +201,7 @@ test -d out || mkdir out
 $SUDO rm -rf out/*
 test -d gmon && $SUDO rm -rf gmon/*
 
-[ "$cephx" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
+[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
 
 
 # figure machine's ip
