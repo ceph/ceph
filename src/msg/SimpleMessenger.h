@@ -64,6 +64,7 @@ public:
 		  string mname, uint64_t _nonce) :
     Messenger(cct, name),
     accepter(this),
+    dispatch_queue(cct, this),
     reaper_thread(this),
     dispatch_thread(this),
     my_type(name.type()),
@@ -716,6 +717,8 @@ private:
    * See SimpleMessenger::dispatch_entry for details.
    */
   struct DispatchQueue {
+    CephContext *cct;
+    SimpleMessenger *msgr;
     Mutex lock;
     Cond cond;
     bool stop;
@@ -761,11 +764,14 @@ private:
       local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
     }
 
-    DispatchQueue() :
-      lock("SimpleMessenger::DispatchQeueu::lock"), 
-      stop(false),
-      qlen(0),
-      local_pipe(NULL)
+    void entry();
+
+    DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
+      : cct(cct), msgr(msgr),
+	lock("SimpleMessenger::DispatchQeueu::lock"), 
+	stop(false),
+	qlen(0),
+	local_pipe(NULL)
     {}
     ~DispatchQueue() {
       for (map< int, xlist<IncomingQueue *>* >::iterator i = queued_pipes.begin();
