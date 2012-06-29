@@ -1,0 +1,6 @@
+tasks:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down or wrong addr
+    - objects unfound and apparently lost
+- thrashosds:
