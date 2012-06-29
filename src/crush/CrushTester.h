@@ -4,8 +4,6 @@
 #ifndef CEPH_CRUSH_TESTER_H
 #define CEPH_CRUSH_TESTER_H
 
-// remove me
-#include "global/global_context.h"
 #include "crush/CrushWrapper.h"
 
 class CrushTester {
