@@ -2282,6 +2282,20 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, ret, rs, paxos->get_version()));
 	  return true;
 	}
+      } else if (m->cmd[2] == "rename" && m->cmd.size() == 5) {
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	if (pool < 0) {
+	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  err = -ENOENT;
+	} else {
+	  int ret = _prepare_rename_pool(pool, m->cmd[4]);
+	  if (ret == 0) {
+	    ss << "pool '" << m->cmd[3] << "' renamed to '" << m->cmd[4] << "'";
+	    getline(ss, rs);
+	    paxos->wait_for_commit(new Monitor::C_Command(mon, m, ret, rs, paxos->get_version()));
+	    return true;
+	  }
+	}
       } else if (m->cmd[2] == "set") {
 	if (m->cmd.size() != 6) {
 	  err = -EINVAL;
@@ -2626,6 +2640,18 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
     }
+  return 0;
+}
+
+int OSDMonitor::_prepare_rename_pool(uint64_t pool, string newname)
+{
+  dout(10) << "_prepare_rename_pool " << pool << dendl;
+  if (pending_inc.old_pools.count(pool)) {
+    dout(10) << "_prepare_rename_pool " << pool << " pending removal" << dendl;    
+    return -ENOENT;
+  }
+
+  pending_inc.new_pool_names[pool] = newname;
   return 0;
 }
 

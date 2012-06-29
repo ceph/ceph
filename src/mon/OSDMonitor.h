@@ -105,6 +105,7 @@ private:
   bool prepare_pgtemp(class MOSDPGTemp *m);
 
   int _prepare_remove_pool(uint64_t pool);
+  int _prepare_rename_pool(uint64_t pool, string newname);
 
   bool preprocess_pool_op ( class MPoolOp *m);
   bool preprocess_pool_op_create ( class MPoolOp *m);
