@@ -853,11 +853,19 @@ int SimpleMessenger::Pipe::accept()
     // do not clear existing->connection_state, since read_message and write_message both
     // dereference it without pipe_lock.
 
-    // steal queue and out_seq
-    existing->requeue_sent();
-    out_seq = existing->out_seq;
+    // steal incoming queue
     in_seq = existing->in_seq;
     in_seq_acked = in_seq;
+    delete in_q;
+    in_q = existing->in_q;
+    in_q->lock.Lock();
+    in_q->pipe = this;
+    in_q->lock.Unlock();
+    existing->in_q = new IncomingQueue(msgr->cct, existing);
+
+    // steal outgoing queue and out_seq
+    existing->requeue_sent();
+    out_seq = existing->out_seq;
     ldout(msgr->cct,10) << "accept re-queuing on out_seq " << out_seq << " in_seq " << in_seq << dendl;
     for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
          p != existing->out_q.end();
