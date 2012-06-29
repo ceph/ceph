@@ -110,8 +110,47 @@ test_ls() {
     remove_images
 }
 
+test_remove() {
+    echo "testing remove..."
+    remove_images
+
+    rbd create -s 1 test1
+    rbd rm test1
+    rbd ls | wc -l | grep "^0$"
+
+    rbd create --new-format -s 1 test2
+    rbd rm test2
+    rbd ls | wc -l | grep "^0$"
+
+    # check that remove succeeds even if it's
+    # interrupted partway through. simulate this
+    # by removing some objects manually.
+
+    # remove with header missing (old format)
+    rbd create -s 1 test1
+    rados rm -p rbd test1.rbd
+    rbd rm test1
+    rbd ls | wc -l | grep "^0$"
+
+    # remove with header missing
+    rbd create --new-format -s 1 test2
+    HEADER=$(rados -p rbd ls | grep '^rbd_header')
+    rados -p rbd rm $HEADER
+    rbd rm test2
+    rbd ls | wc -l | grep "^0$"
+
+    # remove with header and id missing
+    rbd create --new-format -s 1 test2
+    HEADER=$(rados -p rbd ls | grep '^rbd_header')
+    rados -p rbd rm $HEADER
+    rados -p rbd rm rbd_id.test2
+    rbd rm test2
+    rbd ls | wc -l | grep "^0$"
+}
+
 test_rename
 test_ls
+test_remove
 RBD_CREATE_ARGS=""
 test_others
 # wait for watch to timeout so we can remove old images
