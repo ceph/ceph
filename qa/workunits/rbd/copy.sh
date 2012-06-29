@@ -112,6 +112,12 @@ test_ls() {
 
 test_rename
 test_ls
+RBD_CREATE_ARGS=""
+test_others
+# wait for watch to timeout so we can remove old images
+# TODO: remove this once #2476 is fixed
+sleep 30
+RBD_CREATE_ARGS="--new-format"
 test_others
 
 echo OK
