@@ -1844,7 +1844,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "move") {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "move") {
       do {
 	// osd crush move <name> [<loc1> [<loc2> ...]]
 	string name = m->cmd[3];
@@ -1880,15 +1880,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
 	int id = newcrush.get_item_id(name.c_str());
 
-	err = newcrush.move_bucket(g_ceph_context, id, loc);
-	if (err >= 0)
-	  ss << "moved item id " << id << " name '" << name << "' to location " << loc << " in crush map";
-	if (err > 0) {
-	  pending_inc.crush.clear();
-	  newcrush.encode(pending_inc.crush);
-	  getline(ss, rs);
-	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-	  return true;
+	if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
+	  err = newcrush.move_bucket(g_ceph_context, id, loc);
+	  if (err >= 0) {
+	    ss << "moved item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	    pending_inc.crush.clear();
+	    newcrush.encode(pending_inc.crush);
+	    getline(ss, rs);
+	    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	    return true;
+	  }
+	} else {
+	    ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
 	}
       } while (false);
     }
