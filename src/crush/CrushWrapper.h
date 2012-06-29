@@ -217,7 +217,7 @@ public:
   }
 
 
-  map<string,string> get_loc(int id);
+  pair<string,string> get_immediate_parent(int id);
 
 
   /**
