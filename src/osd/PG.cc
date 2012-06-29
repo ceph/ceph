@@ -1299,6 +1299,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
 	     << " -> " << info.last_update << dendl;
     info.last_complete = info.last_update;
+    log.reset_recovery_pointers();
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
     log.complete_to = log.log.begin();
