@@ -24,7 +24,9 @@ namespace librbd {
       op.exec("rbd", "get_object_prefix", empty);
 
       bufferlist outbl;
-      ioctx->operate(oid, &op, &outbl);
+      int r = ioctx->operate(oid, &op, &outbl);
+      if (r < 0)
+	return r;
 
       try {
 	bufferlist::iterator iter = outbl.begin();
@@ -62,7 +64,9 @@ namespace librbd {
       op.exec("rbd", "list_locks", empty);
 
       bufferlist outbl;
-      ioctx->operate(oid, &op, &outbl);
+      int r = ioctx->operate(oid, &op, &outbl);
+      if (r < 0)
+	return r;
 
       try {
 	bufferlist::iterator iter = outbl.begin();
