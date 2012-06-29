@@ -2537,10 +2537,8 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   coll_t c(info.pgid, s);
   if (!snap_collections.contains(s)) {
     snap_collections.insert(s);
+    write_info(t);
     dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
-    bufferlist bl;
-    ::encode(snap_collections, bl);
-    t.collection_setattr(coll, "snap_collections", bl);
     t.create_collection(c);
   }
   return c;
