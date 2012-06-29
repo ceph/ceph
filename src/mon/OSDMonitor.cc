@@ -1844,6 +1844,54 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
+    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "move") {
+      do {
+	// osd crush move <name> [<loc1> [<loc2> ...]]
+	string name = m->cmd[3];
+	map<string,string> loc;
+	for (unsigned i = 4; i < m->cmd.size(); ++i) {
+	  const char *s = m->cmd[i].c_str();
+	  const char *pos = strchr(s, '=');
+	  if (!pos)
+	    break;
+	  string key(s, 0, pos-s);
+	  string value(pos+1);
+	  if (value.length())
+	    loc[key] = value;
+	  else
+	    loc.erase(key);
+	}
+
+	dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
+	bufferlist bl;
+	if (pending_inc.crush.length())
+	  bl = pending_inc.crush;
+	else
+	  osdmap.crush->encode(bl);
+
+	CrushWrapper newcrush;
+	bufferlist::iterator p = bl.begin();
+	newcrush.decode(p);
+
+	if (!newcrush.name_exists(name.c_str())) {
+	  err = -ENOENT;
+	  ss << "item " << name << " dne";
+	  break;
+	}
+	int id = newcrush.get_item_id(name.c_str());
+
+	err = newcrush.move_bucket(g_ceph_context, id, loc);
+	if (err >= 0)
+	  ss << "moved item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	if (err > 0) {
+	  pending_inc.crush.clear();
+	  newcrush.encode(pending_inc.crush);
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+      } while (false);
+    }
     else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
       do {
 	// osd crush rm <id>

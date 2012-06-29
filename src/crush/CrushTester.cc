@@ -143,7 +143,7 @@ int CrushTester::test()
   // test ability to retrieve item parent information
   if (output_utilization_all)
     for (unsigned j = 0; j < weight.size(); j++)
-      err << "device " << j << " is located at " << crush.get_loc(j) << endl;
+      err << "device " << j << " is located at " << crush.get_immediate_parent(j) << endl;
 
   // make adjustments
   adjust_weights(weight);
