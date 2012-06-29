@@ -424,7 +424,7 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, stat_queue_item;
   int recovery_ops_active;
   bool waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
@@ -628,7 +628,7 @@ protected:
   pg_stat_t pg_stats_stable;
 
   // for ordering writes
-  ObjectStore::Sequencer osr;
+  std::tr1::shared_ptr<ObjectStore::Sequencer> osr;
 
   void update_stats();
   void clear_stats();
@@ -775,6 +775,8 @@ public:
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
   virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  virtual coll_t get_temp_coll() = 0;
+  virtual bool have_temp_coll() = 0;
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
@@ -1363,36 +1365,7 @@ public:
 
  public:
   PG(OSDService *o, OSDMapRef curmap,
-     PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) :
-    osd(o), osdmap_ref(curmap), pool(_pool),
-    _lock("PG::_lock"),
-    ref(0), deleting(false), dirty_info(false), dirty_log(false),
-    info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
-    recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
-    recovery_ops_active(0),
-    waiting_on_backfill(0),
-    role(0),
-    state(0),
-    need_up_thru(false),
-    need_flush(false),
-    last_peering_reset(0),
-    heartbeat_peer_lock("PG::heartbeat_peer_lock"),
-    backfill_target(-1),
-    flushed(true),
-    pg_stats_lock("PG::pg_stats_lock"),
-    pg_stats_valid(false),
-    osr(stringify(p)),
-    finish_sync_event(NULL),
-    finalizing_scrub(false),
-    scrub_block_writes(false),
-    scrub_active(false),
-    scrub_reserved(false), scrub_reserve_failed(false),
-    scrub_waiting_on(0),
-    active_rep_scrub(0),
-    recovery_state(this)
-  {
-    pool->get();
-  }
+     PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid);
   virtual ~PG() {
     pool->put();
   }
@@ -1540,7 +1513,7 @@ public:
   virtual void do_sub_op_reply(OpRequestRef op) = 0;
   virtual void do_scan(OpRequestRef op) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
-  virtual bool snap_trimmer() = 0;
+  virtual void snap_trimmer() = 0;
 
   virtual int do_command(vector<string>& cmd, ostream& ss,
 			 bufferlist& idata, bufferlist& odata) = 0;

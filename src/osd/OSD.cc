@@ -152,7 +152,6 @@ OSDService::OSDService(OSD *osd) :
   snap_trim_wq(osd->snap_trim_wq),
   scrub_wq(osd->scrub_wq),
   scrub_finalize_wq(osd->scrub_finalize_wq),
-  remove_wq(osd->remove_wq),
   rep_scrub_wq(osd->rep_scrub_wq),
   class_handler(osd->class_handler),
   publish_lock("OSDService::publish_lock"),
@@ -710,7 +709,8 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   scrub_wq(this, g_conf->osd_scrub_thread_timeout, &disk_tp),
   scrub_finalize_wq(this, g_conf->osd_scrub_finalize_thread_timeout, &op_tp),
   rep_scrub_wq(this, g_conf->osd_scrub_thread_timeout, &disk_tp),
-  remove_wq(this, g_conf->osd_remove_thread_timeout, &disk_tp),
+  remove_wq(store, g_conf->osd_remove_thread_timeout, &disk_tp),
+  next_removal_seq(0),
   watch_lock("OSD::watch_lock"),
   watch_timer(external_messenger->cct, watch_lock),
   service(this)
@@ -1149,9 +1149,6 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
   vector<hobject_t> objects;
   store->collection_list(tmp, objects);
 
-  if (objects.empty())
-    return;
-
   // delete them.
   ObjectStore::Transaction t;
   unsigned removed = 0;
@@ -1332,6 +1329,19 @@ void OSD::load_pgs()
       if (it->is_temp(pgid))
 	clear_temp(store, *it);
       dout(10) << "load_pgs skipping non-pg " << *it << dendl;
+      if (it->is_temp(pgid)) {
+	clear_temp(store, *it);
+	continue;
+      }
+      uint64_t seq;
+      if (it->is_removal(&seq)) {
+	if (seq >= next_removal_seq)
+	  next_removal_seq = seq + 1;
+	pair<coll_t, SequencerRef> *to_queue = new pair<coll_t, SequencerRef>;
+	to_queue->first = *it;
+	remove_wq.queue(to_queue);
+	continue;
+      }
       continue;
     }
     if (snap != CEPH_NOSNAP) {
@@ -1941,6 +1951,34 @@ void OSD::dump_ops_in_flight(ostream& ss)
   op_tracker.dump_ops_in_flight(ss);
 }
 
+// =========================================
+void OSD::RemoveWQ::_process(pair<coll_t, SequencerRef> *item)
+{
+  coll_t &coll = item->first;
+  ObjectStore::Sequencer *osr = item->second.get();
+  store->flush();
+  vector<hobject_t> olist;
+  store->collection_list(coll, olist);
+  //*_dout << "OSD::RemoveWQ::_process removing coll " << coll << std::endl;
+  uint64_t num = 1;
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  for (vector<hobject_t>::iterator i = olist.begin();
+       i != olist.end();
+       ++i, ++num) {
+    if (num % 20 == 0) {
+      store->queue_transaction(
+	osr, t,
+	new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->second));
+      t = new ObjectStore::Transaction;
+    }
+    t->remove(coll, *i);
+  }
+  t->remove_collection(coll);
+  store->queue_transaction(
+    osr, t,
+    new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->second));
+  delete item;
+}
 // =========================================
 
 void OSD::do_mon_report()
@@ -3623,8 +3661,10 @@ void OSD::activate_map()
 
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
-      queue_pg_for_deletion(pg);
-      //pg->unlock();
+      pg->get();
+      _remove_pg(pg);
+      pg->unlock();
+      pg->put();
       continue;
     } else {
       pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
@@ -4204,7 +4244,7 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
   if (!ctx.transaction->empty()) {
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
-      &pg->osr,
+      pg->osr.get(),
       ctx.transaction, ctx.on_applied, ctx.on_safe);
     assert(tr == 0);
     ctx.transaction = new ObjectStore::Transaction;
@@ -4228,7 +4268,7 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg)
   } else {
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
-      &pg->osr,
+      pg->osr.get(),
       ctx.transaction, ctx.on_applied, ctx.on_safe);
     assert(tr == 0);
   }
@@ -4440,7 +4480,8 @@ void OSD::handle_pg_trim(OpRequestRef op)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       pg->trim(*t, m->trim_to);
       pg->write_info(*t);
-      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t));
+      int tr = store->queue_transaction(pg->osr.get(), t,
+					new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
     }
     pg->unlock();
@@ -4543,14 +4584,10 @@ void OSD::handle_pg_query(OpRequestRef op)
 
     if (pg_map.count(pgid)) {
       pg = _lookup_lock_pg(pgid);
-      if (!pg->deleting) {
-	pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
-			from, it->second);
-	pg->unlock();
-	continue;
-      } else {
-	pg->unlock();
-      }
+      pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
+		      from, it->second);
+      pg->unlock();
+      continue;
     }
 
     // get active crush mapping
@@ -4622,151 +4659,50 @@ void OSD::handle_pg_remove(OpRequestRef op)
     dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     if (pg->info.history.same_interval_since <= m->get_epoch()) {
-      if (pg->deleting) {
-	dout(10) << *pg << " already removing." << dendl;
-      } else {
-	assert(pg->get_primary() == m->get_source().num());
-	queue_pg_for_deletion(pg);
-      }
+      assert(pg->get_primary() == m->get_source().num());
+      pg->get();
+      _remove_pg(pg);
+      pg->unlock();
+      pg->put();
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
 	       << pg->info.history.same_interval_since
 	       << " > " << m->get_epoch() << dendl;
+      pg->unlock();
     }
-    pg->unlock();
-  }
-}
-
-
-void OSD::queue_pg_for_deletion(PG *pg)
-{
-  dout(10) << *pg << " removing." << dendl;
-  pg->assert_locked();
-  assert(pg->get_role() == -1);
-  if (!pg->deleting) {
-    pg->deleting = true;
-    remove_wq.queue(pg);
   }
 }
 
 void OSD::_remove_pg(PG *pg)
 {
-  pg_t pgid = pg->info.pgid;
-  dout(10) << "_remove_pg " << pgid << dendl;
-  
-  pg->lock();
-  if (!pg->deleting) {
-    pg->unlock();
-    return;
-  }
-  
-  // reset log, last_complete, in case deletion gets canceled
-  pg->info.last_complete = eversion_t();
-  pg->info.last_update = eversion_t();
-  pg->info.log_tail = eversion_t();
-  pg->log.zero();
-  pg->ondisklog.zero();
-
-  {
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    pg->write_info(*t);
-    pg->write_log(*t);
-    int tr = store->queue_transaction(&pg->osr, t);
-    assert(tr == 0);
-  }
-  
-  // flush all pg operations to the fs, so we can rely on
-  // collection_list below.
-  pg->osr.flush();
-
-  int n = 0;
-
+  vector<coll_t> removals;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
-
-  // snap collections
   for (interval_set<snapid_t>::iterator p = pg->snap_collections.begin();
        p != pg->snap_collections.end();
-       p++) {
+       ++p) {
     for (snapid_t cur = p.get_start();
 	 cur < p.get_start() + p.get_len();
 	 ++cur) {
-      vector<hobject_t> olist;      
-      store->collection_list(coll_t(pgid, cur), olist);
-      dout(10) << "_remove_pg " << pgid << " snap " << cur << " " << olist.size() << " objects" << dendl;
-      for (vector<hobject_t>::iterator q = olist.begin();
-	   q != olist.end();
-	   q++) {
-	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->remove(coll_t(pgid, cur), *q);
-	t->remove(coll_t(pgid), *q);          // we may hit this twice, but it's harmless
-	int tr = store->queue_transaction(&pg->osr, t);
-	assert(tr == 0);
-	
-	if ((++n & 0xff) == 0) {
-	  pg->unlock();
-	  pg->lock();
-	  if (!pg->deleting) {
-	    dout(10) << "_remove_pg aborted on " << *pg << dendl;
-	    pg->unlock();
-	    return;
-	  }
-	}
-      }
-      rmt->remove_collection(coll_t(pgid, cur));
+      coll_t to_remove = get_next_removal_coll();
+      removals.push_back(to_remove);
+      rmt->collection_rename(coll_t(pg->info.pgid, cur), to_remove);
     }
   }
-
-  // (what remains of the) main collection
-  vector<hobject_t> olist;
-  store->collection_list(coll_t(pgid), olist);
-  dout(10) << "_remove_pg " << pgid << " " << olist.size() << " objects" << dendl;
-  for (vector<hobject_t>::iterator p = olist.begin();
-       p != olist.end();
-       p++) {
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->remove(coll_t(pgid), *p);
-    int tr = store->queue_transaction(&pg->osr, t);
-    assert(tr == 0);
-
-    if ((++n & 0xff) == 0) {
-      pg->unlock();
-      pg->lock();
-      if (!pg->deleting) {
-	dout(10) << "_remove_pg aborted on " << *pg << dendl;
-	pg->unlock();
-	return;
-      }
-    }
+  coll_t to_remove = get_next_removal_coll();
+  removals.push_back(to_remove);
+  rmt->collection_rename(coll_t(pg->info.pgid), to_remove);
+  if (pg->have_temp_coll()) {
+    to_remove = get_next_removal_coll();
+    removals.push_back(to_remove);
+    rmt->collection_rename(pg->get_temp_coll(), to_remove);
   }
+  rmt->remove(coll_t::META_COLL, pg->log_oid);
+  rmt->remove(coll_t::META_COLL, pg->biginfo_oid);
 
-  pg->unlock();
-
-  dout(10) << "_remove_pg " << pgid << " flushing store" << dendl;
-  store->flush();
-  
-  dout(10) << "_remove_pg " << pgid << " taking osd_lock" << dendl;
-  osd_lock.Lock();
-  pg->lock();
-  
-  if (!pg->deleting) {
-    osd_lock.Unlock();
-    pg->unlock();
-    return;
-  }
-
-  dout(10) << "_remove_pg " << pgid << " removing final" << dendl;
-
-  {
-    rmt->remove(coll_t::META_COLL, pg->log_oid);
-    rmt->remove(coll_t::META_COLL, pg->biginfo_oid);
-    rmt->remove_collection(coll_t(pgid));
-    int tr = store->queue_transaction(NULL, rmt);
-    assert(tr == 0);
-  }
-
-  if (store->collection_exists(coll_t::make_temp_coll(pg->get_pgid()))) {
-    clear_temp(store, coll_t::make_temp_coll(pg->get_pgid()));
-  }
+  store->queue_transaction(
+    pg->osr.get(), rmt,
+    new ObjectStore::C_DeleteTransactionHolder<
+      SequencerRef>(rmt, pg->osr));
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from 
   // the pg_map must be done together without unlocking the pg lock,
@@ -4774,18 +4710,28 @@ void OSD::_remove_pg(PG *pg)
   // and handle_notify_timeout
   pg->on_removal();
 
+  for (vector<coll_t>::iterator i = removals.begin();
+       i != removals.end();
+       ++i) {
+    remove_wq.queue(new pair<coll_t, SequencerRef>(*i, pg->osr));
+  }
+
+  recovery_wq.dequeue(pg);
+  scrub_wq.dequeue(pg);
+  scrub_finalize_wq.dequeue(pg);
+  snap_trim_wq.dequeue(pg);
+  pg_stat_queue_dequeue(pg);
+  op_wq.dequeue(pg);
+  peering_wq.dequeue(pg);
+
+  pg->deleting = true;
+
   // remove from map
-  pg_map.erase(pgid);
+  pg_map.erase(pg->info.pgid);
   pg->put(); // since we've taken it out of map
+
   service.unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-
   _put_pool(pg->pool);
-
-  // unlock, and probably delete
-  pg->unlock();
-  pg->put();  // will delete, if last reference
-  osd_lock.Unlock();
-  dout(10) << "_remove_pg " << pgid << " all done" << dendl;
 }
 
 
@@ -4866,8 +4812,12 @@ void OSD::do_recovery(PG *pg)
     dout(10) << "do_recovery raced and failed to start anything; requeuing " << *pg << dendl;
     recovery_wq.queue(pg);
   } else {
-
     pg->lock();
+    if (pg->deleting) {
+      pg->unlock();
+      pg->put();
+      return;
+    }
     
     dout(10) << "do_recovery starting " << max
 	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
@@ -5327,6 +5277,11 @@ void OSD::dequeue_op(PG *pg)
   OpRequestRef op;
 
   pg->lock();
+  if (pg->deleting) {
+    pg->unlock();
+    pg->put();
+    return;
+  }
   assert(!pg->op_queue.empty());
   op = pg->op_queue.front();
   pg->op_queue.pop_front();
