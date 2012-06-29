@@ -263,6 +263,14 @@ TODO: what does this actually do ::
 Sends a repair command to osdN. To send the command to all osds, use ``*``.
 TODO: what does this actually do
 
+::
+
+	$ ceph osd tell N bench [BYTES_PER_WRITE] [TOTAL_BYTES]
+
+Runs a simple throughput benchmark against osdN, writing ``TOTAL_BYTES``
+in write requests of ``BYTES_PER_WRITE`` each. By default, the test
+writes 1 GB in total in 4-MB increments.
+
 MDS subsystem
 -------------
 
