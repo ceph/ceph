@@ -30,7 +30,10 @@ class CrushTester {
 
 
   void adjust_weights(vector<__u32>& weight);
-
+  int get_maximum_affected_by_rule(int ruleno);
+  map<int,int> get_collapsed_mapping();
+  bool check_valid_placement(int ruleno, vector<int> out, const vector<__u32>& weight);
+  int random_placement(int ruleno, vector<int>& out, int maxout, vector<__u32>& weight);
 
 public:
   CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
