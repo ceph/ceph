@@ -13,6 +13,7 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 blktrace = '/usr/sbin/blktrace'
 log_dir = '/tmp/cephtest/archive/performance/blktrace'
+daemon_signal = 'term'
 
 @contextlib.contextmanager
 def setup(ctx, config):
@@ -27,6 +28,7 @@ def setup(ctx, config):
 
 @contextlib.contextmanager
 def execute(ctx, config):
+    procs = []
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = ctx.disk_config.remote_to_roles_to_dev[remote]
@@ -35,11 +37,14 @@ def execute(ctx, config):
             if roles_to_devs.get(id_):
                 dev = roles_to_devs[id_]
                 log.info("running blktrace on %s: %s" % (remote.name, dev))
+
                 proc = remote.run(
                     args=[
                         'cd',
                         log_dir,
                         run.Raw(';'),
+                        '/tmp/cephtest/daemon-helper',
+                        daemon_signal,
                         'sudo',
                         blktrace,
                         '-o',
@@ -48,14 +53,16 @@ def execute(ctx, config):
                         dev,
                         ],
                     wait=False,   
+                    stdin=run.PIPE,
                     )
+                procs.append(proc)
     try:
         yield
     finally:
         osds = ctx.cluster.only(teuthology.is_type('osd'))
-        for remote, roles_for_host in osds.remotes.iteritems():
-            log.info('stopping all blktrace processes on %s' % (remote.name))
-            remote.run(args=['sudo', 'pkill', '-f', 'blktrace'])
+        log.info('stopping blktrace processs')
+        for proc in procs:
+            proc.stdin.close()
 
 @contextlib.contextmanager
 def task(ctx, config):
