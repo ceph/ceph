@@ -128,7 +128,8 @@ namespace librbd {
     }
 
     ldout(cct, 20) << "detect format of " << name << " : "
-		   << (*old_format ? "old" : "new") << dendl;
+		   << (old_format ? (*old_format ? "old" : "new") :
+		       "don't care")  << dendl;
     return 0;
   }
 
