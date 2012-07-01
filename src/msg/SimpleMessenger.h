@@ -76,12 +76,13 @@ public:
     dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
+    local_connection(new Connection),
     msgr(this)
   {
     pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN, NULL);
-    init_local_pipe();
+    init_local_connection();
   }
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
@@ -734,9 +735,9 @@ private:
 
     Pipe *local_pipe;
     void local_delivery(Message *m, int priority) {
-      local_pipe->pipe_lock.Lock();
       if ((unsigned long)m > 10)
-	m->set_connection(local_pipe->connection_state->get());
+	m->set_connection(msgr->local_connection->get());
+      local_pipe->pipe_lock.Lock();
       local_pipe->queue_received(m, priority);
       local_pipe->pipe_lock.Unlock();
     }
@@ -913,6 +914,9 @@ private:
 
   int timeout;
 
+  /// con used for sending messages to ourselves
+  Connection *local_connection;
+
   SimpleMessenger *msgr; //hack to make dout macro work, will fix
 
 public:
@@ -953,12 +957,11 @@ public:
   int get_proto_version(int peer_type, bool connect);
 
   /**
-   * Fill in the address and peer type for the local pipe, which
-   * is used for delivering messages back to ourself (whether actual Messages
-   * submitted by the endpoint, or interrupts we use to process things like
-   * dead Pipes in a fair order).
+   * Fill in the address and peer type for the local connection, which
+   * is used for delivering messages back to ourself.
    */
-  void init_local_pipe();  /**
+  void init_local_connection();
+  /**
    * Tell the SimpleMessenger its full IP address.
    *
    * This is used by Pipes when connecting to other endpoints, and

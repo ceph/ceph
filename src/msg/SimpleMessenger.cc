@@ -156,7 +156,7 @@ int SimpleMessenger::Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, i
     msgr->my_inst.addr.nonce = msgr->nonce;
   }
 
-  msgr->init_local_pipe();
+  msgr->init_local_connection();
 
   ldout(msgr->cct,1) << "accepter.bind my_inst.addr is " << msgr->my_inst.addr << " need_addr=" << msgr->need_addr << dendl;
   msgr->did_bind = true;
@@ -2761,13 +2761,13 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     my_inst.addr.addr = t.addr;
     ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
-    init_local_pipe();
+    init_local_connection();
   }
   lock.Unlock();
 }
 
-void SimpleMessenger::init_local_pipe()
+void SimpleMessenger::init_local_connection()
 {
-  dispatch_queue.local_pipe->connection_state->peer_addr = msgr->my_inst.addr;
-  dispatch_queue.local_pipe->connection_state->peer_type = msgr->my_type;
+  local_connection->peer_addr = msgr->my_inst.addr;
+  local_connection->peer_type = msgr->my_type;
 }
