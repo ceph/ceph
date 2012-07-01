@@ -409,6 +409,7 @@ private:
   class Pipe;
   struct IncomingQueue {
     CephContext *cct;
+    DispatchQueue *dq;
     Pipe *pipe;  // this will change
     Mutex lock;
     map<int, list<Message*> > in_q; // and inbound ones
@@ -416,18 +417,22 @@ private:
     map<int, xlist<IncomingQueue *>::item* > queue_items; // protected by pipe_lock AND q.lock
     bool halt;
 
-    void queue(Message *m, int priority, DispatchQueue *dq);
-    void discard_queue(SimpleMessenger *msgr, DispatchQueue *dq);
+    void queue(Message *m, int priority);
+    void discard_queue();
     void restart_queue();
 
-    IncomingQueue(CephContext *cct, Pipe *parent)
+  private:
+    friend class DispatchQueue;
+    IncomingQueue(CephContext *cct, DispatchQueue *dq, Pipe *parent)
       : cct(cct),
+	dq(dq),
 	pipe(parent),
 	lock("SimpleMessenger::IncomingQueue::lock"),
 	in_qlen(0),
 	halt(false)
     {
     }
+  public:
     ~IncomingQueue() {
       for (map<int, xlist<IncomingQueue *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
@@ -485,7 +490,7 @@ private:
       state(st),
       connection_state(new Connection),
       reader_running(false), reader_joining(false), writer_running(false),
-      in_q(new IncomingQueue(r->cct, this)),
+      in_q(r->dispatch_queue.create_queue(this)),
       keepalive(false),
       close_on_empty(false),
       connect_seq(0), peer_global_seq(0),
@@ -735,7 +740,11 @@ private:
     void local_delivery(Message *m, int priority) {
       if ((unsigned long)m > 10)
 	m->set_connection(msgr->local_connection->get());
-      local_queue.queue(m, priority, this);
+      local_queue.queue(m, priority);
+    }
+
+    IncomingQueue *create_queue(Pipe *parent) {
+      return new IncomingQueue(cct, this, parent);
     }
 
     int get_queue_len() {
@@ -768,7 +777,7 @@ private:
 	lock("SimpleMessenger::DispatchQeueu::lock"), 
 	stop(false),
 	qlen(0),
-	local_queue(cct, NULL)
+	local_queue(cct, this, NULL)
     {}
     ~DispatchQueue() {
       for (map< int, xlist<IncomingQueue *>* >::iterator i = queued_pipes.begin();
