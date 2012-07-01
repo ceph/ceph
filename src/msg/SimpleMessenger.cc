@@ -2173,7 +2173,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
  */
 
 #undef dout_prefix
-#define dout_prefix pipe->_pipe_prefix(_dout) << "incomingqueue."
+#define dout_prefix (pipe ? pipe->_pipe_prefix(_dout) : *_dout) << "incomingqueue."
 
 void SimpleMessenger::IncomingQueue::queue(Message *m, int priority, DispatchQueue *dq)
 {
@@ -2443,12 +2443,12 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
-  Pipe *pipe = NULL;
   if (my_inst.addr == dest.addr) {
     // local
-    pipe = dispatch_queue.local_pipe;
+    return (Connection *)local_connection->get();
   } else {
     // remote
+    Pipe *pipe = NULL;
     hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(dest.addr);
     if (p != rank_pipe.end()) {
       pipe = p->second;
@@ -2464,8 +2464,8 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
     if (!pipe) {
       pipe = connect_rank(dest.addr, dest.name.type(), NULL);
     }
+    return (Connection *)pipe->connection_state->get();
   }
-  return (Connection *)pipe->connection_state->get();
 }
 
 
@@ -2646,9 +2646,7 @@ void SimpleMessenger::wait()
       reaper();
     }
 
-    dispatch_queue.local_pipe->pipe_lock.Lock();
-    dispatch_queue.local_pipe->discard_queue();
-    dispatch_queue.local_pipe->pipe_lock.Unlock();
+    dispatch_queue.local_queue.discard_queue(this, &dispatch_queue);
   }
   lock.Unlock();
 
