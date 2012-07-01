@@ -80,8 +80,6 @@ public:
     msgr(this)
   {
     pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
-    // for local dmsg delivery
-    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN, NULL);
     init_local_connection();
   }
   /**
@@ -93,7 +91,6 @@ public:
     assert(!did_bind); // either we didn't bind or we shut down the Accepter
     assert(rank_pipe.empty()); // we don't have any running Pipes.
     assert(reaper_stop && !reaper_started); // the reaper thread is stopped
-    delete dispatch_queue.local_pipe;
   }
   /** @defgroup Accessors
    * @{
@@ -733,13 +730,12 @@ private:
     list<Connection*> remote_reset_q;
     list<Connection*> reset_q;
 
-    Pipe *local_pipe;
+    IncomingQueue local_queue;
+
     void local_delivery(Message *m, int priority) {
       if ((unsigned long)m > 10)
 	m->set_connection(msgr->local_connection->get());
-      local_pipe->pipe_lock.Lock();
-      local_pipe->queue_received(m, priority);
-      local_pipe->pipe_lock.Unlock();
+      local_queue.queue(m, priority, this);
     }
 
     int get_queue_len() {
@@ -772,7 +768,7 @@ private:
 	lock("SimpleMessenger::DispatchQeueu::lock"), 
 	stop(false),
 	qlen(0),
-	local_pipe(NULL)
+	local_queue(cct, NULL)
     {}
     ~DispatchQueue() {
       for (map< int, xlist<IncomingQueue *>* >::iterator i = queued_pipes.begin();
