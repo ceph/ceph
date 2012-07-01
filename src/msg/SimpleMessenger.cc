@@ -527,7 +527,7 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix(std::ostream *_dout) {
 void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
 {
   assert(pipe_lock.is_locked());
-  in_q->queue(m, priority, &msgr->dispatch_queue);
+  in_q->queue(m, priority);
 }
 
 
@@ -864,7 +864,7 @@ int SimpleMessenger::Pipe::accept()
     in_q->pipe = this;
     in_q->restart_queue();
     in_q->lock.Unlock();
-    existing->in_q = new IncomingQueue(msgr->cct, existing);
+    existing->in_q = msgr->dispatch_queue.create_queue(existing);
 
     // steal outgoing queue and out_seq
     existing->requeue_sent();
@@ -1338,7 +1338,7 @@ void SimpleMessenger::Pipe::discard_queue()
 {
   ldout(msgr->cct,10) << "discard_queue" << dendl;
 
-  in_q->discard_queue(msgr, &msgr->dispatch_queue);
+  in_q->discard_queue();
   ldout(msgr->cct,20) << " dequeued pipe " << dendl;
 
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
@@ -2175,7 +2175,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 #undef dout_prefix
 #define dout_prefix (pipe ? pipe->_pipe_prefix(_dout) : *_dout) << "incomingqueue."
 
-void SimpleMessenger::IncomingQueue::queue(Message *m, int priority, DispatchQueue *dq)
+void SimpleMessenger::IncomingQueue::queue(Message *m, int priority)
 {
   Mutex::Locker l(lock);
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
@@ -2233,7 +2233,7 @@ void SimpleMessenger::IncomingQueue::queue(Message *m, int priority, DispatchQue
   }
 }
 
-void SimpleMessenger::IncomingQueue::discard_queue(SimpleMessenger *msgr, DispatchQueue *dq)
+void SimpleMessenger::IncomingQueue::discard_queue()
 {
   halt = true;
 
@@ -2266,8 +2266,8 @@ void SimpleMessenger::IncomingQueue::discard_queue(SimpleMessenger *msgr, Dispat
       if (*r < (void *) DispatchQueue::D_NUM_CODES) {
         continue; // skip non-Message dispatch codes
       }
-      msgr->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
-      ldout(msgr->cct,20) << "  discard " << *r << dendl;
+      dq->msgr->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
+      ldout(cct,20) << "  discard " << *r << dendl;
       (*r)->put();
     }
   in_q.clear();
@@ -2646,7 +2646,7 @@ void SimpleMessenger::wait()
       reaper();
     }
 
-    dispatch_queue.local_queue.discard_queue(this, &dispatch_queue);
+    dispatch_queue.local_queue.discard_queue();
   }
   lock.Unlock();
 
