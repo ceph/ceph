@@ -755,10 +755,11 @@ int SimpleMessenger::Pipe::accept()
       if (connect.connect_seq == existing->connect_seq) {
 	// connection race?
 	if (peer_addr < msgr->my_inst.addr ||
-	    existing->policy.server) {
+	    existing->policy.server ||
+	    existing->state == STATE_STANDBY) {
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
+		   << " == " << connect.connect_seq << ", or STANDBY, or we are server, replacing my attempt" << dendl;
 	  if (!(existing->state == STATE_CONNECTING ||
 		existing->state == STATE_STANDBY ||
 		existing->state == STATE_WAIT))
@@ -782,8 +783,7 @@ int SimpleMessenger::Pipe::accept()
 			     << " == " << connect.connect_seq
 			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
-		 existing->state == STATE_OPEN ||
-		 existing->state == STATE_STANDBY);
+		 existing->state == STATE_OPEN);
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->pipe_lock.Unlock();
 	  msgr->lock.Unlock();
