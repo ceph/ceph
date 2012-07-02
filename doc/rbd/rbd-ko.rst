@@ -81,18 +81,17 @@ devices mapped to kernel objects, execute the following::
 
 	ls /sys/bus/rbd/devices	
 
-
 Unmapping a Block Device
 ------------------------	
 
 To unmap an RBD image with the ``rbd`` command, specify the ``rm`` option 
 and the device name (i.e., by convention the same as the RBD image name). :: 
 
-	rbd unmap {device}
+	sudo rbd unmap /dev/rbd/{poolname}/{imagename}
 	
 For example::
 
-	rbd unmap foo
+	sudo rbd unmap /dev/rbd/rbd/foo
 
 To unmap an RBD image from a kernel object, specify its index and use ``tee`` 
 to call ``remove`` as follows, but replace ``{device-number}`` with the number 
