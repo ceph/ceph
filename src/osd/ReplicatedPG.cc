@@ -3413,12 +3413,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
   // (logical) local ack.
   int whoami = osd->get_nodeid();
 
-  if (!repop->aborted) {
-    assert(repop->waitfor_ack.count(whoami) ||
-	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk
-    repop->waitfor_ack.erase(whoami);
-  }
-  
   if (repop->ctx->clone_obc) {
     put_object_context(repop->ctx->clone_obc);
     repop->ctx->clone_obc = 0;
@@ -3436,16 +3430,22 @@ void ReplicatedPG::op_applied(RepGather *repop)
   put_object_contexts(repop->src_obc);
   repop->obc = 0;
 
-  assert(info.last_update >= repop->v);
-  assert(last_update_applied < repop->v);
-  last_update_applied = repop->v;
-  if (last_update_applied == info.last_update && scrub_block_writes) {
-    dout(10) << "requeueing scrub for cleanup" << dendl;
-    finalizing_scrub = true;
-    scrub_gather_replica_maps();
-    ++scrub_waiting_on;
-    scrub_waiting_on_whom.insert(osd->whoami);
-    osd->scrub_wq.queue(this);
+  if (!repop->aborted) {
+    assert(repop->waitfor_ack.count(whoami) ||
+	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk
+    repop->waitfor_ack.erase(whoami);
+
+    assert(info.last_update >= repop->v);
+    assert(last_update_applied < repop->v);
+    last_update_applied = repop->v;
+    if (last_update_applied == info.last_update && scrub_block_writes) {
+      dout(10) << "requeueing scrub for cleanup" << dendl;
+      finalizing_scrub = true;
+      scrub_gather_replica_maps();
+      ++scrub_waiting_on;
+      scrub_waiting_on_whom.insert(osd->whoami);
+      osd->scrub_wq.queue(this);
+    }
   }
 
   if (!repop->aborted)
