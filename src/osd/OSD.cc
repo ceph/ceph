@@ -2397,8 +2397,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       } else {
 	cmd.erase(cmd.begin(), cmd.begin() + 2);
 	r = pg->do_command(cmd, ss, data, odata);
+	pg->unlock();
       }
-      pg->unlock();
     }
   }
 
