@@ -17,8 +17,8 @@ For example::
 
 	[client.radosgw.gateway]
 		host = {host-name}
-		keyring = /etc/ceph/keyring.radosgw.gateway
-		rgw socket path = /var/run/ceph/
+		keyring = /etc/ceph/keyring.rados.gateway
+		rgw socket path = /tmp/radosgw.sock
 		log file = /var/log/ceph/radosgw.log
 
 If you deploy Ceph with ``mkcephfs``, manually redeploy ``ceph.conf`` to the 
@@ -33,39 +33,25 @@ Create ``rgw.conf``
 Create an ``rgw.conf`` file on the host where you installed RADOS Gateway
 under the ``/etc/apache2/sites-enabled`` directory.
 
-There are several ways to use FastCGI with Apache. You may let Apache manage
-FastCGI, or you may manage FastCGI separately as an external server.
-See `Module mod_fastcgi`_ for details. 
+
+We recommend deploying FastCGI as an external server, because allowing
+Apache to manage FastCGI sometimes introduces high latency. To manage FastCGI 
+as an external server, use the ``FastCgiExternalServer`` directive. 
+See `FastCgiExternalServer`_ for details on this directive. 
+See `Module mod_fastcgi`_ for general details. :: 
+
+	FastCgiExternalServer /var/www/s3gw.fcgi -socket /tmp/radosgw.sock
 
 .. _Module mod_fastcgi: http://www.fastcgi.com/drupal/node/25
-
-.. tip: We recommend using the external server option, because allowing
-   Apache to manage FastCGI sometimes introduces high latency.
-
-To manage FastCGI as an external server, use the ``FastCgiExternalServer`` 
-directive. See `FastCgiExternalServer`_ for details on this directive. :: 
-
-	FastCgiExternalServer /var/www/s3gw.fcgi -socket /var/run/ceph/radosgw.client.radosgw
-
 .. _FastCgiExternalServer: http://www.fastcgi.com/drupal/node/25#FastCgiExternalServer
 
-To allow Apache to manage FastCGI, add a path to the FastCGI wrapper, and add 
-a path to the FastCGI server. ::
-
-	FastCgiWrapper /var/www/s3gw.fcgi
-	FastCgiServer /usr/bin/radosgw
-
-.. note: You may set either the externally-managed or Apache-managed settings. 
-	You do not need both.
-
-Once you have configured how Apache and FastCGI will interact, you must 
+Once you have configured FastCGI as an external server, you must 
 create the virtual host configuration within your ``rgw.conf`` file. See 
 `Apache Virtual Host documentation`_ for details on ``<VirtualHost>`` format 
 and settings. Replace the values in brackets. ::
 
 	<VirtualHost *:80>
 		ServerName {fqdn}
-		ServerAlias {alias-fqdn}
 		ServerAdmin {email.address}
 		DocumentRoot /var/www
 	</VirtualHost>
@@ -79,7 +65,7 @@ Swift-compatible interface. Turn on the rewrite engine and add the following
 rewrite rule to your Virtual Host configuration. :: 
 
 	RewriteEngine On
-	RewriteRule ^/(.*)/s3gw.fcgi?params=$1&%{QUERY_STRING}[E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+	RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /s3gw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
 	
 Since the ``<VirtualHost>`` is running ``mod_fastcgi.c``, you must include a
 section in your ``<VirtualHost>`` configuration for the ``mod_fastcgi.c`` module. 
@@ -155,7 +141,7 @@ Generate a key so that RADOS Gateway can identify a user name and authenticate
 the user with the cluster. Then, add capabilities to the key. For example:: 
 
 	sudo ceph-authtool /etc/ceph/keyring.rados.gateway -n client.rados.gateway --gen-key
-	sudo ceph-authtool -n client.rados.gateway --cap mds 'allow' --cap osd 'allow rwx' --cap mon 'allow r' /etc/ceph/keyring.rados.gateway
+	sudo ceph-authtool -n client.rados.gateway --cap osd 'allow rwx' --cap mon 'allow r' /etc/ceph/keyring.rados.gateway
 	
 Add to Ceph Keyring Entries 
 ---------------------------
