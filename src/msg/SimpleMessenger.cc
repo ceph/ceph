@@ -860,6 +860,7 @@ int SimpleMessenger::Pipe::accept()
     in_q = existing->in_q;
     in_q->lock.Lock();
     in_q->pipe = this;
+    in_q->restart_queue();
     in_q->lock.Unlock();
     existing->in_q = new IncomingQueue(msgr->cct, existing);
 
