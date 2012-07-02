@@ -286,7 +286,7 @@ def valgrind_post(ctx, config):
             #look at valgrind logs for each node
             proc = remote.run(
                 args=[
-                    'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
+                    'grep', '-r', "<kind>", run.Raw(val_path), run.Raw('|'),
                     'egrep', '-v', '-q', '(PossiblyLost|DefinitelyLost)'],
                 wait = False,
                 check_status=False
