@@ -144,7 +144,7 @@ find_rbd_dev() {
 rbd_validate_all() {
     # Test for configuration errors first
     if [ -z "$OCF_RESKEY_name" ]; then
-       ocf_log err 'Required parameter "name" is unset!'
+       ocf_log err "Required parameter "name" is unset!"
        exit $OCF_ERR_CONFIGURED
     fi
 
