@@ -108,6 +108,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   
   elector(this),
   leader(0),
+  quorum_features(0),
   probe_timeout_event(NULL),
 
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
@@ -974,6 +975,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   leader = l;
   quorum = q;
   outside_quorum.clear();
+  quorum_features = 0;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << dendl;
   
