@@ -718,6 +718,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_queue_max_bytes(g_conf->filestore_queue_max_bytes),
   m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
   m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
+  m_filestore_do_dump(false),
   m_filestore_dump_fmt(true)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
