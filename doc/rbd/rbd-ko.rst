@@ -4,14 +4,35 @@
 
 .. important:: To use kernel object operations, you must have a running Ceph cluster.
 
-Add a Block Device
-------------------
-To add an RBD image as a kernel object, first load the Ceph RBD module:: 
+Load the Ceph RBD Module
+------------------------
+
+To map an RBD image to a kernel object, first load the Ceph RBD module:: 
 
 	modprobe rbd
 
-Map the RBD image to the kernel object with ``add``, specifying the IP address 
-of the monitor, the user name, and the RBD image name as follows:: 
+Map a Block Device with ``rbd``
+-------------------------------
+
+Use ``rbd`` to map an image name to a kernel object. You must specify the 
+image name, the pool name, and the client name. If you use ``cephx`` 
+authentication, you must also specify a secret. ::
+
+	sudo rbd map {image-name} --pool {pool-name} --name {client-name} --secret {client-secret}	
+
+For example:: 
+
+ sudo rbd map foo --pool rbd --name client.admin
+ 
+If you use ``cephx`` authentication, you must also specify a secret. ::
+
+	echo "10.20.30.40  name=admin,secret=/path/to/secret rbd foo" | sudo tee /sys/bus/rbd/add 
+
+Map a Block Device with ``add``
+-------------------------------
+
+To map an RBD image to a kernel object directly, enter the IP address of
+the monitor, the user name, and the RBD image name as follows:: 
 
 	echo "{mon-ip-address}  name={user-name} rbd {image-name}" | sudo tee /sys/bus/rbd/add
 	
@@ -22,7 +43,6 @@ For example::
 If you use ``cephx`` authentication, you must also specify a secret. ::
 
 	echo "10.20.30.40  name=admin,secret=/path/to/secret rbd foo" | sudo tee /sys/bus/rbd/add
-
 
 A kernel block device resides under the ``/sys/bus/rbd/devices`` directory and
 provides the following functions: 
@@ -52,24 +72,31 @@ provides the following functions:
 
 List Block Devices
 ------------------
-Images are mounted as devices sequentially starting from ``0``. To list the 
-devices mounted, execute the following:: 
+To list RBD block devices with the ``rbd`` command, specify the ``list`` option. :: 
+
+	rbd list
+
+Images are mounted as devices sequentially starting from ``0``. To list all 
+devices mapped to kernel objects, execute the following:: 
 
 	ls /sys/bus/rbd/devices	
 
 
-Removing a Block Device
------------------------	
-To remove an RBD image, specify its index and use ``tee`` to call ``remove`` as
-follows, but replace ``{device-number}`` with the number of the device you want
-to remove:: 
+Unmapping a Block Device
+------------------------	
 
-	echo {device-number} | sudo tee /sys/bus/rbd/remove	
+To unmap an RBD image with the ``rbd`` command, specify the ``rm`` option 
+and the device name (i.e., by convention the same as the RBD image name). :: 
 
+	rbd unmap {device}
+	
+For example::
 
-Creating a Snapshot
--------------------
-To create a snapshot of a device, you must specify the device number. ::
+	rbd unmap foo
 
-	echo sn1 | sudo tee /sys/bus/rbd/devices/0{device-number}/create_snap
+To unmap an RBD image from a kernel object, specify its index and use ``tee`` 
+to call ``remove`` as follows, but replace ``{device-number}`` with the number 
+of the device you want to remove:: 
+
+	echo {device-number} | sudo tee /sys/bus/rbd/remove
 	
