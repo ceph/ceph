@@ -82,7 +82,7 @@ class StateMachineRenderer(object):
             self.get_context(line)
 
     def get_context(self, line):
-        match = re.search(r"\w+(::\w+)*\s*(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)&",
+        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)",
                           line)
         if match is not None:
             self.context.append((match.group('tag'), self.context_depth, match.group('event')))
