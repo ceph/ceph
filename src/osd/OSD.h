@@ -1177,6 +1177,7 @@ protected:
 	PG *pg = osd->_lookup_lock_pg(msg->pgid);
 	osd->osd_lock.Unlock();
 	pg->replica_scrub(msg);
+	msg->put();
 	pg->unlock();
       } else {
 	msg->put();
