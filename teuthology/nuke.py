@@ -33,7 +33,7 @@ def parse_args():
         '-p','--pid',
 	type=int,
 	default=False,
-        help='pid of the process to be deleted',
+        help='pid of the process to be killed',
         )
     parser.add_argument(
         '-r', '--reboot-all',
@@ -262,7 +262,7 @@ def main():
     if ctx.archive:
         ctx.config = config_file(ctx.archive + '/config.yaml')
         if not ctx.pid:
-            ctx.pid = int open(ctx.archive + '/pid').read().rstrip('\n')
+            ctx.pid = int(open(ctx.archive + '/pid').read().rstrip('\n'))
         if not ctx.owner:
             ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
 
@@ -276,8 +276,13 @@ def main():
         ctx.owner = get_user()
 
     if ctx.pid:
-	from teuthology.misc import kill_process
-	kill_process(ctx)
+        if ctx.archive:
+            import os
+            os.system('grep -q %s /proc/%d/cmdline && kill %d' % (ctx.archive,
+                                                                  ctx.pid,
+                                                                  ctx.pid))
+        else:
+            subprocess.check_call(["kill", "-9", str(ctx.pid)]);
 
     nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all)
 

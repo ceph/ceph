@@ -424,9 +424,6 @@ def get_clients(ctx, roles):
 def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
 
-def kill_process(ctx):
-	subprocess.check_call(["kill", "-9", str(ctx.pid)]);
-
 def read_config(ctx):
     filename = os.path.join(os.environ['HOME'], '.teuthology.yaml')
     ctx.teuthology_config = {}
