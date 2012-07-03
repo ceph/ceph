@@ -11,6 +11,13 @@ To map an RBD image to a kernel object, first load the Ceph RBD module::
 
 	modprobe rbd
 
+Get a List of RBD Images
+------------------------
+
+To mount an RBD image, first return a list of the images. ::
+
+	rbd list
+
 Map a Block Device with ``rbd``
 -------------------------------
 
@@ -70,11 +77,13 @@ provides the following functions:
 +------------------+------------------------------------------------------------+
 
 
-List Block Devices
-------------------
-To list RBD block devices with the ``rbd`` command, specify the ``list`` option. :: 
+Show Mapped Block Devices
+-------------------------
 
-	rbd list
+To show RBD images mapped to kernel block devices with the ``rbd`` command, 
+specify the ``showmapped`` option. ::
+
+	sudo rbd showmapped
 
 Images are mounted as devices sequentially starting from ``0``. To list all 
 devices mapped to kernel objects, execute the following:: 
