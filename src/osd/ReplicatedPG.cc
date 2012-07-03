@@ -1424,7 +1424,6 @@ void ReplicatedPG::snap_trimmer()
   lock();
   if (deleting) {
     unlock();
-    put();
     return;
   }
   dout(10) << "snap_trimmer entry" << dendl;
@@ -1434,7 +1433,6 @@ void ReplicatedPG::snap_trimmer()
       dout(10) << " can't write, requeueing" << dendl;
       queue_snap_trim();
       unlock();
-      put();
       return;
     }
     if (!scrub_block_writes) {
@@ -1457,7 +1455,6 @@ void ReplicatedPG::snap_trimmer()
     queue_snap_trim();
   }
   unlock();
-  put();
   return;
 }
 
