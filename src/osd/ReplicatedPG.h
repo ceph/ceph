@@ -755,6 +755,7 @@ protected:
     }
     void finish(int r) {
       pg->_committed_pushed_object(op, same_since, last_complete);
+      pg->put();
     }
   };
 
