@@ -3356,7 +3356,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 	note_down_osd(*p);
     
     osdmap = newmap;
-    service.publish_map(newmap);
 
     superblock.current_epoch = cur;
     advance_map(t, fin);
@@ -3601,15 +3600,10 @@ void OSD::activate_map()
       //pool is deleted!
       pg->get();
       to_remove.push_back(pg);
-      pg->unlock();
-      continue;
-    } else {
-      pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
     }
     pg->unlock();
-  }  
+  }
 
-  
   for (list<PG*>::iterator i = to_remove.begin();
        i != to_remove.end();
        ++i) {
@@ -3618,7 +3612,21 @@ void OSD::activate_map()
     (*i)->unlock();
     (*i)->put();
   }
+  to_remove.clear();
 
+  service.publish_map(osdmap);
+
+  // scan pg's
+  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+       it != pg_map.end();
+       it++) {
+    PG *pg = it->second;
+    pg->lock();
+    pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
+    pg->unlock();
+  }
+
+  
   logger->set(l_osd_pg, pg_map.size());
   logger->set(l_osd_pg_primary, num_pg_primary);
   logger->set(l_osd_pg_replica, num_pg_replica);
