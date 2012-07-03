@@ -42,16 +42,12 @@ two OSD daemons and one metadata server on your local machine.
    
 Deploy the Configuration
 ------------------------
+To deploy the configuration, create a directory for each daemon as follows::
 
-To deploy the configuration, create a directory for each 
-daemon using the same name used in your ``ceph.conf`` file. ::
-
-	sudo mkdir /srv/osd.0
-	sudo mkdir /srv/osd.1
-	sudo mkdir /srv/mon.a
-	sudo mkdir /srv/mds.a
-
-Then deploy the configuration. :: 
+	sudo mkdir /var/lib/ceph/osd/ceph-0
+	sudo mkdir /var/lib/ceph/osd/ceph-1
+	sudo mkdir /var/lib/ceph/mon/ceph-a
+	sudo mkdir /var/lib/ceph/mds/ceph-a
 
 	cd /etc/ceph
 	sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring
