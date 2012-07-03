@@ -6,6 +6,7 @@ import os
 import os.path
 import subprocess
 import sys
+import tempfile
 import uuid
 
 
@@ -23,6 +24,18 @@ class PrepareError(Exception):
     def __str__(self):
         doc = self.__doc__.strip()
         return ': '.join([doc] + [str(a) for a in self.args])
+
+
+class MountError(PrepareError):
+    """
+    Mounting filesystem failed
+    """
+
+
+class UnmountError(PrepareError):
+    """
+    Unmounting filesystem failed
+    """
 
 
 def write_one_line(parent, name, text):
@@ -69,8 +82,62 @@ def get_fsid(cluster):
     return fsid
 
 
-def prepare(
+MOUNT_OPTIONS = dict(
+    ext4='user_xattr',
+    )
+
+
+def mount(
+    dev,
+    fstype,
+    ):
+    # pick best-of-breed mount options based on fs type
+    options = MOUNT_OPTIONS.get(fstype, '')
+
+    # mount
+    path = tempfile.mkdtemp(
+        prefix='mnt.',
+        dir='/var/lib/ceph/tmp',
+        )
+    try:
+        subprocess.check_call(
+            args=[
+                'mount',
+                '-o', options,
+                '--',
+                dev,
+                path,
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        try:
+            os.rmdir(path)
+        except (OSError, IOError):
+            pass
+        raise MountError(e)
+
+    return path
+
+
+def unmount(
     path,
+    ):
+    try:
+        subprocess.check_call(
+            args=[
+                'umount',
+                '--',
+                path,
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        raise UnmountError(e)
+
+    os.rmdir(path)
+
+
+def prepare(
+    disk,
     cluster_uuid,
     ):
     """
@@ -78,14 +145,50 @@ def prepare(
 
     The ``magic`` file is written last, so it's presence is a reliable
     indicator of the whole sequence having completed.
-    """
-    if os.path.exists(os.path.join(path, 'magic')):
-        raise PrepareError('already prepared, aborting')
 
-    write_one_line(path, 'ceph_fsid', cluster_uuid)
-    osd_uuid = str(uuid.uuid4())
-    write_one_line(path, 'fsid', osd_uuid)
-    write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
+    WARNING: This will unconditionally overwrite anything given to
+    it.
+    """
+    try:
+        subprocess.check_call(
+            args=[
+                'sgdisk',
+                '--zap-all',
+                '--clear',
+                '--mbrtogpt',
+                '--largest-new=1',
+                '--change-name=1:ceph data',
+                '--typecode=1:4fbd7e29-9d25-41b8-afd0-062c0ceff05d',
+                '--',
+                disk,
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        raise PrepareError(e)
+
+    # TODO make fstype configurable; both ceph.conf and command line
+    fstype = 'ext4'
+    dev = '{disk}1'.format(disk=disk)
+    try:
+        subprocess.check_call(
+            args=[
+                'mkfs',
+                '--type={fstype}'.format(fstype=fstype),
+                '--',
+                dev,
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        raise PrepareError(e)
+
+    path = mount(dev=dev, fstype=fstype)
+    try:
+        write_one_line(path, 'ceph_fsid', cluster_uuid)
+        osd_uuid = str(uuid.uuid4())
+        write_one_line(path, 'fsid', osd_uuid)
+        write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
+    finally:
+        unmount(path)
 
 
 def parse_args():
@@ -108,9 +211,9 @@ def parse_args():
         help='cluster uuid to assign this disk to',
         )
     parser.add_argument(
-        'path',
-        metavar='PATH',
-        help='path to OSD data directory',
+        'disk',
+        metavar='DISK',
+        help='path to OSD data disk block device',
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -140,7 +243,7 @@ def main():
                     'must have fsid in config or pass --cluster--uuid=',
                     )
         prepare(
-            path=args.path,
+            disk=args.disk,
             cluster_uuid=args.cluster_uuid,
             )
     except PrepareError as e:
