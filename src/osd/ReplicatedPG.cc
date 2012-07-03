@@ -5330,7 +5330,6 @@ void ReplicatedPG::_committed_pushed_object(OpRequestRef op, epoch_t same_since,
     log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
 
   unlock();
-  put();
 }
 
 void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc)
