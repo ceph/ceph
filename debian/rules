@@ -115,6 +115,7 @@ binary-arch: build install
 	dh_link
 
 	dh_strip -pceph --dbg-package=ceph-dbg -k --exclude=libcls_
+	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -pceph-common --dbg-package=ceph-common-dbg
 	dh_strip -pceph-fs-common --dbg-package=ceph-fs-common-dbg
