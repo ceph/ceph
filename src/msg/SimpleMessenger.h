@@ -37,6 +37,7 @@ using namespace __gnu_cxx;
 #include "include/assert.h"
 
 
+
 /*
  * This class handles transmission and reception of messages. Generally
  * speaking, there are 2 major components:
@@ -63,6 +64,7 @@ public:
 		  string mname, uint64_t _nonce) :
     Messenger(cct, name),
     accepter(this),
+    dispatch_queue(cct, this),
     reaper_thread(this),
     dispatch_thread(this),
     my_type(name.type()),
@@ -404,6 +406,41 @@ private:
     int start();
   } accepter;
 
+
+  class DispatchQueue;
+  class Pipe;
+  struct IncomingQueue {
+    CephContext *cct;
+    Pipe *pipe;  // this will change
+    Mutex lock;
+    map<int, list<Message*> > in_q; // and inbound ones
+    int in_qlen;
+    map<int, xlist<IncomingQueue *>::item* > queue_items; // protected by pipe_lock AND q.lock
+    bool halt;
+
+    void queue(Message *m, int priority, DispatchQueue *dq);
+    void discard_queue(SimpleMessenger *msgr, DispatchQueue *dq);
+    void restart_queue();
+
+    IncomingQueue(CephContext *cct, Pipe *parent)
+      : cct(cct),
+	pipe(parent),
+	lock("SimpleMessenger::IncomingQueue::lock"),
+	in_qlen(0),
+	halt(false)
+    {
+    }
+    ~IncomingQueue() {
+      for (map<int, xlist<IncomingQueue *>::item* >::iterator i = queue_items.begin();
+	   i != queue_items.end();
+	   ++i) {
+        assert(!i->second->is_on_list());
+        delete i->second;
+      }
+    }
+  };
+
+
   /**
    * The Pipe is the most complex SimpleMessenger component. It gets
    * two threads, one each for reading and writing on a socket it's handed
@@ -450,7 +487,8 @@ private:
       state(st),
       connection_state(new Connection),
       reader_running(false), reader_joining(false), writer_running(false),
-      in_qlen(0), keepalive(false), halt_delivery(false),
+      in_q(new IncomingQueue(r->cct, this)),
+      keepalive(false),
       close_on_empty(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0) {
@@ -466,12 +504,7 @@ private:
         msgr->timeout = -1;
     }
     ~Pipe() {
-      for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
-          i != queue_items.end();
-          ++i) {
-        assert(!i->second->is_on_list());
-        delete i->second;
-      }
+      delete in_q;
       assert(out_q.empty());
       assert(sent.empty());
       if (connection_state)
@@ -509,9 +542,7 @@ private:
     bool writer_running;
 
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
-    map<int, list<Message*> > in_q; // and inbound ones
-    int in_qlen;
-    map<int, xlist<Pipe *>::item* > queue_items; // protected by pipe_lock AND q.lock
+    IncomingQueue *in_q;
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -686,15 +717,17 @@ private:
    * See SimpleMessenger::dispatch_entry for details.
    */
   struct DispatchQueue {
+    CephContext *cct;
+    SimpleMessenger *msgr;
     Mutex lock;
     Cond cond;
     bool stop;
 
-    map<int, xlist<Pipe *>* > queued_pipes;
-    map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
+    map<int, xlist<IncomingQueue *>* > queued_pipes;
+    map<int, xlist<IncomingQueue *>::iterator> queued_pipe_iters;
     atomic_t qlen;
     
-    enum { D_CONNECT = 0, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
+    enum { D_CONNECT = 1, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
     list<Connection*> connect_q;
     list<Connection*> remote_reset_q;
     list<Connection*> reset_q;
@@ -731,14 +764,17 @@ private:
       local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
     }
 
-    DispatchQueue() :
-      lock("SimpleMessenger::DispatchQeueu::lock"), 
-      stop(false),
-      qlen(0),
-      local_pipe(NULL)
+    void entry();
+
+    DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
+      : cct(cct), msgr(msgr),
+	lock("SimpleMessenger::DispatchQeueu::lock"), 
+	stop(false),
+	qlen(0),
+	local_pipe(NULL)
     {}
     ~DispatchQueue() {
-      for (map< int, xlist<Pipe *>* >::iterator i = queued_pipes.begin();
+      for (map< int, xlist<IncomingQueue *>* >::iterator i = queued_pipes.begin();
 	   i != queued_pipes.end();
 	   ++i) {
 	i->second->clear();

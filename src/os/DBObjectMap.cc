@@ -1098,8 +1098,10 @@ DBObjectMap::Header DBObjectMap::_generate_new_header(const hobject_t &hoid,
 {
   Header header = Header(new _Header(), RemoveOnDelete(this));
   header->seq = state.seq++;
-  if (parent)
+  if (parent) {
     header->parent = parent->seq;
+    header->spos = parent->spos;
+  }
   header->num_children = 1;
   header->hoid = hoid;
   assert(!in_use.count(header->seq));

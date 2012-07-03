@@ -4,7 +4,7 @@
 
 Default users and pools are suitable for initial testing purposes. For test bed 
 and production environments, you should create users and assign pool access to 
-the users. For user management, see the `ceph-authtool`_ command for details.
+the users.
 
 Enabling Authentication
 -----------------------
@@ -14,113 +14,97 @@ authentication for your cluster. ::
 	[global]
 		auth supported = cephx
 
-The valid values are ``cephx`` or ``none``. If you specify ``cephx``, you should
-also specify the keyring's path. We recommend using the ``/etc/ceph`` directory.
-Provide a ``keyring`` setting in ``ceph.conf`` like this::
-
-	[global]
-		auth supported = cephx
-		keyring = /etc/ceph/keyring
-
-If there is no keyring in the path, generate one.  
-
-Generating a Keyring
---------------------
-To generate a keyring in the default location, use the ``ceph-authtool`` and 
-specify the same path you specified in the ``[global]`` section of your 
-``ceph.conf`` file. For example::
-
-	sudo ceph-authtool --create-keyring /etc/ceph/keyring
-	sudo chmod +r /etc/ceph/keyring
-
-Specify Keyrings for each Daemon
---------------------------------
-In your ``ceph.conf`` file under the daemon settings, you must also specify the
-keyring directory and keyring name. The metavariable ``$name`` resolves 
-automatically. ::
-
-	[mon]
-		keyring = /etc/ceph/keyring.$name
-		
-	[osd]
-		keyring = /etc/ceph/keyring.$name
-
-	[mds]
-		keyring = /etc/ceph/keyring.$name		
+The valid values are ``cephx`` or ``none``. If you specify ``cephx``,
+Ceph will look for the keyring in the default search path, which
+includes ``/etc/ceph/keyring``.  You can override this location by
+adding a ``keyring`` option in the ``[global]`` section of your
+``ceph.conf`` file, but this is not recommended.
 
 The ``client.admin`` Key
 ------------------------
-Each Ceph command you execute on the command line assumes that you are
-the ``client.admin`` default user. When running Ceph with ``cephx`` enabled,
-you need to have a ``client.admin`` key to run ``ceph`` commands.
+
+By default, each Ceph command you execute on the command line assumes
+that you are the ``client.admin`` default user. When running Ceph with
+``cephx`` enabled, you need to have a ``client.admin`` key to run
+``ceph`` commands.
 
 .. important: To continue to run Ceph commands on the command line with
    ``cephx`` enabled, you need to create a key for the ``client.admin`` 
    user, and create a secret file under ``/etc/ceph``. 
-   
+
+The following command will generate and register a ``client.admin``
+key on the monitor with admin capabilities and write it to a keyring
+on the local file system.  If the key already exists, its current
+value will be returned.
+
 ::
-   
-	sudo ceph-authtool /etc/ceph/keyring -n client.admin --gen-key
-	sudo ceph-authtool -n client.admin --cap mds 'allow' --cap osd 'allow *' --cap mon 'allow *' /etc/ceph/keyring
-	sudo ceph auth add client.admin -i /etc/ceph/keyring
+
+        sudo ceph auth get-or-create client.admin mds 'allow' osd 'allow *' mon 'allow *' > /etc/ceph/keyring
 
 Generate a Key
 --------------
-Keys enable a specific user to access the monitor, metadata server and cluster
-according to capabilities assigned to the key. To generate a key for a user,
-you must specify specify a path to the keyring and a username. Replace 
-the ``{keyring/path}`` and ``{username}`` below. ::
 
-	sudo ceph-authtool {keyring/path} -n client.{username} --gen-key
+Keys enable a specific user to access the monitor, metadata server and
+cluster according to capabilities assigned to the key.  Capabilities are
+simple strings specifying some access permissions for a given server type.
+Each server type has its own string.  All capabilities are simply listed
+in ``{type}`` and ``{capability}`` pairs on the command line::
 
-For example:: 
+        sudo ceph auth get-or-create client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
 
-	sudo ceph-authtool /etc/ceph/keyring -n client.whirlpool --gen-key
-	
+For example, to create a user ``client.foo`` with access 'rw' for
+daemon type 'osd' and 'r' for daemon type 'mon'::
+
+        sudo ceph auth get-or-create client.foo osd rw mon r > keyring.foo
+
 .. note: User names are associated to user types, which include ``client``
    ``admin``, ``osd``, ``mon``, and ``mds``. In most cases, you will be 
    creating keys for ``client`` users.
 
-List Keys
----------
-To see a list of keys in a keyring, execute the following::
-
-	sudo ceph-authtool /etc/ceph/keyring --list
-	
-A keyring will display the user, the user's key, and the capabilities
-associated to the user's key.
-
-Add Capabilities to a Key
--------------------------
-To add capabilities to a key, you must specify the username, and a capability 
-for at least one of the monitor, metadata server and OSD. You may add more than
-one capability when executing the ``ceph-authtool`` command. Replace the 
-``{usertype.username}``, ``{daemontype}`` and ``{capability}`` below::  
-
-	sudo ceph-authtool -n {usertype.username} --cap {daemontype} {capability}
-
-For example:: 
-
-	ceph-authtool -n client.whirlpool --cap mds 'allow' --cap osd 'allow rw pool=swimmingpool' --cap mon 'allow r' /etc/ceph/keyring
-
-Add the Keys to your Cluster
-----------------------------
-Once you have generated keys and added capabilities to the keys, add each of the
-keys to your cluster. Replace the ``{usertype.username}`` below. ::
-
-	sudo ceph auth add {usertype.username} -i /etc/ceph/keyring
-
-For example:: 
-
-	sudo ceph auth add client.whirlpool -i /etc/ceph/keyring
-	
 
 List Keys in your Cluster
 -------------------------
-To list the keys in your cluster, execute the following:: 
+
+To list the keys registered in your cluster::
 
 	sudo ceph auth list
 
 
-.. _ceph-authtool: http://ceph.com/docs/master/man/8/ceph-authtool/
-		
+Daemon keyrings
+---------------
+
+With the exception of the monitors, daemon keyrings are generated in
+the same way that user keyrings are.  By default, the daemons store
+their keyrings inside their data directory.  The default keyring
+locations, and the capabilities necessary for the daemon to function,
+are shown below.
+
++-----------+---------------------------+---------------------------------------------+
+| Daemon    | Default keyring location  | Default caps                                |
++===========+===========================+=============================================+
+| ceph-mon  | $mon_data/keyring         | n/a                                         |
++-----------+---------------------------+---------------------------------------------+
+| ceph-osd  | $osd_data/keyring         | mon 'allow rwx' osd 'allow *'               |
++-----------+---------------------------+---------------------------------------------+
+| ceph-mds  | $mds_data/keyring         | mds 'allow rwx' mds 'allow *' osd 'allow *' |
++-----------+---------------------------+---------------------------------------------+
+| radosgw   | $rgw_data/keyring         | mon 'allow r' osd 'allow rwx'               |
++-----------+---------------------------+---------------------------------------------+
+
+Note that the monitor keyring contains a key but no capabilities, and
+is not part of the cluster auth database.
+
+The daemon data directory locations default to directories of the form::
+
+  /var/lib/ceph/$daemontype/$cluster-$id
+
+For example, ``osd.12`` would be::
+
+  /var/lib/ceph/osd/ceph-12
+
+You can override these locations, but it is not recommended.
+
+The monitor key can be created with ``ceph-authtool`` command, and
+must be identical across all monitors::
+
+      sudo ceph-authtool {keyring} --create-keyring --gen-key -n mon.
