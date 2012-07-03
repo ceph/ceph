@@ -234,14 +234,13 @@ void *SimpleMessenger::Accepter::entry()
       
       msgr->lock.Lock();
 
-      if (!msgr->destination_stopped) {
-	Pipe *p = new Pipe(msgr, Pipe::STATE_ACCEPTING, NULL);
-	p->sd = sd;
-	p->pipe_lock.Lock();
-	p->start_reader();
-	p->pipe_lock.Unlock();
-	msgr->pipes.insert(p);
-      }
+      Pipe *p = new Pipe(msgr, Pipe::STATE_ACCEPTING, NULL);
+      p->sd = sd;
+      p->pipe_lock.Lock();
+      p->start_reader();
+      p->pipe_lock.Unlock();
+      msgr->pipes.insert(p);
+
       msgr->lock.Unlock();
     } else {
       ldout(msgr->cct,0) << "accepter no incoming connection?  sd = " << sd
