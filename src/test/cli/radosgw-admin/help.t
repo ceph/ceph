@@ -61,11 +61,11 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --yes-i-really-mean-it    required for certain operations
-  --conf/-c        Read configuration from the given configuration file
-  -d               Run in foreground, log to stderr.
-  -f               Run in foreground, log to usual location.
-  --id/-i          set ID portion of my name
-  --name/-n        set name (TYPE.ID)
-  --version        show version and quit
+    --conf/-c        Read configuration from the given configuration file
+    -d               Run in foreground, log to stderr.
+    -f               Run in foreground, log to usual location.
+    --id/-i          set ID portion of my name
+    --name/-n        set name (TYPE.ID)
+    --version        show version and quit
   
   [1]
