@@ -4286,7 +4286,6 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   last_update_applied = m->version;
   if (finalizing_scrub) {
     assert(active_rep_scrub);
-    assert(info.last_update <= active_rep_scrub->scrub_to);
     if (last_update_applied == active_rep_scrub->scrub_to) {
       osd->rep_scrub_wq.queue(active_rep_scrub);
       active_rep_scrub = 0;
