@@ -62,37 +62,14 @@ public:
    * be a value that will be repeated if the daemon restarts.
    */
   SimpleMessenger(CephContext *cct, entity_name_t name,
-		  string mname, uint64_t _nonce) :
-    Messenger(cct, name),
-    accepter(this),
-    dispatch_queue(cct, this),
-    reaper_thread(this),
-    dispatch_thread(this),
-    my_type(name.type()),
-    nonce(_nonce),
-    lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
-    global_seq(0),
-    destination_stopped(false),
-    cluster_protocol(0),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
-    reaper_started(false), reaper_stop(false),
-    timeout(0),
-    local_connection(new Connection),
-    msgr(this)
-  {
-    pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
-    init_local_connection();
-  }
+		  string mname, uint64_t _nonce);
+
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
    * elsewhere.
    */
-  virtual ~SimpleMessenger() {
-    assert(destination_stopped); // we've been marked as stopped
-    assert(!did_bind); // either we didn't bind or we shut down the Accepter
-    assert(rank_pipe.empty()); // we don't have any running Pipes.
-    assert(reaper_stop && !reaper_started); // the reaper thread is stopped
-  }
+  virtual ~SimpleMessenger();
+
   /** @defgroup Accessors
    * @{
    */
