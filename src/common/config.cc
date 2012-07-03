@@ -434,7 +434,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       } else {
 	std::string no("--no-");
 	no += opt->name;
-	if (ceph_argparse_flag(args, i, &res, no.c_str(), (char*)NULL)) {
+	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
 	  set_val_impl("false", opt);
 	  break;
 	}
