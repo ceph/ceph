@@ -198,7 +198,8 @@ int md_config_t::parse_config_files(const char *conf_files,
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
 					 std::deque<std::string> *parse_errors)
 {
-  Mutex::Locker l(lock);
+  assert(lock.is_locked());
+
   // open new conf
   list<string>::const_iterator c;
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
@@ -215,11 +216,11 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     return -EINVAL;
 
   std::vector <std::string> my_sections;
-  get_my_sections(my_sections);
+  _get_my_sections(my_sections);
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = &config_optionsp[i];
     std::string val;
-    int ret = get_val_from_conf_file(my_sections, opt->name, val, false);
+    int ret = _get_val_from_conf_file(my_sections, opt->name, val, false);
     if (ret == 0) {
       set_val_impl(val.c_str(), opt);
     }
@@ -230,7 +231,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     std::string as_option("debug_");
     as_option += subsys.get_name(o);
     std::string val;
-    int ret = get_val_from_conf_file(my_sections, as_option.c_str(), val, false);
+    int ret = _get_val_from_conf_file(my_sections, as_option.c_str(), val, false);
     if (ret == 0) {
       int log, gather;
       int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
@@ -433,7 +434,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       } else {
 	std::string no("--no-");
 	no += opt->name;
-	if (ceph_argparse_flag(args, i, &res, no.c_str(), (char*)NULL)) {
+	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
 	  set_val_impl("false", opt);
 	  break;
 	}
@@ -736,6 +737,12 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
 void md_config_t::get_my_sections(std::vector <std::string> &sections) const
 {
   Mutex::Locker l(lock);
+  _get_my_sections(sections);
+}
+
+void md_config_t::_get_my_sections(std::vector <std::string> &sections) const
+{
+  assert(lock.is_locked());
   sections.push_back(name.to_str());
 
   sections.push_back(name.get_type_name());
@@ -758,6 +765,13 @@ int md_config_t::get_val_from_conf_file(const std::vector <std::string> &section
 		    const char *key, std::string &out, bool emeta) const
 {
   Mutex::Locker l(lock);
+  return _get_val_from_conf_file(sections, key, out, emeta);
+}
+
+int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sections,
+					 const char *key, std::string &out, bool emeta) const
+{
+  assert(lock.is_locked());
   std::vector <std::string>::const_iterator s = sections.begin();
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
