@@ -17,7 +17,7 @@ Name:		ceph
 Version:	@VERSION@
 Release:	6%{?dist}
 Summary:	User space components of the Ceph file system
-License:	LGPLv2
+License:	GPL-2.0
 Group:		System Environment/Base
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
@@ -81,7 +81,7 @@ FUSE based client for Ceph distributed network file system
 %package devel
 Summary:	Ceph headers
 Group:		Development/Libraries
-License:	LGPLv2
+License:	LGPL-2.0
 Requires:	%{name} = %{version}-%{release}
 Requires:	librados2 = %{version}
 Requires:	librbd1 = %{version}
@@ -111,7 +111,7 @@ conjunction with any FastCGI capable web server.
 %package obsync
 Summary:	synchronize data between cloud object storage providers or a local directory
 Group:		Productivity/Networking/Other
-License:	LGPLv2
+License:	LGPL-2.0
 Requires:	python, python-boto
 %description obsync
 obsync is a tool to synchronize objects between cloud object
@@ -122,7 +122,7 @@ Ceph RADOS cluster, or a local directory.
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
 Group:		System Environment/Base
-License:	LGPLv2
+License:	LGPL-2.0
 Requires:	%{name} = %{version}
 Requires:	resource-agents
 %description resource-agents
@@ -134,7 +134,7 @@ managers such as Pacemaker.
 %package -n librados2
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
-License:	LGPLv2
+License:	LGPL-2.0
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
@@ -144,7 +144,7 @@ store using a simple file-like interface.
 %package -n librbd1
 Summary:	RADOS block device client library
 Group:		System Environment/Libraries
-License:	LGPLv2
+License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
@@ -155,7 +155,7 @@ shared library allowing applications to manage these block devices.
 %package -n libcephfs1
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
-License:	LGPLv2
+License:	LGPL-2.0
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
@@ -165,7 +165,7 @@ POSIX-like interface.
 %package -n python-ceph
 Summary:	Python libraries for the Ceph distributed filesystem
 Group:		System Environment/Libraries
-License:	LGPLv2
+License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
