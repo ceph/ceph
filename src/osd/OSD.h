@@ -880,6 +880,7 @@ protected:
     }
     void _process(PG *pg) {
       pg->scrub();
+      pg->put();
     }
     void _clear() {
       while (!osd->scrub_queue.empty()) {
