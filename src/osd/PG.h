@@ -802,7 +802,7 @@ public:
   void _request_scrub_map(int replica, eversion_t version);
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
-  virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  virtual int _scrub(ScrubMap &map, int* errors, int* fixed) { return 0; }
   virtual coll_t get_temp_coll() = 0;
   virtual bool have_temp_coll() = 0;
   void clear_scrub_reserved();
