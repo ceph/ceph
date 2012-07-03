@@ -43,19 +43,74 @@ void do_status(CephToolCtx *ctx, bool shutdown = false);
 
 static void usage()
 {
-  cout << "usage: ceph [options] [commands]\n";
+  cout << "usage:\n";
+  cout << " ceph [options] [command]\n";
+  cout << " ceph -s     cluster status summary\n";
+  cout << " ceph -w     running cluster summary and events\n";
+  cout << "\n";
   cout << "If no commands are specified, enter interactive mode.\n";
-  cout << "Commands:\n";
-  cout << "   (osd|pg|mds) stat -- get monitor subsystem status\n"
-       << "   ...\n";
-  cout << "Options:\n";
-  cout << "   -i infile\n"
-       << "   -o outfile\n"
-       << "        specify input or output file (for certain commands)\n"
-       << "   -s or --status\n"
-       << "        print current system status\n"
-       << "   -w or --watch\n"
-       << "        watch system status changes in real time (push)\n";
+  cout << "\n";
+  cout << "CLUSTER COMMANDS\n";
+  cout << "  ceph health [detail]\n";
+  cout << "  ceph quorum_status\n";
+  cout << "  ceph -m <mon-ip-or-host> mon_status\n";
+  cout << "\n";
+  cout << "AUTHENTICATION (AUTH) COMMANDS\n";
+  cout << "  ceph auth get-or-create[-key] <name> [capsys1 capval1 [...]]\n";
+  cout << "  ceph auth del <name>\n";
+  cout << "  ceph auth list\n";
+  cout << "\n";
+  cout << "METADATA SERVER (MDS) COMMANDS\n";
+  cout << "  ceph mds stat\n";
+  cout << "  ceph mds tell <mds-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'\n";
+  cout << "\n";
+  cout << "MONITOR (MON) COMMANDS\n";
+  cout << "  ceph mon add <name> <ip>[:<port>]\n";
+  cout << "  ceph mon delete <name>\n";
+  cout << "  ceph mon stat\n";
+  cout << "  ceph mon tell <mon-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'\n";
+  cout << "\n";
+  cout << "OBJECT STORAGE DEVICE (OSD) COMMANDS\n";
+  cout << "  ceph osd dump [--format=json]\n";
+  cout << "  ceph osd tree\n";
+  cout << "  ceph osd down <osd-id>\n";
+  cout << "  ceph osd in <osd-id>\n";
+  cout << "  ceph osd out <osd-id>\n";
+  cout << "  ceph osd set <noout|noin|nodown|noup>\n";
+  cout << "  ceph osd unset <noout|noin|nodown|noup>\n";
+  cout << "  ceph osd pause\n";
+  cout << "  ceph osd unpause\n";
+  cout << "  ceph osd tell <osd-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'\n";
+  cout << "  ceph osd getcrushmap -o <file>\n";
+  cout << "  ceph osd getmap -o <file>\n";
+  cout << "  ceph osd crush set <osd-id> <name> <weight> [<loc1> [<loc2> ...]]\n";
+  cout << "  ceph osd crush move <bucketname> <loc1> [<loc2> ...]\n";
+  cout << "  ceph osd crush reweight <name> <weight>\n";
+  cout << "  ceph osd create [<osd-id>]\n";
+  cout << "  ceph osd rm <osd-id> [<osd-id>...]\n";
+  cout << "  ceph osd lost [--yes-i-really-mean-it]\n";
+  cout << "  ceph osd reweight <osd-id> <weight>\n";
+  cout << "  ceph osd blacklist add <address>[:source_port] [time]\n";
+  cout << "  ceph osd blacklist rm <address>[:source_port]\n";
+  cout << "  ceph osd pool mksnap <pool> <snapname>\n";
+  cout << "  ceph osd pool rmsnap <pool> <snapname>\n";
+  cout << "  ceph osd pool create <pool> [<pg_num> [<pgp_num>]]\n";
+  cout << "  ceph osd pool delete <pool>\n";
+  cout << "  ceph osd pool rename <pool> <new pool name>\n";
+  cout << "  ceph osd pool set <pool> <field> <value>\n";
+  cout << "  ceph osd scrub <osd-id>\n";
+  cout << "  ceph osd repair <osd-id>\n";
+  cout << "  ceph osd tell N bench [bytes per write] [total bytes]\n";
+  cout << "\n";
+  cout << "PLACEMENT GROUP (PG) COMMANDS\n";
+  cout << "  ceph pg dump\n";
+  cout << "  ceph pg <pg-id> query\n";
+  cout << "  ceph pg scrub <pg-id>\n";
+  cout << "  ceph pg map <pg-id>\n";
+  cout << "\n";
+  cout << "OPTIONS\n";
+  cout << "  -o <file>        Write out to <file>\n";
+  cout << "  -i <file>        Read input from <file> (for some commands)\n";
   generic_client_usage(); // Will exit()
 }
 
