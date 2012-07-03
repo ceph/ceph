@@ -650,15 +650,9 @@ void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_a
 
   // local?
   if (!pipe && my_inst.addr == dest_addr) {
-    if (!destination_stopped) {
-      // local
-      ldout(cct,20) << "submit_message " << *m << " local" << dendl;
-      dispatch_queue.local_delivery(m, m->get_priority());
-    } else {
-      ldout(cct,0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
-      assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
-      m->put();
-    }
+    // local
+    ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+    dispatch_queue.local_delivery(m, m->get_priority());
   } else {
     // remote pipe.
     if (pipe) {
