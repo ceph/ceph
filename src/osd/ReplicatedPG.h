@@ -905,7 +905,7 @@ protected:
 
 
   // -- scrub --
-  virtual int _scrub(ScrubMap& map, int& errors, int& fixed);
+  virtual int _scrub(ScrubMap& map, int* errors, int* fixed);
 
   void apply_and_flush_repops(bool requeue);
 

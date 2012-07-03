@@ -3489,7 +3489,7 @@ void PG::scrub_finalize() {
   }
 
   // ok, do the pg-type specific scrubbing
-  _scrub(primary_scrubmap, errors, fixed);
+  _scrub(primary_scrubmap, &errors, &fixed);
 
   {
     stringstream oss;
