@@ -541,10 +541,12 @@ private:
       for (list<PG*>::iterator i = osd->op_queue.begin();
 	   i != osd->op_queue.end();
 	   ) {
-	if (*i == pg)
+	if (*i == pg) {
 	  osd->op_queue.erase(i++);
-	else
+	  pg->put();
+	} else {
 	  ++i;
+	}
       }
     }
     bool _empty() {
