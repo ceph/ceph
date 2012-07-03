@@ -1,38 +1,8 @@
 
 #include "CrushTester.h"
 
-// chi squared stuff
-#include <math.h>
-
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-# include <boost/math/distributions/chi_squared.hpp>
-# include <boost/accumulators/statistics/variance.hpp>
-# include <boost/accumulators/accumulators.hpp>
-# include <boost/accumulators/statistics/stats.hpp>
-
-// random number generator
-# include <boost/random/mersenne_twister.hpp>
-# include <boost/random/discrete_distribution.hpp>
-# include <boost/random/uniform_int_distribution.hpp>
-
-// needed to compute chi squared value
-using boost::math::chi_squared;
-using boost::accumulators::stats;
-using boost::accumulators::variance;
-using boost::accumulators::accumulator_set;
-
-// create a random number generator to simulate placements
-
-// use the mersenne twister as our seed generator
-typedef boost::mt19937 generator;
-
-generator gen(42); // repeatable
-//generator gen(static_cast<unsigned int>(std::time(0))); // non-repeatable (ish)
-
-// create another random number generator to pick buckets when we want to mark devices down
-generator bucket_gen(42);
-
-#endif
+// a better RNG to be found within
+#include <stdlib.h>
 
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -120,7 +90,6 @@ map<int,int> CrushTester::get_collapsed_mapping()
 
 void CrushTester::adjust_weights(vector<__u32>& weight)
 {
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
 
   if (mark_down_device_ratio > 0) {
     // active buckets
@@ -145,12 +114,9 @@ void CrushTester::adjust_weights(vector<__u32>& weight)
       }
     }
 
-    // create the uniform distribution on the number of buckets to visit
-    boost::random::uniform_int_distribution<> bucket_choose(0, buckets_above_devices.size() - 1);
-
     // permute bucket list
     for (unsigned i = 0; i < buckets_above_devices.size(); i++) {
-      unsigned j = bucket_choose(bucket_gen);
+      unsigned j = lrand48() % (buckets_above_devices.size() - 1);
       std::swap(buckets_above_devices[i], buckets_above_devices[j]);
     }
 
@@ -165,9 +131,8 @@ void CrushTester::adjust_weights(vector<__u32>& weight)
         items.push_back(crush.get_bucket_item(id, o));
 
       // permute items
-      boost::random::uniform_int_distribution<> item_choose(0, size - 1);
       for (int o = 0; o < size; o++) {
-        int j = item_choose(bucket_gen);
+        int j = lrand48() % (crush.get_bucket_size(id) - 1);
         std::swap(items[o], items[j]);
       }
 
@@ -178,9 +143,6 @@ void CrushTester::adjust_weights(vector<__u32>& weight)
       }
     }
   }
-#else
-  err << "WARNING: boost::random not compiled in, mark down ratios not working" << std::endl;
-#endif
 }
 
 bool CrushTester::check_valid_placement(int ruleno, vector<int> out, const vector<__u32>& weight){
@@ -285,12 +247,6 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
   for (unsigned i = 0; i < weight.size(); i++)
     proportional_weights[i] = (float) weight[i] / (float) total_weight;
 
-
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-  // create a random number generator with the device weights to use for simulating placements
-  boost::random::discrete_distribution<> dist(proportional_weights);
-#endif
-
   // determine the real maximum number of devices to return
   int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
@@ -302,7 +258,7 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
     // create a vector to hold our trial mappings
     int temp_array[devices_requested];
     for (int i = 0; i < devices_requested; i++){
-      temp_array[i] = dist(gen);
+      temp_array[i] = lrand48() % (crush.get_max_devices());
     }
 
     trial_placement.assign(temp_array, temp_array + devices_requested);
@@ -334,7 +290,6 @@ int CrushTester::test()
     min_x = 0;
     max_x = 1023;
   }
-
 
   // initial osd weights
   vector<__u32> weight;
@@ -387,32 +342,11 @@ int CrushTester::test()
       int num_objects = ((max_x - min_x) + 1);
       float num_devices = (float) per.size(); // get the total number of devices, better to cast as a float here 
 
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-      float test_chi_statistic = 0.0; // our observed chi squared statistic
-
-      // look up the maximum expected chi squared statistic for the 5% and 1% confidence levels
-      float chi_statistic_five_percent = quantile(complement(chi_squared(num_devices_active-1), 0.05));
-      float chi_statistic_one_percent = quantile(complement(chi_squared(num_devices_active-1), 0.01));
-#endif
-      
       // create a map to hold batch-level placement information
       map<int, vector<int> > batch_per;
-      vector <float> device_test_chi (per.size() );
       int objects_per_batch = num_objects / num_batches;
       int batch_min = min_x;
       int batch_max = min_x + objects_per_batch - 1;
-      
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-      // place holders for the reference values, we will probably SEGFAULT if we try zero degrees of freedom
-      float batch_chi_statistic_five_percent = -1.0;
-      float batch_chi_statistic_one_percent = -1.0;
-      
-      if (num_batches > 1) {
-        // look up the chi squared statistic for the 5% and 1% confidence levels
-        batch_chi_statistic_five_percent = quantile(complement(chi_squared(num_batches-1), 0.05));
-        batch_chi_statistic_one_percent = quantile(complement(chi_squared(num_batches-1), 0.01));
-      }
-#endif
 
       // get the total weight of the system
       int total_weight = 0;
@@ -428,13 +362,7 @@ int CrushTester::test()
 
       for (unsigned i = 0; i < per.size(); i++)
         proportional_weights[i] = (float) weight[i] / (float) total_weight;
-      
 
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-      // create a random number generator with the device weights to use for simulating placements
-      boost::random::discrete_distribution<> dist(proportional_weights);
-#endif
-      
       // compute the expected number of objects stored per device when a device's weight is considered
       vector<float> num_objects_expected(num_devices);
 
@@ -467,13 +395,12 @@ int CrushTester::test()
             crush.do_rule(r, x, out, nr, weight);
           } else {
 
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
+
             if (output_statistics)
               err << "RNG"; // prepend RNG to placement output to denote simulation
 
             // test our new monte carlo placement generator
             random_placement(r, out, nr, weight);
-#endif
           }
 
           if (output_statistics){
@@ -492,12 +419,6 @@ int CrushTester::test()
           }
         }
 
-        // compute chi squared statistic for device examining the uniformity this batch of placements
-        for (unsigned i = 0; i < per.size(); i++){
-          device_test_chi[i] += pow( (temporary_per[i] - batch_num_objects_expected[i]), 2) /
-              batch_num_objects_expected[i];
-        }
-
         batch_min = batch_max + 1;
         batch_max = batch_min + objects_per_batch - 1;
       }
@@ -513,25 +434,6 @@ int CrushTester::test()
           << " result size == " << p->first << ":\t"
           << p->second << "/" << (max_x-min_x+1) << std::endl;
 
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-      // compute our overall test chi squared statistic examining the final distribution of placements
-      for (unsigned i = 0; i < per.size(); i++)
-        if (num_objects_expected[i] > 0){
-          test_chi_statistic += pow((per[i] - num_objects_expected[i] ),2) / (float) num_objects_expected[i];
-        }
-
-      int num_devices_failing_at_five_percent = 0;
-      int num_devices_failing_at_one_percent = 0;
-
-      for (unsigned i = 0; i < per.size(); i++) {
-        if (device_test_chi[i] > batch_chi_statistic_five_percent)
-          num_devices_failing_at_five_percent++;
-        if (device_test_chi[i] > batch_chi_statistic_one_percent)
-          num_devices_failing_at_one_percent++;
-      }
-
-#endif      
-
       if (output_statistics)
         for (unsigned i = 0; i < per.size(); i++) {
           if (output_utilization && num_batches > 1){
@@ -539,43 +441,15 @@ int CrushTester::test()
               err << "  device " << i << ":\t"
                   << "\t" << " stored " << ": " << per[i]
                   << "\t" << " expected " << ": " << num_objects_expected[i]
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-                  << "\t" << " X^2 " << ": " << device_test_chi[i]
-                  << "\t" << " critical (5% confidence) " << ": " << batch_chi_statistic_five_percent
-                  << "\t" << " (1% confidence) " << ": " << batch_chi_statistic_one_percent
-#endif
                   << std::endl;
             }
           } else if (output_utilization_all && num_batches > 1) {
             err << "  device " << i << ":\t"
                 << "\t" << " stored " << ": " << per[i]
                 << "\t" << " expected " << ": " << num_objects_expected[i]
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-                << "\t" << " X^2 " << ": " << device_test_chi[i]
-                << "\t" << " critical X^2 (5% confidence) " << ": " << batch_chi_statistic_five_percent
-                << "\t" << " (1% confidence) " << ": " << batch_chi_statistic_one_percent
-#endif
                 << std::endl;
           }
         }
-
-#ifdef HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION
-      err << " chi squared = " << test_chi_statistic
-          << " (vs " << chi_statistic_five_percent << " / "
-          << chi_statistic_one_percent
-          << " for 5% / 1% confidence level) " << std::endl;
-      if (output_utilization || output_utilization_all)
-        err << " total system weight (dec) = " << (total_weight / (float) 0x10000) << std::endl;
-
-      if (num_batches > 1 && output_statistics) {
-        err << " " << num_devices_failing_at_five_percent << "/" << num_devices_active << " ("
-            << (100.0*((float) num_devices_failing_at_five_percent / (float) num_devices_active))
-            << "%) devices failed testing at 5% confidence level" << std::endl;
-        err << " " << num_devices_failing_at_one_percent << "/" << num_devices_active  << " ("
-            << (100.0*((float) num_devices_failing_at_one_percent / (float) num_devices_active))
-            << "%) devices failed testing at 1% confidence level" << std::endl;
-      }
-#endif
     }
   }
 
