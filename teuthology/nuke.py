@@ -17,14 +17,13 @@ def parse_args():
         type=config_file,
         action=MergeConfig,
         default={},
-        required=True,
         dest='config',
         help='yaml config containing machines to nuke',
         )
     parser.add_argument(
-        '--archive',
+        '-a', '--archive',
         metavar='DIR',
-        help='path to archive results in',
+        help='archive path for a job to kill and nuke',
         )
     parser.add_argument(
         '--owner',
@@ -244,6 +243,7 @@ def synch_clocks(remotes, log):
 def main():
     from gevent import monkey; monkey.patch_all()
     from .orchestra import monkey; monkey.patch_all()
+    from teuthology.run import config_file
 
     import logging
 
@@ -258,6 +258,13 @@ def main():
     logging.basicConfig(
         level=loglevel,
         )
+
+    if ctx.archive:
+        ctx.config = config_file(ctx.archive + '/config.yaml')
+        if not ctx.pid:
+            ctx.pid = int open(ctx.archive + '/pid').read().rstrip('\n')
+        if not ctx.owner:
+            ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
 
     from teuthology.misc import read_config
     read_config(ctx)
