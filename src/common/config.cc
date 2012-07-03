@@ -220,7 +220,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = &config_optionsp[i];
     std::string val;
-    int ret = get_val_from_conf_file(my_sections, opt->name, val, false);
+    int ret = _get_val_from_conf_file(my_sections, opt->name, val, false);
     if (ret == 0) {
       set_val_impl(val.c_str(), opt);
     }
@@ -231,7 +231,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     std::string as_option("debug_");
     as_option += subsys.get_name(o);
     std::string val;
-    int ret = get_val_from_conf_file(my_sections, as_option.c_str(), val, false);
+    int ret = _get_val_from_conf_file(my_sections, as_option.c_str(), val, false);
     if (ret == 0) {
       int log, gather;
       int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
@@ -759,6 +759,13 @@ int md_config_t::get_val_from_conf_file(const std::vector <std::string> &section
 		    const char *key, std::string &out, bool emeta) const
 {
   Mutex::Locker l(lock);
+  return _get_val_from_conf_file(sections, key, out, emeta);
+}
+
+int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sections,
+					 const char *key, std::string &out, bool emeta) const
+{
+  assert(lock.is_locked());
   std::vector <std::string>::const_iterator s = sections.begin();
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
