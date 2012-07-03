@@ -3016,7 +3016,6 @@ void PG::replica_scrub(MOSDRepScrub *msg)
 	       << msg->map_epoch << " < " << info.history.same_interval_since 
 	       << dendl;
     }
-    msg->put();
     return;
   }
 
@@ -3029,6 +3028,7 @@ void PG::replica_scrub(MOSDRepScrub *msg)
       finalizing_scrub = 1;
       if (last_update_applied != msg->scrub_to) {
 	active_rep_scrub = msg;
+	msg->get();
 	return;
       }
     }
@@ -3040,7 +3040,6 @@ void PG::replica_scrub(MOSDRepScrub *msg)
 
   if (msg->map_epoch < info.history.same_interval_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
-    msg->put();
     return;
   }
 
@@ -3055,8 +3054,6 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   subop->ops = scrub;
 
   osd->cluster_messenger->send_message(subop, msg->get_connection());
-
-  msg->put();
 }
 
 /* Scrub:
