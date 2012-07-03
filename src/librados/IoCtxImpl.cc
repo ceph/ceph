@@ -655,7 +655,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
 		 *o, snap_seq, pbl, 0,
-		 onack, 0);
+		 onack, &c->objver);
   return 0;
 }
 
