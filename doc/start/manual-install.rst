@@ -1,6 +1,6 @@
-=============
- Quick Start
-=============
+==========================
+ Installing Ceph Manually
+==========================
 Ceph is intended for large-scale deployments, but you may install Ceph on a
 single host. Quick start is intended for Debian/Ubuntu Linux distributions.
 
