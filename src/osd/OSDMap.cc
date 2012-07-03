@@ -688,6 +688,8 @@ int OSDMap::apply_incremental(Incremental &inc)
   for (map<int64_t,string>::iterator p = inc.new_pool_names.begin();
        p != inc.new_pool_names.end();
        p++) {
+    if (pool_name.count(p->first))
+      name_pool.erase(pool_name[p->first]);
     pool_name[p->first] = p->second;
     name_pool[p->second] = p->first;
   }

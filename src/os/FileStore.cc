@@ -389,6 +389,12 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT)
 	return r;
+    } else {
+      /* Ensure that replay of this op doesn't result in the object_map
+       * going away.
+       */
+      if (!btrfs_stable_commits)
+	object_map->sync(&o, &spos);
     }
   }
   return index->unlink(o);
@@ -712,6 +718,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_queue_max_bytes(g_conf->filestore_queue_max_bytes),
   m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
   m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
+  m_filestore_do_dump(false),
   m_filestore_dump_fmt(true)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
