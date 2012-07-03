@@ -980,8 +980,15 @@ protected:
       osd->recovery_queue.pop_front();
       return pg;
     }
+    void _queue_front(PG *pg) {
+      if (!pg->recovery_item.is_on_list()) {
+	pg->get();
+	osd->recovery_queue.push_front(&pg->recovery_item);
+      }
+    }
     void _process(PG *pg) {
       osd->do_recovery(pg);
+      pg->put();
     }
     void _clear() {
       while (!osd->recovery_queue.empty()) {

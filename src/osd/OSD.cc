@@ -4832,7 +4832,6 @@ void OSD::do_recovery(PG *pg)
     pg->lock();
     if (pg->deleting || !(pg->is_active() && pg->is_primary())) {
       pg->unlock();
-      pg->put();
       return;
     }
     
@@ -4860,7 +4859,7 @@ void OSD::do_recovery(PG *pg)
       if (!rctx.query_map->size()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
 	recovery_wq.lock();
-	pg->recovery_item.remove_myself();	// sigh...
+	recovery_wq._dequeue(pg);
 	recovery_wq.unlock();
       }
     }
@@ -4870,7 +4869,6 @@ void OSD::do_recovery(PG *pg)
     pg->unlock();
     dispatch_context(rctx, pg, curmap);
   }
-  pg->put();
 }
 
 void OSD::start_recovery_op(PG *pg, const hobject_t& soid)
@@ -4910,10 +4908,9 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 #endif
 
   if (dequeue)
-    pg->recovery_item.remove_myself();
+    recovery_wq._dequeue(pg);
   else {
-    pg->get();
-    recovery_queue.push_front(&pg->recovery_item);  // requeue
+    recovery_wq._queue_front(pg);
   }
 
   recovery_wq.kick();
@@ -4926,8 +4923,7 @@ void OSD::defer_recovery(PG *pg)
 
   // move pg to the end of the queue...
   recovery_wq.lock();
-  pg->get();
-  recovery_queue.push_back(&pg->recovery_item);
+  recovery_wq._enqueue(pg);
   recovery_wq.kick();
   recovery_wq.unlock();
 }
