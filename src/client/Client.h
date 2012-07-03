@@ -338,7 +338,7 @@ protected:
   void trim_dentry(Dentry *dn);
   void trim_caps(int mds, int max);
   
-  void dump_inode(Inode *in, set<Inode*>& did);
+  void dump_inode(Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache();  // debug
   
   // trace generation

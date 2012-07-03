@@ -232,18 +232,24 @@ inodeno_t Client::get_root_ino()
 
 // debug crapola
 
-void Client::dump_inode(Inode *in, set<Inode*>& did)
+void Client::dump_inode(Inode *in, set<Inode*>& did, bool disconnected)
 {
-  ldout(cct, 1) << "dump_inode: inode " << in->ino << " ref " << in->get_num_ref() << " dir " << in->dir << dendl;
-
+  filepath path;
+  in->make_long_path(path);
+  ldout(cct, 1) << "dump_inode: "
+		<< (disconnected ? "DISCONNECTED ":"")
+		<< "inode " << in->ino
+		<< " " << path
+		<< " ref " << in->get_num_ref()
+		<< *in << dendl;
+  did.insert(in);
   if (in->dir) {
-    ldout(cct, 1) << "  dir size " << in->dir->dentries.size() << dendl;
-    //for (hash_map<const char*, Dentry*, hash<const char*>, eqstr>::iterator it = in->dir->dentries.begin();
+    ldout(cct, 1) << "  dir " << in->dir << " size " << in->dir->dentries.size() << dendl;
     for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          it++) {
-      ldout(cct, 1) << "    dn " << it->first << " ref " << it->second->ref << dendl;
-      dump_inode(it->second->inode, did);
+      ldout(cct, 1) << "   " << in->ino << " dn " << it->first << " " << it->second << " ref " << it->second->ref << dendl;
+      dump_inode(it->second->inode, did, false);
     }
   }
 }
@@ -252,22 +258,19 @@ void Client::dump_cache()
 {
   set<Inode*> did;
 
-  if (root) dump_inode(root, did);
+  ldout(cct, 1) << "dump_cache" << dendl;
 
+  if (root)
+    dump_inode(root, did, true);
+
+  // make a second pass to catch anything disconnected
   for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
-    if (did.count(it->second)) continue;
-    
-    ldout(cct, 1) << "dump_cache: inode " << it->first
-		  << " ref " << it->second->get_num_ref()
-		  << " dir " << it->second->dir
-		  << " " << *it->second << dendl;
-    if (it->second->dir) {
-      ldout(cct, 1) << "  dir size " << it->second->dir->dentries.size() << dendl;
-    }
+    if (did.count(it->second))
+      continue;
+    dump_inode(it->second, did, true);
   }
- 
 }
 
 int Client::init() 
