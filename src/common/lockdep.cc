@@ -36,7 +36,7 @@ namespace __gnu_cxx {
 #undef DOUT_COND
 #define DOUT_COND(cct, l) cct && l <= XDOUT_CONDVAR(cct, dout_subsys)
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  100   // increase me as needed
+#define MAX_LOCKS  1000   // increase me as needed
 #define BACKTRACE_SKIP 3
 
 /******* Globals **********/
