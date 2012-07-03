@@ -581,10 +581,12 @@ private:
       for (list<PG*>::iterator i = peering_queue.begin();
 	   i != peering_queue.end();
 	   ) {
-	if (*i == pg)
+	if (*i == pg) {
 	  peering_queue.erase(i++);
-	else
+	  pg->put();
+	} else {
 	  ++i;
+	}
       }
     }
     bool _enqueue(PG *pg) {
