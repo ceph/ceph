@@ -11,6 +11,11 @@ recent Debian/Ubuntu operating system. The intent is to help you exercise
 Ceph functionality without the deployment overhead associated with a 
 production-ready storage cluster.
 
+Install Debian/Ubuntu
+---------------------
+
+Install a recent release of Debian or Ubuntu (e.g., 12.04 precise). 
+
 Add Ceph Packages
 -----------------
 
@@ -25,7 +30,10 @@ install Ceph. ::
 Add a Configuration File
 ------------------------
 
-Copy the contents of the following configuration file and save it to
+Modify the contents of the following configuration file such that
+``localhost`` is the actual host name, and the monitor IP address 
+is the actual IP address of the host (i.e., not 127.0.0.1).Then, 
+copy the contents of the modified configuration file and save it to
 ``/etc/ceph/ceph.conf``. This file will configure Ceph to operate a monitor, 
 two OSD daemons and one metadata server on your local machine. 
 
