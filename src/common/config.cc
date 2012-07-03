@@ -216,7 +216,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     return -EINVAL;
 
   std::vector <std::string> my_sections;
-  get_my_sections(my_sections);
+  _get_my_sections(my_sections);
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = &config_optionsp[i];
     std::string val;
@@ -737,6 +737,12 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
 void md_config_t::get_my_sections(std::vector <std::string> &sections) const
 {
   Mutex::Locker l(lock);
+  _get_my_sections(sections);
+}
+
+void md_config_t::_get_my_sections(std::vector <std::string> &sections) const
+{
+  assert(lock.is_locked());
   sections.push_back(name.to_str());
 
   sections.push_back(name.get_type_name());
