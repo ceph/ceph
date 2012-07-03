@@ -217,7 +217,27 @@ public:
   }
 
 
+  /**
+   * returns the (type, name) of the parent bucket of id
+   */
   pair<string,string> get_immediate_parent(int id);
+
+  /**
+   * get the fully qualified location of a device by successively finding
+   * parents beginning at ID and ending at highest type number specified in
+   * the CRUSH map which assumes that if device foo is under device bar, the
+   * type_id of foo < bar where type_id is the integer specified in the CRUSH map
+   *
+   * returns the location in the form of (type=foo) where type is a type of bucket
+   * specified in the CRUSH map and foo is a name specified in the CRUSH map
+   */
+  map<string, string> get_full_location(int id);
+
+  /**
+   * returns (type_id, type) of all parent buckets between id and
+   * default, can be used to check for anomolous CRUSH maps
+   */
+  map<int, string> get_parent_hierarchy(int id);
 
 
   /**
