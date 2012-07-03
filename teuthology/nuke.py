@@ -31,6 +31,12 @@ def parse_args():
         help='job owner',
         )
     parser.add_argument(
+        '-p','--pid',
+	type=int,
+	default=False,
+        help='pid of the process to be deleted',
+        )
+    parser.add_argument(
         '-r', '--reboot-all',
         action='store_true',
         default=False,
@@ -262,8 +268,11 @@ def main():
         from teuthology.misc import get_user
         ctx.owner = get_user()
 
-    nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all)
+    if ctx.pid:
+	from teuthology.misc import kill_process
+	kill_process(ctx)
 
+    nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all)
 
 def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
     from teuthology.parallel import parallel
