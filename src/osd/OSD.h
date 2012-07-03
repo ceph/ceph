@@ -1045,6 +1045,7 @@ protected:
     }
     void _process(PG *pg) {
       pg->snap_trimmer();
+      pg->put();
     }
     void _clear() {
       osd->snap_trim_queue.clear();
