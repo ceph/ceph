@@ -488,6 +488,7 @@ protected:
    * @defgroup Dispatcher Interfacing
    * @{
    */
+public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
