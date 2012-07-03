@@ -198,7 +198,8 @@ int md_config_t::parse_config_files(const char *conf_files,
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
 					 std::deque<std::string> *parse_errors)
 {
-  Mutex::Locker l(lock);
+  assert(lock.is_locked());
+
   // open new conf
   list<string>::const_iterator c;
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
