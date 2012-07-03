@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import os.path
+import subprocess
 import sys
 import uuid
 
@@ -41,6 +42,33 @@ def write_one_line(parent, name, text):
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 
+def get_fsid(cluster):
+    try:
+        p = subprocess.Popen(
+            args=[
+                'ceph-conf',
+                '--cluster={cluster}'.format(
+                    cluster=cluster,
+                    ),
+                '--name=osd.',
+                '--lookup',
+                'fsid',
+                ],
+            stdout=subprocess.PIPE,
+            close_fds=True,
+            )
+    except OSError as e:
+        raise PrepareError('error executing ceph-conf', e)
+    (out, _err) = p.communicate()
+    ret = p.wait()
+    if ret != 0:
+        raise PrepareError('getting cluster uuid from configuration failed')
+    fsid = out.split('\n', 1)[0]
+    if not fsid:
+        return None
+    return fsid
+
+
 def prepare(
     path,
     cluster_uuid,
@@ -70,10 +98,14 @@ def parse_args():
         help='be more verbose',
         )
     parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        help='cluster name to assign this disk to',
+        )
+    parser.add_argument(
         '--cluster-uuid',
         metavar='UUID',
         help='cluster uuid to assign this disk to',
-        required=True,
         )
     parser.add_argument(
         'path',
@@ -83,6 +115,7 @@ def parse_args():
     parser.set_defaults(
         # we want to hold on to this, for later
         prog=parser.prog,
+        cluster='ceph',
         )
     args = parser.parse_args()
     return args
@@ -100,6 +133,12 @@ def main():
         )
 
     try:
+        if args.cluster_uuid is None:
+            args.cluster_uuid = get_fsid(cluster=args.cluster)
+            if args.cluster_uuid is None:
+                raise PrepareError(
+                    'must have fsid in config or pass --cluster--uuid=',
+                    )
         prepare(
             path=args.path,
             cluster_uuid=args.cluster_uuid,
