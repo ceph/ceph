@@ -136,6 +136,12 @@ namespace librados
     void src_cmpxattr(const std::string& src_oid,
 		      const char *name, int op, uint64_t v);
     void exec(const char *cls, const char *method, bufferlist& inbl);
+    /**
+     * Guard operation with a check that object version == ver
+     *
+     * @param ver [in] version to check
+     */
+    void assert_version(uint64_t ver);
 
   protected:
     ObjectOperationImpl *impl;

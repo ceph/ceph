@@ -103,6 +103,12 @@ void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
   o->src_cmpxattr(oid, CEPH_NOSNAP, name, bl, op, CEPH_OSD_CMPXATTR_MODE_U64);
 }
 
+void librados::ObjectOperation::assert_version(uint64_t ver)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->assert_version(ver);
+}
+
 void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
