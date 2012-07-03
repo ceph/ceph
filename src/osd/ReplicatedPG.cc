@@ -5547,6 +5547,7 @@ struct C_PG_MarkUnfoundLost : public Context {
   }
   void finish(int r) {
     pg->_finish_mark_all_unfound_lost(obcs);
+    pg->put();
   }
 };
 
@@ -5661,7 +5662,6 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
     obcs.pop_front();
   }
   unlock();
-  put();
 }
 
 
