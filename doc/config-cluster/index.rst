@@ -1,6 +1,7 @@
-===============================
- Configuring a Storage Cluster
-===============================
+===============
+ Configuration
+===============
+
 Ceph can run with a cluster containing thousands of Object Storage Devices
 (OSDs). A minimal system will have at least two OSDs for data replication. To
 configure OSD clusters, you must provide settings in the configuration file.
