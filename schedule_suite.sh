@@ -24,20 +24,22 @@ test ! -d ~/src/teuthology/virtualenv/bin && echo "error: expects to find ~/src/
 KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
 CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-tarball-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
 
+
+
 ## always include this
 fn="/tmp/schedule.suite.$$"
 trap "rm $fn" EXIT
 cat <<EOF > $fn
 kernel:
   kdb: true
-  branch: $kernel
+  sha1: $KERNEL_SHA1
 nuke-on-error: true
 tasks:
 - chef:
 - clock:
 overrides:
   ceph:
-    branch: $ceph
+    sha1: $CEPH_SHA1
     log-whitelist:
     - slow request
 EOF
