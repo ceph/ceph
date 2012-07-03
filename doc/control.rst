@@ -230,8 +230,9 @@ Creates/deletes a snapshot of a pool. ::
 
 	$ ceph osd pool create POOL [pg_num [pgp_num]]
 	$ ceph osd pool delete POOL
+        $ ceph osd pool rename OLDNAME NEWNAME
 
-Creates/deletes a storage pool. ::
+Creates/deletes/renames a storage pool. ::
 
 	$ ceph osd pool set POOL FIELD VALUE
 

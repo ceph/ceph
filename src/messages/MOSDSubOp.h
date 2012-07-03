@@ -87,6 +87,7 @@ public:
   bool hobject_incorrect_pool;
 
   virtual void decode_payload() {
+    hobject_incorrect_pool = false;
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);

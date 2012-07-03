@@ -4,7 +4,6 @@ usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/ceph-run
 usr/bin/ceph-mon
-usr/bin/ceph-mds
 usr/bin/ceph-osd
 usr/bin/ceph-debugpack
 sbin/ceph-disk-prepare usr/sbin/
@@ -15,7 +14,6 @@ usr/lib/rados-classes/*
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/doc/ceph/sample.fetch_config
 usr/share/man/man8/ceph-mon.8
-usr/share/man/man8/ceph-mds.8
 usr/share/man/man8/ceph-osd.8
 usr/share/man/man8/mkcephfs.8
 usr/share/man/man8/ceph-run.8
