@@ -947,7 +947,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     }
     
     MOSDOpReply *reply = ctx->reply;
-    reply->set_version(info.last_update);
     ctx->reply = NULL;
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->client_messenger->send_message(reply, m->get_connection());
