@@ -1,0 +1,21 @@
+{
+        strptime suckage
+        Memcheck:Cond
+        fun:__GI___strncasecmp_l
+        fun:__strptime_internal
+        ...
+}
+{
+        strptime suckage 2
+        Memcheck:Value8
+        fun:__GI___strncasecmp_l
+        fun:__strptime_internal
+        ...
+}
+{
+        strptime suckage 3
+        Memcheck:Addr8
+        fun:__GI___strncasecmp_l
+        fun:__strptime_internal
+        ...
+}

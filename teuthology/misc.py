@@ -493,13 +493,16 @@ def get_valgrind_args(name, v):
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
             '/tmp/cephtest/chdir-coredump',
-            'valgrind', '--xml=yes',
+            'valgrind',
+            '--suppressions=/tmp/cephtest/valgrind.supp',
+            '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     else:
         extra_args = [
             '/tmp/cephtest/chdir-coredump',
             'valgrind',
+            '--suppressions=/tmp/cephtest/valgrind.supp',
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     extra_args.extend(v)
