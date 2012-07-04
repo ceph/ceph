@@ -164,11 +164,6 @@ void LogMonitor::update_from_paxos()
     }
   }
 
-  // trim
-  unsigned max = g_conf->mon_max_log_epochs;
-  if (mon->is_leader() && version > max)
-    trim_to(version - max);
-
   check_subs();
 }
 
@@ -209,6 +204,14 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   put_version_full(t, version, summary_bl);
   put_version_latest_full(t, version);
+}
+
+void LogMonitor::update_trim()
+{
+  unsigned max = g_conf->mon_max_log_epochs;
+  version_t version = get_version();
+  if (mon->is_leader() && version > max)
+    set_trim_to(version - max);
 }
 
 bool LogMonitor::preprocess_query(PaxosServiceMessage *m)

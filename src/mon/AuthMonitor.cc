@@ -205,10 +205,6 @@ void AuthMonitor::update_from_paxos()
   ::encode(mon->key_server, bl);
   paxos->stash_latest(version, bl);
   */
-  unsigned max = g_conf->paxos_max_join_drift * 2;
-  if (mon->is_leader() &&
-      version > max)
-    trim_to(version - max);
 }
 
 void AuthMonitor::increase_max_global_id()
@@ -263,6 +259,14 @@ void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
     put_version_latest_full(t, version);
   } else
     dout(10) << __func__ << " key server has no secrets; do not put them in tx" << dendl;
+}
+
+void AuthMonitor::update_trim()
+{
+  unsigned max = g_conf->paxos_max_join_drift * 2;
+  version_t version = get_version();
+  if (mon->is_leader() && (version > max))
+    set_trim_to(version - max);
 }
 
 bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)

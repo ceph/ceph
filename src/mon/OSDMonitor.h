@@ -151,6 +151,9 @@ private:
   bool prepare_update(PaxosServiceMessage *m);
   bool should_propose(double &delay);
 
+  void update_trim();
+  bool should_trim();
+
   bool can_mark_down(int o);
   bool can_mark_up(int o);
   bool can_mark_out(int o);

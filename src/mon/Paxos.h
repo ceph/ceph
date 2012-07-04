@@ -532,6 +532,17 @@ private:
    */
 
   bool going_to_bootstrap;
+  /**
+   * Should be true if we have proposed to trim, or are in the middle of
+   * trimming; false otherwise.
+   */
+  bool going_to_trim;
+  /**
+   * If we have disabled trimming our state, this variable should have a
+   * value greater than zero, corresponding to the version we had at the time
+   * we disabled the trim.
+   */
+  version_t trim_disabled_version;
 
   /**
    * @defgroup Paxos_h_callbacks Callback classes.
@@ -607,6 +618,14 @@ private:
     }
   };
 
+  class C_Trimmed : public Context {
+    Paxos *paxos;
+  public:
+    C_Trimmed(Paxos *p) : paxos(p) { }
+    void finish(int r) {
+      paxos->going_to_trim = false;
+    }
+  };
   /**
    *
    */
@@ -997,7 +1016,9 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
-		   going_to_bootstrap(false) { }
+		   going_to_bootstrap(false),
+		   going_to_trim(false),
+		   trim_disabled_version(0) { }
 
   const string get_name() const {
     return paxos_name;
@@ -1111,19 +1132,66 @@ public:
    * Erase old states from stable storage.
    *
    * @param first The version we are trimming to
-   * @param force If specified, we may even erase the latest stashed version
-   *		  iif @p first is higher than that version.
    */
-  void trim_to(version_t first, bool force = false);
+  void trim_to(version_t first);
   /**
    * Erase old states from stable storage.
    *
    * @param t A transaction
    * @param first The version we are trimming to
-   * @param force If specified, we may even erase the latest stashed version
-   *		  iif @p first is higher than that version.
    */
-  void trim_to(MonitorDBStore::Transaction *t, version_t first, bool force=false);
+  void trim_to(MonitorDBStore::Transaction *t, version_t first);
+  /**
+   * Trim the Paxos state as much as we can.
+   */
+  void trim() {
+    assert(should_trim());
+    version_t trim_to_version = get_version() - g_conf->paxos_max_join_drift;
+    trim_to(trim_to_version);
+  }
+  /**
+   * Disable trimming
+   *
+   * This is required by the Monitor's store synchronization mechanisms
+   * to guarantee a consistent store state.
+   */
+  void trim_disable() {
+    if (!trim_disabled_version)
+      trim_disabled_version = get_version();
+  }
+  /**
+   * Enable trimming
+   */
+  void trim_enable();
+  /**
+   * Check if trimming has been disabled
+   *
+   * @returns true if trim has been disabled; false otherwise.
+   */
+  bool is_trim_disabled() { return (trim_disabled_version > 0); }
+  /**
+   * Check if we should trim.
+   *
+   * If trimming is disabled, we must take that into consideration and only
+   * return true if we are positively sure that we should trim soon.
+   *
+   * @returns true if we should trim; false otherwise.
+   */
+  bool should_trim() {
+    int available_versions = (get_version() - get_first_committed());
+    int maximum_versions =
+      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_tolerance);
+
+    if (going_to_trim || (available_versions <= maximum_versions))
+      return false;
+
+    if (trim_disabled_version > 0) {
+      int disabled_versions = (get_version() - trim_disabled_version);
+      if (disabled_versions < g_conf->paxos_trim_disabled_max_versions)
+	return false;
+    }
+    return true;
+  }
  
   /**
    * @defgroup Paxos_h_slurping_funcs Slurping-related functions
