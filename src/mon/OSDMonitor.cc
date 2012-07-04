@@ -503,6 +503,30 @@ void OSDMonitor::share_map_with_random_osd()
   mon->messenger->send_message(m, s->inst);
 }
 
+void OSDMonitor::update_trim()
+{
+  if (mon->pgmon()->is_readable() &&
+      mon->pgmon()->pg_map.creating_pgs.empty()) {
+    epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
+    dout(10) << " min_last_epoch_clean " << floor << dendl;
+    unsigned min = g_conf->mon_min_osdmap_epochs;
+    if (floor + min > get_version()) {
+      if (min < get_version())
+	floor = get_version() - min;
+      else
+	floor = 0;
+    }
+    if (floor > get_first_committed())
+      if (get_trim_to() < floor)
+	set_trim_to(floor);
+  }
+}
+
+bool OSDMonitor::should_trim()
+{
+  update_trim();
+  return (get_trim_to() > 0);
+}
 
 // -------------
 
@@ -1614,24 +1638,11 @@ void OSDMonitor::tick()
 #endif
   // ---------------
 
+  update_trim();
+
   if (do_propose ||
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
-
-  if (mon->pgmon()->is_readable() &&
-      mon->pgmon()->pg_map.creating_pgs.empty()) {
-    epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
-    dout(10) << " min_last_epoch_clean " << floor << dendl;
-    unsigned min = g_conf->mon_min_osdmap_epochs;
-    if (floor + min > get_version()) {
-      if (min < get_version())
-	floor = get_version() - min;
-      else
-	floor = 0;
-    }
-    if (floor > get_first_committed())
-      trim_to(floor); // we are now responsible for trimming our own versions.
-  }    
 }
 
 void OSDMonitor::handle_osd_timeouts(const utime_t &now,

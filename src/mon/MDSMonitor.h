@@ -76,6 +76,9 @@ class MDSMonitor : public PaxosService {
   void create_pending(); 
   void encode_pending(MonitorDBStore::Transaction *t);
 
+  bool should_trim() { return false; }
+  void encode_trim(MonitorDBStore::Transaction *t) { }
+
   void update_logger();
 
   void _updated(MMDSBeacon *m);

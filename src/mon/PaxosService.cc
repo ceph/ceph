@@ -125,6 +125,12 @@ void PaxosService::propose_pending()
    */
   MonitorDBStore::Transaction t;
   bufferlist bl;
+
+  if (should_trim()) {
+    encode_trim(&t);
+    set_trim_to(0);
+  }
+
   encode_pending(&t);
   have_pending = false;
 
@@ -263,35 +269,32 @@ void PaxosService::wakeup_proposing_waiters()
   finish_contexts(g_ceph_context, waiting_for_finished_proposal);
 }
 
-void PaxosService::trim_to(version_t first, bool force)
+void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
 {
   version_t first_committed = get_first_committed();
   version_t latest_full = get_version("full", "latest");
+  version_t trim_to = get_trim_to();
 
   string latest_key = mon->store->combine_strings("full", latest_full);
   bool has_full = mon->store->exists(get_service_name(), latest_key);
 
-  dout(10) << __func__ << " " << first << " (was " << first_committed << ")"
+  dout(10) << __func__ << " " << trim_to << " (was " << first_committed << ")"
 	   << ", latest full " << latest_full << dendl;
 
-  if (first_committed >= first)
+  if (first_committed >= trim_to)
     return;
 
-  MonitorDBStore::Transaction t;
-  while ((first_committed < first)
-      && (force || (first_committed < latest_full))) {
+  while ((first_committed < trim_to)) {
     dout(20) << __func__ << first_committed << dendl;
-    t.erase(get_service_name(), first_committed);
+    t->erase(get_service_name(), first_committed);
 
     if (has_full) {
       latest_key = mon->store->combine_strings("full", first_committed);
-      if (mon->store->exists(get_service_name(), latest_key))
-	t.erase(get_service_name(), latest_key);
+      t->erase(get_service_name(), latest_key);
     }
 
     first_committed++;
   }
-  put_first_committed(&t, first_committed);
-  mon->store->apply_transaction(t);
+  put_first_committed(t, first_committed);
 }
 
