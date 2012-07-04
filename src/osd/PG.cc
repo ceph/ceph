@@ -4342,19 +4342,24 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
     q.f->close_section();
   }
 
-  q.f->open_object_section("scrub");
-  q.f->dump_stream("scrub_epoch_start") << pg->scrub_epoch_start;
-  q.f->dump_int("scrub_active", pg->scrub_active);
-  q.f->dump_int("scrub_block_writes", pg->scrub_block_writes);
-  q.f->dump_int("finalizing_scrub", pg->finalizing_scrub);
-  q.f->dump_int("scrub_waiting_on", pg->scrub_waiting_on);
-  q.f->open_array_section("scrub_waiting_on_whom");
-  for (set<int>::iterator p = pg->scrub_waiting_on_whom.begin();
-       p != pg->scrub_waiting_on_whom.end();
-       ++p) {
-    q.f->dump_int("osd", *p);
+  {
+    q.f->open_object_section("scrub");
+    q.f->dump_stream("scrub_epoch_start") << pg->scrub_epoch_start;
+    q.f->dump_int("scrub_active", pg->scrub_active);
+    q.f->dump_int("scrub_block_writes", pg->scrub_block_writes);
+    q.f->dump_int("finalizing_scrub", pg->finalizing_scrub);
+    q.f->dump_int("scrub_waiting_on", pg->scrub_waiting_on);
+    {
+      q.f->open_array_section("scrub_waiting_on_whom");
+      for (set<int>::iterator p = pg->scrub_waiting_on_whom.begin();
+	   p != pg->scrub_waiting_on_whom.end();
+	   ++p) {
+	q.f->dump_int("osd", *p);
+      }
+      q.f->close_section();
+    }
+    q.f->close_section();
   }
-  q.f->close_section();
 
   q.f->close_section();
   return forward_event();
