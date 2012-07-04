@@ -767,6 +767,9 @@ void Paxos::finish_proposal()
     return;
   }
 
+  if (should_trim()) {
+    trim();
+  }
 
   if (is_active() && (proposals.size() > 0)) {
     propose_queued();
@@ -818,9 +821,6 @@ void Paxos::handle_lease(MMonPaxos *lease)
   lease_timeout_event = new C_LeaseTimeout(this);
   mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
 
-  // trim?
-  trim_to(lease->first_committed);
-  
   // kick waiters
   finish_contexts(g_ceph_context, waiting_for_active);
   if (is_readable())
@@ -846,6 +846,8 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 	       << " -- got everyone" << dendl;
       mon->timer.cancel_event(lease_ack_timeout_event);
       lease_ack_timeout_event = 0;
+
+
     } else {
       dout(10) << "handle_lease_ack from " << ack->get_source() 
 	       << " -- still need "
@@ -892,7 +894,7 @@ void Paxos::lease_renew_timeout()
  * trim old states
  */
 
-void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first, bool force)
+void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
 {
   dout(10) << "trim_to " << first << " (was " << first_committed << ")"
 	   << dendl;
@@ -908,11 +910,11 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first, bool force)
   t->put(get_name(), "first_committed", first_committed);
 }
 
-void Paxos::trim_to(version_t first, bool force)
+void Paxos::trim_to(version_t first)
 {
   MonitorDBStore::Transaction t;
   
-  trim_to(&t, first, force);
+  trim_to(&t, first);
 
   if (!t.empty()) {
     JSONFormatter f(true);
@@ -920,8 +922,23 @@ void Paxos::trim_to(version_t first, bool force)
     dout(30) << __func__ << " transaction dump:\n";
     f.flush(*_dout);
     *_dout << dendl;
-    get_store()->apply_transaction(t);
+
+    bufferlist bl;
+    t.encode(bl);
+
+    going_to_trim = true;
+    queue_proposal(bl, new C_Trimmed(this));
   }
+}
+
+void Paxos::trim_enable() {
+  trim_disabled_version = 0;
+  // We may not be the leader when we reach this function. We sure must
+  // have been the leader at some point, but we may have been demoted and
+  // we really should reset 'trim_disabled_version' if that was the case.
+  // So, make sure we only trim() iff we are the leader.
+  if (mon->is_leader() && should_trim())
+    trim();
 }
 
 /*

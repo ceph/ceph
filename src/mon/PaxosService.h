@@ -76,6 +76,12 @@ class PaxosService {
    * then have_pending should be true; otherwise, false.
    */
   bool have_pending; 
+  /**
+   * The version to trim to. If zero, we assume there is no version to be
+   * trimmed; otherwise, we assume we should trim to the version held by
+   * this variable.
+   */
+  version_t trim_version;
 
 protected:
   /**
@@ -175,6 +181,7 @@ public:
   PaxosService(Monitor *mn, Paxos *p, string name) 
     : mon(mn), paxos(p), service_name(name),
       service_version(0), proposal_timer(0), have_pending(false),
+      trim_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
       last_accepted_name("last_accepted"),
@@ -554,6 +561,10 @@ public:
   void wakeup_proposing_waiters();
 
   /**
+   * @defgroup PaxosService_h_Trim
+   * @{
+   */
+  /**
    * Trim our log. This implies getting rid of versions on the k/v store.
    * Services implementing us don't have to implement this function if they
    * don't want to, but we won't implement it for them either.
@@ -568,7 +579,49 @@ public:
    *		  expected behavior is that, when 'true', we will remove all
    *		  the log versions even if we don't have a full map in store.
    */
-  void trim_to(version_t first, bool force = false);
+  virtual void encode_trim(MonitorDBStore::Transaction *t);
+  /**
+   * Check if we should trim.
+   *
+   * We define this function here, because we assume that as long as we know of
+   * a version to trim, we should trim. However, any implementation should feel
+   * free to define its own version of this function if deemed necessary.
+   *
+   * @returns true if we should trim; false otherwise.
+   */
+  virtual bool should_trim() {
+    update_trim();
+    return (get_trim_to() > 0);
+  }
+  /**
+   * Update our trim status. We do nothing here, because there is no
+   * straightforward way to update the trim version, since that's service
+   * specific. However, we do not force services to implement it, since there
+   * a couple of services that do not trim anything at all, and we don't want
+   * to shove this function down their throats if they are never going to use
+   * it anyway.
+   */
+  virtual void update_trim() { }
+  /**
+   * Set the trim version variable to @p ver
+   *
+   * @param ver The version to trim to.
+   */
+  void set_trim_to(version_t ver) {
+    trim_version = ver;
+  }
+  /**
+   * Get the version we should trim to.
+   *
+   * @returns the version we should trim to; if we return zero, it should be
+   *	      assumed that there's no version to trim to.
+   */
+  version_t get_trim_to() {
+    return trim_version;
+  }
+  /**
+   * @}
+   */
 
 
   /**

@@ -208,9 +208,7 @@ void PGMonitor::update_from_paxos()
   }
   */
 
-  unsigned max = g_conf->mon_max_pgmap_epochs;
-  if (mon->is_leader() && (version > max))
-    trim_to(version - max);
+  update_trim();
 
   send_pg_creates();
 
@@ -270,6 +268,15 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
   put_version_full(t, version, full_bl);
   put_version_latest_full(t, version);
 }
+
+void PGMonitor::update_trim()
+{
+  unsigned max = g_conf->mon_max_pgmap_epochs;
+  version_t version = get_version();
+  if (mon->is_leader() && (version > max))
+    set_trim_to(version - max);
+}
+
 
 bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
 {
