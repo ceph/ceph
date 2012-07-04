@@ -611,6 +611,8 @@ struct RGWObjEnt {
   string etag;
   string content_type;
 
+  RGWObjEnt() : size(0), mtime(0) {}
+
   void clear() { // not clearing etag
     name="";
     size = 0;
