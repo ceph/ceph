@@ -5140,8 +5140,12 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
                               off, len, bl, 0, onfinish);
   if (r == 0) {
+    client_lock.Unlock();
+    flock.Lock();
     while (!done) 
-      cond.Wait(client_lock);
+      cond.Wait(flock);
+    flock.Unlock();
+    client_lock.Lock();
     r = rvalue;
   } else {
     // it was cached.
@@ -5172,8 +5176,12 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
 		      onfinish);
+    client_lock.Unlock();
+    flock.Lock();
     while (!done)
-      cond.Wait(client_lock);
+      cond.Wait(flock);
+    flock.Unlock();
+    client_lock.Lock();
 
     if (r < 0)
       return r;
@@ -5339,8 +5347,12 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 		       in->truncate_size, in->truncate_seq,
 		       onfinish, onsafe);
     
+    client_lock.Unlock();
+    flock.Lock();
     while (!done)
-      cond.Wait(client_lock);
+      cond.Wait(flock);
+    flock.Unlock();
+    client_lock.Lock();
   }
 
   // time
