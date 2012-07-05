@@ -39,11 +39,11 @@ generate a unique identifier. ::
 
 	uuidgen -r
 
-For the monitor(s) secret(s), use ``ceph-authtool`` to generate the secret(s):
+For the monitor(s) secret(s), use ``ceph-authtool`` to generate the secret(s)::
 
 	ceph-authtool /dev/stdout --name=mon. --gen-key  
  
-The secret is the value to the right of "key =", and should look something 
+The secret is the value to the right of ``"key ="``, and should look something 
 like this:: 
 
 	AQBAMuJPINJgFhAAziXIrLvTvAz4PRo5IK/Log==
@@ -60,7 +60,7 @@ For example:
 
 	knife environment create Ceph
 
-A JSON file will appear, and perform the following: 
+A JSON file will appear. Perform the following steps: 
 
 #. Enter a description for the environment. 
 #. In ``"default_attributes": {}``, add ``"ceph" : {}``.
@@ -72,15 +72,20 @@ A JSON file will appear, and perform the following:
 #. Within ``"config": {}`` and following the ``fsid`` key-value pair, add ``"mon_initial_members":``
 #. Immediately following ``"mon_initial_members":``, enter the initial monitor host names.
 
-For example
+For example:: 
+
 	"default-attributes" : {
-    "ceph": {
-      "monitor-secret": "AQBAMuJPINJgFhAAziXIrLvTvAz4PRo5IK/Log==",
-      "config": {
-        "fsid": "ddca2b02-3ddf-42fb-ba52-0ee1982c6da0",
-        "mon_initial_members": "mon-host"
-      }
-     }
+		"ceph": {
+			"monitor-secret": "AQBAMuJPINJgFhAAziXIrLvTvAz4PRo5IK/Log==",
+			"config": {
+				"fsid": "ddca2b02-3ddf-42fb-ba52-0ee1982c6da0",
+				"mon_initial_members": "mon-host"
+			}
+	}
+
+Advanced users (i.e., developers and QA) may also add ``"ceph_branch": "{branch}"``
+to ``default-attributes``, replacing ``{branch}`` with the name of the branch you
+wish to use (e.g., ``master``). 
 
 Configure the Roles
 -------------------
@@ -140,9 +145,9 @@ runs the ``apt`` recipe followed by the roles ``ceph-mon`` and ``ceph-osd``::
     		]
   		},
  		 "run_list": [
-      		"recipe[ceph::apt]",
-        		"role[ceph-mon]",
-        		"role[ceph-mds]"
+			"recipe[ceph::apt]",
+			"role[ceph-mon]",
+			"role[ceph-mds]"
   		]
 	}
 
