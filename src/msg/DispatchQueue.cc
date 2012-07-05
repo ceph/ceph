@@ -244,3 +244,30 @@ void DispatchQueue::entry()
   }
   lock.Unlock();
 }
+
+void DispatchQueue::start()
+{
+  assert(!stop);
+  assert(!dispatch_thread.is_started());
+  dispatch_thread.create();
+}
+
+void DispatchQueue::wait()
+{
+  dispatch_thread.join();
+}
+
+void DispatchQueue::shutdown()
+{
+  // stop my dispatch thread
+  if (dispatch_thread.am_self()) {
+    ldout(cct,10) << "shutdown i am dispatch, setting stop flag" << dendl;
+    stop = true;
+  } else {
+    ldout(cct,10) << "shutdown i am not dispatch, setting stop flag" << dendl;
+    lock.Lock();
+    stop = true;
+    cond.Signal();
+    lock.Unlock();
+  }
+}

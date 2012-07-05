@@ -288,12 +288,10 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     accepter(this),
     dispatch_queue(cct, this),
     reaper_thread(this),
-    dispatch_thread(this),
     my_type(name.type()),
     nonce(_nonce),
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
-    destination_stopped(false),
     cluster_protocol(0),
     dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
@@ -311,50 +309,23 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
  */
 SimpleMessenger::~SimpleMessenger()
 {
-  assert(destination_stopped); // we've been marked as stopped
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(reaper_stop && !reaper_started); // the reaper thread is stopped
 }
 
-
-void SimpleMessenger::dispatch_entry()
-{
-  dispatch_queue.entry();
-
-  //tell everything else it's time to stop
-  lock.Lock();
-  destination_stopped = true;
-  wait_cond.Signal();
-  lock.Unlock();
-}
-
 void SimpleMessenger::ready()
 {
   ldout(cct,10) << "ready " << get_myaddr() << dendl;
-  assert(!dispatch_thread.is_started());
-  dispatch_thread.create();
+  dispatch_queue.start();
 }
 
 
 int SimpleMessenger::shutdown()
 {
   ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
-
-  // stop my dispatch thread
-  if (dispatch_thread.am_self()) {
-    ldout(cct,10) << "shutdown i am dispatch, setting stop flag" << dendl;
-    dispatch_queue.stop = true;
-  } else {
-    ldout(cct,10) << "shutdown i am not dispatch, setting stop flag and joining thread." << dendl;
-    dispatch_queue.lock.Lock();
-    dispatch_queue.stop = true;
-    dispatch_queue.cond.Signal();
-    dispatch_queue.lock.Unlock();
-  }
-
+  dispatch_queue.shutdown();
   mark_down_all();
-
   return 0;
 }
 
@@ -759,17 +730,11 @@ void SimpleMessenger::wait()
     lock.Unlock();
     return;
   }
-  while (!destination_stopped) {
-    ldout(cct,10) << "wait: still active" << dendl;
-    wait_cond.Wait(lock);
-    ldout(cct,10) << "wait: woke up" << dendl;
-  }
-
-  ldout(cct,10) << "wait: join dispatch thread" << dendl;
-  dispatch_thread.join();
-
-  ldout(cct,10) << "wait: everything stopped" << dendl;
   lock.Unlock();
+
+  ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
+  dispatch_queue.wait();
+  ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   
   // done!  clean up.
   if (did_bind) {

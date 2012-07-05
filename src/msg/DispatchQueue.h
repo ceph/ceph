@@ -20,6 +20,7 @@
 #include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/Thread.h"
 
 class CephContext;
 class DispatchQueue;
@@ -89,6 +90,19 @@ struct DispatchQueue {
 
   IncomingQueue local_queue;
 
+  /**
+   * The DispatchThread runs dispatch_entry to empty out the dispatch_queue.
+   */
+  class DispatchThread : public Thread {
+    DispatchQueue *dq;
+  public:
+    DispatchThread(DispatchQueue *dq) : dq(dq) {}
+    void *entry() {
+      dq->entry();
+      return 0;
+    }
+  } dispatch_thread;
+
   void local_delivery(Message *m, int priority);
 
   IncomingQueue *create_queue(Pipe *parent) {
@@ -130,14 +144,18 @@ struct DispatchQueue {
     local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
   }
 
+  void start();
   void entry();
+  void wait();
+  void shutdown();
 
   DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
     : cct(cct), msgr(msgr),
       lock("SimpleMessenger::DispatchQeueu::lock"), 
       stop(false),
       qlen(0),
-      local_queue(cct, this, NULL)
+      local_queue(cct, this, NULL),
+      dispatch_thread(this)
   {}
   ~DispatchQueue() {
     for (map< int, xlist<IncomingQueue *>* >::iterator i = queued_pipes.begin();
