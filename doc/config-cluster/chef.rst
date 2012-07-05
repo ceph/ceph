@@ -18,7 +18,10 @@ To get the cookbooks for Ceph, clone them from git.::
 Install the Cookbooks
 ---------------------
 
-knife cookbook upload apache2 ceph
+To install Ceph, you must install the Ceph cookbooks and the Apache cookbooks
+(for use with RADOSGW). :: 
+
+	knife cookbook upload apache2 ceph
 
 Configure your Ceph Environment
 -------------------------------
