@@ -173,7 +173,8 @@ static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const 
   librados::ObjectReadOperation read_op;
   string start_after;
 
-  read_op.read(0, 0, &outdata, NULL);
+#define COPY_CHUNK_SIZE (4 * 1024 * 1024)
+  read_op.read(0, COPY_CHUNK_SIZE, &outdata, NULL);
 
   map<std::string, bufferlist> attrset;
   read_op.getxattrs(&attrset, NULL);
@@ -213,6 +214,20 @@ static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const 
     return ret;
   }
 
+  uint64_t off = 0;
+
+  while (outdata.length() == COPY_CHUNK_SIZE) {
+    off += outdata.length();
+    outdata.clear();
+    ret = io_ctx.read(oid, outdata, COPY_CHUNK_SIZE, off); 
+    if (ret < 0)
+      goto err;
+
+    ret = target_ctx.write(target_oid, outdata, outdata.length(), off);
+    if (ret < 0)
+      goto err;
+  }
+
   /* iterate through source omap and update target. This is not atomic */
   while (omap.size() == OMAP_CHUNK) {
     /* now start_after should point at the last entry */    
@@ -232,7 +247,6 @@ static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const 
     if (ret < 0)
       goto err;
   }
-
 
   return 0;
 
