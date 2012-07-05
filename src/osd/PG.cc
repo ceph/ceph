@@ -3682,18 +3682,6 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
   return false;
 }
 
-
-void PG::on_removal()
-{
-  osd->recovery_wq.dequeue(this);
-  osd->scrub_wq.dequeue(this);
-  osd->scrub_finalize_wq.dequeue(this);
-  osd->snap_trim_wq.dequeue(this);
-  osd->pg_stat_queue_dequeue(this);
-
-  remove_watchers_and_notifies();
-}
-
 void PG::set_last_peering_reset()
 {
   dout(20) << "set_last_peering_reset " << get_osdmap()->get_epoch() << dendl;
