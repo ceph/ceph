@@ -5692,6 +5692,13 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   }
 }
 
+void ReplicatedPG::on_removal()
+{
+  dout(10) << "on_removal" << dendl;
+  apply_and_flush_repops(false);
+  remove_watchers_and_notifies();
+}
+
 void ReplicatedPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
