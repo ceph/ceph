@@ -402,19 +402,6 @@ private:
   } reaper_thread;
 
   /**
-   * The DispatchThread runs dispatch_entry to empty out the dispatch_queue.
-   */
-  class DispatchThread : public Thread {
-    SimpleMessenger *msgr;
-  public:
-    DispatchThread(SimpleMessenger *_messenger) : msgr(_messenger) {}
-    void *entry() {
-      msgr->dispatch_entry();
-      return 0;
-    }
-  } dispatch_thread;
-
-  /**
    * @} // Inner classes
    */
 
@@ -489,9 +476,6 @@ private:
   __u32 global_seq;
   /// lock to protect the global_seq
   pthread_spinlock_t global_seq_lock;
-
-  /// flag set true when all the threads need to shut down
-  bool destination_stopped;
 
   /// hash map of addresses to Pipes
   hash_map<entity_addr_t, Pipe*> rank_pipe;
@@ -589,15 +573,6 @@ public:
       return default_policy;
   }
 
-  /**
-   * This function is used by the dispatch thread. It runs continuously
-   * until dispatch_queue.stop is set to true, choosing what order the Pipes
-   * get to deliver in, and sending out their chosen Message via the
-   * ms_deliver_* functions.
-   * It should really only by dispatch_thread calling this, in our
-   * current implementation.
-   */
-  void dispatch_entry();
   /**
    * Release memory accounting back to the dispatch throttler.
    *
