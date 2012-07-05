@@ -1942,7 +1942,8 @@ void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef
     if (num % 20 == 0) {
       store->queue_transaction(
 	osr, t,
-	new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->get<1>()));
+	new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->get<1>()),
+	new ContainerContext<SequencerRef>(item->get<1>()));
       t = new ObjectStore::Transaction;
     }
     t->remove(coll, *i);
@@ -1950,7 +1951,8 @@ void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef
   t->remove_collection(coll);
   store->queue_transaction(
     osr, t,
-    new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->get<1>()));
+    new ObjectStore::C_DeleteTransactionHolder<SequencerRef>(t, item->get<1>()),
+    new ContainerContext<SequencerRef>(item->get<1>()));
   delete item;
 }
 // =========================================
@@ -4718,7 +4720,9 @@ void OSD::_remove_pg(PG *pg)
   store->queue_transaction(
     pg->osr.get(), rmt,
     new ObjectStore::C_DeleteTransactionHolder<
-      SequencerRef>(rmt, pg->osr));
+      SequencerRef>(rmt, pg->osr),
+    new ContainerContext<
+      SequencerRef>(pg->osr));
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from 
   // the pg_map must be done together without unlocking the pg lock,
