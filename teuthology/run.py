@@ -37,7 +37,7 @@ def parse_args():
         help='config file to read',
         )
     parser.add_argument(
-        '--archive',
+        '-a', '--archive',
         metavar='DIR',
         help='path to archive results in',
         )
