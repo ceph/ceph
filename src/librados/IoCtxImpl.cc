@@ -1382,10 +1382,6 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 int librados::IoCtxImpl::_notify_ack(const object_t& oid,
 				     uint64_t notify_id, uint64_t ver)
 {
-  Mutex mylock("IoCtxImpl::watch::mylock");
-  Cond cond;
-  eversion_t objver;
-
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.notify_ack(notify_id, ver);
