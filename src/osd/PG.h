@@ -1364,7 +1364,7 @@ public:
  public:
   PG(OSDService *o, OSDMapRef curmap,
      PGPool pool, pg_t p, const hobject_t& loid, const hobject_t& ioid);
-  virtual ~PG() {}
+  virtual ~PG();
 
  private:
   // Prevent copying
