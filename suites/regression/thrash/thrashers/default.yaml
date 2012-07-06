@@ -4,3 +4,4 @@ tasks:
     - wrongly marked me down or wrong addr
     - objects unfound and apparently lost
 - thrashosds:
+    timeout: 1200
