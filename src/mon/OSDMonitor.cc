@@ -2008,11 +2008,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return prepare_unset_flag(m, CEPH_OSDMAP_NOIN);
     }
     else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
-      pending_inc.cluster_snapshot = m->cmd[2];
-      ss << "creating cluster snap " << m->cmd[2];
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      // ** DISABLE THIS FOR NOW **
+      ss << "cluster snapshot currently disabled (broken implementation)";
+      // ** DISABLE THIS FOR NOW **
     }
     else if (m->cmd[1] == "down" && m->cmd.size() >= 3) {
       bool any = false;
