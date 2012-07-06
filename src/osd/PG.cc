@@ -82,7 +82,13 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_reserved(false), scrub_reserve_failed(false),
   scrub_waiting_on(0),
   active_rep_scrub(0),
-  recovery_state(this) {}
+  recovery_state(this)
+{
+}
+
+PG::~PG()
+{
+}
 
 void PG::lock(bool no_lockdep)
 {
