@@ -43,6 +43,17 @@ class Context {
   }
 };
 
+/**
+ * Simple context holding a single object
+ */
+template<class T>
+class ContainerContext : public Context {
+  T obj;
+public:
+  ContainerContext(T &obj) : obj(obj) {}
+  void finish(int r) {}
+};
+
 
 /*
  * finish and destroy a list of Contexts
