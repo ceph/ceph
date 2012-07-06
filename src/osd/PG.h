@@ -1498,7 +1498,7 @@ public:
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
 
-  virtual void on_removal();
+  virtual void on_removal() = 0;
 
 
   // abstract bits
