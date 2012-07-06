@@ -15,13 +15,14 @@ To get the cookbooks for Ceph, clone them from git.::
 	git clone https://github.com/opscode-cookbooks/apache2.git
 	git clone https://github.com/ceph/ceph-cookbooks.git
 
+
 Install the Cookbooks
 ---------------------
 
-To install Ceph, you must install the Ceph cookbooks and the Apache cookbooks
-(for use with RADOSGW). :: 
+To install Ceph, you must upload the Ceph cookbooks and the Apache cookbooks
+(for use with RADOSGW) to your Chef server. :: 
 
-	knife cookbook upload apache2 ceph
+	knife cookbook upload apache2 ceph-cookbooks
 
 Configure your Ceph Environment
 -------------------------------
@@ -41,6 +42,7 @@ generate a unique identifier. ::
 
 For the monitor(s) secret(s), use ``ceph-authtool`` to generate the secret(s)::
 
+	sudo apt-get install ceph-common
 	ceph-authtool /dev/stdout --name=mon. --gen-key  
  
 The secret is the value to the right of ``"key ="``, and should look something 
@@ -56,7 +58,7 @@ Then, use ``knife`` to create an environment. ::
 
 	knife environment create {env-name}
 	
-For example: 
+For example:: 
 
 	knife environment create Ceph
 
@@ -74,15 +76,16 @@ A JSON file will appear. Perform the following steps:
 
 For example:: 
 
-	"default-attributes" : {
+	"default_attributes" : {
 		"ceph": {
 			"monitor-secret": "AQBAMuJPINJgFhAAziXIrLvTvAz4PRo5IK/Log==",
 			"config": {
 				"fsid": "ddca2b02-3ddf-42fb-ba52-0ee1982c6da0",
 				"mon_initial_members": "mon-host"
 			}
+		}
 	}
-
+	
 Advanced users (i.e., developers and QA) may also add ``"ceph_branch": "{branch}"``
 to ``default-attributes``, replacing ``{branch}`` with the name of the branch you
 wish to use (e.g., ``master``). 
@@ -178,6 +181,15 @@ generated while using ``uuidgen -r``::
 Finally, simulate a hotplug event. :: 
 
 	sudo udevadm trigger --subsystem-match=block --action=add
+	
+Proceed to Operating the Cluster
+--------------------------------
+
+Once you complete the deployment, you may begin operating your cluster.
+See `Operating a Cluster`_ for details.
+
+
 
 .. _Managing Cookbooks with Knife: http://wiki.opscode.com/display/chef/Managing+Cookbooks+With+Knife
 .. _Installing Chef: ../../install/chef
+.. _Operating a Cluster: ../../init/
