@@ -599,7 +599,16 @@ public:
       delete t;
     }
   };
-
+  template<class T>
+  struct C_DeleteTransactionHolder : public Context {
+    ObjectStore::Transaction *t;
+    T obj;
+    C_DeleteTransactionHolder(ObjectStore::Transaction *tt, T &obj) :
+      t(tt), obj(obj) {}
+    void finish(int r) {
+      delete t;
+    }
+  };
 
   virtual unsigned apply_transaction(Transaction& t, Context *ondisk=0) = 0;
   virtual unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) = 0;

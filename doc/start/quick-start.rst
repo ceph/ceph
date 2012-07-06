@@ -4,7 +4,7 @@
 
 Thank you for trying Ceph! Petabyte-scale data clusters are quite an 
 undertaking. Before delving deeper into Ceph, we recommend setting up a
-cluster on a a single host to explore some of the functionality. 
+cluster on a single host to explore some of the functionality. 
 
 Ceph **5-Minute Quick Start** is intended for use on one machine with a 
 recent Debian/Ubuntu operating system. The intent is to help you exercise 

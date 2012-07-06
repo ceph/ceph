@@ -1,5 +1,5 @@
 project = u'Ceph'
-copyright = u'2012, New Dream Network'
+copyright = u'2012, Inktank Storage, Inc.'
 version = 'dev'
 release = 'dev'
 
