@@ -15,21 +15,32 @@ test_rados_tool.sh: tests rados_tool
 EOF
 }
 
+do_run() {
+    if [ "$1" == "--tee" ]; then
+      shift
+      tee_out="$1"
+      shift
+      "$@" | tee $tee_out
+    else
+      "$@"
+    fi
+}
+
 run_expect_fail() {
-    echo "RUN_EXPECT_FAIL: " $@
-    $@
+    echo "RUN_EXPECT_FAIL: " "$@"
+    do_run "$@"
     [ $? -eq 0 ] && die "expected failure, but got success! cmd: $@"
 }
 
 run_expect_succ() {
-    echo "RUN_EXPECT_SUCC: " $@
-    $@
+    echo "RUN_EXPECT_SUCC: " "$@"
+    do_run "$@"
     [ $? -ne 0 ] && die "expected success, but got failure! cmd: $@"
 }
 
 run() {
     echo "RUN: " $@
-    $@
+    do_run "$@"
 }
 
 DNAME="`dirname $0`"
@@ -37,6 +48,8 @@ DNAME="`readlink -f $DNAME`"
 RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
 KEEP_TEMP_FILES=0
 POOL=trs_pool
+POOL_CP_TARGET=trs_pool.2
+
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary"
 which attr &>/dev/null
@@ -153,6 +166,59 @@ diff -q -r "$TDIR/dird" "$TDIR/dire" \
 touch "$TDIR/dire/tmp\$tmp"
 run_expect_succ "$RADOS_TOOL" --delete-after --create export "$POOL" "$TDIR/dire" | tee "$TDIR/out7"
 run_expect_succ grep temporary "$TDIR/out7"
+
+
+# test copy pool
+run "$RADOS_TOOL" rmpool "$POOL"
+run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET"
+run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
+run_expect_succ "$RADOS_TOOL" mkpool "$POOL_CP_TARGET"
+
+# create src files
+mkdir -p "$TDIR/dir_cp_src"
+for i in `seq 1 5`; do
+  fname="$TDIR/dir_cp_src/f.$i"
+  objname="f.$i"
+  dd if=/dev/urandom of="$fname" bs=$((1024*1024)) count=$i
+  run_expect_succ "$RADOS_TOOL" -p "$POOL" put $objname "$fname"
+
+# a few random attrs
+  for j in `seq 1 4`; do
+    rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
+    run_expect_succ "$RADOS_TOOL" -p "$POOL" setxattr $objname attr.$j "$rand_str"
+    run_expect_succ --tee "$fname.attr.$j" "$RADOS_TOOL" -p "$POOL" getxattr $objname attr.$j
+  done
+
+  rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
+  run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapheader $objname "$rand_str"
+  run_expect_succ --tee "$fname.omap.header" "$RADOS_TOOL" -p "$POOL" getomapheader $objname
+# a few random omap keys
+  for j in `seq 1 4`; do
+    rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
+    run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapval $objname key.$j "$rand_str"
+  done
+  run_expect_succ --tee "$fname.omap.vals" "$RADOS_TOOL" -p "$POOL" listomapvals $objname
+done
+
+run_expect_succ "$RADOS_TOOL" cppool "$POOL" "$POOL_CP_TARGET"
+
+mkdir -p "$TDIR/dir_cp_dst"
+for i in `seq 1 5`; do
+  fname="$TDIR/dir_cp_dst/f.$i"
+  objname="f.$i"
+  run_expect_succ "$RADOS_TOOL" -p "$POOL_CP_TARGET" get $objname "$fname"
+
+# a few random attrs
+  for j in `seq 1 4`; do
+    run_expect_succ --tee "$fname.attr.$j" "$RADOS_TOOL" -p "$POOL_CP_TARGET" getxattr $objname attr.$j
+  done
+
+  run_expect_succ --tee "$fname.omap.header" "$RADOS_TOOL" -p "$POOL_CP_TARGET" getomapheader $objname
+  run_expect_succ --tee "$fname.omap.vals" "$RADOS_TOOL" -p "$POOL_CP_TARGET" listomapvals $objname
+done
+
+diff -q -r "$TDIR/dir_cp_src" "$TDIR/dir_cp_dst" \
+    || die "copy pool validation failed!"
 
 echo "SUCCESS!"
 exit 0
