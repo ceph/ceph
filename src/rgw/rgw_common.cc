@@ -294,16 +294,28 @@ int XMLArgs::parse()
     NameVal nv(nameval);
     int ret = nv.parse();
     if (ret >= 0) {
-      val_map[nv.get_name()] = nv.get_val();
+      string& name = nv.get_name();
+      string& val = nv.get_val();
+      val_map[name] = val;
 
-      if ((nv.get_name().compare("acl") == 0) ||
-          (nv.get_name().compare("location") == 0) ||
-          (nv.get_name().compare("uploads") == 0) ||
-          (nv.get_name().compare("partNumber") == 0) ||
-          (nv.get_name().compare("uploadId") == 0) ||
-          (nv.get_name().compare("versionid") == 0) ||
-          (nv.get_name().compare("torrent") == 0)) {
-        sub_resources[nv.get_name()] = nv.get_val();
+      if ((name.compare("acl") == 0) ||
+          (name.compare("location") == 0) ||
+          (name.compare("uploads") == 0) ||
+          (name.compare("partNumber") == 0) ||
+          (name.compare("uploadId") == 0) ||
+          (name.compare("versionId") == 0) ||
+          (name.compare("torrent") == 0)) {
+        sub_resources[name] = val;
+      } else if (name[0] == 'r') { // root of all evil
+        if ((name.compare("response-content-type") == 0) ||
+           (name.compare("response-content-language") == 0) ||
+           (name.compare("response-expires") == 0) ||
+           (name.compare("response-cache-control") == 0) ||
+           (name.compare("response-content-disposition") == 0) ||
+           (name.compare("response-content-encoding") == 0)) {
+	  sub_resources[name] = val;
+	  has_resp_modifier = true;
+	}
       }
     }
 
@@ -313,19 +325,22 @@ int XMLArgs::parse()
   return 0;
 }
 
-string& XMLArgs::get(string& name)
+string& XMLArgs::get(string& name, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
-  if (iter == val_map.end())
-    return empty_str;
-  return iter->second;
+  bool e = (iter != val_map.end());
+  if (exists)
+    *exists = e;
+  if (e)
+    return iter->second;
+  return empty_str;
 }
 
-string& XMLArgs::get(const char *name)
+string& XMLArgs::get(const char *name, bool *exists)
 {
   string s(name);
-  return get(s);
+  return get(s, exists);
 }
 
 bool verify_bucket_permission(struct req_state *s, int perm)
