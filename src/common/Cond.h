@@ -86,7 +86,6 @@ class Cond {
     assert(waiter_mutex == NULL ||
 	   waiter_mutex->is_locked());
 
-    //int r = pthread_cond_signal(&_c);
     int r = pthread_cond_broadcast(&_c);
     return r;
   }
@@ -103,7 +102,6 @@ class Cond {
     assert(waiter_mutex == NULL ||
 	   waiter_mutex->is_locked());
 
-    //int r = pthread_cond_signal(&_c);
     int r = pthread_cond_broadcast(&_c);
     return r;
   }
