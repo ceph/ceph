@@ -52,12 +52,12 @@ void usage(ostream& out)
   out <<					\
 "usage: rados [options] [commands]\n"
 "POOL COMMANDS\n"
-"   lspools                         list pools\n"
+"   lspools                          list pools\n"
 "   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
 "                                    [with auid 123[and using crush rule 4]]\n"
+"   cppool <pool-name> <dest-pool>   copy content of a pool\n"
 "   rmpool <pool-name>               remove pool <pool-name>'\n"
-"   mkpool <pool-name>               create the pool <pool-name>\n"
-"   df                              show per-pool and total usage\n"
+"   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
 "   chown 123                        change the pool owner to auid 123\n"
 "\n"
@@ -66,6 +66,7 @@ void usage(ostream& out)
 "   put <obj-name> [infile]          write object\n"
 "   create <obj-name> [category]     create object\n"
 "   rm <obj-name>                    remove object\n"
+"   cp <obj-name> [target-obj]       copy object\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
 "   setxattr <obj-name> attr val\n"
@@ -101,11 +102,16 @@ void usage(ostream& out)
 STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "\n"
 "GLOBAL OPTIONS:\n"
-"   --object_locator object_locator\n"
+"   --object-locator object_locator\n"
 "        set object_locator for operation"
+"   --target-locator object_locator\n"
+"        set object_locator for operation target"
 "   -p pool\n"
 "   --pool=pool\n"
 "        select given pool by name\n"
+"   -t pool\n"
+"   --target-pool=pool\n"
+"        select target pool by name\n"
 "   -b op_size\n"
 "        set the size of write ops for put or benchmarking"
 "   -s name\n"
@@ -155,6 +161,133 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, bool 
   } else {
     outdata.write_file(outfile);
     generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << outfile << dendl;
+  }
+
+  return 0;
+}
+
+static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
+{
+  string oid(objname);
+  bufferlist outdata;
+  librados::ObjectReadOperation read_op;
+  string start_after;
+
+#define COPY_CHUNK_SIZE (4 * 1024 * 1024)
+  read_op.read(0, COPY_CHUNK_SIZE, &outdata, NULL);
+
+  map<std::string, bufferlist> attrset;
+  read_op.getxattrs(&attrset, NULL);
+
+  bufferlist omap_header;
+  read_op.omap_get_header(&omap_header, NULL);
+
+#define OMAP_CHUNK 1000
+  map<string, bufferlist> omap;
+  read_op.omap_get_vals(start_after, OMAP_CHUNK, &omap, NULL);
+
+  bufferlist opbl;
+  int ret = io_ctx.operate(oid, &read_op, &opbl);
+  if (ret < 0) {
+    return ret;
+  }
+
+  librados::ObjectWriteOperation write_op;
+  string target_oid(target_obj);
+
+  /* reset dest if exists */
+  write_op.create(false);
+  write_op.remove();
+
+  write_op.write_full(outdata);
+  write_op.omap_set_header(omap_header);
+
+  map<std::string, bufferlist>::iterator iter;
+  for (iter = attrset.begin(); iter != attrset.end(); ++iter) {
+    write_op.setxattr(iter->first.c_str(), iter->second);
+  }
+  if (omap.size()) {
+    write_op.omap_set(omap);
+  }
+  ret = target_ctx.operate(target_oid, &write_op);
+  if (ret < 0) {
+    return ret;
+  }
+
+  uint64_t off = 0;
+
+  while (outdata.length() == COPY_CHUNK_SIZE) {
+    off += outdata.length();
+    outdata.clear();
+    ret = io_ctx.read(oid, outdata, COPY_CHUNK_SIZE, off); 
+    if (ret < 0)
+      goto err;
+
+    ret = target_ctx.write(target_oid, outdata, outdata.length(), off);
+    if (ret < 0)
+      goto err;
+  }
+
+  /* iterate through source omap and update target. This is not atomic */
+  while (omap.size() == OMAP_CHUNK) {
+    /* now start_after should point at the last entry */    
+    map<string, bufferlist>::iterator iter = omap.end();
+    --iter;
+    start_after = iter->first;
+
+    omap.clear();
+    ret = io_ctx.omap_get_vals(oid, start_after, OMAP_CHUNK, &omap);
+    if (ret < 0)
+      goto err;
+
+    if (!omap.size())
+      break;
+
+    ret = target_ctx.omap_set(target_oid, omap);
+    if (ret < 0)
+      goto err;
+  }
+
+  return 0;
+
+err:
+  target_ctx.remove(target_oid);
+  return ret;
+}
+
+static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_pool)
+{
+  IoCtx src_ctx, target_ctx;
+  int ret = rados.ioctx_create(src_pool, src_ctx);
+  if (ret < 0) {
+    cerr << "cannot open source pool: " << src_pool << std::endl;
+    return ret;
+  }
+  ret = rados.ioctx_create(target_pool, target_ctx);
+  if (ret < 0) {
+    cerr << "cannot open target pool: " << target_pool << std::endl;
+    return ret;
+  }
+  librados::ObjectIterator i = src_ctx.objects_begin();
+  librados::ObjectIterator i_end = src_ctx.objects_end();
+  for (; i != i_end; ++i) {
+    string oid = i->first;
+    string locator = i->second;
+    if (i->second.size())
+      cout << src_pool << ":" << oid << "(@" << locator << ")" << " => "
+           << target_pool << ":" << oid << "(@" << locator << ")" << std::endl;
+    else
+      cout << src_pool << ":" << oid << " => "
+           << target_pool << ":" << oid << std::endl;
+
+
+    target_ctx.locator_set_key(locator);
+    ret = do_copy(src_ctx, oid.c_str(), target_ctx, oid.c_str());
+    if (ret < 0) {
+      char buf[64];
+      cerr << "error copying object: " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      return ret;
+    }
   }
 
   return 0;
@@ -658,7 +791,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int ret;
   bool create_pool = false;
   const char *pool_name = NULL;
-  string oloc;
+  const char *target_pool_name = NULL;
+  string oloc, target_oloc;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
   const char *snapname = NULL;
@@ -690,9 +824,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     pool_name = i->second.c_str();
   }
+  i = opts.find("target_pool");
+  if (i != opts.end()) {
+    target_pool_name = i->second.c_str();
+  }
   i = opts.find("object_locator");
   if (i != opts.end()) {
     oloc = i->second;
+  }
+  i = opts.find("target_locator");
+  if (i != opts.end()) {
+    target_oloc = i->second;
   }
   i = opts.find("category");
   if (i != opts.end()) {
@@ -1234,6 +1376,46 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     } while (ret == MAX_READ);
     ret = 0;
   }
+  else if (strcmp(nargs[0], "cp") == 0) {
+    if (!pool_name)
+      usage_exit();
+
+    if (nargs.size() < 2 || nargs.size() > 3)
+      usage_exit();
+
+    const char *target = target_pool_name;
+    if (!target)
+      target = pool_name;
+
+    const char *target_obj;
+    if (nargs.size() < 3) {
+      if (strcmp(target, pool_name) == 0) {
+        cerr << "cannot copy object into itself" << std::endl;
+        return 1;
+      }
+      target_obj = nargs[1];
+    } else {
+      target_obj = nargs[2];
+    }
+
+    // open io context.
+    IoCtx target_ctx;
+    ret = rados.ioctx_create(target, target_ctx);
+    if (ret < 0) {
+      cerr << "error opening target pool " << target << ": "
+           << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+    if (target_oloc.size()) {
+      target_ctx.locator_set_key(target_oloc);
+    }
+
+    ret = do_copy(io_ctx, nargs[1], target_ctx, target_obj);
+    if (ret < 0) {
+      cerr << "error copying " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+  }
   else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
@@ -1322,6 +1504,25 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
     cout << "successfully created pool " << nargs[1] << std::endl;
+  }
+  else if (strcmp(nargs[0], "cppool") == 0) {
+    if (nargs.size() != 3)
+      usage_exit();
+    const char *src_pool = nargs[1];
+    const char *target_pool = nargs[2];
+
+    if (strcmp(src_pool, target_pool) == 0) {
+      cerr << "cannot copy pool into itself" << std::endl;
+      return 1;
+    }
+
+    ret = do_copy_pool(rados, src_pool, target_pool);
+    if (ret < 0) {
+      cerr << "error copying pool " << src_pool << " => " << target_pool << ": "
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+    cout << "successfully copied pool " << nargs[1] << std::endl;
   }
   else if (strcmp(nargs[0], "rmpool") == 0) {
     if (nargs.size() < 2)
@@ -1545,8 +1746,12 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--target-pool", (char*)NULL)) {
+      opts["target_pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {
       opts["object_locator"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-locator" , (char *)NULL)) {
+      opts["target_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
       opts["category"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
