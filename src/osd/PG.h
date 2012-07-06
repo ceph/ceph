@@ -589,6 +589,22 @@ protected:
       else
 	begin = objects.begin()->first;
     }
+
+    /// dump
+    void dump(Formatter *f) const {
+      f->dump_stream("begin") << begin;
+      f->dump_stream("end") << end;
+      f->open_array_section("objects");
+      for (map<hobject_t, eversion_t>::const_iterator i = objects.begin();
+	   i != objects.end();
+	   ++i) {
+	f->open_object_section("object");
+	f->dump_stream("object") << i->first;
+	f->dump_stream("version") << i->second;
+	f->close_section();
+      }
+      f->close_section();
+    }
   };
   
   BackfillInterval backfill_info;
@@ -656,6 +672,7 @@ public:
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
   virtual void mark_all_unfound_lost(int how) = 0;
+  virtual void dump_recovery_info(Formatter *f) const = 0;
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
