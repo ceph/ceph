@@ -6,6 +6,9 @@
 
 #include "crush/CrushWrapper.h"
 
+#include <fstream>
+#include <sstream>
+
 class CrushTester {
   CrushWrapper& crush;
   ostream& err;
@@ -28,12 +31,107 @@ class CrushTester {
   bool output_bad_mappings;
   bool output_choose_tries;
 
+  bool output_data_file;
+  bool output_csv;
+
+  string output_data_file_name;
+
 
   void adjust_weights(vector<__u32>& weight);
   int get_maximum_affected_by_rule(int ruleno);
   map<int,int> get_collapsed_mapping();
   bool check_valid_placement(int ruleno, vector<int> out, const vector<__u32>& weight);
   int random_placement(int ruleno, vector<int>& out, int maxout, vector<__u32>& weight);
+
+  // scaffolding to store data for off-line processing
+   struct tester_data_set {
+     vector <string> device_utilization;
+     vector <string> device_utilization_all;
+     vector <string> placement_information;
+     vector <string> batch_device_utilization_all;
+     vector <string> batch_device_expected_utilization_all;
+     map<int, float> proportional_weights;
+     map<int, float> proportional_weights_all;
+     map<int, float> absolute_weights;
+   } ;
+
+   void write_to_csv(ofstream& csv_file, vector<string>& payload)
+   {
+     if (csv_file.good())
+       for (vector<string>::iterator it = payload.begin(); it != payload.end(); it++)
+         csv_file << (*it);
+   }
+
+   void write_to_csv(ofstream& csv_file, map<int, float>& payload)
+   {
+     if (csv_file.good())
+       for (map<int, float>::iterator it = payload.begin(); it != payload.end(); it++)
+         csv_file << (*it).first << ',' << (*it).second << std::endl;
+   }
+
+   void write_data_set_to_csv(string user_tag, tester_data_set& tester_data)
+   {
+
+     ofstream device_utilization_file ((user_tag + (string)"-device_utilization.csv").c_str());
+     ofstream device_utilization_all_file ((user_tag + (string)"-device_utilization_all.csv").c_str());
+     ofstream placement_information_file ((user_tag + (string)"-placement_information.csv").c_str());
+     ofstream proportional_weights_file ((user_tag + (string)"-proportional_weights.csv").c_str());
+     ofstream proportional_weights_all_file ((user_tag + (string)"-proportional_weights_all.csv").c_str());
+     ofstream absolute_weights_file ((user_tag + (string)"-absolute_weights.csv").c_str());
+
+     // write the headers
+     device_utilization_file << "Device ID, Number of Objects Stored, Number of Objects Expected" << std::endl;
+     device_utilization_all_file << "Device ID, Number of Objects Stored, Number of Objects Expected" << std::endl;
+     proportional_weights_file << "Device ID, Proportional Weight" << std::endl;
+     proportional_weights_all_file << "Device ID, Proportional Weight" << std::endl;
+     absolute_weights_file << "Device ID, Absolute Weight" << std::endl;
+
+     placement_information_file << "Input";
+     for (int i = 0; i < max_rep; i++) {
+       placement_information_file << ", OSD" << i;
+     }
+     placement_information_file << std::endl;
+
+     write_to_csv(device_utilization_file, tester_data.device_utilization);
+     write_to_csv(device_utilization_all_file, tester_data.device_utilization_all);
+     write_to_csv(placement_information_file, tester_data.placement_information);
+     write_to_csv(proportional_weights_file, tester_data.proportional_weights);
+     write_to_csv(proportional_weights_all_file, tester_data.proportional_weights_all);
+     write_to_csv(absolute_weights_file, tester_data.absolute_weights);
+
+     device_utilization_file.close();
+     device_utilization_all_file.close();
+     placement_information_file.close();
+     proportional_weights_file.close();
+     absolute_weights_file.close();
+
+     if (num_batches > 1) {
+       ofstream batch_device_utilization_all_file ((user_tag + (string)"-batch_device_utilization_all.csv").c_str());
+       ofstream batch_device_expected_utilization_all_file ((user_tag + (string)"-batch_device_expected_utilization_all.csv").c_str());
+
+       batch_device_utilization_all_file << "Batch Round";
+       for (unsigned i = 0; i < tester_data.device_utilization.size(); i++) {
+         batch_device_utilization_all_file << ", Objects Stored on OSD" << i;
+       }
+       batch_device_utilization_all_file << std::endl;
+
+       batch_device_expected_utilization_all_file << "Batch Round";
+       for (unsigned i = 0; i < tester_data.device_utilization.size(); i++) {
+         batch_device_expected_utilization_all_file << ", Objects Expected on OSD" << i;
+       }
+       batch_device_expected_utilization_all_file << std::endl;
+
+       write_to_csv(batch_device_utilization_all_file, tester_data.batch_device_utilization_all);
+       write_to_csv(batch_device_expected_utilization_all_file, tester_data.batch_device_expected_utilization_all);
+       batch_device_expected_utilization_all_file.close();
+       batch_device_utilization_all_file.close();
+     }
+   }
+
+   void write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<int> vector_data);
+   void write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<float> vector_data);
+   void write_integer_indexed_scalar_data_string(vector<string> &dst, int index, int scalar_data);
+   void write_integer_indexed_scalar_data_string(vector<string> &dst, int index, float scalar_data);
 
 public:
   CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
@@ -49,9 +147,22 @@ public:
       output_utilization_all(false),
       output_statistics(false),
       output_bad_mappings(false),
-      output_choose_tries(false)
+      output_choose_tries(false),
+      output_data_file(false),
+      output_csv(false),
+      output_data_file_name("")
+
   { }
 
+  void set_output_data_file_name(string name) {
+    output_data_file_name = name;
+  }
+  void set_output_data_file(bool b) {
+     output_data_file = b;
+  }
+  void set_output_csv(bool b) {
+     output_csv = b;
+  }
   void set_output_utilization(bool b) {
     output_utilization = b;
   }

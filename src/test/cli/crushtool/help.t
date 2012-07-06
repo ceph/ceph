@@ -12,7 +12,7 @@
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r]
         [--num-rep n]
-        [--batches b]
+        [--batches b]      split the CRUSH mapping into b rounds
       --simulate           simulate placements using a RNG
         [--weight|-w devno weight]
                            where weight is 0 to 1.0
@@ -41,4 +41,11 @@
                            permutation before re-descent
      --set-choose-total-tries N
                            set choose total descent attempts
+     --output-name name
+                           prepend the data file(s) generated during the
+                           testing routine with name
+     --output-csv
+                           export select data generated during testing routine
+                           to CSV files for off-line post-processing
+                           use --help-output for more information
   [1]

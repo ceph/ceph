@@ -277,7 +277,70 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
   return 0;
 }
 
+void CrushTester::write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<int> vector_data)
+{
+  stringstream data_buffer (stringstream::in | stringstream::out);
+  unsigned input_size = vector_data.size();
 
+  // pass the indexing variable to the data buffer
+  data_buffer << index;
+
+  // pass the rest of the input data to the buffer
+  for (unsigned i = 0; i < input_size; i++) {
+    data_buffer << ',' << vector_data[i];
+  }
+
+  data_buffer << std::endl;
+
+  // write the data buffer to the destination
+  dst.push_back( data_buffer.str() );
+}
+void CrushTester::write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<float> vector_data)
+{
+  stringstream data_buffer (stringstream::in | stringstream::out);
+  unsigned input_size = vector_data.size();
+
+  // pass the indexing variable to the data buffer
+  data_buffer << index;
+
+  // pass the rest of the input data to the buffer
+  for (unsigned i = 0; i < input_size; i++) {
+    data_buffer << ',' << vector_data[i];
+  }
+
+  data_buffer << std::endl;
+
+  // write the data buffer to the destination
+  dst.push_back( data_buffer.str() );
+}
+void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, int index, int scalar_data)
+{
+  stringstream data_buffer (stringstream::in | stringstream::out);
+
+  // pass the indexing variable to the data buffer
+  data_buffer << index;
+
+  // pass the input data to the buffer
+  data_buffer << ',' << scalar_data;
+  data_buffer << std::endl;
+
+  // write the data buffer to the destination
+  dst.push_back( data_buffer.str() );
+}
+void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, int index, float scalar_data)
+{
+  stringstream data_buffer (stringstream::in | stringstream::out);
+
+  // pass the indexing variable to the data buffer
+  data_buffer << index;
+
+  // pass the input data to the buffer
+  data_buffer << ',' << scalar_data;
+  data_buffer << std::endl;
+
+  // write the data buffer to the destination
+  dst.push_back( data_buffer.str() );
+}
 
 
 int CrushTester::test()
@@ -342,6 +405,11 @@ int CrushTester::test()
       int num_objects = ((max_x - min_x) + 1);
       float num_devices = (float) per.size(); // get the total number of devices, better to cast as a float here 
 
+      // create a structure to hold data for post-processing
+      tester_data_set tester_data;
+      vector<int> vector_data_buffer;
+      vector<float> vector_data_buffer_f;
+
       // create a map to hold batch-level placement information
       map<int, vector<int> > batch_per;
       int objects_per_batch = num_objects / num_batches;
@@ -363,6 +431,21 @@ int CrushTester::test()
       for (unsigned i = 0; i < per.size(); i++)
         proportional_weights[i] = (float) weight[i] / (float) total_weight;
 
+      if (output_data_file) {
+        // stage the absolute weight information for post-processing
+        for (unsigned i = 0; i < per.size(); i++) {
+          tester_data.absolute_weights[i] = (float) weight[i] / (float)0x10000;
+        }
+
+        // stage the proportional weight information for post-processing
+        for (unsigned i = 0; i < per.size(); i++) {
+          if (proportional_weights[i] > 0 )
+            tester_data.proportional_weights[i] = proportional_weights[i];
+
+          tester_data.proportional_weights_all[i] = proportional_weights[i];
+        }
+
+      }
       // compute the expected number of objects stored per device when a device's weight is considered
       vector<float> num_objects_expected(num_devices);
 
@@ -384,7 +467,6 @@ int CrushTester::test()
         // create a vector to hold placement results temporarily 
         vector<int> temporary_per ( per.size() );
 
-
         for (int x = batch_min; x <= batch_max; x++) {
           // create a vector to hold the results of a CRUSH placement or RNG simulation
           vector<int> out;
@@ -394,18 +476,17 @@ int CrushTester::test()
               err << "CRUSH"; // prepend CRUSH to placement output
             crush.do_rule(r, x, out, nr, weight);
           } else {
-
-
             if (output_statistics)
               err << "RNG"; // prepend RNG to placement output to denote simulation
-
             // test our new monte carlo placement generator
             random_placement(r, out, nr, weight);
           }
 
-          if (output_statistics){
+          if (output_statistics)
             err << " rule " << r << " x " << x << " " << out << std::endl;
-          }
+
+          if (output_data_file)
+            write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);
 
           for (unsigned i = 0; i < out.size(); i++) {
             per[out[i]]++;
@@ -426,8 +507,8 @@ int CrushTester::test()
       for (unsigned i = 0; i < per.size(); i++)
         if (output_utilization && !output_statistics)
           err << "  device " << i
-          << ":\t" << per[i]
-                          << std::endl;
+          << ":\t" << per[i] << std::endl;
+
       for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); p++)
         if ( output_statistics || p->first != nr)
           err << "rule " << r << " (" << crush.get_rule_name(r) << ") num_rep " << nr
@@ -450,6 +531,31 @@ int CrushTester::test()
                 << std::endl;
           }
         }
+
+      if (output_data_file)
+        for (unsigned i = 0; i < per.size(); i++) {
+          vector_data_buffer_f.clear();
+          vector_data_buffer_f.push_back( (float) per[i]);
+          vector_data_buffer_f.push_back( (float) num_objects_expected[i]);
+
+          write_integer_indexed_vector_data_string(tester_data.device_utilization_all, i, vector_data_buffer_f);
+
+          if (num_objects_expected[i] > 0 && per[i] > 0)
+            write_integer_indexed_vector_data_string(tester_data.device_utilization, i, vector_data_buffer_f);
+        }
+
+      if (output_data_file && num_batches > 1) {
+        // stage batch utilization information for post-processing
+        for (int i = 0; i < num_batches; i++) {
+          write_integer_indexed_vector_data_string(tester_data.batch_device_utilization_all, i, batch_per[i]);
+          write_integer_indexed_vector_data_string(tester_data.batch_device_expected_utilization_all, i, batch_per[i]);
+        }
+      }
+
+      string rule_tag = crush.get_rule_name(r);
+
+      if (output_csv)
+        write_data_set_to_csv(output_data_file_name+rule_tag,tester_data);
     }
   }
 
