@@ -210,16 +210,22 @@ class XMLArgs
   string str, empty_str;
   map<string, string> val_map;
   map<string, string> sub_resources;
+
+  bool has_resp_modifier;
  public:
-  XMLArgs() {}
-  XMLArgs(string s) : str(s) {}
+  XMLArgs() : has_resp_modifier(false) {}
   /** Set the arguments; as received */
-  void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
+  void set(string s) {
+    has_resp_modifier = false;
+    val_map.clear();
+    sub_resources.clear();
+    str = s;
+  }
   /** parse the received arguments */
   int parse();
   /** Get the value for a specific argument parameter */
-  string& get(string& name);
-  string& get(const char *name);
+  string& get(string& name, bool *exists = NULL);
+  string& get(const char *name, bool *exists = NULL);
   /** see if a parameter is contained in this XMLArgs */
   bool exists(const char *name) {
     map<string, string>::iterator iter = val_map.find(name);
@@ -230,6 +236,10 @@ class XMLArgs
     return (iter != sub_resources.end());
   }
   map<string, string>& get_sub_resources() { return sub_resources; }
+
+  bool has_response_modifier() {
+    return has_resp_modifier;
+  }
 };
 
 class RGWConf;
