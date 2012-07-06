@@ -734,7 +734,7 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
     if (room < (header.max_size >> 1) &&
 	room + size > (header.max_size >> 1)) {
       dout(10) << " passing half full mark, triggering commit" << dendl;
-      do_sync_cond->Signal();  // initiate a real commit so we can trim
+      do_sync_cond->SloppySignal();  // initiate a real commit so we can trim
     }
   }
 
