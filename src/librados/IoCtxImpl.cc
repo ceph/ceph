@@ -1600,8 +1600,10 @@ void librados::IoCtxImpl::C_NotifyComplete::notify(uint8_t opcode,
 						   uint64_t ver,
 						   bufferlist& bl)
 {
+  lock->Lock();
   *done = true;
   cond->Signal();
+  lock->Unlock();
 }
 
 /////////////////////////// WatchContext ///////////////////////////////
