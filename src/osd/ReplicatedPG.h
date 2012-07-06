@@ -562,6 +562,19 @@ protected:
   struct PushInfo {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
+
+    void dump(Formatter *f) const {
+      {
+	f->open_object_section("recovery_progress");
+	recovery_progress.dump(f);
+	f->close_section();
+      }
+      {
+	f->open_object_section("recovery_info");
+	recovery_info.dump(f);
+	f->close_section();
+      }
+    }
   };
   map<hobject_t, map<int, PushInfo> > pushing;
 
@@ -569,6 +582,19 @@ protected:
   struct PullInfo {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
+
+    void dump(Formatter *f) const {
+      {
+	f->open_object_section("recovery_progress");
+	recovery_progress.dump(f);
+	f->close_section();
+      }
+      {
+	f->open_object_section("recovery_info");
+	recovery_info.dump(f);
+	f->close_section();
+      }
+    }
 
     bool is_complete() const {
       return recovery_progress.is_complete(recovery_info);
@@ -618,6 +644,82 @@ protected:
    */
   set<hobject_t> backfills_in_flight;
   map<hobject_t, pg_stat_t> pending_backfill_updates;
+
+  void dump_recovery_info(Formatter *f) const {
+    f->dump_int("backfill_target", get_backfill_target());
+    f->dump_int("waiting_on_backfill", waiting_on_backfill);
+    f->dump_stream("backfill_pos") << backfill_pos;
+    {
+      f->open_object_section("backfill_info");
+      backfill_info.dump(f);
+      f->close_section();
+    }
+    {
+      f->open_object_section("peer_backfill_info");
+      peer_backfill_info.dump(f);
+      f->close_section();
+    }
+    {
+      f->open_array_section("backfills_in_flight");
+      for (set<hobject_t>::const_iterator i = backfills_in_flight.begin();
+	   i != backfills_in_flight.end();
+	   ++i) {
+	f->dump_stream("object") << *i;
+      }
+      f->close_section();
+    }
+    {
+      f->open_array_section("pull_from_peer");
+      for (map<int, set<hobject_t> >::const_iterator i = pull_from_peer.begin();
+	   i != pull_from_peer.end();
+	   ++i) {
+	f->open_object_section("pulling_from");
+	f->dump_int("pull_from", i->first);
+	{
+	  f->open_array_section("pulls");
+	  for (set<hobject_t>::const_iterator j = i->second.begin();
+	       j != i->second.end();
+	       ++j) {
+	    f->open_object_section("pull_info");
+	    assert(pulling.count(*j));
+	    pulling.find(*j)->second.dump(f);
+	    f->close_section();
+	  }
+	  f->close_section();
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+    {
+      f->open_array_section("pushing");
+      for (map<hobject_t, map<int, PushInfo> >::const_iterator i =
+	     pushing.begin();
+	   i != pushing.end();
+	   ++i) {
+	f->open_object_section("object");
+	f->dump_stream("pushing") << i->first;
+	{
+	  f->open_array_section("pushing_to");
+	  for (map<int, PushInfo>::const_iterator j = i->second.begin();
+	       j != i->second.end();
+	       ++j) {
+	    f->open_object_section("push_progress");
+	    f->dump_stream("object_pushing") << j->first;
+	    {
+	      f->open_object_section("push_info");
+	      j->second.dump(f);
+	      f->close_section();
+	    }
+	    f->close_section();
+	  }
+	  f->close_section();
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+  }
 
   /// leading edge of backfill
   hobject_t backfill_pos;

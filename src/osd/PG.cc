@@ -152,7 +152,6 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
     tail = s;
 }
 
-
 /********* PG **********/
 
 void PG::proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, pg_missing_t& omissing, int from)
@@ -4747,6 +4746,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
       }
       q.f->close_section();
     }
+    q.f->close_section();
+  }
+  {
+    q.f->open_object_section("recovery_progress");
+    pg->dump_recovery_info(q.f);
     q.f->close_section();
   }
 
