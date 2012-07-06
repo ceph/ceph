@@ -439,6 +439,14 @@ inline void decode(std::vector<T*>& v, bufferlist::iterator& p)
 */
 // vector
 template<class T>
+inline void encode(const std::vector<T>& v, bufferlist& bl, uint64_t features)
+{
+  __u32 n = v.size();
+  encode(n, bl);
+  for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(*p, bl, features);
+}
+template<class T>
 inline void encode(const std::vector<T>& v, bufferlist& bl)
 {
   __u32 n = v.size();
