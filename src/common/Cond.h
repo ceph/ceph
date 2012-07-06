@@ -29,12 +29,14 @@ class Cond {
   // my bits
   pthread_cond_t _c;
 
+  Mutex *waiter_mutex;
+
   // don't allow copying.
   void operator=(Cond &C) {}
   Cond( const Cond &C ) {}
 
  public:
-  Cond() {
+  Cond() : waiter_mutex(NULL) {
     int r = pthread_cond_init(&_c,NULL);
     assert(r == 0);
   }
@@ -44,6 +46,11 @@ class Cond {
 
   int Wait(Mutex &mutex)  { 
     assert(mutex.is_locked());
+
+    // make sure this cond is used with one mutex only
+    assert(waiter_mutex == NULL || waiter_mutex == &mutex);
+    waiter_mutex = &mutex;
+
     --mutex.nlock;
     int r = pthread_cond_wait(&_c, &mutex._m);
     ++mutex.nlock;
@@ -53,6 +60,11 @@ class Cond {
   int Wait(Mutex &mutex, char* s)  { 
     //cout << "Wait: " << s << endl;
     assert(mutex.is_locked());
+
+    // make sure this cond is used with one mutex only
+    assert(waiter_mutex == NULL || waiter_mutex == &mutex);
+    waiter_mutex = &mutex;
+
     --mutex.nlock;
     int r = pthread_cond_wait(&_c, &mutex._m);
     ++mutex.nlock;
@@ -61,6 +73,11 @@ class Cond {
 
   int WaitUntil(Mutex &mutex, utime_t when) {
     assert(mutex.is_locked());
+
+    // make sure this cond is used with one mutex only
+    assert(waiter_mutex == NULL || waiter_mutex == &mutex);
+    waiter_mutex = &mutex;
+
     struct timespec ts;
     when.to_timespec(&ts);
     --mutex.nlock;
@@ -74,16 +91,32 @@ class Cond {
     return WaitUntil(mutex, when);
   }
 
+  int SloppySignal() { 
+    int r = pthread_cond_broadcast(&_c);
+    return r;
+  }
   int Signal() { 
+    // make sure signaler is holding the waiter's lock.
+    assert(waiter_mutex == NULL ||
+	   waiter_mutex->is_locked());
+
     //int r = pthread_cond_signal(&_c);
     int r = pthread_cond_broadcast(&_c);
     return r;
   }
   int SignalOne() { 
+    // make sure signaler is holding the waiter's lock.
+    assert(waiter_mutex == NULL ||
+	   waiter_mutex->is_locked());
+
     int r = pthread_cond_signal(&_c);
     return r;
   }
   int SignalAll() { 
+    // make sure signaler is holding the waiter's lock.
+    assert(waiter_mutex == NULL ||
+	   waiter_mutex->is_locked());
+
     //int r = pthread_cond_signal(&_c);
     int r = pthread_cond_broadcast(&_c);
     return r;
