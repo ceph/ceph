@@ -280,6 +280,24 @@ bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
   return true;
 }
 
+bool coll_t::is_removal(uint64_t *seq, pg_t *pgid) const
+{
+  if (str.substr(0, 11) != string("FORREMOVAL_"))
+    return false;
+
+  stringstream ss(str.substr(11));
+  ss >> *seq;
+  char sep;
+  ss >> sep;
+  assert(sep == '_');
+  string pgid_str;
+  ss >> pgid_str;
+  if (!pgid->parse(pgid_str.c_str())) {
+    assert(0);
+    return false;
+  }
+  return true;
+}
 
 void coll_t::encode(bufferlist& bl) const
 {
@@ -1308,6 +1326,48 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->stats = *s.back();
 }
 
+// -- pg_notify_t --
+void pg_notify_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(query_epoch, bl);
+  ::encode(epoch_sent, bl);
+  ::encode(info, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_notify_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(query_epoch, bl);
+  ::decode(epoch_sent, bl);
+  ::decode(info, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_notify_t::dump(Formatter *f) const
+{
+  f->dump_stream("query_epoch") << query_epoch;
+  f->dump_stream("epoch_sent") << epoch_sent;
+  {
+    f->open_object_section("info");
+    info.dump(f);
+    f->close_section();
+  }
+}
+
+void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
+{
+  o.push_back(new pg_notify_t(1,1,pg_info_t()));
+  o.push_back(new pg_notify_t(3,10,pg_info_t()));
+}
+
+ostream &operator<<(ostream &lhs, const pg_notify_t notify)
+{
+  return lhs << "(query_epoch:" << notify.query_epoch
+	     << ", epoch_sent:" << notify.epoch_sent
+	     << ", info:" << notify.info << ")";
+}
 
 // -- pg_interval_t --
 
@@ -1437,10 +1497,43 @@ ostream& operator<<(ostream& out, const pg_interval_t& i)
 
 // -- pg_query_t --
 
+void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
+  if (features & CEPH_FEATURE_QUERY_T) {
+    ENCODE_START(2, 2, bl);
+    ::encode(type, bl);
+    ::encode(since, bl);
+    history.encode(bl);
+    ::encode(epoch_sent, bl);
+    ENCODE_FINISH(bl);
+  } else {
+    ::encode(type, bl);
+    ::encode(since, bl);
+    history.encode(bl);
+  }
+}
+
+void pg_query_t::decode(bufferlist::iterator &bl) {
+  bufferlist::iterator bl2 = bl;
+  try {
+    DECODE_START(2, bl);
+    ::decode(type, bl);
+    ::decode(since, bl);
+    history.decode(bl);
+    ::decode(epoch_sent, bl);
+    DECODE_FINISH(bl);
+  } catch (...) {
+    bl = bl2;
+    ::decode(type, bl);
+    ::decode(since, bl);
+    history.decode(bl);
+  }
+}
+
 void pg_query_t::dump(Formatter *f) const
 {
   f->dump_string("type", get_type_name());
   f->dump_stream("since") << since;
+  f->dump_stream("epoch_sent") << epoch_sent;
   f->open_object_section("history");
   history.dump(f);
   f->close_section();
@@ -1450,10 +1543,10 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
   o.push_back(new pg_query_t());
   list<pg_history_t*> h;
   pg_history_t::generate_test_instances(h);
-  o.push_back(new pg_query_t(pg_query_t::INFO, *h.back()));
-  o.push_back(new pg_query_t(pg_query_t::MISSING, *h.back()));
-  o.push_back(new pg_query_t(pg_query_t::LOG, eversion_t(4, 5), *h.back()));
-  o.push_back(new pg_query_t(pg_query_t::FULLLOG, *h.back()));
+  o.push_back(new pg_query_t(pg_query_t::INFO, *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::MISSING, *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::LOG, eversion_t(4, 5), *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::FULLLOG, *h.back(), 5));
 }
 
 
