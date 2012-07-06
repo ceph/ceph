@@ -1,6 +1,7 @@
-==========================
- Start | Stop the Cluster
-==========================
+=====================
+ Operating a Cluster
+=====================
+
 The ``ceph`` process provides functionality to **start**, **restart**, and 
 **stop** your Ceph cluster. Each time you execute ``ceph``, you must specify at 
 least one option and one command. You may also specify a daemon type or a daemon
