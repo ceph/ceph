@@ -38,12 +38,52 @@
 using namespace std;
 
 void usage();
+void data_analysis();
 
 
 const char *infn = "stdin";
 
 
 ////////////////////////////////////////////////////////////////////////////
+
+void data_analysis_usage()
+{
+cout << "data output from testing routine ...\n";
+cout << "          absolute_weights\n";
+cout << "                the decimal weight of each OSD\n";
+cout << "                data layout: ROW MAJOR\n";
+cout << "                             OSD id (int), weight (int)\n";
+cout << "           batch_device_expected_utilization_all\n";
+cout << "                 the expected number of objects each OSD should receive per placement batch\n";
+cout << "                 which may be a decimal value\n";
+cout << "                 data layout: COLUMN MAJOR\n";
+cout << "                              round (int), objects expected on OSD 0...OSD n (float)\n";
+cout << "           batch_device_utilization_all\n";
+cout << "                 the number of objects stored on each OSD during each placement round\n";
+cout << "                 data layout: COLUMN MAJOR\n";
+cout << "                              round (int), objects stored on OSD 0...OSD n (int)\n";
+cout << "           device_utilization_all\n";
+cout << "                  the number of objects stored on each OSD at the end of placements\n";
+cout << "                  data_layout: ROW MAJOR\n";
+cout << "                               OSD id (int), objects stored (int), objects expected (float)\n";
+cout << "           device_utilization\n";
+cout << "                  the number of objects stored on each OSD marked 'up' at the end of placements\n";
+cout << "                  data_layout: ROW MAJOR\n";
+cout << "                               OSD id (int), objects stored (int), objects expected (float)\n";
+cout << "           placement_information\n";
+cout << "                  the map of input -> OSD\n";
+cout << "                  data_layout: ROW MAJOR\n";
+cout << "                               input (int), OSD's mapped (int)\n";
+cout << "           proportional_weights_all\n";
+cout << "                  the proportional weight of each OSD specified in the CRUSH map\n";
+cout << "                  data_layout: ROW MAJOR\n";
+cout << "                               OSD id (int), proportional weight (float)\n";
+cout << "           proportional_weights\n";
+cout << "                  the proportional weight of each 'up' OSD specified in the CRUSH map\n";
+cout << "                  data_layout: ROW MAJOR\n";
+cout << "                               OSD id (int), proportional weight (float)\n";
+exit(1);
+}
 
 void usage()
 {
@@ -59,7 +99,7 @@ void usage()
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
   cout << "      [--num-rep n]\n";
-  cout << "      [--batches b]\n";
+  cout << "      [--batches b]      split the CRUSH mapping into b rounds\n";
   cout << "    --simulate           simulate placements using a RNG\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
@@ -88,6 +128,13 @@ void usage()
   cout << "                         permutation before re-descent\n";
   cout << "   --set-choose-total-tries N\n";
   cout << "                         set choose total descent attempts\n";
+  cout << "   --output-name name\n";
+  cout << "                         prepend the data file(s) generated during the\n";
+  cout << "                         testing routine with name\n";
+  cout << "   --output-csv\n";
+  cout << "                         export select data generated during testing routine\n";
+  cout << "                         to CSV files for off-line post-processing\n";
+  cout << "                         use --help-output for more information\n";
   exit(1);
 }
 
@@ -229,6 +276,19 @@ int main(int argc, const char **argv)
       std::string name(*i);
       i = args.erase(i);
       add_loc[type] = name;
+    } else if (ceph_argparse_flag(args, i, "--output-csv", (char*)NULL)) {
+      tester.set_output_data_file(true);
+      tester.set_output_csv(true);
+    } else if (ceph_argparse_flag(args, i, "--help-output", (char*)NULL)) {
+      data_analysis_usage();
+    } else if (ceph_argparse_witharg(args, i, &val, "--output-name", (char*)NULL)) {
+      std::string name(val);
+      if (i == args.end()) {
+        usage();
+      }
+      else {
+        tester.set_output_data_file_name(name + "-");
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--remove_item", (char*)NULL)) {
       remove_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--reweight_item", (char*)NULL)) {
