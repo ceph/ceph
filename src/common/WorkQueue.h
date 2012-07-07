@@ -108,8 +108,11 @@ public:
     void unlock() {
       pool->unlock();
     }
-    void kick() {
-      pool->kick();
+    void wake() {
+      pool->wake();
+    }
+    void _wake() {
+      pool->_wake();
     }
     void drain() {
       pool->drain(this);
@@ -168,8 +171,13 @@ public:
     void unlock() {
       pool->unlock();
     }
-    void kick() {
-      pool->kick();
+    /// wake up the thread pool (without lock held)
+    void wake() {
+      pool->wake();
+    }
+    /// wake up the thread pool (with lock already held)
+    void _wake() {
+      pool->_wake();
     }
     void drain() {
       pool->drain(this);
@@ -251,8 +259,14 @@ public:
   void wait(Cond &c) {
     c.Wait(_lock);
   }
-  /// wake up a waiter
-  void kick() {
+
+  /// wake up a waiter (with lock already held)
+  void _wake() {
+    _cond.Signal();
+  }
+  /// wake up a waiter (without lock held)
+  void wake() {
+    Mutex::Locker l(_lock);
     _cond.Signal();
   }
 
