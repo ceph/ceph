@@ -278,9 +278,10 @@ def main():
     if ctx.pid:
         if ctx.archive:
             import os
-            os.system('grep -q %s /proc/%d/cmdline && kill %d' % (ctx.archive,
-                                                                  ctx.pid,
-                                                                  ctx.pid))
+            os.system('grep -q %s /proc/%d/cmdline && sudo kill %d' % (
+                    ctx.archive,
+                    ctx.pid,
+                    ctx.pid))
         else:
             subprocess.check_call(["kill", "-9", str(ctx.pid)]);
 
