@@ -20,11 +20,8 @@ System commands
 
 ::
 
-	$ ceph stop
-
-Cleanly shuts down the cluster.  ::
-
 	$ ceph -s
+        $ ceph status
 
 Shows an overview of the current status of the cluster.  ::
 
