@@ -1783,11 +1783,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CALL:
       {
 	string cname, mname;
-	bp.copy(op.cls.class_len, cname);
-	bp.copy(op.cls.method_len, mname);
-
 	bufferlist indata;
-	bp.copy(op.cls.indata_len, indata);
+	try {
+	  bp.copy(op.cls.class_len, cname);
+	  bp.copy(op.cls.method_len, mname);
+	  bp.copy(op.cls.indata_len, indata);
+	} catch (buffer::error& e) {
+	  dout(10) << "call unable to decode class + method + indata" << dendl;
+	  dout(30) << "in dump: ";
+	  osd_op.indata.hexdump(*_dout);
+	  *_dout << dendl;
+	  result = -EINVAL;
+	  break;
+	}
 
 	ClassHandler::ClassData *cls;
 	result = osd->class_handler->open_class(cname, &cls);
@@ -1810,6 +1818,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	dout(10) << "method called response length=" << outdata.length() << dendl;
 	op.extent.length = outdata.length();
 	osd_op.outdata.claim_append(outdata);
+	dout(30) << "out dump: ";
+	osd_op.outdata.hexdump(*_dout);
+	*_dout << dendl;
       }
       break;
 
