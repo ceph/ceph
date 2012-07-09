@@ -728,11 +728,16 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   CLS_LOG(20, "get_parent snap_id=%llu", snap_id);
 
-  r = require_feature(hctx, RBD_FEATURE_LAYERING);
-  if (r < 0)
-    return r;
-
   cls_rbd_parent parent;
+  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r < 0) {
+    ::encode(parent.pool, *out);
+    ::encode(parent.id, *out);
+    ::encode(parent.snapid, *out);
+    ::encode(parent.overlap, *out);
+    return 0;
+  }
+
   if (snap_id == CEPH_NOSNAP) {
     r = read_key(hctx, "parent", &parent);
     if (r < 0 && r != -ENOENT)
