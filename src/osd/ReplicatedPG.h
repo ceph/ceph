@@ -470,6 +470,17 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
+  bool already_complete(eversion_t v) {
+    for (xlist<RepGather*>::iterator i = repop_queue.begin();
+	 !i.end();
+	 ++i) {
+      if ((*i)->v > v)
+        break;
+      if (!(*i)->waitfor_disk.empty())
+	return false;
+    }
+    return true;
+  }
   map<tid_t, RepGather*> repop_map;
 
   void apply_repop(RepGather *repop);
