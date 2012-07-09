@@ -33,6 +33,153 @@ using ::librbd::cls_client::lock_image_exclusive;
 using ::librbd::cls_client::lock_image_shared;
 using ::librbd::cls_client::unlock_image;
 using ::librbd::cls_client::break_lock;
+using ::librbd::cls_client::get_id;
+using ::librbd::cls_client::set_id;
+using ::librbd::cls_client::dir_get_id;
+using ::librbd::cls_client::dir_get_name;
+using ::librbd::cls_client::dir_list;
+using ::librbd::cls_client::dir_add_image;
+using ::librbd::cls_client::dir_remove_image;
+using ::librbd::cls_client::dir_rename_image;
+
+TEST(cls_rbd, get_and_set_id)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  string oid = "rbd_id_test";
+  string id;
+  string valid_id = "0123abcxyzZYXCBA";
+  string invalid_id = ".abc";
+  string empty_id;
+
+  ASSERT_EQ(-ENOENT, get_id(&ioctx, oid, &id));
+  ASSERT_EQ(-ENOENT, set_id(&ioctx, oid, valid_id));
+
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_EQ(-EINVAL, set_id(&ioctx, oid, invalid_id));
+  ASSERT_EQ(-EINVAL, set_id(&ioctx, oid, empty_id));
+  ASSERT_EQ(-ENOENT, get_id(&ioctx, oid, &id));
+
+  ASSERT_EQ(0, set_id(&ioctx, oid, valid_id));
+  ASSERT_EQ(-EEXIST, set_id(&ioctx, oid, valid_id));
+  ASSERT_EQ(-EEXIST, set_id(&ioctx, oid, valid_id + valid_id));
+  ASSERT_EQ(0, get_id(&ioctx, oid, &id));
+  ASSERT_EQ(id, valid_id);
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, directory_methods)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  string oid = "rbd_id_test";
+  string id, name;
+  string imgname = "bar";
+  string imgname2 = "foo";
+  string imgname3 = "baz";
+  string valid_id = "0123abcxyzZYXCBA";
+  string valid_id2 = "5";
+  string invalid_id = ".abc";
+  string empty;
+
+  ASSERT_EQ(-ENOENT, dir_get_id(&ioctx, oid, imgname, &id));
+  ASSERT_EQ(-ENOENT, dir_get_name(&ioctx, oid, valid_id, &name));
+  ASSERT_EQ(-ENOENT, dir_remove_image(&ioctx, oid, imgname, valid_id));
+
+  ASSERT_EQ(-EINVAL, dir_add_image(&ioctx, oid, imgname, invalid_id));
+  ASSERT_EQ(-EINVAL, dir_add_image(&ioctx, oid, imgname, empty));
+  ASSERT_EQ(-EINVAL, dir_add_image(&ioctx, oid, empty, valid_id));
+
+  map<string, string> images;
+  ASSERT_EQ(-ENOENT, dir_list(&ioctx, oid, "", 30, &images));
+  
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
+  ASSERT_EQ(0u, images.size());
+  ASSERT_EQ(0, ioctx.remove(oid));
+
+  ASSERT_EQ(0, dir_add_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(-EEXIST, dir_add_image(&ioctx, oid, imgname, valid_id2));
+  ASSERT_EQ(-EBADF, dir_add_image(&ioctx, oid, imgname2, valid_id));
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
+  ASSERT_EQ(1u, images.size());
+  ASSERT_EQ(valid_id, images[imgname]);
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 0, &images));
+  ASSERT_EQ(0u, images.size());
+  ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id, &name));
+  ASSERT_EQ(imgname, name);
+  ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname, &id));
+  ASSERT_EQ(valid_id, id);
+
+  ASSERT_EQ(0, dir_add_image(&ioctx, oid, imgname2, valid_id2));
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
+  ASSERT_EQ(2u, images.size());
+  ASSERT_EQ(valid_id, images[imgname]);
+  ASSERT_EQ(valid_id2, images[imgname2]);
+  ASSERT_EQ(0, dir_list(&ioctx, oid, imgname, 0, &images));
+  ASSERT_EQ(0u, images.size());
+  ASSERT_EQ(0, dir_list(&ioctx, oid, imgname, 2, &images));
+  ASSERT_EQ(1u, images.size());
+  ASSERT_EQ(valid_id2, images[imgname2]);
+  ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id2, &name));
+  ASSERT_EQ(imgname2, name);
+  ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname2, &id));
+  ASSERT_EQ(valid_id2, id);
+
+  ASSERT_EQ(-ESTALE, dir_rename_image(&ioctx, oid, imgname, imgname2, valid_id2));
+  ASSERT_EQ(-ESTALE, dir_remove_image(&ioctx, oid, imgname, valid_id2));
+  ASSERT_EQ(-EEXIST, dir_rename_image(&ioctx, oid, imgname, imgname2, valid_id));
+  ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname, &id));
+  ASSERT_EQ(valid_id, id);
+  ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id2, &name));
+  ASSERT_EQ(imgname2, name);
+
+  ASSERT_EQ(0, dir_rename_image(&ioctx, oid, imgname, imgname3, valid_id));
+  ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname3, &id));
+  ASSERT_EQ(valid_id, id);
+  ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id, &name));
+  ASSERT_EQ(imgname3, name);
+  ASSERT_EQ(0, dir_rename_image(&ioctx, oid, imgname3, imgname, valid_id));
+
+  ASSERT_EQ(0, dir_remove_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
+  ASSERT_EQ(1u, images.size());
+  ASSERT_EQ(valid_id2, images[imgname2]);
+  ASSERT_EQ(0, dir_list(&ioctx, oid, imgname2, 30, &images));
+  ASSERT_EQ(0u, images.size());
+  ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id2, &name));
+  ASSERT_EQ(imgname2, name);
+  ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname2, &id));
+  ASSERT_EQ(valid_id2, id);
+  ASSERT_EQ(-ENOENT, dir_get_name(&ioctx, oid, valid_id, &name));
+  ASSERT_EQ(-ENOENT, dir_get_id(&ioctx, oid, imgname, &id));
+
+  ASSERT_EQ(0, dir_add_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
+  ASSERT_EQ(2u, images.size());
+  ASSERT_EQ(valid_id, images[imgname]);
+  ASSERT_EQ(valid_id2, images[imgname2]);
+  ASSERT_EQ(0, dir_remove_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(-ENOENT, dir_remove_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(0, dir_remove_image(&ioctx, oid, imgname2, valid_id2));
+  ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
+  ASSERT_EQ(0u, images.size());
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
 
 TEST(cls_rbd, create)
 {

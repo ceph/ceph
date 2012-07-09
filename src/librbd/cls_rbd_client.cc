@@ -24,7 +24,9 @@ namespace librbd {
       op.exec("rbd", "get_object_prefix", empty);
 
       bufferlist outbl;
-      ioctx->operate(oid, &op, &outbl);
+      int r = ioctx->operate(oid, &op, &outbl);
+      if (r < 0)
+	return r;
 
       try {
 	bufferlist::iterator iter = outbl.begin();
@@ -62,7 +64,9 @@ namespace librbd {
       op.exec("rbd", "list_locks", empty);
 
       bufferlist outbl;
-      ioctx->operate(oid, &op, &outbl);
+      int r = ioctx->operate(oid, &op, &outbl);
+      if (r < 0)
+	return r;
 
       try {
 	bufferlist::iterator iter = outbl.begin();
@@ -416,5 +420,120 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "break_lock", in, out);
     }
 
+    /************************ rbd_id object methods ************************/
+
+    int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id)
+    {
+      bufferlist in, out;
+      int r = ioctx->exec(oid, "rbd", "get_id", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*id, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id)
+    {
+      bufferlist in, out;
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "set_id", in, out);
+    }
+
+    /******************** rbd_directory object methods ********************/
+
+    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
+		   const std::string &name, std::string *id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      int r = ioctx->exec(oid, "rbd", "dir_get_id", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*id, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &id, std::string *name)
+    {
+      bufferlist in, out;
+      ::encode(id, in);
+      int r = ioctx->exec(oid, "rbd", "dir_get_name", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*name, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int dir_list(librados::IoCtx *ioctx, const std::string &oid,
+		 const std::string &start, uint64_t max_return,
+		 map<string, string> *images)
+    {
+      bufferlist in, out;
+      ::encode(start, in);
+      ::encode(max_return, in);
+      int r = ioctx->exec(oid, "rbd", "dir_list", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*images, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_add_image", in, out);
+    }
+
+    int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
+			 const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_remove_image", in, out);
+    }
+
+    int dir_rename_image(librados::IoCtx *ioctx, const std::string &oid,
+			 const std::string &src, const std::string &dest,
+			 const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(src, in);
+      ::encode(dest, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_rename_image", in, out);
+    }
   } // namespace cls_client
 } // namespace librbd
