@@ -860,9 +860,7 @@ int Pipe::connect()
       ldout(msgr->cct,10) << "connect success " << connect_seq << ", lossy = " << policy.lossy
 	       << ", features " << connection_state->get_features() << dendl;
       
-      pipe_lock.Unlock();
       msgr->dispatch_queue.queue_connect(connection_state);
-      pipe_lock.Lock();
       
       if (!reader_running) {
 	ldout(msgr->cct,20) << "connect starting reader" << dendl;
@@ -1034,9 +1032,7 @@ void Pipe::fail()
 
   discard_queue();
   
-  pipe_lock.Unlock();
   msgr->dispatch_queue.queue_reset(connection_state);
-  pipe_lock.Lock();
 }
 
 void Pipe::was_session_reset()
@@ -1046,9 +1042,7 @@ void Pipe::was_session_reset()
   ldout(msgr->cct,10) << "was_session_reset" << dendl;
   discard_queue();
 
-  pipe_lock.Unlock();
   msgr->dispatch_queue.queue_remote_reset(connection_state);
-  pipe_lock.Lock();
 
   out_seq = 0;
   in_seq = 0;
