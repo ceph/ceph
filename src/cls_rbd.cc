@@ -64,6 +64,14 @@ cls_method_handle_t h_lock_image_shared;
 cls_method_handle_t h_unlock_image;
 cls_method_handle_t h_break_lock;
 cls_method_handle_t h_list_locks;
+cls_method_handle_t h_get_id;
+cls_method_handle_t h_set_id;
+cls_method_handle_t h_dir_get_id;
+cls_method_handle_t h_dir_get_name;
+cls_method_handle_t h_dir_list;
+cls_method_handle_t h_dir_add_image;
+cls_method_handle_t h_dir_remove_image;
+cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -76,7 +84,8 @@ cls_method_handle_t h_assign_bid;
 #define RBD_LOCKS_KEY RBD_LOCK_PREFIX "lockers"
 #define RBD_LOCK_EXCLUSIVE "exclusive"
 #define RBD_LOCK_SHARED "shared"
-
+#define RBD_DIR_ID_KEY_PREFIX "id_"
+#define RBD_DIR_NAME_KEY_PREFIX "name_"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -148,6 +157,17 @@ static int read_key(cls_method_context_t hctx, const string &key, T *out)
   }
 
   return 0;
+}
+
+static bool is_valid_id(const string &id) {
+  if (!id.size())
+    return false;
+  for (size_t i = 0; i < id.size(); ++i) {
+    if (!isalnum(id[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -858,7 +878,7 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "get_snapcontext");
 
   int r;
-  uint64_t max_read = RBD_MAX_KEYS_READ;
+  int max_read = RBD_MAX_KEYS_READ;
   vector<snapid_t> snap_ids;
   string last_read = RBD_SNAP_KEY_PREFIX;
 
@@ -875,7 +895,7 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
     if (keys.size() > 0)
       last_read = *(keys.rbegin());
-  } while (r == RBD_MAX_KEYS_READ);
+  } while (r == max_read);
 
   uint64_t snap_seq;
   r = read_key(hctx, "snap_seq", &snap_seq);
@@ -1105,6 +1125,408 @@ int get_all_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   uint64_t all_features = RBD_FEATURES_ALL;
   ::encode(all_features, *out);
   return 0;
+}
+
+/************************ rbd_id object methods **************************/
+
+/**
+ * Input:
+ * @param in ignored
+ *
+ * Output:
+ * @param id the id stored in the object
+ * @returns 0 on success, negative error code on failure
+ */
+int get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t size;
+  int r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0)
+    return r;
+
+  if (size == 0)
+    return -ENOENT;
+
+  bufferlist read_bl;
+  r = cls_cxx_read(hctx, 0, size, &read_bl);
+  if (r < 0) {
+    CLS_ERR("get_id: could not read id: %d", r);
+    return r;
+  }
+
+  string id;
+  try {
+    bufferlist::iterator iter = read_bl.begin();
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EIO;
+  }
+
+  ::encode(id, *out);
+  return 0;
+};
+
+/**
+ * Set the id of an image. The object must already exist.
+ *
+ * Input:
+ * @param id the id of the image, as an alpha-numeric string
+ *
+ * Output:
+ * @returns 0 on success, -EEXIST if the atomic create fails,
+ *          negative error code on other error
+ */
+int set_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  string id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (!is_valid_id(id)) {
+    CLS_ERR("set_id: invalid id '%s'", id.c_str());
+    return -EINVAL;
+  }
+
+  uint64_t size;
+  r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0)
+    return r;
+  if (size != 0)
+    return -EEXIST;
+
+  CLS_LOG(20, "set_id: id=%s", id.c_str());
+
+  bufferlist write_bl;
+  ::encode(id, write_bl);
+  return cls_cxx_write(hctx, 0, write_bl.length(), &write_bl);
+}
+
+/*********************** methods for rbd_directory ***********************/
+
+static const string dir_key_for_id(const string &id)
+{
+  return RBD_DIR_ID_KEY_PREFIX + id;
+}
+
+static const string dir_key_for_name(const string &name)
+{
+  return RBD_DIR_NAME_KEY_PREFIX + name;
+}
+
+static const string dir_name_from_key(const string &key)
+{
+  return key.substr(strlen(RBD_DIR_NAME_KEY_PREFIX));
+}
+
+static int dir_add_image_helper(cls_method_context_t hctx,
+				const string &name, const string &id,
+				bool check_for_unique_id)
+{
+  if (!name.size() || !is_valid_id(id)) {
+    CLS_ERR("dir_add_image_helper: invalid name '%s' or id '%s'",
+	    name.c_str(), id.c_str());
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_add_image_helper name=%s id=%s", name.c_str(), id.c_str());
+
+  string tmp;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  int r = read_key(hctx, name_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "name already exists");
+    return -EEXIST;
+  }
+  r = read_key(hctx, id_key, &tmp);
+  if (r != -ENOENT && check_for_unique_id) {
+    CLS_LOG(10, "id already exists");
+    return -EBADF;
+  }
+  bufferlist id_bl, name_bl;
+  ::encode(id, id_bl);
+  ::encode(name, name_bl);
+  map<string, bufferlist> omap_vals;
+  omap_vals[name_key] = id_bl;
+  omap_vals[id_key] = name_bl;
+  return cls_cxx_map_set_vals(hctx, &omap_vals);
+}
+
+static int dir_remove_image_helper(cls_method_context_t hctx,
+				   const string &name, const string &id)
+{
+  CLS_LOG(20, "dir_remove_image_helper name=%s id=%s",
+	  name.c_str(), id.c_str());
+
+  string stored_name, stored_id;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  int r = read_key(hctx, name_key, &stored_id);
+  if (r < 0) {
+    CLS_ERR("error reading name to id mapping: %d", r);
+    return r;
+  }
+  r = read_key(hctx, id_key, &stored_name);
+  if (r < 0) {
+    CLS_ERR("error reading id to name mapping: %d", r);
+    return r;
+  }
+
+  // check if this op raced with a rename
+  if (stored_name != name || stored_id != id) {
+    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
+	    stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
+    return -ESTALE;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, name_key);
+  if (r < 0) {
+    CLS_ERR("error removing name: %d", r);
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, id_key);
+  if (r < 0) {
+    CLS_ERR("error removing id: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Rename an image in the directory, updating both indexes
+ * atomically. This can't be done from the client calling
+ * dir_add_image and dir_remove_image in one transaction because the
+ * results of the first method are not visibale to later steps.
+ *
+ * Input:
+ * @param src original name of the image
+ * @param dest new name of the image
+ * @param id the id of the image
+ *
+ * Output:
+ * @returns -ESTALE if src and id do not map to each other
+ * @returns -ENOENT if src or id are not in the directory
+ * @returns -EEXIST if dest already exists
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_rename_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string src, dest, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(src, iter);
+    ::decode(dest, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = dir_remove_image_helper(hctx, src, id);
+  if (r < 0)
+    return r;
+  // ignore duplicate id because the result of
+  // remove_image_helper is not visible yet
+  return dir_add_image_helper(hctx, dest, id, false);
+}
+
+/**
+ * Get the id of an image given its name.
+ *
+ * Input:
+ * @param name the name of the image
+ *
+ * Output:
+ * @param id the id of the image
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string name;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_get_id: name=%s", name.c_str());
+
+  string id;
+  int r = read_key(hctx, dir_key_for_name(name), &id);
+  if (r < 0) {
+    CLS_ERR("error reading id for name '%s': %d", name.c_str(), r);
+    return r;
+  }
+  ::encode(id, *out);
+  return 0;
+}
+
+/**
+ * Get the name of an image given its id.
+ *
+ * Input:
+ * @param id the id of the image
+ *
+ * Output:
+ * @param name the name of the image
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_get_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string id;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_get_name: id=%s", id.c_str());
+
+  string name;
+  int r = read_key(hctx, dir_key_for_id(id), &name);
+  if (r < 0) {
+    CLS_ERR("error reading name for id '%s': %d", id.c_str(), r);
+    return r;
+  }
+  ::encode(name, *out);
+  return 0;
+}
+
+/**
+ * List the names and ids of the images in the directory, sorted by
+ * name.
+ *
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param images map from name to id of up to max_return images
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  map<string, string> images;
+  string last_read = dir_key_for_name(start_after);
+
+  while (r == max_read && images.size() < max_return) {
+    map<string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading directory by name: %d", r);
+      return r;
+    }
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end(); ++it) {
+      string id;
+      bufferlist::iterator iter = it->second.begin();
+      try {
+	::decode(id, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode id of image '%s'", it->first.c_str());
+	return -EIO;
+      }
+      CLS_LOG(20, "adding '%s' -> '%s'", dir_name_from_key(it->first).c_str(), id.c_str());
+      images[dir_name_from_key(it->first)] = id;
+      if (images.size() >= max_return)
+	break;
+    }
+    if (vals.size() > 0) {
+      last_read = images.rbegin()->first;
+    }
+  }
+
+  ::encode(images, *out);
+
+  return 0;
+}
+
+/**
+ * Add an image to the rbd directory. Creates the directory object if
+ * needed, and updates the index from id to name and name to id.
+ *
+ * Input:
+ * @param name the name of the image
+ * @param id the id of the image
+ *
+ * Output:
+ * @returns -EEXIST if the image name is already in the directory
+ * @returns -EBADF if the image id is already in the directory
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = cls_cxx_create(hctx, false);
+  if (r < 0) {
+    CLS_ERR("could not create directory: error %d", r);
+    return r;
+  }
+
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  return dir_add_image_helper(hctx, name, id, true);
+}
+
+/**
+ * Remove an image from the rbd directory.
+ *
+ * Input:
+ * @param name the name of the image
+ * @param id the id of the image
+ *
+ * Output:
+ * @returns -ESTALE if the name and id do not map to each other
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  return dir_remove_image_helper(hctx, name, id);
 }
 
 /****************************** Old format *******************************/
@@ -1405,6 +1827,34 @@ void __cls_init()
   cls_register_cxx_method(h_class, "remove_parent",
 			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
 			  remove_parent, &h_remove_parent);
+
+  /* methods for the rbd_id.$image_name objects */
+  cls_register_cxx_method(h_class, "get_id",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  get_id, &h_get_id);
+  cls_register_cxx_method(h_class, "set_id",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  set_id, &h_set_id);
+
+  /* methods for the rbd_directory object */
+  cls_register_cxx_method(h_class, "dir_get_id",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  dir_get_id, &h_dir_get_id);
+  cls_register_cxx_method(h_class, "dir_get_name",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  dir_get_name, &h_dir_get_name);
+  cls_register_cxx_method(h_class, "dir_list",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  dir_list, &h_dir_list);
+  cls_register_cxx_method(h_class, "dir_add_image",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  dir_add_image, &h_dir_add_image);
+  cls_register_cxx_method(h_class, "dir_remove_image",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  dir_remove_image, &h_dir_remove_image);
+  cls_register_cxx_method(h_class, "dir_rename_image",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  dir_rename_image, &h_dir_rename_image);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
