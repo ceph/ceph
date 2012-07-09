@@ -16,7 +16,7 @@ methods, a :class:`TypeError` will be raised.
 """
 # Copyright 2011 Josh Durgin
 from ctypes import CDLL, c_char, c_char_p, c_size_t, c_void_p, c_int, \
-    create_string_buffer, byref, Structure, c_uint64
+    create_string_buffer, byref, Structure, c_uint64, c_int64, c_uint8
 import ctypes
 import errno
 
@@ -102,7 +102,7 @@ class rbd_image_info_t(Structure):
                 ("num_objs", c_uint64),
                 ("order", c_int),
                 ("block_name_prefix", c_char * 24),
-                ("parent_pool", c_int),
+                ("parent_pool", c_int64),
                 ("parent_name", c_char * 96)]
 
 class rbd_snap_info_t(Structure):
@@ -291,6 +291,7 @@ class Image(object):
         :param snapshot: which snapshot to read from
         :type snaphshot: str
         """
+        self.closed = True
         self.librbd = CDLL('librbd.so.1')
         self.image = c_void_p()
         self.name = name
@@ -302,7 +303,7 @@ class Image(object):
                                    byref(self.image), c_char_p(snapshot))
         if ret != 0:
             raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
-	self.closed = False
+        self.closed = False
 
     def __enter__(self):
         return self
@@ -326,6 +327,10 @@ class Image(object):
 
     def __del__(self):
         self.close()
+
+    def __str__(self):
+        s = "rbd.Image(" + dict.__repr__(self.__dict__) + ")"
+        return s
 
     def resize(self, size):
         """
@@ -357,9 +362,12 @@ class Image(object):
             * ``block_name_prefix`` (str) - the prefix of the RADOS objects used
               to store the image
 
-            * ``parent_pool`` (int) - parent pool id (-1 if no parent pool)
+            * ``parent_pool`` (int) - deprecated
 
-            * ``parent_name``  (str) - name of parent pool ('' if no parent pool)
+            * ``parent_name``  (str) - deprecated
+
+            * see also :method:``format`` and :method:``features``
+
         """
         info = rbd_image_info_t()
         ret = self.librbd.rbd_stat(self.image, byref(info), ctypes.sizeof(info))
@@ -372,8 +380,45 @@ class Image(object):
             'order'             : info.order,
             'block_name_prefix' : info.block_name_prefix,
             'parent_pool'       : info.parent_pool,
-            'parent_name'       : info.parent_name,
+            'parent_name'       : info.parent_name
             }
+
+    def parent_info(self):
+        ret = -errno.ERANGE
+        size = 8;
+        while ret == -errno.ERANGE and size < 128:
+            pool = create_string_buffer(size)
+            name = create_string_buffer(size)
+            snapname = create_string_buffer(size)
+            ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool), 
+                name, len(name), snapname, len(snapname))
+            if ret == -errno.ERANGE:
+                size *= 2;
+
+        if (ret != 0):
+            raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
+        return (pool.value, name.value, snapname.value)
+
+    def old_format(self):
+        old = c_uint8()
+        ret = self.librbd.rbd_get_old_format(self.image, byref(old))
+        if (ret != 0):
+            raise make_ex(ret, 'error getting old_format for image' % (self.name))
+        return old.value != 0
+
+    def features(self):
+        features = c_uint64()
+        ret = self.librbd.rbd_get_features(self.image, byref(features))
+        if (ret != 0):
+            raise make_ex(ret, 'error getting features for image' % (self.name))
+        return features.value
+
+    def overlap(self):
+        overlap = c_uint64()
+        ret = self.librbd.rbd_get_overlap(self.image, byref(overlap))
+        if (ret != 0):
+            raise make_ex(ret, 'error getting overlap for image' % (self.name))
+        return overlap.value
 
     def copy(self, dest_ioctx, dest_name):
         """

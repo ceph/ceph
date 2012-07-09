@@ -119,20 +119,13 @@ void usage_exit()
   exit(1);
 }
 
-static void print_info(const char *imgname, librbd::image_info_t& info)
+static string feature_str(uint64_t features)
 {
-  cout << "rbd image '" << imgname << "':\n"
-       << "\tsize " << prettybyte_t(info.size) << " in "
-       << info.num_objs << " objects"
-       << std::endl
-       << "\torder " << info.order
-       << " (" << prettybyte_t(info.obj_size) << " objects)"
-       << std::endl
-       << "\tblock_name_prefix: " << info.block_name_prefix
-       << std::endl
-       << "\tparent: " << info.parent_name
-       << " (pool " << info.parent_pool << ")"
-       << std::endl;
+  string s = ""; 
+
+  if (features & RBD_FEATURE_LAYERING)
+    s += "layering";
+  return s;
 }
 
 struct MyProgressContext : public librbd::ProgressContext {
@@ -216,11 +209,47 @@ static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 static int do_show_info(const char *imgname, librbd::Image& image)
 {
   librbd::image_info_t info;
+  string parent_pool, parent_name, parent_snapname;
+  uint8_t old_format;
+  uint64_t overlap, features;
   int r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
 
-  print_info(imgname, info);
+  r = image.old_format(&old_format);
+  if (r < 0)
+    return r;
+
+  r = image.overlap(&overlap);
+  if (r < 0)
+    return r;
+
+  r = image.features(&features);
+  if (r < 0)
+    return r;
+
+  cout << "rbd image '" << imgname << "':\n"
+       << "\tsize " << prettybyte_t(info.size) << " in "
+       << info.num_objs << " objects"
+       << std::endl
+       << "\torder " << info.order
+       << " (" << prettybyte_t(info.obj_size) << " objects)"
+       << std::endl
+       << "\tblock_name_prefix: " << info.block_name_prefix
+       << std::endl
+       << "\told format: " << (old_format ? "True" : "False")
+       << std::endl
+       << "\tfeatures: " << feature_str(features)
+       << std::endl;
+
+  // parent info, if present 
+  if ((image.parent_info(&parent_pool, &parent_name, &parent_snapname) == 0) &&
+      parent_name.length() > 0) {
+
+    cout << "\tparent: " << parent_pool << "/" << parent_name
+	 << "@" << parent_snapname << std::endl;
+    cout << "\toverlap: " << prettybyte_t(overlap) << std::endl;
+  }
   return 0;
 }
 
@@ -255,6 +284,7 @@ static int do_list_snaps(librbd::Image& image)
   if (r < 0)
     return r;
 
+  cout << "ID\tNAME\t\tSIZE" << std::endl;
   for (std::vector<librbd::snap_info_t>::iterator i = snaps.begin(); i != snaps.end(); ++i) {
     cout << i->id << '\t' << i->name << '\t' << i->size << std::endl;
   }
