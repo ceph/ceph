@@ -101,19 +101,31 @@ struct DispatchQueue {
     
   void queue_connect(Connection *con) {
     lock.Lock();
-    connect_q.push_back(con);
+    if (stop) {
+      lock.Unlock();
+      return;
+    }
+    connect_q.push_back(con->get());
     lock.Unlock();
     local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
   }
   void queue_remote_reset(Connection *con) {
     lock.Lock();
-    remote_reset_q.push_back(con);
+    if (stop) {
+      lock.Unlock();
+      return;
+    }
+    remote_reset_q.push_back(con->get());
     lock.Unlock();
     local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
   }
   void queue_reset(Connection *con) {
     lock.Lock();
-    reset_q.push_back(con);
+    if (stop) {
+      lock.Unlock();
+      return;
+    }
+    reset_q.push_back(con->get());
     lock.Unlock();
     local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
   }
