@@ -62,6 +62,7 @@ private:
   Mutex lock;
   Cond cond;
   SafeTimer timer;
+  int refcnt;
 
 public:
   Finisher finisher;
@@ -99,6 +100,8 @@ public:
 			librados::WatchCtx *ctx, uint64_t *cookie);
   void unregister_watcher(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
+  void get();
+  bool put();
 };
 
 #endif
