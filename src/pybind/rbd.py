@@ -23,6 +23,8 @@ import errno
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
+RBD_FEATURE_LAYERING = 1
+
 class Error(Exception):
     pass
 
@@ -59,6 +61,12 @@ class ImageBusy(Error):
 class ImageHasSnapshots(Error):
     pass
 
+class FunctionNotSupported(Error):
+    pass
+
+class ArgumentOutOfRange(Error):
+    pass
+
 def make_ex(ret, msg):
     """
     Translate a librbd return code into an exception.
@@ -79,6 +87,8 @@ def make_ex(ret, msg):
         errno.EROFS     : ReadOnlyImage,
         errno.EBUSY     : ImageBusy,
         errno.ENOTEMPTY : ImageHasSnapshots,
+        errno.ENOSYS    : FunctionNotSupported,
+        errno.EDOM      : ArgumentOutOfRange
         }
     ret = abs(ret)
     if ret in errors:
@@ -156,6 +166,46 @@ class RBD(object):
                                           byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating image')
+
+    def clone(self, p_ioctx, p_name, p_snapname, c_ioctx, c_name,
+              features=0, order=None):
+        """
+        Clone a parent rbd snapshot into a COW sparse child.
+
+        :param p_ioctx: the parent context that represents the parent snap
+        :type ioctx: :class:`rados.Ioctx`
+        :param p_name: the parent image name
+        :type name: str
+        :param p_snapname: the parent image snapshot name
+        :type name: str
+        :param c_ioctx: the child context that represents the new clone
+        :type ioctx: :class:`rados.Ioctx`
+        :param c_name: the clone (child) name
+        :type name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        if order is None:
+            order = 0
+        if not isinstance(p_snapname, str) or not isinstance(p_name, str):
+            raise TypeError('parent name and snapname must be strings')
+        if not isinstance(c_name, str):
+            raise TypeError('child name must be a string')
+
+        ret = self.librbd.rbd_clone(p_ioctx.io, c_char_p(p_name),
+                                    c_char_p(p_snapname),
+                                    c_ioctx.io, c_char_p(c_name),
+                                          c_uint64(features),
+                                          byref(c_int(order)))
+        if ret < 0:
+            raise make_ex(ret, 'error creating clone')
 
     def list(self, ioctx):
         """
