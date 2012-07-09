@@ -369,27 +369,27 @@ namespace librbd {
     }
 
     int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-                   std::set<std::pair<std::string, std::string> > &locks,
-                   bool &exclusive)
+		   std::set<std::pair<std::string, std::string> > &locks,
+		   bool &exclusive)
     {
       bufferlist in, out;
       int r = ioctx->exec(oid, "rbd", "list_locks", in, out);
       if (r < 0) {
-        return r;
+	return r;
       }
 
       bufferlist::iterator iter = out.begin();
       try {
-        ::decode(locks, iter);
-        ::decode(exclusive, iter);
+	::decode(locks, iter);
+	::decode(exclusive, iter);
       } catch (const buffer::error &err) {
-        return -EBADMSG;
+	return -EBADMSG;
       }
       return 0;
     }
 
     int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-                             const std::string &cookie)
+			     const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(cookie, in);
@@ -397,7 +397,7 @@ namespace librbd {
     }
 
     int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-                          const std::string &cookie)
+			  const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(cookie, in);
@@ -405,14 +405,14 @@ namespace librbd {
     }
 
     int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-                         const std::string &cookie)
+		     const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(cookie, in);
       return ioctx->exec(oid, "rbd", "unlock_image", in, out);
     }
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-                   const std::string &locker, const std::string &cookie)
+		   const std::string &locker, const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(locker, in);
