@@ -704,12 +704,12 @@ int check_exists(cls_method_context_t hctx)
  * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
  *
  * Output:
- * @param pool parent pool id
+ * @param pool parent pool id (-1 if parent does not exist)
  * @param image parent image id
  * @param snapid parent snapid
  * @param size portion of parent mapped under the child
  *
- * @returns 0 on success, -ENOENT if no parent, other negative error code on failure
+ * @returns 0 on success or parent does not exist, negative error code on failure
  */
 int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -735,20 +735,17 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   cls_rbd_parent parent;
   if (snap_id == CEPH_NOSNAP) {
     r = read_key(hctx, "parent", &parent);
-    if (r < 0)
+    if (r < 0 && r != -ENOENT)
       return r;
   } else {
     cls_rbd_snap snap;
     string snapshot_key;
     key_from_snap_id(snap_id, &snapshot_key);
     r = read_key(hctx, snapshot_key, &snap);
-    if (r < 0)
+    if (r < 0 && r != -ENOENT)
       return r;
     parent = snap.parent;
   }
-
-  if (!parent.exists())
-    return -ENOENT;
 
   ::encode(parent.pool, *out);
   ::encode(parent.id, *out);

@@ -442,8 +442,10 @@ TEST(cls_rbd, parents)
   // new image will work
   ASSERT_EQ(0, create_image(&ioctx, "foo", 33<<20, 22, RBD_FEATURE_LAYERING, "foo."));
 
-  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
-  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 123, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-1, pool);
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 123, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-1, pool);
 
   ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", -1, "parent", 3, 10<<20));
   ASSERT_EQ(-EINVAL, set_parent(&ioctx, "foo", 1, "", 3, 10<<20));
@@ -461,7 +463,8 @@ TEST(cls_rbd, parents)
 
   ASSERT_EQ(0, remove_parent(&ioctx, "foo"));
   ASSERT_EQ(-ENOENT, remove_parent(&ioctx, "foo"));
-  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", CEPH_NOSNAP, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-1, pool);
 
   // snapshots
   ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 10<<20));
@@ -498,7 +501,8 @@ TEST(cls_rbd, parents)
   ASSERT_EQ(parent, "parent2");
   ASSERT_EQ(snapid, snapid_t(6));
   ASSERT_EQ(size, 5ull<<20);
-  ASSERT_EQ(-ENOENT, get_parent(&ioctx, "foo", 12, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(0, get_parent(&ioctx, "foo", 12, &pool, &parent, &snapid, &size));
+  ASSERT_EQ(-1, pool);
 
   // make sure set_parent takes min of our size and parent's size
   ASSERT_EQ(0, set_parent(&ioctx, "foo", 1, "parent", 3, 1<<20));
