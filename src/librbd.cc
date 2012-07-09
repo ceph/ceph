@@ -1766,8 +1766,12 @@ int open_image(ImageCtx *ictx)
   if (r < 0)
     return r;
 
-  ictx->snap_set(ictx->snapname);
-  ictx->data_ctx.snap_set_read(ictx->snapid);
+  if (ictx->snapname.length()) {
+    r = ictx->snap_set(ictx->snapname);
+    if (r < 0)
+      return r;
+    ictx->data_ctx.snap_set_read(ictx->snapid);
+  }
 
   WatchCtx *wctx = new WatchCtx(ictx);
   ictx->wctx = wctx;
