@@ -69,6 +69,9 @@ int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order);
+int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
+	      const char *p_snapname, rados_ioctx_t c_ioctx,
+	      const char *c_name, uint64_t features, int *c_order);
 int rbd_remove(rados_ioctx_t io, const char *name);
 int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			     librbd_progress_fn_t cb, void *cbdata);

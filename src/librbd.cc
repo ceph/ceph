@@ -672,6 +672,38 @@ namespace librbd {
     return c;
   }
 
+ProgressContext::~ProgressContext()
+{
+}
+
+class NoOpProgressContext : public librbd::ProgressContext
+{
+public:
+  NoOpProgressContext()
+  {
+  }
+  int update_progress(uint64_t offset, uint64_t src_size)
+  {
+    return 0;
+  }
+};
+
+class CProgressContext : public librbd::ProgressContext
+{
+public:
+  CProgressContext(librbd_progress_fn_t fn, void *data)
+    : m_fn(fn), m_data(data)
+  {
+  }
+  int update_progress(uint64_t offset, uint64_t src_size)
+  {
+    return m_fn(offset, src_size, m_data);
+  }
+private:
+  librbd_progress_fn_t m_fn;
+  void *m_data;
+};
+
 void WatchCtx::invalidate()
 {
   Mutex::Locker l(lock);
@@ -1125,6 +1157,105 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 
   ldout(cct, 2) << "done." << dendl;
   return 0;
+}
+
+/*
+ * Parent may be in different pool, hence different IoCtx
+ */
+int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	  IoCtx& c_ioctx, const char *c_name,
+	  uint64_t features, int *c_order)
+{
+  CephContext *cct = (CephContext *)p_ioctx.cct();
+  ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
+		 << p_snapname << "to child " << &c_ioctx << " name "
+                 << c_name << " features = " << features << " order = "
+                 << *c_order << dendl;
+
+  if (features & ~RBD_FEATURES_ALL) {
+    lderr(cct) << "librbd does not support requested features" << dendl;
+    return -ENOSYS;
+  }
+
+  // make sure child doesn't already exist, in either format
+  int r = detect_format(c_ioctx, c_name, NULL, NULL);
+  if (r != -ENOENT) {
+    lderr(cct) << "rbd image " << c_name << " already exists" << dendl;
+    return -EEXIST;
+  }
+
+  if (p_snapname == NULL) {
+    lderr(cct) << "image to be cloned must be a snapshot" << dendl;
+    return -EINVAL;
+  }
+
+  // make sure parent snapshot exists
+  ImageCtx *p_imctx = new ImageCtx(p_name, p_snapname, p_ioctx);
+  r = open_image(p_imctx);
+  if (r < 0) {
+    lderr(cct) << "error opening parent image: "
+      << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  if (p_imctx->old_format) {
+    lderr(cct) << "parent image must be in new format" << dendl;
+    return -EINVAL;
+  }
+
+  if ((p_imctx->features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+    lderr(cct) << "parent image must support layering" << dendl;
+    return -EINVAL;
+  }
+
+  int order = *c_order;
+
+  if (!*c_order) {
+    order = p_imctx->order;
+  }
+
+  uint64_t size = p_imctx->get_image_size();
+  int remove_r;
+  librbd::NoOpProgressContext no_op;
+  ImageCtx *c_imctx = NULL;
+  r = create(c_ioctx, c_name, size, false, features, &order);
+  if (r < 0) {
+    lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
+    goto err_close_parent;
+  }
+
+  uint64_t p_poolid;
+  p_poolid = p_ioctx.get_id();
+
+  c_imctx = new ImageCtx(c_name, NULL, c_ioctx);
+  r = open_image(c_imctx);
+  if (r < 0) {
+    lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
+    goto err_remove;
+  }
+
+  r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, p_poolid,
+			     p_imctx->id, p_imctx->snapid, size);
+  if (r < 0) {
+    lderr(cct) << "couldn't set parent: " << r << dendl;
+    goto err_close_child;
+  }
+  ldout(cct, 2) << "done." << dendl;
+  close_image(c_imctx);
+  close_image(p_imctx);
+  return 0;
+
+ err_close_child:
+  close_image(c_imctx);
+ err_remove:
+  remove_r = remove(c_ioctx, c_name, no_op);
+  if (remove_r < 0) {
+    lderr(cct) << "Error removing failed clone: "
+	       << cpp_strerror(remove_r) << dendl;
+  }
+ err_close_parent:
+  close_image(p_imctx);
+  return r;
 }
 
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
@@ -1587,38 +1718,6 @@ int ictx_refresh(ImageCtx *ictx)
 
   return 0;
 }
-
-ProgressContext::~ProgressContext()
-{
-}
-
-class NoOpProgressContext : public librbd::ProgressContext
-{
-public:
-  NoOpProgressContext()
-  {
-  }
-  int update_progress(uint64_t offset, uint64_t src_size)
-  {
-    return 0;
-  }
-};
-
-class CProgressContext : public librbd::ProgressContext
-{
-public:
-  CProgressContext(librbd_progress_fn_t fn, void *data)
-    : m_fn(fn), m_data(data)
-  {
-  }
-  int update_progress(uint64_t offset, uint64_t src_size)
-  {
-    return m_fn(offset, src_size, m_data);
-  }
-private:
-  librbd_progress_fn_t m_fn;
-  void *m_data;
-};
 
 int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx)
 {
@@ -2473,6 +2572,14 @@ int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
   return librbd::create(io_ctx, name, size, false, features, order);
 }
 
+int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
+	       int *c_order)
+{
+  return librbd::clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name,
+		       features, c_order);
+}
+
 int RBD::remove(IoCtx& io_ctx, const char *name)
 {
   librbd::NoOpProgressContext prog_ctx;
@@ -2753,6 +2860,17 @@ extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   return librbd::create(io_ctx, name, size, false, features, order);
+}
+
+extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
+			 const char *p_snapname, rados_ioctx_t c_ioctx,
+			 const char *c_name, uint64_t features, int *c_order)
+{
+  librados::IoCtx p_ioc, c_ioc;
+  librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
+  librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
+  return librbd::clone(p_ioc, p_name, p_snapname, c_ioc, c_name,
+		       features, c_order);
 }
 
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)

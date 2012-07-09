@@ -62,46 +62,54 @@ static string dir_info_oid = RBD_INFO;
 
 void usage()
 {
-  cout << "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
-       << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-       << "  (ls | list) [pool-name]                     list rbd images\n"
-       << "  info [--snap <name>] <image-name>           show information about image size,\n"
-       << "                                              striping, etc.\n"
-       << "  create [--order <bits>] --size <MB> <name>  create an empty image\n"
-       << "  resize --size <MB> <image-name>             resize (expand or contract) image\n"
-       << "  rm <image-name>                             delete an image\n"
-       << "  export [--snap <name>] <image-name> <path>  export image to file\n"
-       << "  import <path> <dst-image>                   import image from file (dest defaults\n"
-       << "                                              as the filename part of file)\n"
-       << "  (cp | copy) [--snap <name>] <src> <dest>    copy src image to dest\n"
-       << "  (mv | rename) <src> <dest>                  rename src image to dest\n"
-       << "  snap ls <image-name>                        dump list of image snapshots\n"
-       << "  snap create --snap <name> <image-name>      create a snapshot\n"
-       << "  snap rollback --snap <name> <image-name>    rollback image head to snapshot\n"
-       << "  snap rm --snap <name> <image-name>          deletes a snapshot\n"
-       << "  snap purge <image-name>                     deletes all snapshots\n"
-       << "  watch <image-name>                          watch events on image\n"
-       << "  map <image-name>                            map the image to a block device\n"
-       << "                                              using the kernel\n"
-       << "  unmap <device>                              unmap a rbd device that was\n"
-       << "                                              mapped by the kernel\n"
-       << "  showmapped                                  show the rbd images mapped\n"
-       << "                                              by the kernel\n"
-       << "\n"
-       << "Other input options:\n"
-       << "  -p, --pool <pool>            source pool name\n"
-       << "  --image <image-name>         image name\n"
-       << "  --dest <name>                destination [pool and] image name\n"
-       << "  --snap <snapname>            specify snapshot name\n"
-       << "  --dest-pool <name>           destination pool name\n"
-       << "  --path <path-name>           path name for import/export (if not specified)\n"
-       << "  --size <size in MB>          size parameter for create and resize commands\n"
-       << "  --order <bits>               the object size in bits, such that the objects\n"
-       << "                               are (1 << order) bytes. Default is 22 (4 MB).\n"
-       << "\n"
-       << "For the map command:\n"
-       << "  --user <username>            rados user to authenticate as\n"
-       << "  --secret <path>              file containing secret key for use with cephx\n";
+  cout << 
+"usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
+"where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
+"  (ls | list) [pool-name]                     list rbd images\n"
+"  info <image-name>                           show information about image size,\n"
+"                                              striping, etc.\n"
+"  create [--order <bits>] --size <MB> <name>  create an empty image\n"
+"  clone [--order <bits>] <parentsnap> <clonename>\n"
+"                                              clone a snapshot into a COW\n"
+"                                               child image\n"
+"  resize --size <MB> <image-name>             resize (expand or contract) image\n"
+"  rm <image-name>                             delete an image\n"
+"  export <image-name> <path>                  export image to file\n"
+"  import <path> <image-name>                  import image from file\n"
+"                                              (dest defaults)\n"
+"                                              as the filename part of file)\n"
+"  (cp | copy) <src> <dest>                    copy src image to dest\n"
+"  (mv | rename) <src> <dest>                  rename src image to dest\n"
+"  snap ls <image-name>                        dump list of image snapshots\n"
+"  snap create <snap-name>                     create a snapshot\n"
+"  snap rollback <snap-name>                   rollback image to snapshot\n"
+"  snap rm <snap-name>                         deletes a snapshot\n"
+"  snap purge <image-name>                     deletes all snapshots\n"
+"  watch <image-name>                          watch events on image\n"
+"  map <image-name>                            map image to a block device\n"
+"                                              using the kernel\n"
+"  unmap <device>                              unmap a rbd device that was\n"
+"                                              mapped by the kernel\n"
+"  showmapped                                  show the rbd images mapped\n"
+"                                              by the kernel\n"
+"\n"
+"<image-name>, <snap-name> are [pool/]name[@snap], or you may specify\n"
+"individual pieces of names with -p/--pool, --image, and/or --snap.\n"
+"\n"
+"Other input options:\n"
+"  -p, --pool <pool>            source pool name\n"
+"  --image <image-name>         image name\n"
+"  --dest <image-name>          destination [pool and] image name\n"
+"  --snap <snap-name>           snapshot name\n"
+"  --dest-pool <name>           destination pool name\n"
+"  --path <path-name>           path name for import/export\n"
+"  --size <size in MB>          size of image for create and resize\n"
+"  --order <bits>               the object size in bits; object size will be\n"
+"                               (1 << order) bytes. Default is 22 (4 MB).\n"
+"\n"
+"For the map command:\n"
+"  --user <username>            rados user to authenticate as\n"
+"  --secret <path>              file containing secret key for use with cephx\n";
 }
 
 void usage_exit()
@@ -170,6 +178,9 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     bool old_format, uint64_t features)
 {
   int r;
+  if (features == 0) 
+    features = RBD_FEATURES_ALL;
+
   if (old_format)
     r = rbd.create(io_ctx, imgname, size, order);
   else
@@ -177,6 +188,20 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   if (r < 0)
     return r;
   return 0;
+}
+
+static int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
+		    const char *p_name, const char *p_snapname, 
+		    librados::IoCtx &c_ioctx, const char *c_name,
+		    uint64_t features, int *c_order)
+{
+  if (features == 0)
+    features = RBD_FEATURES_ALL;
+  else if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING)
+    return -EINVAL;
+
+  return rbd.clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
+		    c_order);
 }
 
 static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
@@ -858,6 +883,7 @@ enum {
   OPT_LIST,
   OPT_INFO,
   OPT_CREATE,
+  OPT_CLONE,
   OPT_RESIZE,
   OPT_RM,
   OPT_EXPORT,
@@ -885,6 +911,8 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_INFO;
     if (strcmp(cmd, "create") == 0)
       return OPT_CREATE;
+    if (strcmp(cmd, "clone") == 0)
+      return OPT_CLONE;
     if (strcmp(cmd, "resize") == 0)
       return OPT_RESIZE;
     if (strcmp(cmd, "rm") == 0)
@@ -957,7 +985,7 @@ int main(int argc, const char **argv)
   uint64_t size = 0;  // in bytes
   int order = 0;
   bool old_format = true;
-  const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
+  const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
 
   std::string val;
   std::ostringstream err;
@@ -998,6 +1026,8 @@ int main(int argc, const char **argv)
       secretfile = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--user", (char*)NULL)) {
       user = strdup(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char *)NULL)) {
+      imgname = strdup(val.c_str());
     } else {
       ++i;
     }
@@ -1056,6 +1086,13 @@ int main(int argc, const char **argv)
       case OPT_RENAME:
 	set_conf_param(v, &imgname, &destname);
 	break;
+      case OPT_CLONE:
+	if (imgname == NULL) {
+	  set_conf_param(v, &imgname, NULL);
+        } else {
+	  set_conf_param(v, &destname, NULL);
+	}
+	break;
       case OPT_SHOWMAPPED:
 	usage_exit();
 	break;
@@ -1093,17 +1130,17 @@ int main(int argc, const char **argv)
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY &&
-      opt_cmd != OPT_MAP) {
+      opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage_exit();
   }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE) && !snapname) {
+       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE) && !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage_exit();
   }
 
-  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, NULL);
+  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, (char **)&dest_snapname);
 
   if (!poolname)
     poolname = "rbd";
@@ -1113,8 +1150,18 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
 
-  if (opt_cmd == OPT_COPY && !destname ) {
+  if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE) && !destname ) {
     cerr << "error: destination image name was not specified" << std::endl;
+    usage_exit();
+  }
+
+  if ((opt_cmd == OPT_CLONE) && dest_snapname) {
+    cerr << "error: cannot clone to a snapshot" << std::endl;
+    usage_exit();
+  }
+
+  if ((opt_cmd == OPT_CLONE) && size) {
+    cerr << "error: clone must begin at size of parent" << std::endl;
     usage_exit();
   }
 
@@ -1168,7 +1215,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
+  if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT || opt_cmd == OPT_CLONE) {
     r = rados.ioctx_create(dest_poolname, dest_io_ctx);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << ": " << cpp_strerror(-r) << std::endl;
@@ -1205,6 +1252,21 @@ int main(int argc, const char **argv)
     r = do_create(rbd, io_ctx, imgname, size, &order, old_format, 0);
     if (r < 0) {
       cerr << "create error: " << cpp_strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
+  case OPT_CLONE:
+    if (order && (order < 12 || order > 25)) {
+      cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
+      usage();
+      exit(1);
+    }
+
+    r = do_clone(rbd, io_ctx, imgname, snapname, dest_io_ctx, destname,
+		 RBD_FEATURE_LAYERING, &order);
+    if (r < 0) {
+      cerr << "clone error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
