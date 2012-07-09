@@ -44,8 +44,8 @@ namespace librbd {
 		   std::string *parent_image, snapid_t *parent_snap_id,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   int64_t parent_pool, const std::string& parent_image, snapid_t parent_snap_id,
-		   uint64_t parent_overlap);
+		   int64_t parent_pool, const std::string& parent_image,
+		   snapid_t parent_snap_id, uint64_t parent_overlap);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
@@ -72,6 +72,27 @@ namespace librbd {
                      const std::string &cookie);
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
                    const std::string &locker, const std::string &cookie);
+
+    // operations on rbd_id objects
+    int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id);
+
+    // operations on rbd_directory objects
+    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
+		   const std::string &name, std::string *id);
+    int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &id, std::string *name);
+    int dir_list(librados::IoCtx *ioctx, const std::string &oid,
+		 const std::string &start, uint64_t max_return,
+		 map<string, string> *images);
+    int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id);
+    int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
+			 const std::string &name, const std::string &id);
+    // atomic remove and add
+    int dir_rename_image(librados::IoCtx *ioctx, const std::string &oid,
+			 const std::string &src, const std::string &dest,
+			 const std::string &id);
 
     // class operations on the old format, kept for
     // backwards compatability

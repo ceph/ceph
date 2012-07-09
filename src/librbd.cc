@@ -97,12 +97,19 @@ namespace librbd {
       id(_id), size(_size), features(_features) {};
   };
 
-  const string md_oid(const string &name, bool old_format)
+  const string id_obj_name(const string &name)
   {
-    if (old_format)
-      return name + RBD_SUFFIX;
-    else
-      return RBD_HEADER_PREFIX + name;
+    return RBD_ID_PREFIX + name;
+  }
+
+  const string header_name(const string &image_id)
+  {
+    return RBD_HEADER_PREFIX + image_id;
+  }
+
+  const string old_header_name(const string &image_name)
+  {
+    return image_name + RBD_SUFFIX;
   }
 
   int detect_format(IoCtx &io_ctx, const string &name, bool *old_format,
@@ -111,17 +118,18 @@ namespace librbd {
     CephContext *cct = (CephContext *)io_ctx.cct();
     if (old_format)
       *old_format = true;
-    int r = io_ctx.stat(md_oid(name, true), size, NULL);
+    int r = io_ctx.stat(old_header_name(name), size, NULL);
     if (r < 0) {
       if (old_format)
 	*old_format = false;
-      r = io_ctx.stat(md_oid(name, false), size, NULL);
+      r = io_ctx.stat(id_obj_name(name), size, NULL);
       if (r < 0)
 	return r;
     }
 
     ldout(cct, 20) << "detect format of " << name << " : "
-		   << (*old_format ? "old" : "new") << dendl;
+		   << (old_format ? (*old_format ? "old" : "new") :
+		       "don't care")  << dendl;
     return 0;
   }
 
@@ -173,6 +181,7 @@ namespace librbd {
     uint64_t features;
     string object_prefix;
     string header_oid;
+    string id; // only used for new-format images
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -244,15 +253,24 @@ namespace librbd {
       }
 
       if (!old_format) {
-	r = cls_client::get_immutable_metadata(&md_ctx, md_oid(name, false),
+	r = cls_client::get_id(&md_ctx, id_obj_name(name), &id);
+	if (r < 0) {
+	  lderr(cct) << "error reading image id: " << cpp_strerror(r) << dendl;
+	  return r;
+	}
+
+	header_oid = header_name(id);
+	r = cls_client::get_immutable_metadata(&md_ctx, header_oid,
 					       &object_prefix, &order);
 	if (r < 0) {
 	  lderr(cct) << "error reading immutable metadata: "
 		     << cpp_strerror(r) << dendl;
 	  return r;
 	}
+      } else {
+	header_oid = old_header_name(name);
       }
-      header_oid = md_oid(name, old_format);
+
       return 0;
     }
 
@@ -933,13 +951,33 @@ int list(IoCtx& io_ctx, std::vector<std::string>& names)
   if (r < 0)
     return r;
 
-  bufferlist::iterator p = bl.begin();
-  bufferlist header;
-  map<string,bufferlist> m;
-  ::decode(header, p);
-  ::decode(m, p);
-  for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
-    names.push_back(q->first);
+  // old format images are in a tmap
+  if (bl.length()) {
+    bufferlist::iterator p = bl.begin();
+    bufferlist header;
+    map<string,bufferlist> m;
+    ::decode(header, p);
+    ::decode(m, p);
+    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+      names.push_back(q->first);
+    }
+  }
+
+  // new format images are accessed by class methods
+  int max_read = 1024;
+  string last_read = "";
+  do {
+    map<string, string> images;
+    cls_client::dir_list(&io_ctx, RBD_DIRECTORY, last_read, max_read, &images);
+    for (map<string, string>::const_iterator it = images.begin();
+	 it != images.end(); ++it) {
+      names.push_back(it->first);
+    }
+    if (images.size()) {
+      last_read = images.rbegin()->first;
+    }
+  } while (r == max_read);
+
   return 0;
 }
 
@@ -1029,31 +1067,57 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
     return r;
   }
 
-  ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-  r = tmap_set(io_ctx, imgname);
-  if (r < 0) {
-    lderr(cct) << "error adding img to directory: " << cpp_strerror(r)<< dendl;
-    return r;
-  }
 
   if (!*order)
     *order = RBD_DEFAULT_OBJ_ORDER;
 
-  ldout(cct, 2) << "creating rbd image..." << dendl;
-  string header_oid = md_oid(imgname, old_format);
   if (old_format) {
+    ldout(cct, 2) << "adding rbd image to directory..." << dendl;
+    r = tmap_set(io_ctx, imgname);
+    if (r < 0) {
+      lderr(cct) << "error adding image to directory: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    ldout(cct, 2) << "creating rbd image..." << dendl;
     struct rbd_obj_header_ondisk header;
     init_rbd_header(header, size, order, bid);
 
     bufferlist bl;
     bl.append((const char *)&header, sizeof(header));
+
+    string header_oid = old_header_name(imgname);
     r = io_ctx.write(header_oid, bl, bl.length(), 0);
   } else {
+    string id_obj = id_obj_name(imgname);
+    r = io_ctx.create(id_obj, true);
+    if (r < 0) {
+      lderr(cct) << "error creating rbd id object: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    ostringstream bid_ss;
+    bid_ss << std::hex << bid;
+    string id = bid_ss.str();
+    r = cls_client::set_id(&io_ctx, id_obj, id);
+    if (r < 0) {
+      lderr(cct) << "error setting image id: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    ldout(cct, 2) << "adding rbd image to directory..." << dendl;
+    r = cls_client::dir_add_image(&io_ctx, RBD_DIRECTORY, imgname, id);
+    if (r < 0) {
+      lderr(cct) << "error adding image to directory: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
     ostringstream oss;
     oss << RBD_DATA_PREFIX << std::hex << bid;
-    r = cls_client::create_image(&io_ctx, header_oid, size, *order, features,
+    r = cls_client::create_image(&io_ctx, header_name(id), size, *order, features,
 				 oss.str());
   }
+
   if (r < 0) {
     lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
     return r;
@@ -1070,21 +1134,31 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 		 << dstname << dendl;
 
   bool old_format;
-  uint64_t header_size;
-  int r = detect_format(io_ctx, srcname, &old_format, &header_size);
+  uint64_t src_size;
+  int r = detect_format(io_ctx, srcname, &old_format, &src_size);
   if (r < 0) {
-    lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
+    lderr(cct) << "error finding source object: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  string header_oid = md_oid(srcname, old_format);
-  string dst_header_oid = md_oid(dstname, old_format);
-  bufferlist headerbl;
+  string src_oid = old_format ? old_header_name(srcname) : id_obj_name(srcname);
+  string dst_oid = old_format ? old_header_name(dstname) : id_obj_name(dstname);
+
+  string id;
+  if (!old_format) {
+    r = cls_client::get_id(&io_ctx, src_oid, &id);
+    if (r < 0) {
+      lderr(cct) << "error reading image id: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  bufferlist databl;
   map<string, bufferlist> omap_values;
-  r = io_ctx.read(header_oid, headerbl, header_size, 0);
+  r = io_ctx.read(src_oid, databl, src_size, 0);
   if (r < 0) {
-    lderr(cct) << "error reading header: " << header_oid << ": "
-	       << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error reading source object: " << src_oid << ": "
+	       << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1092,10 +1166,10 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   string last_read = "";
   do {
     map<string, bufferlist> outbl;
-    r = io_ctx.omap_get_vals(header_oid, last_read, MAX_READ, &outbl);
+    r = io_ctx.omap_get_vals(src_oid, last_read, MAX_READ, &outbl);
     if (r < 0) {
-      lderr(cct) << "error reading header omap values: " << cpp_strerror(r)
-		 << dendl;
+      lderr(cct) << "error reading source object omap values: "
+		 << cpp_strerror(r) << dendl;
       return r;
     }
     omap_values.insert(outbl.begin(), outbl.end());
@@ -1103,40 +1177,60 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
       last_read = outbl.rbegin()->first;
   } while (r == MAX_READ);
 
-  r = io_ctx.stat(dst_header_oid, NULL, NULL);
+  r = detect_format(io_ctx, dstname, NULL, NULL);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "error checking for existing image called "
+	       << dstname << ":" << cpp_strerror(r) << dendl;
+    return r;
+  }
   if (r == 0) {
-    lderr(cct) << "rbd image header " << dst_header_oid
-	       << " already exists" << dendl;
+    lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
     return -EEXIST;
   }
+
   librados::ObjectWriteOperation op;
   op.create(true);
-  op.write_full(headerbl);
-  op.omap_set(omap_values);
-  r = io_ctx.operate(dst_header_oid, &op);
+  op.write_full(databl);
+  if (omap_values.size())
+    op.omap_set(omap_values);
+  r = io_ctx.operate(dst_oid, &op);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << dst_header_oid << ": "
+    lderr(cct) << "error writing destination object: " << dst_oid << ": "
 	       << cpp_strerror(r) << dendl;
     return r;
   }
 
-  r = tmap_set(io_ctx, dstname);
-  if (r < 0) {
-    io_ctx.remove(dst_header_oid);
-    lderr(cct) << "couldn't add " << dstname << " to directory: "
-	       << cpp_strerror(r) << dendl;
-    return r;
+  if (old_format) {
+    r = tmap_set(io_ctx, dstname);
+    if (r < 0) {
+      io_ctx.remove(dst_oid);
+      lderr(cct) << "couldn't add " << dstname << " to directory: "
+		 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    r = tmap_rm(io_ctx, srcname);
+    if (r < 0) {
+      lderr(cct) << "warning: couldn't remove old entry from directory ("
+		 << srcname << ")" << dendl;
+    }
+  } else {
+    r = cls_client::dir_rename_image(&io_ctx, RBD_DIRECTORY,
+				     srcname, dstname, id);
+    if (r < 0) {
+      lderr(cct) << "error updating directory: " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
-  r = tmap_rm(io_ctx, srcname);
-  if (r < 0)
-    lderr(cct) << "warning: couldn't remove old entry from directory ("
-	       << srcname << ")" << dendl;
 
-  r = io_ctx.remove(header_oid);
-  if (r < 0 && r != -ENOENT)
-    lderr(cct) << "warning: couldn't remove old header object ("
-	       << header_oid << ")" << dendl;
-  notify_change(io_ctx, header_oid, NULL, NULL);
+  r = io_ctx.remove(src_oid);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "warning: couldn't remove old source object ("
+	       << src_oid << ")" << dendl;
+  }
+
+  if (old_format) {
+    notify_change(io_ctx, old_header_name(srcname), NULL, NULL);
+  }
 
   return 0;
 }
@@ -1160,6 +1254,9 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
+  string id;
+  bool old_format = false;
+  bool unknown_format = true;
   ImageCtx *ictx = new ImageCtx(imgname, NULL, io_ctx);
   int r = open_image(ictx);
   if (r < 0) {
@@ -1171,6 +1268,9 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
       return -ENOTEMPTY;
     }
     string header_oid = ictx->header_oid;
+    old_format = ictx->old_format;
+    unknown_format = false;
+    id = ictx->id;
     trim_image(ictx, 0, prog_ctx);
     close_image(ictx);
 
@@ -1182,11 +1282,40 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
     }
   }
 
-  ldout(cct, 2) << "removing rbd image from directory..." << dendl;
-  r = tmap_rm(io_ctx, imgname);
-  if (r < 0) {
-    lderr(cct) << "error removing img from directory: " << cpp_strerror(-r) << dendl;
-    return r;
+  if (old_format || unknown_format) {
+    ldout(cct, 2) << "removing rbd image from directory..." << dendl;
+    r = tmap_rm(io_ctx, imgname);
+    if (r == 0)
+      old_format = true;
+    if (r < 0 && !unknown_format) {
+      lderr(cct) << "error removing img from old-style directory: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+  }
+  if (!old_format || unknown_format) {
+    ldout(cct, 2) << "removing id object..." << dendl;
+    r = io_ctx.remove(id_obj_name(imgname));
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing id object: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (unknown_format) {
+      r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "error getting id of image" << dendl;
+	return r;
+      }
+    }
+
+    ldout(cct, 2) << "removing rbd image from directory..." << dendl;
+    r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, imgname, id);
+    if (r < 0 && !unknown_format) {
+      lderr(cct) << "error removing img from new-style directory: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   ldout(cct, 2) << "done." << dendl;
