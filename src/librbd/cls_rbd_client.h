@@ -62,16 +62,16 @@ namespace librbd {
 		   uint64_t *id);
 
     int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-                   std::set<std::pair<std::string, std::string> > &locks,
-                   bool &exclusive);
+		   std::set<std::pair<std::string, std::string> > &locks,
+		   bool &exclusive);
     int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-                             const std::string &cookie);
+			     const std::string &cookie);
     int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-                          const std::string &cookie);
+			  const std::string &cookie);
     int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-                     const std::string &cookie);
+		     const std::string &cookie);
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-                   const std::string &locker, const std::string &cookie);
+		   const std::string &locker, const std::string &cookie);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
