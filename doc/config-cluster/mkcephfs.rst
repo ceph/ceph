@@ -52,7 +52,6 @@ if you are using ``mkcephfs`` to deploy Ceph.
 	ssh myserver02 sudo tee /etc/ceph/ceph.conf <ceph.conf
 	ssh myserver03 sudo tee /etc/ceph/ceph.conf <ceph.conf
 
-
 Create the Default Directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The ``mkcephfs`` deployment script does not create the default server directories. 
@@ -63,19 +62,19 @@ the following:
 
 On ``myserver01``::
 
-	sudo mkdir /srv/osd.0
-	sudo mkdir /srv/mon.a
+	sudo mkdir /var/lib/ceph/osd/ceph-0
+	sudo mkdir /var/lib/ceph/mon/ceph-a
 
 On ``myserver02``::
 
-	sudo mkdir /srv/osd.1
-	sudo mkdir /srv/mon.b
+	sudo mkdir /var/lib/ceph/osd/ceph-1
+	sudo mkdir /var/lib/ceph/mon/ceph-b
 
 On ``myserver03``::
 
-	sudo mkdir /srv/osd.2
-	sudo mkdir /srv/mon.c
-	sudo mkdir /srv/mds.a
+	sudo mkdir /var/lib/ceph/osd/ceph-2
+	sudo mkdir /var/lib/ceph/mon/ceph-c
+	sudo mkdir /var/lib/ceph/mds/ceph-a
 
 Run ``mkcephfs``
 ~~~~~~~~~~~~~~~~
