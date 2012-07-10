@@ -704,6 +704,19 @@ public:
 				      int min, int max, snapid_t snap, 
 				      vector<hobject_t> *ls, hobject_t *next) = 0;
 
+  /**
+   * list contents of a collection that fall in the range [start, end)
+   *
+   * @param c collection
+   * @param start list object that sort >= this value
+   * @param end list objects that sort < this value
+   * @param snapid return no objects with snap < snapid
+   * @param ls [out] result
+   * @return zero on success, or negative error
+   */
+  virtual int collection_list_range(coll_t c, hobject_t start, hobject_t end,
+                                    snapid_t seq, vector<hobject_t> *ls) = 0;
+
   /// OMAP
   /// Get omap contents
   virtual int omap_get(
