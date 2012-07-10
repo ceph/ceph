@@ -522,6 +522,20 @@ public:
 	 p++)
       (*p)->ms_handle_connect(con);
   }
+
+  /**
+   * Notify each Dispatcher of a new incomming Connection. Call
+   * this function whenever a new Connection is accepted.
+   *
+   * @param con Pointer to the new Connection.
+   */
+  void ms_deliver_handle_accept(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_accept(con);
+  }
+
   /**
    * Notify each Dispatcher of a Connection which may have lost
    * Messages. Call this function whenever you detect that a lossy Connection
