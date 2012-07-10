@@ -3,8 +3,7 @@
 =====================
 
 We use Chef cookbooks to deploy Ceph. See `Managing Cookbooks with Knife`_ for details
-on using ``knife``.  For Chef installation instructions, see
-`Installing Chef`_.
+on using ``knife``.  For Chef installation instructions, see `Installing Chef`_.
 
 Clone the Required Cookbooks
 ----------------------------
@@ -15,6 +14,26 @@ To get the cookbooks for Ceph, clone them from git.::
 	git clone https://github.com/opscode-cookbooks/apache2.git
 	git clone https://github.com/ceph/ceph-cookbooks.git
 
+Add the Required Cookbook Paths
+-------------------------------
+
+If you added a default cookbook path when you installed Chef, ``knife``
+may be able to upload the cookbook you've cloned to your cookbook path
+directory without further configuration. If you used a different path, 
+or if the cookbook repository you cloned has a different tree structure, 
+add the required cookbook path to your ``knife.rb`` file. The 
+``cookbook_path`` setting takes a string or an array of strings. 
+For example, you can replace a string path with an array of string paths::
+
+	cookbook_path '/home/{user-name}/chef-cookbooks/'
+
+Becomes::
+	
+	cookbook_path [
+		'/home/{user-name}/chef-cookbooks/', 
+		'/home/{user-name}/chef-cookbooks/{another-directory}/',
+		'/some/other/path/to/cookbooks'
+	]
 
 Install the Cookbooks
 ---------------------
@@ -42,6 +61,7 @@ generate a unique identifier. ::
 
 For the monitor(s) secret(s), use ``ceph-authtool`` to generate the secret(s)::
 
+	sudo apt-get update	
 	sudo apt-get install ceph-common
 	ceph-authtool /dev/stdout --name=mon. --gen-key  
  
