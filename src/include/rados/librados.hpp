@@ -481,6 +481,7 @@ namespace librados
     static void version(int *major, int *minor, int *extra);
 
     Rados();
+    explicit Rados(IoCtx& ioctx);
     ~Rados();
 
     int init(const char * const id);
@@ -503,6 +504,7 @@ namespace librados
     int pool_delete(const char *name);
     int pool_delete_async(const char *name, PoolAsyncCompletion *c);
     int64_t pool_lookup(const char *name);
+    int pool_reverse_lookup(int64_t id, std::string *name);
 
     uint64_t get_instance_id();
 

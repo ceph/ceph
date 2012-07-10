@@ -65,6 +65,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     objecter(NULL),
     lock("radosclient"),
     timer(cct, lock),
+    refcnt(1),
     finisher(cct),
     max_watch_cookie(0)
 {
@@ -96,7 +97,7 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
 {
   Mutex::Locker l(lock);
   const char *str = osdmap.get_pool_name(pool_id);
-  if (!s)
+  if (!str)
     return -ENOENT;
   *s = str;
   return 0;
@@ -367,6 +368,19 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
   return 0;
 }
 
+void librados::RadosClient::get() {
+  Mutex::Locker l(lock);
+  assert(refcnt > 0);
+  refcnt++;
+}
+
+bool librados::RadosClient::put() {
+  Mutex::Locker l(lock);
+  assert(refcnt > 0);
+  refcnt--;
+  return (refcnt == 0);
+}
+ 
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 				       __u8 crush_rule)
 {

@@ -437,6 +437,16 @@ void rados_ioctx_destroy(rados_ioctx_t io);
 rados_config_t rados_ioctx_cct(rados_ioctx_t io);
 
 /**
+ * Get the cluster handle used by this rados_ioctx_t
+ * Note that this is a weak reference, and should not
+ * be destroyed via rados_destroy().
+ *
+ * @param io the io context
+ * @returns the cluster handle for this io context
+ */
+rados_t rados_ioctx_get_cluster(rados_ioctx_t io);
+
+/**
  * Get pool usage statistics
  *
  * Fills in a rados_pool_stat_t after querying the cluster.
@@ -456,6 +466,18 @@ int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats);
  * @returns -ENOENT if the pool is not found
  */
 int64_t rados_pool_lookup(rados_t cluster, const char *pool_name);
+
+/**
+ * Get the name of a pool
+ *
+ * @param cluster which cluster the pool is in
+ * @param id the id of the pool
+ * @param buf where to store the pool name
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer too small
+ */
+int rados_pool_reverse_lookup(rados_t cluster, int64_t id, char *buf,
+			      size_t maxlen);
 
 /**
  * Create a pool with default settings
@@ -555,7 +577,7 @@ int64_t rados_ioctx_get_id(rados_ioctx_t io);
  * @param io the io context to query
  * @param buf pointer to buffer where name will be stored
  * @param maxlen size of buffer where name will be stored
- * @returns length of string stored, or -ERANGE if buffer to small
+ * @returns length of string stored, or -ERANGE if buffer too small
  */
 int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf, unsigned maxlen);
 

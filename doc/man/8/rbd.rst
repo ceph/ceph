@@ -77,6 +77,10 @@ Commands
 :command:`create` [*image-name*]
   Will create a new rbd image. You must also specify the size via --size.
 
+:command:`clone` [*parent-snapname*] [*image-name*]
+  Will create a clone (copy-on-write child) of the parent snapshot.
+  Size and object order will be identical to parent image unless specified.
+
 :command:`resize` [*image-name*]
   Resizes rbd image. The size parameter also needs to be specified.
 
@@ -155,6 +159,10 @@ To delete an rbd image (be careful!)::
 To create a new snapshot::
 
        rbd snap create mypool/myimage@mysnap
+
+To create a copy-on-write clone of a snapshot::
+
+       rbd clone myimage@mysnap cloneimage
 
 To delete a snapshot::
 
