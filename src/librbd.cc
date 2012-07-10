@@ -193,13 +193,19 @@ namespace librbd {
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
 
-    ImageCtx(std::string imgname, const char *snap, IoCtx& p)
+    /**
+     * Either image_name or image_id must be set.
+     * If id is not known, pass the empty string,
+     * and init() will look it up.
+     */
+    ImageCtx(const string &image_name, const string &image_id,
+	     const char *snap, IoCtx& p)
       : cct((CephContext*)p.cct()),
 	perfcounter(NULL),
 	snap_id(CEPH_NOSNAP),
 	snap_exists(true),
 	exclusive_locked(false),
-	name(imgname),
+	name(image_name),
 	wctx(NULL),
 	refresh_seq(0),
 	last_refresh(0),
@@ -209,12 +215,14 @@ namespace librbd {
 	old_format(true),
 	order(0), size(0), features(0), parent_poolid(-1),
 	parent_snapid(CEPH_NOSNAP), overlap(0),
+	id(image_id),
 	object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
     {
       md_ctx.dup(p);
       data_ctx.dup(p);
 
-      string pname = string("librbd-") + data_ctx.get_pool_name() + string("/") + name;
+      string pname = string("librbd-") + id + string("-") +
+	data_ctx.get_pool_name() + string("/") + name;
       if (snap) {
 	snap_name = snap;
 	pname += "@";
@@ -254,17 +262,25 @@ namespace librbd {
     }
 
     int init() {
-      int r = detect_format(md_ctx, name, &old_format, NULL);
-      if (r < 0) {
-	lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
-	return r;
+      int r;
+      if (id.length()) {
+	old_format = false;
+      } else {
+	r = detect_format(md_ctx, name, &old_format, NULL);
+	if (r < 0) {
+	  lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
+	  return r;
+	}
       }
 
       if (!old_format) {
-	r = cls_client::get_id(&md_ctx, id_obj_name(name), &id);
-	if (r < 0) {
-	  lderr(cct) << "error reading image id: " << cpp_strerror(r) << dendl;
-	  return r;
+	if (!id.length()) {
+	  r = cls_client::get_id(&md_ctx, id_obj_name(name), &id);
+	  if (r < 0) {
+	    lderr(cct) << "error reading image id: " << cpp_strerror(r)
+		       << dendl;
+	    return r;
+	  }
 	}
 
 	header_oid = header_name(id);
@@ -1289,7 +1305,7 @@ int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
   }
 
   // make sure parent snapshot exists
-  ImageCtx *p_imctx = new ImageCtx(p_name, p_snap_name, p_ioctx);
+  ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx);
   r = open_image(p_imctx, true);
   if (r < 0) {
     lderr(cct) << "error opening parent image: "
@@ -1326,7 +1342,7 @@ int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
   uint64_t p_poolid;
   p_poolid = p_ioctx.get_id();
 
-  c_imctx = new ImageCtx(c_name, NULL, c_ioctx);
+  c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx);
   r = open_image(c_imctx, true);
   if (r < 0) {
     lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
@@ -1533,7 +1549,7 @@ int get_parent_info(ImageCtx *ictx, string *parent_poolname,
 
   // for parent snapname, we need to open the parent ImageCtx, for which
   // we use the same rados handle
-  ImageCtx *p_imctx = new ImageCtx(*parent_name, NULL, p_ioctx);
+  ImageCtx *p_imctx = new ImageCtx(*parent_name, "", NULL, p_ioctx);
   r = open_image(p_imctx);
   if (r < 0)
     return r;
@@ -1557,7 +1573,7 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   string id;
   bool old_format = false;
   bool unknown_format = true;
-  ImageCtx *ictx = new ImageCtx(imgname, NULL, io_ctx);
+  ImageCtx *ictx = new ImageCtx(imgname, "", NULL, io_ctx);
   int r = open_image(ictx, true);
   if (r < 0) {
     ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
@@ -1996,7 +2012,7 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
     return r;
   }
 
-  cp.destictx = new librbd::ImageCtx(destname, NULL, dest_md_ctx);
+  cp.destictx = new librbd::ImageCtx(destname, "", NULL, dest_md_ctx);
   cp.src_size = src_size;
   r = open_image(cp.destictx, true);
   if (r < 0) {
@@ -2742,7 +2758,7 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name)
 
 int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snap_name)
 {
-  ImageCtx *ictx = new ImageCtx(name, snap_name, io_ctx);
+  ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx);
 
   int r = librbd::open_image(ictx, true);
   if (r < 0)
@@ -3138,7 +3154,7 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image, c
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, snap_name, io_ctx);
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx);
   int r = librbd::open_image(ictx, true);
   *image = (rbd_image_t)ictx;
   return r;
