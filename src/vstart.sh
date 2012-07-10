@@ -335,6 +335,9 @@ EOF
 
 		for f in $MONS
 		do
+		    cmd="rm -rf dev/mon.$f"
+		    echo $cmd
+		    $cmd
 		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn"
 		    [ "$cephx" -eq 1 ] && cmd="$cmd --keyring=$keyring_fn"
 		    echo $cmd
