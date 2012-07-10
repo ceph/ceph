@@ -782,16 +782,21 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     ::decode(snapid, iter);
     ::decode(size, iter);
   } catch (const buffer::error &err) {
+    CLS_LOG(20, "cls_rbd::set_parent: invalid decode");
     return -EINVAL;
   }
 
   int r = check_exists(hctx);
-  if (r < 0)
+  if (r < 0) {
+    CLS_LOG(20, "cls_rbd::set_parent: child already exists");
     return r;
+  }
 
   r = require_feature(hctx, RBD_FEATURE_LAYERING);
-  if (r < 0)
+  if (r < 0) {
+    CLS_LOG(20, "cls_rbd::set_parent: child does not support layering");
     return r;
+  }
 
   CLS_LOG(20, "set_parent pool=%lld id=%s snapid=%llu size=%llu",
 	  pool, id.c_str(), snapid.val, size);
