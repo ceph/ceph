@@ -48,7 +48,7 @@ public:
     try {
       shutdown();
       if (cct) {
-	common_destroy_context(cct);
+	cct->put();
 	cct = NULL;
       }
     }
