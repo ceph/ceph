@@ -63,7 +63,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     monclient(cct_),
     messenger(NULL),
     objecter(NULL),
-    lock("radosclient"),
+    lock("librados::RadosClient::lock"),
     timer(cct, lock),
     finisher(cct),
     max_watch_cookie(0)
@@ -236,6 +236,7 @@ librados::RadosClient::~RadosClient()
   if (objecter)
     delete objecter;
   common_destroy_context(cct);
+  cct->put();
   cct = NULL;
 }
 
