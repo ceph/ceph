@@ -161,12 +161,12 @@ namespace librbd {
     vector<snap_t> snaps; // this mirrors snapc.snaps, but is in a
 			  // format librados can understand
     std::map<std::string, struct SnapInfo> snaps_by_name;
-    uint64_t snapid;
-    bool snap_exists; // false if our snapid was deleted
+    uint64_t snap_id;
+    bool snap_exists; // false if our snap_id was deleted
     std::set<std::pair<std::string, std::string> > locks;
     bool exclusive_locked;
     std::string name;
-    std::string snapname;
+    std::string snap_name;
     IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;
     int refresh_seq;    ///< sequence for refresh requests
@@ -194,7 +194,7 @@ namespace librbd {
     ImageCtx(std::string imgname, const char *snap, IoCtx& p)
       : cct((CephContext*)p.cct()),
 	perfcounter(NULL),
-	snapid(CEPH_NOSNAP),
+	snap_id(CEPH_NOSNAP),
 	snap_exists(true),
 	exclusive_locked(false),
 	name(imgname),
@@ -213,9 +213,9 @@ namespace librbd {
 
       string pname = string("librbd-") + data_ctx.get_pool_name() + string("/") + name;
       if (snap) {
-	snapname = snap;
+	snap_name = snap;
 	pname += "@";
-	pname += snapname;
+	pname += snap_name;
       }
       perf_start(pname);
 
@@ -321,8 +321,8 @@ namespace librbd {
     {
       std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end()) {
-	snapname = snap_name;
-	snapid = it->second.id;
+	snap_name = snap_name;
+	snap_id = it->second.id;
 	return 0;
       }
       return -ENOENT;
@@ -330,11 +330,11 @@ namespace librbd {
 
     void snap_unset()
     {
-      snapid = CEPH_NOSNAP;
-      snapname = "";
+      snap_id = CEPH_NOSNAP;
+      snap_name = "";
     }
 
-    snap_t get_snapid(std::string snap_name) const
+    snap_t get_snap_id(std::string snap_name) const
     {
       std::map<std::string, struct SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end())
@@ -342,13 +342,13 @@ namespace librbd {
       return CEPH_NOSNAP;
     }
 
-    int get_snapname(snapid_t snapid, std::string *snapname) const
+    int get_snap_name(snapid_t snap_id, std::string *snap_name) const
     {
       std::map<std::string, struct SnapInfo>::const_iterator it;
 
       for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
-	if (it->second.id == snapid) {
-	  *snapname = it->first;
+	if (it->second.id == snap_id) {
+	  *snap_name = it->first;
 	  return 0;
 	}
       }
@@ -374,10 +374,10 @@ namespace librbd {
 
     uint64_t get_image_size() const
     {
-      if (snapname.length() == 0) {
+      if (snap_name.length() == 0) {
 	return size;
       } else {
-	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snapname);
+	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
 	if (p == snaps_by_name.end())
 	  return 0;
 	return p->second.size;
@@ -387,7 +387,7 @@ namespace librbd {
     void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
 			     uint64_t off, Context *onfinish) {
       lock.Lock();
-      ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snapid, bl, 0);
+      ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
       lock.Unlock();
       ObjectExtent extent(o, off, len);
       extent.oloc.pool = data_ctx.get_id();
@@ -645,7 +645,7 @@ namespace librbd {
   int write_header(IoCtx& io_ctx, const string& md_oid, bufferlist& header);
   int tmap_set(IoCtx& io_ctx, const string& imgname);
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
-  int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx);
+  int rollback_image(ImageCtx *ictx, uint64_t snap_id, ProgressContext& prog_ctx);
   void image_info(const ImageCtx& ictx, image_info_t& info, size_t info_size);
   string get_block_oid(const string &object_prefix, uint64_t num, bool old_format);
   uint64_t get_max_block(uint64_t size, uint8_t obj_order);
@@ -974,7 +974,7 @@ int tmap_rm(IoCtx& io_ctx, const string& imgname)
   return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
-int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
+int rollback_image(ImageCtx *ictx, uint64_t snap_id, ProgressContext& prog_ctx)
 {
   assert(ictx->lock.is_locked());
   uint64_t numseg = get_max_block(ictx->size, ictx->order);
@@ -983,8 +983,9 @@ int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-    r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
-    ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
+    r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snap_id);
+    ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to "
+			 << snap_id << " returned " << r << dendl;
     prog_ctx.update_progress(i * bsize, numseg * bsize);
     if (r < 0 && r != -ENOENT)
       return r;
@@ -1061,15 +1062,15 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  snap_t snapid = ictx->get_snapid(snap_name);
-  if (snapid == CEPH_NOSNAP)
+  snap_t snap_id = ictx->get_snap_id(snap_name);
+  if (snap_id == CEPH_NOSNAP)
     return -ENOENT;
 
   r = rm_snap(ictx, snap_name);
   if (r < 0)
     return r;
 
-  r = ictx->data_ctx.selfmanaged_snap_remove(snapid);
+  r = ictx->data_ctx.selfmanaged_snap_remove(snap_id);
 
   if (r < 0)
     return r;
@@ -1181,13 +1182,13 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 /*
  * Parent may be in different pool, hence different IoCtx
  */
-int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	  IoCtx& c_ioctx, const char *c_name,
 	  uint64_t features, int *c_order)
 {
   CephContext *cct = (CephContext *)p_ioctx.cct();
   ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
-		 << p_snapname << "to child " << &c_ioctx << " name "
+		 << p_snap_name << "to child " << &c_ioctx << " name "
                  << c_name << " features = " << features << " order = "
                  << *c_order << dendl;
 
@@ -1203,17 +1204,17 @@ int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
     return -EEXIST;
   }
 
-  if (p_snapname == NULL) {
+  if (p_snap_name == NULL) {
     lderr(cct) << "image to be cloned must be a snapshot" << dendl;
     return -EINVAL;
   }
 
   // make sure parent snapshot exists
-  ImageCtx *p_imctx = new ImageCtx(p_name, p_snapname, p_ioctx);
-  r = open_image(p_imctx);
+  ImageCtx *p_imctx = new ImageCtx(p_name, p_snap_name, p_ioctx);
+  r = open_image(p_imctx, true);
   if (r < 0) {
     lderr(cct) << "error opening parent image: "
-      << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -1254,7 +1255,7 @@ int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
   }
 
   r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, p_poolid,
-			     p_imctx->id, p_imctx->snapid, size);
+			     p_imctx->id, p_imctx->snap_id, size);
   if (r < 0) {
     lderr(cct) << "couldn't set parent: " << r << dendl;
     goto err_close_child;
@@ -1667,7 +1668,7 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
   } else {
     r = cls_client::snapshot_remove(&ictx->md_ctx,
 				    ictx->header_oid,
-				    ictx->get_snapid(snap_name));
+				    ictx->get_snap_id(snap_name));
   }
 
   if (r < 0) {
@@ -1805,10 +1806,10 @@ int ictx_refresh(ImageCtx *ictx)
 
   ictx->snapc = new_snapc;
 
-  if (ictx->snapid != CEPH_NOSNAP &&
-      ictx->get_snapid(ictx->snapname) != ictx->snapid) {
+  if (ictx->snap_id != CEPH_NOSNAP &&
+      ictx->get_snap_id(ictx->snap_name) != ictx->snap_id) {
     lderr(cct) << "tried to read from a snapshot that no longer exists: "
-	       << ictx->snapname << dendl;
+	       << ictx->snap_name << dendl;
     ictx->snap_exists = false;
   }
 
@@ -1833,12 +1834,12 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
   if (!ictx->snap_exists)
     return -ENOENT;
 
-  if (ictx->snapid != CEPH_NOSNAP)
+  if (ictx->snap_id != CEPH_NOSNAP)
     return -EROFS;
 
   Mutex::Locker l(ictx->lock);
-  snap_t snapid = ictx->get_snapid(snap_name);
-  if (snapid == CEPH_NOSNAP) {
+  snap_t snap_id = ictx->get_snap_id(snap_name);
+  if (snap_id == CEPH_NOSNAP) {
     lderr(cct) << "No such snapshot found." << dendl;
     return -ENOENT;
   }
@@ -1859,15 +1860,16 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_c
     return r;
   }
 
-  r = rollback_image(ictx, snapid, prog_ctx);
+  r = rollback_image(ictx, snap_id, prog_ctx);
   if (r < 0) {
     lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
   ictx_refresh(ictx);
-  snap_t new_snapid = ictx->get_snapid(snap_name);
-  ldout(cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
+  snap_t new_snap_id = ictx->get_snap_id(snap_name);
+  ldout(cct, 20) << "snap_id is " << ictx->snap_id << " new snap_id is "
+		 << new_snap_id << dendl;
 
   notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
@@ -1947,7 +1949,7 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   }
 
   ictx->snap_exists = true;
-  ictx->data_ctx.snap_set_read(ictx->snapid);
+  ictx->data_ctx.snap_set_read(ictx->snap_id);
 
   return 0;
 }
@@ -1956,7 +1958,7 @@ int open_image(ImageCtx *ictx)
 {
   ldout(ictx->cct, 20) << "open_image: ictx =  " << ictx
 		       << " name =  '" << ictx->name << "' snap_name = '"
-		       << ictx->snapname << "'" << dendl;
+		       << ictx->snap_name << "'" << dendl;
   int r = ictx->init();
   if (r < 0)
     return r;
@@ -1967,11 +1969,11 @@ int open_image(ImageCtx *ictx)
   if (r < 0)
     return r;
 
-  if (ictx->snapname.length()) {
-    r = ictx->snap_set(ictx->snapname);
+  if (ictx->snap_name.length()) {
+    r = ictx->snap_set(ictx->snap_name);
     if (r < 0)
       return r;
-    ictx->data_ctx.snap_set_read(ictx->snapid);
+    ictx->data_ctx.snap_set_read(ictx->snap_id);
   }
 
   WatchCtx *wctx = new WatchCtx(ictx);
@@ -2153,7 +2155,7 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   uint64_t start_block = get_block_num(ictx->order, off);
   uint64_t end_block = get_block_num(ictx->order, off + len - 1);
   uint64_t block_size = get_block_size(ictx->order);
-  snapid_t snap = ictx->snapid;
+  snapid_t snap = ictx->snap_id;
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -2423,7 +2425,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   uint64_t start_block = get_block_num(ictx->order, off);
   uint64_t end_block = get_block_num(ictx->order, off + len - 1);
   uint64_t block_size = get_block_size(ictx->order);
-  snapid_t snap = ictx->snapid;
+  snapid_t snap = ictx->snap_id;
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -2651,11 +2653,11 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name)
   return open(io_ctx, image, name, NULL);
 }
 
-int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname)
+int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snap_name)
 {
-  ImageCtx *ictx = new ImageCtx(name, snapname, io_ctx);
+  ImageCtx *ictx = new ImageCtx(name, snap_name, io_ctx);
 
-  int r = librbd::open_image(ictx);
+  int r = librbd::open_image(ictx, true);
   if (r < 0)
     return r;
 
@@ -2674,11 +2676,11 @@ int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
   return librbd::create(io_ctx, name, size, false, features, order);
 }
 
-int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	       int *c_order)
 {
-  return librbd::clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name,
+  return librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
 		       features, c_order);
 }
 
@@ -2787,12 +2789,12 @@ int Image::overlap(uint64_t *overlap)
   return librbd::get_overlap(ictx, overlap);
 }
 
-int Image::parent_info(string *parent_poolname, string *parent_name,
-                           string *parent_snapname)
+int Image::parent_info(string *parent_pool_name, string *parent_name,
+                           string *parent_snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  return librbd::get_parent_info(ictx, parent_poolname, parent_name,
-				 parent_snapname);
+  return librbd::get_parent_info(ictx, parent_pool_name, parent_name,
+				 parent_snap_name);
 }
 
 int Image::copy(IoCtx& dest_io_ctx, const char *destname)
@@ -2991,13 +2993,13 @@ extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
 }
 
 extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
-			 const char *p_snapname, rados_ioctx_t c_ioctx,
+			 const char *p_snap_name, rados_ioctx_t c_ioctx,
 			 const char *c_name, uint64_t features, int *c_order)
 {
   librados::IoCtx p_ioc, c_ioc;
   librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
   librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
-  return librbd::clone(p_ioc, p_name, p_snapname, c_ioc, c_name,
+  return librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
 		       features, c_order);
 }
 
@@ -3102,26 +3104,26 @@ extern "C" int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
 }
 
 extern "C" int rbd_get_parent_info(rbd_image_t image,
-  char *parent_poolname, size_t ppoolnamelen, char *parent_name,
-  size_t pnamelen, char *parent_snapname, size_t psnapnamelen)
+  char *parent_pool_name, size_t ppool_namelen, char *parent_name,
+  size_t pnamelen, char *parent_snap_name, size_t psnap_namelen)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  string p_poolname, p_name, p_snapname;
+  string p_pool_name, p_name, p_snap_name;
 
-  int r = librbd::get_parent_info(ictx, &p_poolname, &p_name, &p_snapname);
+  int r = librbd::get_parent_info(ictx, &p_pool_name, &p_name, &p_snap_name);
   if (r < 0)
     return r;
 
   // compare against input bufferlen, leaving room for \0
-  if (p_poolname.length() + 1 > ppoolnamelen ||
+  if (p_pool_name.length() + 1 > ppool_namelen ||
       p_name.length() + 1 > pnamelen ||
-      p_snapname.length() + 1 > psnapnamelen) {
+      p_snap_name.length() + 1 > psnap_namelen) {
     return -ERANGE;
   }
 
-  strcpy(parent_poolname, p_poolname.c_str());
+  strcpy(parent_pool_name, p_pool_name.c_str());
   strcpy(parent_name, p_name.c_str());
-  strcpy(parent_snapname, p_snapname.c_str());
+  strcpy(parent_snap_name, p_snap_name.c_str());
   return 0;
 }
 
@@ -3196,10 +3198,10 @@ extern "C" void rbd_snap_list_end(rbd_snap_info_t *snaps)
   }
 }
 
-extern "C" int rbd_snap_set(rbd_image_t image, const char *snapname)
+extern "C" int rbd_snap_set(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::snap_set(ictx, snapname);
+  return librbd::snap_set(ictx, snap_name);
 }
 
 extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,
