@@ -638,7 +638,7 @@ namespace librbd {
   int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx& srci, IoCtx& dest_md_ctx, const char *destname);
 
-  int open_image(ImageCtx *ictx);
+  int open_image(ImageCtx *ictx, bool watch);
   void close_image(ImageCtx *ictx);
 
   /* cooperative locking */
@@ -1265,7 +1265,7 @@ int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
   p_poolid = p_ioctx.get_id();
 
   c_imctx = new ImageCtx(c_name, NULL, c_ioctx);
-  r = open_image(c_imctx);
+  r = open_image(c_imctx, true);
   if (r < 0) {
     lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
     goto err_remove;
@@ -1498,7 +1498,7 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   bool old_format = false;
   bool unknown_format = true;
   ImageCtx *ictx = new ImageCtx(imgname, NULL, io_ctx);
-  int r = open_image(ictx);
+  int r = open_image(ictx, true);
   if (r < 0) {
     ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
   } else {
@@ -1933,7 +1933,7 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
 
   cp.destictx = new librbd::ImageCtx(destname, NULL, dest_md_ctx);
   cp.src_size = src_size;
-  r = open_image(cp.destictx);
+  r = open_image(cp.destictx, true);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
@@ -1971,7 +1971,7 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int open_image(ImageCtx *ictx)
+int open_image(ImageCtx *ictx, bool watch)
 {
   ldout(ictx->cct, 20) << "open_image: ictx =  " << ictx
 		       << " name =  '" << ictx->name << "' snap_name = '"
@@ -1993,6 +1993,7 @@ int open_image(ImageCtx *ictx)
     ictx->data_ctx.snap_set_read(ictx->snap_id);
   }
 
+  if (watch) {
     r = ictx->register_watch();
     if (r < 0) {
       lderr(ictx->cct) << "error registering a watch: " << cpp_strerror(r)
@@ -2000,6 +2001,7 @@ int open_image(ImageCtx *ictx)
       close_image(ictx);
       return r;
     }
+  }
 
   return 0;
 }
@@ -3072,7 +3074,7 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image, c
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, snap_name, io_ctx);
-  int r = librbd::open_image(ictx);
+  int r = librbd::open_image(ictx, true);
   *image = (rbd_image_t)ictx;
   return r;
 }
