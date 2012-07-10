@@ -266,6 +266,12 @@ if [ -n "$initdaemon" ]; then
     fi
 
     if [ $type = "mon" ]; then
+	get_conf mon_data "/var/run/ceph/mon/ceph-$id" "mon data"
+	if [ `ls $mon_data | wc -l` -ne 0 ]; then
+	    echo "ERROR: $name mon_data directory $mon_data is not empty."
+	    echo "       Please make sure that it is empty before running mkcephfs."
+	    exit 1
+	fi
 	$BINDIR/ceph-mon -c $conf --mkfs -i $id --monmap $dir/monmap --osdmap $dir/osdmap -k $dir/keyring.mon
     fi
     
