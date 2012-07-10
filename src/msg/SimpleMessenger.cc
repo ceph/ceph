@@ -845,13 +845,15 @@ int SimpleMessenger::Pipe::accept()
   existing->unregister_pipe();
   replaced = true;
     
-  if (!existing->policy.lossy) { /* if we're lossy, we can lose messages and
-                                    should let the daemon handle it itself.
-    Otherwise, take over other Connection so we don't lose older messages */
-    existing->connection_state->reset_pipe(this);
+  if (!existing->policy.lossy) {
+    // drop my Connection, and take a ref to the existing one. do not
+    // clear existing->connection_state, since read_message and
+    // write_message both dereference it without pipe_lock.
+    connection_state->put();
+    connection_state = existing->connection_state->get();
 
-    // do not clear existing->connection_state, since read_message and write_message both
-    // dereference it without pipe_lock.
+    // make existing Connection reference us
+    existing->connection_state->reset_pipe(this);
 
     // steal incoming queue
     in_seq = existing->in_seq;
