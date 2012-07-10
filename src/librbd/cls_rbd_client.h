@@ -15,6 +15,14 @@
 namespace librbd {
   namespace cls_client {
 
+    struct parent_info {
+      int64_t pool_id;
+      string image_id;
+      snapid_t snap_id;
+      uint64_t overlap;
+      parent_info() : pool_id(-1), snap_id(CEPH_NOSNAP), overlap(0) {}
+    };
+
     // high-level interface to the header
     int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			       std::string *object_prefix, uint8_t *order);
@@ -57,7 +65,8 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features);
+		      std::vector<uint64_t> *features,
+		      std::vector<parent_info> *parents);
     int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
 		   uint64_t *id);
 
