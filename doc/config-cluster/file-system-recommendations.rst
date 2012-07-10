@@ -11,6 +11,10 @@ Use ``hdparm`` to disable write caching on the hard disk::
 
 	hdparm -W 0 /dev/hda 0
 
+In production environments, we recommend running OSDs with an operating system
+disk, and a separate disk(s) for data. If you run data and an operating system
+on a single disk, create a separate partition for your data before configuring
+your OSD cluster.
 
 Ceph OSDs depend on the Extended Attributes (XATTRs) of the underlying file
 system for:
