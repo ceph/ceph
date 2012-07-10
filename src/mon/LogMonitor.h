@@ -69,6 +69,15 @@ private:
 
   void check_subs();
   void check_sub(Subscription *s);
+
+  /**
+   * translate log sub name ('log-info') to integer id
+   *
+   * @param n name
+   * @return id, or -1 if unrecognized
+   */
+  int sub_name_to_id(const string& n);
+
 };
 
 #endif

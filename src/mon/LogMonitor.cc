@@ -320,20 +320,31 @@ bool LogMonitor::prepare_command(MMonCommand *m)
 }
 
 
+int LogMonitor::sub_name_to_id(const string& n)
+{
+  if (n == "log-debug")
+    return CLOG_DEBUG;
+  if (n == "log-info")
+    return CLOG_INFO;
+  if (n == "log-sec")
+    return CLOG_SEC;
+  if (n == "log-warn")
+    return CLOG_WARN;
+  if (n == "log-error")
+    return CLOG_ERROR;
+  return -1;
+}
+
 void LogMonitor::check_subs()
 {
   dout(10) << __func__ << dendl;
-
-  map<string, xlist<Subscription*>*>::iterator subs_map_it;
-  subs_map_it = mon->session_map.subs.begin();
-
-  for (; subs_map_it != mon->session_map.subs.end(); subs_map_it++) {
-
-    xlist<Subscription*> *subs_lst = subs_map_it->second;
-    xlist<Subscription*>::iterator subs_lst_it = subs_lst->begin();
-
-    for (; !subs_lst_it.end(); ++subs_lst_it)
-      check_sub(*subs_lst_it);
+  for (map<string, xlist<Subscription*>*>::iterator i = mon->session_map.subs.begin();
+       i != mon->session_map.subs.end();
+       i++) {
+    for (xlist<Subscription*>::iterator j = i->second->begin(); !j.end(); ++j) {
+      if (sub_name_to_id((*j)->type) >= 0)
+	check_sub(*j);
+    }
   }
 }
 
@@ -341,20 +352,10 @@ void LogMonitor::check_sub(Subscription *s)
 {
   dout(10) << __func__ << " client wants " << s->type << " ver " << s->next << dendl;
 
-  map<string, int> types;
-  types["log-debug"]  = CLOG_DEBUG;
-  types["log-info"]   = CLOG_INFO;
-  types["log-sec"]    = CLOG_SEC;
-  types["log-warn"]   = CLOG_WARN;
-  types["log-error"]  = CLOG_ERROR;
-
-  if (!types.count(s->type)) {
-    dout(1) << __func__ << " sub " << s->type << " not log type " << dendl;
-    return;
-  }
+  int sub_level = sub_name_to_id(s->type);
+  assert(sub_level >= 0);
 
   version_t summary_version = summary.version;
-
   if (s->next > summary_version) {
     dout(10) << __func__ << " client " << s->session->inst 
 	    << " requested version (" << s->next << ") is greater than ours (" 
@@ -363,7 +364,6 @@ void LogMonitor::check_sub(Subscription *s)
     return;
   } 
  
-  int sub_level = types[s->type];
   MLog *mlog = new MLog(mon->monmap->fsid);
 
   if (s->next == 0) { 
