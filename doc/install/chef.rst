@@ -231,7 +231,7 @@ each Chef Node. In a command line shell on the Chef Server, for each node,
 replace ``{nodename}`` in the following line with the node's host name and 
 execute it. ::
 
-	sudo cat /etc/chef/validation.pem | ssh -t -t {nodename} "exec sudo tee /etc/chef/validation.pem >/dev/null"
+	sudo cat /etc/chef/validation.pem | ssh {nodename} "exec sudo tee /etc/chef/validation.pem >/dev/null"
 
 Run ``chef-client`` on each Chef Node
 -------------------------------------
