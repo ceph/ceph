@@ -255,7 +255,8 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features)
+		      std::vector<uint64_t> *features,
+		      std::vector<parent_info> *parents)
     {
       names->clear();
       names->resize(ids.size());
@@ -263,17 +264,22 @@ namespace librbd {
       sizes->resize(ids.size());
       features->clear();
       features->resize(ids.size());
+      parents->clear();
+      parents->resize(ids.size());
+
       librados::ObjectReadOperation op;
       for (vector<snapid_t>::const_iterator it = ids.begin();
 	   it != ids.end(); ++it) {
-	bufferlist bl1, bl2, bl3;
 	snapid_t snap_id = it->val;
+	bufferlist bl1, bl2, bl3, bl4;
 	::encode(snap_id, bl1);
 	op.exec("rbd", "get_snapshot_name", bl1);
 	::encode(snap_id, bl2);
 	op.exec("rbd", "get_size", bl2);
 	::encode(snap_id, bl3);
 	op.exec("rbd", "get_features", bl3);
+	::encode(snap_id, bl4);
+	op.exec("rbd", "get_parent", bl4);
       }
 
       bufferlist outbl;
@@ -286,11 +292,19 @@ namespace librbd {
 	for (size_t i = 0; i < ids.size(); ++i) {
 	  uint8_t order;
 	  uint64_t incompat_features;
+	  // get_snapshot_name
 	  ::decode((*names)[i], iter);
+	  // get_size
 	  ::decode(order, iter);
 	  ::decode((*sizes)[i], iter);
+	  // get_features
 	  ::decode((*features)[i], iter);
 	  ::decode(incompat_features, iter);
+	  // get_parent
+	  ::decode((*parents)[i].pool_id, iter);
+	  ::decode((*parents)[i].image_id, iter);
+	  ::decode((*parents)[i].snap_id, iter);
+	  ::decode((*parents)[i].overlap, iter);
 	}
       } catch (const buffer::error &err) {
 	return -EBADMSG;
