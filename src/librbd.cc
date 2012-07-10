@@ -1285,15 +1285,14 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   if (old_format || unknown_format) {
     ldout(cct, 2) << "removing rbd image from directory..." << dendl;
     r = tmap_rm(io_ctx, imgname);
-    if (r == 0)
-      old_format = true;
+    old_format = (r == 0);
     if (r < 0 && !unknown_format) {
       lderr(cct) << "error removing img from old-style directory: "
 		 << cpp_strerror(-r) << dendl;
       return r;
     }
   }
-  if (!old_format || unknown_format) {
+  if (!old_format) {
     ldout(cct, 2) << "removing id object..." << dendl;
     r = io_ctx.remove(id_obj_name(imgname));
     if (r < 0 && r != -ENOENT) {
@@ -1301,17 +1300,15 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
       return r;
     }
 
-    if (unknown_format) {
-      r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error getting id of image" << dendl;
-	return r;
-      }
+    r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error getting id of image" << dendl;
+      return r;
     }
 
     ldout(cct, 2) << "removing rbd image from directory..." << dendl;
     r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, imgname, id);
-    if (r < 0 && !unknown_format) {
+    if (r < 0) {
       lderr(cct) << "error removing img from new-style directory: "
 		 << cpp_strerror(-r) << dendl;
       return r;
