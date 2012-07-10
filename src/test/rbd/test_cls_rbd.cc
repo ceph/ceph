@@ -41,6 +41,7 @@ using ::librbd::cls_client::dir_list;
 using ::librbd::cls_client::dir_add_image;
 using ::librbd::cls_client::dir_remove_image;
 using ::librbd::cls_client::dir_rename_image;
+using ::librbd::cls_client::parent_info;
 
 TEST(cls_rbd, get_and_set_id)
 {
@@ -590,12 +591,13 @@ TEST(cls_rbd, snapshots)
   vector<uint64_t> snap_sizes;
   vector<uint64_t> snap_features;
   SnapContext snapc;
+  vector<parent_info> parents;
   
   ASSERT_EQ(0, get_snapcontext(&ioctx, "foo", &snapc));
   ASSERT_EQ(0u, snapc.snaps.size());
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(0u, snap_names.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0u, snap_features.size());
@@ -606,7 +608,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -619,7 +621,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -632,7 +634,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -645,7 +647,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(snap_names.size(), 1u);
   ASSERT_EQ(snap_names[0], "snap1");
   ASSERT_EQ(snap_sizes[0], 10u);
@@ -659,7 +661,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[1]);
   ASSERT_EQ(1u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(2u, snap_names.size());
   ASSERT_EQ("snap2", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -674,7 +676,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[0]);
   ASSERT_EQ(1u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap2", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -695,7 +697,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[1]);
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(2u, snap_names.size());
   ASSERT_EQ("snap3", snap_names[0]);
   ASSERT_EQ(0u, snap_sizes[0]);
@@ -718,7 +720,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[0]);
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap2", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -730,7 +732,7 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps.size());
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features));
+			     &snap_sizes, &snap_features, &parents));
   ASSERT_EQ(0u, snap_names.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0u, snap_features.size());

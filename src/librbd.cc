@@ -93,8 +93,10 @@ namespace librbd {
     snap_t id;
     uint64_t size;
     uint64_t features;
-    SnapInfo(snap_t _id, uint64_t _size, uint64_t _features) :
-      id(_id), size(_size), features(_features) {};
+    cls_client::parent_info parent;
+    SnapInfo(snap_t _id, uint64_t _size, uint64_t _features,
+	     cls_client::parent_info _parent) :
+      id(_id), size(_size), features(_features), parent(_parent) {}
   };
 
   const string id_obj_name(const string &name)
@@ -366,11 +368,12 @@ namespace librbd {
       return -ENOENT;
     }
 
-    void add_snap(std::string snap_name, snap_t id, uint64_t size, uint64_t features)
+    void add_snap(string snap_name, snap_t id, uint64_t size, uint64_t features,
+		  cls_client::parent_info parent)
     {
       snaps.push_back(id);
-      struct SnapInfo info(id, size, features);
-      snaps_by_name.insert(std::pair<std::string, struct SnapInfo>(snap_name, info));
+      SnapInfo info(id, size, features, parent);
+      snaps_by_name.insert(pair<string, SnapInfo>(snap_name, info));
     }
 
     uint64_t get_image_size() const
@@ -383,6 +386,65 @@ namespace librbd {
 	  return 0;
 	return p->second.size;
       }
+    }
+
+    int get_features(uint64_t *out_features) const
+    {
+      if (snap_name.length() == 0) {
+	*out_features = features;
+	return 0;
+      }
+      map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+      if (p == snaps_by_name.end())
+	return -ENOENT;
+      *out_features = p->second.features;
+      return 0;
+    }
+
+    int64_t get_parent_pool_id() const
+    {
+      if (snap_name.length() == 0) {
+	return parent_md.pool_id;
+      }
+      map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+      if (p == snaps_by_name.end())
+	return -1;
+      return p->second.parent.pool_id;
+    }
+
+    string get_parent_image_id() const
+    {
+      if (snap_name.length() == 0) {
+	return parent_md.image_id;
+      }
+      map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+      if (p == snaps_by_name.end())
+	return "";
+      return p->second.parent.image_id;
+    }
+
+    uint64_t get_parent_snap_id() const
+    {
+      if (snap_name.length() == 0) {
+	return parent_md.snap_id;
+      }
+      map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+      if (p == snaps_by_name.end())
+	return CEPH_NOSNAP;
+      return p->second.parent.snap_id;
+    }
+
+    int get_parent_overlap(uint64_t *overlap) const
+    {
+      if (snap_name.length() == 0) {
+	*overlap = parent_md.overlap;
+	return 0;
+      }
+      map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+      if (p == snaps_by_name.end())
+	return -ENOENT;
+      *overlap = p->second.parent.overlap;
+      return 0;
     }
 
     void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
@@ -1433,8 +1495,7 @@ int get_features(ImageCtx *ictx, uint64_t *features)
   if (r < 0)
     return r;
   Mutex::Locker(ictx->lock);
-  *features = ictx->features;
-  return 0;
+  return ictx->get_features(features);
 }
 
 int get_overlap(ImageCtx *ictx, uint64_t *overlap)
@@ -1443,8 +1504,7 @@ int get_overlap(ImageCtx *ictx, uint64_t *overlap)
   if (r < 0)
     return r;
   Mutex::Locker(ictx->lock);
-  *overlap = ictx->overlap;
-  return 0;
+  return ictx->get_parent_overlap(overlap);
 }
 
 int get_parent_info(ImageCtx *ictx, string *parent_poolname,
@@ -1735,6 +1795,7 @@ int ictx_refresh(ImageCtx *ictx)
   vector<string> snap_names;
   vector<uint64_t> snap_sizes;
   vector<uint64_t> snap_features;
+  vector<cls_client::parent_info> snap_parents;
   if (ictx->old_format) {
     r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
     if (r < 0) {
@@ -1787,7 +1848,8 @@ int ictx_refresh(ImageCtx *ictx)
 
       r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
 				    new_snapc.snaps, &snap_names,
-				    &snap_sizes, &snap_features);
+				    &snap_sizes, &snap_features,
+				    &snap_parents);
       // -ENOENT here means we raced with snapshot deletion
       if (r < 0 && r != -ENOENT) {
 	lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
@@ -1801,9 +1863,12 @@ int ictx_refresh(ImageCtx *ictx)
   ictx->snaps_by_name.clear();
   for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
     uint64_t features = ictx->old_format ? 0 : snap_features[i];
+    cls_client::parent_info parent;
+    if (!ictx->old_format)
+      parent = snap_parents[i];
     ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
-		   snap_sizes[i], features);
-    std::vector<snap_t>::const_iterator it =
+		   snap_sizes[i], features, parent);
+    vector<snap_t>::const_iterator it =
       find(ictx->snaps.begin(), ictx->snaps.end(), new_snapc.snaps[i].val);
     if (it == ictx->snaps.end()) {
       new_snap = true;
