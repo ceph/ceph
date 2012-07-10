@@ -198,6 +198,7 @@ namespace librbd {
 	snap_exists(true),
 	exclusive_locked(false),
 	name(imgname),
+	wctx(NULL),
 	refresh_seq(0),
 	last_refresh(0),
 	refresh_lock("librbd::ImageCtx::refresh_lock"),
@@ -472,6 +473,22 @@ namespace librbd {
       cache_lock.Unlock();
       if (unclean)
 	lderr(cct) << "could not release all objects from cache" << dendl;
+    }
+
+    int register_watch() {
+      assert(!wctx);
+      wctx = new WatchCtx(this);
+      return md_ctx.watch(header_oid, 0, &(wctx->cookie), wctx);
+    }
+
+    void unregister_watch() {
+      assert(wctx);
+      lock.Lock();
+      wctx->invalidate();
+      md_ctx.unwatch(header_oid, wctx->cookie);
+      lock.Unlock();
+      delete wctx;
+      wctx = NULL;
     }
   };
 
@@ -1976,11 +1993,15 @@ int open_image(ImageCtx *ictx)
     ictx->data_ctx.snap_set_read(ictx->snap_id);
   }
 
-  WatchCtx *wctx = new WatchCtx(ictx);
-  ictx->wctx = wctx;
+    r = ictx->register_watch();
+    if (r < 0) {
+      lderr(ictx->cct) << "error registering a watch: " << cpp_strerror(r)
+		       << dendl;
+      close_image(ictx);
+      return r;
+    }
 
-  r = ictx->md_ctx.watch(ictx->header_oid, 0, &(wctx->cookie), wctx);
-  return r;
+  return 0;
 }
 
 void close_image(ImageCtx *ictx)
@@ -1990,11 +2011,10 @@ void close_image(ImageCtx *ictx)
     ictx->shutdown_cache(); // implicitly flushes
   else
     flush(ictx);
-  ictx->lock.Lock();
-  ictx->wctx->invalidate();
-  ictx->md_ctx.unwatch(ictx->header_oid, ictx->wctx->cookie);
-  delete ictx->wctx;
-  ictx->lock.Unlock();
+
+  if (ictx->wctx)
+    ictx->unregister_watch();
+
   delete ictx;
 }
 
