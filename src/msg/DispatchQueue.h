@@ -83,8 +83,8 @@ struct DispatchQueue {
   map<int, xlist<IncomingQueue *>::iterator> queued_pipe_iters;
   atomic_t qlen;
     
-  enum { D_CONNECT = 1, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
-  list<Connection*> connect_q;
+  enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
+  list<Connection*> connect_q, accept_q;
   list<Connection*> remote_reset_q;
   list<Connection*> reset_q;
 
@@ -122,6 +122,16 @@ struct DispatchQueue {
     connect_q.push_back(con->get());
     lock.Unlock();
     local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
+  }
+  void queue_accept(Connection *con) {
+    lock.Lock();
+    if (stop) {
+      lock.Unlock();
+      return;
+    }
+    accept_q.push_back(con->get());
+    lock.Unlock();
+    local_delivery((Message*)D_ACCEPT, CEPH_MSG_PRIO_HIGHEST);
   }
   void queue_remote_reset(Connection *con) {
     lock.Lock();
