@@ -264,6 +264,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("log dump");
   _admin_socket->unregister_command("log reopen");
   delete _admin_hook;
+  delete _admin_socket;
 
   delete _heartbeat_map;
 
