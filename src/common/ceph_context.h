@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include "include/buffer.h"
+#include "include/atomic.h"
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -46,9 +47,22 @@ using ceph::bufferlist;
 class CephContext {
 public:
   CephContext(uint32_t module_type_);
-  ~CephContext();
-  md_config_t *_conf;
 
+  // ref count!
+private:
+  ~CephContext();
+  atomic_t nref;
+public:
+  CephContext *get() {
+    nref.inc();
+    return this;
+  }
+  void put() {
+    if (nref.dec() == 0)
+      delete this;
+  }
+
+  md_config_t *_conf;
   ceph::log::Log *_log;
 
   /* Start the Ceph Context's service thread */
