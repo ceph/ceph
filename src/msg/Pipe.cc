@@ -500,6 +500,9 @@ int Pipe::accept()
   connection_state->set_features((int)reply.features & (int)connect.features);
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
 
+  // notify
+  msgr->dispatch_queue.queue_accept(connection_state);
+
   // ok!
   if (msgr->dispatch_queue.stop)
     goto shutting_down;
