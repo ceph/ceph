@@ -235,7 +235,6 @@ librados::RadosClient::~RadosClient()
     delete messenger;
   if (objecter)
     delete objecter;
-  common_destroy_context(cct);
   cct->put();
   cct = NULL;
 }
