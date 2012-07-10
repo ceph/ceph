@@ -6295,14 +6295,10 @@ int ReplicatedPG::recover_backfill(int max)
     MOSDPGBackfill *m = NULL;
     if (bound.is_max()) {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
-      if (info.stats.stats.sum.num_bytes != pinfo.stats.stats.sum.num_bytes)
-	osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
-			  << "num_bytes " << pinfo.stats.stats.sum.num_bytes
-			  << " != expected " << info.stats.stats.sum.num_bytes << "\n";
-      if (info.stats.stats.sum.num_objects != pinfo.stats.stats.sum.num_objects)
-	osd->clog.error() << info.pgid << " backfill osd." << backfill_target << " stat mismatch on finish: "
-			  << "num_objects " << pinfo.stats.stats.sum.num_objects
-			  << " != expected " << info.stats.stats.sum.num_objects << "\n";
+      /* pinfo.stats might be wrong if we did log-based recovery on the
+       * backfilled portion in addition to continuing backfill.
+       */
+      pinfo.stats = info.stats;
       start_recovery_op(hobject_t::get_max());
     } else {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
