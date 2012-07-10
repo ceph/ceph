@@ -210,6 +210,13 @@ void DispatchQueue::entry()
 	  lock.Unlock();
 	  msgr->ms_deliver_handle_connect(con);
 	  con->put();
+	} else if ((long)m == DispatchQueue::D_ACCEPT) {
+	  lock.Lock();
+	  Connection *con = accept_q.front();
+	  accept_q.pop_front();
+	  lock.Unlock();
+	  msgr->ms_deliver_handle_accept(con);
+	  con->put();
 	} else if ((long)m == DispatchQueue::D_BAD_RESET) {
 	  lock.Lock();
 	  Connection *con = reset_q.front();
