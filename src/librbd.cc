@@ -182,6 +182,10 @@ namespace librbd {
     string object_prefix;
     string header_oid;
     string id; // only used for new-format images
+    int64_t parent_poolid;
+    string parent_id;
+    snapid_t parent_snapid;
+    uint64_t overlap;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -200,7 +204,8 @@ namespace librbd {
 	lock("librbd::ImageCtx::lock"),
 	cache_lock("librbd::ImageCtx::cache_lock"),
 	old_format(true),
-	order(0), size(0), features(0),
+	order(0), size(0), features(0), parent_poolid(-1),
+	parent_snapid(CEPH_NOSNAP), overlap(0),
 	object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
     {
       md_ctx.dup(p);
@@ -335,6 +340,19 @@ namespace librbd {
       if (it != snaps_by_name.end())
 	return it->second.id;
       return CEPH_NOSNAP;
+    }
+
+    int get_snapname(snapid_t snapid, std::string *snapname) const
+    {
+      std::map<std::string, struct SnapInfo>::const_iterator it;
+
+      for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
+	if (it->second.id == snapid) {
+	  *snapname = it->first;
+	  return 0;
+	}
+      }
+      return -ENOENT;
     }
 
     int get_snap_size(std::string snap_name, uint64_t *size) const
@@ -672,6 +690,38 @@ namespace librbd {
     return c;
   }
 
+ProgressContext::~ProgressContext()
+{
+}
+
+class NoOpProgressContext : public librbd::ProgressContext
+{
+public:
+  NoOpProgressContext()
+  {
+  }
+  int update_progress(uint64_t offset, uint64_t src_size)
+  {
+    return 0;
+  }
+};
+
+class CProgressContext : public librbd::ProgressContext
+{
+public:
+  CProgressContext(librbd_progress_fn_t fn, void *data)
+    : m_fn(fn), m_data(data)
+  {
+  }
+  int update_progress(uint64_t offset, uint64_t src_size)
+  {
+    return m_fn(offset, src_size, m_data);
+  }
+private:
+  librbd_progress_fn_t m_fn;
+  void *m_data;
+};
+
 void WatchCtx::invalidate()
 {
   Mutex::Locker l(lock);
@@ -712,17 +762,18 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   ondisk.snap_names_len = 0;
 }
 
-void image_info(const ImageCtx& ictx, image_info_t& info, size_t infosize)
+void image_info(ImageCtx& ictx, image_info_t& info, size_t infosize)
 {
   int obj_order = ictx.order;
   info.size = ictx.get_image_size();
   info.obj_size = 1 << obj_order;
-  info.num_objs = ictx.get_image_size() >> obj_order;
+  info.num_objs = info.size >> obj_order;
   info.order = obj_order;
   memcpy(&info.block_name_prefix, ictx.object_prefix.c_str(),
 	 RBD_MAX_BLOCK_NAME_SIZE);
-  info.parent_pool = -1;
-  bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
+  // clear deprecated fields
+  info.parent_pool = -1L;
+  info.parent_name[0] = '\0';
 }
 
 string get_block_oid(const string &object_prefix, uint64_t num, bool old_format)
@@ -1127,6 +1178,105 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
   return 0;
 }
 
+/*
+ * Parent may be in different pool, hence different IoCtx
+ */
+int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	  IoCtx& c_ioctx, const char *c_name,
+	  uint64_t features, int *c_order)
+{
+  CephContext *cct = (CephContext *)p_ioctx.cct();
+  ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
+		 << p_snapname << "to child " << &c_ioctx << " name "
+                 << c_name << " features = " << features << " order = "
+                 << *c_order << dendl;
+
+  if (features & ~RBD_FEATURES_ALL) {
+    lderr(cct) << "librbd does not support requested features" << dendl;
+    return -ENOSYS;
+  }
+
+  // make sure child doesn't already exist, in either format
+  int r = detect_format(c_ioctx, c_name, NULL, NULL);
+  if (r != -ENOENT) {
+    lderr(cct) << "rbd image " << c_name << " already exists" << dendl;
+    return -EEXIST;
+  }
+
+  if (p_snapname == NULL) {
+    lderr(cct) << "image to be cloned must be a snapshot" << dendl;
+    return -EINVAL;
+  }
+
+  // make sure parent snapshot exists
+  ImageCtx *p_imctx = new ImageCtx(p_name, p_snapname, p_ioctx);
+  r = open_image(p_imctx);
+  if (r < 0) {
+    lderr(cct) << "error opening parent image: "
+      << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  if (p_imctx->old_format) {
+    lderr(cct) << "parent image must be in new format" << dendl;
+    return -EINVAL;
+  }
+
+  if ((p_imctx->features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+    lderr(cct) << "parent image must support layering" << dendl;
+    return -EINVAL;
+  }
+
+  int order = *c_order;
+
+  if (!*c_order) {
+    order = p_imctx->order;
+  }
+
+  uint64_t size = p_imctx->get_image_size();
+  int remove_r;
+  librbd::NoOpProgressContext no_op;
+  ImageCtx *c_imctx = NULL;
+  r = create(c_ioctx, c_name, size, false, features, &order);
+  if (r < 0) {
+    lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
+    goto err_close_parent;
+  }
+
+  uint64_t p_poolid;
+  p_poolid = p_ioctx.get_id();
+
+  c_imctx = new ImageCtx(c_name, NULL, c_ioctx);
+  r = open_image(c_imctx);
+  if (r < 0) {
+    lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
+    goto err_remove;
+  }
+
+  r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, p_poolid,
+			     p_imctx->id, p_imctx->snapid, size);
+  if (r < 0) {
+    lderr(cct) << "couldn't set parent: " << r << dendl;
+    goto err_close_child;
+  }
+  ldout(cct, 2) << "done." << dendl;
+  close_image(c_imctx);
+  close_image(p_imctx);
+  return 0;
+
+ err_close_child:
+  close_image(c_imctx);
+ err_remove:
+  remove_r = remove(c_ioctx, c_name, no_op);
+  if (remove_r < 0) {
+    lderr(cct) << "Error removing failed clone: "
+	       << cpp_strerror(remove_r) << dendl;
+  }
+ err_close_parent:
+  close_image(p_imctx);
+  return r;
+}
+
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
@@ -1246,6 +1396,78 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
 
   Mutex::Locker l(ictx->lock);
   image_info(*ictx, info, infosize);
+  return 0;
+}
+
+int get_old_format(ImageCtx *ictx, uint8_t *old)
+{
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+  Mutex::Locker(ictx->lock);
+  *old = ictx->old_format;
+  return 0;
+}
+
+int get_features(ImageCtx *ictx, uint64_t *features)
+{
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+  Mutex::Locker(ictx->lock);
+  *features = ictx->features;
+  return 0;
+}
+
+int get_overlap(ImageCtx *ictx, uint64_t *overlap)
+{
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+  Mutex::Locker(ictx->lock);
+  *overlap = ictx->overlap;
+  return 0;
+}
+
+int get_parent_info(ImageCtx *ictx, string *parent_poolname,
+		    string *parent_name, string *parent_snapname)
+{
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  Mutex::Locker l(ictx->lock);
+
+  Rados rados(ictx->md_ctx);
+  r = rados.pool_reverse_lookup(ictx->parent_poolid, parent_poolname);
+  if (r < 0) 
+    return r;
+
+  IoCtx p_ioctx;
+  r = rados.ioctx_create(parent_poolname->c_str(), p_ioctx);
+  if (r < 0)
+    return r;
+
+  r = cls_client::dir_get_name(&p_ioctx, RBD_DIRECTORY, ictx->parent_id,
+			       parent_name);
+  if (r < 0)
+    return r;
+
+  // for parent snapname, we need to open the parent ImageCtx, for which
+  // we use the same rados handle
+  ImageCtx *p_imctx = new ImageCtx(*parent_name, NULL, p_ioctx);
+  r = open_image(p_imctx);
+  if (r < 0)
+    return r;
+
+  // and now we can look up the name in the ImageCtx
+  r = p_imctx->get_snapname(ictx->parent_snapid, parent_snapname);
+  // failure or no, close the ImageCtx
+  close_image(p_imctx);
+
+  if (r < 0) 
+    return r;
+
   return 0;
 }
 
@@ -1531,6 +1753,20 @@ int ictx_refresh(ImageCtx *ictx)
 			 << unsupported << dendl;
 	return -ENOSYS;
       }
+
+      r = cls_client::get_parent(&(ictx->md_ctx), ictx->header_oid,
+				 ictx->snapid, &ictx->parent_poolid,
+				 &ictx->parent_id, &ictx->parent_snapid,
+				 &ictx->overlap);
+      if (r < 0) {
+	if (r == -ENOENT) {
+	  // no parent, make sure sentinel value is set
+	  ictx->parent_poolid = -1;
+	} else {
+	  return r;
+	}
+      }
+
       r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
 				    new_snapc.snaps, &snap_names,
 				    &snap_sizes, &snap_features);
@@ -1584,38 +1820,6 @@ int ictx_refresh(ImageCtx *ictx)
 
   return 0;
 }
-
-ProgressContext::~ProgressContext()
-{
-}
-
-class NoOpProgressContext : public librbd::ProgressContext
-{
-public:
-  NoOpProgressContext()
-  {
-  }
-  int update_progress(uint64_t offset, uint64_t src_size)
-  {
-    return 0;
-  }
-};
-
-class CProgressContext : public librbd::ProgressContext
-{
-public:
-  CProgressContext(librbd_progress_fn_t fn, void *data)
-    : m_fn(fn), m_data(data)
-  {
-  }
-  int update_progress(uint64_t offset, uint64_t src_size)
-  {
-    return m_fn(offset, src_size, m_data);
-  }
-private:
-  librbd_progress_fn_t m_fn;
-  void *m_data;
-};
 
 int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx)
 {
@@ -1763,8 +1967,12 @@ int open_image(ImageCtx *ictx)
   if (r < 0)
     return r;
 
-  ictx->snap_set(ictx->snapname);
-  ictx->data_ctx.snap_set_read(ictx->snapid);
+  if (ictx->snapname.length()) {
+    r = ictx->snap_set(ictx->snapname);
+    if (r < 0)
+      return r;
+    ictx->data_ctx.snap_set_read(ictx->snapid);
+  }
 
   WatchCtx *wctx = new WatchCtx(ictx);
   ictx->wctx = wctx;
@@ -2466,6 +2674,14 @@ int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
   return librbd::create(io_ctx, name, size, false, features, order);
 }
 
+int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
+	       int *c_order)
+{
+  return librbd::clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name,
+		       features, c_order);
+}
+
 int RBD::remove(IoCtx& io_ctx, const char *name)
 {
   librbd::NoOpProgressContext prog_ctx;
@@ -2551,6 +2767,32 @@ int Image::stat(image_info_t& info, size_t infosize)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::info(ictx, info, infosize);
+}
+
+int Image::old_format(uint8_t *old)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::get_old_format(ictx, old);
+}
+
+int Image::features(uint64_t *features)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::get_features(ictx, features);
+}
+
+int Image::overlap(uint64_t *overlap)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::get_overlap(ictx, overlap);
+}
+
+int Image::parent_info(string *parent_poolname, string *parent_name,
+                           string *parent_snapname)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::get_parent_info(ictx, parent_poolname, parent_name,
+				 parent_snapname);
 }
 
 int Image::copy(IoCtx& dest_io_ctx, const char *destname)
@@ -2748,6 +2990,17 @@ extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
   return librbd::create(io_ctx, name, size, false, features, order);
 }
 
+extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
+			 const char *p_snapname, rados_ioctx_t c_ioctx,
+			 const char *c_name, uint64_t features, int *c_order)
+{
+  librados::IoCtx p_ioc, c_ioc;
+  librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
+  librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
+  return librbd::clone(p_ioc, p_name, p_snapname, c_ioc, c_name,
+		       features, c_order);
+}
+
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
 {
   librados::IoCtx io_ctx;
@@ -2828,6 +3081,48 @@ extern "C" int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosi
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::info(ictx, *info, infosize);
+}
+
+extern "C" int rbd_get_old_format(rbd_image_t image, uint8_t *old)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::get_old_format(ictx, old);
+}
+
+extern "C" int rbd_get_features(rbd_image_t image, uint64_t *features)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::get_features(ictx, features);
+}
+
+extern "C" int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::get_overlap(ictx, overlap);
+}
+
+extern "C" int rbd_get_parent_info(rbd_image_t image,
+  char *parent_poolname, size_t ppoolnamelen, char *parent_name,
+  size_t pnamelen, char *parent_snapname, size_t psnapnamelen)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  string p_poolname, p_name, p_snapname;
+
+  int r = librbd::get_parent_info(ictx, &p_poolname, &p_name, &p_snapname);
+  if (r < 0)
+    return r;
+
+  // compare against input bufferlen, leaving room for \0
+  if (p_poolname.length() + 1 > ppoolnamelen ||
+      p_name.length() + 1 > pnamelen ||
+      p_snapname.length() + 1 > psnapnamelen) {
+    return -ERANGE;
+  }
+
+  strcpy(parent_poolname, p_poolname.c_str());
+  strcpy(parent_name, p_name.c_str());
+  strcpy(parent_snapname, p_snapname.c_str());
+  return 0;
 }
 
 /* snapshots */

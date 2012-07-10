@@ -13,6 +13,7 @@
  */
 
 #include "include/rados/librados.h"
+#include "include/rbd_types.h"
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
 
@@ -54,20 +55,27 @@ static int get_features(bool *old_format, uint64_t *features)
   return 0;
 }
 
-static int create_image(rados_ioctx_t ioctx, const char *name,
-			uint64_t size, int *order)
+static int create_image_full(rados_ioctx_t ioctx, const char *name,
+			      uint64_t size, int *order, int old_format,
+			      uint64_t features)
 {
-  bool old_format;
-  uint64_t features;
-  int r = get_features(&old_format, &features);
-  if (r < 0)
-    return r;
-
   if (old_format) {
     return rbd_create(ioctx, name, size, order);
   } else {
     return rbd_create2(ioctx, name, size, features, order);
   }
+}
+
+static int create_image(rados_ioctx_t ioctx, const char *name,
+			uint64_t size, int *order)
+{
+  bool old_format;
+  uint64_t features;
+
+  int r = get_features(&old_format, &features);
+  if (r < 0)
+    return r;
+  return create_image_full(ioctx, name, size, order, old_format, features);
 }
 
 static int create_image_pp(librbd::RBD &rbd,
@@ -79,7 +87,6 @@ static int create_image_pp(librbd::RBD &rbd,
   int r = get_features(&old_format, &features);
   if (r < 0)
     return r;
-
   if (old_format) {
     return rbd.create(ioctx, name, size, order);
   } else {
@@ -960,6 +967,82 @@ TEST(LibRBD, TestIOToSnapshot)
 
   ASSERT_EQ(0, rbd_close(image));
 
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRBD, TestClone)
+{
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  rbd_image_info_t pinfo, cinfo;
+  string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  int features = RBD_FEATURE_LAYERING;
+  rbd_image_t parent, child;
+  int order = 0;
+
+  // make a parent to clone from
+  ASSERT_EQ(0, create_image_full(ioctx, "parent", 4<<20, &order, false, features));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
+  printf("made parent image \"parent\"\n");
+
+  // can't clone a non-snapshot, expect failure
+  EXPECT_NE(0, rbd_clone(ioctx, "parent", NULL, ioctx, "child", features, &order));
+
+  // create a snapshot, reopen as the parent we're interested in
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, "parent_snap"));
+  printf("made snapshot \"parent@parent_snap\"\n");
+
+  // - validate "no clone if not preserved" when preserved is available
+
+  // This clone and open should work
+  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
+	    &order));
+  ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
+  printf("made and opened clone \"child\"\n"); 
+
+  // check attributes
+  ASSERT_EQ(0, rbd_stat(parent, &pinfo, sizeof(pinfo)));
+  ASSERT_EQ(0, rbd_stat(child, &cinfo, sizeof(cinfo)));
+  EXPECT_EQ(cinfo.size, pinfo.size);
+  uint64_t overlap;
+  rbd_get_overlap(child, &overlap);
+  EXPECT_EQ(overlap, pinfo.size);
+  EXPECT_EQ(cinfo.obj_size, pinfo.obj_size);
+  EXPECT_EQ(cinfo.order, pinfo.order);
+  printf("sizes and overlaps are good between parent and child\n");
+
+  // sizing down child results in changing overlap and size, not parent size
+  ASSERT_EQ(0, rbd_resize(child, 2UL<<20));
+  ASSERT_EQ(0, rbd_stat(child, &cinfo, sizeof(cinfo)));
+  rbd_get_overlap(child, &overlap);
+  ASSERT_EQ(overlap, 2UL<<20);
+  ASSERT_EQ(cinfo.size, 2UL<<20);
+  ASSERT_EQ(0, rbd_resize(child, 4UL<<20));
+  ASSERT_EQ(0, rbd_stat(child, &cinfo, sizeof(cinfo)));
+  rbd_get_overlap(child, &overlap);
+  ASSERT_EQ(overlap, 2UL<<20);
+  ASSERT_EQ(cinfo.size, 4UL<<20);
+  printf("sized down clone, changed overlap\n");
+
+  // sizing back up doesn't change that
+  ASSERT_EQ(0, rbd_resize(child, 5UL<<20));
+  ASSERT_EQ(0, rbd_stat(child, &cinfo, sizeof(cinfo)));
+  rbd_get_overlap(child, &overlap);
+  ASSERT_EQ(overlap, 2UL<<20);
+  ASSERT_EQ(cinfo.size, 5UL<<20);
+  ASSERT_EQ(0, rbd_stat(parent, &pinfo, sizeof(pinfo)));
+  printf("parent info: size %ld obj_size %ld parent_pool %ld\n", pinfo.size, pinfo.obj_size, pinfo.parent_pool);
+  ASSERT_EQ(pinfo.size, 4UL<<20);
+  printf("sized up clone, changed size but not overlap or parent's size\n");
+  
+  ASSERT_EQ(0, rbd_close(child));
+  ASSERT_EQ(0, rbd_close(parent));
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }

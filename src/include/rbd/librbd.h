@@ -58,8 +58,8 @@ typedef struct {
   uint64_t num_objs;
   int order;
   char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
-  int parent_pool;                            /* -1 if none */
-  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* blank if none */
+  int64_t parent_pool;			      /* deprecated */
+  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
 } rbd_image_info_t;
 
 void rbd_version(int *major, int *minor, int *extra);
@@ -69,6 +69,9 @@ int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order);
+int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
+	      const char *p_snapname, rados_ioctx_t c_ioctx,
+	      const char *c_name, uint64_t features, int *c_order);
 int rbd_remove(rados_ioctx_t io, const char *name);
 int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			     librbd_progress_fn_t cb, void *cbdata);
@@ -80,6 +83,13 @@ int rbd_resize(rbd_image_t image, uint64_t size);
 int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 			     librbd_progress_fn_t cb, void *cbdata);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
+int rbd_get_old_format(rbd_image_t image, uint8_t *old);
+int rbd_get_features(rbd_image_t image, uint64_t *features);
+int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
+int rbd_get_parent_info(rbd_image_t image,
+			char *parent_poolname, size_t ppoolnamelen,
+			char *parent_name, size_t pnamelen,
+			char *parent_snapname, size_t psnapnamelen);
 int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx, const char *destname);
 int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p, const char *destname,
 			   librbd_progress_fn_t cb, void *cbdata);

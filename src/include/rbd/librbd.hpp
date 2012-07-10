@@ -70,6 +70,9 @@ public:
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
+  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
+	       int *c_order);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
@@ -89,6 +92,11 @@ public:
   int resize(uint64_t size);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);
+  int parent_info(std::string *parent_poolname, std::string *parent_name,
+		      std::string *parent_snapname);
+  int old_format(uint8_t *old);
+  int features(uint64_t *features);
+  int overlap(uint64_t *overlap);
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);

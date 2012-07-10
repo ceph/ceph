@@ -6,7 +6,7 @@ from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
-                 ImageBusy, ImageHasSnapshots)
+                 ImageBusy, ImageHasSnapshots, RBD_FEATURE_LAYERING)
 
 
 rados = None
@@ -30,8 +30,10 @@ def tearDown():
     rados.shutdown()
 
 def create_image():
+    global features
     features = os.getenv("RBD_FEATURES")
     if features is not None:
+        features = int(features)
         RBD().create(ioctx, IMG_NAME, IMG_SIZE, IMG_ORDER, old_format=False,
                      features=int(features))
     else:
@@ -86,8 +88,6 @@ def check_stat(info, size, order):
     eq(info['order'], order)
     eq(info['num_objs'], size / (1 << order))
     eq(info['obj_size'], 1 << order)
-    eq(info['parent_pool'], -1)
-    eq(info['parent_name'], '')
 
 class TestImage(object):
 
@@ -348,4 +348,45 @@ class TestImage(object):
         self.image.set_snap(None)
         read = self.image.read(0, 256)
         eq(read, data)
+        self.image.remove_snap('snap1')
+
+    def test_clone(self):
+        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
+            return 0
+        self.image.create_snap('snap1')
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+        with Image(ioctx, 'clone') as clone:
+            image_info = self.image.stat()
+            clone_info = clone.stat()
+            eq(clone_info['size'], image_info['size'])
+            eq(clone_info['size'], clone.overlap())
+        RBD().remove(ioctx, 'clone')
+        self.image.remove_snap('snap1')
+
+    def test_clone_resize(self):
+        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
+            return 0
+        self.image.create_snap('snap1')
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+        with Image(ioctx, 'clone') as clone:
+            image_info = self.image.stat()
+            clone_info = clone.stat()
+            eq(clone_info['size'], image_info['size'])
+            eq(clone_info['size'], clone.overlap())
+
+            clone.resize(IMG_SIZE / 2)
+            image_info = self.image.stat()
+            clone_info = clone.stat()
+            eq(clone_info['size'], IMG_SIZE / 2)
+            eq(image_info['size'], IMG_SIZE)
+            eq(clone.overlap(), IMG_SIZE / 2)
+
+            clone.resize(IMG_SIZE * 2)
+            image_info = self.image.stat()
+            clone_info = clone.stat()
+            eq(clone_info['size'], IMG_SIZE * 2)
+            eq(image_info['size'], IMG_SIZE)
+            eq(clone.overlap(), IMG_SIZE / 2)
+
+        RBD().remove(ioctx, 'clone')
         self.image.remove_snap('snap1')
