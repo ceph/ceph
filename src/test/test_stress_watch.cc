@@ -38,10 +38,10 @@ struct WatcherUnwatcher : public Thread {
   WatcherUnwatcher(string& _pool) : pool(_pool) {}
 
   void *entry() {
+    Rados cluster;
+    connect_cluster_pp(cluster);
     while (!stop_flag.read()) {
-      Rados cluster;
       IoCtx ioctx;
-      connect_cluster_pp(cluster);
       cluster.ioctx_create(pool.c_str(), ioctx);
 
       uint64_t handle;
