@@ -211,7 +211,8 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
 
 
 CephContext::CephContext(uint32_t module_type_)
-  : _conf(new md_config_t()),
+  : nref(1),
+    _conf(new md_config_t()),
     _log(NULL),
     _module_type(module_type_),
     _service_thread(NULL),
