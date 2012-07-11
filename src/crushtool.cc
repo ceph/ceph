@@ -370,7 +370,7 @@ int main(int argc, const char **argv)
   }
 
   if (decompile) {
-    CrushCompiler cc(crush, cerr);
+    CrushCompiler cc(crush, cerr, (int)verbose);
     if (!outfn.empty()) {
       ofstream o;
       o.open(outfn.c_str(), ios::out | ios::binary | ios::trunc);
@@ -395,7 +395,7 @@ int main(int argc, const char **argv)
       return -ENOENT;
     }
 
-    CrushCompiler cc(crush, cerr);
+    CrushCompiler cc(crush, cerr, (int)verbose);
     if (unsafe_tunables)
       cc.enable_unsafe_tunables();
     int r = cc.compile(in, srcfn.c_str());
