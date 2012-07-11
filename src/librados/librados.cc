@@ -1287,6 +1287,8 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
   librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
+
+  cct->put();
   return 0;
 }
 
@@ -1297,7 +1299,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 extern "C" int rados_create_with_context(rados_t *pcluster, rados_config_t cct_)
 {
   CephContext *cct = (CephContext *)cct_;
-  librados::RadosClient *radosp = new librados::RadosClient(cct->get());
+  librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
   return 0;
 }
