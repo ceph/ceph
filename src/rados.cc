@@ -15,6 +15,7 @@
 #include "include/types.h"
 
 #include "include/rados/librados.hpp"
+#include "rados_sync.h"
 using namespace librados;
 
 #include "common/obj_bencher.h"
@@ -45,7 +46,9 @@ using namespace librados;
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
 
-#define STR(x) #x
+// two steps seem to be necessary to do this right
+#define STR(x) _STR(x)
+#define _STR(x) #x
 
 void usage(ostream& out)
 {
@@ -76,12 +79,14 @@ void usage(ostream& out)
 "   lssnap                           list snaps\n"
 "   mksnap <snap-name>               create snap <snap-name>\n"
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
-"   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n\n"
+"   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
+"\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "   load-gen [options]               generate load on the cluster\n"
 "   listomapkeys <obj-name>          list the keys in the object map\n"
-"   getomapval <obj-name> <key>      show the value for the specified key in the object's object map"
+"   getomapval <obj-name> <key>      show the value for the specified key\n"
+				     "in the object's object map\n"
 "   setomapval <obj-name> <key> <val>\n"
 "   listomapvals <obj-name> <key> <val>\n"
 "   rmomapkey <obj-name> <key> <val>\n"
@@ -98,21 +103,19 @@ void usage(ostream& out)
 "       -d / --delete-after          After synchronizing, delete unreferenced\n"
 "                                    files or objects from the target bucket\n"
 "                                    or directory.\n"
-"       --workers                    Number of worker threads to spawn (default "
-STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
+"       --workers                    Number of worker threads to spawn \n"
+"                                    default " STR(DEFAULT_NUM_RADOS_WORKER_THREADS) "\n"
 "\n"
 "GLOBAL OPTIONS:\n"
-"   --object-locator object_locator\n"
-"        set object_locator for operation"
-"   --target-locator object_locator\n"
-"        set object_locator for operation target"
+"   --object_locator object_locator\n"
+"        set object_locator for operation\n"
 "   -p pool\n"
 "   --pool=pool\n"
 "        select given pool by name\n"
 "   --target-pool=pool\n"
 "        select target pool by name\n"
 "   -b op_size\n"
-"        set the size of write ops for put or benchmarking"
+"        set the size of write ops for put or benchmarking\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -123,6 +126,9 @@ STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "        create the pool or directory that was specified\n"
 "\n"
 "BENCH OPTIONS:\n"
+"   -t N\n"
+"   --concurrent-ios=N\n"
+"        Set number of concurrent I/O operations\n"
 "   --show-time\n"
 "        prefix output with date/time\n"
 "\n"
@@ -136,7 +142,6 @@ STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "   --percent                        percent of operations that are read\n"
 "   --target-throughput              target throughput (in MB)\n"
 "   --run-length                     total time (in seconds)\n";
-
 
 }
 
