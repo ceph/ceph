@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <map>
 
+
 #include <typeinfo>
 
 // -------------
@@ -493,6 +494,12 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       //err << " item " << iname << " (" << itemid << ") pos " << pos << " weight " << weight << std::endl;
       items[pos] = itemid;
       weights[pos] = (unsigned)(weight * 0x10000);
+
+      if (crush_addition_is_unsafe((int) bucketweight, (int) weight)) {
+        err << "oh no! our bucket weights are overflowing all over the place, better lower the item weights" << std::endl;
+        return -ERANGE;
+      }
+
       bucketweight += weight;
     }
   }

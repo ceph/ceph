@@ -1,4 +1,3 @@
-
 #include <string.h>
 #include <limits.h>
 #include <math.h>
@@ -17,7 +16,7 @@ struct crush_map *crush_create()
 	struct crush_map *m;
 	m = malloc(sizeof(*m));
         if (!m)
-          return NULL;
+                return NULL;
 	memset(m, 0, sizeof(*m));
 
 	/* initialize legacy tunable values */
@@ -84,7 +83,7 @@ struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, 
 	struct crush_rule *rule;
 	rule = malloc(crush_rule_size(len));
         if (!rule)
-          return NULL;
+                return NULL;
 	rule->len = len;
 	rule->mask.ruleset = ruleset;
 	rule->mask.type = type;
@@ -141,7 +140,7 @@ int crush_add_bucket(struct crush_map *map,
 
 	assert(map->buckets[pos] == 0);
 
-   	/* add it */
+        /* add it */
 	bucket->id = id;
 	map->buckets[pos] = bucket;
 
@@ -170,22 +169,27 @@ crush_make_uniform_bucket(int hash, int type, int size,
 
 	bucket = malloc(sizeof(*bucket));
         if (!bucket)
-          return NULL;
+                return NULL;
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_UNIFORM;
 	bucket->h.hash = hash;
 	bucket->h.type = type;
 	bucket->h.size = size;
+
+	if (crush_multiplication_is_unsafe(size, item_weight))
+                goto err;
+
 	bucket->h.weight = size * item_weight;
-
 	bucket->item_weight = item_weight;
-
 	bucket->h.items = malloc(sizeof(__u32)*size);
+
         if (!bucket->h.items)
-          goto err;
-	bucket->h.perm = malloc(sizeof(__u32)*size);
+                goto err;
+
+        bucket->h.perm = malloc(sizeof(__u32)*size);
+
         if (!bucket->h.perm)
-          goto err;
+                goto err;
 	for (i=0; i<size; i++)
 		bucket->h.items[i] = items[i];
 
@@ -211,7 +215,7 @@ crush_make_list_bucket(int hash, int type, int size,
 
 	bucket = malloc(sizeof(*bucket));
         if (!bucket)
-          return NULL;
+                return NULL;
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_LIST;
 	bucket->h.hash = hash;
@@ -220,20 +224,26 @@ crush_make_list_bucket(int hash, int type, int size,
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
         if (!bucket->h.items)
-          goto err;
+                goto err;
 	bucket->h.perm = malloc(sizeof(__u32)*size);
         if (!bucket->h.perm)
-          goto err;
-	bucket->item_weights = malloc(sizeof(__u32)*size);
+                goto err;
+
+
+        bucket->item_weights = malloc(sizeof(__u32)*size);
         if (!bucket->item_weights)
-          goto err;
+                goto err;
 	bucket->sum_weights = malloc(sizeof(__u32)*size);
         if (!bucket->sum_weights)
-          goto err;
+                goto err;
 	w = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->item_weights[i] = weights[i];
+
+		if (crush_addition_is_unsafe(w, weights[i]))
+                        goto err;
+
 		w += weights[i];
 		bucket->sum_weights[i] = w;
 		/*printf("pos %d item %d weight %d sum %d\n",
@@ -298,7 +308,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 
 	bucket = malloc(sizeof(*bucket));
         if (!bucket)
-          return NULL;
+                return NULL;
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_TREE;
 	bucket->h.hash = hash;
@@ -307,18 +317,19 @@ crush_make_tree_bucket(int hash, int type, int size,
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
         if (!bucket->h.items)
-          goto err;
+                goto err;
 	bucket->h.perm = malloc(sizeof(__u32)*size);
         if (!bucket->h.perm)
-          goto err;
+                goto err;
 
 	/* calc tree depth */
 	depth = calc_depth(size);
 	bucket->num_nodes = 1 << depth;
 	printf("size %d depth %d nodes %d\n", size, depth, bucket->num_nodes);
-	bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
+
+        bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
         if (!bucket->node_weights)
-          goto err;
+                goto err;
 
 	memset(bucket->h.items, 0, sizeof(__u32)*bucket->h.size);
 	memset(bucket->node_weights, 0, sizeof(__u32)*bucket->num_nodes);
@@ -328,9 +339,17 @@ crush_make_tree_bucket(int hash, int type, int size,
 		node = crush_calc_tree_node(i);
 		printf("item %d node %d weight %d\n", i, node, weights[i]);
 		bucket->node_weights[node] = weights[i];
+
+		if (crush_addition_is_unsafe(bucket->h.weight, weights[i]))
+                        goto err;
+
 		bucket->h.weight += weights[i];
 		for (j=1; j<depth; j++) {
 			node = parent(node);
+
+                        if (crush_addition_is_unsafe(bucket->node_weights[node], weights[i]))
+                                goto err;
+
 			bucket->node_weights[node] += weights[i];
 			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
@@ -362,7 +381,7 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 	/* reverse sort by weight (simple insertion sort) */
 	reverse = malloc(sizeof(int) * size);
         if (!reverse)
-          return -ENOMEM;
+                return -ENOMEM;
 	if (size)
 		reverse[0] = 0;
 	for (i=1; i<size; i++) {
@@ -439,35 +458,35 @@ crush_make_straw_bucket(int hash,
 
 	bucket = malloc(sizeof(*bucket));
         if (!bucket)
-          return NULL;
+                return NULL;
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_STRAW;
 	bucket->h.hash = hash;
 	bucket->h.type = type;
 	bucket->h.size = size;
 
-	bucket->h.items = malloc(sizeof(__u32)*size);
+        bucket->h.items = malloc(sizeof(__u32)*size);
         if (!bucket->h.items)
-          goto err;
+                goto err;
 	bucket->h.perm = malloc(sizeof(__u32)*size);
         if (!bucket->h.perm)
-          goto err;
+                goto err;
 	bucket->item_weights = malloc(sizeof(__u32)*size);
         if (!bucket->item_weights)
-          goto err;
-	bucket->straws = malloc(sizeof(__u32)*size);
+                goto err;
+        bucket->straws = malloc(sizeof(__u32)*size);
         if (!bucket->straws)
-          goto err;
+                goto err;
 
-	bucket->h.weight = 0;
+        bucket->h.weight = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
 		bucket->item_weights[i] = weights[i];
 	}
 
-	if (crush_calc_straw(bucket) < 0)
-          goto err;
+        if (crush_calc_straw(bucket) < 0)
+                goto err;
 
 	return bucket;
 err:
@@ -513,21 +532,25 @@ crush_make_bucket(int alg, int hash, int type, int size,
 
 int crush_add_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item, int weight)
 {
-	int newsize = bucket->h.size + 1;
+        int newsize = bucket->h.size + 1;
 
 	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
 	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
 
 	bucket->h.items[newsize-1] = item;
-	bucket->h.weight += weight;
-	bucket->h.size++;
 
-	return 0;
+        if (crush_addition_is_unsafe(bucket->h.weight, weight))
+                return -ERANGE;
+
+        bucket->h.weight += weight;
+        bucket->h.size++;
+
+        return 0;
 }
 
 int crush_add_list_bucket_item(struct crush_bucket_list *bucket, int item, int weight)
 {
-	int newsize = bucket->h.size + 1;
+        int newsize = bucket->h.size + 1;
 
 	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
 	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
@@ -536,10 +559,17 @@ int crush_add_list_bucket_item(struct crush_bucket_list *bucket, int item, int w
 
 	bucket->h.items[newsize-1] = item;
 	bucket->item_weights[newsize-1] = weight;
-	if (newsize > 1)
-		bucket->sum_weights[newsize-1] = bucket->sum_weights[newsize-2] + weight;
-	else
-		bucket->sum_weights[newsize-1] = weight;
+	if (newsize > 1) {
+
+                if (crush_addition_is_unsafe(bucket->sum_weights[newsize-2], weight))
+                        return -ERANGE;
+
+                bucket->sum_weights[newsize-1] = bucket->sum_weights[newsize-2] + weight;
+	}
+
+        else {
+                bucket->sum_weights[newsize-1] = weight;
+        }
 
 	bucket->h.weight += weight;
 	bucket->h.size++;
@@ -563,12 +593,21 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 
 	for (j=1; j<depth; j++) {
 		node = parent(node);
+
+                if (!crush_addition_is_unsafe(bucket->node_weights[node], weight))
+                        return -ERANGE;
+
 		bucket->node_weights[node] += weight;
-		printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+                printf(" node %d weight %d\n", node, bucket->node_weights[node]);
 	}
+
+
+	if (crush_addition_is_unsafe(bucket->h.weight, weight))
+                return -ERANGE;
 	
-	bucket->h.weight += weight;
-	bucket->h.size++;
+        bucket->h.weight += weight;
+        bucket->h.size++;
+
 	return 0;
 }
 
@@ -584,8 +623,11 @@ int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int
 	bucket->h.items[newsize-1] = item;
 	bucket->item_weights[newsize-1] = weight;
 
-	bucket->h.weight += weight;
-	bucket->h.size++;
+	if (crush_addition_is_unsafe(bucket->h.weight, weight))
+                return -ERANGE;
+
+	 bucket->h.weight += weight;
+	 bucket->h.size++;
 	
 	return crush_calc_straw(bucket);
 }
@@ -844,7 +886,7 @@ int crush_adjust_straw_bucket_item_weight(struct crush_bucket_straw *bucket, int
 
 	r = crush_calc_straw(bucket);
         if (r < 0)
-          return r;
+                return r;
 
 	return diff;
 }
@@ -872,7 +914,7 @@ int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight
 
 /************************************************/
 
-static void crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_uniform *bucket)
+static int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_uniform *bucket)
 {
 	unsigned i;
 	unsigned sum = 0, n = 0, leaves = 0;
@@ -882,6 +924,10 @@ static void crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_
 		if (id < 0) {
 			struct crush_bucket *c = crush->buckets[-1-id];
 			crush_reweight_bucket(crush, c);
+
+			if (crush_addition_is_unsafe(sum, c->weight))
+                                return -ERANGE;
+
 			sum += c->weight;
 			n++;
 		} else {
@@ -892,9 +938,11 @@ static void crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_
 	if (n > leaves)
 		bucket->item_weight = sum / n;  // more bucket children than leaves, average!
 	bucket->h.weight = bucket->item_weight * bucket->h.size;
+
+	return 0;
 }
 
-static void crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list *bucket)
+static int crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list *bucket)
 {
 	unsigned i;
 
@@ -906,11 +954,17 @@ static void crush_reweight_list_bucket(struct crush_map *crush, struct crush_buc
 			crush_reweight_bucket(crush, c);
 			bucket->item_weights[i] = c->weight;
 		}
+
+		if (crush_addition_is_unsafe(bucket->h.weight, bucket->item_weights[i]))
+                        return -ERANGE;
+
 		bucket->h.weight += bucket->item_weights[i];
 	}
+
+	return 0;
 }
 
-static void crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree *bucket)
+static int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree *bucket)
 {
 	unsigned i;
 
@@ -923,11 +977,19 @@ static void crush_reweight_tree_bucket(struct crush_map *crush, struct crush_buc
 			crush_reweight_bucket(crush, c);
 			bucket->node_weights[node] = c->weight;
 		}
+
+		if (crush_addition_is_unsafe(bucket->h.weight, bucket->node_weights[node]))
+                        return -ERANGE;
+
 		bucket->h.weight += bucket->node_weights[node];
+
+
 	}
+
+	return 0;
 }
 
-static void crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_straw *bucket)
+static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_straw *bucket)
 {
 	unsigned i;
 
@@ -939,25 +1001,27 @@ static void crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bu
 			crush_reweight_bucket(crush, c);
 			bucket->item_weights[i] = c->weight;
 		}
-		bucket->h.weight += bucket->item_weights[i];
+
+                if (crush_addition_is_unsafe(bucket->h.weight, bucket->item_weights[i]))
+                        return -ERANGE;
+
+                bucket->h.weight += bucket->item_weights[i];
 	}
+
+	return 0;
 }
 
 int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
-		crush_reweight_uniform_bucket(crush, (struct crush_bucket_uniform *)b);
-		break;
+		return crush_reweight_uniform_bucket(crush, (struct crush_bucket_uniform *)b);
 	case CRUSH_BUCKET_LIST:
-		crush_reweight_list_bucket(crush, (struct crush_bucket_list *)b);
-		break;
+		return crush_reweight_list_bucket(crush, (struct crush_bucket_list *)b);
 	case CRUSH_BUCKET_TREE:
-		crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
-		break;
+		return crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
 	case CRUSH_BUCKET_STRAW:
-		crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
-		break;
+		return crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
 	default:
 		return -1;
 	}
