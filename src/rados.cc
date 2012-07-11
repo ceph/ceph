@@ -109,7 +109,6 @@ STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "   -p pool\n"
 "   --pool=pool\n"
 "        select given pool by name\n"
-"   -t pool\n"
 "   --target-pool=pool\n"
 "        select target pool by name\n"
 "   -b op_size\n"
@@ -1746,7 +1745,7 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--target-pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
       opts["target_pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {
       opts["object_locator"] = val;
