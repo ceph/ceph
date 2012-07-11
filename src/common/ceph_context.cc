@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
+#include "common/lockdep.h"
 #include "log/Log.h"
 
 #include <iostream>
@@ -250,6 +251,10 @@ CephContext::CephContext(uint32_t module_type_)
 
 CephContext::~CephContext()
 {
+  if (_conf->lockdep) {
+    lockdep_unregister_ceph_context(this);
+  }
+
   join_service_thread();
 
   _admin_socket->unregister_command("perfcounters_dump");

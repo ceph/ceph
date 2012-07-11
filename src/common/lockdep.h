@@ -20,6 +20,7 @@ class CephContext;
 extern int g_lockdep;
 
 extern void lockdep_register_ceph_context(CephContext *cct);
+extern void lockdep_unregister_ceph_context(CephContext *cct);
 extern int lockdep_register(const char *n);
 extern int lockdep_will_lock(const char *n, int id);
 extern int lockdep_locked(const char *n, int id, bool force_backtrace=false);
