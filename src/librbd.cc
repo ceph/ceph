@@ -175,13 +175,13 @@ namespace librbd {
     ::SnapContext snapc;
     vector<snap_t> snaps; // this mirrors snapc.snaps, but is in a
 			  // format librados can understand
-    std::map<std::string, struct SnapInfo> snaps_by_name;
+    map<string, SnapInfo> snaps_by_name;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
-    std::set<std::pair<std::string, std::string> > locks;
+    set<pair<string, string> > locks;
     bool exclusive_locked;
-    std::string name;
-    std::string snap_name;
+    string name;
+    string snap_name;
     IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;
     int refresh_seq;    ///< sequence for refresh requests
@@ -366,17 +366,17 @@ namespace librbd {
       data_ctx.snap_set_read(snap_id);
     }
 
-    snap_t get_snap_id(std::string snap_name) const
+    snap_t get_snap_id(string snap_name) const
     {
-      std::map<std::string, struct SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
+      map<string, SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end())
 	return it->second.id;
       return CEPH_NOSNAP;
     }
 
-    int get_snap_name(snapid_t snap_id, std::string *snap_name) const
+    int get_snap_name(snapid_t snap_id, string *snap_name) const
     {
-      std::map<std::string, struct SnapInfo>::const_iterator it;
+      map<string, SnapInfo>::const_iterator it;
 
       for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
 	if (it->second.id == snap_id) {
@@ -387,9 +387,9 @@ namespace librbd {
       return -ENOENT;
     }
 
-    int get_snap_size(std::string snap_name, uint64_t *size) const
+    int get_snap_size(string snap_name, uint64_t *size) const
     {
-      std::map<std::string, struct SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
+      map<string, SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end()) {
 	*size = it->second.size;
 	return 0;
@@ -410,7 +410,7 @@ namespace librbd {
       if (snap_name.length() == 0) {
 	return size;
       } else {
-	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+	map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
 	if (p == snaps_by_name.end())
 	  return 0;
 	return p->second.size;
@@ -697,7 +697,7 @@ namespace librbd {
   };
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
-  int list(IoCtx& io_ctx, std::vector<string>& names);
+  int list(IoCtx& io_ctx, vector<string>& names);
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order,
 	     bool old_format);
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname);
@@ -706,7 +706,7 @@ namespace librbd {
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int snap_create(ImageCtx *ictx, const char *snap_name);
-  int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
+  int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps);
   int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
   int add_snap(ImageCtx *ictx, const char *snap_name);
@@ -722,13 +722,13 @@ namespace librbd {
 
   /* cooperative locking */
   int list_locks(ImageCtx *ictx,
-                 std::set<std::pair<std::string, std::string> > &locks,
+                 set<pair<string, string> > &locks,
                  bool &exclusive);
-  int lock_exclusive(ImageCtx *ictx, const std::string& cookie);
-  int lock_shared(ImageCtx *ictx, const std::string& cookie);
-  int unlock(ImageCtx *ictx, const std::string& cookie);
-  int break_lock(ImageCtx *ictx, const std::string& lock_holder,
-                 const std::string& cookie);
+  int lock_exclusive(ImageCtx *ictx, const string& cookie);
+  int lock_shared(ImageCtx *ictx, const string& cookie);
+  int unlock(ImageCtx *ictx, const string& cookie);
+  int break_lock(ImageCtx *ictx, const string& lock_holder,
+                 const string& cookie);
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
@@ -1089,7 +1089,7 @@ int rollback_image(ImageCtx *ictx, uint64_t snap_id, ProgressContext& prog_ctx)
   return 0;
 }
 
-int list(IoCtx& io_ctx, std::vector<std::string>& names)
+int list(IoCtx& io_ctx, vector<string>& names)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "list " << &io_ctx << dendl;
@@ -1748,7 +1748,7 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   return 0;
 }
 
-int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps)
+int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)
 {
   ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
@@ -1758,7 +1758,7 @@ int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps)
   bufferlist bl, bl2;
 
   Mutex::Locker l(ictx->lock);
-  for (std::map<std::string, struct SnapInfo>::iterator it = ictx->snaps_by_name.begin();
+  for (map<string, SnapInfo>::iterator it = ictx->snaps_by_name.begin();
        it != ictx->snaps_by_name.end(); ++it) {
     snap_info_t info;
     info.name = it->first;
@@ -2175,7 +2175,7 @@ void close_image(ImageCtx *ictx)
 }
 
 int list_locks(ImageCtx *ictx,
-               std::set<std::pair<std::string, std::string> > &locks,
+               set<pair<string, string> > &locks,
                bool &exclusive)
 {
   ldout(ictx->cct, 20) << "list_locks on image " << ictx << dendl;
@@ -2190,7 +2190,7 @@ int list_locks(ImageCtx *ictx,
   return 0;
 }
 
-int lock_exclusive(ImageCtx *ictx, const std::string& cookie)
+int lock_exclusive(ImageCtx *ictx, const string& cookie)
 {
   /**
    * If we wanted we could do something more intelligent, like local
@@ -2201,19 +2201,19 @@ int lock_exclusive(ImageCtx *ictx, const std::string& cookie)
                                           ictx->header_oid, cookie);
 }
 
-int lock_shared(ImageCtx *ictx, const std::string& cookie)
+int lock_shared(ImageCtx *ictx, const string& cookie)
 {
   return cls_client::lock_image_shared(&ictx->md_ctx,
                                        ictx->header_oid, cookie);
 }
 
-int unlock(ImageCtx *ictx, const std::string& cookie)
+int unlock(ImageCtx *ictx, const string& cookie)
 {
   return cls_client::unlock_image(&ictx->md_ctx, ictx->header_oid, cookie);
 }
 
-int break_lock(ImageCtx *ictx, const std::string& lock_holder,
-               const std::string& cookie)
+int break_lock(ImageCtx *ictx, const string& lock_holder,
+               const string& cookie)
 {
   return cls_client::break_lock(&ictx->md_ctx, ictx->header_oid,
                                 lock_holder, cookie);
@@ -2873,7 +2873,7 @@ int RBD::remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& 
   return r;
 }
 
-int RBD::list(IoCtx& io_ctx, std::vector<std::string>& names)
+int RBD::list(IoCtx& io_ctx, vector<string>& names)
 {
   int r = librbd::list(io_ctx, names);
   return r;
@@ -2987,29 +2987,29 @@ int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
   return librbd::copy(*ictx, dest_io_ctx, destname, pctx);
 }
 
-int Image::list_locks(std::set<std::pair<std::string, std::string> > &locks,
+int Image::list_locks(set<pair<string, string> > &locks,
                       bool &exclusive)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::list_locks(ictx, locks, exclusive);
 }
 
-int Image::lock_exclusive(const std::string& cookie)
+int Image::lock_exclusive(const string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::lock_exclusive(ictx, cookie);
 }
-int Image::lock_shared(const std::string& cookie)
+int Image::lock_shared(const string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::lock_shared(ictx, cookie);
 }
-int Image::unlock(const std::string& cookie)
+int Image::unlock(const string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::unlock(ictx, cookie);
 }
-int Image::break_lock(const std::string& other_locker, const std::string& cookie)
+int Image::break_lock(const string& other_locker, const string& cookie)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::break_lock(ictx, other_locker, cookie);
@@ -3040,7 +3040,7 @@ int Image::snap_rollback_with_progress(const char *snap_name, ProgressContext& p
   return librbd::snap_rollback(ictx, snap_name, prog_ctx);
 }
 
-int Image::snap_list(std::vector<librbd::snap_info_t>& snaps)
+int Image::snap_list(vector<librbd::snap_info_t>& snaps)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::snap_list(ictx, snaps);
@@ -3127,7 +3127,7 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  std::vector<std::string> cpp_names;
+  vector<string> cpp_names;
   int r = librbd::list(io_ctx, cpp_names);
   if (r == -ENOENT)
     return 0;
@@ -3333,7 +3333,7 @@ extern "C" int rbd_snap_rollback_with_progress(rbd_image_t image, const char *sn
 
 extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps)
 {
-  std::vector<librbd::snap_info_t> cpp_snaps;
+  vector<librbd::snap_info_t> cpp_snaps;
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   int r = librbd::snap_list(ictx, cpp_snaps);
   if (r == -ENOENT)
@@ -3384,7 +3384,7 @@ extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,
                                 char **lockers_and_cookies, int *max_entries)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  std::set<std::pair<std::string, std::string> > locks;
+  set<pair<string, string> > locks;
   bool exclusive_bool;
 
   if (*max_entries <= 0) {
@@ -3402,7 +3402,7 @@ extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,
     return -ERANGE;
   }
 
-  std::set<std::pair<std::string, std::string> >::iterator p;
+  set<pair<string, string> >::iterator p;
   int i = 0;
   for (p = locks.begin();
       p != locks.end();
