@@ -68,7 +68,7 @@ void usage(ostream& out)
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
 "   create <obj-name> [category]     create object\n"
-"   rm <obj-name>                    remove object\n"
+"   rm <obj-name> ...                remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
@@ -1423,11 +1423,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
-    string oid(nargs[1]);
-    ret = io_ctx.remove(oid);
-    if (ret < 0) {
-      cerr << "error removing " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      return 1;
+    vector<const char *>::iterator iter = nargs.begin();
+    ++iter;
+    for (; iter != nargs.end(); ++iter) {
+      const string & oid = *iter;
+      ret = io_ctx.remove(oid);
+      if (ret < 0) {
+        cerr << "error removing " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+        return 1;
+      }
     }
   }
   else if (strcmp(nargs[0], "create") == 0) {
