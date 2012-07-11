@@ -744,6 +744,18 @@ def cluster(ctx, config):
                         ]
                     )
 
+        if ctx.archive is not None:
+            # archive mon data, too
+            log.info('Archiving mon data...')
+            path = os.path.join(ctx.archive, 'data')
+            os.makedirs(path)
+            for remote, roles in mons.remotes.iteritems():
+                for role in roles:
+                    if role.startswith('mon.'):
+                        teuthology.pull_directory(remote,
+                                       '/tmp/cephtest/data/%s' % role,
+                                       path + '/' + role)
+
         log.info('Cleaning ceph cluster...')
         run.wait(
             ctx.cluster.run(
