@@ -300,6 +300,7 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
                 should_unlock,
                 sync_clocks,
                 reboot_all,
+                ctx.config.get('check-locks', True),
                 )
         for unnuked in p:
             if unnuked:
@@ -307,12 +308,13 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
     if total_unnuked:
         log.error('Could not nuke the following targets:\n' + '\n  '.join(['targets:', ] + yaml.safe_dump(total_unnuked, default_flow_style=False).splitlines()))
 
-def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all):
+def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all, check_locks):
     from teuthology.lock import unlock
     ret = None
     ctx = argparse.Namespace(
         config=dict(targets=targets),
         owner=ctx.owner,
+        check_locks=check_locks,
         synch_clocks=synch_clocks,
         reboot_all=reboot_all,
         teuthology_config=ctx.teuthology_config,
@@ -331,7 +333,8 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all):
 
 def nuke_helper(ctx, log):
     from teuthology.task.internal import check_lock, connect
-    check_lock(ctx, None)
+    if ctx.check_locks:
+        check_lock(ctx, None)
     connect(ctx, None)
 
     log.info('Unmount ceph-fuse and killing daemons...')
