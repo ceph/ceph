@@ -28,8 +28,8 @@
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
 #define CRUSH_MAX_SET   10  /* max size of a mapping result */
 
-#define CRUSH_MAX_DEVICE_WEIGHT 10000
-#define CRUSH_MAX_BUCKET_WEIGHT 10000000
+#define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
+#define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
 /*
  * CRUSH uses user-defined "rules" to describe how inputs should be
