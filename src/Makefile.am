@@ -950,12 +950,12 @@ rados_include_DATA = \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h
 
-crush_includedir = $(includedir)/crush
-crush_include_DATA = \
-	$(srcdir)/crush/hash.h \
-	$(srcdir)/crush/crush.h \
-	$(srcdir)/crush/mapper.h \
-	$(srcdir)/crush/types.h
+#crush_includedir = $(includedir)/crush
+#crush_include_DATA = \
+#	$(srcdir)/crush/hash.h \
+#	$(srcdir)/crush/crush.h \
+#	$(srcdir)/crush/mapper.h \
+#	$(srcdir)/crush/types.h
 
 FORCE:
 .git_version: FORCE
