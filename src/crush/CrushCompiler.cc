@@ -462,12 +462,23 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       int pos = -1;
       for (unsigned q = 2; q < sub->children.size(); q++) {
 	string tag = string_node(sub->children[q++]);
-	if (tag == "weight")
+	if (tag == "weight") {
 	  weight = float_node(sub->children[q]);
+	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
+	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT << std::endl;
+	    return -ERANGE;
+	  }
+	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
+	    err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT
+	        << " to prevent overflow" << std::endl;
+	    return -ERANGE;
+	  }
+	}
 	else if (tag == "pos") 
 	  pos = int_node(sub->children[q]);
 	else
 	  assert(0);
+
       }
       if (alg == CRUSH_BUCKET_UNIFORM) {
 	if (!have_uniform_weight) {
