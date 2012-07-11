@@ -29,9 +29,10 @@ namespace librbd {
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
-                             std::set<std::pair<std::string, std::string> >* lockers,
-                             bool *exclusive_lock,
-                             ::SnapContext *snapc);
+			     std::set<std::pair<std::string, std::string> >* lockers,
+			     bool *exclusive_lock,
+			     ::SnapContext *snapc,
+			     parent_info *parent);
 
     // low-level interface (mainly for testing)
     int create_image(librados::IoCtx *ioctx, const std::string &oid,

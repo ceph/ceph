@@ -87,7 +87,20 @@ namespace librbd {
   void rados_cb(rados_completion_t cb, void *arg);
   void rados_aio_sparse_read_cb(rados_completion_t cb, void *arg);
 
-  class WatchCtx;
+  class ImageCtx;
+  class WatchCtx : public librados::WatchCtx {
+    ImageCtx *ictx;
+    bool valid;
+    Mutex lock;
+  public:
+    uint64_t cookie;
+    WatchCtx(ImageCtx *ctx) : ictx(ctx),
+			      valid(true),
+			      lock("librbd::WatchCtx") {}
+    virtual ~WatchCtx() {}
+    void invalidate();
+    virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl);
+  };
 
   struct SnapInfo {
     snap_t id;
@@ -184,10 +197,8 @@ namespace librbd {
     string object_prefix;
     string header_oid;
     string id; // only used for new-format images
-    int64_t parent_poolid;
-    string parent_id;
-    snapid_t parent_snapid;
-    uint64_t overlap;
+    cls_client::parent_info parent_md;
+    ImageCtx *parent;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -213,9 +224,7 @@ namespace librbd {
 	lock("librbd::ImageCtx::lock"),
 	cache_lock("librbd::ImageCtx::cache_lock"),
 	old_format(true),
-	order(0), size(0), features(0), parent_poolid(-1),
-	parent_snapid(CEPH_NOSNAP), overlap(0),
-	id(image_id),
+	order(0), size(0), features(0),	id(image_id), parent(NULL),
 	object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
     {
       md_ctx.dup(p);
@@ -574,20 +583,6 @@ namespace librbd {
     }
   };
 
-  class WatchCtx : public librados::WatchCtx {
-    ImageCtx *ictx;
-    bool valid;
-    Mutex lock;
-  public:
-    uint64_t cookie;
-    WatchCtx(ImageCtx *ctx) : ictx(ctx),
-			      valid(true),
-			      lock("librbd::WatchCtx") {}
-    virtual ~WatchCtx() {}
-    void invalidate();
-    virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl);
-  };
-
   struct AioCompletion {
     Mutex lock;
     Cond cond;
@@ -720,6 +715,8 @@ namespace librbd {
   int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx& srci, IoCtx& dest_md_ctx, const char *destname);
 
+  int open_parent(ImageCtx *ictx, ImageCtx **parent_ctx,
+		  string *parent_pool_name, string *parent_image_name);
   int open_image(ImageCtx *ictx, bool watch);
   void close_image(ImageCtx *ictx);
 
@@ -1527,40 +1524,88 @@ int get_overlap(ImageCtx *ictx, uint64_t *overlap)
   return ictx->get_parent_overlap(overlap);
 }
 
-int get_parent_info(ImageCtx *ictx, string *parent_poolname,
-		    string *parent_name, string *parent_snapname)
+int open_parent(ImageCtx *ictx, ImageCtx **parent_ctx,
+		string *parent_pool_name, string *parent_image_name)
+{
+  assert(!(*parent_ctx));
+  assert(ictx->parent_md.pool_id >= 0);
+  string pool_name;
+  Rados rados(ictx->md_ctx);
+  int64_t pool_id = ictx->get_parent_pool_id();
+  if (pool_id < 0)
+    return -ENOENT;
+  int r = rados.pool_reverse_lookup(pool_id, &pool_name);
+  if (r < 0) {
+    lderr(ictx->cct) << "error looking up name for pool id " << pool_id
+		     << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  IoCtx p_ioctx;
+  r = rados.ioctx_create(pool_name.c_str(), p_ioctx);
+  if (r < 0) {
+    lderr(ictx->cct) << "error opening pool " << pool_name << ": "
+		     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (parent_image_name) {
+    r = cls_client::dir_get_name(&p_ioctx, RBD_DIRECTORY,
+				 ictx->get_parent_image_id(),
+				 parent_image_name);
+    if (r < 0) {
+      lderr(ictx->cct) << "error getting parent image name: "
+		       << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  // since we don't know the image and snapshot name, set their ids and
+  // reset the snap_name and snap_exists fields after we read the header
+  ImageCtx *parent = new ImageCtx("", ictx->get_parent_image_id(),
+				  NULL, p_ioctx);
+  r = open_image(parent, false);
+  if (r < 0) {
+    lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
+		     << dendl;
+    close_image(parent);
+    return r;
+  }
+  r = parent->get_snap_name(ictx->get_parent_snap_id(), &parent->snap_name);
+  if (r < 0) {
+    lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
+    close_image(parent);
+    return r;
+  }
+  parent->snap_set(parent->snap_name);
+
+  if (parent_ctx)
+    *parent_ctx = parent;
+  if (parent_pool_name)
+    *parent_pool_name = pool_name;
+
+  return 0;
+}
+
+int get_parent_info(ImageCtx *ictx, string *parent_pool_name,
+		    string *parent_name, string *parent_snap_name)
 {
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
 
   Mutex::Locker l(ictx->lock);
+  if (ictx->get_parent_pool_id() < 0)
+    return -ENOENT;
 
-  Rados rados(ictx->md_ctx);
-  r = rados.pool_reverse_lookup(ictx->parent_poolid, parent_poolname);
-  if (r < 0) 
-    return r;
-
-  IoCtx p_ioctx;
-  r = rados.ioctx_create(parent_poolname->c_str(), p_ioctx);
-  if (r < 0)
-    return r;
-
-  r = cls_client::dir_get_name(&p_ioctx, RBD_DIRECTORY, ictx->parent_id,
-			       parent_name);
-  if (r < 0)
-    return r;
-
-  // for parent snapname, we need to open the parent ImageCtx, for which
+  // for parent snap_name, we need to open the parent ImageCtx, for which
   // we use the same rados handle
-  ImageCtx *p_imctx = new ImageCtx(*parent_name, "", NULL, p_ioctx);
-  r = open_image(p_imctx);
+  ImageCtx *p_imctx = NULL;
+  r = open_parent(ictx, &p_imctx, parent_pool_name, parent_name);
   if (r < 0)
     return r;
 
-  // and now we can look up the name in the ImageCtx
-  r = p_imctx->get_snapname(ictx->parent_snapid, parent_snapname);
-  // failure or no, close the ImageCtx
+  *parent_snap_name = p_imctx->snap_name;
   close_image(p_imctx);
 
   if (r < 0) 
@@ -1797,6 +1842,36 @@ int ictx_check(ImageCtx *ictx)
   return 0;
 }
 
+int refresh_parent(ImageCtx *ictx) {
+  // close the parent if it changed or this image no longer needs
+  // to read from it
+  int r;
+  if (ictx->parent) {
+    uint64_t overlap;
+    r = ictx->get_parent_overlap(&overlap);
+    if (r < 0)
+      return r;
+    if (!overlap ||
+	ictx->parent->md_ctx.get_id() != ictx->get_parent_pool_id() ||
+	ictx->parent->id != ictx->get_parent_image_id() ||
+	ictx->parent->snap_id != ictx->get_parent_snap_id()) {
+      close_image(ictx->parent);
+      ictx->parent = NULL;
+    }
+  }
+
+  if (ictx->get_parent_pool_id() > -1 && !ictx->parent) {
+    r = open_parent(ictx, &(ictx->parent), NULL, NULL);
+    if (r < 0) {
+      lderr(ictx->cct) << "error opening parent snapshot: "
+		       << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  return 0;
+}
+
 int ictx_refresh(ImageCtx *ictx)
 {
   CephContext *cct = ictx->cct;
@@ -1837,9 +1912,10 @@ int ictx_refresh(ImageCtx *ictx)
       r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
 					   &ictx->size, &ictx->features,
 					   &incompatible_features,
-                                           &ictx->locks,
-                                           &ictx->exclusive_locked,
-                                           &new_snapc);
+					   &ictx->locks,
+					   &ictx->exclusive_locked,
+					   &new_snapc,
+					   &ictx->parent_md);
       if (r < 0) {
 	lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
 		   << dendl;
@@ -1851,19 +1927,6 @@ int ictx_refresh(ImageCtx *ictx)
 	lderr(ictx->cct) << "Image uses unsupported features: "
 			 << unsupported << dendl;
 	return -ENOSYS;
-      }
-
-      r = cls_client::get_parent(&(ictx->md_ctx), ictx->header_oid,
-				 ictx->snapid, &ictx->parent_poolid,
-				 &ictx->parent_id, &ictx->parent_snapid,
-				 &ictx->overlap);
-      if (r < 0) {
-	if (r == -ENOENT) {
-	  // no parent, make sure sentinel value is set
-	  ictx->parent_poolid = -1;
-	} else {
-	  return r;
-	}
       }
 
       r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
@@ -1914,6 +1977,10 @@ int ictx_refresh(ImageCtx *ictx)
 	       << ictx->snap_name << dendl;
     ictx->snap_exists = false;
   }
+
+  r = refresh_parent(ictx);
+  if (r < 0)
+    return r;
 
   ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
 
@@ -2055,8 +2122,10 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
 
 int open_image(ImageCtx *ictx, bool watch)
 {
-  ldout(ictx->cct, 20) << "open_image: ictx =  " << ictx
-		       << " name =  '" << ictx->name << "' snap_name = '"
+  ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
+		       << " name = '" << ictx->name
+		       << " id = '" << ictx->id
+		       << "' snap_name = '"
 		       << ictx->snap_name << "'" << dendl;
   int r = ictx->init();
   if (r < 0)
@@ -2090,6 +2159,10 @@ int open_image(ImageCtx *ictx, bool watch)
 void close_image(ImageCtx *ictx)
 {
   ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
+  if (ictx->parent) {
+    close_image(ictx->parent);
+    ictx->parent = NULL;
+  }
   if (ictx->object_cacher)
     ictx->shutdown_cache(); // implicitly flushes
   else
