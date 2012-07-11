@@ -336,12 +336,14 @@ namespace librbd {
       delete perfcounter;
     }
 
-    int snap_set(std::string snap_name)
+    int snap_set(string in_snap_name)
     {
-      std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
+      map<string, SnapInfo>::iterator it = snaps_by_name.find(in_snap_name);
       if (it != snaps_by_name.end()) {
-	snap_name = snap_name;
+	snap_name = in_snap_name;
 	snap_id = it->second.id;
+	snap_exists = true;
+	data_ctx.snap_set_read(snap_id);
 	return 0;
       }
       return -ENOENT;
@@ -351,6 +353,8 @@ namespace librbd {
     {
       snap_id = CEPH_NOSNAP;
       snap_name = "";
+      snap_exists = true;
+      data_ctx.snap_set_read(snap_id);
     }
 
     snap_t get_snap_id(std::string snap_name) const
@@ -2046,9 +2050,6 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
     ictx->snap_unset();
   }
 
-  ictx->snap_exists = true;
-  ictx->data_ctx.snap_set_read(ictx->snap_id);
-
   return 0;
 }
 
@@ -2071,7 +2072,6 @@ int open_image(ImageCtx *ictx, bool watch)
     r = ictx->snap_set(ictx->snap_name);
     if (r < 0)
       return r;
-    ictx->data_ctx.snap_set_read(ictx->snap_id);
   }
 
   if (watch) {
