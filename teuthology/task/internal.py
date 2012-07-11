@@ -3,13 +3,11 @@ import contextlib
 import gevent
 import logging
 import os
-import tarfile
 import time
 import yaml
 
 from teuthology import lock
 from teuthology import misc as teuthology
-from teuthology import safepath
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
@@ -190,51 +188,12 @@ def archive(ctx, config):
         yield
     finally:
         if ctx.archive is not None:
-
             log.info('Transferring archived files...')
             logdir = os.path.join(ctx.archive, 'remote')
             os.mkdir(logdir)
             for remote in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, remote.shortname)
-                os.mkdir(path)
-                log.debug('Transferring archived files from %s to %s', remote.shortname, path)
-                proc = remote.run(
-                    args=[
-                        'tar',
-                        'c',
-                        '-f', '-',
-                        '-C', '/tmp/cephtest/archive',
-                        '--',
-                        '.',
-                        ],
-                    stdout=run.PIPE,
-                    wait=False,
-                    )
-                tar = tarfile.open(mode='r|', fileobj=proc.stdout)
-                while True:
-                    ti = tar.next()
-                    if ti is None:
-                        break
-
-                    if ti.isdir():
-                        # ignore silently; easier to just create leading dirs below
-                        pass
-                    elif ti.isfile():
-                        sub = safepath.munge(ti.name)
-                        safepath.makedirs(root=path, path=os.path.dirname(sub))
-                        tar.makefile(ti, targetpath=os.path.join(path, sub))
-                    else:
-                        if ti.isdev():
-                            type_ = 'device'
-                        elif ti.issym():
-                            type_ = 'symlink'
-                        elif ti.islnk():
-                            type_ = 'hard link'
-                        else:
-                            type_ = 'unknown'
-                        log.info('Ignoring tar entry: %r type %r', ti.name, type_)
-                        continue
-                proc.exitstatus.get()
+                teuthology.pull_directory(remote, '/tmp/cephtest/archive', path)
 
         log.info('Removing archive directory...')
         run.wait(

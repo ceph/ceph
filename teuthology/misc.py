@@ -5,6 +5,7 @@ import logging
 import configobj
 import getpass
 import socket
+import tarfile
 import time
 import urllib2
 import urlparse
@@ -12,6 +13,7 @@ import yaml
 import json
 import subprocess
 
+from teuthology import safepath
 from .orchestra import run
 
 log = logging.getLogger(__name__)
@@ -238,6 +240,51 @@ def get_file(remote, path):
         )
     data = proc.stdout.getvalue()
     return data
+
+def pull_directory(remote, remotedir, localdir):
+    """
+    Copy a remote directory to a local directory.
+    """
+    os.mkdir(localdir)
+    log.debug('Transferring archived files from %s:%s to %s',
+              remote.shortname, remotedir, localdir)
+    proc = remote.run(
+        args=[
+            'tar',
+            'c',
+            '-f', '-',
+            '-C', remotedir,
+            '--',
+            '.',
+            ],
+        stdout=run.PIPE,
+        wait=False,
+        )
+    tar = tarfile.open(mode='r|', fileobj=proc.stdout)
+    while True:
+        ti = tar.next()
+        if ti is None:
+            break
+
+        if ti.isdir():
+            # ignore silently; easier to just create leading dirs below
+            pass
+        elif ti.isfile():
+            sub = safepath.munge(ti.name)
+            safepath.makedirs(root=localdir, path=os.path.dirname(sub))
+            tar.makefile(ti, targetpath=os.path.join(localdir, sub))
+        else:
+            if ti.isdev():
+                type_ = 'device'
+            elif ti.issym():
+                type_ = 'symlink'
+            elif ti.islnk():
+                type_ = 'hard link'
+            else:
+                type_ = 'unknown'
+                log.info('Ignoring tar entry: %r type %r', ti.name, type_)
+                continue
+    proc.exitstatus.get()
 
 def get_scratch_devices(remote):
     """
