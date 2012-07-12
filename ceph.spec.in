@@ -326,6 +326,8 @@ fi
 /usr/sbin/rcceph
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_rgw.so*
+/sbin/ceph-disk-activate
+/sbin/ceph-disk-prepare
 
 #################################################################################
 %files fuse
