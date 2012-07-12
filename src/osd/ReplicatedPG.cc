@@ -3584,7 +3584,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   }
 
   // done.
-  if (repop->waitfor_ack.empty() && repop->waitfor_disk.empty()) {
+  if (repop->waitfor_ack.empty() && repop->waitfor_disk.empty() &&
+      repop->applied) {
     repop->done = true;
 
     calc_min_last_complete_ondisk();
