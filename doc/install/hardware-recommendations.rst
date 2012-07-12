@@ -54,3 +54,53 @@ and development clusters can run successfully with modest hardware.
 |              +----------------+------------------------------------+
 |              | Network        |  2-1GB Ethernet NICs               |
 +--------------+----------------+------------------------------------+
+
+.. important: If you are running an OSD with a single disk, create a
+   partition for your volume storage that is separate from the partition
+   containing the OS. Generally, we recommend separate disks for the
+   OS and the volume storage.
+
+Production Cluster Example
+==========================
+
+Production clusters for petabyte scale data storage may also use commodity
+hardware, but should have considerably more memory, processing power and data
+storage to account for heavy traffic loads.
+
+A recent (2012) Ceph cluster project is using two fairly robust hardware
+configurations for Ceph OSDs, and a lighter configuration for monitors.
+
++----------------+----------------+------------------------------------+
+|  Configuration | Criteria       | Minimum Recommended                |
++================+================+====================================+
+| Dell PE R510   | Processor      |  2 64-bit quad-core Xeon CPUs      |
+|                +----------------+------------------------------------+
+|                | RAM            |  16 GB                             |
+|                +----------------+------------------------------------+
+|                | Volume Storage |  8-2TB drives. 1-OS 7-Storage      |
+|                +----------------+------------------------------------+
+|                | Client Network |  2-1GB Ethernet NICs               |
+|                +----------------+------------------------------------+
+|                | OSD Network    |  2-1GB Ethernet NICs               |
+|                +----------------+------------------------------------+
+|                | NIC Mgmt.      |  2-1GB Ethernet NICs               |
++----------------+----------------+------------------------------------+
+| Dell PE R515   | Processor      |  1 hex-core Opteron CPU            |
+|                +----------------+------------------------------------+
+|                | RAM            |  16 GB                             |
+|                +----------------+------------------------------------+
+|                | Volume Storage |  12-3TB drives. Storage            |
+|                +----------------+------------------------------------+
+|                | OS Storage     |  1-500GB drive. Operating System.  |
+|                +----------------+------------------------------------+
+|                | Client Network |  2-1GB Ethernet NICs               |
+|                +----------------+------------------------------------+
+|                | OSD Network    |  2-1GB Ethernet NICs               |
+|                +----------------+------------------------------------+
+|                | NIC Mgmt.      |  2-1GB Ethernet NICs               |
++----------------+----------------+------------------------------------+
+
+
+
+
+
