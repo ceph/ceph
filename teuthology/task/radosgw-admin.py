@@ -271,7 +271,7 @@ def task(ctx, config):
 
     # TESTCASE 'bucket-stats5','bucket','stats','after creating key','succeeds, lists one non-empty object'
     (err, out) = rgwadmin(ctx, client, [
-            'bucket', 'stats', '--bucket-id', bucket_id])
+            'bucket', 'stats', '--bucket', bucket_name])
     assert not err
     assert out['id'] == bucket_id
     assert out['usage']['rgw.main']['num_objects'] == 1
@@ -282,7 +282,7 @@ def task(ctx, config):
 
     # TESTCASE 'bucket-stats6','bucket','stats','after deleting key','succeeds, lists one no objects'
     (err, out) = rgwadmin(ctx, client, [
-            'bucket', 'stats', '--bucket-id', bucket_id])
+            'bucket', 'stats', '--bucket', bucket_name])
     assert not err
     assert out['id'] == bucket_id
     assert out['usage']['rgw.main']['num_objects'] == 0
