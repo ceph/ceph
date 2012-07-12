@@ -1301,6 +1301,8 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
   librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
+
+  cct->put();
   return 0;
 }
 
