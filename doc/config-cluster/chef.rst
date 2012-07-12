@@ -156,7 +156,7 @@ Then, add at least one of::
 	"role[ceph-cookbooks-radosgw]"
 
 If you add more than one role, separate them with a comma. Replace the 
-``{hostname}`` setting of the ``name`` key to the host name for the node. 
+``{hostname}`` setting of the ``name`` key to the host name for the node. ::
 
 	{
   		"chef_environment": "Ceph",
