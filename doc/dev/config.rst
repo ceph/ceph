@@ -39,14 +39,14 @@ A sample configuration file can be found in src/sample.ceph.conf.
 Metavariables
 =============
 
-The configuration system supports certain "metavariables." If these occur
-inside a configuration value, they are expanded into something else-- similar to
-how bash shell expansion works.
+The configuration system allows any configuration value to be
+substituted into another value using the ``$varname`` syntax, similar
+to how bash shell expansion works.
 
-There are a few different metavariables:
+A few additional special metavariables are also defined:
  - $host: expands to the current hostname
- - $type: expands to one of "mds", "osd", or "mon"
- - $id: expands to the daemon identifier. For osd.0, this would be "0"; for mds.a, it would be "a"
+ - $type: expands to one of "mds", "osd", "mon", or "client"
+ - $id: expands to the daemon identifier. For ``osd.0``, this would be ``0``; for ``mds.a``, it would be ``a``; for ``client.admin``, it would be ``admin``.
  - $num: same as $id
  - $name: expands to $type.$id
 
