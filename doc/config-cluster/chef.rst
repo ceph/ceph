@@ -120,10 +120,10 @@ Navigate to the Ceph cookbooks directory. ::
 Create roles for OSDs, monitors, metadata servers, and RADOS Gateways from
 their respective role files. ::
 
-	knife role from file roles/ceph-osd.rb
-	knife role from file roles/ceph-mon.rb
-	knife role from file roles/ceph-mds.rb
-	knife role from file roles/ceph-radosgw.rb
+	knife role from file roles/ceph-cookbooks-osd.rb
+	knife role from file roles/ceph-cookbooks-mon.rb
+	knife role from file roles/ceph-cookbooks-mds.rb
+	knife role from file roles/ceph-cookbooks-radosgw.rb
 
 Configure Nodes
 ---------------
