@@ -74,10 +74,4 @@ void complain_about_parse_errors(CephContext *cct,
  */
 void common_init_finish(CephContext *cct);
 
-/* This function is called from library code to destroy a context created by
- * the library.
- * You should not call this function if you called global_init.
- */
-void common_destroy_context(CephContext *cct);
-
 #endif

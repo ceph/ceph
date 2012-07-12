@@ -130,5 +130,5 @@ void librgw_free_bin(librgw_t rgw, char *bin)
 
 void librgw_shutdown(librgw_t rgw)
 {
-  common_destroy_context(rgw);
+  rgw->put();
 }

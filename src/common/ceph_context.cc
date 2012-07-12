@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
+#include "common/lockdep.h"
 #include "log/Log.h"
 
 #include <iostream>
@@ -211,7 +212,8 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
 
 
 CephContext::CephContext(uint32_t module_type_)
-  : _conf(new md_config_t()),
+  : nref(1),
+    _conf(new md_config_t()),
     _log(NULL),
     _module_type(module_type_),
     _service_thread(NULL),
@@ -249,6 +251,10 @@ CephContext::CephContext(uint32_t module_type_)
 
 CephContext::~CephContext()
 {
+  if (_conf->lockdep) {
+    lockdep_unregister_ceph_context(this);
+  }
+
   join_service_thread();
 
   _admin_socket->unregister_command("perfcounters_dump");
@@ -263,6 +269,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("log dump");
   _admin_socket->unregister_command("log reopen");
   delete _admin_hook;
+  delete _admin_socket;
 
   delete _heartbeat_map;
 

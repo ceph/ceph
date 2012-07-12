@@ -1240,7 +1240,7 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   uuid_d fsid;
   o.back()->build_simple(cct, 1, fsid, 16, 7, 8);
   o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
-  delete cct;
+  cct->put();
 }
 
 string OSDMap::get_flag_string(unsigned f)

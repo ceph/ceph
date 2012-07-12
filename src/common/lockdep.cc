@@ -64,6 +64,17 @@ void lockdep_register_ceph_context(CephContext *cct)
   pthread_mutex_unlock(&lockdep_mutex);
 }
 
+void lockdep_unregister_ceph_context(CephContext *cct)
+{
+  pthread_mutex_lock(&lockdep_mutex);
+  if (cct == g_lockdep_ceph_ctx) {
+    // this cct is going away; shut it down!
+    g_lockdep = false;
+    g_lockdep_ceph_ctx = NULL;
+  }
+  pthread_mutex_unlock(&lockdep_mutex);
+}
+
 int lockdep_dump_locks()
 {
   pthread_mutex_lock(&lockdep_mutex);

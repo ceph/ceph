@@ -119,7 +119,3 @@ void common_init_finish(CephContext *cct)
   }
 }
 
-void common_destroy_context(CephContext *cct)
-{
-  //delete cct;        // TODO: fix #845
-}
