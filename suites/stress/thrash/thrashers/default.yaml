@@ -1,6 +1,6 @@
 tasks:
 - ceph:
     log-whitelist:
-    - wrongly marked me down or wrong addr
+    - wrongly marked me down
     - objects unfound and apparently lost
 - thrashosds:

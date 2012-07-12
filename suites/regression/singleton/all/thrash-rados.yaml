@@ -11,7 +11,7 @@ roles:
 tasks:
 - ceph:
     log-whitelist:
-    - wrongly marked me down or wrong addr
+    - wrongly marked me down
 - thrashosds:
     op_delay: 30
     clean_interval: 120

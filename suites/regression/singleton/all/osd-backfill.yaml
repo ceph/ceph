@@ -9,7 +9,7 @@ roles:
 tasks:
 - ceph:
     log-whitelist:
-    - wrongly marked me down or wrong addr
+    - wrongly marked me down
     conf:
       osd:
         osd min pg log entries: 5
