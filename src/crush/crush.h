@@ -28,6 +28,8 @@
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
 #define CRUSH_MAX_SET   10  /* max size of a mapping result */
 
+#define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
+#define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
 /*
  * CRUSH uses user-defined "rules" to describe how inputs should be
@@ -174,6 +176,8 @@ struct crush_map {
 
 /* crush.c */
 extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
+extern int crush_addition_is_unsafe(__u32 a, __u32 b);
+extern int crush_multiplication_is_unsafe(__u32  a, __u32 b);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);

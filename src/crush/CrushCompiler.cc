@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <map>
 
+
 #include <typeinfo>
 
 // -------------
@@ -439,9 +440,9 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   vector<int> weights(size);
 
   int curpos = 0;
-  float bucketweight = 0;
+  unsigned bucketweight = 0;
   bool have_uniform_weight = false;
-  float uniform_weight = 0;
+  unsigned uniform_weight = 0;
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
@@ -454,19 +455,30 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       }
       int itemid = item_id[iname];
 
-      float weight = 1.0;
+      unsigned weight = 0x10000;
       if (item_weight.count(itemid))
 	weight = item_weight[itemid];
 
       int pos = -1;
       for (unsigned q = 2; q < sub->children.size(); q++) {
 	string tag = string_node(sub->children[q++]);
-	if (tag == "weight")
-	  weight = float_node(sub->children[q]);
+	if (tag == "weight") {
+	  weight = float_node(sub->children[q]) * (float)0x10000;
+	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
+	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
+	    return -ERANGE;
+	  }
+	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
+	    err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT / 0x10000
+	        << " to prevent overflow" << std::endl;
+	    return -ERANGE;
+	  }
+	}
 	else if (tag == "pos") 
 	  pos = int_node(sub->children[q]);
 	else
 	  assert(0);
+
       }
       if (alg == CRUSH_BUCKET_UNIFORM) {
 	if (!have_uniform_weight) {
@@ -475,7 +487,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	} else {
 	  if (uniform_weight != weight) {
 	    err << "item '" << iname << "' in uniform bucket '" << name << "' has weight " << weight
-		<< " but previous item(s) have weight " << uniform_weight
+		<< " but previous item(s) have weight " << (float)uniform_weight/(float)0x10000
 		<< "; uniform bucket items must all have identical weights." << std::endl;
 	    return -1;
 	  }
@@ -492,7 +504,13 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       }
       //err << " item " << iname << " (" << itemid << ") pos " << pos << " weight " << weight << std::endl;
       items[pos] = itemid;
-      weights[pos] = (unsigned)(weight * 0x10000);
+      weights[pos] = weight;
+
+      if (crush_addition_is_unsafe(bucketweight, weight)) {
+        err << "oh no! our bucket weights are overflowing all over the place, better lower the item weights" << std::endl;
+        return -ERANGE;
+      }
+
       bucketweight += weight;
     }
   }
@@ -502,7 +520,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     //err << "assigned id " << id << std::endl;
   }
 
-  if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight " << bucketweight << std::endl;
+  if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
+		   << (float)bucketweight / (float)0x10000 << std::endl;
   id_item[id] = name;
   item_id[name] = id;
   item_weight[id] = bucketweight;
