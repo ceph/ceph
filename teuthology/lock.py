@@ -34,7 +34,7 @@ def lock_many(ctx, num, user=None):
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
         return machines
     if status == 503:
-        log.error('Insufficient nodes avaiable to lock %d nodes.', num)
+        log.error('Insufficient nodes available to lock %d nodes.', num)
     else:
         log.error('Could not lock %d nodes, reason: unknown.', num)
     return []
