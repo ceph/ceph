@@ -146,14 +146,14 @@ The node configuration should appear in your text editor. Change the
 ``chef_environment`` value to ``Ceph`` (or whatever name you set for your
 Ceph environment). 
 
-In the ``run_list``, add ``"recipe[ceph::apt]",`` to all nodes as the first
-setting, so that Chef can install or update the necessary packages. Then, 
-add at least one of:: 
+In the ``run_list``, add ``"recipe[ceph-cookbooks::apt]",`` to all nodes as 
+the first setting, so that Chef can install or update the necessary packages. 
+Then, add at least one of:: 
 
-	"role[ceph-mon]"
-	"role[ceph-osd]"
-	"role[ceph-mds]"
-	"role[ceph-radosgw]"
+	"role[ceph-cookbooks-mon]"
+	"role[ceph-cookbooks-osd]"
+	"role[ceph-cookbooks-mds]"
+	"role[ceph-cookbooks-radosgw]"
 
 If you add more than one role, separate them with a comma. The following
 example adds a node named `mon-host` to the `Ceph` environment and 
@@ -161,16 +161,16 @@ runs the ``apt`` recipe followed by the roles ``ceph-mon`` and ``ceph-osd``::
 
 	{
   		"chef_environment": "Ceph",
-  		"name": "mon-host",
+  		"name": "{hostname}",
   		"normal": {
     		"tags": [
 
     		]
   		},
  		 "run_list": [
-			"recipe[ceph::apt]",
-			"role[ceph-mon]",
-			"role[ceph-mds]"
+			"recipe[ceph-cookbooks::apt]",
+			"role[ceph-cookbooks-mon]",
+			"role[ceph-cookbooks-mds]"
   		]
 	}
 
