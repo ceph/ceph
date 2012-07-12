@@ -24,9 +24,9 @@ static int decode_bits(char c)
 		return c - 'a' + 26;
 	if (c >= '0' && c <= '9')
 		return c - '0' + 52;
-	if (c == '+')
+	if (c == '+' || c == '-')
 		return 62;
-	if (c == '/')
+	if (c == '/' || c == '_')
 		return 63;
 	if (c == '=')
 		return 0; /* just non-negative, please */

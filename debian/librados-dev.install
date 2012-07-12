@@ -6,3 +6,5 @@ usr/include/rados/librados.hpp
 usr/include/rados/buffer.h
 usr/include/rados/page.h
 usr/include/rados/crc32c.h
+usr/bin/librados-config
+usr/share/man/man8/librados-config.8
