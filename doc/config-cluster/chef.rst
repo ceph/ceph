@@ -120,10 +120,10 @@ Navigate to the Ceph cookbooks directory. ::
 Create roles for OSDs, monitors, metadata servers, and RADOS Gateways from
 their respective role files. ::
 
-	knife role from file roles/ceph-cookbooks-osd.rb
-	knife role from file roles/ceph-cookbooks-mon.rb
-	knife role from file roles/ceph-cookbooks-mds.rb
-	knife role from file roles/ceph-cookbooks-radosgw.rb
+	knife role from file roles/ceph-osd.rb
+	knife role from file roles/ceph-mon.rb
+	knife role from file roles/ceph-mds.rb
+	knife role from file roles/ceph-radosgw.rb
 
 Configure Nodes
 ---------------
@@ -150,10 +150,10 @@ In the ``run_list``, add ``"recipe[ceph-cookbooks::apt]",`` to all nodes as
 the first setting, so that Chef can install or update the necessary packages. 
 Then, add at least one of:: 
 
-	"role[ceph-cookbooks-mon]"
-	"role[ceph-cookbooks-osd]"
-	"role[ceph-cookbooks-mds]"
-	"role[ceph-cookbooks-radosgw]"
+	"role[ceph-mon]"
+	"role[ceph-osd]"
+	"role[ceph-mds]"
+	"role[ceph-radosgw]"
 
 If you add more than one role, separate them with a comma. Replace the 
 ``{hostname}`` setting of the ``name`` key to the host name for the node. ::
@@ -168,8 +168,8 @@ If you add more than one role, separate them with a comma. Replace the
   		},
  		 "run_list": [
 			"recipe[ceph-cookbooks::apt]",
-			"role[ceph-cookbooks-mon]",
-			"role[ceph-cookbooks-mds]"
+			"role[ceph-mon]",
+			"role[ceph-mds]"
   		]
 	}
 
