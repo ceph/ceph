@@ -647,12 +647,6 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
   if (ret < 0)
     return ret;
 
-  ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.bucket_id, bl.c_str(), bl.length(), false, pattrs);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to store " << pi_buckets_rados << ":" << info.bucket.bucket_id << " ret=" << ret << dendl;
-    return ret;
-  }
-
   ldout(cct, 20) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
 }

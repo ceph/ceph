@@ -41,6 +41,7 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 
 int RGWGetObj_REST_S3::send_response(bufferlist& bl)
 {
+  string content_type_str;
   const char *content_type = NULL;
   int orig_ret = ret;
 
@@ -64,6 +65,28 @@ int RGWGetObj_REST_S3::send_response(bufferlist& bl)
         char *etag = bl.c_str();
         dump_etag(s, etag);
       }
+    }
+
+    if (s->args.has_response_modifier()) {
+      bool exists;
+      content_type_str = s->args.get("response-content-type", &exists);
+      if (exists)
+	content_type = content_type_str.c_str();
+      string val = s->args.get("response-content-language", &exists);
+      if (exists)
+        CGI_PRINTF(s, "Content-Language: %s\n", val.c_str());
+      val = s->args.get("response-expires", &exists);
+      if (exists)
+        CGI_PRINTF(s, "Expires: %s\n", val.c_str());
+      val = s->args.get("response-cache-control", &exists);
+      if (exists)
+        CGI_PRINTF(s, "Cache-Control: %s\n", val.c_str());
+      val = s->args.get("response-content-disposition", &exists);
+      if (exists)
+        CGI_PRINTF(s, "Content-Disposition: %s\n", val.c_str());
+      val = s->args.get("response-content-encoding", &exists);
+      if (exists)
+        CGI_PRINTF(s, "Content-Encoding: %s\n", val.c_str());
     }
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {

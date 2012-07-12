@@ -863,30 +863,15 @@ int main(int argc, char **argv)
   map<string, RGWSubUser>::iterator uiter;
   RGWUserInfo old_info = info;
 
-  if ((!bucket_name.empty()) || !bucket_id.empty()) {
-    if (!bucket_id.empty()) {
-      int ret = rgwstore->get_bucket_info(NULL, bucket_id, bucket_info);
-
-      if (ret < 0) {
-        cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
-        return ret;
-      }
-      bucket = bucket_info.bucket;
-      if ((!bucket_name.empty()) && bucket.name.compare(bucket_name.c_str()) != 0) {
-        cerr << "bucket name does not match bucket id (expected bucket name: " << bucket.name << ")" << std::endl;
-        return -EINVAL;
-      }
-    } else {
-      string bucket_name_str = bucket_name;
-      RGWBucketInfo bucket_info;
-      int r = rgwstore->get_bucket_info(NULL, bucket_name_str, bucket_info);
-      if (r < 0) {
-        cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
-        return r;
-      }
-      bucket = bucket_info.bucket;
-      bucket_id = bucket.bucket_id;
+  if (!bucket_name.empty()) {
+    string bucket_name_str = bucket_name;
+    RGWBucketInfo bucket_info;
+    int r = rgwstore->get_bucket_info(NULL, bucket_name_str, bucket_info);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
+      return r;
     }
+    bucket = bucket_info.bucket;
   }
 
   int err;
@@ -1325,8 +1310,8 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
-    if (bucket_name.empty() && bucket_id.empty() && user_id.empty()) {
-      cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
+    if (bucket_name.empty() && user_id.empty()) {
+      cerr << "either bucket or uid needs to be specified" << std::endl;
       return usage();
     }
     formatter->reset();
