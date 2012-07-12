@@ -98,10 +98,10 @@ For example::
 
 	"default_attributes" : {
 		"ceph": {
-			"monitor-secret": "AQBAMuJPINJgFhAAziXIrLvTvAz4PRo5IK/Log==",
+			"monitor-secret": "{replace-with-generated-secret}",
 			"config": {
-				"fsid": "ddca2b02-3ddf-42fb-ba52-0ee1982c6da0",
-				"mon_initial_members": "mon-host"
+				"fsid": "{replace-with-generated-uuid}",
+				"mon_initial_members": "{replace-with-monitor-hostname(s)}"
 			}
 		}
 	}
@@ -155,9 +155,8 @@ Then, add at least one of::
 	"role[ceph-cookbooks-mds]"
 	"role[ceph-cookbooks-radosgw]"
 
-If you add more than one role, separate them with a comma. The following
-example adds a node named `mon-host` to the `Ceph` environment and 
-runs the ``apt`` recipe followed by the roles ``ceph-mon`` and ``ceph-osd``:: 
+If you add more than one role, separate them with a comma. Replace the 
+``{hostname}`` setting of the ``name`` key to the host name for the node. 
 
 	{
   		"chef_environment": "Ceph",
