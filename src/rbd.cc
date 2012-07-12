@@ -1015,6 +1015,7 @@ int main(int argc, const char **argv)
   uint64_t size = 0;  // in bytes
   int order = 0;
   bool old_format = true;
+  uint64_t features = RBD_FEATURE_LAYERING;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
 
   std::string val;
@@ -1279,7 +1280,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_create(rbd, io_ctx, imgname, size, &order, old_format, 0);
+    r = do_create(rbd, io_ctx, imgname, size, &order, old_format, features);
     if (r < 0) {
       cerr << "create error: " << cpp_strerror(-r) << std::endl;
       exit(1);
@@ -1294,7 +1295,7 @@ int main(int argc, const char **argv)
     }
 
     r = do_clone(rbd, io_ctx, imgname, snapname, dest_io_ctx, destname,
-		 RBD_FEATURE_LAYERING, &order);
+		 features, &order);
     if (r < 0) {
       cerr << "clone error: " << cpp_strerror(-r) << std::endl;
       exit(1);
@@ -1424,7 +1425,7 @@ int main(int argc, const char **argv)
       exit(1);
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
-		  old_format, 0, size);
+		  old_format, features, size);
     if (r < 0) {
       cerr << "import failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
