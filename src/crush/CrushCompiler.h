@@ -36,7 +36,7 @@ class CrushCompiler {
 
   map<string, int> item_id;
   map<int, string> id_item;
-  map<int, float> item_weight;
+  map<int, unsigned> item_weight;
   map<string, int> type_id;
   map<string, int> rule_id;
 
