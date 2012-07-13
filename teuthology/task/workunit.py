@@ -123,6 +123,8 @@ def _run_tests(ctx, role, tests, env):
     secretfile = '/tmp/cephtest/data/{role}.secret'.format(role=role)
     teuthology.write_secret_file(remote, role, secretfile)
 
+    ceph_ref = ctx.summary.get('ceph-sha1', 'master')
+
     remote.run(
         logger=log.getChild(role),
         args=[
@@ -172,6 +174,7 @@ def _run_tests(ctx, role, tests, env):
                     run.Raw('&&'),
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
+                    run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
                     run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
                     run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
                     run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
