@@ -42,6 +42,8 @@ overrides:
     sha1: $CEPH_SHA1
     log-whitelist:
     - slow request
+  workunit:
+    sha1: $CEPH_SHA1
 EOF
 
 if [ "$flavor" = "gcov" ]; then
