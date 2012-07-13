@@ -146,7 +146,7 @@ The node configuration should appear in your text editor. Change the
 ``chef_environment`` value to ``Ceph`` (or whatever name you set for your
 Ceph environment). 
 
-In the ``run_list``, add ``"recipe[ceph-cookbooks::apt]",`` to all nodes as 
+In the ``run_list``, add ``"recipe[ceph::apt]",`` to all nodes as 
 the first setting, so that Chef can install or update the necessary packages. 
 Then, add at least one of:: 
 
