@@ -167,7 +167,7 @@ If you add more than one role, separate them with a comma. Replace the
     		]
   		},
  		 "run_list": [
-			"recipe[ceph-cookbooks::apt]",
+			"recipe[ceph::apt]",
 			"role[ceph-mon]",
 			"role[ceph-mds]"
   		]
