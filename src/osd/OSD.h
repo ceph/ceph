@@ -453,6 +453,7 @@ private:
     epoch_t epoch;      ///< most recent epoch we wanted this peer
   };
   Mutex heartbeat_lock;
+  map<int, int> debug_heartbeat_drops_remaining;
   Cond heartbeat_cond;
   bool heartbeat_stop;
   bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers

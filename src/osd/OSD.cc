@@ -1671,6 +1671,27 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   case MOSDPing::PING:
     {
+      if (g_conf->osd_debug_drop_ping_probability > 0) {
+	if (debug_heartbeat_drops_remaining.count(from)) {
+	  if (debug_heartbeat_drops_remaining[from] == 0) {
+	    debug_heartbeat_drops_remaining.erase(from);
+	  } else {
+	    debug_heartbeat_drops_remaining[from]--;
+	    dout(5) << "Dropping heartbeat from " << from
+		    << ", " << debug_heartbeat_drops_remaining[from]
+		    << " remaining to drop" << dendl;
+	    break;
+	  }
+	} else if (g_conf->osd_debug_drop_ping_probability >
+	           ((((double)(rand()%100))/100.0))) {
+	  debug_heartbeat_drops_remaining[from] =
+	    g_conf->osd_debug_drop_ping_duration;
+	  dout(5) << "Dropping heartbeat from " << from
+		  << ", " << debug_heartbeat_drops_remaining[from]
+		  << " remaining to drop" << dendl;
+	  break;
+	}
+      }
       Message *r = new MOSDPing(monc->get_fsid(),
 				locked ? osdmap->get_epoch():0, 
 				MOSDPing::PING_REPLY,
