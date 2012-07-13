@@ -617,15 +617,26 @@ def cluster(ctx, config):
                 fs = config.get('fs')
                 mkfs = ['mkfs.%s' % fs]
                 package = None
-                options = ['noatime']
+                options = []
+                fs_options = config.get('mkfs_options')
+                mnt_options = config.get('mount_options')
                 if fs == 'btrfs':
                     package = 'btrfs-tools'
-                    options.append('user_subvol_rm_allowed')
+                    if mnt_options is None:
+                        options = ['noatime','user_subvol_rm_allowed']
                 if fs == 'xfs':
                     package = 'xfsprogs'
-                    mkfs.append('-f')
+                if mnt_options is None:
+                    options = ['noatime']
+                if fs_options is None:
+                    mkfs = mkfs + ['-f','-i','size=2048']
                 if fs == 'ext4' or fs == 'ext3':
-                    options.append('user_xattr')
+                    if mnt_options is None:
+                        options = ['noatime','user_xattr']
+                if fs_options is not None:
+                    mkfs.extend(fs_options)
+                if mnt_options is not None:
+                    options.extend(mnt_options)
 
                 log.info('%s on %s on %s' % (mkfs, dev, remote))
                 if package is not None:
@@ -906,7 +917,9 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-            fs: btrfs
+            fs: xfs
+            mkfs_options: [-b,size=65536,-l,logdev=/dev/sdc1]
+            mount_options: [nobarrier, inode64]
 
     Note, this will cause the task to check the /scratch_devs file on each node
     for available devices.  If no such file is found, /dev/sdb will be used.
@@ -920,7 +933,7 @@ def task(ctx, config):
             mds.1: --tool=memcheck
             osd.1: [--tool=memcheck, --leak-check=no]
 
-    Those nodes which are using memcheck or helgrind will get
+    Those nodes which are using memcheck or valgrind will get
     checked for bad results.
 
     To adjust or modify config options, use::
@@ -1021,6 +1034,8 @@ def task(ctx, config):
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {}),
                 fs=config.get('fs', None),
+                mkfs_options=config.get('mkfs_options', None),
+                mount_options=config.get('mount_options',None),
                 block_journal=config.get('block_journal', None),
                 log_whitelist=config.get('log-whitelist', []),
                 )),
