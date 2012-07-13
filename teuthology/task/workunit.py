@@ -21,12 +21,14 @@ def task(ctx, config):
             clients:
               client.0: [direct_io, xattrs.sh]
               client.1: [snaps]
+            branch: foo
 
     You can also run a list of workunits on all clients:
         tasks:
         - ceph:
         - cfuse:
         - workunit:
+            tag: v0.47
             clients:
               all: [direct_io, xattrs.sh, snaps]
 
@@ -40,6 +42,7 @@ def task(ctx, config):
         - ceph:
         - cfuse:
         - workunit:
+            sha1: 9b28948635b17165d17c1cf83d4a870bd138ddf6
             clients:
               all: [snaps]
             env:
@@ -49,6 +52,17 @@ def task(ctx, config):
     assert isinstance(config, dict)
     assert isinstance(config.get('clients'), dict), \
         'configuration must contain a dictionary of clients'
+
+    refspec = config.get('branch')
+    if refspec is None:
+        refspec = config.get('sha1')
+    if refspec is None:
+        refspec = config.get('tag')
+    if refspec is None:
+        refspec = 'HEAD'
+
+    log.info('Pulling workunits from ref %s', refspec)
+
     if config.get('env') is not None:
         assert isinstance(config['env'], dict), 'env must be a dictionary'
     clients = config['clients']
@@ -64,13 +78,13 @@ def task(ctx, config):
     with parallel() as p:
         for role, tests in clients.iteritems():
             if role != "all":
-                p.spawn(_run_tests, ctx, role, tests, config.get('env'))
+                p.spawn(_run_tests, ctx, refspec, role, tests, config.get('env'))
             else:
                 all_spec = True
 
     if all_spec:
         all_tasks = clients["all"]
-        _spawn_on_all_clients(ctx, all_tasks, config.get('env'))
+        _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'))
 
 def _make_scratch_dir(ctx, role):
     PREFIX = 'client.'
@@ -97,7 +111,7 @@ def _make_scratch_dir(ctx, role):
             ],
         )
 
-def _spawn_on_all_clients(ctx, tests, env):
+def _spawn_on_all_clients(ctx, refspec, tests, env):
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
     for client in client_generator:
@@ -108,9 +122,9 @@ def _spawn_on_all_clients(ctx, tests, env):
     for unit in tests:
         with parallel() as p:
             for remote, role in client_remotes:
-                p.spawn(_run_tests, ctx, role, [unit], env)
+                p.spawn(_run_tests, ctx, refspec, role, [unit], env)
 
-def _run_tests(ctx, role, tests, env):
+def _run_tests(ctx, refspec, role, tests, env):
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
@@ -133,8 +147,7 @@ def _run_tests(ctx, role, tests, env):
             'wget',
             '-q',
             '-O-',
-            # TODO make branch/tag/sha1 used configurable
-            'https://github.com/ceph/ceph/tarball/HEAD',
+            'https://github.com/ceph/ceph/tarball/%s' % refspec,
             run.Raw('|'),
             'tar',
             '-C', srcdir,
