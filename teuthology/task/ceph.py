@@ -615,29 +615,24 @@ def cluster(ctx, config):
             if roles_to_devs.get(id_):
                 dev = roles_to_devs[id_]
                 fs = config.get('fs')
-                mkfs = ['mkfs.%s' % fs]
                 package = None
-                options = []
-                fs_options = config.get('mkfs_options')
-                mnt_options = config.get('mount_options')
+                mkfs_options = config.get('mkfs_options')
+                mount_options = config.get('mount_options')
                 if fs == 'btrfs':
                     package = 'btrfs-tools'
-                    if mnt_options is None:
-                        options = ['noatime','user_subvol_rm_allowed']
+                    if mount_options is None:
+                        mount_options = ['noatime','user_subvol_rm_allowed']
                 if fs == 'xfs':
                     package = 'xfsprogs'
-                if mnt_options is None:
-                    options = ['noatime']
-                if fs_options is None:
-                    mkfs = mkfs + ['-f','-i','size=2048']
+                    if mount_options is None:
+                        mount_options = ['noatime']
+                    if mkfs_options is None:
+                        mkfs_options = ['-f', '-i', 'size=2048']
                 if fs == 'ext4' or fs == 'ext3':
-                    if mnt_options is None:
-                        options = ['noatime','user_xattr']
-                if fs_options is not None:
-                    mkfs.extend(fs_options)
-                if mnt_options is not None:
-                    options.extend(mnt_options)
+                    if mount_options is None:
+                        mount_options = ['noatime','user_xattr']
 
+                mkfs = ['mkfs.%s' % fs] + mkfs_options
                 log.info('%s on %s on %s' % (mkfs, dev, remote))
                 if package is not None:
                     remote.run(
@@ -647,13 +642,14 @@ def cluster(ctx, config):
                             ]
                         )
                 remote.run(args=['sudo'] + mkfs + [dev])
-                log.info('mount %s on %s -o %s' % (dev, remote, options))
+                log.info('mount %s on %s -o %s' % (dev, remote,
+                                                   ','.join(mount_options)))
                 remote.run(
                     args=[
                         'sudo',
                         'mount',
                         '-t', fs,
-                        '-o', ','.join(options),
+                        '-o', ','.join(mount_options),
                         dev,
                         os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
                         ]
