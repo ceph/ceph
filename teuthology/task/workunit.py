@@ -53,6 +53,9 @@ def task(ctx, config):
     assert isinstance(config.get('clients'), dict), \
         'configuration must contain a dictionary of clients'
 
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('workunit', {}))
+
     refspec = config.get('branch')
     if refspec is None:
         refspec = config.get('sha1')
