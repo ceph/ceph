@@ -189,29 +189,15 @@ void PGMap::apply_incremental(const Incremental& inc)
     if (t == osd_stat.end()) {
       hash_map<int,osd_stat_t>::value_type v(osd, new_stats);
       osd_stat.insert(v);
-    }
-    else {
+    } else {
       stat_osd_sub(t->second);
       t->second = new_stats;
     }
-    
+
     stat_osd_add(new_stats);
     
-    //update the full/nearful_osd sets
-    int from = p->first;
-    float ratio = ((float)p->second.kb_used) / (float) p->second.kb;
-    if ( ratio > full_ratio ) {
-      full_osds.insert(from);
-      //sets don't double-insert so this might be a (very expensive) null-op
-    }
-    else if ( ratio > nearfull_ratio ) {
-      nearfull_osds.insert(from);
-      full_osds.erase(from);
-    }
-    else {//it's not full or near-full
-      full_osds.erase(from);
-      nearfull_osds.erase(from);
-    }
+    // adjust [near]full status
+    register_nearfull_status(osd, new_stats);
   }
   for (set<pg_t>::const_iterator p = inc.pg_remove.begin();
        p != inc.pg_remove.end();
@@ -247,11 +233,26 @@ void PGMap::redo_full_sets()
   for (hash_map<int, osd_stat_t>::iterator i = osd_stat.begin();
        i != osd_stat.end();
        ++i) {
-    float ratio = ((float)i->second.kb_used) / ((float)i->second.kb);
-    if (full_ratio > 0 && ratio > full_ratio)
-      full_osds.insert(i->first);
-    else if (nearfull_ratio > 0 && ratio > nearfull_ratio)
-      nearfull_osds.insert(i->first);
+    register_nearfull_status(i->first, i->second);
+  }
+}
+
+void PGMap::register_nearfull_status(int osd, const osd_stat_t& s)
+{
+  float ratio = ((float)s.kb_used) / ((float)s.kb);
+
+  if (full_ratio > 0 && ratio > full_ratio) {
+    // full
+    full_osds.insert(osd);
+    nearfull_osds.erase(osd);
+  } else if (nearfull_ratio > 0 && ratio > nearfull_ratio) {
+    // nearfull
+    full_osds.erase(osd);
+    nearfull_osds.insert(osd);
+  } else {
+    // ok
+    full_osds.erase(osd);
+    nearfull_osds.erase(osd);
   }
 }
 
