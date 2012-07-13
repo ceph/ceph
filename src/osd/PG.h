@@ -697,6 +697,15 @@ public:
 		       pg_missing_t& omissing, int from);
   bool proc_replica_info(int from, const pg_info_t &info);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
+
+  /**
+   * Merges authoratative log/info into current log/info/store
+   *
+   * @param [in,out] t used to delete obsolete objects
+   * @param [in,out] oinfo recieved authoritative info
+   * @param [in,out] olog recieved authoritative log
+   * @param [in] from peer which sent the information
+   */
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   bool search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
