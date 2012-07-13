@@ -33,9 +33,11 @@ struct CompatSet {
     uint64_t mask;
     map <uint64_t,string> names;
 
-    FeatureSet() : mask(0), names() {}
+    FeatureSet() : mask(1), names() {}
     void insert(Feature f) {
-      mask |= f.id;
+      assert(f.id > 0);
+      assert(f.id < 63);
+      mask |= (1<<f.id);
       names[f.id] = f.name;
     }
 
@@ -45,18 +47,42 @@ struct CompatSet {
     void remove(uint64_t f) {
       if (names.count(f)) {
 	names.erase(f);
-	mask &= ~f;
+	mask &= ~(1<<f);
       }
     }      
 
     void encode(bufferlist& bl) const {
-      ::encode(mask, bl);
+      /* See below, mask always has the lowest bit set in memory, but
+       * unset in the encoding */
+      ::encode(mask & (~(uint64_t)1), bl);
       ::encode(names, bl);
     }
 
     void decode(bufferlist::iterator& bl) {
       ::decode(mask, bl);
       ::decode(names, bl);
+      /**
+       * Previously, there was a bug where insert did
+       * mask |= f.id rather than mask |= (1 << f.id).
+       * In FeatureSets from those version, mask always
+       * has the lowest bit set.  Since then, masks always
+       * have the lowest bit unset.
+       *
+       * When we encounter such a FeatureSet, we have to
+       * reconstruct the mask from the names map.
+       */
+      if (mask & 1) {
+	mask = 1;
+	map<uint64_t, string> temp_names;
+	temp_names.swap(names);
+	for (map<uint64_t, string>::iterator i = temp_names.begin();
+	     i != temp_names.end();
+	     ++i) {
+	  insert(Feature(i->first, i->second));
+	}
+      } else {
+	mask |= 1;
+      }
     }
 
     void dump(Formatter *f) const {
