@@ -40,8 +40,8 @@ def normalize_config(ctx, config):
     it is applied to all nodes.
     """
     if config is None or \
-            len(config) == 1 and config.keys() in [['tag'], ['branch'],
-                                                   ['sha1'], ['kdb']]:
+            len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb'],
+                       config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
             config = {'branch': 'master'}
