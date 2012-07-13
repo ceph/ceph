@@ -403,6 +403,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       sb.cluster_fsid = fsid;
       sb.osd_fsid = store->get_fsid();
       sb.whoami = whoami;
+      sb.compat_features = get_osd_compat_set();
 
       // benchmark?
       if (g_conf->osd_auto_weight) {
@@ -793,6 +794,17 @@ int OSD::init()
     store->umount();
     delete store;
     return -EINVAL;
+  }
+  if (osd_compat.compare(superblock.compat_features) != 0) {
+    // We need to persist the new compat_set before we
+    // do anything else
+    dout(5) << "Upgrading superblock compat_set" << dendl;
+    superblock.compat_features = osd_compat;
+    ObjectStore::Transaction t;
+    write_superblock(t);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      return r;
   }
   service.publish_superblock(superblock);
 
