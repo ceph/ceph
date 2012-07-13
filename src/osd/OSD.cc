@@ -1703,6 +1703,12 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	if (locked && is_active())
 	  _share_map_outgoing(service.get_osdmap()->get_cluster_inst(from));
       }
+
+      // Cancel false reports
+      if (failure_queue.count(from))
+	failure_queue.erase(from);
+      if (failure_pending.count(from))
+	send_still_alive(failure_pending[from]);
     }
     break;
 
