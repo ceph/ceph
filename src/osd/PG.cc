@@ -483,6 +483,11 @@ void PG::merge_log(ObjectStore::Transaction& t,
     changed = true;
   }
 
+  if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
+    oinfo.stats.reported = info.stats.reported;
+  if (info.last_backfill.is_max())
+    info.stats = oinfo.stats;
+
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
     rewind_divergent_log(t, olog.head);
@@ -548,10 +553,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
     log.index();   
 
     info.last_update = log.head = olog.head;
-    if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
-      oinfo.stats.reported = info.stats.reported;
-    if (info.last_backfill.is_max())
-      info.stats = oinfo.stats;
 
     // process divergent items
     if (!divergent.empty()) {
