@@ -5,6 +5,7 @@
 #include "common/config.h"
 #include "msg/SimpleMessenger.h"
 
+#include <arpa/inet.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
