@@ -4984,26 +4984,18 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
-  if (pg) {
-    if (m->get_map_epoch() < pg->info.history.same_primary_since) {
-      dout(7) << *pg << " changed after " << m->get_map_epoch() << ", dropping" << dendl;
-      return;
-    } else {
-      dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
-      clog.warn() << m->get_source_inst() << " misdirected "
-          << m->get_reqid() << " " << pg->info.pgid << " to osd." << whoami
-          << " not " << pg->acting
-          << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
-          << "\n";
-    }
-  } else {
-    dout(7) << "got misdirected op from " << m->get_source_inst()
-            << " for pgid " << m->get_pg() << dendl;
-    clog.warn() << m->get_source_inst() << " misdirected "
-                << m->get_reqid() << " pg " << m->get_pg()
-                << " to osd." << whoami
-                << " in e" << m->get_map_epoch() << "\n";
+
+  if (m->get_map_epoch() < pg->info.history.same_primary_since) {
+    dout(7) << *pg << " changed after " << m->get_map_epoch() << ", dropping" << dendl;
+    return;
   }
+
+  dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
+  clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
+	      << " pg " << m->get_pg()
+	      << " to osd." << whoami
+	      << " not " << pg->acting
+	      << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch() << "\n";
   reply_op_error(op, -ENXIO);
 }
 
@@ -5106,7 +5098,15 @@ void OSD::handle_op(OpRequestRef op)
       dout(7) << "dropping request; client will resend when they get new map" << dendl;
     } else {
       dout(7) << "we are invalid target" << dendl;
-      service.handle_misdirected_op(NULL, op);
+      clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
+		  << " pg " << m->get_pg()
+		  << " to osd." << whoami
+		  << " in e" << osdmap->get_epoch()
+		  << ", client e" << m->get_map_epoch()
+		  << " pg " << pgid
+		  << " features " << m->get_connection()->get_features()
+		  << "\n";
+      service.reply_op_error(op, -ENXIO);
     }
     return;
   } else if (!op_has_sufficient_caps(pg, m)) {
