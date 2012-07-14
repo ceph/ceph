@@ -5074,7 +5074,7 @@ void OSD::handle_op(OpRequestRef op)
   if (!pg) {
     dout(7) << "hit non-existent pg " << pgid << dendl;
 
-    if (osdmap->get_pg_role(pgid, whoami) >= 0) {
+    if (osdmap->get_pg_acting_role(pgid, whoami) >= 0) {
       dout(7) << "we are valid target for op, waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
       op->mark_delayed();
@@ -5094,7 +5094,7 @@ void OSD::handle_op(OpRequestRef op)
 	send_map->have_pg_pool(pgid.pool()))
       pgid = send_map->raw_pg_to_pg(pgid);
     
-    if (send_map->get_pg_role(m->get_pg(), whoami) >= 0) {
+    if (send_map->get_pg_acting_role(m->get_pg(), whoami) >= 0) {
       dout(7) << "dropping request; client will resend when they get new map" << dendl;
     } else {
       dout(7) << "we are invalid target" << dendl;
