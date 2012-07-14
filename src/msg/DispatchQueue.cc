@@ -138,7 +138,7 @@ void IncomingQueue::restart_queue()
  */
 
 #undef dout_prefix
-#define dout_prefix *_dout << "dispatchqueue."
+#define dout_prefix *_dout << "-- " << msgr->get_myaddr() << " "
 
 
 void DispatchQueue::local_delivery(Message *m, int priority)
