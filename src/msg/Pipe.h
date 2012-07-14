@@ -238,6 +238,12 @@ class DispatchQueue;
       if (sd >= 0)
         ::shutdown(sd, SHUT_RDWR);
     }
+
+    int tcp_read(char *buf, int len);
+    int tcp_read_wait();
+    int tcp_read_nonblocking(char *buf, int len);
+    int tcp_write(const char *buf, int len);
+
   };
 
 
