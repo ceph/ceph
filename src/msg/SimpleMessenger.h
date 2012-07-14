@@ -38,6 +38,7 @@ using namespace __gnu_cxx;
 #include "DispatchQueue.h"
 
 #include "Pipe.h"
+#include "Accepter.h"
 
 /*
  * This class handles transmission and reception of messages. Generally
@@ -363,29 +364,19 @@ private:
    * @defgroup Inner classes
    * @{
    */
-  /**
-   * If the SimpleMessenger binds to a specific address, the Accepter runs
-   * and listens for incoming connections.
-   */
-  class Accepter : public Thread {
-  public:
-    SimpleMessenger *msgr;
-    bool done;
-    int listen_sd;
-    
-    Accepter(SimpleMessenger *r) : msgr(r), done(false), listen_sd(-1) {}
-    
-    void *entry();
-    void stop();
-    int bind(entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
-    int rebind(int avoid_port);
-    int start();
-  } accepter;
-
-
 
 public:
+  Accepter accepter;
   DispatchQueue dispatch_queue;
+
+
+  /**
+   * Register a new pipe for accept
+   *
+   * @param sd socket
+   */
+  Pipe *add_accept_pipe(int sd);
+
 private:
 
   /**
@@ -409,6 +400,7 @@ private:
    * @defgroup Utility functions
    * @{
    */
+
   /**
    * Create a Pipe associated with the given entity (of the given type).
    * Initiate the connection. (This function returning does not guarantee
@@ -466,6 +458,16 @@ private:
   /// true, specifying we haven't learned our addr; set false when we find it.
   // maybe this should be protected by the lock?
   bool need_addr;
+
+public:
+  bool get_need_addr() const { return need_addr; }
+  void set_need_addr(bool b) { need_addr = b; }
+
+  uint64_t get_nonce() const {
+    return nonce;
+  }
+
+private:
   /**
    *  false; set to true if the SimpleMessenger bound to a specific address;
    *  and set false again by Accepter::stop(). This isn't lock-protected
