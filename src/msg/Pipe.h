@@ -75,6 +75,22 @@ class DispatchQueue;
       STATE_WAIT       // just wait for racing connection
     };
 
+    static const char *get_state_name(int s) {
+      switch (s) {
+      case STATE_ACCEPTING: return "accepting";
+      case STATE_CONNECTING: return "connecting";
+      case STATE_OPEN: return "open";
+      case STATE_STANDBY: return "standby";
+      case STATE_CLOSED: return "closed";
+      case STATE_CLOSING: return "closing";
+      case STATE_WAIT: return "wait";
+      default: return "UNKNOWN";
+      }
+    }
+    const char *get_state_name() {
+      return get_state_name(state);
+    }
+
     int sd;
     int peer_type;
     entity_addr_t peer_addr;
