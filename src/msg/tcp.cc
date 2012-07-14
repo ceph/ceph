@@ -29,7 +29,7 @@ int tcp_read(CephContext *cct, int sd, char *buf, int len, int timeout)
 
     if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
       if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-	lgeneric_dout(cct, 0) << "injecting socket failure" << dendl;
+	lgeneric_dout(cct, 0) << "injecting socket failure sd " << sd << dendl;
 	::shutdown(sd, SHUT_RDWR);
       }
     }
