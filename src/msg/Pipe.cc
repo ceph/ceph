@@ -320,25 +320,12 @@ int Pipe::accept()
 	existing->was_session_reset();
 	goto replace;
       }
-      /*if (lossy_rx) {
-	if (existing->state == STATE_STANDBY) {
-	  ldout(msgr->cct,0) << "accept incoming lossy connection, kicking outgoing lossless "
-		    << existing << dendl;
-	  existing->state = STATE_CONNECTING;
-	  existing->cond.Signal();
-	} else {
-	  ldout(msgr->cct,0) << "accept incoming lossy connection, our lossless " << existing
-		    << " has state " << existing->state << ", doing nothing" << dendl;
-	}
-	existing->lock.Unlock();
-	goto fail;
-	}*/
 
       ldout(msgr->cct,0) << "accept connect_seq " << connect.connect_seq
-		<< " vs existing " << existing->connect_seq
-		<< " state " << existing->state << dendl;
+			 << " vs existing " << existing->connect_seq
+			 << " state " << existing->get_state_name() << dendl;
 
-      if (connect.connect_seq == 0) {
+      if (connect.connect_seq == 0 && existing->connect_seq > 0) {
 	ldout(msgr->cct,0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	goto replace;
@@ -358,8 +345,10 @@ int Pipe::accept()
 	// we need to resolve here.
 	if (existing->state == STATE_OPEN ||
 	    existing->state == STATE_STANDBY) {
-	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-			      << " == " << connect.connect_seq << ", OPEN|STANDBY, RETRY_SESSION" << dendl;
+	  ldout(msgr->cct,10) << "accept connection race, existing " << existing
+			      << ".cseq " << existing->connect_seq
+			      << " == " << connect.connect_seq
+			      << ", OPEN|STANDBY, RETRY_SESSION" << dendl;
 	  goto retry_session;
 	}
 
@@ -371,7 +360,8 @@ int Pipe::accept()
 		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
 	  if (!(existing->state == STATE_CONNECTING ||
 		existing->state == STATE_WAIT))
-	    lderr(msgr->cct) << "accept race bad state, would replace, existing=" << existing->state
+	    lderr(msgr->cct) << "accept race bad state, would replace, existing="
+			     << existing->get_state_name()
 			     << " " << existing << ".cseq=" << existing->connect_seq
 			     << " == " << connect.connect_seq
 			     << dendl;
@@ -384,7 +374,8 @@ int Pipe::accept()
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > msgr->my_inst.addr);
 	  if (!(existing->state == STATE_CONNECTING))
-	    lderr(msgr->cct) << "accept race bad state, would send wait, existing=" << existing->state
+	    lderr(msgr->cct) << "accept race bad state, would send wait, existing="
+			     << existing->get_state_name()
 			     << " " << existing << ".cseq=" << existing->connect_seq
 			     << " == " << connect.connect_seq
 			     << dendl;
@@ -545,7 +536,7 @@ int Pipe::accept()
 
   pipe_lock.Lock();
   if (state != STATE_CLOSED) {
-    ldout(msgr->cct,10) << "accept starting writer, " << "state=" << state << dendl;
+    ldout(msgr->cct,10) << "accept starting writer, state " << get_state_name() << dendl;
     start_writer();
   }
   ldout(msgr->cct,20) << "accept done" << dendl;
@@ -893,7 +884,8 @@ int Pipe::connect()
   if (state == STATE_CONNECTING)
     fault(true);
   else
-    ldout(msgr->cct,3) << "connect fault, but state != connecting, stopping" << dendl;
+    ldout(msgr->cct,3) << "connect fault, but state = " << get_state_name()
+		       << " != connecting, stopping" << dendl;
 
  stop_locked:
   delete authorizer;
@@ -1207,7 +1199,8 @@ void Pipe::writer()
 
   pipe_lock.Lock();
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
-    ldout(msgr->cct,10) << "writer: state = " << state << " policy.server=" << policy.server << dendl;
+    ldout(msgr->cct,10) << "writer: state = " << get_state_name()
+			<< " policy.server=" << policy.server << dendl;
 
     // standby?
     if (is_queued() && state == STATE_STANDBY && !policy.server) {
