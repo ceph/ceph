@@ -141,12 +141,20 @@ public:
    */
   const entity_inst_t& get_myinst() { return my_inst; }
   /**
+   * set messenger's instance
+   */
+  void set_myinst(entity_inst_t i) { my_inst = i; }
+  /**
    * Retrieve the Messenger's address.
    *
    * @return A const reference to the address this Messenger
    * currently believes to be its own.
    */
   const entity_addr_t& get_myaddr() { return my_inst.addr; }
+  /**
+   * set messenger's address
+   */
+  void set_myaddr(entity_addr_t a) { my_inst.addr = a; }
   /**
    * Retrieve the Messenger's name.
    *
