@@ -22,7 +22,7 @@ MON_ADDR=""
 
 conf="ceph.conf"
 
-keyring_fn="keyring"
+keyring_fn="$PWD/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
@@ -271,7 +271,7 @@ EOF
 			cat <<EOF >> $conf
 
 [client]
-        keyring = keyring
+        keyring = $keyring_fn
 
 [mds]
 $DAEMONOPTS
