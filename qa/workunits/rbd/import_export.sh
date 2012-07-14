@@ -13,6 +13,8 @@ rbd rm testimg || true
 rbd import $RBD_CREATE_ARGS /tmp/img testimg
 rbd export testimg /tmp/img2
 
+rbd rm testimg
+
 cmp /tmp/img /tmp/img2
 
 rm /tmp/img /tmp/img2
