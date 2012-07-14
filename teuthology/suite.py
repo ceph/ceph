@@ -60,6 +60,12 @@ combination, and will override anything in the suite.
         help='how many seconds to wait for jobs to finish before emailing results',
         )
     parser.add_argument(
+        '-n', '--num',
+        default=1,
+        type=int,
+        help='number of times to run/queue each job'
+        )
+    parser.add_argument(
         'config',
         metavar='CONFFILE',
         nargs='*',
@@ -80,6 +86,7 @@ combination, and will override anything in the suite.
     base_arg = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
         '--name', args.name,
+        '--num', str(args.num),
         ]
     if args.verbose:
         base_arg.append('-v')

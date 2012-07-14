@@ -217,6 +217,12 @@ def schedule():
         help='list of jobs to remove from the queue',
         )
     parser.add_argument(
+        '-n', '--num',
+        default=1,
+        type=int,
+        help='number of times to run/queue the job'
+        )
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         default=False,
@@ -260,5 +266,8 @@ def schedule():
         job_config['results_timeout'] = ctx.timeout
 
     job = yaml.safe_dump(job_config)
-    jid = beanstalk.put(job, ttr=60*60*24)
-    print 'Job scheduled with ID {jid}'.format(jid=jid)
+    num = ctx.num
+    while num > 0:
+        jid = beanstalk.put(job, ttr=60*60*24)
+        print 'Job scheduled with ID {jid}'.format(jid=jid)
+        num -= 1
