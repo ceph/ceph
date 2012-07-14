@@ -338,40 +338,44 @@ int Pipe::accept()
 		<< " vs existing " << existing->connect_seq
 		<< " state " << existing->state << dendl;
 
+      if (connect.connect_seq == 0) {
+	ldout(msgr->cct,0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
+	existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
+	goto replace;
+      }
+
       if (connect.connect_seq < existing->connect_seq) {
-	if (connect.connect_seq == 0) {
-	  ldout(msgr->cct,0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
-	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
-	  goto replace;
-	} else {
-	  // old attempt, or we sent READY but they didn't get it.
-	  ldout(msgr->cct,10) << "accept existing " << existing << ".cseq " << existing->connect_seq
-		   << " > " << connect.connect_seq << ", RETRY_SESSION" << dendl;
-	  reply.tag = CEPH_MSGR_TAG_RETRY_SESSION;
-	  reply.connect_seq = existing->connect_seq;  // so we can send it below..
-	  existing->pipe_lock.Unlock();
-	  msgr->lock.Unlock();
-	  goto reply;
-	}
+	// old attempt, or we sent READY but they didn't get it.
+	ldout(msgr->cct,10) << "accept existing " << existing << ".cseq " << existing->connect_seq
+			    << " > " << connect.connect_seq << ", RETRY_SESSION" << dendl;
+	goto retry_session;
       }
 
       if (connect.connect_seq == existing->connect_seq) {
+	// if the existing connection successfully opened, and/or
+	// subsequently went to standby, then the peer should bump
+	// their connect_seq and retry: this is not a connection race
+	// we need to resolve here.
+	if (existing->state == STATE_OPEN ||
+	    existing->state == STATE_STANDBY) {
+	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
+			      << " == " << connect.connect_seq << ", OPEN|STANDBY, RETRY_SESSION" << dendl;
+	  goto retry_session;
+	}
+
 	// connection race?
 	if (peer_addr < msgr->my_inst.addr ||
-	    existing->policy.server ||
-	    existing->state == STATE_STANDBY) {
+	    existing->policy.server) {
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << connect.connect_seq << ", or STANDBY, or we are server, replacing my attempt" << dendl;
+		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
 	  if (!(existing->state == STATE_CONNECTING ||
-		existing->state == STATE_STANDBY ||
 		existing->state == STATE_WAIT))
 	    lderr(msgr->cct) << "accept race bad state, would replace, existing=" << existing->state
 			     << " " << existing << ".cseq=" << existing->connect_seq
 			     << " == " << connect.connect_seq
 			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
-		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
 	  goto replace;
 	} else {
@@ -379,14 +383,12 @@ int Pipe::accept()
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > msgr->my_inst.addr);
-	  if (!(existing->state == STATE_CONNECTING ||
-		existing->state == STATE_OPEN))
+	  if (!(existing->state == STATE_CONNECTING))
 	    lderr(msgr->cct) << "accept race bad state, would send wait, existing=" << existing->state
 			     << " " << existing << ".cseq=" << existing->connect_seq
 			     << " == " << connect.connect_seq
 			     << dendl;
-	  assert(existing->state == STATE_CONNECTING ||
-		 existing->state == STATE_OPEN);
+	  assert(existing->state == STATE_CONNECTING);
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->pipe_lock.Unlock();
 	  msgr->lock.Unlock();
@@ -423,7 +425,14 @@ int Pipe::accept()
       existing = NULL;
       goto open;
     }
-    assert(0);    
+    assert(0);
+
+  retry_session:
+    reply.tag = CEPH_MSGR_TAG_RETRY_SESSION;
+    reply.connect_seq = existing->connect_seq + 1;
+    existing->pipe_lock.Unlock();
+    msgr->lock.Unlock();
+    goto reply;    
 
   reply:
     reply.features = ((uint64_t)connect.features & policy.features_supported) | policy.features_required;
