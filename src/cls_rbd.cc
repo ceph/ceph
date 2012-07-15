@@ -731,26 +731,20 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   cls_rbd_parent parent;
   r = require_feature(hctx, RBD_FEATURE_LAYERING);
-  if (r < 0) {
-    ::encode(parent.pool, *out);
-    ::encode(parent.id, *out);
-    ::encode(parent.snapid, *out);
-    ::encode(parent.overlap, *out);
-    return 0;
-  }
-
-  if (snap_id == CEPH_NOSNAP) {
-    r = read_key(hctx, "parent", &parent);
-    if (r < 0 && r != -ENOENT)
-      return r;
-  } else {
-    cls_rbd_snap snap;
-    string snapshot_key;
-    key_from_snap_id(snap_id, &snapshot_key);
-    r = read_key(hctx, snapshot_key, &snap);
-    if (r < 0 && r != -ENOENT)
-      return r;
-    parent = snap.parent;
+  if (r == 0) {
+    if (snap_id == CEPH_NOSNAP) {
+      r = read_key(hctx, "parent", &parent);
+      if (r < 0 && r != -ENOENT)
+	return r;
+    } else {
+      cls_rbd_snap snap;
+      string snapshot_key;
+      key_from_snap_id(snap_id, &snapshot_key);
+      r = read_key(hctx, snapshot_key, &snap);
+      if (r < 0 && r != -ENOENT)
+	return r;
+      parent = snap.parent;
+    }
   }
 
   ::encode(parent.pool, *out);
