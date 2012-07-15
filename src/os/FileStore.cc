@@ -64,6 +64,7 @@
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
+#include "common/fd.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
 #include "LevelDBStore.h"
@@ -2901,6 +2902,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	f.flush(*_dout);
 	*_dout << dendl;
 	assert(0 == "unexpected error");
+
+	if (r == -EMFILE) {
+	  dump_open_fds(g_ceph_context);
+	}
       }
     }
 
