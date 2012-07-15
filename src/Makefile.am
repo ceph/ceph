@@ -1031,6 +1031,7 @@ libcommon_files = \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
 	common/armor.c \
+	common/fd.cc \
 	common/xattr.c \
 	common/safe_io.c \
 	common/snap_types.cc \
@@ -1245,6 +1246,7 @@ noinst_HEADERS = \
 	common/debug.h\
 	common/dout.h\
 	common/escape.h\
+	common/fd.h\
 	common/version.h\
 	common/hex.h\
 	common/entity_name.h\
