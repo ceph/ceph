@@ -4920,6 +4920,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
     // rewind divergent log entries
     pg->rewind_divergent_log(*context< RecoveryMachine >().get_cur_transaction(),
 			     infoevt.info.last_update);
+    pg->info.stats = infoevt.info.stats;
   }
   
   assert(infoevt.info.last_update == pg->info.last_update);
