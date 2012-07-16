@@ -218,6 +218,10 @@ void PGMap::apply_incremental(const Incremental& inc)
       stat_osd_sub(t->second);
       osd_stat.erase(t);
     }
+
+    // remove these old osds from full/nearfull set(s), too
+    nearfull_osds.erase(*p);
+    full_osds.erase(*p);
   }
   
   if (inc.osdmap_epoch)
