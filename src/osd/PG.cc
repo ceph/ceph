@@ -4452,7 +4452,11 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
+    pg->osd->unreg_last_pg_scrub(pg->info.pgid,
+				 pg->info.history.last_scrub_stamp);
     pg->info = msg->info;
+    pg->osd->reg_last_pg_scrub(pg->info.pgid,
+			       pg->info.history.last_scrub_stamp);
     pg->log.claim_log(msg->log);
     pg->missing.clear();
   } else {
