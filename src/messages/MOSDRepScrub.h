@@ -24,22 +24,38 @@
 
 struct MOSDRepScrub : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
   pg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
   eversion_t scrub_to;   // last_update_applied when message sent
   epoch_t map_epoch;
+  bool chunky;           // true for chunky scrubs
+  hobject_t start;       // lower bound of scrub, inclusive
+  hobject_t end;         // upper bound of scrub, exclusive
 
-  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION) { }
+  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
 	       epoch_t map_epoch)
-    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION),
+    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_from(scrub_from),
       scrub_to(scrub_to),
-      map_epoch(map_epoch) { }
-  
+      map_epoch(map_epoch),
+      chunky(false) { }
+
+  MOSDRepScrub(pg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
+               hobject_t start, hobject_t end)
+    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+      pgid(pgid),
+      scrub_to(scrub_to),
+      map_epoch(map_epoch),
+      chunky(true),
+      start(start),
+      end(end) { }
+
+
 private:
   ~MOSDRepScrub() {}
 
@@ -48,7 +64,9 @@ public:
   void print(ostream& out) const {
     out << "replica scrub(pg: ";
     out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
-	<< "epoch:" << map_epoch;
+        << ",epoch:" << map_epoch << ",start:" << start << ",end:" << end
+        << ",chunky:" << chunky
+        << ",version:" << header.version;
     out << ")";
   }
 
@@ -57,6 +75,9 @@ public:
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
+    ::encode(chunky, payload);
+    ::encode(start, payload);
+    ::encode(end, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -64,6 +85,14 @@ public:
     ::decode(scrub_from, p);
     ::decode(scrub_to, p);
     ::decode(map_epoch, p);
+
+    if (header.version >= 3) {
+      ::decode(chunky, p);
+      ::decode(start, p);
+      ::decode(end, p);
+    } else { // v2 scrub: non-chunky
+      chunky = false;
+    }
   }
 };
 
