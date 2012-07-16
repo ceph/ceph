@@ -785,6 +785,43 @@ public:
   ScrubMap primary_scrubmap;
   MOSDRepScrub *active_rep_scrub;
 
+  bool scrub_is_chunky;
+
+  hobject_t scrub_start;
+  hobject_t scrub_end;
+  eversion_t scrub_subset_last_update;
+  int scrub_errors;
+  int scrub_fixed;
+
+  int active_pushes;
+
+  enum ScrubState {
+    SCRUB_INACTIVE,
+    SCRUB_NEW_CHUNK,
+    SCRUB_WAIT_PUSHES,
+    SCRUB_WAIT_LAST_UPDATE,
+    SCRUB_BUILD_MAP,
+    SCRUB_WAIT_REPLICAS,
+    SCRUB_COMPARE_MAPS,
+    SCRUB_FINISH,
+  } scrub_state;
+
+  static const char *scrub_string(const PG::ScrubState& state) {
+    const char *ret = NULL;
+    switch( state )
+    {
+      case SCRUB_INACTIVE: ret = "SCRUB_INACTIVE"; break;
+      case SCRUB_NEW_CHUNK: ret = "SCRUB_NEW_CHUNK"; break;
+      case SCRUB_WAIT_PUSHES: ret = "SCRUB_WAIT_PUSHES"; break;
+      case SCRUB_WAIT_LAST_UPDATE: ret = "SCRUB_WAIT_LAST_UPDATE"; break;
+      case SCRUB_BUILD_MAP: ret = "SCRUB_BUILD_MAP"; break;
+      case SCRUB_WAIT_REPLICAS: ret = "SCRUB_WAIT_REPLICAS"; break;
+      case SCRUB_COMPARE_MAPS: ret = "SCRUB_COMPARE_MAPS"; break;
+      case SCRUB_FINISH: ret = "SCRUB_FINISH"; break;
+    }
+    return ret;
+  }
+
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
 			      ScrubMap::object &candidate,
@@ -795,14 +832,22 @@ public:
 			  map<hobject_t, int> &authoritative,
 			  ostream &errorstream);
   void scrub();
+  void classic_scrub();
+  void chunky_scrub();
+  void scrub_compare_maps();
   void scrub_finalize();
+  void scrub_finish();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
   void _scan_list(ScrubMap &map, vector<hobject_t> &ls);
-  void _request_scrub_map(int replica, eversion_t version);
+  void _request_scrub_map_classic(int replica, eversion_t version);
+  void _request_scrub_map(int replica, eversion_t version, hobject_t start, hobject_t end);
+  int build_scrub_map_chunk(ScrubMap &map, hobject_t start, hobject_t end);
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
-  virtual int _scrub(ScrubMap &map, int* errors, int* fixed) { return 0; }
+  virtual void _scrub(ScrubMap &map) { }
+  virtual void _scrub_clear_state() { }
+  virtual void _scrub_finish() { }
   virtual coll_t get_temp_coll() = 0;
   virtual bool have_temp_coll() = 0;
   void clear_scrub_reserved();
@@ -1435,6 +1480,8 @@ public:
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
+
+  bool       is_chunky_scrub_active() const { return scrub_state != SCRUB_INACTIVE; }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
