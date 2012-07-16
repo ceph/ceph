@@ -72,7 +72,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
 
 Pipe::~Pipe()
 {
-  delete in_q;
+  in_q->put();
   assert(out_q.empty());
   assert(sent.empty());
   if (connection_state)
@@ -463,7 +463,7 @@ int Pipe::accept()
     // steal incoming queue
     in_seq = existing->in_seq;
     in_seq_acked = in_seq;
-    delete in_q;
+    in_q->put();
     in_q = existing->in_q;
     in_q->lock.Lock();
     in_q->pipe = this;
