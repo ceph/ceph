@@ -174,7 +174,7 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   char tfn[1024];
   snprintf(tfn, sizeof(tfn), "%s.new", fn);
 
-  int fd = TEMP_FAILURE_RETRY(::open(tfn, O_WRONLY|O_CREAT, 0600));
+  int fd = TEMP_FAILURE_RETRY(::open(tfn, O_WRONLY|O_CREAT|O_TRUNC, 0600));
   if (fd < 0) {
     int err = errno;
     derr << "MonitorStore::put_int: failed to open '" << tfn << "': "
@@ -379,7 +379,7 @@ int MonitorStore::put_bl_sn_map(const char *a,
     snprintf(fn, sizeof(fn), "%s/%llu", dfn, (long long unsigned)p->first);
     snprintf(tfn, sizeof(tfn), "%s.new", fn);
 
-    int fd = ::open(tfn, O_WRONLY|O_CREAT, 0600);
+    int fd = ::open(tfn, O_WRONLY|O_CREAT|O_TRUNC, 0600);
     if (fd < 0) {
       int err = -errno;
       derr << "failed to open " << tfn << ": " << cpp_strerror(err) << dendl;
