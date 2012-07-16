@@ -46,7 +46,7 @@ void IncomingQueue::queue(Message *m, int priority)
     list<Message *>& queue = in_q[priority];
     if (queue.empty()) {
       ldout(cct,20) << "queue " << m << " under newly queued queue" << dendl;
-      if (!queue_items.count(priority)) 
+      if (!queue_items.count(priority))
 	queue_items[priority] = new xlist<IncomingQueue *>::item(this);
       if (dq->queued_pipes.empty())
 	dq->cond.Signal();
@@ -60,6 +60,7 @@ void IncomingQueue::queue(Message *m, int priority)
 	dq->queued_pipes[priority] = qlist;
       }
       qlist->push_back(queue_items[priority]);
+      get();  // dq now has a ref
     }
 
     queue.push_back(m);
@@ -100,6 +101,7 @@ void IncomingQueue::discard_queue()
     xlist<IncomingQueue *>* list_on;
     if ((list_on = i->second->get_list())) { //if in round-robin
       i->second->remove_myself(); //take off
+      put();  // dq loses its ref
       if (list_on->empty()) { //if round-robin queue is empty
 	delete list_on;
 	dq->queued_pipes.erase(i->first); //remove from map
@@ -179,8 +181,10 @@ void DispatchQueue::entry()
       Message *m = m_queue.front();
       m_queue.pop_front();
 
+      bool dequeued = false;
       if (m_queue.empty()) {
 	qlist->pop_front();  // pipe is done
+	dequeued = true;     // must drop dq's ref below
 	if (qlist->empty()) {
 	  delete qlist;
 	  queued_pipes.erase(priority);
@@ -199,6 +203,10 @@ void DispatchQueue::entry()
       qlen.dec();
 
       inq->lock.Unlock(); // done with the pipe's message queue now
+
+      if (dequeued)
+	inq->put();
+
       {
 	if ((long)m == DispatchQueue::D_BAD_REMOTE_RESET) {
 	  lock.Lock();
