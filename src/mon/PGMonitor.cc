@@ -610,6 +610,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	// it's osd_stat_t record.
 	dout(10) << "check_osd_map  osd." << p->first << " created or destroyed" << dendl;
 	pending_inc.osd_stat_rm.insert(p->first);
+
+	// and adjust full, nearfull set
+	pg_map.nearfull_osds.erase(p->first);
+	pg_map.full_osds.erase(p->first);
       }
     }
   }
