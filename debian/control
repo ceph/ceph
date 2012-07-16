@@ -122,7 +122,7 @@ Description: common utilities to mount and interact with a ceph file system
 
 Package: ceph-fs-common-dbg
 Architecture: linux-any
-Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
+Depends: ceph-fs-common (= ${binary:Version}), ${misc:Depends}
 Conflicts: ceph-client-tools-dbg
 Replaces: ceph-client-tools-dbg
 Section: debug
