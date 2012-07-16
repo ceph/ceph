@@ -23,6 +23,8 @@ class SubsystemMap {
   std::vector<Subsystem> m_subsys;
   unsigned m_max_name_len;
 
+  friend class Log;
+
 public:
   SubsystemMap() : m_max_name_len(0) {}
 
