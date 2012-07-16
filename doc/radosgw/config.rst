@@ -169,7 +169,7 @@ The RADOS Gateway user is a user of the RADOS Gateway.
 
 For example:: 
 
-	sudo radosgw-admin user create --uid="{username}" --displayname="{Display Name}"
+	sudo radosgw-admin user create --uid="{username}" --display-name="{Display Name}"
 
 For details on RADOS Gateway administration, see `radosgw-admin`_. 
 
