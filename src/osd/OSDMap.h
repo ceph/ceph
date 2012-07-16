@@ -493,12 +493,6 @@ public:
   static int calc_pg_rank(int osd, vector<int>& acting, int nrep=0);
   static int calc_pg_role(int osd, vector<int>& acting, int nrep=0);
   
-  int get_pg_role(pg_t pg, int osd) const {
-    vector<int> group;
-    int nrep = pg_to_osds(pg, group);
-    return calc_pg_role(osd, group, nrep);
-  }
-  
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) const {
     vector<int> group;
