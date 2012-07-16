@@ -849,7 +849,7 @@ protected:
     }
   };
   struct C_OSD_AppliedRecoveredObject : public Context {
-    ReplicatedPG *pg;
+    boost::intrusive_ptr<ReplicatedPG> pg;
     ObjectStore::Transaction *t;
     ObjectContext *obc;
     C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
