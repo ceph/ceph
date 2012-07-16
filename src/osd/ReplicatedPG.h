@@ -885,6 +885,15 @@ protected:
       pg->put();
     }
   };
+  struct C_OSD_AppliedRecoveredObjectReplica : public Context {
+    boost::intrusive_ptr<ReplicatedPG> pg;
+    ObjectStore::Transaction *t;
+    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p, ObjectStore::Transaction *tt) :
+      pg(p), t(tt) {}
+    void finish(int r) {
+      pg->_applied_recovered_object_replica(t);
+    }
+  };
 
   void sub_op_remove(OpRequestRef op);
 
@@ -894,6 +903,7 @@ protected:
 
   void sub_op_modify_reply(OpRequestRef op);
   void _applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _applied_recovered_object_replica(ObjectStore::Transaction *t);
   void _committed_pushed_object(OpRequestRef op, epoch_t same_since, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
   void sub_op_push(OpRequestRef op);
@@ -905,7 +915,10 @@ protected:
 
 
   // -- scrub --
-  virtual int _scrub(ScrubMap& map, int* errors, int* fixed);
+  virtual void _scrub(ScrubMap& map);
+  virtual void _scrub_clear_state();
+  virtual void _scrub_finish();
+  object_stat_collection_t scrub_cstat;
 
   void apply_and_flush_repops(bool requeue);
 
