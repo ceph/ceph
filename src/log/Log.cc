@@ -188,9 +188,12 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
   while ((e = t->dequeue()) != NULL) {
     unsigned sub = e->m_subsys;
 
-    bool do_fd = m_fd >= 0 && (crash || m_subs->get_log_level(sub) >= e->m_prio);
-    bool do_syslog = (crash ? m_syslog_crash : m_syslog_log) >= e->m_prio;
-    bool do_stderr = (crash ? m_stderr_crash : m_stderr_log) >= e->m_prio;
+    bool should_log = m_subs->get_log_level(sub) >= e->m_prio;
+    bool do_fd = m_fd >= 0 && (crash || should_log);
+    bool do_syslog = crash ? (m_syslog_crash >= e->m_prio) :
+      (m_syslog_crash >= e->m_prio && should_log);
+    bool do_stderr = crash ? (m_stderr_crash >= e->m_prio) :
+      (m_stderr_crash >= e->m_prio && should_log);
 
     if (do_fd || do_syslog || do_stderr) {
       int buflen = 0;
