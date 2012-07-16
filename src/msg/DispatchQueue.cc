@@ -92,6 +92,8 @@ void IncomingQueue::discard_queue()
 
   // dequeue ourselves
   dq->lock.Lock();
+  lock.Lock();
+
   for (map<int, xlist<IncomingQueue *>::item* >::iterator i = queue_items.begin();
        i != queue_items.end();
        ++i) {
@@ -125,6 +127,8 @@ void IncomingQueue::discard_queue()
     }
   in_q.clear();
   in_qlen = 0;
+
+  lock.Unlock();
 }
 
 void IncomingQueue::restart_queue()
