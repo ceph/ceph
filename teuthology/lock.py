@@ -24,7 +24,7 @@ def send_request(method, url, body=None, headers=None):
              method, url, body, resp.status)
     return (False, None, resp.status)
 
-def lock_many(ctx, num, user=None):
+def lock_many(ctx, num, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
     success, content, status = send_request('POST', _lock_url(ctx),
@@ -32,6 +32,10 @@ def lock_many(ctx, num, user=None):
     if success:
         machines = json.loads(content)
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
+        if description is not None:
+            log.debug('Setting locked machine descriptions to %s', description)
+            for m in machines.keys():
+                update_lock(ctx, m, description)
         return machines
     if status == 503:
         log.error('Insufficient nodes available to lock %d nodes.', num)

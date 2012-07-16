@@ -74,7 +74,7 @@ def lock_machines(ctx, config):
             else:
                 assert 0, 'not enough machines free'
 
-        newly_locked = lock.lock_many(ctx, config, ctx.owner)
+        newly_locked = lock.lock_many(ctx, config, ctx.owner, ctx.archive)
         if len(newly_locked) == config:
             ctx.config['targets'] = newly_locked
             log.info('\n  '.join(['Locked targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
