@@ -4897,6 +4897,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->info = msg->info;
     pg->osd->reg_last_pg_scrub(pg->info.pgid,
 			       pg->info.history.last_scrub_stamp);
+    pg->dirty_info = true;
+    pg->dirty_log = true;
     pg->log.claim_log(msg->log);
     pg->missing.clear();
   } else {
