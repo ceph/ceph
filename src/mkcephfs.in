@@ -267,7 +267,7 @@ if [ -n "$initdaemon" ]; then
 
     if [ $type = "mon" ]; then
 	get_conf mon_data "/var/run/ceph/mon/ceph-$id" "mon data"
-	if [ `ls $mon_data | wc -l` -ne 0 ]; then
+	if ! find "$mon_data" -maxdepth 0 -empty | read; then
 	    echo "ERROR: $name mon_data directory $mon_data is not empty."
 	    echo "       Please make sure that it is empty before running mkcephfs."
 	    exit 1
