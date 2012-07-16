@@ -21,6 +21,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+#include "common/RefCountedObj.h"
 
 class CephContext;
 class DispatchQueue;
@@ -29,7 +30,7 @@ class SimpleMessenger;
 class Message;
 class Connection;
 
-struct IncomingQueue {
+struct IncomingQueue : public RefCountedObject {
   CephContext *cct;
   DispatchQueue *dq;
   Pipe *pipe;  // this will change
@@ -54,7 +55,6 @@ private:
       halt(false)
   {
   }
-public:
   ~IncomingQueue() {
     for (map<int, xlist<IncomingQueue *>::item* >::iterator i = queue_items.begin();
 	 i != queue_items.end();
