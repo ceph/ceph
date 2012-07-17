@@ -763,9 +763,9 @@ def cluster(ctx, config):
             for remote, roles in mons.remotes.iteritems():
                 for role in roles:
                     if role.startswith('mon.'):
-                        teuthology.pull_directory(remote,
+                        teuthology.pull_directory_tarball(remote,
                                        '/tmp/cephtest/data/%s' % role,
-                                       path + '/' + role)
+                                       path + '/' + role + '.tgz')
 
         log.info('Cleaning ceph cluster...')
         run.wait(

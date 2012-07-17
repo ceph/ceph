@@ -286,6 +286,27 @@ def pull_directory(remote, remotedir, localdir):
                 continue
     proc.exitstatus.get()
 
+def pull_directory_tarball(remote, remotedir, localfile):
+    """
+    Copy a remote directory to a local tarball.
+    """
+    log.debug('Transferring archived files from %s:%s to %s',
+              remote.shortname, remotedir, localfile)
+    out = open(localfile, 'w')
+    proc = remote.run(
+        args=[
+            'tar',
+            'cz',
+            '-f', '-',
+            '-C', remotedir,
+            '--',
+            '.',
+            ],
+        stdout=out,
+        wait=False,
+        )
+    proc.exitstatus.get()
+
 def get_scratch_devices(remote):
     """
     Read the scratch disk list from remote host
