@@ -8,10 +8,10 @@ Concepts
 *Messenger*
    See src/msg/Messenger.h
 
-	 Handles sending and receipt of messages on behalf of the OSD.  The OSD uses
-	 two messengers: 
-	   1. cluster_messenger - handles traffic to other OSDs, monitors
-           2. client_messenger - handles client traffic
+   Handles sending and receipt of messages on behalf of the OSD.  The OSD uses
+   two messengers: 
+     1. cluster_messenger - handles traffic to other OSDs, monitors
+     2. client_messenger - handles client traffic
 
 	 This division allows the OSD to be configured with different interfaces for
 	 client and cluster traffic.
