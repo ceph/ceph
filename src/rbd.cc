@@ -1417,7 +1417,7 @@ int main(int argc, const char **argv)
     }
     r = do_remove_snap(image, snapname);
     if (r < 0) {
-      cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "failed to remove snapshot: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
