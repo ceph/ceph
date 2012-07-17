@@ -1450,17 +1450,16 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
 				   0, onack, NULL, &objver);
   lock->Unlock();
 
-  mylock_all.Lock();
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
 
+  mylock_all.Lock();
   if (r == 0) {
     while (!done_all)
       cond_all.Wait(mylock_all);
   }
-
   mylock_all.Unlock();
 
   lock->Lock();
