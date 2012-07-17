@@ -45,11 +45,11 @@ class Cond {
   }
 
   int Wait(Mutex &mutex)  { 
-    assert(mutex.is_locked());
-
     // make sure this cond is used with one mutex only
     assert(waiter_mutex == NULL || waiter_mutex == &mutex);
     waiter_mutex = &mutex;
+
+    assert(mutex.is_locked());
 
     --mutex.nlock;
     int r = pthread_cond_wait(&_c, &mutex._m);
@@ -58,11 +58,11 @@ class Cond {
   }
 
   int WaitUntil(Mutex &mutex, utime_t when) {
-    assert(mutex.is_locked());
-
     // make sure this cond is used with one mutex only
     assert(waiter_mutex == NULL || waiter_mutex == &mutex);
     waiter_mutex = &mutex;
+
+    assert(mutex.is_locked());
 
     struct timespec ts;
     when.to_timespec(&ts);
