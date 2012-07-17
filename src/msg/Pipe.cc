@@ -942,9 +942,6 @@ void Pipe::discard_queue()
 {
   ldout(msgr->cct,10) << "discard_queue" << dendl;
 
-  in_q->discard_queue();
-  ldout(msgr->cct,20) << " dequeued pipe " << dendl;
-
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
     if (*p < (void *) DispatchQueue::D_NUM_CODES) {
       continue; // skip non-Message dispatch codes
@@ -1036,6 +1033,7 @@ void Pipe::fail()
 
   stop();
 
+  in_q->discard_queue();
   discard_queue();
   
   msgr->dispatch_queue.queue_reset(connection_state);
@@ -1046,6 +1044,7 @@ void Pipe::was_session_reset()
   assert(pipe_lock.is_locked());
 
   ldout(msgr->cct,10) << "was_session_reset" << dendl;
+  in_q->discard_queue();
   discard_queue();
 
   msgr->dispatch_queue.queue_remote_reset(connection_state);
