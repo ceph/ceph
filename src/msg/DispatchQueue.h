@@ -33,7 +33,8 @@ class Connection;
 struct IncomingQueue : public RefCountedObject {
   CephContext *cct;
   DispatchQueue *dq;
-  Pipe *pipe;  // this will change
+  SimpleMessenger *msgr;
+  void *parent;
   Mutex lock;
   map<int, list<Message*> > in_q; // and inbound ones
   int in_qlen;
@@ -46,10 +47,11 @@ struct IncomingQueue : public RefCountedObject {
 
 private:
   friend class DispatchQueue;
-  IncomingQueue(CephContext *cct, DispatchQueue *dq, Pipe *parent)
+  IncomingQueue(CephContext *cct, DispatchQueue *dq, SimpleMessenger *msgr, void *parent)
     : cct(cct),
       dq(dq),
-      pipe(parent),
+      msgr(msgr),
+      parent(parent),
       lock("SimpleMessenger::IncomingQueue::lock"),
       in_qlen(0),
       halt(false)
@@ -106,7 +108,7 @@ struct DispatchQueue {
   void local_delivery(Message *m, int priority);
 
   IncomingQueue *create_queue(Pipe *parent) {
-    return new IncomingQueue(cct, this, parent);
+    return new IncomingQueue(cct, this, msgr, parent);
   }
 
   int get_queue_len() {
@@ -164,7 +166,7 @@ struct DispatchQueue {
       lock("SimpleMessenger::DispatchQeueu::lock"), 
       stop(false),
       qlen(0),
-      local_queue(cct, this, NULL),
+      local_queue(cct, this, msgr, NULL),
       dispatch_thread(this)
   {}
   ~DispatchQueue() {
