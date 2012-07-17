@@ -8,12 +8,14 @@ The OSD handles routing incoming messages to PGs, creating the PG if necessary
 in come cases.
 
 PG messages generally come in two varieties:
+
   1. Peering Messages
   2. Ops/SubOps
 
 There are several ways in which a message might be dropped or delayed.  It is
 important that the message delaying does not result in a violation of certain
 message ordering requirements on the way to the relevant PG handling logic:
+
   1. Ops referring to the same object must not be reordered.
   2. Peering messages must not be reordered.
   3. Subops must not be reordered.
@@ -22,6 +24,7 @@ MOSDMap
 -------
 MOSDMap messages may come from either monitors or other OSDs.  Upon receipt, the
 OSD must perform several tasks:
+
   1. Persist the new maps to the filestore.
      Several PG operations rely on having access to maps dating back to the last
      time the PG was clean.
@@ -59,13 +62,15 @@ messages.  That is, messages from different PGs may be reordered.
 
 
 MOSDPGOps follow the following process:
+
   1. OSD::handle_op: validates permissions and crush mapping.
      See OSDService::handle_misdirected_op
      See OSD::op_has_sufficient_caps
-           See OSD::require_same_or_newer_map
+     See OSD::require_same_or_newer_map
   2. OSD::enqueue_op
 
 MOSDSubOps follow the following process:
+
   1. OSD::handle_sub_op checks that sender is an OSD
   2. OSD::enqueue_op
 
@@ -78,6 +83,7 @@ off of op_queue and passed to PG::do_request, which checks that the PG map is
 new enough (must_delay_op) and then processes the request.
 
 In summary, the possible ways that an op may wait or be discarded in are:
+
   1. Wait in waiting_for_osdmap due to OSD::require_same_or_newer_map from
      OSD::handle_*.
   2. Discarded in OSD::can_discard_op at enqueue_op.
@@ -94,6 +100,7 @@ Peering Messages
 See OSD::handle_pg_(notify|info|log|query)
 
 Peering messages are tagged with two epochs:
+
   1. epoch_sent: map epoch at which the message was sent
   2. query_epoch: map epoch at which the message triggering the message was sent
 
