@@ -10,6 +10,7 @@ Concepts
 
    Handles sending and receipt of messages on behalf of the OSD.  The OSD uses
    two messengers: 
+
      1. cluster_messenger - handles traffic to other OSDs, monitors
      2. client_messenger - handles client traffic
 
@@ -31,6 +32,7 @@ Concepts
   The WorkQueue class abstracts the process of queueing independent tasks
   for asynchronous execution.  Each OSD process contains workqueues for
   distinct tasks:
+
     1. OpWQ: handles ops (from clients) and subops (from other OSDs).
        Runs in the op_tp threadpool.
     2. PeeringWQ: handles peering tasks and pg map advancement
@@ -61,6 +63,7 @@ Concepts
   See also above.
 
   There are 4 OSD threadpools:
+
     1. op_tp: handles ops and subops
     2. recovery_tp: handles recovery tasks
     3. disk_tp: handles disk intensive tasks

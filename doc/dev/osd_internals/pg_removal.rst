@@ -5,6 +5,7 @@ PG Removal
 See OSD::_remove_pg, OSD::RemoveWQ
 
 There are two ways for a pg to be removed from an OSD:
+
   1. MOSDPGRemove from the primary
   2. OSD::advance_map finds that the pool has been removed
 
