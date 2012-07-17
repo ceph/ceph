@@ -1473,7 +1473,7 @@ void Client::handle_client_reply(MClientReply *reply)
 
 bool Client::ms_dispatch(Message *m)
 {
-  client_lock.Lock();
+  Mutex::Locker l(client_lock);
   if (!initialized) {
     ldout(cct, 10) << "inactive, discarding " << *m << dendl;
     m->put();
@@ -1537,8 +1537,6 @@ bool Client::ms_dispatch(Message *m)
       dump_cache();      
     }
   }
-
-  client_lock.Unlock();
 
   return true;
 }
