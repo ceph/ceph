@@ -1678,7 +1678,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   heartbeat_lock.Lock();
 
-  bool locked = map_lock.try_get_read();
+  OSDMapRef curmap = service.get_osdmap();
   
   switch (m->op) {
 
@@ -1706,15 +1706,15 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	}
       }
       Message *r = new MOSDPing(monc->get_fsid(),
-				locked ? osdmap->get_epoch():0, 
+				curmap->get_epoch(),
 				MOSDPing::PING_REPLY,
 				m->stamp);
       hbserver_messenger->send_message(r, m->get_connection());
 
-      if (osdmap->is_up(from)) {
+      if (curmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
-	if (locked && is_active())
-	  _share_map_outgoing(service.get_osdmap()->get_cluster_inst(from));
+	if (is_active())
+	  _share_map_outgoing(curmap->get_cluster_inst(from));
       }
     }
     break;
@@ -1731,18 +1731,18 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	i->second.last_rx = m->stamp;
       }
 
-      if (m->map_epoch &&        // peer may not have gotten map_lock on ping reply
-	  service.get_osdmap()->is_up(from)) {
+      if (m->map_epoch &&
+	  curmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
-	if (locked && is_active())
-	  _share_map_outgoing(service.get_osdmap()->get_cluster_inst(from));
+	if (is_active())
+	  _share_map_outgoing(curmap->get_cluster_inst(from));
       }
 
       // Cancel false reports
       if (failure_queue.count(from))
 	failure_queue.erase(from);
       if (failure_pending.count(from))
-	send_still_alive(failure_pending[from]);
+	send_still_alive(curmap->get_epoch(), failure_pending[from]);
     }
     break;
 
@@ -1753,9 +1753,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
     monc->renew_subs();
     break;
   }
-
-  if (locked) 
-    map_lock.put_read();
 
   heartbeat_lock.Unlock();
   m->put();
@@ -2290,9 +2287,9 @@ void OSD::send_failures()
   if (locked) heartbeat_lock.Unlock();
 }
 
-void OSD::send_still_alive(entity_inst_t i)
+void OSD::send_still_alive(epoch_t epoch, entity_inst_t i)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, osdmap->get_epoch());
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, epoch);
   m->is_failed = false;
   monc->send_mon_message(m);
 }
