@@ -94,7 +94,10 @@ public:
     static Policy lossless_peer(uint64_t sup, uint64_t req) {
       return Policy(false, false, sup, req);
     }
-    static Policy client(uint64_t sup, uint64_t req) {
+    static Policy lossy_client(uint64_t sup, uint64_t req) {
+      return Policy(true, false, sup, req);
+    }
+    static Policy lossless_client(uint64_t sup, uint64_t req) {
       return Policy(false, false, sup, req);
     }
   };
