@@ -41,7 +41,7 @@ struct IncomingQueue : public RefCountedObject {
   map<int, xlist<IncomingQueue *>::item* > queue_items; // protected by pipe_lock AND q.lock
   bool halt;
 
-  void queue(Message *m, int priority);
+  void queue(Message *m, int priority, bool hold_dq_lock=false);
   void discard_queue();
   void restart_queue();
 
@@ -86,9 +86,7 @@ struct DispatchQueue {
   atomic_t qlen;
     
   enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
-  list<Connection*> connect_q, accept_q;
-  list<Connection*> remote_reset_q;
-  list<Connection*> reset_q;
+  list<Connection*> con_q;
 
   IncomingQueue local_queue;
 
@@ -121,9 +119,9 @@ struct DispatchQueue {
       lock.Unlock();
       return;
     }
-    connect_q.push_back(con->get());
+    con_q.push_back(con->get());
+    local_queue.queue((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST, true);
     lock.Unlock();
-    local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
   }
   void queue_accept(Connection *con) {
     lock.Lock();
@@ -131,9 +129,9 @@ struct DispatchQueue {
       lock.Unlock();
       return;
     }
-    accept_q.push_back(con->get());
+    con_q.push_back(con->get());
+    local_queue.queue((Message*)D_ACCEPT, CEPH_MSG_PRIO_HIGHEST, true);
     lock.Unlock();
-    local_delivery((Message*)D_ACCEPT, CEPH_MSG_PRIO_HIGHEST);
   }
   void queue_remote_reset(Connection *con) {
     lock.Lock();
@@ -141,9 +139,9 @@ struct DispatchQueue {
       lock.Unlock();
       return;
     }
-    remote_reset_q.push_back(con->get());
+    con_q.push_back(con->get());
+    local_queue.queue((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST, true);
     lock.Unlock();
-    local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
   }
   void queue_reset(Connection *con) {
     lock.Lock();
@@ -151,9 +149,9 @@ struct DispatchQueue {
       lock.Unlock();
       return;
     }
-    reset_q.push_back(con->get());
+    con_q.push_back(con->get());
+    local_queue.queue((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST, true);
     lock.Unlock();
-    local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
   }
 
   void start();
