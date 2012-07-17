@@ -26,7 +26,7 @@
  */
 
 #undef dout_prefix
-#define dout_prefix (pipe ? pipe->_pipe_prefix(_dout) : *_dout) << "incomingqueue."
+#define dout_prefix *_dout << "incomingqueue(" << this << " " << parent << ")."
 
 void IncomingQueue::queue(Message *m, int priority)
 {
@@ -82,7 +82,7 @@ void IncomingQueue::queue(Message *m, int priority)
   ldout(cct, 20) << "queue " << m << " halt, discarding" << dendl;
   // don't want to put local-delivery signals
   if (m>(void *)DispatchQueue::D_NUM_CODES) {
-    pipe->msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
   }
 }
@@ -190,10 +190,10 @@ void DispatchQueue::entry()
 	  queued_pipes.erase(priority);
 	}
 	inq->in_q.erase(priority);
-	ldout(cct,20) << "dispatch_entry inq " << inq << " pipe " << inq->pipe << " dequeued " << m
+	ldout(cct,20) << "dispatch_entry inq " << inq << " parent " << inq->parent << " dequeued " << m
 		      << ", dequeued queue" << dendl;
       } else {
-	ldout(cct,20) << "dispatch_entry inq " << inq << " pipe " << inq->pipe << " dequeued " << m
+	ldout(cct,20) << "dispatch_entry inq " << inq << " parent " << inq->parent << " dequeued " << m
 		      << ", moved to end of list" << dendl;
 	qlist->push_back(inq->queue_items[priority]);  // move to end of list
       }
