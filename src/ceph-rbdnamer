@@ -1,8 +1,10 @@
 #!/bin/sh
 
-POOL=`cat /sys/devices/rbd/$1/pool`
-IMAGE=`cat /sys/devices/rbd/$1/name`
-SNAP=`cat /sys/devices/rbd/$1/current_snap`
+DEV=$1
+NUM=`echo $DEV | sed 's#p.*##g' | tr -d 'a-z'`
+POOL=`cat /sys/devices/rbd/$NUM/pool`
+IMAGE=`cat /sys/devices/rbd/$NUM/name`
+SNAP=`cat /sys/devices/rbd/$NUM/current_snap`
 if [ "$SNAP" = "-" ]; then
 	echo -n "$POOL $IMAGE"
 else
