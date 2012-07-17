@@ -34,3 +34,4 @@ in the body of the message.
    :glob:
 
    *
+   osd_internals/index*
