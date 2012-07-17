@@ -51,9 +51,9 @@ class Cond {
 
     assert(mutex.is_locked());
 
-    --mutex.nlock;
+    mutex._pre_unlock();
     int r = pthread_cond_wait(&_c, &mutex._m);
-    ++mutex.nlock;
+    mutex._post_lock();
     return r;
   }
 
@@ -66,9 +66,11 @@ class Cond {
 
     struct timespec ts;
     when.to_timespec(&ts);
-    --mutex.nlock;
+
+    mutex._pre_unlock();
     int r = pthread_cond_timedwait(&_c, &mutex._m, &ts);
-    ++mutex.nlock;
+    mutex._post_lock();
+
     return r;
   }
   int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {

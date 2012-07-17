@@ -32,6 +32,7 @@ private:
 
   pthread_mutex_t _m;
   int nlock;
+  pthread_t locked_by;
 
   // don't allow copying.
   void operator=(Mutex &M) {}
@@ -52,7 +53,7 @@ private:
 
 public:
   Mutex(const char *n, bool r = false, bool ld=true, bool bt=false) :
-    name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt), nlock(0) {
+    name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt), nlock(0), locked_by(0) {
     if (recursive) {
       // Mutexes of type PTHREAD_MUTEX_RECURSIVE do all the same checks as
       // mutexes of type PTHREAD_MUTEX_ERRORCHECK.
@@ -98,7 +99,7 @@ public:
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
       if (lockdep && g_lockdep) _locked();
-      nlock++;
+      _post_lock();
     }
     return r == 0;
   }
@@ -106,18 +107,29 @@ public:
   void Lock(bool no_lockdep=false) {
     if (lockdep && g_lockdep && !no_lockdep) _will_lock();
     int r = pthread_mutex_lock(&_m);
-    if (lockdep && g_lockdep) _locked();
     assert(r == 0);
-    if (!recursive)
+    if (lockdep && g_lockdep) _locked();
+    _post_lock();
+  }
+  void _post_lock() {
+    if (!recursive) {
       assert(nlock == 0);
+      locked_by = pthread_self();
+    };
     nlock++;
   }
 
-  void Unlock() {
+  void _pre_unlock() {
     assert(nlock > 0);
     --nlock;
-    if (!recursive)
+    if (!recursive) {
+      assert(locked_by == pthread_self());
+      locked_by = 0;
       assert(nlock == 0);
+    }
+  }
+  void Unlock() {
+    _pre_unlock();
     if (lockdep && g_lockdep) _will_unlock();
     int r = pthread_mutex_unlock(&_m);
     assert(r == 0);
