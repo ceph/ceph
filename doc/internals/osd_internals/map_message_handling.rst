@@ -60,8 +60,8 @@ messages.  That is, messages from different PGs may be reordered.
 
 MOSDPGOps follow the following process:
   1. OSD::handle_op: validates permissions and crush mapping.
-	   See OSDService::handle_misdirected_op
-	   See OSD::op_has_sufficient_caps
+     See OSDService::handle_misdirected_op
+     See OSD::op_has_sufficient_caps
            See OSD::require_same_or_newer_map
   2. OSD::enqueue_op
 
@@ -82,12 +82,12 @@ In summary, the possible ways that an op may wait or be discarded in are:
      OSD::handle_*.
   2. Discarded in OSD::can_discard_op at enqueue_op.
   3. Wait in PG::op_waiters due to PG::must_delay_request in PG::do_request.
-	4. Wait in PG::waiting_for_active in due_request due to !flushed.
+  4. Wait in PG::waiting_for_active in due_request due to !flushed.
   5. Wait in PG::waiting_for_active due to !active() in do_op/do_sub_op.
   6. Wait in PG::waiting_for_(degraded|missing) in do_op.
   7. Wait in PG::waiting_for_active due to scrub_block_writes in do_op
 
-TODO: The above is not a complete list.	
+TODO: The above is not a complete list.
 
 Peering Messages
 ----------------
