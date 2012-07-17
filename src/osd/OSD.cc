@@ -1777,7 +1777,6 @@ void OSD::heartbeat_entry()
 void OSD::heartbeat_check()
 {
   assert(heartbeat_lock.is_locked());
-  // we should also have map_lock rdlocked.
 
   // check for incoming heartbeats (move me elsewhere?)
   utime_t cutoff = ceph_clock_now(g_ceph_context);
@@ -1829,9 +1828,6 @@ void OSD::heartbeat()
 
   dout(5) << "heartbeat: " << osd_stat << dendl;
 
-  bool map_locked = map_lock.try_get_read();
-  dout(30) << "heartbeat map_locked=" << map_locked << dendl;
-
   utime_t now = ceph_clock_now(g_ceph_context);
 
   // send heartbeats
@@ -1841,7 +1837,7 @@ void OSD::heartbeat()
     int peer = i->first;
     dout(30) << "heartbeat allocating ping for osd." << peer << dendl;
     Message *m = new MOSDPing(monc->get_fsid(),
-			      map_locked ? osdmap->get_epoch():0, 
+			      service.get_osdmap()->get_epoch(),
 			      MOSDPing::PING,
 			      now);
     i->second.last_tx = now;
@@ -1851,12 +1847,8 @@ void OSD::heartbeat()
     hbclient_messenger->send_message(m, i->second.con);
   }
 
-  if (map_locked) {
-    dout(30) << "heartbeat check" << dendl;
-    heartbeat_check();
-  } else {
-    dout(30) << "heartbeat no map_lock, no check" << dendl;
-  }
+  dout(30) << "heartbeat check" << dendl;
+  heartbeat_check();
 
   if (logger) {
     logger->set(l_osd_hb_to, heartbeat_peers.size());
@@ -1874,10 +1866,6 @@ void OSD::heartbeat()
     }
   }
 
-  if (map_locked) {
-    dout(30) << "heartbeat put map_lock" << dendl;
-    map_lock.put_read();
-  }
   dout(30) << "heartbeat done" << dendl;
 }
 
