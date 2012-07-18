@@ -278,6 +278,7 @@ def main():
     if ctx.pid:
         if ctx.archive:
             import os
+            log.info('Killing teuthology process at pid %d', ctx.pid)
             os.system('grep -q %s /proc/%d/cmdline && sudo kill %d' % (
                     ctx.archive,
                     ctx.pid,
