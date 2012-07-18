@@ -25,4 +25,5 @@ Each interface (S3 or Swift) provides its own namespace.
 	Configuration <config>
 	Config Reference <config-ref>
 	S3 API <s3>
-	Swift API <swift>
+	Swift API <swift/index>
+	
