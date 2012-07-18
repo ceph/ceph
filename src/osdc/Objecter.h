@@ -602,6 +602,9 @@ public:
 
     bool budgeted;
 
+    /// true if we should resend this message on failure
+    bool should_resend;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, eversion_t *ov) :
       session(NULL), session_item(this), incarnation(0),
@@ -612,7 +615,8 @@ public:
       flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false),
-      budgeted(false) {
+      budgeted(false),
+      should_resend(true) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
@@ -779,10 +783,13 @@ public:
     OSDSession *session;
     xlist<LingerOp*>::item session_item;
 
+    tid_t register_tid;
+
     LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
 		 registering(false), registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
-		 session(NULL), session_item(this) {}
+		 session(NULL), session_item(this),
+		 register_tid(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -857,6 +864,8 @@ public:
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
   void send_op(Op *op);
+  void cancel_op(Op *op);
+  void finish_op(Op *op);
   bool is_pg_changed(vector<int>& a, vector<int>& b, bool any_change=false);
   enum recalc_op_target_result {
     RECALC_OP_TARGET_NO_ACTION = 0,
@@ -866,7 +875,7 @@ public:
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
-  void send_linger(LingerOp *info, bool first_send);
+  void send_linger(LingerOp *info);
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
 

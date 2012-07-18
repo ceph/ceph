@@ -246,44 +246,49 @@ void Objecter::shutdown()
   }
 }
 
-void Objecter::send_linger(LingerOp *info, bool first_send)
+void Objecter::send_linger(LingerOp *info)
 {
-  if (!info->registering) {
-    ldout(cct, 15) << "send_linger " << info->linger_id << dendl;
-    vector<OSDOp> ops = info->ops; // need to pass a copy to ops
-    Context *onack = (!info->registered && info->on_reg_ack) ? new C_Linger_Ack(this, info) : NULL;
-    Context *oncommit = new C_Linger_Commit(this, info);
-    Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ,
-		   onack, oncommit,
-		   info->pobjver);
-    o->snapid = info->snap;
+  ldout(cct, 15) << "send_linger " << info->linger_id << dendl;
+  vector<OSDOp> opv = info->ops; // need to pass a copy to ops
+  Context *onack = (!info->registered && info->on_reg_ack) ? new C_Linger_Ack(this, info) : NULL;
+  Context *oncommit = new C_Linger_Commit(this, info);
+  Op *o = new Op(info->oid, info->oloc, opv, info->flags | CEPH_OSD_FLAG_READ,
+		 onack, oncommit,
+		 info->pobjver);
+  o->snapid = info->snap;
 
-    if (info->session) {
-      int r = recalc_op_target(o);
-      if (r == RECALC_OP_TARGET_POOL_DNE) {
-	linger_check_for_latest_map(info);
-      }
+  // do not resend this; we will send a new op to reregister
+  o->should_resend = false;
+
+  if (info->session) {
+    int r = recalc_op_target(o);
+    if (r == RECALC_OP_TARGET_POOL_DNE) {
+      linger_check_for_latest_map(info);
     }
-
-    if (first_send) {
-      op_submit(o);
-    } else {
-      _op_submit(o);
-    }
-
-    OSDSession *s = o->session;
-    if (info->session != s) {
-      info->session_item.remove_myself();
-      info->session = s;
-      if (info->session)
-	s->linger_ops.push_back(&info->session_item);
-    }
-    info->registering = true;
-
-    logger->inc(l_osdc_linger_send);
-  } else {
-    ldout(cct, 15) << "send_linger " << info->linger_id << " already (re)registering" << dendl;
   }
+
+  if (info->register_tid) {
+    // repeat send.  cancel old registeration op, if any.
+    if (ops.count(info->register_tid)) {
+      Op *o = ops[info->register_tid];
+      cancel_op(o);
+    }
+    info->register_tid = _op_submit(o);
+  } else {
+    // first send
+    info->register_tid = op_submit(o);
+  }
+
+  OSDSession *s = o->session;
+  if (info->session != s) {
+    info->session_item.remove_myself();
+    info->session = s;
+    if (info->session)
+      s->linger_ops.push_back(&info->session_item);
+  }
+  info->registering = true;
+
+  logger->inc(l_osdc_linger_send);
 }
 
 void Objecter::_linger_ack(LingerOp *info, int r) 
@@ -348,7 +353,7 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
 
   logger->set(l_osdc_linger_active, linger_ops.size());
 
-  send_linger(info, true);
+  send_linger(info);
 
   return info->linger_id;
 }
@@ -450,6 +455,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p != linger_ops.end();
 	     p++) {
 	  LingerOp *op = p->second;
+	  ldout(cct, 10) << " checking linger op " << op->linger_id << dendl;
 	  int r = recalc_linger_op_target(op);
 	  if (skipped_map)
 	    r = RECALC_OP_TARGET_NEED_RESEND;
@@ -472,6 +478,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p != ops.end();
 	     ++p) {
 	  Op *op = p->second;
+	  ldout(cct, 10) << " checking op " << op->tid << dendl;
 	  int r = recalc_op_target(op);
 	  if (skipped_map)
 	    r = RECALC_OP_TARGET_NEED_RESEND;
@@ -541,16 +548,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
   // resend requests
   for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
     Op *op = p->second;
-    if (op->session) {
-      logger->inc(l_osdc_op_resend);
-      send_op(op);
+    if (op->should_resend) {
+      if (op->session) {
+	logger->inc(l_osdc_op_resend);
+	send_op(op);
+      }
+    } else {
+      cancel_op(op);
     }
   }
   for (list<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); p++) {
     LingerOp *op = *p;
     if (op->session) {
       logger->inc(l_osdc_linger_resend);
-      send_linger(op, false);
+      send_linger(op);
     }
   }
 
@@ -747,15 +758,21 @@ void Objecter::kick_requests(OSDSession *session)
   ldout(cct, 10) << "kick_requests for osd." << session->osd << dendl;
 
   // resend ops
-  for (xlist<Op*>::iterator p = session->ops.begin(); !p.end(); ++p) {
+  for (xlist<Op*>::iterator p = session->ops.begin(); !p.end();) {
+    Op *op = *p;
+    ++p;
     logger->inc(l_osdc_op_resend);
-    send_op(*p);
+    if (op->should_resend) {
+      send_op(op);
+    } else {
+      cancel_op(op);
+    }
   }
 
   // resend lingers
   for (xlist<LingerOp*>::iterator j = session->linger_ops.begin(); !j.end(); ++j) {
     logger->inc(l_osdc_linger_resend);
-    send_linger(*j, false);
+    send_linger(*j);
   }
 }
 
@@ -1086,6 +1103,35 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
   return RECALC_OP_TARGET_NO_ACTION;
 }
 
+void Objecter::cancel_op(Op *op)
+{
+  ldout(cct, 15) << "cancel_op " << op->tid << dendl;
+
+  // currently this only works for linger registrations, since we just
+  // throw out the callbacks.
+  assert(!op->should_resend);
+  delete op->onack;
+  delete op->oncommit;
+
+  finish_op(op);
+}
+
+void Objecter::finish_op(Op *op)
+{
+  ldout(cct, 15) << "finish_op " << op->tid << dendl;
+
+  op->session_item.remove_myself();
+  if (op->budgeted)
+    put_op_budget(op);
+  if (op->con)
+    op->con->put();
+
+  ops.erase(op->tid);
+  logger->set(l_osdc_op_active, ops.size());
+
+  delete op;
+}
+
 void Objecter::send_op(Op *op)
 {
   ldout(cct, 15) << "send_op " << op->tid << " to osd." << op->session->osd << dendl;
@@ -1292,15 +1338,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // done with this tid?
   if (!op->onack && !op->oncommit) {
-    op->session_item.remove_myself();
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
-    if (op->budgeted)
-      put_op_budget(op);
-    ops.erase(tid);
-    logger->set(l_osdc_op_active, ops.size());
-    if (op->con)
-      op->con->put();
-    delete op;
+    finish_op(op);
   }
   
   ldout(cct, 5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
