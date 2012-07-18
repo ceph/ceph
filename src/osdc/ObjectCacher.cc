@@ -1004,7 +1004,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   if (!success) {
     if (perfcounter && external_call) {
       perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-      perfcounter->inc(l_objectcacher_cache_bytes_hit, bytes_in_cache);
       perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_not_in_cache);
       perfcounter->inc(l_objectcacher_cache_ops_miss);
     }
