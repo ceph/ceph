@@ -63,8 +63,8 @@ the container ``my-new-container``:
 	client.storeObject("my-new-container", file, mimeType);
 
 
-Add Metadata to Object
-======================
+Add/Update Object Metadata
+==========================
 
 This adds the metadata key-value pair ``key``:``value`` to the object named
 ``foo.txt`` in the container ``my-new-container``:
