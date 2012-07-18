@@ -1440,6 +1440,7 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
       info.pgid, create, false, role, up, acting, history, pi,
       *rctx.transaction);
     pg->handle_create(&rctx);
+    pg->write_if_dirty(*rctx.transaction);
     dispatch_context(rctx, pg, osdmap);
       
     created++;
