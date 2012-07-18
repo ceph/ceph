@@ -4099,9 +4099,6 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   op->mark_started();
 
-  map< int, map<pg_t,pg_query_t> > query_map;
-  map<int,vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;
-
   int num_created = 0;
 
   for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
@@ -4168,6 +4165,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     calc_priors_during(pgid, created, history.same_interval_since, 
 		       creating_pgs[pgid].prior);
 
+    PG::RecoveryCtx rctx = create_context();
     // poll priors
     set<int>& pset = creating_pgs[pgid].prior;
     dout(10) << "mkpg " << pgid << " e" << created
@@ -4175,13 +4173,13 @@ void OSD::handle_pg_create(OpRequestRef op)
 	     << " : querying priors " << pset << dendl;
     for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
       if (osdmap->is_up(*p))
-	query_map[*p][pgid] = pg_query_t(pg_query_t::INFO, history,
-					 osdmap->get_epoch());
-    
+	(*rctx.query_map)[*p][pgid] = pg_query_t(pg_query_t::INFO, history,
+						 osdmap->get_epoch());
+
+    PG *pg = NULL;
     if (can_create_pg(pgid)) {
       pg_interval_map_t pi;
-      PG::RecoveryCtx rctx = create_context();
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	osdmap, pgid, true, false,
 	0, creating_pgs[pgid].acting, creating_pgs[pgid].acting,
 	history, pi,
@@ -4192,9 +4190,9 @@ void OSD::handle_pg_create(OpRequestRef op)
       pg->write_if_dirty(*rctx.transaction);
       pg->update_stats();
       pg->unlock();
-      dispatch_context(rctx, pg, osdmap);
       num_created++;
     }
+    dispatch_context(rctx, pg, osdmap);
   }
 
   maybe_update_heartbeat_peers();
