@@ -819,6 +819,7 @@ int OSD::init()
     return -EINVAL;
   }
   osdmap = get_map(superblock.current_epoch);
+  service.publish_map(osdmap);
 
   bind_epoch = osdmap->get_epoch();
 
