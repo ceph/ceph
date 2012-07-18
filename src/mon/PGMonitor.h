@@ -96,6 +96,7 @@ private:
   bool register_new_pgs();
 
   void send_pg_creates();
+  void send_pg_creates(int osd, Connection *con);
 
   /**
    * check pgs for down primary osds

@@ -288,8 +288,11 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
   num_pg_by_state[s.state]++;
   pg_pool_sum[pgid.pool()].add(s);
   pg_sum.add(s);
-  if (s.state & PG_STATE_CREATING)
+  if (s.state & PG_STATE_CREATING) {
     creating_pgs.insert(pgid);
+    if (s.acting.size())
+      creating_pgs_by_osd[s.acting[0]].insert(pgid);
+  }
 }
 
 void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
@@ -304,8 +307,11 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
     pg_pool_sum.erase(pgid.pool());
 
   pg_sum.sub(s);
-  if (s.state & PG_STATE_CREATING)
+  if (s.state & PG_STATE_CREATING) {
     creating_pgs.erase(pgid);
+    if (s.acting.size())
+      creating_pgs_by_osd[s.acting[0]].erase(pgid);
+  }
 }
 
 void PGMap::stat_osd_add(const osd_stat_t &s)

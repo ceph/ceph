@@ -759,7 +759,6 @@ void PGMonitor::send_pg_creates()
 {
   dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
 
-  map<int, MOSDPGCreate*> msg;
   utime_t now = ceph_clock_now(g_ceph_context);
   
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
@@ -767,42 +766,62 @@ void PGMonitor::send_pg_creates()
        p++) {
     pg_t pgid = *p;
     pg_t on = pgid;
-    if (pg_map.pg_stat[pgid].parent_split_bits)
-      on = pg_map.pg_stat[pgid].parent;
+    pg_stat_t& s = pg_map.pg_stat[pgid];
+    if (s.parent_split_bits)
+      on = s.parent;
     vector<int> acting;
     int nrep = mon->osdmon()->osdmap.pg_to_acting_osds(on, acting);
-    if (!nrep) {
-      dout(20) << "send_pg_creates  " << pgid << " -> no osds in epoch "
-	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
-      continue;  // blarney!
-    }
-    int osd = acting[0];
+
+    if (s.acting.size())
+      pg_map.creating_pgs_by_osd[acting[0]].erase(pgid);
+    s.acting = acting;
 
     // don't send creates for localized pgs
     if (pgid.preferred() >= 0)
       continue;
+
+    if (nrep) {
+      pg_map.creating_pgs_by_osd[acting[0]].insert(pgid);
+    } else {
+      dout(20) << "send_pg_creates  " << pgid << " -> no osds in epoch "
+	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
+      continue;  // blarney!
+    }
+  }
+
+  for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin();
+       p != pg_map.creating_pgs_by_osd.end();
+       ++p) {
+    int osd = p->first;
 
     // throttle?
     if (last_sent_pg_create.count(osd) &&
 	now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd]) 
       continue;
       
-    dout(20) << "send_pg_creates  " << pgid << " -> osd." << osd 
-	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
-    if (msg.count(osd) == 0)
-      msg[osd] = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
-    msg[osd]->mkpg[pgid] = pg_create_t(pg_map.pg_stat[pgid].created,
-				       pg_map.pg_stat[pgid].parent,
-				       pg_map.pg_stat[pgid].parent_split_bits);
+    send_pg_creates(osd, NULL);
+  }
+}
+
+void PGMonitor::send_pg_creates(int osd, Connection *con)
+{
+  map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.find(osd);
+  if (p == pg_map.creating_pgs_by_osd.end())
+    return;
+
+  dout(20) << "send_pg_creates osd." << osd << " pgs " << p->second << dendl;
+  MOSDPGCreate *m = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
+  for (set<pg_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+    m->mkpg[*q] = pg_create_t(pg_map.pg_stat[*q].created,
+			      pg_map.pg_stat[*q].parent,
+			      pg_map.pg_stat[*q].parent_split_bits);
   }
 
-  for (map<int, MOSDPGCreate*>::iterator p = msg.begin();
-       p != msg.end();
-       p++) {
-    dout(10) << "sending pg_create to osd." << p->first << dendl;
-    mon->messenger->send_message(p->second, mon->osdmon()->osdmap.get_inst(p->first));
-    last_sent_pg_create[p->first] = ceph_clock_now(g_ceph_context);
-  }
+  if (con)
+    mon->messenger->send_message(m, con);
+  else
+    mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));
+  last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
 }
 
 bool PGMonitor::check_down_pgs()
