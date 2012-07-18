@@ -1473,7 +1473,7 @@ void Client::handle_client_reply(MClientReply *reply)
 
 bool Client::ms_dispatch(Message *m)
 {
-  client_lock.Lock();
+  Mutex::Locker l(client_lock);
   if (!initialized) {
     ldout(cct, 10) << "inactive, discarding " << *m << dendl;
     m->put();
@@ -1537,8 +1537,6 @@ bool Client::ms_dispatch(Message *m)
       dump_cache();      
     }
   }
-
-  client_lock.Unlock();
 
   return true;
 }
@@ -4190,6 +4188,8 @@ void Client::_closedir(dir_result_t *dirp)
 
 void Client::rewinddir(dir_result_t *dirp)
 {
+  Mutex::Locker lock(client_lock);
+
   ldout(cct, 3) << "rewinddir(" << dirp << ")" << dendl;
   dir_result_t *d = (dir_result_t*)dirp;
   _readdir_drop_dirp_buffer(d);
@@ -4205,6 +4205,8 @@ loff_t Client::telldir(dir_result_t *dirp)
 
 void Client::seekdir(dir_result_t *dirp, loff_t offset)
 {
+  Mutex::Locker lock(client_lock);
+
   ldout(cct, 3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
   dir_result_t *d = (dir_result_t*)dirp;
 
@@ -4359,6 +4361,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
 int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 {
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
 	   << " at_cache_name " << dirp->at_cache_name << " offset " << hex << dirp->offset << dec
 	   << dendl;
@@ -4399,7 +4402,9 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     if (pd == dir->dentry_map.end())
       next_off = dir_result_t::END;
 
+    client_lock.Unlock();
     int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
+    client_lock.Lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
 	     << " = " << r
 	     << dendl;
@@ -4420,6 +4425,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 
 int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 {
+  Mutex::Locker lock(client_lock);
+
   dir_result_t *dirp = (dir_result_t*)d;
 
   ldout(cct, 10) << "readdir_r_cb " << *dirp->inode << " offset " << hex << dirp->offset << dec
@@ -4449,7 +4456,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 
     fill_stat(diri, &st);
 
+    client_lock.Unlock();
     int r = cb(p, &de, &st, -1, next_off);
+    client_lock.Lock();
     if (r < 0)
       return r;
 
@@ -4464,7 +4473,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 
     fill_stat(in, &st);
 
+    client_lock.Unlock();
     int r = cb(p, &de, &st, -1, 2);
+    client_lock.Lock();
     if (r < 0)
       return r;
 
@@ -4495,7 +4506,6 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       return 0;
 
     if (dirp->buffer_frag != dirp->frag() || dirp->buffer == NULL) {
-      Mutex::Locker lock(client_lock);
       int r = _readdir_get_frag(dirp);
       if (r)
 	return r;
@@ -4512,7 +4522,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       int stmask = fill_stat(ent.second, &st);  
       fill_dirent(&de, ent.first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
+      client_lock.Unlock();
       int r = cb(p, &de, &st, stmask, dirp->offset + 1);  // _next_ offset
+      client_lock.Lock();
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << dirp->offset << dec
 	       << " = " << r
 	       << dendl;
