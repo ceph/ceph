@@ -3363,14 +3363,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   C_Contexts *fin = new C_Contexts(g_ceph_context);
 
-  // lock all pgs
-  for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       i++) {
-    PG *pg = i->second;
-    pg->lock_with_map_lock_held(true);
-  }
-
   // advance through the new maps
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
@@ -3402,16 +3394,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(1) << "state: booting -> active" << dendl;
       state = STATE_ACTIVE;
     }
-  }
-
-  // write and unlock pgs
-  for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       i++) {
-    PG *pg = i->second;
-    //pg->lock_with_map_lock_held();
-    pg->write_if_dirty(t);
-    pg->unlock();
   }
 
   bool do_shutdown = false;
