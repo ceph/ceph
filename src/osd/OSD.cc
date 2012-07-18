@@ -697,6 +697,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp, 200),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
+  debug_drop_pg_create_probability(g_conf->osd_debug_drop_pg_create_probability),
+  debug_drop_pg_create_duration(g_conf->osd_debug_drop_pg_create_duration),
+  debug_drop_pg_create_left(-1),
   outstanding_pg_stats(false),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
@@ -4089,6 +4092,21 @@ void OSD::handle_pg_create(OpRequestRef op)
   assert(m->get_header().type == MSG_OSD_PG_CREATE);
 
   dout(10) << "handle_pg_create " << *m << dendl;
+
+  // drop the next N pg_creates in a row?
+  if (debug_drop_pg_create_left < 0 &&
+      g_conf->osd_debug_drop_pg_create_probability >
+      ((((double)(rand()%100))/100.0))) {
+    debug_drop_pg_create_left = debug_drop_pg_create_duration;
+  }
+  if (debug_drop_pg_create_left >= 0) {
+    --debug_drop_pg_create_left;
+    if (debug_drop_pg_create_left >= 0) {
+      dout(0) << "DEBUG dropping/ignoring pg_create, will drop the next "
+	      << debug_drop_pg_create_left << " too" << dendl;
+      return;
+    }
+  }
 
   if (!require_mon_peer(op->request)) {
     // we have to hack around require_mon_peer's interface limits
