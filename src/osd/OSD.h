@@ -762,6 +762,9 @@ protected:
     int split_bits;
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
+  double debug_drop_pg_create_probability;
+  int debug_drop_pg_create_duration;
+  int debug_drop_pg_create_left;  // 0 if we just dropped the last one, -1 if we can drop more
 
   bool can_create_pg(pg_t pgid);
   void handle_pg_create(OpRequestRef op);
