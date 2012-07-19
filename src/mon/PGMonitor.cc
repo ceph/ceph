@@ -773,7 +773,7 @@ void PGMonitor::send_pg_creates()
     int nrep = mon->osdmon()->osdmap.pg_to_acting_osds(on, acting);
 
     if (s.acting.size())
-      pg_map.creating_pgs_by_osd[acting[0]].erase(pgid);
+      pg_map.creating_pgs_by_osd[s.acting[0]].erase(pgid);
     s.acting = acting;
 
     // don't send creates for localized pgs
@@ -799,7 +799,8 @@ void PGMonitor::send_pg_creates()
 	now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd]) 
       continue;
       
-    send_pg_creates(osd, NULL);
+    if (mon->osdmon()->osdmap.is_up(osd))
+      send_pg_creates(osd, NULL);
   }
 }
 
@@ -817,10 +818,12 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
 			      pg_map.pg_stat[*q].parent_split_bits);
   }
 
-  if (con)
+  if (con) {
     mon->messenger->send_message(m, con);
-  else
+  } else {
+    assert(mon->osdmon()->osdmap.is_up(osd));
     mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));
+  }
   last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
 }
 
@@ -1361,4 +1364,12 @@ int PGMonitor::dump_stuck_pg_stats(ostream& ss,
   rdata.append(ds);
   ss << "ok";
   return 0;
+}
+
+void PGMonitor::check_sub(Subscription *sub)
+{
+  if (sub->type == "osd_pg_creates") {
+    send_pg_creates(sub->session->inst.name.num(),
+		    sub->session->con);
+  }
 }
