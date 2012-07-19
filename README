@@ -114,7 +114,11 @@ To build the source code, you must install the following:
 - libfuse-dev
 - linux-kernel-headers
 - libcrypto++-dev
+- libaio-dev
+- libgoogle-perftools-dev
+- libkeyutils-dev
+
 
 For example:
 
-	$ apt-get install automake autoconf automake gcc g++ libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev
+	$ apt-get install automake autoconf automake gcc g++ libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libaio-dev libgoogle-perftools-dev libkeyutils-dev
