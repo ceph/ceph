@@ -18,10 +18,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -69,10 +68,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -120,10 +118,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -171,10 +168,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -222,10 +218,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -273,10 +268,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -324,10 +318,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -375,10 +368,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
@@ -426,10 +418,9 @@
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
-    snap create --snap <snap-name> <image-name> create a snapshot
-    snap rollback --snap <snap-name> <image-name>
-                                                rollback image to snapshot
-    snap rm --snap <snap-name> <image-name>     deletes a snapshot
+    snap create <snap-name>                     create a snapshot
+    snap rollback <snap-name>                   rollback image to snapshot
+    snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
