@@ -2013,6 +2013,9 @@ void OSD::ms_handle_connect(Connection *con)
       service.send_pg_temp();
       send_failures();
       send_pg_stats(ceph_clock_now(g_ceph_context));
+
+      monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
+      monc->renew_subs();
     }
   }
 }

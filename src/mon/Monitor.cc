@@ -1817,6 +1817,10 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R)) {
         osdmon()->check_sub(s->sub_map["osdmap"]);
       }
+    } else if (p->first == "osd_pg_creates") {
+      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+      }
     } else if (p->first == "monmap") {
       check_sub(s->sub_map["monmap"]);
     } else if (logmon()->sub_name_to_id(p->first) >= 0) {
