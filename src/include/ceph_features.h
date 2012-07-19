@@ -20,6 +20,7 @@
 #define CEPH_FEATURE_OSDENC         (1<<13)
 #define CEPH_FEATURE_OMAP           (1<<14)
 #define CEPH_FEATURE_MONENC         (1<<15)
+#define CEPH_FEATURE_CRUSH_TUNABLES (1<<18)
 
 /*
  * Features supported.  Should be everything above.
@@ -40,7 +41,8 @@
 	 CEPH_FEATURE_OSDREPLYMUX |	 \
 	 CEPH_FEATURE_OSDENC |		 \
 	 CEPH_FEATURE_OMAP |		 \
-	 CEPH_FEATURE_MONENC)
+	 CEPH_FEATURE_MONENC |		 \
+	 CEPH_FEATURE_CRUSH_TUNABLES)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
 
