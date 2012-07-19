@@ -137,6 +137,8 @@ public:
 			     list<pair<health_status_t,string> > *detail,
 			     const set<int>& s, const char *desc, health_status_t sev) const;
 
+  void check_sub(Subscription *sub);
+
 private:
   // no copying allowed
   PGMonitor(const PGMonitor &rhs);
