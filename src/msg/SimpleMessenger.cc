@@ -361,14 +361,6 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
     hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(dest.addr);
     if (p != rank_pipe.end()) {
       pipe = p->second;
-      pipe->pipe_lock.Lock();
-      if (pipe->state == Pipe::STATE_CLOSED) {
-	pipe->unregister_pipe();
-	pipe->pipe_lock.Unlock();
-	pipe = 0;
-      } else {
-	pipe->pipe_lock.Unlock();
-      }
     }
     if (!pipe) {
       pipe = connect_rank(dest.addr, dest.name.type(), NULL);
@@ -439,17 +431,9 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
         // connected?
         pipe = rank_pipe[ dest_proc_addr ];
 	pipe->pipe_lock.Lock();
-	if (pipe->state == Pipe::STATE_CLOSED) {
-	  ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
-	  pipe->unregister_pipe();
-	  pipe->pipe_lock.Unlock();
-	  pipe = 0;
-	  ret = -EPIPE;
-	} else {
-	  ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
-	  pipe->_send_keepalive();
-	  pipe->pipe_lock.Unlock();
-	}
+	ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
+	pipe->_send_keepalive();
+	pipe->pipe_lock.Unlock();
       } else {
         ret = -EINVAL;
       }
