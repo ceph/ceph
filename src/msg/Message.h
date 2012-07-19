@@ -199,6 +199,18 @@ public:
       return pipe->get();
     return NULL;
   }
+  bool try_get_pipe(RefCountedObject **p) {
+    Mutex::Locker l(lock);
+    if (failed) {
+      *p = NULL;
+    } else {
+      if (pipe)
+	*p = pipe->get();
+      else
+	*p = NULL;
+    }
+    return !failed;
+  }
   void clear_pipe(RefCountedObject *old_p) {
     if (old_p == pipe) {
       Mutex::Locker l(lock);
