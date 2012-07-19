@@ -987,7 +987,18 @@ void Pipe::fault(bool onconnect, bool onread)
   // lossy channel?
   if (policy.lossy) {
     ldout(msgr->cct,10) << "fault on lossy channel, failing" << dendl;
-    fail();
+
+    stop();
+
+    // disconnect from Connection, and mark it failed.  future messages
+    // will be dropped.
+    assert(connection_state);
+    connection_state->clear_pipe(this);
+
+    in_q->discard_queue();
+    discard_queue();
+
+    msgr->dispatch_queue.queue_reset(connection_state);
     return;
   }
 
@@ -1024,19 +1035,6 @@ void Pipe::fault(bool onconnect, bool onread)
       backoff.set_from_double(conf->ms_max_backoff);
     ldout(msgr->cct,10) << "fault done waiting or woke up" << dendl;
   }
-}
-
-void Pipe::fail()
-{
-  ldout(msgr->cct,10) << "fail" << dendl;
-  assert(pipe_lock.is_locked());
-
-  stop();
-
-  in_q->discard_queue();
-  discard_queue();
-  
-  msgr->dispatch_queue.queue_reset(connection_state);
 }
 
 void Pipe::was_session_reset()

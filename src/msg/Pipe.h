@@ -144,7 +144,6 @@ class DispatchQueue;
     int write_keepalive();
 
     void fault(bool onconnect=false, bool reader=false);
-    void fail();
 
     void was_session_reset();
 
