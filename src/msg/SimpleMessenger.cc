@@ -382,8 +382,12 @@ void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_a
 {
   Pipe *pipe = NULL;
   if (con) {
-    pipe = con ? (Pipe *)con->pipe : NULL;
-    // we don't want to deal with ref-counting here, so we don't use get_pipe()
+    bool ok = con->try_get_pipe((RefCountedObject**)&pipe);
+    if (!ok) {
+      ldout(cct,0) << "submit_message " << *m << " on failed lossy con, dropping message " << m << dendl;
+      m->put();
+      return;
+    }
     con->get();
   }
 
@@ -395,23 +399,10 @@ void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_a
   } else {
     // remote pipe.
     if (pipe) {
-      pipe->pipe_lock.Lock();
-      if (pipe->state == Pipe::STATE_CLOSED) {
-        ldout(cct,0) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe, dropping message " << m << dendl;
-        pipe->unregister_pipe();
-        pipe->pipe_lock.Unlock();
-        pipe = 0;
-	assert(con);
-	con->put();
-	return;
-      } else {
-        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-
-        pipe->_send(m);
-        pipe->pipe_lock.Unlock();
-      }
-    }
-    if (!pipe) {
+      ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
+      pipe->send(m);
+      pipe->put();
+    } else {
       const Policy& policy = get_policy(dest_type);
       if (policy.server) {
         ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
