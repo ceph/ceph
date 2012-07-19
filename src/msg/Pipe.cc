@@ -51,7 +51,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     peer_type(-1),
     pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
     state(st),
-    connection_state(new Connection),
+    connection_state(NULL),
     reader_running(false), reader_joining(false), writer_running(false),
     in_q(r->dispatch_queue.create_queue(this)),
     keepalive(false),
