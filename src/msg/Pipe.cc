@@ -990,13 +990,20 @@ void Pipe::fault(bool onconnect, bool onread)
 
     stop();
 
+    // ugh
+    pipe_lock.Unlock();
+    msgr->lock.Lock();
+    pipe_lock.Lock();
+    unregister_pipe();
+    msgr->lock.Unlock();
+
+    in_q->discard_queue();
+    discard_queue();
+
     // disconnect from Connection, and mark it failed.  future messages
     // will be dropped.
     assert(connection_state);
     connection_state->clear_pipe(this);
-
-    in_q->discard_queue();
-    discard_queue();
 
     msgr->dispatch_queue.queue_reset(connection_state);
     return;
