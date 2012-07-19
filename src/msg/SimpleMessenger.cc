@@ -380,47 +380,46 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 
 void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
-  Pipe *pipe = NULL;
+  // existing connection?
   if (con) {
+    Pipe *pipe = NULL;
     bool ok = con->try_get_pipe((RefCountedObject**)&pipe);
     if (!ok) {
-      ldout(cct,0) << "submit_message " << *m << " on failed lossy con, dropping message " << m << dendl;
+      ldout(cct,0) << "submit_message " << *m << " remote, " << dest_addr
+		   << ", failed lossy con, dropping message " << m << dendl;
       m->put();
       return;
     }
-    con->get();
-  }
-
-  // local?
-  if (!pipe && my_inst.addr == dest_addr) {
-    // local
-    ldout(cct,20) << "submit_message " << *m << " local" << dendl;
-    dispatch_queue.local_delivery(m, m->get_priority());
-  } else {
-    // remote pipe.
     if (pipe) {
       ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
       pipe->send(m);
       pipe->put();
-    } else {
-      const Policy& policy = get_policy(dest_type);
-      if (policy.server) {
-        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
-            << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
-        m->put();
-      } else if (lazy) {
-        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
-        m->put();
-      } else {
-        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-        // not connected.
-        pipe = connect_rank(dest_addr, dest_type, con);
-        pipe->send(m);
-      }
+      return;
     }
   }
-  if (con) {
-    con->put();
+
+  // local?
+  if (my_inst.addr == dest_addr) {
+    // local
+    ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+    dispatch_queue.local_delivery(m, m->get_priority());
+    return;
+  }
+
+  // remote, no existing pipe.
+  const Policy& policy = get_policy(dest_type);
+  if (policy.server) {
+    ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
+		  << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
+    m->put();
+  } else if (lazy) {
+    ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
+    m->put();
+  } else {
+    ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
+    // not connected.
+    Pipe *pipe = connect_rank(dest_addr, dest_type, con);
+    pipe->send(m);
   }
 }
 
