@@ -2072,7 +2072,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
-      } 
+      }
     }
     else if (m->cmd[1] == "in" && m->cmd.size() >= 3) {
       bool any = false;
@@ -2186,6 +2186,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd." << osd << " does not exist";
+	  err = 0;
 	} else if (osdmap.is_up(osd)) {
 	  ss << "osd." << osd << " is still up";
 	} else {
