@@ -419,6 +419,12 @@ namespace librbd {
       return 0;
     }
 
+    int copyup(librados::IoCtx *ioctx, const std::string &oid,
+	       bufferlist data) {
+      bufferlist out;
+      return ioctx->exec(oid, "rbd", "copyup", data, out);
+    }
+
     int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
 			     const std::string &cookie)
     {

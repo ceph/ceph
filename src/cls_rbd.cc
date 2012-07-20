@@ -59,6 +59,7 @@ cls_method_handle_t h_get_snapshot_name;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
 cls_method_handle_t h_get_all_features;
+cls_method_handle_t h_copyup;
 cls_method_handle_t h_lock_image_exclusive;
 cls_method_handle_t h_lock_image_shared;
 cls_method_handle_t h_unlock_image;
@@ -1134,6 +1135,34 @@ int get_all_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * "Copy up" data from the parent of a clone to the clone's object(s).
+ * Used for implementing copy-on-write for a clone image.  Client
+ * will pass down a chunk of data that fits completely within one
+ * clone block (one object), and is aligned (starts at beginning of block),
+ * but may be shorter (for non-full parent blocks).  The class method
+ * can't know the object size to validate the requested length,
+ * so it just writes the data as given if the child object doesn't
+ * already exist, and returns success if it does.
+ *
+ * Input:
+ * @param in bufferlist of data to write
+ *
+ * Output:
+ * @returns 0 on success, or if block already exists in child
+ *  negative error code on other error
+ */
+
+int copyup(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // check for existence; if child object exists, just return success
+  if (cls_cxx_stat(hctx, NULL, NULL) == 0)
+    return 0;
+  CLS_LOG(20, "copyup: writing length %d\n", in->length());
+  return cls_cxx_write(hctx, 0, in->length(), in);
+}
+
+
 /************************ rbd_id object methods **************************/
 
 /**
@@ -1810,6 +1839,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_all_features",
 			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
 			  get_all_features, &h_get_all_features);
+  cls_register_cxx_method(h_class, "copyup",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  copyup, &h_copyup);
   cls_register_cxx_method(h_class, "lock_exclusive",
                           CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
                           lock_image_exclusive, &h_lock_image_exclusive);
