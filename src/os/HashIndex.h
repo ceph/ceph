@@ -260,12 +260,12 @@ private:
 
   /// Get path contents by hash
   int get_path_contents_by_hash(
-    const vector<string> &path,          /// [in] Path to list
-    const string *lower_bound,           /// [in] list > *lower_bound
-    const hobject_t *next_object,        /// [in] list > *next_object
-    const snapid_t *seq,                 /// [in] list >= *seq
-    set<string> *hash_prefixes,          /// [out] prefixes in dir
-    multimap<string, hobject_t> *objects /// [out] objects
+    const vector<string> &path,            /// [in] Path to list
+    const string *lower_bound,             /// [in] list > *lower_bound
+    const hobject_t *next_object,          /// [in] list > *next_object
+    const snapid_t *seq,                   /// [in] list >= *seq
+    set<string> *hash_prefixes,            /// [out] prefixes in dir
+    set<pair<string, hobject_t> > *objects /// [out] objects
     );
 
   /// List objects in collection in hobject_t order
