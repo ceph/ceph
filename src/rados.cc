@@ -769,7 +769,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
       formatter->dump_stream("name") << id.locker;
       formatter->dump_string("cookie", id.cookie);
       formatter->dump_string("description", info.description);
-      formatter->dump_stream("duration") << info.duration;
+      formatter->dump_stream("expiration") << info.expiration;
       formatter->dump_stream("addr") << info.addr;
       formatter->close_section();
     }

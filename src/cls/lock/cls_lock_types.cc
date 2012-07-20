@@ -42,7 +42,7 @@ void cls_lock_id_t::generate_test_instances(list<cls_lock_id_t*>& o)
 
 void cls_lock_locker_info_t::dump(Formatter *f) const
 {
-  f->dump_stream("duration") << duration;
+  f->dump_stream("expiration") << expiration;
   f->dump_stream("addr") << addr;
   f->dump_string("description", description);
 }
@@ -61,7 +61,7 @@ static void generate_test_addr(entity_addr_t& a, int nonce, int port)
 void cls_lock_locker_info_t::generate_test_instances(list<cls_lock_locker_info_t*>& o)
 {
   cls_lock_locker_info_t *i = new cls_lock_locker_info_t;
-  i->duration = utime_t(5, 0);
+  i->expiration = utime_t(5, 0);
   generate_test_addr(i->addr, 1, 2);
   i->description = "description";
   o.push_back(i);

@@ -50,7 +50,7 @@ void lock_info(IoCtx& ioctx, string& oid, string& name, map<cls_lock_id_t, cls_l
   map<cls_lock_id_t, cls_lock_locker_info_t>::iterator liter;
   for (liter = lockers.begin(); liter != lockers.end(); ++liter) {
     const cls_lock_id_t& locker = liter->first;
-    cout << "    " << locker.locker << " duration=" << liter->second.duration
+    cout << "    " << locker.locker << " expiration=" << liter->second.expiration
          << " addr=" << liter->second.addr << " cookie=" << locker.cookie << std::endl;
   }
 }
