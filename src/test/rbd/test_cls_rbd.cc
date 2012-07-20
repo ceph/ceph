@@ -62,9 +62,18 @@ TEST(cls_rbd, copyup)
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
   string oid = "rbd_copyup_test";
+  bufferlist inbl, outbl;
+
+  // copyup of 0-len nonexistent object should create new 0-len object
+  ioctx.remove(oid);
+  ASSERT_EQ(0, copyup(&ioctx, oid, inbl));
+  size_t size;
+  ASSERT_EQ(0, ioctx.stat(oid, &size, NULL));
+  ASSERT_EQ(0U, size);
+
+  // create some random data to write
   size_t l = 4 << 20;
   char *b = random_buf(l);
-  bufferlist inbl, outbl;
   inbl.append(b, l);
   delete b;
   ASSERT_EQ(l, inbl.length());

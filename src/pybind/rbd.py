@@ -551,6 +551,14 @@ class Image(object):
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
 
+    def flatten(self):
+        """
+        Flatten clone image (copy all blocks from parent to child)
+        """
+        ret = self.librbd.rbd_flatten(self.image)
+        if (ret < 0):
+            raise make_ex(ret, "error flattening %s" % self.name)
+
 class SnapIterator(object):
     """
     Iterator over snapshot info for an image.
