@@ -790,8 +790,8 @@ protected:
 
   // -- boot --
   void start_boot();
-  void _got_boot_version(epoch_t oldest, epoch_t newest);
-  void send_boot();
+  void _maybe_boot(epoch_t oldest, epoch_t newest);
+  void _send_boot();
   
   friend class C_OSD_GetVersion;
 
