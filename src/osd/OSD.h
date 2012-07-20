@@ -128,6 +128,7 @@ class ReplicatedPG;
 class AuthAuthorizeHandlerRegistry;
 
 class OpsFlightSocketHook;
+class HistoricOpsSocketHook;
 
 extern const coll_t meta_coll;
 
@@ -525,8 +526,13 @@ private:
   OpTracker op_tracker;
   void check_ops_in_flight();
   void dump_ops_in_flight(ostream& ss);
+  void dump_historic_ops(ostream& ss) {
+    return op_tracker.dump_historic_ops(ss);
+  }
   friend class OpsFlightSocketHook;
+  friend class HistoricOpsSocketHook;
   OpsFlightSocketHook *admin_ops_hook;
+  HistoricOpsSocketHook *historic_ops_hook;
 
   // -- op queue --
   list<PG*> op_queue;
