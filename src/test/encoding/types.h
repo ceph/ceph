@@ -139,7 +139,7 @@ TYPE(cls_rbd_snap)
 #endif
 
 #include "cls/lock/cls_lock_types.h"
-TYPE(cls_lock_id_t)
+TYPE(cls_lock_locker_id_t)
 TYPE(cls_lock_locker_info_t)
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)

@@ -29,7 +29,7 @@ using namespace librados;
 
 using namespace rados::cls::lock;
 
-void lock_info(IoCtx& ioctx, string& oid, string& name, map<cls_lock_id_t, cls_lock_locker_info_t>& lockers,
+void lock_info(IoCtx& ioctx, string& oid, string& name, map<cls_lock_locker_id_t, cls_lock_locker_info_t>& lockers,
 	       ClsLockType *assert_type, string *assert_tag)
 {
   ClsLockType lock_type = LOCK_NONE;
@@ -47,15 +47,15 @@ void lock_info(IoCtx& ioctx, string& oid, string& name, map<cls_lock_id_t, cls_l
   if (assert_tag)
     ASSERT_EQ(*assert_tag, tag);
 
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator liter;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator liter;
   for (liter = lockers.begin(); liter != lockers.end(); ++liter) {
-    const cls_lock_id_t& locker = liter->first;
+    const cls_lock_locker_id_t& locker = liter->first;
     cout << "    " << locker.locker << " expiration=" << liter->second.expiration
          << " addr=" << liter->second.addr << " cookie=" << locker.cookie << std::endl;
   }
 }
 
-void lock_info(IoCtx& ioctx, string& oid, string& name, map<cls_lock_id_t, cls_lock_locker_info_t>& lockers)
+void lock_info(IoCtx& ioctx, string& oid, string& name, map<cls_lock_locker_id_t, cls_lock_locker_info_t>& lockers)
 {
   lock_info(ioctx, oid, name, lockers, NULL, NULL);
 }
@@ -106,7 +106,7 @@ TEST(ClsLock, TestMultiLocking) {
 
   ASSERT_EQ(1, (int)locks.size());
   list<string>::iterator iter = locks.begin();
-  map<cls_lock_id_t, cls_lock_locker_info_t> lockers;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers;
   lock_info(ioctx, oid, *iter, lockers, &lock_type_exclusive, NULL);
 
   ASSERT_EQ(1, (int)lockers.size());
@@ -134,8 +134,8 @@ TEST(ClsLock, TestMultiLocking) {
   l2.break_lock(ioctx2, oid, name);
   lock_info(ioctx, oid, *iter, lockers);
   ASSERT_EQ(1, (int)lockers.size());
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator liter = lockers.begin();
-  const cls_lock_id_t& id = liter->first;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator liter = lockers.begin();
+  const cls_lock_locker_id_t& id = liter->first;
   ASSERT_EQ(name2, id.locker);
 
   /* test lock tag */
@@ -188,11 +188,11 @@ TEST(ClsLock, TestMeta) {
   l2.set_description(description);
   ASSERT_EQ(0, l2.lock_shared(ioctx2, oid));
 
-  map<cls_lock_id_t, cls_lock_locker_info_t> lockers;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers;
   lock_info(ioctx, oid, lock_name, lockers, NULL, NULL);
   ASSERT_EQ(1, (int)lockers.size());
 
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator iter = lockers.begin();
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter = lockers.begin();
   cls_lock_locker_info_t locker = iter->second;
   ASSERT_EQ("new description", locker.description);
 
@@ -234,7 +234,7 @@ TEST(ClsLock, TestCookie) {
   l.set_cookie("");
   ASSERT_EQ(0, l.unlock(ioctx, oid));
 
-  map<cls_lock_id_t, cls_lock_locker_info_t> lockers;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers;
   lock_info(ioctx, oid, lock_name, lockers);
   ASSERT_EQ(0, (int)lockers.size());
 

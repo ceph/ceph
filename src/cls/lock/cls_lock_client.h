@@ -39,7 +39,7 @@ namespace rados {
 
       extern int list_locks(librados::IoCtx& ioctx, std::string& oid, list<std::string> *locks);
       extern int get_lock_info(librados::IoCtx& ioctx, std::string& oid, std::string& lock,
-                               map<cls_lock_id_t, cls_lock_locker_info_t> *lockers,
+                               map<cls_lock_locker_id_t, cls_lock_locker_info_t> *lockers,
                                ClsLockType *lock_type,
                                std::string *tag);
 
