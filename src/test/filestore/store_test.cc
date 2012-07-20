@@ -50,6 +50,17 @@ public:
   }
 };
 
+bool sorted(const vector<hobject_t> &in) {
+  hobject_t start;
+  for (vector<hobject_t>::const_iterator i = in.begin();
+       i != in.end();
+       ++i) {
+    if (start > *i) return false;
+    start = *i;
+  }
+  return true;
+}
+
 TEST_F(StoreTest, SimpleColTest) {
   coll_t cid = coll_t("initial");
   int r = 0;
@@ -194,9 +205,10 @@ TEST_F(StoreTest, ManyObjectTest) {
     r = store->collection_list_partial(cid, start,
 				       50,
 				       60,
-				       CEPH_NOSNAP,
+				       0,
 				       &objects,
 				       &next);
+    ASSERT_TRUE(sorted(objects));
     ASSERT_EQ(r, 0);
     listed.insert(objects.begin(), objects.end());
     if (objects.size() < 50) {
@@ -257,7 +269,7 @@ public:
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return hobject_t(name, string(), CEPH_NOSNAP, rand(), 0);
+    return hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0);
   }
 };
 
@@ -368,8 +380,9 @@ public:
     while (1) {
       cerr << "scanning..." << std::endl;
       int r = store->collection_list_partial(cid, current, 50, 100, 
-					     CEPH_NOSNAP, &objects, &next);
+					     0, &objects, &next);
       ASSERT_EQ(r, 0);
+      ASSERT_TRUE(sorted(objects));
       objects_set.insert(objects.begin(), objects.end());
       objects.clear();
       if (next.max) break;
@@ -447,7 +460,7 @@ TEST_F(StoreTest, Synthetic) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 1000; ++i) {
+  for (int i = 0; i < 10000; ++i) {
     if (!(i % 10)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
@@ -505,8 +518,9 @@ TEST_F(StoreTest, HashCollisionTest) {
   hobject_t current, next;
   while (1) {
     r = store->collection_list_partial(cid, current, 50, 60,
-				       CEPH_NOSNAP, &objects, &next);
+				       0, &objects, &next);
     ASSERT_EQ(r, 0);
+    ASSERT_TRUE(sorted(objects));
     for (vector<hobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
