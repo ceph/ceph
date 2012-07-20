@@ -138,6 +138,18 @@ TYPE(cls_rbd_snap)
 
 #endif
 
+#include "cls/lock/cls_lock_types.h"
+TYPE(cls_lock_id_t)
+TYPE(cls_lock_locker_info_t)
+#include "cls/lock/cls_lock_ops.h"
+TYPE(cls_lock_lock_op)
+TYPE(cls_lock_unlock_op)
+TYPE(cls_lock_break_op)
+TYPE(cls_lock_get_info_op)
+TYPE(cls_lock_get_info_reply)
+TYPE(cls_lock_list_locks_reply)
+
+
 // --- messages ---
 #include "messages/MAuth.h"
 MESSAGE(MAuth)
