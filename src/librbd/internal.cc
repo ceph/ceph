@@ -748,6 +748,16 @@ namespace librbd {
     return 0;
   }
 
+  int get_size(ImageCtx *ictx, uint64_t *size)
+  {
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+    Mutex::Locker(ictx->lock);
+    *size = ictx->get_image_size(ictx->snap_id);
+    return 0;
+  }
+
   int get_features(ImageCtx *ictx, uint64_t *features)
   {
     int r = ictx_check(ictx);

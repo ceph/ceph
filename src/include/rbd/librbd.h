@@ -84,6 +84,7 @@ int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 			     librbd_progress_fn_t cb, void *cbdata);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 int rbd_get_old_format(rbd_image_t image, uint8_t *old);
+int rbd_get_size(rbd_image_t image, uint64_t *size);
 int rbd_get_features(rbd_image_t image, uint64_t *features);
 int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
 int rbd_get_parent_info(rbd_image_t image,

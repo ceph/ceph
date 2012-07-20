@@ -137,6 +137,22 @@ class TestImage(object):
         info = self.image.stat()
         check_stat(info, new_size, IMG_ORDER)
 
+    def test_size(self):
+        eq(IMG_SIZE, self.image.size())
+        self.image.create_snap('snap1')
+        new_size = IMG_SIZE * 2
+        self.image.resize(new_size)
+        eq(new_size, self.image.size())
+        self.image.create_snap('snap2')
+        self.image.set_snap('snap2')
+        eq(new_size, self.image.size())
+        self.image.set_snap('snap1')
+        eq(IMG_SIZE, self.image.size())
+        self.image.set_snap(None)
+        eq(new_size, self.image.size())
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+
     def test_resize_down(self):
         new_size = IMG_SIZE / 2
         data = rand_data(256)
