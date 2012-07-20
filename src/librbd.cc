@@ -36,6 +36,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
 
+#define howmany(x, y)	(((x) + (y) - 1) / (y))
+
 namespace librbd {
 
   enum {
@@ -867,7 +869,7 @@ void image_info(ImageCtx& ictx, image_info_t& info, size_t infosize)
   int obj_order = ictx.order;
   info.size = ictx.get_image_size();
   info.obj_size = 1 << obj_order;
-  info.num_objs = info.size >> obj_order;
+  info.num_objs = howmany(info.size, get_block_size(obj_order));
   info.order = obj_order;
   memcpy(&info.block_name_prefix, ictx.object_prefix.c_str(),
 	 RBD_MAX_BLOCK_NAME_SIZE);
