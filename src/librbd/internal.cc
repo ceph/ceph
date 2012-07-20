@@ -809,12 +809,10 @@ namespace librbd {
     return ictx->get_parent_overlap(ictx->snap_id, overlap);
   }
 
-  int open_parent(ImageCtx *ictx, ImageCtx **parent_ctx,
-		  string *parent_pool_name, string *parent_image_name)
+  int open_parent(ImageCtx *ictx)
   {
     assert(ictx->snap_lock.is_locked());
     assert(ictx->parent_lock.is_locked());
-    assert(!(*parent_ctx));
     string pool_name;
     Rados rados(ictx->md_ctx);
 
@@ -840,40 +838,29 @@ namespace librbd {
       return r;
     }
 
-    if (parent_image_name) {
-      r = cls_client::dir_get_name(&p_ioctx, RBD_DIRECTORY,
-				   parent_image_id, parent_image_name);
-      if (r < 0) {
-	lderr(ictx->cct) << "error getting parent image name: "
-			 << cpp_strerror(r) << dendl;
-	return r;
-      }
-    }
-
     // since we don't know the image and snapshot name, set their ids and
     // reset the snap_name and snap_exists fields after we read the header
-    ImageCtx *parent = new ImageCtx("", parent_image_id, NULL, p_ioctx);
-    r = open_image(parent, false);
+    ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx);
+    r = open_image(ictx->parent, false);
     if (r < 0) {
       lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
 		       << dendl;
-      close_image(parent);
+      close_image(ictx->parent);
+      ictx->parent = NULL;
       return r;
     }
-    parent->snap_lock.Lock();
-    r = parent->get_snap_name(parent_snap_id, &parent->snap_name);
+
+    ictx->parent->snap_lock.Lock();
+    r = ictx->parent->get_snap_name(parent_snap_id, &ictx->parent->snap_name);
     if (r < 0) {
       lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
-      parent->snap_lock.Unlock();
-      close_image(parent);
+      ictx->parent->snap_lock.Unlock();
+      close_image(ictx->parent);
+      ictx->parent = NULL;
       return r;
     }
-    parent->snap_set(parent->snap_name);
-    parent->snap_lock.Unlock();
-    if (parent_ctx)
-      *parent_ctx = parent;
-    if (parent_pool_name)
-      *parent_pool_name = pool_name;
+    ictx->parent->snap_set(ictx->parent->snap_name);
+    ictx->parent->snap_lock.Unlock();
 
     return 0;
   }
@@ -887,22 +874,30 @@ namespace librbd {
 
     Mutex::Locker l(ictx->snap_lock);
     Mutex::Locker l2(ictx->parent_lock);
-    if (ictx->get_parent_pool_id(ictx->snap_id) < 0)
+    if (!ictx->parent)
       return -ENOENT;
 
-    // for parent snap_name, we need to open the parent ImageCtx, for which
-    // we use the same rados handle
-    // TODO: parent is already open!
-    ImageCtx *p_imctx = NULL;
-    r = open_parent(ictx, &p_imctx, parent_pool_name, parent_name);
-    if (r < 0)
-      return r;
+    if (parent_pool_name) {
+      Rados rados(ictx->md_ctx);
+      r = rados.pool_reverse_lookup(ictx->parent->md_ctx.get_id(),
+				    parent_pool_name);
+      if (r < 0) {
+	lderr(ictx->cct) << "error looking up pool name" << dendl;
+      }
+    }
 
-    *parent_snap_name = p_imctx->snap_name;
-    close_image(p_imctx);
+    if (parent_snap_name)
+      *parent_snap_name = ictx->parent->snap_name;
 
-    if (r < 0) 
-      return r;
+    if (parent_name) {
+      r = cls_client::dir_get_name(&ictx->parent->md_ctx, RBD_DIRECTORY,
+				   ictx->parent->id, parent_name);
+      if (r < 0) {
+	lderr(ictx->cct) << "error getting parent image name: "
+			 << cpp_strerror(r) << dendl;
+	return r;
+      }
+    }
 
     return 0;
   }
@@ -1169,7 +1164,7 @@ namespace librbd {
     }
 
     if (ictx->get_parent_pool_id(ictx->snap_id) > -1 && !ictx->parent) {
-      r = open_parent(ictx, &(ictx->parent), NULL, NULL);
+      r = open_parent(ictx);
       if (r < 0) {
 	lderr(ictx->cct) << "error opening parent snapshot: "
 			 << cpp_strerror(r) << dendl;
@@ -1982,6 +1977,7 @@ namespace librbd {
     c->init_time(ictx, AIO_TYPE_WRITE);
     for (uint64_t i = start_block; i <= end_block; i++) {
       string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+      ldout(cct, 20) << "oid = '" << oid << "' i = " << i << dendl;
       uint64_t total_off = off + total_write;
       uint64_t block_ofs = get_block_ofs(ictx->order, total_off);
       uint64_t write_len = min(block_size - block_ofs, left);
