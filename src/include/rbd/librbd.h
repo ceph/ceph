@@ -104,6 +104,8 @@ int rbd_snap_rollback_with_progress(rbd_image_t image, const char *snapname,
 				    librbd_progress_fn_t cb, void *cbdata);
 int rbd_snap_set(rbd_image_t image, const char *snapname);
 
+int rbd_flatten(rbd_image_t image);
+
 /* cooperative locking */
 /**
  * in params:
