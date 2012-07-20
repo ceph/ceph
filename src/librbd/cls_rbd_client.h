@@ -74,6 +74,8 @@ namespace librbd {
     int list_locks(librados::IoCtx *ioctx, const std::string &oid,
 		   std::set<std::pair<std::string, std::string> > &locks,
 		   bool &exclusive);
+    int copyup(librados::IoCtx *ioctx, const std::string &oid,
+	       bufferlist data);
     int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
 			     const std::string &cookie);
     int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
