@@ -6,7 +6,8 @@ from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
-                 ImageBusy, ImageHasSnapshots, RBD_FEATURE_LAYERING)
+                 ImageBusy, ImageHasSnapshots, ReadOnlyImage,
+                 RBD_FEATURE_LAYERING)
 
 
 rados = None
@@ -387,6 +388,116 @@ class TestImage(object):
             eq(clone_info['size'], IMG_SIZE * 2)
             eq(image_info['size'], IMG_SIZE)
             eq(clone.overlap(), IMG_SIZE / 2)
+
+        RBD().remove(ioctx, 'clone')
+        self.image.remove_snap('snap1')
+
+    def test_flatten_errors(self):
+        global ioctx
+        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
+            return 0
+        self.image.create_snap('snap1')
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+
+        # test that we can't flatten a non-clone
+        assert_raises(InvalidArgument, self.image.flatten)
+
+        # test that we can't flatten a snapshot
+        with Image(ioctx, 'clone') as clone:
+            clone.create_snap('snap2')
+        with Image(ioctx, 'clone', 'snap2') as snap2:
+            assert_raises(ReadOnlyImage, snap2.flatten)
+            snap2.remove('snap2')
+
+    def test_flatten_basic(self):
+        global ioctx
+        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
+            return 0
+        self.image.create_snap('snap1')
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+
+        with Image(ioctx, 'clone') as clone:
+            clone.flatten()
+            eq(0, clone.overlap())
+
+        RBD().remove(ioctx, 'clone')
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+
+        # resize down/up such that overlap is not the whole size
+        with Image(ioctx, 'clone') as clone:
+            clone.resize(IMG_SIZE / 2)
+            clone.resize(IMG_SIZE * 2)
+            eq(IMG_SIZE / 2, clone.overlap())
+            clone.flatten()
+            eq(0, clone.overlap())
+
+        RBD().remove(ioctx, 'clone')
+        self.image.remove_snap('snap1')
+
+    def test_flatten_smaller_order(self):
+        global ioctx
+        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
+            return 0
+        self.image.create_snap('snap1')
+        new_order = IMG_ORDER - 2
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone',
+                    features, new_order)
+
+        with Image(ioctx, 'clone') as clone:
+            clone.flatten()
+            eq(0, clone.overlap())
+        RBD().remove(ioctx, 'clone')
+
+        # flatten after resizing to non-block size
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone',
+                    features, new_order)
+        with Image(ioctx, 'clone') as clone:
+            clone.resize(IMG_SIZE / 2 - 1)
+            clone.flatten()
+            eq(0, clone.overlap())
+
+        RBD().remove(ioctx, 'clone')
+
+        # flatten after resizing to non-block size
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone',
+                    features, new_order)
+        with Image(ioctx, 'clone') as clone:
+            clone.resize(IMG_SIZE / 2 + 1)
+            clone.flatten()
+            eq(0, clone.overlap())
+
+        RBD().remove(ioctx, 'clone')
+        self.image.remove_snap('snap1')
+
+    def test_flatten_larger_order(self):
+        global ioctx
+        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
+            return 0
+        self.image.create_snap('snap1')
+        new_order = IMG_ORDER + 2
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone',
+                    features, new_order)
+
+        with Image(ioctx, 'clone') as clone:
+            clone.flatten()
+
+        # flatten after resizing to non-block size
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone',
+                    features, new_order)
+        with Image(ioctx, 'clone') as clone:
+            clone.resize(IMG_SIZE / 2 - 1)
+            clone.flatten()
+            eq(0, clone.overlap())
+
+        RBD().remove(ioctx, 'clone')
+
+        # flatten after resizing to non-block size
+        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone',
+                    features, new_order)
+        with Image(ioctx, 'clone') as clone:
+            clone.resize(IMG_SIZE / 2 + 1)
+            clone.flatten()
+            eq(0, clone.overlap())
 
         RBD().remove(ioctx, 'clone')
         self.image.remove_snap('snap1')

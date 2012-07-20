@@ -720,6 +720,10 @@ namespace librbd {
   int open_image(ImageCtx *ictx, bool watch);
   void close_image(ImageCtx *ictx);
 
+  int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
+		   const char *buf);
+  int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
+
   /* cooperative locking */
   int list_locks(ImageCtx *ictx,
                  set<pair<string, string> > &locks,
@@ -2174,6 +2178,102 @@ void close_image(ImageCtx *ictx)
   delete ictx;
 }
 
+// copy a parent block from buf to the child ictx(offset, len)
+int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
+		 const char *buf)
+{
+  uint64_t blksize = get_block_size(ictx->order);
+
+  // len > blksize invalid, block-misaligned offset invalid
+  if ((len > blksize) || (get_block_ofs(ictx->order, offset) != 0))
+    return -EINVAL;
+
+  bufferlist bl;
+  string oid = get_block_oid(ictx->object_prefix,
+			     get_block_num(ictx->order, offset),
+			     ictx->old_format);
+
+  bl.append(buf, len);
+  return cls_client::copyup(&ictx->data_ctx, oid, bl);
+}
+
+// test if an entire buf is zero in 8-byte chunks
+static bool buf_is_zero(char *buf, size_t len)
+{
+  size_t ofs;
+  int chunk = sizeof(uint64_t);
+
+  for (ofs = 0; ofs < len; ofs += sizeof(uint64_t)) {
+    if (*(uint64_t *)(buf + ofs) != 0) {
+      return false;
+    }
+  }
+  for (ofs = (len / chunk) * chunk; ofs < len; ofs++) {
+    if (buf[ofs] != '\0') {
+      return false;
+    }
+  }
+  return true;
+}
+
+// 'flatten' child image by copying all parent's blocks
+int flatten(ImageCtx *ictx, ProgressContext &prog_ctx)
+{
+  ldout(ictx->cct, 20) << "flatten" << dendl;
+  int r;
+  // ictx_check also updates parent data
+  if ((r = ictx_check(ictx)) < 0) {
+    lderr(ictx->cct) << "ictx_check failed" << dendl;
+    return r;
+  }
+
+  Mutex::Locker l(ictx->lock);
+  // can't flatten a non-clone
+  if (ictx->parent_md.pool_id == -1) {
+    lderr(ictx->cct) << "image has no parent" << dendl;
+    return -EINVAL;
+  }
+  if (ictx->snap_id != CEPH_NOSNAP) {
+    lderr(ictx->cct) << "snapshots cannot be flattened" << dendl;
+    return -EROFS;
+  }
+
+  assert(ictx->parent != NULL);
+  assert(ictx->parent_md.overlap <= ictx->size);
+
+  uint64_t overlap = ictx->parent_md.overlap;
+  uint64_t cblksize = get_block_size(ictx->order);
+  char *buf = new char[cblksize];
+
+  size_t ofs = 0;
+  while (ofs < overlap) {
+    prog_ctx.update_progress(ofs, overlap);
+    size_t readsize = min(overlap - ofs, cblksize);
+    if ((r = read(ictx->parent, ofs, readsize, buf)) < 0) {
+      lderr(ictx->cct) << "reading from parent failed" << dendl;
+      goto err;
+    }
+
+    // for actual amount read, if data is all zero, don't bother with block
+    if (!buf_is_zero(buf, r)) {
+      if ((r = copyup_block(ictx, ofs, r, buf)) < 0) {
+	lderr(ictx->cct) << "failed to copy block to child" << dendl;
+	goto err;
+      }
+    }
+    ofs += cblksize;
+  }
+
+  r = cls_client::remove_parent(&ictx->md_ctx, ictx->header_oid);
+  notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+  ldout(ictx->cct, 20) << "finished flattening" << dendl;
+
+ err:
+  delete buf;
+  return r;
+}
+
 int list_locks(ImageCtx *ictx,
                set<pair<string, string> > &locks,
                bool &exclusive)
@@ -2987,6 +3087,19 @@ int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
   return librbd::copy(*ictx, dest_io_ctx, destname, pctx);
 }
 
+int Image::flatten()
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::flatten(ictx, prog_ctx);
+}
+
+int Image::flatten_with_progress(librbd::ProgressContext& prog_ctx)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::flatten(ictx, prog_ctx);
+}
+
 int Image::list_locks(set<pair<string, string> > &locks,
                       bool &exclusive)
 {
@@ -3378,6 +3491,21 @@ extern "C" int rbd_snap_set(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::snap_set(ictx, snap_name);
+}
+
+extern "C" int rbd_flatten(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::flatten(ictx, prog_ctx);
+}
+
+extern "C" int rbd_flatten_with_progress(rbd_image_t image,
+					 librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  return librbd::flatten(ictx, prog_ctx);
 }
 
 extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,

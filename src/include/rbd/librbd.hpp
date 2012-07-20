@@ -101,6 +101,8 @@ public:
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
 
+  int flatten();
+  int flatten_with_progress(ProgressContext &prog_ctx);
   /* cooperative locking */
   int list_locks(std::set<std::pair<std::string, std::string> > &locks,
                  bool &exclusive);
