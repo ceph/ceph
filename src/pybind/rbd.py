@@ -406,6 +406,19 @@ class Image(object):
             raise make_ex(ret, 'error getting old_format for image' % (self.name))
         return old.value != 0
 
+    def size(self):
+        """
+        Get the size of the image. If open to a snapshot, returns the
+        size of that snapshot.
+
+        :returns: the size of the image in bytes
+        """
+        image_size = c_uint64()
+        ret = self.librbd.rbd_get_size(self.image, byref(image_size))
+        if (ret != 0):
+            raise make_ex(ret, 'error getting size for image' % (self.name))
+        return image_size.value
+
     def features(self):
         features = c_uint64()
         ret = self.librbd.rbd_get_features(self.image, byref(features))

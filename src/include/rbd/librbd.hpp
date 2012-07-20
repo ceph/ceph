@@ -95,6 +95,7 @@ public:
   int parent_info(std::string *parent_poolname, std::string *parent_name,
 		      std::string *parent_snapname);
   int old_format(uint8_t *old);
+  int size(uint64_t *size);
   int features(uint64_t *features);
   int overlap(uint64_t *overlap);
   int copy(IoCtx& dest_io_ctx, const char *destname);
