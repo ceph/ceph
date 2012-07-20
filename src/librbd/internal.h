@@ -106,9 +106,7 @@ namespace librbd {
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ProgressContext &prog_ctx);
 
-  int open_parent(ImageCtx *ictx, ImageCtx **parent_ctx,
-		  std::string *parent_pool_name,
-		  std::string *parent_image_name);
+  int open_parent(ImageCtx *ictx);
   int open_image(ImageCtx *ictx, bool watch);
   void close_image(ImageCtx *ictx);
 
