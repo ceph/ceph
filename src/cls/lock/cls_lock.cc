@@ -42,9 +42,11 @@ cls_method_handle_t h_list_locks;
 #define LOCK_PREFIX    "lock."
 
 typedef struct lock_info_s {
-  map<cls_lock_id_t, cls_lock_locker_info_t> lockers;
-  ClsLockType lock_type;
-  string tag;
+  map<cls_lock_id_t, cls_lock_locker_info_t> lockers; // map of lockers
+  ClsLockType lock_type;                              // lock type (exclusive / shared)
+  string tag;                                         // tag: operations on lock can only succeed with this tag
+                                                      //      as long as set of non expired lockers
+                                                      //      is bigger than 0.
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
