@@ -392,7 +392,7 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 					 const hobject_t *next_object,
 					 const snapid_t *seq,
 					 set<string> *hash_prefixes,
-					 multimap<string, hobject_t> *objects) {
+					 set<pair<string, hobject_t> > *objects) {
   set<string> subdirs;
   map<string, hobject_t> rev_objects;
   int r;
@@ -445,7 +445,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
   vector<string> next_path = path;
   next_path.push_back("");
   set<string> hash_prefixes;
-  multimap<string, hobject_t> objects;
+  set<pair<string, hobject_t> > objects;
   int r = get_path_contents_by_hash(path,
 				    NULL,
 				    next,
@@ -458,8 +458,9 @@ int HashIndex::list_by_hash(const vector<string> &path,
   for (set<string>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {
-    multimap<string, hobject_t>::iterator j = objects.find(*i);
-    if (j == objects.end()) {
+    set<pair<string, hobject_t> >::iterator j = objects.lower_bound(
+      make_pair(*i, hobject_t()));
+    if (j == objects.end() || j->first != *i) {
       if (min_count > 0 && out->size() > (unsigned)min_count) {
 	if (next)
 	  *next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1);
