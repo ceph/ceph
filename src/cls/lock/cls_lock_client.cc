@@ -125,7 +125,7 @@ namespace rados {
       }
 
       int get_lock_info(IoCtx& ioctx, string& oid, string& lock,
-                        map<cls_lock_id_t, cls_lock_locker_info_t> *lockers,
+                        map<cls_lock_locker_id_t, cls_lock_locker_info_t> *lockers,
                         ClsLockType *lock_type,
                         string *tag)
       {

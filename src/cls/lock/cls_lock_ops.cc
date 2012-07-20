@@ -21,7 +21,7 @@
 
 
 
-static void generate_lock_id(cls_lock_id_t& i, int n, const string& cookie)
+static void generate_lock_id(cls_lock_locker_id_t& i, int n, const string& cookie)
 {
   i.locker = entity_name_t(entity_name_t::CLIENT(n));
   i.cookie = cookie;
@@ -113,9 +113,9 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
   f->dump_string("lock_type", cls_lock_type_str(lock_type));
   f->dump_string("tag", tag);
   f->open_array_section("lockers");
-  map<cls_lock_id_t, cls_lock_locker_info_t>::const_iterator iter;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::const_iterator iter;
   for (iter = lockers.begin(); iter != lockers.end(); ++iter) {
-    const cls_lock_id_t& id = iter->first;
+    const cls_lock_locker_id_t& id = iter->first;
     const cls_lock_locker_info_t& info = iter->second;
     f->open_object_section("object");
     f->dump_stream("locker") << id.locker;
@@ -133,7 +133,7 @@ void cls_lock_get_info_reply::generate_test_instances(list<cls_lock_get_info_rep
   cls_lock_get_info_reply *i = new cls_lock_get_info_reply;
   i->lock_type = LOCK_SHARED;
   i->tag = "tag";
-  cls_lock_id_t id1, id2;
+  cls_lock_locker_id_t id1, id2;
   entity_addr_t addr1, addr2;
   generate_lock_id(id1, 1, "cookie1");
   generate_test_addr(addr1, 10, 20);

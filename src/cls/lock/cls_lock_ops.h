@@ -121,7 +121,7 @@ WRITE_CLASS_ENCODER(cls_lock_get_info_op)
 
 struct cls_lock_get_info_reply
 {
-  map<cls_lock_id_t, cls_lock_locker_info_t> lockers;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers;
   ClsLockType lock_type;
   string tag;
 
