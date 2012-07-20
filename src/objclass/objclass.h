@@ -101,6 +101,11 @@ extern int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime
 extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
+extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
+                            bufferlist *outbl);
+extern int cls_cxx_getxattrs(cls_method_context_t hctx, map<string, bufferlist> *attrset);
+extern int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
+                            bufferlist *inbl);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
