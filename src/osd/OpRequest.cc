@@ -20,6 +20,62 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "--OSD::tracker-- ";
 }
 
+void OpHistory::insert(utime_t now, OpRequest *op) {
+  duration.insert(make_pair(op->get_duration(), op));
+  arrived.insert(make_pair(op->get_arrived(), op));
+  cleanup(now);
+}
+
+void OpHistory::cleanup(utime_t now) {
+  while (arrived.size() &&
+	 now - arrived.begin()->first >
+	 (double)(g_conf->osd_op_history_duration)) {
+    delete arrived.begin()->second;
+    duration.erase(make_pair(
+	arrived.begin()->second->get_duration(),
+	arrived.begin()->second));
+    arrived.erase(arrived.begin());
+  }
+
+  while (duration.size() > g_conf->osd_op_history_size) {
+    delete duration.begin()->second;
+    arrived.erase(make_pair(
+	duration.begin()->second->get_arrived(),
+	duration.begin()->second));
+    duration.erase(duration.begin());
+  }
+}
+
+void OpHistory::dump_ops(utime_t now, Formatter *f)
+{
+  cleanup(now);
+  f->open_object_section("OpHistory");
+  f->dump_int("num to keep", g_conf->osd_op_history_size);
+  f->dump_int("duration to keep", g_conf->osd_op_history_duration);
+  {
+    f->open_array_section("Ops");
+    for (set<pair<utime_t, const OpRequest *> >::const_iterator i =
+	   arrived.begin();
+	 i != arrived.end();
+	 ++i) {
+      f->open_object_section("Op");
+      i->second->dump(now, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void OpTracker::dump_historic_ops(ostream &ss)
+{
+  JSONFormatter jf(true);
+  Mutex::Locker locker(ops_in_flight_lock);
+  utime_t now = ceph_clock_now(g_ceph_context);
+  history.dump_ops(now, &jf);
+  jf.flush(ss);
+}
+
 void OpTracker::dump_ops_in_flight(ostream &ss)
 {
   JSONFormatter jf(true);
@@ -29,22 +85,8 @@ void OpTracker::dump_ops_in_flight(ostream &ss)
   jf.open_array_section("ops"); // list of OpRequests
   utime_t now = ceph_clock_now(g_ceph_context);
   for (xlist<OpRequest*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
-    stringstream name;
-    Message *m = (*p)->request;
-    m->print(name);
     jf.open_object_section("op");
-    jf.dump_string("description", name.str().c_str()); // this OpRequest
-    jf.dump_stream("received_at") << (*p)->received_time;
-    jf.dump_float("age", now - (*p)->received_time);
-    jf.dump_string("flag_point", (*p)->state_string());
-    if (m->get_orig_source().is_client()) {
-      jf.open_object_section("client_info");
-      stringstream client_name;
-      client_name << m->get_orig_source();
-      jf.dump_string("client", client_name.str());
-      jf.dump_int("tid", m->get_tid());
-      jf.close_section(); // client_info
-    }
+    (*p)->dump(now, &jf);
     jf.close_section(); // this OpRequest
   }
   jf.close_section(); // list of OpRequests
@@ -59,11 +101,14 @@ void OpTracker::register_inflight_op(xlist<OpRequest*>::item *i)
   ops_in_flight.back()->seq = seq++;
 }
 
-void OpTracker::unregister_inflight_op(xlist<OpRequest*>::item *i)
+void OpTracker::unregister_inflight_op(OpRequest *i)
 {
   Mutex::Locker locker(ops_in_flight_lock);
-  assert(i->get_list() == &ops_in_flight);
-  i->remove_myself();
+  assert(i->xitem.get_list() == &ops_in_flight);
+  utime_t now = ceph_clock_now(g_ceph_context);
+  i->xitem.remove_myself();
+  i->request->clear_data();
+  history.insert(now, i);
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
@@ -128,6 +173,38 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   return warning_vector.size();
 }
 
+void OpRequest::dump(utime_t now, Formatter *f) const
+{
+  Message *m = request;
+  stringstream name;
+  m->print(name);
+  f->dump_string("description", name.str().c_str()); // this OpRequest
+  f->dump_stream("received_at") << received_time;
+  f->dump_float("age", now - received_time);
+  f->dump_float("duration", get_duration());
+  f->dump_string("flag_point", state_string());
+  if (m->get_orig_source().is_client()) {
+    f->open_object_section("client_info");
+    stringstream client_name;
+    client_name << m->get_orig_source();
+    f->dump_string("client", client_name.str());
+    f->dump_int("tid", m->get_tid());
+    f->close_section(); // client_info
+  }
+  {
+    f->open_array_section("events");
+    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
+	 i != events.end();
+	 ++i) {
+      f->open_object_section("event");
+      f->dump_stream("time") << i->first;
+      f->dump_string("event", i->second);
+      f->close_section();
+    }
+    f->close_section();
+  }
+}
+
 void OpTracker::mark_event(OpRequest *op, const string &dest)
 {
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -145,8 +222,8 @@ void OpTracker::_mark_event(OpRequest *op, const string &evt,
 
 void OpTracker::RemoveOnDelete::operator()(OpRequest *op) {
   op->mark_event("done");
-  tracker->unregister_inflight_op(&(op->xitem));
-  delete op;
+  tracker->unregister_inflight_op(op);
+  // Do not delete op, unregister_inflight_op took control
 }
 
 OpRequestRef OpTracker::create_request(Message *ref)
@@ -168,5 +245,10 @@ OpRequestRef OpTracker::create_request(Message *ref)
 
 void OpRequest::mark_event(const string &event)
 {
+  utime_t now = ceph_clock_now(g_ceph_context);
+  {
+    Mutex::Locker l(lock);
+    events.push_back(make_pair(now, event));
+  }
   tracker->mark_event(this, event);
 }
