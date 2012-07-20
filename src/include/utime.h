@@ -119,7 +119,7 @@ public:
   }
 
   // cast to double
-  operator double() {
+  operator double() const {
     return (double)sec() + ((double)nsec() / 1000000000.0L);
   }
   operator ceph_timespec() {

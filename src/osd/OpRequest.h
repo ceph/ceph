@@ -26,6 +26,17 @@
 #include "osd/osd_types.h"
 
 class OpRequest;
+class OpHistory {
+  set<pair<utime_t, const OpRequest *> > arrived;
+  set<pair<double, const OpRequest *> > duration;
+  void cleanup(utime_t now);
+
+public:
+  void insert(utime_t now, OpRequest *op);
+  void dump_ops(utime_t now, Formatter *f);
+};
+
+class OpRequest;
 typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpTracker {
   class RemoveOnDelete {
@@ -38,12 +49,15 @@ class OpTracker {
   uint64_t seq;
   Mutex ops_in_flight_lock;
   xlist<OpRequest *> ops_in_flight;
+  OpHistory history;
 
 public:
   OpTracker() : seq(0), ops_in_flight_lock("OpTracker mutex") {}
   void dump_ops_in_flight(std::ostream& ss);
+  void dump_historic_ops(std::ostream& ss);
   void register_inflight_op(xlist<OpRequest*>::item *i);
-  void unregister_inflight_op(xlist<OpRequest*>::item *i);
+  void unregister_inflight_op(OpRequest *i);
+
   /**
    * Look for Ops which are too old, and insert warning
    * strings for each Op that is too old.
@@ -67,11 +81,23 @@ public:
  */
 struct OpRequest : public TrackedOp {
   friend class OpTracker;
+  friend class OpHistory;
   Message *request;
   xlist<OpRequest*>::item xitem;
   utime_t received_time;
   uint8_t warn_interval_multiplier;
+  utime_t get_arrived() const {
+    return received_time;
+  }
+  double get_duration() const {
+    return events.size() ?
+      (events.rbegin()->first - received_time) :
+      0.0;
+  }
+  void dump(utime_t now, Formatter *f) const;
 private:
+  list<pair<utime_t, string> > events;
+  Mutex lock;
   OpTracker *tracker;
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
@@ -86,6 +112,7 @@ private:
   OpRequest(Message *req, OpTracker *tracker) :
     request(req), xitem(this),
     warn_interval_multiplier(1),
+    lock("OpRequest::lock"),
     tracker(tracker),
     seq(0) {
     received_time = request->get_recv_stamp();
@@ -108,7 +135,7 @@ public:
   bool currently_started() { return latest_flag_point & flag_started; }
   bool currently_sub_op_sent() { return latest_flag_point & flag_sub_op_sent; }
 
-  const char *state_string() {
+  const char *state_string() const {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";

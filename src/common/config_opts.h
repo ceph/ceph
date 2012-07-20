@@ -340,6 +340,8 @@ OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
 OPTION(osd_debug_drop_pg_create_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_pg_create_duration, OPT_INT, 1)
+OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
+OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 // Use omap for xattrs for attrs over
