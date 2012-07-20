@@ -78,17 +78,21 @@ namespace librbd {
     void perf_stop();
     int snap_set(std::string in_snap_name);
     void snap_unset();
-    librados::snap_t get_snap_id(std::string snap_name) const;
-    int get_snap_name(snapid_t snap_id, std::string *snap_name) const;
-    int get_snap_size(std::string snap_name, uint64_t *size) const;
-    void add_snap(std::string snap_name, librados::snap_t id, uint64_t size,
-		  uint64_t features, cls_client::parent_info parent);
-    uint64_t get_image_size() const;
-    int get_features(uint64_t *out_features) const;
-    int64_t get_parent_pool_id() const;
-    std::string get_parent_image_id() const;
-    uint64_t get_parent_snap_id() const;
-    int get_parent_overlap(uint64_t *overlap) const;
+    librados::snap_t get_snap_id(std::string in_snap_name) const;
+    int get_snap_name(snapid_t snap_id, std::string *out_snap_name) const;
+    int get_snap_size(std::string in_snap_name, uint64_t *out_size) const;
+    void add_snap(std::string in_snap_name, librados::snap_t id,
+		  uint64_t in_size, uint64_t features,
+		  cls_client::parent_info parent);
+
+    uint64_t get_image_size(librados::snap_t in_snap_id) const;
+    int get_features(librados::snap_t in_snap_id,
+		     uint64_t *out_features) const;
+    int64_t get_parent_pool_id(librados::snap_t in_snap_id) const;
+    std::string get_parent_image_id(librados::snap_t in_snap_id) const;
+    uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
+    int get_parent_overlap(librados::snap_t in_snap_id,
+			   uint64_t *overlap) const;
     void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
 			     uint64_t off, Context *onfinish);
     void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off);

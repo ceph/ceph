@@ -93,7 +93,7 @@ namespace librbd {
   void image_info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   {
     int obj_order = ictx->order;
-    info.size = ictx->get_image_size();
+    info.size = ictx->get_image_size(ictx->snap_id);
     info.obj_size = 1 << obj_order;
     info.num_objs = howmany(info.size, get_block_size(obj_order));
     info.order = obj_order;
@@ -570,7 +570,7 @@ namespace librbd {
       order = p_imctx->order;
     }
 
-    uint64_t size = p_imctx->get_image_size();
+    uint64_t size = p_imctx->get_image_size(p_imctx->snap_id);
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
@@ -754,7 +754,7 @@ namespace librbd {
     if (r < 0)
       return r;
     Mutex::Locker(ictx->lock);
-    return ictx->get_features(features);
+    return ictx->get_features(ictx->snap_id, features);
   }
 
   int get_overlap(ImageCtx *ictx, uint64_t *overlap)
@@ -763,7 +763,7 @@ namespace librbd {
     if (r < 0)
       return r;
     Mutex::Locker(ictx->lock);
-    return ictx->get_parent_overlap(overlap);
+    return ictx->get_parent_overlap(ictx->snap_id, overlap);
   }
 
   int open_parent(ImageCtx *ictx, ImageCtx **parent_ctx,
@@ -773,7 +773,11 @@ namespace librbd {
     assert(ictx->parent_md.pool_id >= 0);
     string pool_name;
     Rados rados(ictx->md_ctx);
-    int64_t pool_id = ictx->get_parent_pool_id();
+    ictx->lock.Lock();
+    int64_t pool_id = ictx->get_parent_pool_id(ictx->snap_id);
+    string parent_image_id = ictx->get_parent_image_id(ictx->snap_id);
+    snap_t parent_snap_id = ictx->get_parent_snap_id(ictx->snap_id);
+    ictx->lock.Unlock();
     if (pool_id < 0)
       return -ENOENT;
     int r = rados.pool_reverse_lookup(pool_id, &pool_name);
@@ -791,10 +795,10 @@ namespace librbd {
       return r;
     }
 
+
     if (parent_image_name) {
       r = cls_client::dir_get_name(&p_ioctx, RBD_DIRECTORY,
-				   ictx->get_parent_image_id(),
-				   parent_image_name);
+				   parent_image_id, parent_image_name);
       if (r < 0) {
 	lderr(ictx->cct) << "error getting parent image name: "
 			 << cpp_strerror(r) << dendl;
@@ -804,8 +808,7 @@ namespace librbd {
 
     // since we don't know the image and snapshot name, set their ids and
     // reset the snap_name and snap_exists fields after we read the header
-    ImageCtx *parent = new ImageCtx("", ictx->get_parent_image_id(),
-				    NULL, p_ioctx);
+    ImageCtx *parent = new ImageCtx("", parent_image_id, NULL, p_ioctx);
     r = open_image(parent, false);
     if (r < 0) {
       lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
@@ -813,7 +816,7 @@ namespace librbd {
       close_image(parent);
       return r;
     }
-    r = parent->get_snap_name(ictx->get_parent_snap_id(), &parent->snap_name);
+    r = parent->get_snap_name(parent_snap_id, &parent->snap_name);
     if (r < 0) {
       lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
       close_image(parent);
@@ -837,7 +840,7 @@ namespace librbd {
       return r;
 
     Mutex::Locker l(ictx->lock);
-    if (ictx->get_parent_pool_id() < 0)
+    if (ictx->get_parent_pool_id(ictx->snap_id) < 0)
       return -ENOENT;
 
     // for parent snap_name, we need to open the parent ImageCtx, for which
@@ -1096,19 +1099,20 @@ namespace librbd {
     int r;
     if (ictx->parent) {
       uint64_t overlap;
-      r = ictx->get_parent_overlap(&overlap);
+      r = ictx->get_parent_overlap(ictx->snap_id, &overlap);
       if (r < 0)
 	return r;
       if (!overlap ||
-	  ictx->parent->md_ctx.get_id() != ictx->get_parent_pool_id() ||
-	  ictx->parent->id != ictx->get_parent_image_id() ||
-	  ictx->parent->snap_id != ictx->get_parent_snap_id()) {
+	  ictx->parent->md_ctx.get_id() !=
+	  ictx->get_parent_pool_id(ictx->snap_id) ||
+	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
+	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
 	close_image(ictx->parent);
 	ictx->parent = NULL;
       }
     }
 
-    if (ictx->get_parent_pool_id() > -1 && !ictx->parent) {
+    if (ictx->get_parent_pool_id(ictx->snap_id) > -1 && !ictx->parent) {
       r = open_parent(ictx, &(ictx->parent), NULL, NULL);
       if (r < 0) {
 	lderr(ictx->cct) << "error opening parent snapshot: "
@@ -1269,7 +1273,7 @@ namespace librbd {
     // the current version, so we have to invalidate that too.
     ictx->invalidate_cache();
 
-    uint64_t new_size = ictx->get_image_size();
+    uint64_t new_size = ictx->get_image_size(ictx->snap_id);
     ictx->get_snap_size(snap_name, &new_size);
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
@@ -1323,7 +1327,7 @@ namespace librbd {
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
     CopyProgressCtx cp(prog_ctx);
-    uint64_t src_size = ictx->get_image_size();
+    uint64_t src_size = ictx->get_image_size(ictx->snap_id);
     int64_t r;
 
     int order = ictx->order;
@@ -1864,7 +1868,7 @@ namespace librbd {
   int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
   {
     ictx->lock.Lock();
-    uint64_t image_size = ictx->get_image_size();
+    uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     bool snap_exists = ictx->snap_exists;
     ictx->lock.Unlock();
 

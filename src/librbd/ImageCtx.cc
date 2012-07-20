@@ -184,110 +184,134 @@ namespace librbd {
     data_ctx.snap_set_read(snap_id);
   }
 
-  snap_t ImageCtx::get_snap_id(string snap_name) const
+  snap_t ImageCtx::get_snap_id(string in_snap_name) const
   {
-    map<string, SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
+    map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end())
       return it->second.id;
     return CEPH_NOSNAP;
   }
 
-  int ImageCtx::get_snap_name(snapid_t snap_id, string *snap_name) const
+  int ImageCtx::get_snap_name(snapid_t in_snap_id, string *out_snap_name) const
   {
     map<string, SnapInfo>::const_iterator it;
 
     for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
-      if (it->second.id == snap_id) {
-	*snap_name = it->first;
+      if (it->second.id == in_snap_id) {
+	*out_snap_name = it->first;
 	return 0;
       }
     }
     return -ENOENT;
   }
 
-  int ImageCtx::get_snap_size(string snap_name, uint64_t *size) const
+  int ImageCtx::get_snap_size(string in_snap_name, uint64_t *out_size) const
   {
-    map<string, SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
+    map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
-      *size = it->second.size;
+      *out_size = it->second.size;
       return 0;
     }
     return -ENOENT;
   }
 
-  void ImageCtx::add_snap(string snap_name, snap_t id, uint64_t size, uint64_t features,
-		cls_client::parent_info parent)
+  void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
+			  uint64_t features,
+			  cls_client::parent_info parent)
   {
     snaps.push_back(id);
-    SnapInfo info(id, size, features, parent);
-    snaps_by_name.insert(pair<string, SnapInfo>(snap_name, info));
+    SnapInfo info(id, in_size, features, parent);
+    snaps_by_name.insert(pair<string, SnapInfo>(in_snap_name, info));
   }
 
-  uint64_t ImageCtx::get_image_size() const
+  uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
-    if (snap_name.length() == 0) {
+    if (in_snap_id == CEPH_NOSNAP) {
       return size;
-    } else {
-      map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
-      if (p == snaps_by_name.end())
-	return 0;
-      return p->second.size;
     }
+    string in_snap_name;
+    int r = get_snap_name(in_snap_id, &in_snap_name);
+    if (r < 0)
+      return 0;
+    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
+    if (p == snaps_by_name.end())
+      return 0;
+    return p->second.size;
   }
 
-  int ImageCtx::get_features(uint64_t *out_features) const
+  int ImageCtx::get_features(snap_t in_snap_id, uint64_t *out_features) const
   {
-    if (snap_name.length() == 0) {
+    if (in_snap_id == CEPH_NOSNAP) {
       *out_features = features;
       return 0;
     }
-    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+    string in_snap_name;
+    int r = get_snap_name(in_snap_id, &in_snap_name);
+    if (r < 0)
+      return r;
+    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return -ENOENT;
     *out_features = p->second.features;
     return 0;
   }
 
-  int64_t ImageCtx::get_parent_pool_id() const
+  int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
-    if (snap_name.length() == 0) {
+    if (in_snap_id == CEPH_NOSNAP) {
       return parent_md.pool_id;
     }
-    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+    string in_snap_name;
+    int r = get_snap_name(in_snap_id, &in_snap_name);
+    if (r < 0)
+      return -1;
+    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return -1;
     return p->second.parent.pool_id;
   }
 
-  string ImageCtx::get_parent_image_id() const
+  string ImageCtx::get_parent_image_id(snap_t in_snap_id) const
   {
-    if (snap_name.length() == 0) {
+    if (in_snap_id == CEPH_NOSNAP) {
       return parent_md.image_id;
     }
-    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+    string in_snap_name;
+    int r = get_snap_name(in_snap_id, &in_snap_name);
+    if (r < 0)
+      return "";
+    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return "";
     return p->second.parent.image_id;
   }
 
-  uint64_t ImageCtx::get_parent_snap_id() const
+  uint64_t ImageCtx::get_parent_snap_id(snap_t in_snap_id) const
   {
-    if (snap_name.length() == 0) {
+    if (in_snap_id == CEPH_NOSNAP) {
       return parent_md.snap_id;
     }
-    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+    string in_snap_name;
+    int r = get_snap_name(in_snap_id, &in_snap_name);
+    if (r < 0)
+      return CEPH_NOSNAP;
+    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return CEPH_NOSNAP;
     return p->second.parent.snap_id;
   }
 
-  int ImageCtx::get_parent_overlap(uint64_t *overlap) const
+  int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
-    if (snap_name.length() == 0) {
+    if (in_snap_id == CEPH_NOSNAP) {
       *overlap = parent_md.overlap;
       return 0;
     }
-    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(snap_name);
+    string in_snap_name;
+    int r = get_snap_name(in_snap_id, &in_snap_name);
+    if (r < 0)
+      return r;
+    map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return -ENOENT;
     *overlap = p->second.parent.overlap;
