@@ -27,9 +27,12 @@ static inline const char *cls_lock_type_str(ClsLockType type)
     }
 }
 
+/*
+ * cls_lock_id_t: the locker id, needs to be unique in a single lock
+ */
 struct cls_lock_id_t {
-  entity_name_t locker;
-  string cookie;
+  entity_name_t locker;   // locker's client name
+  string cookie;          // locker's cookie.
 
   cls_lock_id_t() {}
   cls_lock_id_t(entity_name_t& _n, const string& _c) : locker(_n), cookie(_c) {}
@@ -61,9 +64,9 @@ WRITE_CLASS_ENCODER(cls_lock_id_t)
 
 struct cls_lock_locker_info_t
 {
-  utime_t expiration;
-  entity_addr_t addr;
-  string description;
+  utime_t expiration;  // expiration: non-zero means epoch of locker expiration
+  entity_addr_t addr;  // addr: locker address
+  string description;  // description: locker description, may be empty
 
   cls_lock_locker_info_t() {}
   cls_lock_locker_info_t(const utime_t& _e, const entity_addr_t& _a,
