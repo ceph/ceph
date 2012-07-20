@@ -1025,14 +1025,19 @@ void Pipe::fault(bool onconnect, bool onread)
 
 
   if (state != STATE_CONNECTING) {
-    if (!onconnect)
-      ldout(msgr->cct,0) << "fault initiating reconnect" << dendl;
-    connect_seq++;
-    state = STATE_CONNECTING;
+    if (policy.server) {
+      ldout(msgr->cct,0) << "fault, server, going to standby" << dendl;
+      state = STATE_STANDBY;
+    } else {
+      if (!onconnect)
+	ldout(msgr->cct,0) << "fault, initiating reconnect" << dendl;
+      connect_seq++;
+      state = STATE_CONNECTING;
+    }
     backoff = utime_t();
   } else if (backoff == utime_t()) {
     if (!onconnect)
-      ldout(msgr->cct,0) << "fault first fault" << dendl;
+      ldout(msgr->cct,0) << "fault" << dendl;
     backoff.set_from_double(conf->ms_initial_backoff);
   } else {
     ldout(msgr->cct,10) << "fault waiting " << backoff << dendl;
@@ -1216,12 +1221,9 @@ void Pipe::writer()
 
     // connect?
     if (state == STATE_CONNECTING) {
-      if (policy.server) {
-	state = STATE_STANDBY;
-      } else {
-	connect();
-	continue;
-      }
+      assert(!policy.server);
+      connect();
+      continue;
     }
     
     if (state == STATE_CLOSING) {
