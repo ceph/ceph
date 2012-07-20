@@ -61,24 +61,24 @@ WRITE_CLASS_ENCODER(cls_lock_id_t)
 
 struct cls_lock_locker_info_t
 {
-  utime_t duration;
+  utime_t expiration;
   entity_addr_t addr;
   string description;
 
   cls_lock_locker_info_t() {}
   cls_lock_locker_info_t(const utime_t& _e, const entity_addr_t& _a,
-			 const string& _d) :  duration(_e), addr(_a), description(_d) {}
+			 const string& _d) :  expiration(_e), addr(_a), description(_d) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(duration, bl);
+    ::encode(expiration, bl);
     ::encode(addr, bl);
     ::encode(description, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(duration, bl);
+    ::decode(expiration, bl);
     ::decode(addr, bl);
     ::decode(description, bl);
     DECODE_FINISH(bl);

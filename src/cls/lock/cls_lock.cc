@@ -105,7 +105,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
     ++next;
 
     struct cls_lock_locker_info_t& info = iter->second;
-    if (!info.duration.is_zero() && info.duration < now) {
+    if (!info.expiration.is_zero() && info.expiration < now) {
       CLS_LOG(20, "expiring locker");
       lock->lockers.erase(iter);
     }
@@ -137,7 +137,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
  * Input:
  * @param name Lock name
  * @param lock_type Type of lock (exclusive / shared)
- * @param duration Type of lock (exclusive / shared)
+ * @param duration Duration of lock (in seconds). Zero means it doesn't expire.
  * @param flags lock flags
  * @param cookie The cookie to set in the lock
  * @param tag The tag to match with the lock (can only lock with matching tags)
@@ -215,13 +215,13 @@ static int lock_obj(cls_method_context_t hctx,
 
   linfo.lock_type = lock_type;
   linfo.tag = tag;
-  utime_t duration_abs;
+  utime_t expiration;
   if (!duration.is_zero()) {
-    duration_abs = ceph_clock_now(g_ceph_context);
-    duration_abs += duration;
+    expiration = ceph_clock_now(g_ceph_context);
+    expiration += duration;
 
   }
-  struct cls_lock_locker_info_t info(duration_abs, inst.addr, description);
+  struct cls_lock_locker_info_t info(expiration, inst.addr, description);
 
   linfo.lockers[id] = info;
 
