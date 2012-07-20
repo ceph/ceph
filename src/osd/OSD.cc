@@ -2155,21 +2155,22 @@ struct C_OSD_GetVersion : public Context {
   C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
   void finish(int r) {
     if (r >= 0)
-      osd->_got_boot_version(oldest, newest);
+      osd->_maybe_boot(oldest, newest);
   }
 };
 
 void OSD::start_boot()
 {
-  dout(10) << "start_boot - have maps " << superblock.oldest_map << ".." << superblock.newest_map << dendl;
+  dout(10) << "start_boot - have maps " << superblock.oldest_map
+	   << ".." << superblock.newest_map << dendl;
   C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
   monc->get_version("osdmap", &c->newest, &c->oldest, c);
 }
 
-void OSD::_got_boot_version(epoch_t oldest, epoch_t newest)
+void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
-  dout(10) << "_got_boot_version mon has osdmaps " << oldest << ".." << newest << dendl;
+  dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
 
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
@@ -2178,7 +2179,7 @@ void OSD::_got_boot_version(epoch_t oldest, epoch_t newest)
     dout(1) << "internal heartbeats indicate we are not healthy; waiting to boot" << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() < newest + g_conf->osd_map_message_max) {
-    send_boot();
+    _send_boot();
     return;
   }
   
@@ -2190,9 +2191,9 @@ void OSD::_got_boot_version(epoch_t oldest, epoch_t newest)
   monc->renew_subs();
 }
 
-void OSD::send_boot()
+void OSD::_send_boot()
 {
-  dout(10) << "send_boot" << dendl;
+  dout(10) << "_send_boot" << dendl;
   entity_addr_t cluster_addr = cluster_messenger->get_myaddr();
   if (cluster_addr.is_blank_ip()) {
     int port = cluster_addr.get_port();
