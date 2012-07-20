@@ -42,6 +42,8 @@ using namespace librados;
 
 #include "common/errno.h"
 
+#include "cls/lock/cls_lock_client.h"
+
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
 
@@ -99,6 +101,23 @@ void usage(ostream& out)
 "                                    or directory.\n"
 "       --workers                    Number of worker threads to spawn (default "
 STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
+"\n"
+"ADVISORY LOCKS\n"
+"   lock list <obj-name>\n"
+"       List all advisory locks on an object\n"
+"   lock get <obj-name> <lock-name>\n"
+"       Try to acquire a lock\n"
+"   lock break <obj-name> <lock-name> <locker-name>\n"
+"       Try to break a lock acquired by another client\n"
+"   lock info <obj-name> <lock-name>\n"
+"       Show lock information\n"
+"   options:\n"
+"       --lock-tag                   Lock tag, all locks operation should use\n"
+"                                    the same tag\n"
+"       --lock-cookie                Locker cookie\n"
+"       --lock-description           Description of lock\n"
+"       --lock-duration              Lock duration (in seconds)\n"
+"       --lock-type                  Lock type (shared, exclusive)\n"
 "\n"
 "GLOBAL OPTIONS:\n"
 "   --object_locator object_locator\n"
@@ -648,6 +667,163 @@ public:
   RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i) {}
   ~RadosBencher() { }
 };
+
+static int do_lock_cmd(std::vector<const char*> &nargs,
+                       const std::map < std::string, std::string > &opts,
+                       IoCtx ioctx,
+		       Formatter *formatter)
+{
+  char buf[128];
+
+  if (nargs.size() < 3)
+    usage_exit();
+
+  string cmd(nargs[1]);
+  string oid(nargs[2]);
+
+  string lock_tag;
+  string lock_cookie;
+  string lock_description;
+  int lock_duration = 0;
+  ClsLockType lock_type = LOCK_EXCLUSIVE;
+
+  map<string, string>::const_iterator i;
+  i = opts.find("lock-tag");
+  if (i != opts.end()) {
+    lock_tag = i->second;
+  }
+  i = opts.find("lock-cookie");
+  if (i != opts.end()) {
+    lock_cookie = i->second;
+  }
+  i = opts.find("lock-description");
+  if (i != opts.end()) {
+    lock_description = i->second;
+  }
+  i = opts.find("lock-duration");
+  if (i != opts.end()) {
+    lock_duration = strtol(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("lock-type");
+  if (i != opts.end()) {
+    const string& type_str = i->second;
+    if (type_str.compare("exclusive") == 0) {
+      lock_type = LOCK_EXCLUSIVE;
+    } else if (type_str.compare("shared") == 0) {
+      lock_type = LOCK_SHARED;
+    } else {
+      cerr << "unknown lock type was specified, aborting" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  if (cmd.compare("list") == 0) {
+    list<string> locks;
+    int ret = rados::cls::lock::list_locks(ioctx, oid, &locks);
+    if (ret < 0) {
+      cerr << "ERROR: rados_list_locks(): " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return ret;
+    }
+
+    formatter->open_object_section("object");
+    formatter->dump_string("objname", oid);
+    formatter->open_array_section("locks");
+    list<string>::iterator iter;
+    for (iter = locks.begin(); iter != locks.end(); ++iter) {
+      formatter->open_object_section("lock");
+      formatter->dump_string("name", *iter);
+      formatter->close_section();
+    }
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
+    return 0;
+  }
+
+  if (nargs.size() < 4)
+    usage_exit();
+
+  string lock_name(nargs[3]);
+
+  if (cmd.compare("info") == 0) {
+    map<cls_lock_id_t, cls_lock_locker_info_t> lockers;
+    ClsLockType type = LOCK_NONE;
+    string description;
+    string tag;
+    int ret = rados::cls::lock::get_lock_info(ioctx, oid, lock_name, &lockers, &type, &tag);
+    if (ret < 0) {
+      cerr << "ERROR: rados_lock_get_lock_info(): " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return ret;
+    }
+
+    formatter->open_object_section("lock");
+    formatter->dump_string("name", lock_name);
+    formatter->dump_string("type", cls_lock_type_str(type));
+    formatter->dump_string("tag", tag);
+    formatter->open_array_section("lockers");
+    map<cls_lock_id_t, cls_lock_locker_info_t>::iterator iter;
+    for (iter = lockers.begin(); iter != lockers.end(); ++iter) {
+      const cls_lock_id_t& id = iter->first;
+      const cls_lock_locker_info_t& info = iter->second;
+      formatter->open_object_section("locker");
+      formatter->dump_stream("name") << id.locker;
+      formatter->dump_string("cookie", id.cookie);
+      formatter->dump_string("description", info.description);
+      formatter->dump_stream("duration") << info.duration;
+      formatter->dump_stream("addr") << info.addr;
+      formatter->close_section();
+    }
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
+    
+    return ret;
+  } else if (cmd.compare("get") == 0) {
+    rados::cls::lock::Lock l(lock_name);
+    l.set_cookie(lock_cookie);
+    l.set_tag(lock_tag);
+    l.set_duration(utime_t(lock_duration, 0));
+    l.set_description(lock_description);
+    int ret;
+    switch (lock_type) {
+    case LOCK_SHARED:
+      ret = l.lock_shared(ioctx, oid);
+      break;
+    default:
+      ret = l.lock_exclusive(ioctx, oid);
+    }
+    if (ret < 0) {
+      cerr << "ERROR: failed locking: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return ret;
+    }
+
+    return ret;
+  }
+
+  if (nargs.size() < 5)
+    usage_exit();
+
+  if (cmd.compare("break") == 0) {
+    string locker(nargs[4]);
+    rados::cls::lock::Lock l(lock_name);
+    l.set_cookie(lock_cookie);
+    l.set_tag(lock_tag);
+    entity_name_t name;
+    if (!name.parse(locker)) {
+      cerr << "ERROR: failed to parse locker name (" << locker << ")" << std::endl;
+      return -EINVAL;
+    }
+    int ret = l.break_lock(ioctx, oid, name);
+    if (ret < 0) {
+      cerr << "ERROR: failed breaking lock: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return ret;
+    }
+  } else {
+    usage_exit();
+  }
+
+  return 0;
+}
 
 /**********************************************
 
@@ -1504,6 +1680,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	 iter != out_keys.end(); ++iter) {
       cout << *iter << std::endl;
     }
+  } else if (strcmp(nargs[0], "lock") == 0) {
+    if (!pool_name)
+      usage_exit();
+
+    if (!formatter) {
+      formatter = new JSONFormatter(pretty_format);
+    }
+    ret = do_lock_cmd(nargs, opts, io_ctx, formatter);
   } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage_exit();
@@ -1583,6 +1767,16 @@ int main(int argc, const char **argv)
       opts["workers"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       opts["format"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-tag", (char*)NULL)) {
+      opts["lock-tag"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-cookie", (char*)NULL)) {
+      opts["lock-cookie"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-description", (char*)NULL)) {
+      opts["lock-description"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-duration", (char*)NULL)) {
+      opts["lock-duration"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-type", (char*)NULL)) {
+      opts["lock-type"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();
