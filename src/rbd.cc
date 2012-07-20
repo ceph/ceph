@@ -72,6 +72,8 @@ void usage()
 "  clone [--order <bits>] <parentsnap> <clonename>\n"
 "                                              clone a snapshot into a COW\n"
 "                                               child image\n"
+"  flatten <image-name>                        fill clone with parent data\n"
+"                                              (make it independent)\n"
 "  resize --size <MB> <image-name>             resize (expand or contract) image\n"
 "  rm <image-name>                             delete an image\n"
 "  export <image-name> <path>                  export image to file\n"
@@ -195,6 +197,18 @@ static int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
 
   return rbd.clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
 		    c_order);
+}
+
+static int do_flatten(librbd::Image& image)
+{
+  MyProgressContext pc("Image flatten");
+  int r = image.flatten_with_progress(pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
 }
 
 static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
@@ -914,6 +928,7 @@ enum {
   OPT_INFO,
   OPT_CREATE,
   OPT_CLONE,
+  OPT_FLATTEN,
   OPT_RESIZE,
   OPT_RM,
   OPT_EXPORT,
@@ -943,6 +958,8 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_CREATE;
     if (strcmp(cmd, "clone") == 0)
       return OPT_CLONE;
+    if (strcmp(cmd, "flatten") == 0)
+      return OPT_FLATTEN;
     if (strcmp(cmd, "resize") == 0)
       return OPT_RESIZE;
     if (strcmp(cmd, "rm") == 0)
@@ -1093,6 +1110,7 @@ int main(int argc, const char **argv)
 	break;
       case OPT_INFO:
       case OPT_CREATE:
+      case OPT_FLATTEN:
       case OPT_RESIZE:
       case OPT_RM:
       case OPT_SNAP_CREATE:
@@ -1226,10 +1244,11 @@ int main(int argc, const char **argv)
   }
 
   if (imgname && talk_to_cluster &&
-      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
-       opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_SNAP_PURGE ||
-       opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY)) {
+      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO ||
+       opt_cmd == OPT_SNAP_LIST || opt_cmd == OPT_SNAP_CREATE ||
+       opt_cmd == OPT_SNAP_ROLLBACK || opt_cmd == OPT_SNAP_REMOVE ||
+       opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_EXPORT ||
+       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY || opt_cmd == OPT_FLATTEN)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
@@ -1298,6 +1317,14 @@ int main(int argc, const char **argv)
 		 features, &order);
     if (r < 0) {
       cerr << "clone error: " << cpp_strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
+  case OPT_FLATTEN:
+    r = do_flatten(image);
+    if (r < 0) {
+      cerr << "flatten error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
