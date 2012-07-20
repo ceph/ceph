@@ -380,7 +380,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   // check caps
   MonSession *session = stats->get_session();
   if (!session) {
-    derr << "PGMonitor::preprocess_pg_stats: no monitor session!" << dendl;
+    dout(10) << "PGMonitor::preprocess_pg_stats: no monitor session!" << dendl;
     stats->put();
     return true;
   }
