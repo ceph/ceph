@@ -402,7 +402,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * @param in is ignored.
  *
  * Output:
- * @param 
+ * @param out contains encoded cls_list_locks_reply
  *
  * @return 0 on success, -errno on failure.
  */static int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
