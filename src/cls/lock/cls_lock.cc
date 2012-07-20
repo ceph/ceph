@@ -42,7 +42,7 @@ cls_method_handle_t h_list_locks;
 #define LOCK_PREFIX    "lock."
 
 typedef struct lock_info_s {
-  map<cls_lock_id_t, cls_lock_locker_info_t> lockers; // map of lockers
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers; // map of lockers
   ClsLockType lock_type;                              // lock type (exclusive / shared)
   string tag;                                         // tag: operations on lock can only succeed with this tag
                                                       //      as long as set of non expired lockers
@@ -100,10 +100,10 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   utime_t now = ceph_clock_now(g_ceph_context);
 
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator iter = lock->lockers.begin();
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter = lock->lockers.begin();
 
   while (iter != lock->lockers.end()) {
-    map<cls_lock_id_t, cls_lock_locker_info_t>::iterator next = iter;
+    map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator next = iter;
     ++next;
 
     struct cls_lock_locker_info_t& info = iter->second;
@@ -175,10 +175,10 @@ static int lock_obj(cls_method_context_t hctx,
     CLS_ERR("Could not read lock info: %s", strerror(r));
     return r;
   }
-  map<cls_lock_id_t, cls_lock_locker_info_t>& lockers = linfo.lockers;
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator iter;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>& lockers = linfo.lockers;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter;
 
-  cls_lock_id_t id;
+  cls_lock_locker_id_t id;
   id.cookie = cookie;
   entity_inst_t inst;
   r = cls_get_request_origin(hctx, &inst);
@@ -283,11 +283,11 @@ static int remove_lock(cls_method_context_t hctx,
     return r;
   }
 
-  map<cls_lock_id_t, cls_lock_locker_info_t>& lockers = linfo.lockers;
-  struct cls_lock_id_t id(locker, cookie);
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>& lockers = linfo.lockers;
+  struct cls_lock_locker_id_t id(locker, cookie);
 
   // remove named locker from set
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator iter = lockers.find(id);
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter = lockers.find(id);
   if (iter == lockers.end()) { // no such key
     return -ENOENT;
   }
@@ -384,7 +384,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   struct cls_lock_get_info_reply ret;
 
-  map<cls_lock_id_t, cls_lock_locker_info_t>::iterator iter;
+  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter;
   for (iter = linfo.lockers.begin(); iter != linfo.lockers.end(); ++iter) {
     ret.lockers[iter->first] = iter->second;
   }

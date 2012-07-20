@@ -28,14 +28,14 @@ static inline const char *cls_lock_type_str(ClsLockType type)
 }
 
 /*
- * cls_lock_id_t: the locker id, needs to be unique in a single lock
+ * cls_lock_locker_id_t: the locker id, needs to be unique in a single lock
  */
-struct cls_lock_id_t {
+struct cls_lock_locker_id_t {
   entity_name_t locker;   // locker's client name
   string cookie;          // locker's cookie.
 
-  cls_lock_id_t() {}
-  cls_lock_id_t(entity_name_t& _n, const string& _c) : locker(_n), cookie(_c) {}
+  cls_lock_locker_id_t() {}
+  cls_lock_locker_id_t(entity_name_t& _n, const string& _c) : locker(_n), cookie(_c) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -50,7 +50,7 @@ struct cls_lock_id_t {
     DECODE_FINISH(bl);
   }
 
-  bool operator<(const cls_lock_id_t& rhs) const {
+  bool operator<(const cls_lock_locker_id_t& rhs) const {
     if (locker == rhs.locker)
       return cookie.compare(rhs.cookie) < 0;
     if (locker < rhs.locker)
@@ -58,9 +58,9 @@ struct cls_lock_id_t {
     return false;
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_lock_id_t*>& o);
+  static void generate_test_instances(list<cls_lock_locker_id_t*>& o);
 };
-WRITE_CLASS_ENCODER(cls_lock_id_t)
+WRITE_CLASS_ENCODER(cls_lock_locker_id_t)
 
 struct cls_lock_locker_info_t
 {
