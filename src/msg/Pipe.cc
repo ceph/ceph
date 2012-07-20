@@ -550,7 +550,7 @@ int Pipe::accept()
   if (state != STATE_CLOSED) {
     bool queued = is_queued();
     if (queued)
-      state = STATE_CONNECTING;
+      state = policy.server ? STATE_STANDBY : STATE_CONNECTING;
     else if (replaced)
       state = STATE_STANDBY;
     else
