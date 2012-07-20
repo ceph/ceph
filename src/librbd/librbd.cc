@@ -213,6 +213,12 @@ namespace librbd {
     return librbd::get_old_format(ictx, old);
   }
 
+  int Image::size(uint64_t *size)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::get_size(ictx, size);
+  }
+
   int Image::features(uint64_t *features)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -564,6 +570,12 @@ extern "C" int rbd_get_old_format(rbd_image_t image, uint8_t *old)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::get_old_format(ictx, old);
+}
+
+extern "C" int rbd_get_size(rbd_image_t image, uint64_t *size)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::get_size(ictx, size);
 }
 
 extern "C" int rbd_get_features(rbd_image_t image, uint64_t *features)
