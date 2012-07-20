@@ -2546,25 +2546,42 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
   
   // check if the snap and snapname exists
   bool snap_exists = false;
-  if (osdmap.get_pg_pool(m->pool)->snap_exists(m->name.c_str()))
+  const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
+  if (p->snap_exists(m->name.c_str()))
     snap_exists = true;
   
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
+    if (p->is_unmanaged_snaps_mode()) {
+      _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
     if (snap_exists) {
       _pool_op_reply(m, -EEXIST, osdmap.get_epoch());
       return true;
     }
     return false; // continue processing
   case POOL_OP_CREATE_UNMANAGED_SNAP:
+    if (p->is_pool_snaps_mode()) {
+      _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
     return false; // continue processing
   case POOL_OP_DELETE_SNAP:
+    if (p->is_unmanaged_snaps_mode()) {
+      _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
     if (!snap_exists) {
       _pool_op_reply(m, -ENOENT, osdmap.get_epoch());
       return true;
     }
     return false;
   case POOL_OP_DELETE_UNMANAGED_SNAP:
+    if (p->is_pool_snaps_mode()) {
+      _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
     return false;
   case POOL_OP_DELETE: //can't delete except on master
     if (osdmap.lookup_pg_pool_name(m->name.c_str()) >= 0) {
