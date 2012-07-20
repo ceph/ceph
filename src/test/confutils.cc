@@ -257,6 +257,12 @@ const char override_config_1[] = "\
         log file =           osd0_log\n\
 ";
 
+const char dup_key_config_1[] = "\
+[mds.a]\n\
+        log_file = 1\n\
+        log_file = 3\n\
+";
+
 TEST(Whitespace, ConfUtils) {
   std::string test0("");
   ConfFile::trim_whitespace(test0, false);
@@ -477,4 +483,15 @@ TEST(Overrides, ConfUtils) {
   conf.parse_config_files(override_conf_1_f.c_str(), &err, 0);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "osd0_log");
+}
+
+TEST(DupKey, ConfUtils) {
+  md_config_t conf;
+  std::deque<std::string> err;
+  std::string dup_key_config_f(next_tempfile(dup_key_config_1));
+
+  conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
+  conf.parse_config_files(dup_key_config_f.c_str(), &err, 0);
+  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(conf.log_file, string("3"));
 }

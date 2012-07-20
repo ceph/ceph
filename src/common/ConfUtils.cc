@@ -360,7 +360,18 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors)
       pair < section_iter_t, bool > nr(sections.insert(nt));
       cur_section = nr.first;
     }
-    else if (!cline->key.empty()) {
+    else {
+      if (cur_section->second.lines.count(*cline)) {
+	// replace an existing key/line in this section, so that
+	//  [mysection]
+	//    foo = 1
+	//    foo = 2
+	// will result in foo = 2.
+	cur_section->second.lines.erase(*cline);
+	if (cline->key.length())
+	  std::cerr << "warning: line " << line_no << ": '" << cline->key << "' in section '"
+		    << cur_section->first << "' redefined " << std::endl;
+      }
       // add line to current section
       //std::cerr << "cur_section = " << cur_section->first << ", " << *cline << std::endl;
       cur_section->second.lines.insert(*cline);
