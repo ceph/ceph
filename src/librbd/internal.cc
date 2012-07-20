@@ -1371,6 +1371,9 @@ namespace librbd {
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
 			 << (snap_name ? snap_name : "NULL") << dendl;
+    // ignore return value, since we may be set to a non-existent
+    // snapshot and the user is trying to fix that
+    ictx_check(ictx);
 
     Mutex::Locker l(ictx->lock);
     if (snap_name) {
