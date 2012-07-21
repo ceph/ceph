@@ -473,6 +473,25 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(crush->choose_total_tries, bl);
 }
 
+static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
+{
+  m.clear();
+  __u32 n;
+  ::decode(n, blp);
+  while (n--) {
+    __s32 key;
+    ::decode(key, blp);
+
+    __u32 strlen;
+    ::decode(strlen, blp);
+    if (strlen == 0) {
+      // der, key was actually 64-bits!
+      ::decode(strlen, blp);
+    }
+    ::decode_nohead(strlen, m[key], blp);
+  }
+}
+
 void CrushWrapper::decode(bufferlist::iterator& blp)
 {
   create();
@@ -513,9 +532,12 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     }
 
     // name info
-    ::decode(type_map, blp);
-    ::decode(name_map, blp);
-    ::decode(rule_name_map, blp);
+    // NOTE: we had a bug where we were incoding int instead of int32, which means the
+    // 'key' field for these maps may be either 32 or 64 bits, depending.  tolerate
+    // both by assuming the string is always non-empty.
+    decode_32_or_64_string_map(type_map, blp);
+    decode_32_or_64_string_map(name_map, blp);
+    decode_32_or_64_string_map(rule_name_map, blp);
     build_rmaps();
 
     // tunables
