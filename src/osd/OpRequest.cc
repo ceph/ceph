@@ -20,28 +20,29 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "--OSD::tracker-- ";
 }
 
-void OpHistory::insert(utime_t now, OpRequest *op) {
+void OpHistory::insert(utime_t now, OpRequest *op)
+{
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_arrived(), op));
   cleanup(now);
 }
 
-void OpHistory::cleanup(utime_t now) {
+void OpHistory::cleanup(utime_t now)
+{
   while (arrived.size() &&
-	 now - arrived.begin()->first >
-	 (double)(g_conf->osd_op_history_duration)) {
-    delete arrived.begin()->second;
+	 now - arrived.begin()->first > (double)(g_conf->osd_op_history_duration)) {
     duration.erase(make_pair(
 	arrived.begin()->second->get_duration(),
 	arrived.begin()->second));
+    delete arrived.begin()->second;
     arrived.erase(arrived.begin());
   }
 
   while (duration.size() > g_conf->osd_op_history_size) {
-    delete duration.begin()->second;
     arrived.erase(make_pair(
 	duration.begin()->second->get_arrived(),
 	duration.begin()->second));
+    delete duration.begin()->second;
     duration.erase(duration.begin());
   }
 }
