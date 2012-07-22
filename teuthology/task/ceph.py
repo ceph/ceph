@@ -636,6 +636,10 @@ def cluster(ctx, config):
                     if mount_options is None:
                         mount_options = ['noatime','user_xattr']
 
+                if mount_options is None:
+                    mount_options = []
+                if mkfs_options is None:
+                    mkfs_options = []
                 mkfs = ['mkfs.%s' % fs] + mkfs_options
                 log.info('%s on %s on %s' % (mkfs, dev, remote))
                 if package is not None:
