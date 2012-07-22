@@ -1941,7 +1941,7 @@ void OSD::tick()
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
   // periodically kick recovery work queue
-  recovery_tp.kick();
+  recovery_tp.wake();
   
   if (scrub_should_schedule()) {
     sched_scrub();
@@ -2631,7 +2631,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	 << "to " << g_conf->osd_recovery_delay_start;
       defer_recovery_until = ceph_clock_now(g_ceph_context);
       defer_recovery_until += g_conf->osd_recovery_delay_start;
-      recovery_wq.kick();
+      recovery_wq.wake();
     }
   }
 
@@ -5309,7 +5309,7 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
     recovery_queue.push_front(&pg->recovery_item);  // requeue
   }
 
-  recovery_wq.kick();
+  recovery_wq._wake();
   recovery_wq.unlock();
 }
 
@@ -5321,7 +5321,7 @@ void OSD::defer_recovery(PG *pg)
   recovery_wq.lock();
   pg->get();
   recovery_queue.push_back(&pg->recovery_item);
-  recovery_wq.kick();
+  recovery_wq._wake();
   recovery_wq.unlock();
 }
 
