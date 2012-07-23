@@ -1480,14 +1480,22 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
 
 //snapshots
 
-int Objecter::create_pool_snap(int64_t pool, string& snapName, Context *onfinish) {
-  ldout(cct, 10) << "create_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
+int Objecter::create_pool_snap(int64_t pool, string& snap_name, Context *onfinish)
+{
+  ldout(cct, 10) << "create_pool_snap; pool: " << pool << "; snap: " << snap_name << dendl;
+
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -EINVAL;
+  if (p->snap_exists(snap_name.c_str()))
+    return -EEXIST;
+
   PoolOp *op = new PoolOp;
   if (!op)
     return -ENOMEM;
   op->tid = ++last_tid;
   op->pool = pool;
-  op->name = snapName;
+  op->name = snap_name;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE_SNAP;
   pool_ops[op->tid] = op;
@@ -1530,15 +1538,22 @@ int Objecter::allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid,
   return 0;
 }
 
-int Objecter::delete_pool_snap(int64_t pool, string& snapName, Context *onfinish)
+int Objecter::delete_pool_snap(int64_t pool, string& snap_name, Context *onfinish)
 {
-  ldout(cct, 10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
+  ldout(cct, 10) << "delete_pool_snap; pool: " << pool << "; snap: " << snap_name << dendl;
+
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -EINVAL;
+  if (!p->snap_exists(snap_name.c_str()))
+    return -ENOENT;
+
   PoolOp *op = new PoolOp;
   if (!op)
     return -ENOMEM;
   op->tid = ++last_tid;
   op->pool = pool;
-  op->name = snapName;
+  op->name = snap_name;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_SNAP;
   pool_ops[op->tid] = op;
