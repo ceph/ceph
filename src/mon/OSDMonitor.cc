@@ -2557,7 +2557,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
       return true;
     }
     if (snap_exists) {
-      _pool_op_reply(m, -EEXIST, osdmap.get_epoch());
+      _pool_op_reply(m, 0, osdmap.get_epoch());
       return true;
     }
     return false; // continue processing
@@ -2573,13 +2573,17 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
       return true;
     }
     if (!snap_exists) {
-      _pool_op_reply(m, -ENOENT, osdmap.get_epoch());
+      _pool_op_reply(m, 0, osdmap.get_epoch());
       return true;
     }
     return false;
   case POOL_OP_DELETE_UNMANAGED_SNAP:
     if (p->is_pool_snaps_mode()) {
       _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    if (p->is_removed_snap(m->snapid)) {
+      _pool_op_reply(m, 0, osdmap.get_epoch());
       return true;
     }
     return false;
@@ -2637,6 +2641,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 
   bufferlist *blp = NULL;
   int ret = 0;
+  bool changed = false;
 
   // projected pool info
   pg_pool_t pp;
@@ -2665,21 +2670,20 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
  
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
-    if (pp.snap_exists(m->name.c_str()))
-      ret = -EEXIST;
-    else {
+    if (!pp.snap_exists(m->name.c_str())) {
       pp.add_snap(m->name.c_str(), ceph_clock_now(g_ceph_context));
       dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp.get_snap_epoch() << dendl;
+      changed = true;
     }
     break;
 
   case POOL_OP_DELETE_SNAP:
     {
       snapid_t s = pp.snap_exists(m->name.c_str());
-      if (s)
+      if (s) {
 	pp.remove_snap(s);
-      else
-	ret = -ENOENT;
+	changed = true;
+      }
     }
     break;
 
@@ -2689,14 +2693,15 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
       uint64_t snapid;
       pp.add_unmanaged_snap(snapid);
       ::encode(snapid, *blp);
+      changed = true;
     }
     break;
 
   case POOL_OP_DELETE_UNMANAGED_SNAP:
-    if (pp.is_removed_snap(m->snapid))
-      ret = -ENOENT;
-    else
+    if (!pp.is_removed_snap(m->snapid)) {
       pp.remove_unmanaged_snap(m->snapid);
+      changed = true;
+    }
     break;
 
   default:
@@ -2704,7 +2709,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
     break;
   }
 
-  if (ret == 0) {
+  if (changed) {
     pp.set_snap_epoch(pending_inc.epoch);
     pending_inc.new_pools[m->pool] = pp;
   }
