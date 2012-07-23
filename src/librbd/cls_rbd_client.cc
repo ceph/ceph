@@ -299,24 +299,6 @@ namespace librbd {
       return 0;
     }
 
-    int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
-		   uint64_t *id)
-    {
-      bufferlist bl, out;
-      int r = ioctx->exec(oid, "rbd", "assign_bid", bl, out);
-      if (r < 0)
-	return r;
-
-      try {
-	bufferlist::iterator iter = out.begin();
-	::decode(*id, iter);
-      } catch (const buffer::error &err) {
-	return -EBADMSG;
-      }
-
-      return 0;
-    }
-
     int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 			 snapid_t snap_id, const std::string &snap_name)
     {

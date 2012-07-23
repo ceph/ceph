@@ -637,8 +637,7 @@ namespace librbd {
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
 
-  int touch_rbd_info(IoCtx& io_ctx, const string& info_oid);
-  int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id);
+  uint64_t rbd_assign_bid(IoCtx& io_ctx);
   int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint64_t *ver);
   int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ictx);
   int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver);
@@ -744,13 +743,15 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 {
   uint32_t hi = bid >> 32;
   uint32_t lo = bid & 0xFFFFFFFF;
+  uint32_t extra = rand() % 0xFFFFFFFF;
   memset(&ondisk, 0, sizeof(ondisk));
 
   memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
   memcpy(&ondisk.signature, RBD_HEADER_SIGNATURE, sizeof(RBD_HEADER_SIGNATURE));
   memcpy(&ondisk.version, RBD_HEADER_VERSION, sizeof(RBD_HEADER_VERSION));
 
-  snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%x.%x", hi, lo);
+  snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%x.%x.%x",
+	   hi, lo, extra);
 
   ondisk.image_size = size;
   ondisk.options.order = *order;
@@ -862,26 +863,10 @@ int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info)
   return 0;
 }
 
-int touch_rbd_info(IoCtx& io_ctx, const string& info_oid)
+uint64_t rbd_assign_bid(IoCtx& io_ctx)
 {
-  bufferlist bl;
-  int r = io_ctx.write(info_oid, bl, 0, 0);
-  if (r < 0)
-    return r;
-  return 0;
-}
-
-int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id)
-{
-  int r = touch_rbd_info(io_ctx, info_oid);
-  if (r < 0)
-    return r;
-
-  r = cls_client::assign_bid(&io_ctx, info_oid, id);
-  if (r < 0)
-    return r;
-
-  return 0;
+  Rados rados(io_ctx);
+  return rados.get_instance_id();
 }
 
 int read_header_bl(IoCtx& io_ctx, const string& header_oid,
@@ -1110,14 +1095,13 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
     return -EDOM;
   }
 
-  uint64_t bid;
+  uint64_t bid = rbd_assign_bid(io_ctx);
   string dir_info = RBD_INFO;
-  r = rbd_assign_bid(io_ctx, dir_info, &bid);
+  r = rbd_assign_bid(io_ctx);
   if (r < 0) {
     lderr(cct) << "failed to assign a block name for image" << dendl;
     return r;
   }
-
 
   if (!*order)
     *order = RBD_DEFAULT_OBJ_ORDER;
@@ -1164,7 +1148,8 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
     }
 
     ostringstream oss;
-    oss << RBD_DATA_PREFIX << std::hex << bid;
+    uint32_t extra = rand() % 0xFFFFFFFF;
+    oss << RBD_DATA_PREFIX << std::hex << bid << std::hex << extra;
     r = cls_client::create_image(&io_ctx, header_name(id), size, *order, features,
 				 oss.str());
   }
