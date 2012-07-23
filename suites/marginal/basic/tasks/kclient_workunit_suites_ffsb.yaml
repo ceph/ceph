@@ -1,5 +1,10 @@
 tasks:
 - ceph:
+    conf:
+      mds:
+        debug mds: 0/20
+        debug ms: 0/1
+        debug journaler: 0/20
 - kclient:
 - workunit:
     clients:
