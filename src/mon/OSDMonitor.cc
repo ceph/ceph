@@ -2560,13 +2560,13 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
       _pool_op_reply(m, 0, osdmap.get_epoch());
       return true;
     }
-    return false; // continue processing
+    return false;
   case POOL_OP_CREATE_UNMANAGED_SNAP:
     if (p->is_pool_snaps_mode()) {
       _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
       return true;
     }
-    return false; // continue processing
+    return false;
   case POOL_OP_DELETE_SNAP:
     if (p->is_unmanaged_snaps_mode()) {
       _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
@@ -2587,14 +2587,14 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
       return true;
     }
     return false;
-  case POOL_OP_DELETE: //can't delete except on master
+  case POOL_OP_DELETE:
     if (osdmap.lookup_pg_pool_name(m->name.c_str()) >= 0) {
       _pool_op_reply(m, 0, osdmap.get_epoch());
       return true;
     }
     return false;
   case POOL_OP_AUID_CHANGE:
-    return false; //can't change except on master
+    return false;
   default:
     assert(0);
     break;
