@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef LEVEL_DB_STORE_H
 #define LEVEL_DB_STORE_H
 
@@ -73,42 +74,57 @@ public:
     std::map<string, bufferlist> *out
     );
 
-  class LevelDBIteratorImpl : public KeyValueDB::IteratorImpl {
+  class LevelDBWholeSpaceIteratorImpl :
+    public KeyValueDB::WholeSpaceIteratorImpl {
+  protected:
     boost::scoped_ptr<leveldb::Iterator> dbiter;
-    const string prefix;
   public:
-    LevelDBIteratorImpl(leveldb::Iterator *iter, const string &prefix) :
-      dbiter(iter), prefix(prefix) {}
+    LevelDBWholeSpaceIteratorImpl(leveldb::Iterator *iter) :
+      dbiter(iter) { }
+    virtual ~LevelDBWholeSpaceIteratorImpl() { }
+
     int seek_to_first() {
+      dbiter->SeekToFirst();
+      return dbiter->status().ok() ? 0 : -1;
+    }
+    int seek_to_first(const string &prefix) {
       leveldb::Slice slice_prefix(prefix);
       dbiter->Seek(slice_prefix);
       return dbiter->status().ok() ? 0 : -1;
     }
     int seek_to_last() {
+      dbiter->SeekToLast();
+      return dbiter->status().ok() ? 0 : -1;
+    }
+    int seek_to_last(const string &prefix) {
       string limit = past_prefix(prefix);
       leveldb::Slice slice_limit(limit);
-	dbiter->Seek(slice_limit);
+      dbiter->Seek(slice_limit);
+
       if (!dbiter->Valid()) {
-	dbiter->SeekToLast();
+        dbiter->SeekToLast();
       } else {
-	dbiter->Prev();
+        dbiter->Prev();
       }
       return dbiter->status().ok() ? 0 : -1;
     }
-    int upper_bound(const string &after) {
-      lower_bound(after);
-      if (valid() && key() == after)
-	next();
+    int upper_bound(const string &prefix, const string &after) {
+      lower_bound(prefix, after);
+      if (valid()) {
+	pair<string,string> key = raw_key();
+	if (key.first == prefix && key.second == after)
+	  next();
+      }
       return dbiter->status().ok() ? 0 : -1;
     }
-    int lower_bound(const string &to) {
+    int lower_bound(const string &prefix, const string &to) {
       string bound = combine_strings(prefix, to);
       leveldb::Slice slice_bound(bound);
       dbiter->Seek(slice_bound);
       return dbiter->status().ok() ? 0 : -1;
     }
     bool valid() {
-      return dbiter->Valid() && in_prefix(prefix, dbiter->key());
+      return dbiter->Valid();
     }
     int next() {
       if (valid())
@@ -137,12 +153,6 @@ public:
       return dbiter->status().ok() ? 0 : -1;
     }
   };
-  Iterator get_iterator(const string &prefix) {
-    return std::tr1::shared_ptr<LevelDBIteratorImpl>(
-      new LevelDBIteratorImpl(
-	db->NewIterator(leveldb::ReadOptions()),
-	prefix));
-  }
 
 
   /// Utility
@@ -157,6 +167,15 @@ public:
     string limit = prefix;
     limit.push_back(1);
     return limit;
+  }
+
+protected:
+  WholeSpaceIterator _get_iterator() {
+    return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+      new LevelDBWholeSpaceIteratorImpl(
+	db->NewIterator(leveldb::ReadOptions())
+      )
+    );
   }
 };
 

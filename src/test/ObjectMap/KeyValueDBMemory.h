@@ -13,7 +13,11 @@ using std::string;
 
 class KeyValueDBMemory : public KeyValueDB {
 public:
-  std::map<string, std::map<string, bufferlist> > db;
+  std::map<std::pair<string,string>,bufferlist> db;
+
+  KeyValueDBMemory() { }
+  KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
+  virtual ~KeyValueDBMemory() { }
 
   int get(
     const string &prefix,
@@ -52,38 +56,34 @@ public:
 
     struct SetOp : public Context {
       KeyValueDBMemory *db;
-      string prefix;
-      string key;
+      std::pair<string,string> key;
       bufferlist value;
       SetOp(KeyValueDBMemory *db,
-	    const string &prefix,
-	    const string &key,
+	    const std::pair<string,string> &key,
 	    const bufferlist &value)
-	: db(db), prefix(prefix), key(key), value(value) {}
+	: db(db), key(key), value(value) {}
       void finish(int r) {
-	db->set(prefix, key, value);
+	db->set(key.first, key.second, value);
       }
     };
 
     void set(const string &prefix, const string &k, const bufferlist& bl) {
-      on_commit.push_back(new SetOp(db, prefix, k, bl));
+      on_commit.push_back(new SetOp(db, std::make_pair(prefix, k), bl));
     }
 
     struct RmKeysOp : public Context {
       KeyValueDBMemory *db;
-      string prefix;
-      string key;
+      std::pair<string,string> key;
       RmKeysOp(KeyValueDBMemory *db,
-	       const string &prefix,
-	       const string &key)
-	: db(db), prefix(prefix), key(key) {}
+	       const std::pair<string,string> &key)
+	: db(db), key(key) {}
       void finish(int r) {
-	db->rmkey(prefix, key);
+	db->rmkey(key.first, key.second);
       }
     };
 
     void rmkey(const string &prefix, const string &key) {
-      on_commit.push_back(new RmKeysOp(db, prefix, key));
+      on_commit.push_back(new RmKeysOp(db, std::make_pair(prefix, key)));
     }
 
     struct RmKeysByPrefixOp : public Context {
@@ -127,6 +127,15 @@ public:
     return static_cast<TransactionImpl_*>(trans.get())->complete();
   }
 
-  friend class MemIterator;
-  Iterator get_iterator(const string &prefix);
+private:
+  bool exists_prefix(const string &prefix) {
+    std::map<std::pair<string,string>,bufferlist>::iterator it;
+    it = db.lower_bound(std::make_pair(prefix, ""));
+    return ((it != db.end()) && ((*it).first.first == prefix));
+  }
+
+  friend class WholeSpaceMemIterator;
+
+protected:
+  WholeSpaceIterator _get_iterator();
 };
