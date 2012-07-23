@@ -2137,7 +2137,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	} else if (osdmap.is_up(osd)) {
 	  ss << "osd." << osd << " is still up";
 	} else {
-	  pending_inc.new_state[osd] = CEPH_OSD_EXISTS;
+	  pending_inc.new_state[osd] = osdmap.get_state(osd);
 	  if (any)
 	    ss << ", osd." << osd;
 	  else 
