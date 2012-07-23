@@ -339,6 +339,7 @@ if [ -n "$prepareosdfs" ]; then
     modprobe btrfs || true
     mkfs.btrfs $btrfs_devs
     btrfs device scan || btrfsctl -a
+    sync   # seems to fix problems for some people...
     mount -t btrfs $btrfs_opt $first_dev $btrfs_path
     chown $osd_user $btrfs_path
     chmod +w $btrfs_path
