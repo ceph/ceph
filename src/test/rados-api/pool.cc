@@ -60,6 +60,20 @@ TEST(LibRadosPools, PoolDelete) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosPools, PoolCreateDelete) {
+  rados_t cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+
+  std::string n = pool_name + "abc123";
+  ASSERT_EQ(0, rados_pool_create(cluster, n.c_str()));
+  ASSERT_EQ(-EEXIST, rados_pool_create(cluster, n.c_str()));
+  ASSERT_EQ(0, rados_pool_delete(cluster, n.c_str()));
+  ASSERT_EQ(-ENOENT, rados_pool_delete(cluster, n.c_str()));
+
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
 TEST(LibRadosPools, AuidTest1) {
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();
