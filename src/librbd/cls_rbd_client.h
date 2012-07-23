@@ -58,9 +58,6 @@ namespace librbd {
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
 		      std::vector<uint64_t> *features);
-    int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
-		   uint64_t *id);
-
     int list_locks(librados::IoCtx *ioctx, const std::string &oid,
                    std::set<std::pair<std::string, std::string> > &locks,
                    bool &exclusive);
