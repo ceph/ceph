@@ -9,98 +9,140 @@
 
 using namespace std;
 
-class MemIterator : public KeyValueDB::IteratorImpl {
-  string prefix;
+/**
+ * Iterate over the whole key space of the in-memory store
+ *
+ * @note Removing keys from the store while iterating over the store key-space
+ *	 may result in unspecified behavior.
+ *	 If one wants to safely iterate over the store while updating the
+ *	 store, one should instead use a snapshot iterator, which provides
+ *	 strong read-consistency.
+ */
+class WholeSpaceMemIterator : public KeyValueDB::WholeSpaceIteratorImpl {
+protected:
   KeyValueDBMemory *db;
-
   bool ready;
-  map<string, bufferlist>::iterator iter;
+
+  map<pair<string,string>, bufferlist>::iterator it;
 
 public:
-  MemIterator(const string &prefix,
-	      KeyValueDBMemory *db) :
-    prefix(prefix), db(db), ready(false) {}
+  WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
+  virtual ~WholeSpaceMemIterator() { }
 
   int seek_to_first() {
-    if (!db->db.count(prefix)) {
+    if (db->db.size() == 0) {
+      it = db->db.end();
       ready = false;
       return 0;
     }
-    iter = db->db[prefix].begin();
+    it = db->db.begin();
+    ready = true;
+    return 0;
+  }
+
+  int seek_to_first(const string &prefix) {
+    it = db->db.lower_bound(make_pair(prefix, ""));
+    if ((db->db.size() == 0) || (it == db->db.end())) {
+      it = db->db.end();
+      ready = false;
+      return 0;
+    }
     ready = true;
     return 0;
   }
 
   int seek_to_last() {
-    if (!db->db.count(prefix)) {
+    it = db->db.end();
+    if (db->db.size() == 0) {
       ready = false;
       return 0;
-    } else if (db->db[prefix].size() == 0) {
-      iter = db->db[prefix].end();
-    } else {
-      iter = --db->db[prefix].end();
     }
+    --it;
+    assert(it != db->db.end());
     ready = true;
     return 0;
   }
 
-  int lower_bound(const string &to) {
-    if (!db->db.count(prefix)) {
+  int seek_to_last(const string &prefix) {
+    string tmp(prefix);
+    tmp.append(1, (char) 0);
+    it = db->db.upper_bound(make_pair(tmp,""));
+
+    if ((db->db.size() == 0) || (it == db->db.end())) {
+      seek_to_last();
+    }
+    else {
+      ready = true;
+      prev();
+    }
+    return 0;
+  }
+
+  int lower_bound(const string &prefix, const string &to) {
+    it = db->db.lower_bound(make_pair(prefix,to));
+    if ((db->db.size() == 0) || (it == db->db.end())) {
+      it = db->db.end();
       ready = false;
       return 0;
     }
-    iter = db->db[prefix].lower_bound(to);
+
+    assert(it != db->db.end());
+
     ready = true;
     return 0;
   }
 
-  int upper_bound(const string &after) {
-    if (!db->db.count(prefix)) {
+  int upper_bound(const string &prefix, const string &after) {
+    it = db->db.upper_bound(make_pair(prefix,after));
+    if ((db->db.size() == 0) || (it == db->db.end())) {
+      it = db->db.end();
       ready = false;
       return 0;
     }
-    iter = db->db[prefix].upper_bound(after);
+    assert(it != db->db.end());
     ready = true;
     return 0;
   }
 
   bool valid() {
-    return ready && iter != db->db[prefix].end();
+    return ready && (it != db->db.end());
   }
 
   bool begin() {
-    return ready && iter == db->db[prefix].begin();
+    return ready && (it == db->db.begin());
   }
 
   int prev() {
-    if (valid() && iter != db->db[prefix].begin())
-      iter--;
+    if (!begin() && ready)
+      --it;
+    else
+      it = db->db.end();
     return 0;
   }
 
   int next() {
     if (valid())
-      iter++;
+      ++it;
     return 0;
   }
 
   string key() {
     if (valid())
-      return iter->first;
+      return (*it).first.second;
     else
       return "";
   }
 
   pair<string,string> raw_key() {
     if (valid())
-      return make_pair(prefix, key());
+      return (*it).first;
     else
-      return make_pair("","");
+      return make_pair("", "");
   }
 
   bufferlist value() {
     if (valid())
-      return iter->second;
+      return (*it).second;
     else
       return bufferlist();
   }
@@ -113,14 +155,15 @@ public:
 int KeyValueDBMemory::get(const string &prefix,
 			  const std::set<string> &key,
 			  map<string, bufferlist> *out) {
-  if (!db.count(prefix))
+  if (!exists_prefix(prefix))
     return 0;
 
   for (std::set<string>::const_iterator i = key.begin();
        i != key.end();
        ++i) {
-    if (db[prefix].count(*i))
-      (*out)[*i] = db[prefix][*i];
+    pair<string,string> k(prefix, *i);
+    if (db.count(k))
+      (*out)[*i] = db[k];
   }
   return 0;
 }
@@ -128,13 +171,13 @@ int KeyValueDBMemory::get(const string &prefix,
 int KeyValueDBMemory::get_keys(const string &prefix,
 			       const std::set<string> &key,
 			       std::set<string> *out) {
-  if (!db.count(prefix))
+  if (!exists_prefix(prefix))
     return 0;
 
   for (std::set<string>::const_iterator i = key.begin();
        i != key.end();
        ++i) {
-    if (db[prefix].count(*i))
+    if (db.count(make_pair(prefix, *i)))
       out->insert(*i);
   }
   return 0;
@@ -143,24 +186,35 @@ int KeyValueDBMemory::get_keys(const string &prefix,
 int KeyValueDBMemory::set(const string &prefix,
 			  const string &key,
 			  const bufferlist &bl) {
-  db[prefix][key] = bl;
+  db[make_pair(prefix,key)] = bl;
   return 0;
 }
 
 int KeyValueDBMemory::rmkey(const string &prefix,
 			    const string &key) {
-  db[prefix].erase(key);
-  if (db[prefix].size() == 0)
-    db.erase(prefix);
-
+  db.erase(make_pair(prefix,key));
   return 0;
 }
 
 int KeyValueDBMemory::rmkeys_by_prefix(const string &prefix) {
-  db.erase(prefix);
+  map<std::pair<string,string>,bufferlist>::iterator i;
+  i = db.lower_bound(make_pair(prefix, ""));
+  if (i == db.end())
+    return 0;
+
+  while (i != db.end()) {
+    std::pair<string,string> key = (*i).first;
+    if (key.first != prefix)
+      break;
+
+    ++i;
+    rmkey(key.first, key.second);
+  }
   return 0;
 }
 
-KeyValueDB::Iterator KeyValueDBMemory::get_iterator(const string &prefix) {
-  return tr1::shared_ptr<IteratorImpl>(new MemIterator(prefix, this));
+KeyValueDB::WholeSpaceIterator KeyValueDBMemory::_get_iterator() {
+  return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+    new WholeSpaceMemIterator(this)
+  );
 }
