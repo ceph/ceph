@@ -1698,14 +1698,11 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  unsigned pg_num, unsigned pgp_num)
 {
-  if (osdmap.name_pool.count(name)) {
-    return -EEXIST;
-  }
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
     if (p->second == name)
-      return -EEXIST;
+      return 0;
   }
 
   if (-1 == pending_inc.new_pool_max)
@@ -2322,15 +2319,24 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
             }
           }
         }
+
+	if (osdmap.name_pool.count(m->cmd[3])) {
+	  ss << "pool '" << m->cmd[3] << "' already exists";
+	  err = 0;
+	  goto out;
+	}
+
         err = prepare_new_pool(m->cmd[3], 0,  // auid=0 for admin created pool
 			       -1,            // default crush rule
 			       pg_num, pgp_num);
-        if (err < 0) {
-          if (err == -EEXIST)
-            ss << "pool '" << m->cmd[3] << "' exists";
+        if (err < 0 && err != -EEXIST) {
           goto out;
         }
-	ss << "pool '" << m->cmd[3] << "' created";
+	if (err == -EEXIST) {
+	  ss << "pool '" << m->cmd[3] << "' already exists";
+	} else {
+	  ss << "pool '" << m->cmd[3] << "' created";
+	}
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
@@ -2593,7 +2599,7 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
 
   int64_t pool = osdmap.lookup_pg_pool_name(m->name.c_str());
   if (pool >= 0) {
-    _pool_op_reply(m, -EEXIST, osdmap.get_epoch());
+    _pool_op_reply(m, 0, osdmap.get_epoch());
     return true;
   }
 
