@@ -86,6 +86,7 @@ public:
     virtual int next() = 0;
     virtual int prev() = 0;
     virtual string key() = 0;
+    virtual pair<string,string> raw_key() = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
     virtual ~IteratorImpl() {}
