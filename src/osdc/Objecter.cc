@@ -843,29 +843,21 @@ void Objecter::tick()
 
 void Objecter::resend_mon_ops()
 {
-  utime_t cutoff = ceph_clock_now(cct);
-  cutoff -= cct->_conf->objecter_mon_retry_interval;
-
+  ldout(cct, 10) << "resend_mon_ops" << dendl;
 
   for (map<tid_t,PoolStatOp*>::iterator p = poolstat_ops.begin(); p!=poolstat_ops.end(); ++p) {
-    if (p->second->last_submit < cutoff) {
-      poolstat_submit(p->second);
-      logger->inc(l_osdc_poolstat_resend);
-    }
+    poolstat_submit(p->second);
+    logger->inc(l_osdc_poolstat_resend);
   }
 
   for (map<tid_t,StatfsOp*>::iterator p = statfs_ops.begin(); p!=statfs_ops.end(); ++p) {
-    if (p->second->last_submit < cutoff) {
-      fs_stats_submit(p->second);
-      logger->inc(l_osdc_statfs_resend);
-    }
+    fs_stats_submit(p->second);
+    logger->inc(l_osdc_statfs_resend);
   }
 
   for (map<tid_t,PoolOp*>::iterator p = pool_ops.begin(); p!=pool_ops.end(); ++p) {
-    if (p->second->last_submit < cutoff) {
-      pool_op_submit(p->second);
-      logger->inc(l_osdc_poolop_resend);
-    }
+    pool_op_submit(p->second);
+    logger->inc(l_osdc_poolop_resend);
   }
 }
 
@@ -1918,6 +1910,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 
 void Objecter::ms_handle_connect(Connection *con)
 {
+  ldout(cct, 10) << "ms_handle_connect " << con << dendl;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
 }
