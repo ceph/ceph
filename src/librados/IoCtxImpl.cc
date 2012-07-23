@@ -102,15 +102,19 @@ int librados::IoCtxImpl::snap_create(const char *snapName)
   Mutex mylock ("IoCtxImpl::snap_create::mylock");
   Cond cond;
   bool done;
+  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
   lock->Lock();
-  objecter->create_pool_snap(poolid,
-			     sName,
-			     new C_SafeCond(&mylock, &cond, &done, &reply));
+  reply = objecter->create_pool_snap(poolid, sName, onfinish);
   lock->Unlock();
 
-  mylock.Lock();
-  while(!done) cond.Wait(mylock);
-  mylock.Unlock();
+  if (reply < 0) {
+    delete onfinish;
+  } else {
+    mylock.Lock();
+    while (!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+  }
   return reply;
 }
 
@@ -121,17 +125,22 @@ int librados::IoCtxImpl::selfmanaged_snap_create(uint64_t *psnapid)
   Mutex mylock("IoCtxImpl::selfmanaged_snap_create::mylock");
   Cond cond;
   bool done;
-  lock->Lock();
+  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
   snapid_t snapid;
-  objecter->allocate_selfmanaged_snap(poolid, &snapid,
-				      new C_SafeCond(&mylock, &cond, &done, &reply));
+  lock->Lock();
+  reply = objecter->allocate_selfmanaged_snap(poolid, &snapid, onfinish);
   lock->Unlock();
 
-  mylock.Lock();
-  while (!done) cond.Wait(mylock);
-  mylock.Unlock();
-  if (reply == 0)
-    *psnapid = snapid;
+  if (reply < 0) {
+    delete onfinish;
+  } else {
+    mylock.Lock();
+    while (!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+    if (reply == 0)
+      *psnapid = snapid;
+  }
   return reply;
 }
 
@@ -143,15 +152,19 @@ int librados::IoCtxImpl::snap_remove(const char *snapName)
   Mutex mylock ("IoCtxImpl::snap_remove::mylock");
   Cond cond;
   bool done;
+  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
   lock->Lock();
-  objecter->delete_pool_snap(poolid,
-			     sName,
-			     new C_SafeCond(&mylock, &cond, &done, &reply));
+  reply = objecter->delete_pool_snap(poolid, sName, onfinish);
   lock->Unlock();
 
-  mylock.Lock();
-  while(!done) cond.Wait(mylock);
-  mylock.Unlock();
+  if (reply < 0) {
+    delete onfinish; 
+  } else {
+    mylock.Lock();
+    while(!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+  }
   return reply;
 }
 
