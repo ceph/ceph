@@ -138,4 +138,5 @@ private:
 
 protected:
   WholeSpaceIterator _get_iterator();
+  WholeSpaceIterator _get_snapshot_iterator();
 };

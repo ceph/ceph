@@ -154,6 +154,19 @@ public:
     }
   };
 
+  class LevelDBSnapshotIteratorImpl : public LevelDBWholeSpaceIteratorImpl {
+    leveldb::DB *db;
+    const leveldb::Snapshot *snapshot;
+  public:
+    LevelDBSnapshotIteratorImpl(leveldb::DB *db, const leveldb::Snapshot *s,
+				leveldb::Iterator *iter) :
+      LevelDBWholeSpaceIteratorImpl(iter), db(db), snapshot(s) { }
+
+    ~LevelDBSnapshotIteratorImpl() {
+      assert(snapshot != NULL);
+      db->ReleaseSnapshot(snapshot);
+    }
+  };
 
   /// Utility
   static string combine_strings(const string &prefix, const string &value);
@@ -177,6 +190,20 @@ protected:
       )
     );
   }
+
+  WholeSpaceIterator _get_snapshot_iterator() {
+    const leveldb::Snapshot *snapshot;
+    leveldb::ReadOptions options;
+
+    snapshot = db->GetSnapshot();
+    options.snapshot = snapshot;
+
+    return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+      new LevelDBSnapshotIteratorImpl(db.get(), snapshot,
+	db->NewIterator(options))
+    );
+  }
+
 };
 
 #endif
