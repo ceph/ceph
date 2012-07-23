@@ -29,6 +29,9 @@
 #include "global/global_context.h"
 
 
+using namespace rados::cls::lock;
+
+
 CLS_VER(1,0)
 CLS_NAME(lock)
 
@@ -42,7 +45,7 @@ cls_method_handle_t h_list_locks;
 #define LOCK_PREFIX    "lock."
 
 typedef struct lock_info_s {
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers; // map of lockers
+  map<locker_id_t, locker_info_t> lockers; // map of lockers
   ClsLockType lock_type;                              // lock type (exclusive / shared)
   string tag;                                         // tag: operations on lock can only succeed with this tag
                                                       //      as long as set of non expired lockers
@@ -100,13 +103,13 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   utime_t now = ceph_clock_now(g_ceph_context);
 
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter = lock->lockers.begin();
+  map<locker_id_t, locker_info_t>::iterator iter = lock->lockers.begin();
 
   while (iter != lock->lockers.end()) {
-    map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator next = iter;
+    map<locker_id_t, locker_info_t>::iterator next = iter;
     ++next;
 
-    struct cls_lock_locker_info_t& info = iter->second;
+    struct locker_info_t& info = iter->second;
     if (!info.expiration.is_zero() && info.expiration < now) {
       CLS_LOG(20, "expiring locker");
       lock->lockers.erase(iter);
@@ -175,10 +178,10 @@ static int lock_obj(cls_method_context_t hctx,
     CLS_ERR("Could not read lock info: %s", strerror(r));
     return r;
   }
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>& lockers = linfo.lockers;
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter;
+  map<locker_id_t, locker_info_t>& lockers = linfo.lockers;
+  map<locker_id_t, locker_info_t>::iterator iter;
 
-  cls_lock_locker_id_t id;
+  locker_id_t id;
   id.cookie = cookie;
   entity_inst_t inst;
   r = cls_get_request_origin(hctx, &inst);
@@ -223,7 +226,7 @@ static int lock_obj(cls_method_context_t hctx,
     expiration += duration;
 
   }
-  struct cls_lock_locker_info_t info(expiration, inst.addr, description);
+  struct locker_info_t info(expiration, inst.addr, description);
 
   linfo.lockers[id] = info;
 
@@ -283,11 +286,11 @@ static int remove_lock(cls_method_context_t hctx,
     return r;
   }
 
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>& lockers = linfo.lockers;
-  struct cls_lock_locker_id_t id(locker, cookie);
+  map<locker_id_t, locker_info_t>& lockers = linfo.lockers;
+  struct locker_id_t id(locker, cookie);
 
   // remove named locker from set
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter = lockers.find(id);
+  map<locker_id_t, locker_info_t>::iterator iter = lockers.find(id);
   if (iter == lockers.end()) { // no such key
     return -ENOENT;
   }
@@ -384,7 +387,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   struct cls_lock_get_info_reply ret;
 
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter;
+  map<locker_id_t, locker_info_t>::iterator iter;
   for (iter = linfo.lockers.begin(); iter != linfo.lockers.end(); ++iter) {
     ret.lockers[iter->first] = iter->second;
   }

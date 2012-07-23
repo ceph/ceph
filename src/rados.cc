@@ -746,7 +746,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   string lock_name(nargs[3]);
 
   if (cmd.compare("info") == 0) {
-    map<cls_lock_locker_id_t, cls_lock_locker_info_t> lockers;
+    map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> lockers;
     ClsLockType type = LOCK_NONE;
     string description;
     string tag;
@@ -761,10 +761,10 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     formatter->dump_string("type", cls_lock_type_str(type));
     formatter->dump_string("tag", tag);
     formatter->open_array_section("lockers");
-    map<cls_lock_locker_id_t, cls_lock_locker_info_t>::iterator iter;
+    map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t>::iterator iter;
     for (iter = lockers.begin(); iter != lockers.end(); ++iter) {
-      const cls_lock_locker_id_t& id = iter->first;
-      const cls_lock_locker_info_t& info = iter->second;
+      const rados::cls::lock::locker_id_t& id = iter->first;
+      const rados::cls::lock::locker_info_t& info = iter->second;
       formatter->open_object_section("locker");
       formatter->dump_stream("name") << id.locker;
       formatter->dump_string("cookie", id.cookie);

@@ -36,7 +36,7 @@ TYPE(coll_t)
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
 TYPE(pool_snap_info_t)
-TYPE(pg_pool_t)
+TYPE_FEATUREFUL(pg_pool_t)
 TYPE(object_stat_sum_t)
 TYPE(object_stat_collection_t)
 TYPE(pg_stat_t)
@@ -77,7 +77,7 @@ TYPE(PGMap::Incremental)
 TYPE(PGMap)
 
 #include "mon/MonMap.h"
-TYPE(MonMap)
+TYPE_FEATUREFUL(MonMap)
 
 #include "mon/MonCaps.h"
 TYPE(MonCap)
@@ -139,8 +139,9 @@ TYPE(cls_rbd_snap)
 #endif
 
 #include "cls/lock/cls_lock_types.h"
-TYPE(cls_lock_locker_id_t)
-TYPE(cls_lock_locker_info_t)
+TYPE(rados::cls::lock::locker_id_t)
+TYPE(rados::cls::lock::locker_info_t)
+
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
 TYPE(cls_lock_unlock_op)
