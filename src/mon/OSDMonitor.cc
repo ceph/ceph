@@ -2338,8 +2338,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	//hey, let's delete a pool!
 	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
-	  ss << "unrecognized pool '" << m->cmd[3] << "'";
-	  err = -ENOENT;
+	  ss << "pool '" << m->cmd[3] << "' does not exist";
+	  err = 0;
 	} else {
 	  int ret = _prepare_remove_pool(pool);
 	  if (ret == 0)
@@ -2533,7 +2533,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
 
   if (!osdmap.get_pg_pool(m->pool)) {
     dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
-    _pool_op_reply(m, -ENOENT, osdmap.get_epoch());
+    _pool_op_reply(m, 0, osdmap.get_epoch());
     return true;
   }
   
@@ -2560,6 +2560,10 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
   case POOL_OP_DELETE_UNMANAGED_SNAP:
     return false;
   case POOL_OP_DELETE: //can't delete except on master
+    if (osdmap.lookup_pg_pool_name(m->name.c_str()) >= 0) {
+      _pool_op_reply(m, 0, osdmap.get_epoch());
+      return true;
+    }
     return false;
   case POOL_OP_AUID_CHANGE:
     return false; //can't change except on master
@@ -2696,22 +2700,23 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
 
 int OSDMonitor::_prepare_remove_pool(uint64_t pool)
 {
-    dout(10) << "_prepare_remove_pool " << pool << dendl;
+  dout(10) << "_prepare_remove_pool " << pool << dendl;
   if (pending_inc.old_pools.count(pool)) {
     dout(10) << "_prepare_remove_pool " << pool << " pending removal" << dendl;    
-    return -ENOENT;  // already removed
+    return 0;  // already removed
   }
   pending_inc.old_pools.insert(pool);
 
   // remove any pg_temp mappings for this pool too
   for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
-       ++p)
+       ++p) {
     if (p->first.pool() == pool) {
       dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
     }
+  }
   return 0;
 }
 
