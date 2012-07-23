@@ -1570,6 +1570,10 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
 			  int crush_rule)
 {
   ldout(cct, 10) << "create_pool name=" << name << dendl;
+
+  if (osdmap->lookup_pg_pool_name(name.c_str()) >= 0)
+    return -EEXIST;
+
   PoolOp *op = new PoolOp;
   if (!op)
     return -ENOMEM;
@@ -1590,6 +1594,9 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
 int Objecter::delete_pool(int64_t pool, Context *onfinish)
 {
   ldout(cct, 10) << "delete_pool " << pool << dendl;
+
+  if (!osdmap->have_pg_pool(pool))
+    return -ENOENT;
 
   PoolOp *op = new PoolOp;
   if (!op) return -ENOMEM;
