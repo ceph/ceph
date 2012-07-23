@@ -155,10 +155,21 @@ public:
     );
   }
 
+  WholeSpaceIterator get_snapshot_iterator() {
+    return _get_snapshot_iterator();
+  }
+
+  Iterator get_snapshot_iterator(const string &prefix) {
+    return std::tr1::shared_ptr<IteratorImpl>(
+      new IteratorImpl(prefix, get_snapshot_iterator())
+    );
+  }
+
   virtual ~KeyValueDB() {}
 
 protected:
   virtual WholeSpaceIterator _get_iterator() = 0;
+  virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
 };
 
 #endif
