@@ -19,9 +19,9 @@
 #include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 
+using namespace rados::cls::lock;
 
-
-static void generate_lock_id(cls_lock_locker_id_t& i, int n, const string& cookie)
+static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {
   i.locker = entity_name_t(entity_name_t::CLIENT(n));
   i.cookie = cookie;
@@ -113,10 +113,10 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
   f->dump_string("lock_type", cls_lock_type_str(lock_type));
   f->dump_string("tag", tag);
   f->open_array_section("lockers");
-  map<cls_lock_locker_id_t, cls_lock_locker_info_t>::const_iterator iter;
+  map<locker_id_t, locker_info_t>::const_iterator iter;
   for (iter = lockers.begin(); iter != lockers.end(); ++iter) {
-    const cls_lock_locker_id_t& id = iter->first;
-    const cls_lock_locker_info_t& info = iter->second;
+    const locker_id_t& id = iter->first;
+    const locker_info_t& info = iter->second;
     f->open_object_section("object");
     f->dump_stream("locker") << id.locker;
     f->dump_string("description", info.description);
@@ -133,14 +133,14 @@ void cls_lock_get_info_reply::generate_test_instances(list<cls_lock_get_info_rep
   cls_lock_get_info_reply *i = new cls_lock_get_info_reply;
   i->lock_type = LOCK_SHARED;
   i->tag = "tag";
-  cls_lock_locker_id_t id1, id2;
+  locker_id_t id1, id2;
   entity_addr_t addr1, addr2;
   generate_lock_id(id1, 1, "cookie1");
   generate_test_addr(addr1, 10, 20);
-  i->lockers[id1] = cls_lock_locker_info_t(utime_t(10, 0), addr1, "description1");
+  i->lockers[id1] = locker_info_t(utime_t(10, 0), addr1, "description1");
   generate_lock_id(id2, 2, "cookie2");
   generate_test_addr(addr2, 30, 40);
-  i->lockers[id2] = cls_lock_locker_info_t(utime_t(20, 0), addr2, "description2");
+  i->lockers[id2] = locker_info_t(utime_t(20, 0), addr2, "description2");
 
   o.push_back(i);
   o.push_back(new cls_lock_get_info_reply);
