@@ -1,1 +1,8 @@
-../../../regression/basic/tasks/kclient_workunit_direct_io.yaml
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - direct_io
+

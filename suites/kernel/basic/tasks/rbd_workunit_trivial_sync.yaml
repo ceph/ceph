@@ -1,1 +1,7 @@
-../../../regression/basic/tasks/rbd_workunit_trivial_sync.yaml
+tasks:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    clients:
+      all: [misc/trivial_sync.sh]

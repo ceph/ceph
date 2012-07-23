@@ -1,8 +1,0 @@
-tasks:
-- ceph:
-- rbd:
-    all:
-- workunit:
-    clients:
-      all:
-        - suites/tiobench.sh

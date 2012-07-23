@@ -1,6 +1,0 @@
-tasks:
-- ceph:
-- kclient:
-- workunit:
-    clients:
-      all: [misc/trivial_sync.sh]

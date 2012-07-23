@@ -1,7 +1,0 @@
-tasks:
-- ceph:
-- rbd:
-    all:
-- workunit:
-    clients:
-      all: [misc/trivial_sync.sh]

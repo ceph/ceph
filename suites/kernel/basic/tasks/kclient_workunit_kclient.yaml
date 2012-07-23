@@ -1,1 +1,6 @@
-../../../regression/basic/tasks/kclient_workunit_kclient.yaml
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all: [kclient]

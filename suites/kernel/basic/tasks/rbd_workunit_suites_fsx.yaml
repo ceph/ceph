@@ -1,1 +1,8 @@
-../../../regression/basic/tasks/rbd_workunit_suites_fsx.yaml
+tasks:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    clients:
+      all:
+        - suites/fsx.sh

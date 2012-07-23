@@ -1,1 +1,8 @@
-../../../regression/basic/tasks/rbd_workunit_kernel_untar_build.yaml
+tasks:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    clients:
+      all:
+        - kernel_untar_build.sh

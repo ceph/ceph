@@ -1,1 +1,6 @@
-../../../regression/basic/tasks/kclient_workunit_trivial_sync.yaml
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all: [misc/trivial_sync.sh]

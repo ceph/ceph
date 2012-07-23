@@ -1,1 +1,9 @@
-../../../regression/basic/tasks/rbd_workunit_suites_iozone.yaml
+tasks:
+- ceph:
+- rbd:
+    all:
+      image_size: 20480
+- workunit:
+    clients:
+      all:
+        - suites/iozone.sh

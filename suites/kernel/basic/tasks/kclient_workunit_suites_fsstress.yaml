@@ -1,1 +1,7 @@
-../../../regression/basic/tasks/kclient_workunit_suites_fsstress.yaml
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

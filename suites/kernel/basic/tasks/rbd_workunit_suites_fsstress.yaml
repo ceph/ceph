@@ -1,1 +1,8 @@
-../../../regression/basic/tasks/rbd_workunit_suites_fsstress.yaml
+tasks:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

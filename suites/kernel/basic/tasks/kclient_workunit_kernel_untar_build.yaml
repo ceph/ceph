@@ -1,1 +1,7 @@
-../../../regression/basic/tasks/kclient_workunit_kernel_untar_build.yaml
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - kernel_untar_build.sh
