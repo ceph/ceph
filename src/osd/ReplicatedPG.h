@@ -470,17 +470,6 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
-  bool already_complete(eversion_t v) {
-    for (xlist<RepGather*>::iterator i = repop_queue.begin();
-	 !i.end();
-	 ++i) {
-      if ((*i)->v > v)
-        break;
-      if (!(*i)->waitfor_disk.empty())
-	return false;
-    }
-    return true;
-  }
   map<tid_t, RepGather*> repop_map;
 
   void apply_repop(RepGather *repop);
@@ -494,6 +483,31 @@ protected:
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
+
+  /// true if we can send an ondisk/commit for v
+  bool already_complete(eversion_t v) {
+    for (xlist<RepGather*>::iterator i = repop_queue.begin();
+	 !i.end();
+	 ++i) {
+      if ((*i)->v > v)
+        break;
+      if (!(*i)->waitfor_disk.empty())
+	return false;
+    }
+    return true;
+  }
+  /// true if we can send an ack for v
+  bool already_ack(eversion_t v) {
+    for (xlist<RepGather*>::iterator i = repop_queue.begin();
+	 !i.end();
+	 ++i) {
+      if ((*i)->v > v)
+        break;
+      if (!(*i)->waitfor_ack.empty())
+	return false;
+    }
+    return true;
+  }
 
   friend class C_OSD_OpCommit;
   friend class C_OSD_OpApplied;

@@ -849,8 +849,18 @@ void ReplicatedPG::do_op(OpRequestRef op)
       if (already_complete(oldv)) {
 	osd->reply_op_error(op, 0, oldv);
       } else {
+	if (m->wants_ack()) {
+	  if (already_ack(oldv)) {
+	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	    reply->add_flags(CEPH_OSD_FLAG_ACK);
+	    osd->client_messenger->send_message(reply, m->get_connection());
+	  } else {
+	    dout(10) << " waiting for " << oldv << " to ack" << dendl;
+	    waiting_for_ack[oldv].push_back(op);
+	  }
+	}
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
-	waiting_for_ondisk[oldv].push_back(op);
+	waiting_for_ondisk[oldv].push_back(op);  // always queue ondisk waiters, so that we can requeue if needed
 	op->mark_delayed();
       }
       return;
@@ -3533,6 +3543,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       log_op_stats(repop->ctx);
       update_stats();
 
+      // send dup commits, in order
       if (waiting_for_ondisk.count(repop->v)) {
 	assert(waiting_for_ondisk.begin()->first == repop->v);
 	for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
@@ -3560,6 +3571,21 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
     // applied?
     if (repop->waitfor_ack.empty()) {
+
+      // send dup acks, in order
+      if (waiting_for_ack.count(repop->v)) {
+	assert(waiting_for_ack.begin()->first == repop->v);
+	for (list<OpRequestRef>::iterator i = waiting_for_ack[repop->v].begin();
+	     i != waiting_for_ack[repop->v].end();
+	     ++i) {
+	  MOSDOp *m = (MOSDOp*)(*i)->request;
+	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->add_flags(CEPH_OSD_FLAG_ACK);
+	  osd->client_messenger->send_message(reply, m->get_connection());
+	}
+	waiting_for_ack.erase(repop->v);
+      }
+
       if (m->wants_ack() && !repop->sent_ack && !repop->sent_disk) {
 	// send ack
 	MOSDOpReply *reply = repop->ctx->reply;
@@ -5785,6 +5811,7 @@ void ReplicatedPG::on_role_change()
        p++)
     requeue_ops(p->second);
   waiting_for_ondisk.clear();
+  waiting_for_ack.clear();
 }
 
 

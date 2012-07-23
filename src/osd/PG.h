@@ -627,7 +627,7 @@ protected:
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
                                         waiting_for_degraded_object;
-  map<eversion_t,list<OpRequestRef> > waiting_for_ondisk;
+  map<eversion_t,list<OpRequestRef> > waiting_for_ack, waiting_for_ondisk;
   map<eversion_t,OpRequestRef>   replay_queue;
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
