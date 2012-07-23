@@ -46,9 +46,6 @@ namespace librbd {
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
 		      std::vector<uint64_t> *features);
-    int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
-		   uint64_t *id);
-
 
     // class operations on the old format, kept for
     // backwards compatability
