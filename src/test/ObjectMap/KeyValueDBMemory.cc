@@ -91,6 +91,13 @@ public:
       return "";
   }
 
+  pair<string,string> raw_key() {
+    if (valid())
+      return make_pair(prefix, key());
+    else
+      return make_pair("","");
+  }
+
   bufferlist value() {
     if (valid())
       return iter->second;

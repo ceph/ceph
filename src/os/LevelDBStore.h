@@ -125,6 +125,11 @@ public:
       split_key(dbiter->key(), 0, &out_key);
       return out_key;
     }
+    pair<string,string> raw_key() {
+      string prefix, key;
+      split_key(dbiter->key(), &prefix, &key);
+      return make_pair(prefix, key);
+    }
     bufferlist value() {
       return to_bufferlist(dbiter->value());
     }
