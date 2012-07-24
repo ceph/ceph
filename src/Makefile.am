@@ -123,7 +123,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libosd.a libmds.a $(LIBOS_LDA) libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libosd.a libmds.a $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -361,7 +361,7 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 lib_LTLIBRARIES += librbd.la
 
 rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/obj_bencher.cc
-rados_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rados_LDADD = libglobal.la libcls_lock_client.a librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
 if WITH_REST_BENCH
@@ -427,6 +427,16 @@ radoslibdir = $(libdir)/rados-classes
 radoslib_LTLIBRARIES = libcls_rbd.la
 
 
+# rbd: rados block device class
+libcls_lock_la_SOURCES = cls/lock/cls_lock.cc
+libcls_lock_la_CFLAGS = ${AM_CFLAGS}
+libcls_lock_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_lock_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_lock_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_lock.la
+
+
 if WITH_RADOSGW
 # rgw: rados gateway
 libcls_rgw_la_SOURCES = cls_rgw.cc
@@ -437,6 +447,12 @@ libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 
 
 radoslib_LTLIBRARIES += libcls_rgw.la
 endif
+
+libcls_lock_client_a_SOURCES =  \
+	cls/lock/cls_lock_client.cc  \
+	cls/lock/cls_lock_types.cc \
+	cls/lock/cls_lock_ops.cc
+noinst_LIBRARIES += libcls_lock_client.a
 
 ## hadoop client
 if WITH_HADOOPCLIENT
@@ -738,6 +754,12 @@ test_rados_api_stat_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_stat_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_stat_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_stat
+
+test_rados_api_cls_lock_SOURCES = test/rados-api/cls_lock.cc test/rados-api/test.cc
+test_rados_api_cls_lock_LDFLAGS = ${AM_LDFLAGS}
+test_rados_api_cls_lock_LDADD =  libcls_lock_client.a librados.la ${UNITTEST_STATIC_LDADD}
+test_rados_api_cls_lock_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_rados_api_cls_lock
 
 test_rados_api_watch_notify_SOURCES = test/rados-api/watch_notify.cc test/rados-api/test.cc
 test_rados_api_watch_notify_LDFLAGS = ${AM_LDFLAGS}
@@ -1232,6 +1254,9 @@ noinst_HEADERS = \
 	client/ObjecterWriteback.h\
 	cls_acl.cc\
 	cls_crypto.cc\
+	cls/lock/cls_lock_types.h\
+	cls/lock/cls_lock_ops.h\
+	cls/lock/cls_lock_client.h\
 	common/BackTrace.h\
 	common/RefCountedObj.h\
 	common/HeartbeatMap.h\
