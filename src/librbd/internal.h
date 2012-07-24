@@ -72,6 +72,8 @@ namespace librbd {
   int detect_format(librados::IoCtx &io_ctx, const std::string &name,
 		    bool *old_format, uint64_t *size);
 
+  bool has_parent(int64_t parent_pool_id, uint64_t off, uint64_t overlap);
+
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -146,6 +148,8 @@ namespace librbd {
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
   std::string get_block_oid(const std::string &object_prefix, uint64_t num,
 			    bool old_format);
+  uint64_t offset_of_object(const string &oid, const string &object_prefix,
+			    uint8_t order);
   uint64_t get_max_block(uint64_t size, uint8_t obj_order);
   uint64_t get_block_size(uint8_t order);
   uint64_t get_block_num(uint8_t order, uint64_t ofs);
@@ -185,8 +189,8 @@ namespace librbd {
 
   // raw callbacks
   int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg);
-  void rados_cb(rados_completion_t cb, void *arg);
-  void rados_aio_sparse_read_cb(rados_completion_t cb, void *arg);
+  void rados_req_cb(rados_completion_t cb, void *arg);
+  void rbd_req_cb(completion_t cb, void *arg);
 }
 
 #endif
