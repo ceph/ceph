@@ -11,10 +11,12 @@
 
 #define TYPE(t)
 #define TYPEWITHSTRAYDATA(t)
+#define TYPE_FEATUREFUL(t)
 #define MESSAGE(t)
 #include "types.h"
 #undef TYPE
 #undef TYPEWITHSTRAYDATA
+#undef TYPE_FEATUREFUL
 #undef MESSAGE
 
 void usage(ostream &out)
@@ -38,7 +40,6 @@ void usage(ostream &out)
   out << "  count_tests         print number of generated test objects (to stdout)\n";
   out << "  select_test <n>     select generated test object as in-memory object\n";
 }
-
 struct Dencoder {
   virtual ~Dencoder() {}
   virtual string decode(bufferlist bl) = 0;
@@ -51,18 +52,19 @@ struct Dencoder {
 };
 
 template<class T>
-class DencoderImpl : public Dencoder {
+class DencoderBase : public Dencoder {
+protected:
   T* m_object;
   list<T*> m_list;
   bool stray_okay;
 
 public:
-  DencoderImpl(bool stray_okay=false) : m_object(new T), stray_okay(stray_okay) {}
+  DencoderBase(bool stray_okay) : m_object(new T), stray_okay(stray_okay) {}
 
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(*m_object, p);
+      m_object->decode(p);
     }
     catch (buffer::error& e) {
       return e.what();
@@ -72,10 +74,7 @@ public:
     return string();
   }
 
-  void encode(bufferlist& out, uint64_t features) {
-    out.clear();
-    ::encode(*m_object, out, features);
-  }
+  virtual void encode(bufferlist& out, uint64_t features) = 0;
 
   void dump(Formatter *f) {
     m_object->dump(f);
@@ -98,11 +97,28 @@ public:
     m_object = *p;
     return string();
   }
-
-  //void print(ostream& out) {
-  //out << m_object << std::endl;
-  //}
 };
+
+template<class T>
+class DencoderImplNoFeature : public DencoderBase<T> {
+public:
+  DencoderImplNoFeature(bool stray_ok) : DencoderBase<T>(stray_ok) {}
+  virtual void encode(bufferlist& out, uint64_t features) {
+    out.clear();
+    this->m_object->encode(out);
+  }
+};
+
+template<class T>
+class DencoderImplFeatureful : public DencoderBase<T> {
+public:
+  DencoderImplFeatureful(bool stray_ok) : DencoderBase<T>(stray_ok) {}
+  virtual void encode(bufferlist& out, uint64_t features) {
+    out.clear();
+    ::encode(*(this->m_object), out, features);
+  }
+};
+
 
 template<class T>
 class MessageDencoderImpl : public Dencoder {
@@ -172,7 +188,7 @@ public:
   //}
 };
 
-
+  
 
 int main(int argc, const char **argv)
 {
@@ -181,12 +197,14 @@ int main(int argc, const char **argv)
 
 #define T_STR(x) #x
 #define T_STRINGIFY(x) T_STR(x)
-#define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImpl<t>;
-#define TYPEWITHSTRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImpl<t>(true);
+#define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(false);
+#define TYPEWITHSTRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(true);
+#define TYPE_FEATUREFUL(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false);
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
 #undef TYPEWITHSTRAYDATA
+#undef TYPE_FEATUREFUL
 #undef T_STR
 #undef T_STRRINGIFY
 
