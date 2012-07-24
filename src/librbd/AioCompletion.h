@@ -5,7 +5,9 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/ceph_context.h"
 #include "common/perf_counters.h"
+#include "include/Context.h"
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
 
@@ -13,13 +15,27 @@
 #include "librbd/internal.h"
 
 namespace librbd {
+
+  class AioRead;
+
   typedef enum {
     AIO_TYPE_READ = 0,
     AIO_TYPE_WRITE,
     AIO_TYPE_DISCARD
   } aio_type_t;
 
-  struct AioBlockCompletion;
+  /**
+   * AioCompletion is the overall completion for a single
+   * rbd I/O request. It may be composed of many AioRequests,
+   * which each go to a single object.
+   *
+   * The retrying of individual requests is handled at a lower level,
+   * so all AioCompletion cares about is the count of outstanding
+   * requests. Note that this starts at 1 to prevent the reference
+   * count from reaching 0 while more requests are being added. When
+   * all requests have been added, finish_adding_requests() releases
+   * this initial reference.
+   */
   struct AioCompletion {
     Mutex lock;
     Cond cond;
@@ -51,14 +67,14 @@ namespace librbd {
       return 0;
     }
 
-    void add_block_completion(AioBlockCompletion *aio_completion) {
+    void add_request() {
       lock.Lock();
       pending_count++;
       lock.Unlock();
       get();
     }
 
-    void finish_adding_completions() {
+    void finish_adding_requests() {
       lock.Lock();
       assert(pending_count);
       int count = --pending_count;
@@ -99,7 +115,7 @@ namespace librbd {
       complete_arg = cb_arg;
     }
 
-    void complete_block(AioBlockCompletion *block_completion, ssize_t r);
+    void complete_request(CephContext *cct, ssize_t r);
 
     ssize_t get_return_value() {
       lock.Lock();
@@ -133,22 +149,44 @@ namespace librbd {
     }
   };
 
-  struct AioBlockCompletion : Context {
-    CephContext *cct;
-    AioCompletion *completion;
-    uint64_t ofs;
-    size_t len;
-    char *buf;
-    std::map<uint64_t,uint64_t> m;
-    ceph::bufferlist data_bl;
-    librados::ObjectWriteOperation write_op;
-
-    AioBlockCompletion(CephContext *cct_, AioCompletion *aio_completion,
-		       uint64_t _ofs, size_t _len, char *_buf)
-      : cct(cct_), completion(aio_completion),
-	ofs(_ofs), len(_len), buf(_buf) {}
-    virtual ~AioBlockCompletion() {}
+  class C_AioRead : public Context {
+  public:
+    C_AioRead(CephContext *cct, AioCompletion *completion, char *out_buf)
+      : m_cct(cct), m_completion(completion), m_out_buf(out_buf) {}
+    virtual ~C_AioRead() {}
     virtual void finish(int r);
+    void set_req(AioRead *req) {
+      m_req = req;
+    }
+  private:
+    CephContext *m_cct;
+    AioCompletion *m_completion;
+    AioRead *m_req;
+    char *m_out_buf;
+  };
+
+  class C_AioWrite : public Context {
+  public:
+    C_AioWrite(CephContext *cct, AioCompletion *completion)
+      : m_cct(cct), m_completion(completion) {}
+    virtual ~C_AioWrite() {}
+    virtual void finish(int r) {
+      m_completion->complete_request(m_cct, r);
+    }
+  private:
+    CephContext *m_cct;
+    AioCompletion *m_completion;
+  };
+
+  class C_CacheRead : public Context {
+  public:
+    C_CacheRead(Context *completion, AioRead *req)
+      : m_completion(completion), m_req(req) {}
+    virtual ~C_CacheRead() {}
+    virtual void finish(int r);
+  private:
+    Context *m_completion;
+    AioRead *m_req;
   };
 }
 

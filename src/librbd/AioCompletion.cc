@@ -6,6 +6,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 
+#include "librbd/AioRequest.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
@@ -16,20 +17,9 @@
 
 namespace librbd {
 
-  void AioBlockCompletion::finish(int r)
+  void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
-    ldout(cct, 10) << "AioBlockCompletion::finish()" << dendl;
-    if ((r >= 0 || r == -ENOENT) && buf) { // this was a sparse_read operation
-      ldout(cct, 10) << "ofs=" << ofs << " len=" << len << dendl;
-      r = handle_sparse_read(cct, data_bl, ofs, m, 0, len, simple_read_cb, buf);
-    }
-    completion->complete_block(this, r);
-  }
-
-  void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t r)
-  {
-    CephContext *cct = block_completion->cct;
-    ldout(cct, 20) << "AioCompletion::complete_block() this=" 
+    ldout(cct, 20) << "AioCompletion::complete_request() this="
 		   << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
     lock.Lock();
     if (rval >= 0) {
@@ -44,5 +34,24 @@ namespace librbd {
       complete();
     }
     put_unlock();
+  }
+
+  void C_AioRead::finish(int r)
+  {
+    ldout(m_cct, 10) << "C_AioRead::finish() " << this << dendl;
+    if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
+      ldout(m_cct, 10) << "ofs=" << m_req->offset()
+		       << " len=" << m_req->length() << dendl;
+      r = handle_sparse_read(m_cct, m_req->data(), m_req->offset(),
+			     m_req->ext_map(), 0, m_req->length(),
+			     simple_read_cb, m_out_buf);
+    }
+    m_completion->complete_request(m_cct, r);
+  }
+
+  void C_CacheRead::finish(int r)
+  {
+    m_completion->complete(r);
+    delete m_req;
   }
 }
