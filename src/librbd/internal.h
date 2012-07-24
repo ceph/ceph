@@ -180,6 +180,8 @@ namespace librbd {
 
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
+  AioCompletion *aio_create_completion_internal(void *cb_arg,
+						callback_t cb_complete);
 
   // raw callbacks
   int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg);
