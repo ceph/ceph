@@ -351,6 +351,7 @@ endif
 librbd_la_SOURCES = \
 	librbd/librbd.cc \
 	librbd/AioCompletion.cc \
+	librbd/AioRequest.cc \
 	librbd/cls_rbd_client.cc \
 	librbd/ImageCtx.cc \
 	librbd/internal.cc \
@@ -1377,6 +1378,7 @@ noinst_HEADERS = \
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
 	librbd/AioCompletion.h\
+	librbd/AioRequest.h\
 	librbd/cls_rbd.h\
 	librbd/cls_rbd_client.h\
 	librbd/ImageCtx.h\

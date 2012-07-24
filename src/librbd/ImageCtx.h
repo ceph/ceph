@@ -47,9 +47,18 @@ namespace librbd {
     WatchCtx *wctx;
     int refresh_seq;    ///< sequence for refresh requests
     int last_refresh;   ///< last completed refresh
-    Mutex refresh_lock;
-    Mutex lock; // protects access to snapshot and header information
+
+    /**
+     * Lock ordering:
+     * md_lock, cache_lock, snap_lock, parent_lock, refresh_lock
+     */
+    Mutex md_lock; // protects access to the mutable image metadata that
+                   // isn't guarded by other locks below
+                   // (size, features, image locks, etc)
     Mutex cache_lock; // used as client_lock for the ObjectCacher
+    Mutex snap_lock; // protects snapshot-related member variables:
+    Mutex parent_lock; // protects parent_md and parent
+    Mutex refresh_lock; // protects refresh_seq and last_refresh
 
     bool old_format;
     uint8_t order;
@@ -102,6 +111,8 @@ namespace librbd {
     void invalidate_cache();
     int register_watch();
     void unregister_watch();
+    size_t parent_io_len(uint64_t offset, size_t length,
+			 librados::snap_t in_snap_id);
   };
 }
 

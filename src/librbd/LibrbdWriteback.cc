@@ -1,12 +1,19 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <errno.h>
+
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/Mutex.h"
-#include "include/rados/librados.h"
+#include "include/Context.h"
+#include "include/rados/librados.hpp"
+#include "include/rbd/librbd.hpp"
 
-#include "LibrbdWriteback.h"
+#include "librbd/AioRequest.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/internal.h"
+#include "librbd/LibrbdWriteback.h"
 
 #include "include/assert.h"
 
@@ -14,72 +21,93 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbdwriteback: "
 
-// If we change the librados api to use an overrideable class for callbacks
-// (like it does with watch/notify) this will be much nicer
-struct CallbackArgs {
-  CephContext *cct;
-  Context *ctx;
-  Mutex *lock;
-  CallbackArgs(CephContext *cct, Context *c, Mutex *l) :
-    cct(cct), ctx(c), lock(l) {}
-};
+namespace librbd {
 
-static void librbd_writeback_librados_aio_cb(rados_completion_t c, void *arg)
-{
-  CallbackArgs *args = reinterpret_cast<CallbackArgs *>(arg);
-  ldout(args->cct, 20) << "aio_cb completing " << dendl;
+  class C_Request : public Context {
+  public:
+    C_Request(CephContext *cct, Context *c, Mutex *l)
+      : m_cct(cct), m_ctx(c), m_lock(l) {}
+    virtual ~C_Request() {}
+    void set_req(AioRequest *req);
+    virtual void finish(int r) {
+      ldout(m_cct, 20) << "aio_cb completing " << dendl;
+      {
+	Mutex::Locker l(*m_lock);
+	m_ctx->complete(r);
+      }
+      ldout(m_cct, 20) << "aio_cb finished" << dendl;
+    }
+  private:
+    CephContext *m_cct;
+    Context *m_ctx;
+    Mutex *m_lock;
+  };
+
+  class C_Read : public Context {
+  public:
+    C_Read(Context *real_context, bufferlist *pbl)
+      : m_ctx(real_context), m_out_bl(pbl) {}
+    virtual ~C_Read() {}
+    virtual void finish(int r) {
+      if (r >= 0)
+	*m_out_bl = m_req->data();
+      m_ctx->complete(r);
+    }
+    void set_req(AioRead *req) {
+      m_req = req;
+    }
+  private:
+    Context *m_ctx;
+    AioRead *m_req;
+    bufferlist *m_out_bl;
+  };
+
+  LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
+    : m_tid(0), m_lock(lock), m_ictx(ictx)
   {
-    Mutex::Locker l(*args->lock);
-    args->ctx->complete(rados_aio_get_return_value(c));
-  }
-  rados_aio_release(c);
-  ldout(args->cct, 20) << "aio_cb finished" << dendl;
-  delete args;
-}
-
-LibrbdWriteback::LibrbdWriteback(const librados::IoCtx& io, Mutex& lock)
-  : m_tid(0), m_lock(lock)
-{
-  m_ioctx.dup(io);
-}
-
-tid_t LibrbdWriteback::read(const object_t& oid,
-			    const object_locator_t& oloc,
-			    uint64_t off, uint64_t len, snapid_t snapid,
-			    bufferlist *pbl, uint64_t trunc_size,
-			    __u32 trunc_seq, Context *onfinish)
-{
-  CallbackArgs *args = new CallbackArgs((CephContext *)m_ioctx.cct(),
-					onfinish, &m_lock);
-  librados::AioCompletion *rados_cb =
-    librados::Rados::aio_create_completion(args, librbd_writeback_librados_aio_cb, NULL);
-
-  m_ioctx.snap_set_read(snapid.val);
-  m_ioctx.aio_read(oid.name, rados_cb, pbl, len, off);
-  return ++m_tid;
-}
-
-tid_t LibrbdWriteback::write(const object_t& oid,
-			     const object_locator_t& oloc,
-			     uint64_t off, uint64_t len,
-			     const SnapContext& snapc,
-			     const bufferlist &bl, utime_t mtime,
-			     uint64_t trunc_size, __u32 trunc_seq,
-			     Context *oncommit)
-{
-  CallbackArgs *args = new CallbackArgs((CephContext *)m_ioctx.cct(),
-					oncommit, &m_lock);
-  librados::AioCompletion *rados_cb =
-    librados::Rados::aio_create_completion(args, NULL, librbd_writeback_librados_aio_cb);
-  // TODO: find a way to make this less stupid
-  vector<librados::snap_t> snaps;
-  for (vector<snapid_t>::const_iterator it = snapc.snaps.begin();
-       it != snapc.snaps.end(); ++it) {
-    snaps.push_back(it->val);
   }
 
-  m_ioctx.snap_set_read(CEPH_NOSNAP);
-  m_ioctx.selfmanaged_snap_set_write_ctx(snapc.seq.val, snaps);
-  m_ioctx.aio_write(oid.name, rados_cb, bl, len, off);
-  return ++m_tid;
+  tid_t LibrbdWriteback::read(const object_t& oid,
+			      const object_locator_t& oloc,
+			      uint64_t off, uint64_t len, snapid_t snapid,
+			      bufferlist *pbl, uint64_t trunc_size,
+			      __u32 trunc_seq, Context *onfinish)
+  {
+    C_Request *req_comp = new C_Request(m_ictx->cct, onfinish, &m_lock);
+    C_Read *read_comp = new C_Read(req_comp, pbl);
+    uint64_t total_off = offset_of_object(oid.name, m_ictx->object_prefix,
+					  m_ictx->order) + off;
+    AioRead *req = new AioRead(m_ictx, oid.name, total_off, len, snapid.val,
+			       false, read_comp);
+    read_comp->set_req(req);
+    req->send();
+    return ++m_tid;
+  }
+
+  tid_t LibrbdWriteback::write(const object_t& oid,
+			       const object_locator_t& oloc,
+			       uint64_t off, uint64_t len,
+			       const SnapContext& snapc,
+			       const bufferlist &bl, utime_t mtime,
+			       uint64_t trunc_size, __u32 trunc_seq,
+			       Context *oncommit)
+  {
+    m_ictx->snap_lock.Lock();
+    librados::snap_t snap_id = m_ictx->snap_id;
+    m_ictx->parent_lock.Lock();
+    int64_t parent_pool_id = m_ictx->get_parent_pool_id(snap_id);
+    uint64_t overlap = 0;
+    m_ictx->get_parent_overlap(snap_id, &overlap);
+    m_ictx->parent_lock.Unlock();
+    m_ictx->snap_lock.Unlock();
+
+    uint64_t total_off = offset_of_object(oid.name, m_ictx->object_prefix,
+					  m_ictx->order) + off;
+    bool parent_exists = has_parent(parent_pool_id, total_off - off, overlap);
+    C_Request *req_comp = new C_Request(m_ictx->cct, oncommit, &m_lock);
+    AioWrite *req = new AioWrite(m_ictx, oid.name, total_off, bl, snapc,
+				 snap_id, parent_exists, req_comp);
+    req->send();
+    return ++m_tid;
+  }
 }
