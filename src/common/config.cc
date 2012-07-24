@@ -300,7 +300,6 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
     *out << "cluster = " << cluster << std::endl;
   }
   if (f) {
-    f->open_object_section("config");
     f->dump_string("name", stringify(name));
     f->dump_string("cluster", cluster);
   }
@@ -325,8 +324,6 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
     if (f)
       f->dump_string(opt->name, buf);
   }
-  if (f)
-    f->close_section();
 }
 
 int md_config_t::parse_argv(std::vector<const char*>& args)
