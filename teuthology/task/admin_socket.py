@@ -109,26 +109,30 @@ def _run_tests(ctx, client, tests):
             )
 
         for command, config in tests.iteritems():
+            if config is None:
+                config = {}
             log.debug('Testing %s with config %s', command, str(config))
-            assert 'test' in config, \
-                'admin_socket task requires a test script'
 
-            test_path = os.path.join(tmp_dir, command)
-            remote.run(
-                args=[
-                    'wget',
-                    '-q',
-                    '-O',
-                    test_path,
-                    '--',
-                    config['test'],
-                    run.Raw('&&'),
-                    'chmod',
-                    'u=rx',
-                    '--',
-                    test_path,
-                    ],
-                )
+            test_path = None
+            if 'test' in config:
+                test_path = os.path.join(tmp_dir, command)
+                remote.run(
+                    args=[
+                        'wget',
+                        '-q',
+                        '-O',
+                        test_path,
+                        '--',
+                        config['test'],
+                        run.Raw('&&'),
+                        'chmod',
+                        'u=rx',
+                        '--',
+                        test_path,
+                        ],
+                    )
+            else:
+                test_path = '/bin/true'
 
             args = config.get('args', [])
             assert isinstance(args, list), \
