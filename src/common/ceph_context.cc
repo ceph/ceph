@@ -175,7 +175,7 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
     _conf->show_config(ss);
     out->append(ss.str());
   }
-  else if (command == "config set ") {
+  else if (command == "config set") {
     std::string var = args;
     size_t pos = var.find(' ');
     if (pos == string::npos) {
