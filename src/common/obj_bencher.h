@@ -64,6 +64,7 @@ protected:
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
+  int clean_up_slow(const std::string& prefix);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;
@@ -81,6 +82,8 @@ protected:
   virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_remove(const std::string& oid) = 0;
+
+  virtual bool get_objects(std::list<std::string>* objects, int num) = 0;
 
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);

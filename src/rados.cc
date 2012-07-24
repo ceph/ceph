@@ -755,6 +755,8 @@ class RadosBencher : public ObjBencher {
   librados::AioCompletion **completions;
   librados::Rados& rados;
   librados::IoCtx& io_ctx;
+  librados::ObjectIterator oi;
+  bool iterator_valid;
 protected:
   int completions_init(int concurrentios) {
     completions = new librados::AioCompletion *[concurrentios];
@@ -811,8 +813,32 @@ protected:
     return completions[slot]->get_return_value();
   }
 
+  bool get_objects(std::list<std::string>* objects, int num) {
+    int count = 0;
+
+    if (!iterator_valid) {
+      oi = io_ctx.objects_begin();
+      iterator_valid = true;
+    }
+
+    librados::ObjectIterator ei = io_ctx.objects_end();
+
+    if (oi == ei) {
+      iterator_valid = false;
+      return false;
+    }
+
+    objects->clear();
+    for ( ; oi != ei && count < num; ++oi) {
+      objects->push_back(oi->first);
+      ++count;
+    }
+
+    return true;
+  }
+
 public:
-  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i) {}
+  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
   ~RadosBencher() { }
 };
 

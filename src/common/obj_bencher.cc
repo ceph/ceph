@@ -680,9 +680,14 @@ int ObjBencher::clean_up(const std::string& prefix, int concurrentios) {
 
   r = fetch_bench_metadata(metadata_name, &object_size, &num_objects, &prevPid);
   if (r < 0) {
-    return r;
+    // if the metadata file is not found we should try to do a linear search on the prefix
+    if (r == -ENOENT) {
+      return clean_up_slow(prefix);
+    }
+    else {
+      return r;
+    }
   }
-  // if this file is not found we should try to do a linear search on the prefix
 
   r = clean_up(num_objects, prevPid, concurrentios);
   if (r != 0) return r;
@@ -817,4 +822,23 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   return -5;
 }
 
+int ObjBencher::clean_up_slow(const std::string& prefix) {
+  std::list<string> objects;
+  int removed = 0;
 
+  out(cout) << "Warning: using slow linear search with sync remove" << std::endl;
+
+  while (get_objects(&objects, 20)) {
+    std::list<std::string>::const_iterator i = objects.begin();
+    for ( ; i != objects.end(); ++i) {
+      if (i->substr(0, prefix.size()) == prefix) {
+        sync_remove(*i);
+        ++removed;
+      }
+    }
+  }
+
+  out(cout) << "Removed " << removed << " object" << (removed != 1 ? "s" : "") << std::endl;
+
+  return 0;
+}
