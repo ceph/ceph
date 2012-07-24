@@ -120,7 +120,7 @@ void DeterministicOpSequence::_print_status(int seq, int op)
 
 int DeterministicOpSequence::_gen_coll_id(rngen_t& gen)
 {
-  boost::uniform_int<> coll_rng(0, m_collections.size()-1);
+  boost::uniform_int<> coll_rng(0, m_collections_ids.size()-1);
   return coll_rng(gen);
 }
 

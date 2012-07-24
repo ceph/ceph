@@ -65,6 +65,7 @@ void TestFileStoreState::init(int colls, int objs)
     inc_in_flight();
 
     m_collections.insert(make_pair(coll_id, entry));
+    m_collections_ids.push_back(coll_id);
     m_next_coll_nr++;
   }
   dout(5) << "init has " << m_in_flight.read() << "in-flight transactions" << dendl;
@@ -92,8 +93,13 @@ TestFileStoreState::get_coll(int key, bool erase)
   map<int, coll_entry_t*>::iterator it = m_collections.find(key);
   if (it != m_collections.end()) {
     entry = it->second;
-    if (erase)
+    if (erase) {
       m_collections.erase(it);
+      vector<int>::iterator cid_it = m_collections_ids.begin()+(entry->m_id);
+      dout(20) << __func__ << " removing key " << key << " coll_id " << entry->m_id
+	      << " iterator's entry id " << (*cid_it) << dendl;
+      m_collections_ids.erase(cid_it);
+    }
   }
 
   dout(5) << "get_coll id " << key;
@@ -113,22 +119,23 @@ TestFileStoreState::get_coll_at(int pos, bool erase)
   if (m_collections.empty())
     return NULL;
 
-  coll_entry_t *entry = NULL;
-  map<int, coll_entry_t*>::iterator it = m_collections.begin();
-  for (int i = 0; it != m_collections.end(); it++, i++) {
-    if (i == pos) {
-      entry = it->second;
-      break;
-    }
-  }
+  assert((size_t) pos < m_collections_ids.size());
+
+  int coll_id = m_collections_ids[pos];
+  coll_entry_t *entry = m_collections[coll_id];
 
   if (entry == NULL) {
     dout(5) << "get_coll_at pos " << pos << " non-existent" << dendl;
     return NULL;
   }
 
-  if (erase)
-    m_collections.erase(it);
+  if (erase) {
+    m_collections.erase(coll_id);
+    vector<int>::iterator it = m_collections_ids.begin()+(pos);
+    dout(20) << __func__ << " removing pos " << pos << " coll_id " << coll_id
+	    << " iterator's entry id " << (*it) << dendl;
+    m_collections_ids.erase(it);
+  }
 
   dout(5) << "get_coll_at pos " << pos << ": "
       << entry->m_coll << "(removed: " << erase << ")" << dendl;

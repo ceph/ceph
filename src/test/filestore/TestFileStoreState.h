@@ -18,6 +18,7 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <map>
+#include <vector>
 
 class TestFileStoreState {
 public:
@@ -55,6 +56,7 @@ public:
  protected:
   boost::shared_ptr<ObjectStore> m_store;
   map<int, coll_entry_t*> m_collections;
+  vector<int> m_collections_ids;
   int m_next_coll_nr;
   int m_num_objs_per_coll;
 

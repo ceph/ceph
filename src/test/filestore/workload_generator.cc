@@ -195,13 +195,15 @@ int WorkloadGenerator::get_uniform_random_value(int min, int max)
 
 TestFileStoreState::coll_entry_t *WorkloadGenerator::get_rnd_coll_entry(bool erase = false)
 {
-  int index = get_uniform_random_value(0, m_collections.size()-1);
+  int index = get_uniform_random_value(0, m_collections_ids.size()-1);
   coll_entry_t *entry = get_coll_at(index, erase);
   return entry;
 }
 
 hobject_t *WorkloadGenerator::get_rnd_obj(coll_entry_t *entry)
 {
+  assert(entry != NULL);
+
   bool create =
       (get_uniform_random_value(0,100) < 50 || !entry->m_objects.size());
 
@@ -456,6 +458,7 @@ void WorkloadGenerator::run()
 
     destroy_collection = should_destroy_collection();
     entry = get_rnd_coll_entry(destroy_collection);
+    assert(entry != NULL);
 
     if (destroy_collection) {
       do_destroy_collection(t, entry, stat_state);
