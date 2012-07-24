@@ -2092,7 +2092,7 @@ void PG::trim_ondisklog(ObjectStore::Transaction& t)
   if (!g_conf->osd_preserve_trimmed_log) {
     uint64_t zt = new_tail & ~4095;
     if (zt > ondisklog.zero_to) {
-      t.zero(coll_t::META_COLL, log_oid, ondisklog.zero_to, zt);
+      t.zero(coll_t::META_COLL, log_oid, ondisklog.zero_to, zt - ondisklog.zero_to);
       dout(15) << "trim_ondisklog zeroing from " << ondisklog.zero_to
 	       << " to " << zt << dendl;
       ondisklog.zero_to = zt;
