@@ -21,6 +21,7 @@
 #include "common/pipe.h"
 #include "common/safe_io.h"
 #include "common/version.h"
+#include "common/Formatter.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -395,12 +396,20 @@ int AdminSocket::unregister_command(std::string command)
 class VersionHook : public AdminSocketHook {
 public:
   virtual bool call(std::string command, std::string args, bufferlist& out) {
-    if (command == "version")
-      out.append(ceph_version_to_str());
-    else if (command == "git_version")
-      out.append(git_version_to_str());
-    else if (command == "0")
+    if (command == "0") {
       out.append(CEPH_ADMIN_SOCK_VERSION);
+    } else {
+      JSONFormatter jf;
+      jf.open_object_section("version");
+      if (command == "version")
+	jf.dump_string("version", ceph_version_to_str());
+      else if (command == "git_version")
+	jf.dump_string("git_version", git_version_to_str());
+      ostringstream ss;
+      jf.close_section();
+      jf.flush(ss);
+      out.append(ss.str());
+    }
     return true;
   }
 };
@@ -410,25 +419,17 @@ class HelpHook : public AdminSocketHook {
 public:
   HelpHook(AdminSocket *as) : m_as(as) {}
   bool call(string command, string args, bufferlist& out) {
-    unsigned max = 0;
+    JSONFormatter jf(true);
+    jf.open_object_section("help");
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();
 	 ++p) {
-      if (p->first.length() > max)
-	max = p->first.length();
+      jf.dump_string(p->first.c_str(), p->second);
     }
-    max += 1;
-    char spaces[max];
-    for (unsigned i=0; i<max; ++i)
-      spaces[i] = ' ';
-    for (map<string,string>::iterator p = m_as->m_help.begin();
-	 p != m_as->m_help.end();
-	 ++p) {
-      out.append(p->first);
-      out.append(spaces, max - p->first.length());
-      out.append(p->second);
-      out.append("\n");
-    }
+    jf.close_section();
+    ostringstream ss;
+    jf.flush(ss);
+    out.append(ss.str());
     return true;
   }
 };
