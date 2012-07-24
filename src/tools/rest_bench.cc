@@ -76,7 +76,8 @@ enum OpType {
   OP_GET_OBJ = 1,
   OP_PUT_OBJ = 2,
   OP_DELETE_OBJ = 3,
-  OP_CLEANUP = 4,
+  OP_LIST_BUCKET = 4,
+  OP_CLEANUP = 5,
 };
 
 struct req_context : public RefCountedObject {
@@ -89,6 +90,9 @@ struct req_context : public RefCountedObject {
   bufferlist out_bl;
   uint64_t off;
   uint64_t len;
+  const char *list_start;
+  std::list<std::string>* list_objects;
+  int list_count;
   string oid;
   Mutex lock;
   Cond cond;
@@ -185,6 +189,25 @@ static int put_obj_callback(int size, char *buf,
   return chunk;
 }
 
+static S3Status list_bucket_callback(int is_truncated, const char *next_marker,
+                                int count, const S3ListBucketContent *objects,
+                                int prefix_count, const char **prefixes,
+                                void *cb_data)
+{
+  if (!cb_data)
+    return S3StatusOK;
+
+  struct req_context *ctx = (struct req_context *)cb_data;
+
+  ctx->list_start = next_marker;
+
+  for (int i = 0; i < count; ++i) {
+    ctx->list_objects->push_back(objects[i].key);
+  }
+
+  return S3StatusOK;
+}
+
 class RESTDispatcher {
   deque<req_context *> m_req_queue;
   ThreadPool m_tp;
@@ -192,6 +215,7 @@ class RESTDispatcher {
   S3ResponseHandler response_handler;
   S3GetObjectHandler get_obj_handler;
   S3PutObjectHandler put_obj_handler;
+  S3ListBucketHandler list_bucket_handler;
 
   struct DispatcherWQ : public ThreadPool::WorkQueue<req_context> {
     RESTDispatcher *dispatcher;
@@ -252,11 +276,15 @@ public:
     put_obj_handler.responseHandler = response_handler;
     put_obj_handler.putObjectDataCallback = put_obj_callback;
 
+    list_bucket_handler.responseHandler = response_handler;
+    list_bucket_handler.listBucketCallback = list_bucket_callback;
+
   }
   void process_context(req_context *ctx);
   void get_obj(req_context *ctx);
   void put_obj(req_context *ctx);
   void delete_obj(req_context *ctx);
+  void list_bucket(req_context *ctx);
 
   void queue(req_context *ctx) {
     req_wq.queue(ctx);
@@ -280,6 +308,9 @@ void RESTDispatcher::process_context(req_context *ctx)
       break;
     case OP_DELETE_OBJ:
       delete_obj(ctx);
+      break;
+    case OP_LIST_BUCKET:
+      list_bucket(ctx);
       break;
     default:
       assert(0);
@@ -324,11 +355,22 @@ void RESTDispatcher::delete_obj(req_context *ctx)
                    ctx->ctx, &response_handler, ctx);
 }
 
+void RESTDispatcher::list_bucket(req_context *ctx)
+{
+  S3_list_bucket(ctx->bucket_ctx,
+                 NULL, ctx->list_start,
+                 NULL, ctx->list_count,
+                 ctx->ctx,
+                 &list_bucket_handler, ctx);
+}
+
 class RESTBencher : public ObjBencher {
   RESTDispatcher *dispatcher;
   struct req_context **completions;
   struct S3RequestContext **handles;
   S3BucketContext bucket_ctx;
+  const char *list_start;
+  bool bucket_list_done;
   string user_agent;
   string host;
   string bucket;
@@ -489,6 +531,38 @@ protected:
     return ret;
   }
 
+  bool get_objects(std::list<std::string>* objects, int num) {
+    if (bucket_list_done) {
+      bucket_list_done = false;
+      return false;
+    }
+
+    struct req_context *ctx = new req_context;
+    int ret = ctx->init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+    ctx->get();
+    ctx->bucket_ctx = &bucket_ctx;
+    ctx->list_start = list_start;
+    ctx->list_objects = objects;
+    ctx->list_count = num;
+    ctx->op = OP_LIST_BUCKET;
+
+    dispatcher->process_context(ctx);
+    ret = ctx->ret();
+
+    list_start = ctx->list_start;
+    if (list_start == NULL || strcmp(list_start, "") == 0) {
+      bucket_list_done = true;
+      list_start = NULL;
+    }
+
+    ctx->put();
+
+    return ret == 0;
+  }
+
   bool completion_is_done(int slot) {
     return completions[slot]->complete;
   }
@@ -513,7 +587,12 @@ protected:
   }
 
 public:
-  RESTBencher(RESTDispatcher *_dispatcher) : dispatcher(_dispatcher), completions(NULL) {
+  RESTBencher(RESTDispatcher *_dispatcher) :
+      dispatcher(_dispatcher),
+      completions(NULL),
+      list_start(NULL),
+      bucket_list_done(false)
+  {
     dispatcher->start();
   }
   ~RESTBencher() { }
@@ -670,7 +749,7 @@ int main(int argc, const char **argv)
     if (args.size() < 2)
       usage_exit();
     operation = OP_CLEANUP;
-    prefix = argv[1];
+    prefix = args[1];
   } else
     usage_exit();
 
