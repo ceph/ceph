@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include <map>
 #include <set>
 #include <string>
@@ -28,12 +29,13 @@ public:
 
   int set(
     const string &prefix,
-    const std::map<string, bufferlist> &to_set
+    const string &key,
+    const bufferlist &bl
     );
 
-  int rmkeys(
+  int rmkey(
     const string &prefix,
-    const std::set<string> &keys
+    const string &key
     );
 
   int rmkeys_by_prefix(
@@ -51,33 +53,37 @@ public:
     struct SetOp : public Context {
       KeyValueDBMemory *db;
       string prefix;
-      std::map<string, bufferlist> to_set;
+      string key;
+      bufferlist value;
       SetOp(KeyValueDBMemory *db,
 	    const string &prefix,
-	    const std::map<string, bufferlist> &to_set)
-	: db(db), prefix(prefix), to_set(to_set) {}
+	    const string &key,
+	    const bufferlist &value)
+	: db(db), prefix(prefix), key(key), value(value) {}
       void finish(int r) {
-	db->set(prefix, to_set);
+	db->set(prefix, key, value);
       }
     };
-    void set(const string &prefix, const std::map<string, bufferlist> &to_set) {
-      on_commit.push_back(new SetOp(db, prefix, to_set));
+
+    void set(const string &prefix, const string &k, const bufferlist& bl) {
+      on_commit.push_back(new SetOp(db, prefix, k, bl));
     }
 
     struct RmKeysOp : public Context {
       KeyValueDBMemory *db;
       string prefix;
-      std::set<string> keys;
+      string key;
       RmKeysOp(KeyValueDBMemory *db,
 	       const string &prefix,
-	       const std::set<string> &keys)
-	: db(db), prefix(prefix), keys(keys) {}
+	       const string &key)
+	: db(db), prefix(prefix), key(key) {}
       void finish(int r) {
-	db->rmkeys(prefix, keys);
+	db->rmkey(prefix, key);
       }
     };
-    void rmkeys(const string &prefix, const std::set<string> &to_remove) {
-      on_commit.push_back(new RmKeysOp(db, prefix, to_remove));
+
+    void rmkey(const string &prefix, const string &key) {
+      on_commit.push_back(new RmKeysOp(db, prefix, key));
     }
 
     struct RmKeysByPrefixOp : public Context {
