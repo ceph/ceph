@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef KEY_VALUE_DB_H
 #define KEY_VALUE_DB_H
 
@@ -20,15 +21,37 @@ public:
   class TransactionImpl {
   public:
     /// Set Keys
-    virtual void set(
+    void set(
       const string &prefix,                 ///< [in] Prefix for keys
       const std::map<string, bufferlist> &to_set ///< [in] keys/values to set
+    ) {
+      std::map<string, bufferlist>::const_iterator it;
+      for (it = to_set.begin(); it != to_set.end(); ++it)
+	set(prefix, it->first, it->second);
+    }
+
+    /// Set Key
+    virtual void set(
+      const string &prefix,   ///< [in] Prefix for the key
+      const string &k,	      ///< [in] Key to set
+      const bufferlist &bl    ///< [in] Value to set
       ) = 0;
 
+
     /// Removes Keys
-    virtual void rmkeys(
+    void rmkeys(
       const string &prefix,   ///< [in] Prefix to search for
       const std::set<string> &keys ///< [in] Keys to remove
+    ) {
+      std::set<string>::const_iterator it;
+      for (it = keys.begin(); it != keys.end(); ++it)
+	rmkey(prefix, *it);
+    }
+
+    /// Remove Key
+    virtual void rmkey(
+      const string &prefix,   ///< [in] Prefix to search for
+      const string &k	      ///< [in] Key to remove
       ) = 0;
 
     /// Removes keys beginning with prefix
