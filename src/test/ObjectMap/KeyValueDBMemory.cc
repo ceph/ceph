@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include "include/encoding.h"
 #include "KeyValueDBMemory.h"
 #include <map>
@@ -133,25 +134,18 @@ int KeyValueDBMemory::get_keys(const string &prefix,
 }
 
 int KeyValueDBMemory::set(const string &prefix,
-			  const map<string, bufferlist> &to_set) {
-  for (map<string, bufferlist>::const_iterator i = to_set.begin();
-       i != to_set.end();
-       ++i) {
-    bufferlist bl = i->second;
-    db[prefix][i->first] = i->second;
-  }
+			  const string &key,
+			  const bufferlist &bl) {
+  db[prefix][key] = bl;
   return 0;
 }
 
-int KeyValueDBMemory::rmkeys(const string &prefix,
-			     const std::set<string> &keys) {
-  if (!db.count(prefix))
-    return 0;
-  for (std::set<string>::const_iterator i = keys.begin();
-       i != keys.end();
-       ++i) {
-    db[prefix].erase(*i);
-  }
+int KeyValueDBMemory::rmkey(const string &prefix,
+			    const string &key) {
+  db[prefix].erase(key);
+  if (db[prefix].size() == 0)
+    db.erase(prefix);
+
   return 0;
 }
 

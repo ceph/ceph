@@ -36,12 +36,11 @@ public:
     LevelDBTransactionImpl(LevelDBStore *db) : db(db) {}
     void set(
       const string &prefix,
-      const std::map<string, bufferlist> &to_set
-      );
-    void rmkeys(
+      const string &k,
+      const bufferlist &bl);
+    void rmkey(
       const string &prefix,
-      const std::set<string> &keys
-      );
+      const string &k);
     void rmkeys_by_prefix(
       const string &prefix
       );
