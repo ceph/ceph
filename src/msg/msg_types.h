@@ -37,7 +37,7 @@ extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
 class entity_name_t {
 public:
   __u8 _type;
-  int64_t _num;
+  uint64_t _num;
 
 public:
   static const int TYPE_MON = CEPH_ENTITY_TYPE_MON;
