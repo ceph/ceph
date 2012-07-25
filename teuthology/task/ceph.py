@@ -635,6 +635,8 @@ def cluster(ctx, config):
                 if fs == 'ext4' or fs == 'ext3':
                     if mount_options is None:
                         mount_options = ['noatime','user_xattr']
+                    if mkfs_options is None:
+                        mkfs_options = ['-y']
 
                 if mount_options is None:
                     mount_options = []
