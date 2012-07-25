@@ -710,30 +710,43 @@ bool PG::needs_recovery() const
   return ret;
 }
 
-void PG::generate_past_intervals()
+bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
 {
-  epoch_t end_epoch = info.history.same_interval_since;
+  *end = info.history.same_interval_since;
+
   // Do we already have the intervals we want?
   map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
   if (pif != past_intervals.end()) {
     if (pif->first <= info.history.last_epoch_clean) {
       dout(10) << __func__ << ": already have past intervals back to "
 	       << info.history.last_epoch_clean << dendl;
-      return;
+      return false;
     }
-    end_epoch = past_intervals.begin()->first;
+    *end = past_intervals.begin()->first;
   }
 
-  epoch_t cur_epoch = MAX(MAX(info.history.epoch_created,
-			      info.history.last_epoch_clean),
-			  osd->superblock.oldest_map);
-  OSDMapRef last_map, cur_map;
-  if (cur_epoch >= end_epoch) {
-    dout(10) << __func__ << " start epoch " << cur_epoch
-	     << " >= end epoch " << end_epoch
+  *start = MAX(MAX(info.history.epoch_created,
+		   info.history.last_epoch_clean),
+	       osd->superblock.oldest_map);
+  if (*start >= *end) {
+    dout(10) << __func__ << " start epoch " << *start
+	     << " >= end epoch " << *end
 	     << ", nothing to do" << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+
+void PG::generate_past_intervals()
+{
+  epoch_t cur_epoch, end_epoch;
+  if (!_calc_past_interval_range(&cur_epoch, &end_epoch)) {
     return;
   }
+
+  OSDMapRef last_map, cur_map;
   vector<int> acting, up, old_acting, old_up;
 
   cur_map = osd->get_map(cur_epoch);
