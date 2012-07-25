@@ -8,7 +8,8 @@
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 
-#include "rgw_cls_api.h"
+#include "cls/rgw/cls_rgw_types.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_tools.h"
 
@@ -474,11 +475,11 @@ int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch,
   }
 
   do {
-    rgw_cls_usage_log_read_ret read_ret;
+    map<rgw_user_bucket, rgw_usage_log_entry> usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
 
     int ret =  cls_obj_usage_log_read(hash, user, start_epoch, end_epoch, num,
-                                    usage_iter.read_iter, read_ret, is_truncated);
+                                    usage_iter.read_iter, usage, is_truncated);
     if (ret == -ENOENT)
       goto next;
 
@@ -487,7 +488,7 @@ int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch,
 
     num -= usage.size();
 
-    for (iter = read_ret.usage.begin(); iter != read_ret.usage.end(); ++iter) {
+    for (iter = usage.begin(); iter != usage.end(); ++iter) {
       usage[iter->first].aggregate(iter->second);
     }
 
@@ -2561,14 +2562,9 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
-  bufferlist in, out;
-  struct rgw_cls_obj_prepare_op call;
-  call.op = op;
-  call.tag = tag;
-  call.name = name;
-  call.locator = locator;
-  ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "bucket_prepare_op", in, out);
+  ObjectWriteOperation o;
+  cls_rgw_bucket_prepare_op(o, op, tag, name, locator);
+  r = io_ctx.operate(oid, &o);
   return r;
 }
 
@@ -2590,22 +2586,19 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
-  bufferlist in;
-  struct rgw_cls_obj_complete_op call;
-  call.op = op;
-  call.tag = tag;
-  call.name = ent.name;
-  call.epoch = epoch;
-  call.meta.size = ent.size;
-  call.meta.mtime = utime_t(ent.mtime, 0);
-  call.meta.etag = ent.etag;
-  call.meta.owner = ent.owner;
-  call.meta.owner_display_name = ent.owner_display_name;
-  call.meta.content_type = ent.content_type;
-  call.meta.category = category;
-  ::encode(call, in);
+  ObjectWriteOperation o;
+  rgw_bucket_dir_entry_meta dir_meta;
+  dir_meta.size = ent.size;
+  dir_meta.mtime = utime_t(ent.mtime, 0);
+  dir_meta.etag = ent.etag;
+  dir_meta.owner = ent.owner;
+  dir_meta.owner_display_name = ent.owner_display_name;
+  dir_meta.content_type = ent.content_type;
+  dir_meta.category = category;
+  cls_rgw_bucket_complete_op(o, op, tag, epoch, ent.name, dir_meta);
+
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-  r = io_ctx.aio_exec(oid, c, "rgw", "bucket_complete_op", in, NULL);
+  r = io_ctx.aio_operate(oid, c, &o);
   c->release();
   return r;
 }
@@ -2648,29 +2641,11 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
-  bufferlist in, out;
-  struct rgw_cls_list_op call;
-  call.start_obj = start;
-  call.filter_prefix = prefix;
-  call.num_entries = num;
-  ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
+  struct rgw_bucket_dir dir;
+  r = cls_rgw_list_op(io_ctx, oid, start, prefix, num, &dir, is_truncated);
   if (r < 0)
     return r;
 
-  struct rgw_cls_list_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
-    return -EIO;
-  }
-
-  if (is_truncated != NULL)
-    *is_truncated = ret.is_truncated;
-
-  struct rgw_bucket_dir& dir = ret.dir;
   map<string, struct rgw_bucket_dir_entry>::iterator miter;
   bufferlist updates;
   for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
@@ -2741,16 +2716,15 @@ int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)
   if (r < 0)
     return r;
 
-  bufferlist in, out;
-  rgw_cls_usage_log_add_op call;
-  call.info = info;
-  ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "user_usage_log_add", in, out);
+  ObjectWriteOperation op;
+  cls_rgw_usage_log_add(op, info);
+
+  r = io_ctx.operate(oid, &op);
   return r;
 }
 
 int RGWRados::cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
-                                     string& read_iter, rgw_cls_usage_log_read_ret& result, bool *is_truncated)
+                                     string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated)
 {
   librados::IoCtx io_ctx;
 
@@ -2760,28 +2734,9 @@ int RGWRados::cls_obj_usage_log_read(string& oid, string& user, uint64_t start_e
   if (r < 0)
     return r;
 
-  bufferlist in, out;
-  rgw_cls_usage_log_read_op call;
-  call.start_epoch = start_epoch;
-  call.end_epoch = end_epoch;
-  call.owner = user;
-  call.max_entries = max_entries;
-  call.iter = read_iter;
-  ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "user_usage_log_read", in, out);
-  if (r < 0)
-    return r;
+  r = cls_rgw_usage_log_read(io_ctx, oid, user, start_epoch, end_epoch,
+			     max_entries, read_iter, usage, is_truncated);
 
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(result, iter);
-    read_iter = result.next_iter;
-    if (is_truncated)
-      *is_truncated = result.truncated;
-  } catch (buffer::error& e) {
-    ldout(cct, 0) << "ERROR: cls_obj_usage_log_read_op: failed to decode result" << dendl;
-    return -EINVAL;
-  }
   return r;
 }
 
@@ -2793,13 +2748,10 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   if (r < 0)
     return r;
 
-  bufferlist in, out;
-  rgw_cls_usage_log_trim_op call;
-  call.user = user;
-  call.start_epoch = start_epoch;
-  call.end_epoch = end_epoch;
-  ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "user_usage_log_trim", in, out);
+  ObjectWriteOperation op;
+  cls_rgw_usage_log_trim(op, user, start_epoch, end_epoch);
+
+  r = io_ctx.operate(oid, &op);
   return r;
 }
 
@@ -2862,24 +2814,9 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
-  bufferlist in, out;
-  struct rgw_cls_list_op call;
-  call.num_entries = 0;
-  ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
+  r = cls_rgw_get_dir_header(io_ctx, oid, &header);
   if (r < 0)
     return r;
-
-  struct rgw_cls_list_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
-    return -EIO;
-  }
-
-  header = ret.dir.header;
 
   return 0;
 }

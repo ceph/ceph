@@ -1,0 +1,146 @@
+#include <errno.h>
+
+#include "include/types.h"
+#include "cls/rgw/cls_rgw_ops.h"
+#include "include/rados/librados.hpp"
+
+using namespace librados;
+
+
+void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
+                               string& name, string& locator)
+{
+  struct rgw_cls_obj_prepare_op call;
+  call.op = op;
+  call.tag = tag;
+  call.name = name;
+  call.locator = locator;
+  bufferlist in;
+  ::encode(call, in);
+  o.exec("rgw", "bucket_prepare_op", in);
+}
+
+
+void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag,
+                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta)
+{
+
+  bufferlist in;
+  struct rgw_cls_obj_complete_op call;
+  call.op = op;
+  call.tag = tag;
+  call.name = name;
+  call.epoch = epoch;
+  call.meta = dir_meta;
+  ::encode(call, in);
+  o.exec("rgw", "bucket_complete_op", in);
+}
+
+int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
+                    string& filter_prefix, uint32_t num_entries,
+                    rgw_bucket_dir *dir, bool *is_truncated)
+{
+  bufferlist in, out;
+  struct rgw_cls_list_op call;
+  call.start_obj = start_obj;
+  call.filter_prefix = filter_prefix;
+  call.num_entries = num_entries;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_list_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  if (dir)
+    *dir = ret.dir;
+  if (is_truncated)
+    *is_truncated = ret.is_truncated;
+
+ return r;
+}
+
+int cls_rgw_get_dir_header(IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header)
+{
+  bufferlist in, out;
+  struct rgw_cls_list_op call;
+  call.num_entries = 0;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_list_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  if (header)
+    *header = ret.dir.header;
+
+ return r;
+}
+
+int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
+                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+                           string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
+                           bool *is_truncated)
+{
+  *is_truncated = false;
+
+  bufferlist in, out;
+  rgw_cls_usage_log_read_op call;
+  call.start_epoch = start_epoch;
+  call.end_epoch = end_epoch;
+  call.owner = user;
+  call.max_entries = max_entries;
+  call.iter = read_iter;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "user_usage_log_read", in, out);
+  if (r < 0)
+    return r;
+
+  try {
+    rgw_cls_usage_log_read_ret result;
+    bufferlist::iterator iter = out.begin();
+    ::decode(result, iter);
+    read_iter = result.next_iter;
+    if (is_truncated)
+      *is_truncated = result.truncated;
+  } catch (buffer::error& e) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void cls_rgw_usage_log_trim(ObjectWriteOperation& op, string& user,
+                           uint64_t start_epoch, uint64_t end_epoch)
+{
+  bufferlist in;
+  rgw_cls_usage_log_trim_op call;
+  call.start_epoch = start_epoch;
+  call.end_epoch = end_epoch;
+  call.user = user;
+  ::encode(call, in);
+  op.exec("rgw", "user_usage_log_trim", in);
+}
+
+void cls_rgw_usage_log_add(ObjectWriteOperation& op, rgw_usage_log_info& info)
+{
+  bufferlist in;
+  rgw_cls_usage_log_add_op call;
+  call.info = info;
+  ::encode(call, in);
+  op.exec("rgw", "user_usage_log_add", in);
+}
+

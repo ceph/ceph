@@ -10,7 +10,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"
-#include "rgw/rgw_cls_api.h"
+#include "cls/rgw/cls_rgw_ops.h"
 #include "common/Clock.h"
 
 #include "global/global_context.h"
