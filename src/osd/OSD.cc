@@ -1903,43 +1903,43 @@ void OSD::tick()
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
-  // periodically kick recovery work queue
-  recovery_tp.wake();
+  if (is_active()) {
+    // periodically kick recovery work queue
+    recovery_tp.wake();
   
-  if (service.scrub_should_schedule()) {
-    sched_scrub();
-  }
+    if (service.scrub_should_schedule()) {
+      sched_scrub();
+    }
 
-  map_lock.get_read();
+    map_lock.get_read();
 
-  maybe_update_heartbeat_peers();
+    maybe_update_heartbeat_peers();
 
-  heartbeat_lock.Lock();
-  heartbeat_check();
-  heartbeat_lock.Unlock();
+    heartbeat_lock.Lock();
+    heartbeat_check();
+    heartbeat_lock.Unlock();
 
-  check_replay_queue();
+    check_replay_queue();
 
-  // mon report?
-  utime_t now = ceph_clock_now(g_ceph_context);
-  if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
-    osd_stat_updated = true;
-    do_mon_report();
-  }
-  else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
-    do_mon_report();
-  }
+    // mon report?
+    utime_t now = ceph_clock_now(g_ceph_context);
+    if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
+      osd_stat_updated = true;
+      do_mon_report();
+    }
+    else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
+      do_mon_report();
+    }
 
-  map_lock.put_read();
+    map_lock.put_read();
 
-  timer.add_event_after(1.0, new C_Tick(this));
-
-  if (outstanding_pg_stats
-      &&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
-    dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
-            << " seconds, reconnecting elsewhere" << dendl;
-    monc->reopen_session();
-    last_pg_stats_ack = ceph_clock_now(g_ceph_context);  // reset clock
+    if (outstanding_pg_stats
+	&&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
+      dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
+	      << " seconds, reconnecting elsewhere" << dendl;
+      monc->reopen_session();
+      last_pg_stats_ack = ceph_clock_now(g_ceph_context);  // reset clock
+    }
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
@@ -1953,6 +1953,8 @@ void OSD::tick()
   }
 
   check_ops_in_flight();
+
+  timer.add_event_after(1.0, new C_Tick(this));
 }
 
 void OSD::check_ops_in_flight()
