@@ -941,6 +941,7 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
 {
   dout(10) << "preprocess_pgtemp " << *m << dendl;
   vector<int> empty;
+  int from = m->get_orig_source().num();
 
   // check caps
   MonSession *session = m->get_session();
@@ -949,6 +950,12 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
   if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "attempt to send MOSDPGTemp from entity with insufficient caps "
 	    << session->caps << dendl;
+    goto ignore;
+  }
+
+  if (!osdmap.is_up(from) ||
+      osdmap.get_inst(from) != m->get_orig_source_inst()) {
+    dout(7) << "ignoring pgtemp message from down " << m->get_orig_source_inst() << dendl;
     goto ignore;
   }
 
