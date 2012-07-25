@@ -23,6 +23,7 @@
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/lockdep.h"
+#include "common/Formatter.h"
 #include "log/Log.h"
 
 #include <iostream>
@@ -172,8 +173,10 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
     _perf_counters_collection->write_json_to_buf(*out, true);
   }
   else if (command == "config show") {
+    JSONFormatter jf(true);
+    _conf->show_config(&jf);
     ostringstream ss;
-    _conf->show_config(ss);
+    jf.flush(ss);
     out->append(ss.str());
   }
   else if (command == "config set") {

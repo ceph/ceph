@@ -141,9 +141,11 @@ public:
 
   /// dump all config values to a stream
   void show_config(std::ostream& out);
+  /// dump all config values to a formatter
+  void show_config(Formatter *f);
 
 private:
-  void _show_config(std::ostream& out);
+  void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
 
