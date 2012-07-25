@@ -662,6 +662,8 @@ public:
   bool needs_recovery() const;
 
   void mark_clean();  ///< mark an active pg clean
+
+  bool _calc_past_interval_range(epoch_t *start, epoch_t *end);
   void generate_past_intervals();
   void trim_past_intervals();
   void build_prior(std::auto_ptr<PriorSet> &prior_set);
