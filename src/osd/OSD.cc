@@ -1466,8 +1466,6 @@ void OSD::build_past_intervals_parallel()
     last_map = cur_map;
     cur_map = get_map(cur_epoch);
 
-    ObjectStore::Transaction t;
-
     for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
       PG *pg = i->first;
       pistate& p = i->second;
@@ -1503,13 +1501,21 @@ void OSD::build_past_intervals_parallel()
 	p.old_up = up;
 	p.old_acting = acting;
 	p.same_interval_since = cur_epoch;
-	pg->write_info(t);
       }
     }
-
-    if (!t.empty())
-      store->apply_transaction(t);
   }
+
+  // write info only at the end.  this is necessary because we check
+  // whether the past_intervals go far enough back or forward in time,
+  // but we don't check for holes.  we could avoid it by discarding
+  // the previous past_intervals and rebuilding from scratch, or we
+  // can just do this and commit all our work at the end.
+  ObjectStore::Transaction t;
+  for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
+    PG *pg = i->first;
+    pg->write_info(t);
+  }
+  store->apply_transaction(t);
 }
 
 
