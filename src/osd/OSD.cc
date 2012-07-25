@@ -1334,8 +1334,113 @@ void OSD::load_pgs()
     pg->unlock();
   }
   dout(10) << "load_pgs done" << dendl;
+
+  build_past_intervals_parallel();
 }
- 
+
+
+/*
+ * build past_intervals efficiently on old, degraded, and buried
+ * clusters.  this is important for efficiently catching up osds that
+ * are way behind on maps to the current cluster state.
+ *
+ * this is a parallel version of PG::generate_past_intervals().
+ * follow the same logic, but do all pgs at the same time so that we
+ * can make a single pass across the osdmap history.
+ */
+struct pistate {
+  epoch_t start, end;
+  vector<int> old_acting, old_up;
+  epoch_t same_interval_since;
+};
+
+void OSD::build_past_intervals_parallel()
+{
+  map<PG*,pistate> pis;
+
+  // calculate untion of map range
+  epoch_t end_epoch = superblock.oldest_map;
+  epoch_t cur_epoch = superblock.newest_map;
+  for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
+       i != pg_map.end();
+       i++) {
+    PG *pg = i->second;
+
+    epoch_t start, end;
+    if (!pg->_calc_past_interval_range(&start, &end))
+      continue;
+
+    dout(10) << pg->info.pgid << " needs " << start << "-" << end << dendl;
+    pistate& p = pis[pg];
+    p.start = start;
+    p.end = end;
+    p.same_interval_since = 0;
+
+    if (start < cur_epoch)
+      cur_epoch = start;
+    if (end > end_epoch)
+      end_epoch = end;
+  }
+  if (pis.empty()) {
+    dout(10) << __func__ << " nothing to build" << dendl;
+    return;
+  }
+
+  dout(1) << __func__ << " over " << cur_epoch << "-" << end_epoch << dendl;
+  assert(cur_epoch <= end_epoch);
+
+  OSDMapRef cur_map, last_map;
+  for ( ; cur_epoch <= end_epoch; cur_epoch++) {
+    dout(10) << __func__ << " epoch " << cur_epoch << dendl;
+    last_map = cur_map;
+    cur_map = get_map(cur_epoch);
+
+    ObjectStore::Transaction t;
+
+    for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
+      PG *pg = i->first;
+      pistate& p = i->second;
+
+      if (cur_epoch < p.start || cur_epoch > p.end)
+	continue;
+
+      vector<int> acting, up;
+      cur_map->pg_to_up_acting_osds(pg->info.pgid, up, acting);
+
+      if (p.same_interval_since == 0) {
+	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->info.pgid
+		 << " first map, acting " << acting
+		 << " up " << up << ", same_interval_since = " << cur_epoch << dendl;
+	p.same_interval_since = cur_epoch;
+	p.old_up = up;
+	p.old_acting = acting;
+	continue;
+      }
+      assert(last_map);
+
+      std::stringstream debug;
+      bool new_interval = pg_interval_t::check_new_interval(p.old_acting, acting,
+							    p.old_up, up,
+							    p.same_interval_since,
+							    pg->info.history.last_epoch_clean,
+							    cur_map, last_map,
+							    &pg->past_intervals,
+							    &debug);
+      if (new_interval) {
+	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->info.pgid
+		 << " " << debug.str() << dendl;
+	p.old_up = up;
+	p.old_acting = acting;
+	p.same_interval_since = cur_epoch;
+	pg->write_info(t);
+      }
+    }
+
+    if (!t.empty())
+      store->apply_transaction(t);
+  }
+}
+
 
 /*
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
