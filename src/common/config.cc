@@ -22,6 +22,7 @@
 #include "common/version.h"
 #include "include/str_list.h"
 #include "include/types.h"
+#include "include/stringify.h"
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 
@@ -283,24 +284,49 @@ void md_config_t::parse_env()
 void md_config_t::show_config(std::ostream& out)
 {
   Mutex::Locker l(lock);
-  _show_config(out);
+  _show_config(&out, NULL);
 }
 
-void md_config_t::_show_config(std::ostream& out)
+void md_config_t::show_config(Formatter *f)
 {
-  out << "name = " << name << std::endl;
-  out << "cluster = " << cluster << std::endl;
+  Mutex::Locker l(lock);
+  _show_config(NULL, f);
+}
+
+void md_config_t::_show_config(std::ostream *out, Formatter *f)
+{
+  if (out) {
+    *out << "name = " << name << std::endl;
+    *out << "cluster = " << cluster << std::endl;
+  }
+  if (f) {
+    f->open_object_section("config");
+    f->dump_string("name", stringify(name));
+    f->dump_string("cluster", cluster);
+  }
   for (int o = 0; o < subsys.get_num(); o++) {
-    out << "debug_" << subsys.get_name(o)
-	<< " = " << subsys.get_log_level(o)
-	<< "/" << subsys.get_gather_level(o) << std::endl;
+    if (out)
+      *out << "debug_" << subsys.get_name(o)
+	   << " = " << subsys.get_log_level(o)
+	   << "/" << subsys.get_gather_level(o) << std::endl;
+    if (f) {
+      ostringstream ss;
+      ss << subsys.get_log_level(o)
+	 << "/" << subsys.get_gather_level(o);
+      f->dump_string(subsys.get_name(o).c_str(), ss.str());
+    }
   }
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     char *buf;
     _get_val(opt->name, &buf, -1);
-    out << opt->name << " = " << buf << std::endl;
+    if (out)
+      *out << opt->name << " = " << buf << std::endl;
+    if (f)
+      f->dump_string(opt->name, buf);
   }
+  if (f)
+    f->close_section();
 }
 
 int md_config_t::parse_argv(std::vector<const char*>& args)
@@ -327,7 +353,7 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
       expand_all_meta();
-      _show_config(cout);
+      _show_config(&cout, NULL);
       _exit(0);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
