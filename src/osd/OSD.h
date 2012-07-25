@@ -740,6 +740,8 @@ protected:
 		       bool primary);
   
   void load_pgs();
+  void build_past_intervals_parallel();
+
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 			  const vector<int>& lastup, const vector<int>& lastacting);
