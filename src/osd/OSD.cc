@@ -1511,11 +1511,20 @@ void OSD::build_past_intervals_parallel()
   // the previous past_intervals and rebuilding from scratch, or we
   // can just do this and commit all our work at the end.
   ObjectStore::Transaction t;
+  int num = 0;
   for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
     PG *pg = i->first;
     pg->write_info(t);
+
+    // don't let the transaction get too big
+    if (++num >= g_conf->osd_target_transaction_size) {
+      store->apply_transaction(t);
+      t = ObjectStore::Transaction();
+      num = 0;
+    }
   }
-  store->apply_transaction(t);
+  if (!t.empty())
+    store->apply_transaction(t);
 }
 
 
