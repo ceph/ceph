@@ -4,7 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "rgw_common.h"
-#include "rgw_cls_api.h"
+#include "cls/rgw/cls_rgw_types.h"
 #include "rgw_log.h"
 
 class RGWWatcher;
@@ -579,7 +579,7 @@ public:
 
   int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
-                             string& read_iter, rgw_cls_usage_log_read_ret& result, bool *is_truncated);
+                             string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
   int cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch);
 
   /// clean up/process any temporary objects older than given date[/time]

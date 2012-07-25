@@ -123,7 +123,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
 ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libosd.a libmds.a $(LIBOS_LDA) libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -321,7 +321,7 @@ librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
-       libglobal.la librgw.a librados.la -lcurl -lexpat \
+       libglobal.la librgw.a librados.la libcls_rgw_client.a -lcurl -lexpat \
        $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = \
@@ -444,7 +444,7 @@ radoslib_LTLIBRARIES += libcls_lock.la
 
 if WITH_RADOSGW
 # rgw: rados gateway
-libcls_rgw_la_SOURCES = cls_rgw.cc
+libcls_rgw_la_SOURCES = cls/rgw/cls_rgw.cc
 libcls_rgw_la_CFLAGS = ${AM_CFLAGS}
 libcls_rgw_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rgw_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
@@ -458,6 +458,12 @@ libcls_lock_client_a_SOURCES =  \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc
 noinst_LIBRARIES += libcls_lock_client.a
+
+libcls_rgw_client_a_SOURCES =  \
+	cls/rgw/cls_rgw_client.cc \
+	cls/rgw/cls_rgw_types.cc \
+	cls/rgw/cls_rgw_ops.cc
+noinst_LIBRARIES += libcls_rgw_client.a
 
 ## hadoop client
 if WITH_HADOOPCLIENT
@@ -1273,6 +1279,9 @@ noinst_HEADERS = \
 	cls/lock/cls_lock_types.h\
 	cls/lock/cls_lock_ops.h\
 	cls/lock/cls_lock_client.h\
+	cls/rgw/cls_rgw_client.h\
+	cls/rgw/cls_rgw_ops.h\
+	cls/rgw/cls_rgw_types.h\
 	common/BackTrace.h\
 	common/RefCountedObj.h\
 	common/HeartbeatMap.h\
@@ -1656,7 +1665,6 @@ noinst_HEADERS = \
 	rgw/rgw_acl_swift.h\
 	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
-	rgw/rgw_cls_api.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_log.h\

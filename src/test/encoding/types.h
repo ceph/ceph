@@ -106,13 +106,15 @@ TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
 TYPE(RGWCacheNotifyInfo)
 
-#include "rgw/rgw_cls_api.h"
+#include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
 TYPE(rgw_bucket_dir_entry_meta)
 TYPE(rgw_bucket_dir_entry)
 TYPE(rgw_bucket_category_stats)
 TYPE(rgw_bucket_dir_header)
 TYPE(rgw_bucket_dir)
+
+#include "cls/rgw/cls_rgw_ops.h"
 TYPE(rgw_cls_obj_prepare_op)
 TYPE(rgw_cls_obj_complete_op)
 TYPE(rgw_cls_list_op)
