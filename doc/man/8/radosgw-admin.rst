@@ -62,6 +62,15 @@ Commands
 :command:`key rm`
   Remove an access key
 
+:command:'pool add'
+  Add an existing pool for data placement
+
+:command:`pool rm`
+  Remove an existing pool from data placement set
+
+:command:`pools list`
+  List placement active set
+
 :command:`policy`
   Display bucket/object policy
 
