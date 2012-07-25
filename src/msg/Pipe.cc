@@ -1016,11 +1016,13 @@ void Pipe::fault(bool onconnect, bool onread)
     if (state == STATE_CLOSING || onconnect) {
       ldout(msgr->cct,10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
-    } else {
+      return;
+    }
+    if (policy.standby) {
       ldout(msgr->cct,0) << "fault with nothing to send, going to standby" << dendl;
       state = STATE_STANDBY;
+      return;
     }
-    return;
   } 
 
 
