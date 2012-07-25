@@ -2093,7 +2093,7 @@ void OSD::_got_boot_version(epoch_t oldest, epoch_t newest)
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
-	     osdmap->get_epoch() < newest + g_conf->osd_map_message_max) {
+	     osdmap->get_epoch() + g_conf->osd_map_message_max > newest) {
     send_boot();
     return;
   }
