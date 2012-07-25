@@ -12,7 +12,7 @@ To get the cookbooks for Ceph, clone them from git.::
 
 	cd ~/chef-cookbooks
 	git clone https://github.com/opscode-cookbooks/apache2.git
-	git clone https://github.com/ceph/ceph-cookbooks.git
+	git clone https://github.com/ceph/ceph-cookbooks.git ceph
 
 Add the Required Cookbook Paths
 -------------------------------
@@ -32,7 +32,7 @@ Becomes::
 	cookbook_path [
 		'/home/{user-name}/chef-cookbooks/', 
 		'/home/{user-name}/chef-cookbooks/{another-directory}/',
-		'/some/other/path/to/cookbooks'
+		'/some/other/path/to/cookbooks/'
 	]
 
 Install the Cookbooks
@@ -41,7 +41,7 @@ Install the Cookbooks
 To install Ceph, you must upload the Ceph cookbooks and the Apache cookbooks
 (for use with RADOSGW) to your Chef server. :: 
 
-	knife cookbook upload apache2 ceph-cookbooks
+	knife cookbook upload apache2 ceph
 
 Configure your Ceph Environment
 -------------------------------
@@ -115,7 +115,7 @@ Configure the Roles
 
 Navigate to the Ceph cookbooks directory. :: 
 
-	cd ~/chef-cookbooks/ceph-cookbooks
+	cd ~/chef-cookbooks/ceph
 	
 Create roles for OSDs, monitors, metadata servers, and RADOS Gateways from
 their respective role files. ::
@@ -180,20 +180,20 @@ For the Ceph 0.48 Argonaut release, install ``gdisk`` and configure the OSD
 hard disks for use with Ceph. Replace ``{fsid}`` with the UUID you generated
 while using ``uuidgen -r``. 
 
-.. important: This procedure will erase all information in ``/dev/sdb``.
+.. important: This procedure will erase all information in ``/dev/{disk}``.
 
 :: 
 
 	sudo apt-get install gdisk
-	sudo sgdisk /dev/sdb --zap-all --clear --mbrtogpt --largest-new=1 --change-name=1:'ceph data' --typecode=1:{fsid}
+	sudo sgdisk /dev/{disk} --zap-all --clear --mbrtogpt --largest-new=1 --change-name=1:'ceph data' --typecode=1:{fsid}
 
 Create a file system and allocate the disk to your cluster. Specify a 
 filesystem (e.g., ``ext4``, ``xfs``, ``btrfs``). When you execute 
 ``ceph-disk-prepare``, remember to replace ``{fsid}`` with the UUID you 
 generated while using ``uuidgen -r``::
 
-	sudo mkfs -t ext4 /dev/sdb1
-	sudo mount -o user_xattr /dev/sdb1 /mnt
+	sudo mkfs -t ext4 /dev/{disk}
+	sudo mount -o user_xattr /dev/{disk} /mnt
 	sudo ceph-disk-prepare --cluster-uuid={fsid} /mnt
 	sudo umount /mnt
 
@@ -201,6 +201,16 @@ Finally, simulate a hotplug event. ::
 
 	sudo udevadm trigger --subsystem-match=block --action=add
 	
+
+Run ``chef-client`` on each Node
+--------------------------------
+
+Once you have completed the preceding steps, you must run ``chef-client`` 
+on each node. For example::
+
+	sudo chef-client
+
+
 Proceed to Operating the Cluster
 --------------------------------
 
