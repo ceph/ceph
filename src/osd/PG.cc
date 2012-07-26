@@ -1390,6 +1390,8 @@ void PG::activate(ObjectStore::Transaction& t,
       MOSDPGLog *m = 0;
       pg_missing_t& pm = peer_missing[peer];
 
+      bool needs_past_intervals = pi.dne();
+
       if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.is_empty() && activator_map) {
@@ -1434,7 +1436,9 @@ void PG::activate(ObjectStore::Transaction& t,
       }
 
       // share past_intervals if we are creating the pg on the replica
-      if (pi.dne())
+      // based on whether our info for that peer was dne() *before*
+      // updating pi.history in the backfill block above.
+      if (needs_past_intervals)
 	m->past_intervals = past_intervals;
 
       if (pi.last_backfill != hobject_t::get_max())
