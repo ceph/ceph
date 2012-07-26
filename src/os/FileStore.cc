@@ -710,6 +710,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_flush_min(g_conf->filestore_flush_min),
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
+  m_filestore_fail_eio(g_conf->filestore_fail_eio),
   do_update(do_update),
   m_journal_dio(g_conf->journal_dio),
   m_journal_aio(g_conf->journal_aio),
@@ -4710,6 +4711,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_commit_timeout",
     "filestore_dump_file",
     "filestore_kill_at",
+    "filestore_fail_eio",
     NULL
   };
   return KEYS;
@@ -4722,7 +4724,8 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_max_sync_interval") ||
       changed.count("filestore_flusher_max_fds") ||
       changed.count("filestore_flush_min") ||
-      changed.count("filestore_kill_at")) {
+      changed.count("filestore_kill_at") ||
+      changed.count("filestore_fail_eio")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
@@ -4731,6 +4734,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_flush_min = conf->filestore_flush_min;
     m_filestore_sync_flush = conf->filestore_sync_flush;
     m_filestore_kill_at.set(conf->filestore_kill_at);
+    m_filestore_fail_eio = conf->filestore_fail_eio;
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
