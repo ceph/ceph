@@ -793,7 +793,7 @@ public:
     bufferlist *poutbl;
     eversion_t *pobjver;
 
-    bool registering, registered;
+    bool registered;
     Context *on_reg_ack, *on_reg_commit;
 
     OSDSession *session;
@@ -802,7 +802,7 @@ public:
     tid_t register_tid;
 
     LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
-		 registering(false), registered(false),
+		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL), session_item(this),
 		 register_tid(0) {}

@@ -286,7 +286,6 @@ void Objecter::send_linger(LingerOp *info)
     if (info->session)
       s->linger_ops.push_back(&info->session_item);
   }
-  info->registering = true;
 
   logger->inc(l_osdc_linger_send);
 }
@@ -312,7 +311,6 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 
   // only tell the user the first time we do this
   info->registered = true;
-  info->registering = false;
   info->pobjver = NULL;
 }
 
