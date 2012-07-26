@@ -380,6 +380,7 @@ OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
+OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, false)
 OPTION(journal_block_align, OPT_BOOL, true)
