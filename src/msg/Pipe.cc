@@ -382,6 +382,8 @@ int Pipe::accept()
 			     << " == " << connect.connect_seq
 			     << dendl;
 	  assert(existing->state == STATE_CONNECTING);
+	  // make sure our outgoing connection will follow through
+	  existing->_send_keepalive();
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->pipe_lock.Unlock();
 	  msgr->lock.Unlock();
