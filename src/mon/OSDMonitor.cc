@@ -1975,6 +1975,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	   << osdmap.crush->get_max_devices();
 	goto out;
       }
+      if (newmax > g_conf->mon_max_osd) {
+	err = -ERANGE;
+	ss << "cannot set max_osd to " << newmax << " which is > conf.mon_max_osd ("
+           << g_conf->mon_max_osd << ")";
+	goto out;
+      }
 
       pending_inc.new_max_osd = newmax;
       ss << "set new max_osd = " << pending_inc.new_max_osd;
