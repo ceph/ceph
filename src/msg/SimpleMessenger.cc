@@ -291,61 +291,65 @@ void SimpleMessenger::Accepter::stop()
  * end of the queue. If the queue is empty; it's removed.
  * The message is then delivered and the process starts again.
  */
-void SimpleMessenger::dispatch_entry()
+void SimpleMessenger::DispatchQueue::entry()
 {
-  dispatch_queue.lock.Lock();
-  while (!dispatch_queue.stop) {
-    while (!dispatch_queue.queued_pipes.empty() && !dispatch_queue.stop) {
+  lock.Lock();
+  while (!stop) {
+    while (!queued_pipes.empty() && !stop) {
       //get highest-priority pipe
-      map<int, xlist<Pipe *>* >::reverse_iterator high_iter =
-	dispatch_queue.queued_pipes.rbegin();
+      map<int, xlist<IncomingQueue *>* >::reverse_iterator high_iter =
+	queued_pipes.rbegin();
       int priority = high_iter->first;
-      xlist<Pipe *> *pipe_list = high_iter->second;
+      xlist<IncomingQueue *> *qlist = high_iter->second;
 
-      Pipe *pipe = pipe_list->front();
+      IncomingQueue *inq = qlist->front();
       //move pipe to back of line -- or just take off if no more messages
-      pipe->pipe_lock.Lock();
-      list<Message *>& m_queue = pipe->in_q[priority];
+      inq->lock.Lock();
+      list<Message *>& m_queue = inq->in_q[priority];
       Message *m = m_queue.front();
       m_queue.pop_front();
 
       if (m_queue.empty()) {
-	pipe_list->pop_front();  // pipe is done
-	if (pipe_list->empty()) {
-	  delete pipe_list;
-	  dispatch_queue.queued_pipes.erase(priority);
+	qlist->pop_front();  // pipe is done
+	if (qlist->empty()) {
+	  delete qlist;
+	  queued_pipes.erase(priority);
 	}
+	inq->in_q.erase(priority);
+	ldout(cct,20) << "dispatch_entry inq " << inq << " pipe " << inq->pipe << " dequeued " << m
+		      << ", dequeued queue" << dendl;
       } else {
-	pipe_list->push_back(pipe->queue_items[priority]);  // move to end of list
+	ldout(cct,20) << "dispatch_entry inq " << inq << " pipe " << inq->pipe << " dequeued " << m
+		      << ", moved to end of list" << dendl;
+	qlist->push_back(inq->queue_items[priority]);  // move to end of list
       }
-      ldout(cct,20) << "dispatch_entry pipe " << pipe << " dequeued " << m << dendl;
-      dispatch_queue.lock.Unlock(); //done with the pipe queue for a while
+      lock.Unlock(); //done with the pipe queue for a while
 
-      pipe->in_qlen--;
-      dispatch_queue.qlen.dec();
+      inq->in_qlen--;
+      qlen.dec();
 
-      pipe->pipe_lock.Unlock(); // done with the pipe's message queue now
-       {
+      inq->lock.Unlock(); // done with the pipe's message queue now
+      {
 	if ((long)m == DispatchQueue::D_BAD_REMOTE_RESET) {
-	  dispatch_queue.lock.Lock();
-	  Connection *con = dispatch_queue.remote_reset_q.front();
-	  dispatch_queue.remote_reset_q.pop_front();
-	  dispatch_queue.lock.Unlock();
-	  ms_deliver_handle_remote_reset(con);
+	  lock.Lock();
+	  Connection *con = remote_reset_q.front();
+	  remote_reset_q.pop_front();
+	  lock.Unlock();
+	  msgr->ms_deliver_handle_remote_reset(con);
 	  con->put();
 	} else if ((long)m == DispatchQueue::D_CONNECT) {
-	  dispatch_queue.lock.Lock();
-	  Connection *con = dispatch_queue.connect_q.front();
-	  dispatch_queue.connect_q.pop_front();
-	  dispatch_queue.lock.Unlock();
-	  ms_deliver_handle_connect(con);
+	  lock.Lock();
+	  Connection *con = connect_q.front();
+	  connect_q.pop_front();
+	  lock.Unlock();
+	  msgr->ms_deliver_handle_connect(con);
 	  con->put();
 	} else if ((long)m == DispatchQueue::D_BAD_RESET) {
-	  dispatch_queue.lock.Lock();
-	  Connection *con = dispatch_queue.reset_q.front();
-	  dispatch_queue.reset_q.pop_front();
-	  dispatch_queue.lock.Unlock();
-	  ms_deliver_handle_reset(con);
+	  lock.Lock();
+	  Connection *con = reset_q.front();
+	  reset_q.pop_front();
+	  lock.Unlock();
+	  msgr->ms_deliver_handle_reset(con);
 	  con->put();
 	} else {
 	  uint64_t msize = m->get_dispatch_throttle_size();
@@ -360,19 +364,24 @@ void SimpleMessenger::dispatch_entry()
 		  << " " << m->get_footer().data_crc << ")"
 		  << " " << m << " con " << m->get_connection()
 		  << dendl;
-	  ms_deliver_dispatch(m);
+	  msgr->ms_deliver_dispatch(m);
 
-	  dispatch_throttle_release(msize);
+	  msgr->dispatch_throttle_release(msize);
 
 	  ldout(cct,20) << "done calling dispatch on " << m << dendl;
 	}
       }
-      dispatch_queue.lock.Lock();
+      lock.Lock();
     }
-    if (!dispatch_queue.stop)
-      dispatch_queue.cond.Wait(dispatch_queue.lock); //wait for something to be put on queue
+    if (!stop)
+      cond.Wait(lock); //wait for something to be put on queue
   }
-  dispatch_queue.lock.Unlock();
+  lock.Unlock();
+}
+
+void SimpleMessenger::dispatch_entry()
+{
+  dispatch_queue.entry();
 
   //tell everything else it's time to stop
   lock.Lock();
@@ -497,6 +506,9 @@ int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 }
 
 
+
+
+
 /**************************************
  * Pipe
  */
@@ -515,61 +527,7 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix(std::ostream *_dout) {
 void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
 {
   assert(pipe_lock.is_locked());
-  
-  list<Message *>& queue = in_q[priority];
-  
-  if (halt_delivery)
-    goto halt;
-  
-  if (queue.empty()) {
-    // queue pipe AND message under pipe AND dispatch_queue locks.
-    pipe_lock.Unlock();
-    msgr->dispatch_queue.lock.Lock();
-    pipe_lock.Lock();
-
-    if (halt_delivery) {
-      msgr->dispatch_queue.lock.Unlock();
-      goto halt;
-    }
-
-    if (queue.empty()) {
-      ldout(msgr->cct,20) << "queue_received queuing pipe" << dendl;
-      if (!queue_items.count(priority)) 
-	queue_items[priority] = new xlist<Pipe *>::item(this);
-      if (msgr->dispatch_queue.queued_pipes.empty())
-	msgr->dispatch_queue.cond.Signal();
-
-      map<int, xlist<Pipe*>*>::iterator p = msgr->dispatch_queue.queued_pipes.find(priority);
-      xlist<Pipe*> *pipe_list;
-      if (p != msgr->dispatch_queue.queued_pipes.end())
-	pipe_list = p->second;
-      else {
-	pipe_list = new xlist<Pipe*>;
-	msgr->dispatch_queue.queued_pipes[priority] = pipe_list;
-      }
-      pipe_list->push_back(queue_items[priority]);
-    }
-
-    queue.push_back(m);
-
-    msgr->dispatch_queue.lock.Unlock();
-  } else {
-    // just queue message under pipe lock.
-    queue.push_back(m);
-  }
-  
-  // increment queue length counters
-  in_qlen++;
-  msgr->dispatch_queue.qlen.inc();
-  
-  return;
-  
- halt:
-  // don't want to put local-delivery signals
-  if (m>(void *)DispatchQueue::D_NUM_CODES) {
-    msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
-    m->put();
-  }
+  in_q->queue(m, priority, &msgr->dispatch_queue);
 }
 
 
@@ -662,6 +620,7 @@ int SimpleMessenger::Pipe::accept()
   bufferlist authorizer, authorizer_reply;
   bool authorizer_valid;
   uint64_t feat_missing;
+  bool replaced = false;
 
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
@@ -796,10 +755,11 @@ int SimpleMessenger::Pipe::accept()
       if (connect.connect_seq == existing->connect_seq) {
 	// connection race?
 	if (peer_addr < msgr->my_inst.addr ||
-	    existing->policy.server) {
+	    existing->policy.server ||
+	    existing->state == STATE_STANDBY) {
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
+		   << " == " << connect.connect_seq << ", or STANDBY, or we are server, replacing my attempt" << dendl;
 	  if (!(existing->state == STATE_CONNECTING ||
 		existing->state == STATE_STANDBY ||
 		existing->state == STATE_WAIT))
@@ -823,7 +783,7 @@ int SimpleMessenger::Pipe::accept()
 			     << " == " << connect.connect_seq
 			     << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
-		 existing->state == STATE_OPEN); // this will win
+		 existing->state == STATE_OPEN);
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->pipe_lock.Unlock();
 	  msgr->lock.Unlock();
@@ -883,20 +843,32 @@ int SimpleMessenger::Pipe::accept()
   ldout(msgr->cct,10) << "accept replacing " << existing << dendl;
   existing->stop();
   existing->unregister_pipe();
+  replaced = true;
     
-  if (!existing->policy.lossy) { /* if we're lossy, we can lose messages and
-                                    should let the daemon handle it itself.
-    Otherwise, take over other Connection so we don't lose older messages */
+  if (!existing->policy.lossy) {
+    // drop my Connection, and take a ref to the existing one. do not
+    // clear existing->connection_state, since read_message and
+    // write_message both dereference it without pipe_lock.
+    connection_state->put();
+    connection_state = existing->connection_state->get();
+
+    // make existing Connection reference us
     existing->connection_state->reset_pipe(this);
 
-    // do not clear existing->connection_state, since read_message and write_message both
-    // dereference it without pipe_lock.
-
-    // steal queue and out_seq
-    existing->requeue_sent();
-    out_seq = existing->out_seq;
+    // steal incoming queue
     in_seq = existing->in_seq;
     in_seq_acked = in_seq;
+    delete in_q;
+    in_q = existing->in_q;
+    in_q->lock.Lock();
+    in_q->pipe = this;
+    in_q->restart_queue();
+    in_q->lock.Unlock();
+    existing->in_q = new IncomingQueue(msgr->cct, existing);
+
+    // steal outgoing queue and out_seq
+    existing->requeue_sent();
+    out_seq = existing->out_seq;
     ldout(msgr->cct,10) << "accept re-queuing on out_seq " << out_seq << " in_seq " << in_seq << dendl;
     for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
          p != existing->out_q.end();
@@ -949,7 +921,7 @@ int SimpleMessenger::Pipe::accept()
       ldout(msgr->cct,2) << "accept write error on in_seq" << dendl;
       goto fail_unlocked;
     }
-    if(tcp_read(msgr->cct, sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
+    if (tcp_read(msgr->cct, sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
       ldout(msgr->cct,2) << "accept read error on newly_acked_seq" << dendl;
       goto fail_unlocked;
     }
@@ -967,14 +939,16 @@ int SimpleMessenger::Pipe::accept()
 
  fail_unlocked:
   pipe_lock.Lock();
-  {
+  if (state != STATE_CLOSED) {
     bool queued = is_queued();
-    if (queued && state != STATE_CLOSED)
+    if (queued)
       state = STATE_CONNECTING;
+    else if (replaced)
+      state = STATE_STANDBY;
     else
       state = STATE_CLOSED;
     fault();
-    if (queued)
+    if (queued || replaced)
       start_writer();
   }
   pipe_lock.Unlock();
@@ -1223,7 +1197,7 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       ldout(msgr->cct,0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
-      halt_delivery = false;
+      in_q->restart_queue();
       cseq = 0;
       pipe_lock.Unlock();
       continue;
@@ -1364,38 +1338,8 @@ void SimpleMessenger::Pipe::discard_queue()
 {
   ldout(msgr->cct,10) << "discard_queue" << dendl;
 
-  halt_delivery = true;
-
-  // dequeue pipe
-  DispatchQueue& q = msgr->dispatch_queue;
-  pipe_lock.Unlock();
-  q.lock.Lock();
-  pipe_lock.Lock();
-  for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
-       i != queue_items.end();
-       ++i) {
-    xlist<Pipe *>* list_on;
-    if ((list_on = i->second->get_list())) { //if in round-robin
-      i->second->remove_myself(); //take off
-      if (list_on->empty()) { //if round-robin queue is empty
-	delete list_on;
-	q.queued_pipes.erase(i->first); //remove from map
-      }
-    }
-  }
-
-  // clear queue_items
-  while (!queue_items.empty()) {
-    delete queue_items.begin()->second;
-    queue_items.erase(queue_items.begin());
-  }
-
-  q.lock.Unlock();
-
+  in_q->discard_queue(msgr, &msgr->dispatch_queue);
   ldout(msgr->cct,20) << " dequeued pipe " << dendl;
-
-  // adjust qlen
-  q.qlen.sub(in_qlen);
 
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
     if (*p < (void *) DispatchQueue::D_NUM_CODES) {
@@ -1414,17 +1358,6 @@ void SimpleMessenger::Pipe::discard_queue()
       (*r)->put();
     }
   out_q.clear();
-  for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
-    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
-      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
-        continue; // skip non-Message dispatch codes
-      }
-      msgr->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
-      ldout(msgr->cct,20) << "  discard " << *r << dendl;
-      (*r)->put();
-    }
-  in_q.clear();
-  in_qlen = 0;
 }
 
 
@@ -2235,6 +2168,119 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 }
 
 
+/**************************************
+ * IncomingQueue
+ */
+
+#undef dout_prefix
+#define dout_prefix pipe->_pipe_prefix(_dout) << "incomingqueue."
+
+void SimpleMessenger::IncomingQueue::queue(Message *m, int priority, DispatchQueue *dq)
+{
+  Mutex::Locker l(lock);
+  ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
+  if (in_q.count(priority) == 0) {
+    // queue inq AND message under inq AND dispatch_queue locks.
+    lock.Unlock();
+    dq->lock.Lock();
+    lock.Lock();
+
+    if (halt) {
+      dq->lock.Unlock();
+      goto halt;
+    }
+
+    list<Message *>& queue = in_q[priority];
+    if (queue.empty()) {
+      ldout(cct,20) << "queue " << m << " under newly queued queue" << dendl;
+      if (!queue_items.count(priority)) 
+	queue_items[priority] = new xlist<IncomingQueue *>::item(this);
+      if (dq->queued_pipes.empty())
+	dq->cond.Signal();
+
+      map<int, xlist<IncomingQueue*>*>::iterator p = dq->queued_pipes.find(priority);
+      xlist<IncomingQueue*> *qlist;
+      if (p != dq->queued_pipes.end())
+	qlist = p->second;
+      else {
+	qlist = new xlist<IncomingQueue*>;
+	dq->queued_pipes[priority] = qlist;
+      }
+      qlist->push_back(queue_items[priority]);
+    }
+
+    queue.push_back(m);
+
+    dq->lock.Unlock();
+  } else {
+    ldout(cct,20) << "queue " << m << " under existing queue" << dendl;
+    // just queue message under our lock.
+    list<Message *>& queue = in_q[priority];
+    queue.push_back(m);
+  }
+  
+  // increment queue length counters
+  in_qlen++;
+  dq->qlen.inc();
+  return;
+
+ halt:
+  ldout(cct, 20) << "queue " << m << " halt, discarding" << dendl;
+  // don't want to put local-delivery signals
+  if (m>(void *)DispatchQueue::D_NUM_CODES) {
+    pipe->msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    m->put();
+  }
+}
+
+void SimpleMessenger::IncomingQueue::discard_queue(SimpleMessenger *msgr, DispatchQueue *dq)
+{
+  halt = true;
+
+  // dequeue ourselves
+  dq->lock.Lock();
+  for (map<int, xlist<IncomingQueue *>::item* >::iterator i = queue_items.begin();
+       i != queue_items.end();
+       ++i) {
+    xlist<IncomingQueue *>* list_on;
+    if ((list_on = i->second->get_list())) { //if in round-robin
+      i->second->remove_myself(); //take off
+      if (list_on->empty()) { //if round-robin queue is empty
+	delete list_on;
+	dq->queued_pipes.erase(i->first); //remove from map
+      }
+    }
+  }
+  dq->lock.Unlock();
+
+  while (!queue_items.empty()) {
+    delete queue_items.begin()->second;
+    queue_items.erase(queue_items.begin());
+  }
+
+  // adjust qlen
+  dq->qlen.sub(in_qlen);
+
+  for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
+        continue; // skip non-Message dispatch codes
+      }
+      msgr->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
+      ldout(msgr->cct,20) << "  discard " << *r << dendl;
+      (*r)->put();
+    }
+  in_q.clear();
+  in_qlen = 0;
+}
+
+void SimpleMessenger::IncomingQueue::restart_queue()
+{
+  halt = false;
+}
+
+
+
 /********************************************
  * SimpleMessenger
  */
@@ -2448,10 +2494,13 @@ void SimpleMessenger::submit_message(Message *m, Connection *con, const entity_a
     if (pipe) {
       pipe->pipe_lock.Lock();
       if (pipe->state == Pipe::STATE_CLOSED) {
-        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
+        ldout(cct,0) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe, dropping message " << m << dendl;
         pipe->unregister_pipe();
         pipe->pipe_lock.Unlock();
         pipe = 0;
+	assert(con);
+	con->put();
+	return;
       } else {
         ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
 
