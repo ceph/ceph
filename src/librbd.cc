@@ -1132,7 +1132,8 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
     }
 
     ostringstream bid_ss;
-    bid_ss << std::hex << bid;
+    uint32_t extra = rand() % 0xFFFFFFFF;
+    bid_ss << std::hex << bid << std::hex << extra;
     string id = bid_ss.str();
     r = cls_client::set_id(&io_ctx, id_obj, id);
     if (r < 0) {
@@ -1148,8 +1149,7 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
     }
 
     ostringstream oss;
-    uint32_t extra = rand() % 0xFFFFFFFF;
-    oss << RBD_DATA_PREFIX << std::hex << bid << std::hex << extra;
+    oss << RBD_DATA_PREFIX << std::hex << id;
     r = cls_client::create_image(&io_ctx, header_name(id), size, *order, features,
 				 oss.str());
   }
