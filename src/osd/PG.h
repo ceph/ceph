@@ -1018,8 +1018,7 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::transition< NeedActingChange, WaitActingChange >,
-	boost::statechart::transition< IsIncomplete, Incomplete >
+	boost::statechart::transition< NeedActingChange, WaitActingChange >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MNotifyRec&);
@@ -1043,12 +1042,6 @@ public:
       void exit();
     };
 
-    struct Incomplete : boost::statechart::state< Incomplete, Primary>,
-			NamedState {
-      Incomplete(my_context ctx);
-      void exit();
-    };
-    
     struct GetInfo;
     struct Active;
 
@@ -1160,7 +1153,8 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< GotLog >
+	boost::statechart::custom_reaction< GotLog >,
+	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MLogRec& logevt);
@@ -1196,6 +1190,11 @@ public:
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap& am);
       boost::statechart::result react(const MLogRec& logrec);
+    };
+
+    struct Incomplete : boost::statechart::state< Incomplete, Peering>, NamedState {
+      Incomplete(my_context ctx);
+      void exit();
     };
 
 
