@@ -1141,8 +1141,8 @@ bool PG::choose_acting(int& newest_update_osd)
   vector<int> want;
 
   if (!calc_acting(newest_update_osd, want)) {
-    dout(10) << "choose_acting failed, marking pg down" << dendl;
-    state_set(PG_STATE_DOWN);
+    dout(10) << "choose_acting failed" << dendl;
+    assert(want_acting.empty());
     return false;
   }
 
@@ -4297,6 +4297,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
+    assert(pg->want_acting.size());
     post_event(NeedActingChange());
     return discard_event();
   }
@@ -4720,7 +4721,11 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   // adjust acting?
   if (!pg->choose_acting(newest_update_osd)) {
-    post_event(NeedActingChange());
+    if (pg->want_acting.size()) {
+      post_event(NeedActingChange());
+    } else {
+      post_event(IsIncomplete());
+    }
     return;
   }
 
@@ -4874,6 +4879,7 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
   pg->state_set(PG_STATE_INCOMPLETE);
   pg->update_stats();
 }
+
 void PG::RecoveryState::Incomplete::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
