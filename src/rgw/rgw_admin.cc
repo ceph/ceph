@@ -821,6 +821,10 @@ int main(int argc, char **argv)
         cerr << "error: subuser already exists" << std::endl;
         return 1;
       }
+      if (!key_type_str.empty() && key_type == KEY_TYPE_S3) {
+        cerr << "error: subusers may not be created with an S3 key, aborting" << std::endl;
+        return 1;
+      }
     } else if (!subuser_found) {
       cerr << "error: subuser doesn't exist" << std::endl;
       return 1;
