@@ -1327,6 +1327,9 @@ void OSD::load_pgs()
     int role = osdmap->calc_pg_role(whoami, pg->acting);
     pg->set_role(role);
 
+    if (role != 0)
+      pg->state_set(PG_STATE_STRAY);
+
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
     pg->handle_loaded(&rctx);
 
