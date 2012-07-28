@@ -103,3 +103,77 @@ def task(ctx, config):
     manager.wait_for_clean()
 
 
+def test_incomplete_pgs(ctx, config):
+    """
+    Test handling of incomplete pgs.  Requires 4 osds.
+    """
+    if config is None:
+        config = {}
+    assert isinstance(config, dict), \
+        'task only accepts a dict for configuration'
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+
+    num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
+    log.info('num_osds is %s' % num_osds)
+    assert num_osds == 4
+
+    manager = ceph_manager.CephManager(
+        mon,
+        ctx=ctx,
+        logger=log.getChild('ceph_manager'),
+        )
+
+    while len(manager.get_osd_status()['up']) < 4:
+        manager.sleep(10)
+
+    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
+    manager.wait_for_clean()
+
+    log.info('Testing incomplete pgs...')
+
+    # move data off of osd.0, osd.1
+    manager.raw_cluster_cmd('osd', 'out', '0', '1')
+    manager.wait_for_clean()
+
+    # write some crap
+    p = rados_start(mon, ['-p', 'rbd', 'bench', '30', 'write', '-b', '4096'])
+    err = p.exitstatus.get();
+
+    # move it back
+    manager.raw_cluster_cmd('osd', 'in', '0', '1')
+    manager.raw_cluster_cmd('osd', 'out', '2', '3')
+    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
+    manager.wait_for_active()
+
+    assert not manager.is_clean()
+    assert not manager.is_recovered()
+
+    # kill 2 + 3
+    log.info('stopping 2,3')
+    manager.kill_osd(2)
+    manager.kill_osd(3)
+    log.info('...')
+    manager.raw_cluster_cmd('osd', 'down', '2', '3')
+    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.wait_for_active_or_down()
+
+    assert manager.get_num_down() > 0
+
+    # revive 2 + 3
+    manager.revive_osd(2)
+    manager.revive_osd(3)
+    while len(manager.get_osd_status()['up']) < 4:
+        log.info('waiting a bit...')
+        time.sleep(2)
+    log.info('all are up!')
+
+    # cluster must recover
+    manager.wait_for_clean()
