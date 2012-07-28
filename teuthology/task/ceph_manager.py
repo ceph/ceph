@@ -266,12 +266,22 @@ class CephManager:
                 num += 1
         return num
 
+    def get_num_down(self):
+        pgs = self.get_pg_stats()
+        num = 0
+        for pg in pgs:
+            if (pg['state'].count('down') and not pg['state'].count('stale')) or \
+                    (pg['state'].count('incomplete') and not pg['state'].count('stale')):
+                num += 1
+        return num
+
     def get_num_active_down(self):
         pgs = self.get_pg_stats()
         num = 0
         for pg in pgs:
             if (pg['state'].count('active') and not pg['state'].count('stale')) or \
-                    (pg['state'].count('down') and not pg['state'].count('stale')):
+                    (pg['state'].count('down') and not pg['state'].count('stale')) or \
+                    (pg['state'].count('incomplete') and not pg['state'].count('stale')):
                 num += 1
         return num
 
