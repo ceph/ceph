@@ -63,6 +63,7 @@ TEST(LibRadosSnapshots, SnapRemove) {
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   rados_snap_t rid;
   ASSERT_EQ(0, rados_ioctx_snap_lookup(ioctx, "snap1", &rid));
+  ASSERT_EQ(-EEXIST, rados_ioctx_snap_create(ioctx, "snap1"));
   ASSERT_EQ(0, rados_ioctx_snap_remove(ioctx, "snap1"));
   ASSERT_EQ(-ENOENT, rados_ioctx_snap_lookup(ioctx, "snap1", &rid));
   rados_ioctx_destroy(ioctx);

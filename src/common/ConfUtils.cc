@@ -90,7 +90,8 @@ clear()
  * loading the whole configuration into memory shouldn't be a problem.
  */
 int ConfFile::
-parse_file(const std::string &fname, std::deque<std::string> *errors)
+parse_file(const std::string &fname, std::deque<std::string> *errors,
+	   std::ostream *warnings)
 {
   clear();
 
@@ -150,7 +151,7 @@ parse_file(const std::string &fname, std::deque<std::string> *errors)
     }
   }
 
-  load_from_buffer(buf, sz, errors);
+  load_from_buffer(buf, sz, errors, warnings);
   ret = 0;
 
 done:
@@ -160,11 +161,12 @@ done:
 }
 
 int ConfFile::
-parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors)
+parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors,
+		 std::ostream *warnings)
 {
   clear();
 
-  load_from_buffer(bl->c_str(), bl->length(), errors);
+  load_from_buffer(bl->c_str(), bl->length(), errors, warnings);
   return 0;
 }
 
@@ -280,7 +282,8 @@ std::ostream &operator<<(std::ostream &oss, const ConfFile &cf)
 }
 
 void ConfFile::
-load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors)
+load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
+		 std::ostream *warnings)
 {
   errors->clear();
 
@@ -360,7 +363,18 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors)
       pair < section_iter_t, bool > nr(sections.insert(nt));
       cur_section = nr.first;
     }
-    else if (!cline->key.empty()) {
+    else {
+      if (cur_section->second.lines.count(*cline)) {
+	// replace an existing key/line in this section, so that
+	//  [mysection]
+	//    foo = 1
+	//    foo = 2
+	// will result in foo = 2.
+	cur_section->second.lines.erase(*cline);
+	if (cline->key.length() && warnings)
+	  *warnings << "warning: line " << line_no << ": '" << cline->key << "' in section '"
+		    << cur_section->first << "' redefined " << std::endl;
+      }
       // add line to current section
       //std::cerr << "cur_section = " << cur_section->first << ", " << *cline << std::endl;
       cur_section->second.lines.insert(*cline);

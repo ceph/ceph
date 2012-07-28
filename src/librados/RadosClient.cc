@@ -389,16 +389,19 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
   Mutex mylock ("RadosClient::pool_create::mylock");
   Cond cond;
   bool done;
+  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
   lock.Lock();
-  objecter->create_pool(name,
-			new C_SafeCond(&mylock, &cond, &done, &reply),
-			auid, crush_rule);
+  reply = objecter->create_pool(name, onfinish, auid, crush_rule);
   lock.Unlock();
 
-  mylock.Lock();
-  while(!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
+  if (reply < 0) {
+    delete onfinish;
+  } else {
+    mylock.Lock();
+    while(!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+  }
   return reply;
 }
 
@@ -407,42 +410,57 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
 					     __u8 crush_rule)
 {
   Mutex::Locker l(lock);
-  objecter->create_pool(name,
-			new C_PoolAsync_Safe(c),
-			auid, crush_rule);
-  return 0;
+  Context *onfinish = new C_PoolAsync_Safe(c);
+  int r = objecter->create_pool(name, onfinish, auid, crush_rule);
+  if (r < 0) {
+    delete c;
+    delete onfinish;
+  }
+  return r;
 }
 
 int librados::RadosClient::pool_delete(const char *name)
 {
+  lock.Lock();
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
-  if (tmp_pool_id < 0)
+  if (tmp_pool_id < 0) {
+    lock.Unlock();
     return -ENOENT;
+  }
 
   Mutex mylock("RadosClient::pool_delete::mylock");
   Cond cond;
   bool done;
-  lock.Lock();
-  int reply = 0;
-  objecter->delete_pool(tmp_pool_id, new C_SafeCond(&mylock, &cond, &done, &reply));
+  int ret;
+  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &ret);
+  ret = objecter->delete_pool(tmp_pool_id, onfinish);
   lock.Unlock();
 
-  mylock.Lock();
-  while (!done) cond.Wait(mylock);
-  mylock.Unlock();
-  return reply;
+  if (ret < 0) {
+    delete onfinish;
+  } else {
+    mylock.Lock();
+    while (!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+  }
+  return ret;
 }
 
 int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompletionImpl *c)
 {
+  Mutex::Locker l(lock);
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
   if (tmp_pool_id < 0)
     return -ENOENT;
 
-  Mutex::Locker l(lock);
-  objecter->delete_pool(tmp_pool_id, new C_PoolAsync_Safe(c));
-
-  return 0;
+  Context *onfinish = new C_PoolAsync_Safe(c);
+  int r = objecter->delete_pool(tmp_pool_id, onfinish);
+  if (r < 0) {
+    delete c;
+    delete onfinish;
+  }
+  return r;
 }
 
 void librados::RadosClient::register_watcher(WatchContext *wc,
