@@ -45,30 +45,32 @@ class Cond {
   }
 
   int Wait(Mutex &mutex)  { 
-    assert(mutex.is_locked());
-
     // make sure this cond is used with one mutex only
     assert(waiter_mutex == NULL || waiter_mutex == &mutex);
     waiter_mutex = &mutex;
 
-    --mutex.nlock;
+    assert(mutex.is_locked());
+
+    mutex._pre_unlock();
     int r = pthread_cond_wait(&_c, &mutex._m);
-    ++mutex.nlock;
+    mutex._post_lock();
     return r;
   }
 
   int WaitUntil(Mutex &mutex, utime_t when) {
-    assert(mutex.is_locked());
-
     // make sure this cond is used with one mutex only
     assert(waiter_mutex == NULL || waiter_mutex == &mutex);
     waiter_mutex = &mutex;
 
+    assert(mutex.is_locked());
+
     struct timespec ts;
     when.to_timespec(&ts);
-    --mutex.nlock;
+
+    mutex._pre_unlock();
     int r = pthread_cond_timedwait(&_c, &mutex._m, &ts);
-    ++mutex.nlock;
+    mutex._post_lock();
+
     return r;
   }
   int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {
