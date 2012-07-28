@@ -175,7 +175,9 @@ void md_config_t::remove_observer(md_config_obs_t* observer_)
 }
 
 int md_config_t::parse_config_files(const char *conf_files,
-				    std::deque<std::string> *parse_errors, int flags)
+				    std::deque<std::string> *parse_errors,
+				    std::ostream *warnings,
+				    int flags)
 {
   Mutex::Locker l(lock);
   if (internal_safe_to_start_threads)
@@ -193,11 +195,12 @@ int md_config_t::parse_config_files(const char *conf_files,
   }
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
-  return parse_config_files_impl(cfl, parse_errors);
+  return parse_config_files_impl(cfl, parse_errors, warnings);
 }
 
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
-					 std::deque<std::string> *parse_errors)
+					 std::deque<std::string> *parse_errors,
+					 std::ostream *warnings)
 {
   assert(lock.is_locked());
 
@@ -207,7 +210,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     cf.clear();
     string fn = *c;
     expand_meta(fn);
-    int ret = cf.parse_file(fn.c_str(), parse_errors);
+    int ret = cf.parse_file(fn.c_str(), parse_errors, warnings);
     if (ret == 0)
       break;
     else if (ret != -ENOENT)
