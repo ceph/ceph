@@ -4287,6 +4287,16 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+
+  // do we tell someone we're here?
+  pg->send_notify = (pg->role != 0);
+
+  return transit< Reset >();
+}
+
 boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
 {
   PG *pg = context< RecoveryMachine >().pg;
