@@ -139,9 +139,15 @@ def test_incomplete_pgs(ctx, config):
     manager.raw_cluster_cmd('osd', 'out', '0', '1')
     manager.wait_for_clean()
 
-    # write some crap
+    # lots of objects in rbd (no pg log, will backfill)
     p = rados_start(mon, ['-p', 'rbd', 'bench', '30', 'write', '-b', '4096'])
-    err = p.exitstatus.get();
+    err = p.exitstatus.get()
+
+    # few objects in metadata pool (with pg log, normal recovery)
+    for f in range(1, 20):
+        p = rados_start(mon, ['-p', 'metadata', 'put',
+                              'foo.%d' % f, '/etc/passwd'])
+        err = p.exitstatus.get()
 
     # move it back
     manager.raw_cluster_cmd('osd', 'in', '0', '1')
