@@ -165,7 +165,8 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
   bli.copy_all(bl);
   ConfFile cf;
   std::deque<std::string> parse_errors;
-  if (cf.parse_bufferlist(&bl, &parse_errors) != 0) {
+
+  if (cf.parse_bufferlist(&bl, &parse_errors, NULL) != 0) {
     throw buffer::malformed_input("cannot parse buffer");
   }
 

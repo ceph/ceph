@@ -263,7 +263,6 @@ if [ "$start_mon" -eq 1 ]; then
 [global]
         osd pg bits = 3
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
-$extra_conf
 EOF
 			[ "$cephx" -eq 1 ] && cat<<EOF >> $conf
         auth supported = cephx
@@ -280,6 +279,7 @@ $CMDSDEBUG
         mds debug auth pins = true
         mds debug subtrees = true
         mds data = dev/mds.\$id
+$extra_conf
 [osd]
 $DAEMONOPTS
         osd data = dev/osd\$id
@@ -290,10 +290,14 @@ $DAEMONOPTS
         osd scrub load threshold = 5.0
         filestore xattr use omap = true
 $COSDDEBUG
+$extra_conf
 [mon]
 $DAEMONOPTS
 $CMONDEBUG
+$extra_conf
         mon cluster log file = out/cluster.mon.\$id.log
+[global]
+$extra_conf
 EOF
 		fi
 
