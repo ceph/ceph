@@ -398,8 +398,6 @@ std::string pg_state_string(int state)
     oss << "down+";
   if (state & PG_STATE_REPLAY)
     oss << "replay+";
-  if (state & PG_STATE_STRAY)
-    oss << "stray+";
   if (state & PG_STATE_SPLITTING)
     oss << "splitting+";
   if (state & PG_STATE_DEGRADED)

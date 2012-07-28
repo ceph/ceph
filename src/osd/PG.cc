@@ -67,6 +67,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   waiting_on_backfill(0),
   role(0),
   state(0),
+  send_notify(false),
   need_up_thru(false),
   need_flush(false),
   last_peering_reset(0),
@@ -1293,8 +1294,9 @@ void PG::activate(ObjectStore::Transaction& t,
 
   // twiddle pg state
   state_set(PG_STATE_ACTIVE);
-  state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
+
+  send_notify = false;
 
   if (is_primary()) {
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -3849,21 +3851,15 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     // take active waiters
     requeue_ops(waiting_for_active);
 
-    // new primary?
-    if (role == 0) {
-      // i am new primary
-      state_clear(PG_STATE_STRAY);
-    } else {
-      // i am now replica|stray.  we need to send a notify.
-      state_set(PG_STATE_STRAY);
-    }
+    // should we tell the primary we are here?
+    send_notify = (role != 0);
       
   } else {
     // no role change.
     // did primary change?
     if (get_primary() != oldprimary) {    
       // we need to announce
-      state_set(PG_STATE_STRAY);
+      send_notify = true;
         
       dout(10) << *this << " " << oldacting << " -> " << acting 
 	       << ", acting primary " 
@@ -3893,7 +3889,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 {
   assert(!is_primary());
-  assert(is_stray() || is_active());
 
   if (info.last_backfill.is_max()) {
     info.stats = oinfo.stats;
@@ -3973,6 +3968,8 @@ ostream& operator<<(ostream& out, const PG& pg)
   }
 
   out << " " << pg_state_string(pg.get_state());
+  if (pg.should_send_notify())
+    out << " NOTIFY";
 
   //out << " (" << pg.log.tail << "," << pg.log.head << "]";
   if (pg.missing.num_missing()) {
@@ -4410,7 +4407,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
 boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->is_stray() && pg->get_primary() >= 0) {
+  if (pg->should_send_notify() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg_notify_t(pg->get_osdmap()->get_epoch(),
 							 pg->get_osdmap()->get_epoch(),
@@ -4852,7 +4849,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
 boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->is_stray() && pg->get_primary() >= 0) {
+  if (pg->should_send_notify() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg_notify_t(pg->get_osdmap()->get_epoch(),
 							 pg->get_osdmap()->get_epoch(),
@@ -4971,7 +4968,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->is_stray() && pg->get_primary() >= 0) {
+  if (pg->should_send_notify() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg_notify_t(pg->get_osdmap()->get_epoch(),
 							 pg->get_osdmap()->get_epoch(),
