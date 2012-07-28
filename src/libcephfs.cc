@@ -131,7 +131,7 @@ public:
   int conf_read_file(const char *path_list)
   {
     std::deque<std::string> parse_errors;
-    int ret = cct->_conf->parse_config_files(path_list, &parse_errors, 0);
+    int ret = cct->_conf->parse_config_files(path_list, &parse_errors, NULL, 0);
     if (ret)
       return ret;
     cct->_conf->apply_changes(NULL);

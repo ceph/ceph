@@ -1360,7 +1360,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   md_config_t *conf = client->cct->_conf;
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(path_list, &parse_errors, 0);
+  int ret = conf->parse_config_files(path_list, &parse_errors, NULL, 0);
   if (ret)
     return ret;
   conf->parse_env(); // environment variables override

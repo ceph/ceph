@@ -217,7 +217,7 @@ int main(int argc, const char **argv)
   if (!caps_fn.empty()) {
     ConfFile cf;
     std::deque<std::string> parse_errors;
-    if (cf.parse_file(caps_fn, &parse_errors) != 0) {
+    if (cf.parse_file(caps_fn, &parse_errors, &cerr) != 0) {
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
