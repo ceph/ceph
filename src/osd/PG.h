@@ -432,6 +432,8 @@ protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   unsigned    state;   // PG_STATE_*
 
+  bool send_notify;    ///< true if we are non-primary and should notify the primary
+
 public:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
@@ -1418,6 +1420,7 @@ public:
   void state_clear(int m) { state &= ~m; }
 
   bool is_complete() const { return info.last_complete == info.last_update; }
+  bool should_send_notify() const { return send_notify; }
 
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
@@ -1426,7 +1429,6 @@ public:
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
-  bool       is_stray() const { return state_test(PG_STATE_STRAY); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 
