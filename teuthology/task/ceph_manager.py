@@ -324,6 +324,21 @@ class CephManager:
             time.sleep(3)
         self.log("recovered!")
 
+    def wait_for_active(self, timeout=None):
+        self.log("waiting for peering to complete")
+        start = time.time()
+        num_active = self.get_num_active()
+        while not self.is_active():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to recover before timeout expired'
+            cur_active = self.get_num_active()
+            if cur_active != num_active:
+                start = time.time()
+                num_active = cur_active
+            time.sleep(3)
+        self.log("active!")
+
     def wait_for_active_or_down(self, timeout=None):
         self.log("waiting for peering to complete or become blocked")
         start = time.time()
