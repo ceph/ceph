@@ -335,7 +335,7 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
             r = remote.run(
                 args=[
                     'egrep',
-                    'BUG|INFO|DEADLOCK',
+                    '\bBUG\b|\bINFO\b|\bDEADLOCK\b',
                     run.Raw('/tmp/cephtest/archive/syslog/*.log'),
                     run.Raw('|'),
                     'grep', '-v', 'task .* blocked for more than .* seconds',
