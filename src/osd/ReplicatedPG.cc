@@ -1439,16 +1439,15 @@ void ReplicatedPG::snap_trimmer()
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
     entity_inst_t nobody;
-    if (!mode.try_write(nobody)) {
+    if (!mode.try_write(nobody) || scrub_block_writes) {
       dout(10) << " can't write, requeueing" << dendl;
       queue_snap_trim();
       unlock();
       return;
     }
-    if (!scrub_block_writes) {
-      dout(10) << "snap_trimmer posting" << dendl;
-      snap_trimmer_machine.process_event(SnapTrim());
-    }
+
+    dout(10) << "snap_trimmer posting" << dendl;
+    snap_trimmer_machine.process_event(SnapTrim());
 
     if (snap_trimmer_machine.need_share_pg_info) {
       dout(10) << "snap_trimmer share_pg_info" << dendl;
