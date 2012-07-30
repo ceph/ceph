@@ -1287,7 +1287,7 @@ namespace librbd {
 	_flush(ictx);
       }
 
-      if (!ictx->snapc.is_valid()) {
+      if (!new_snapc.is_valid()) {
 	lderr(cct) << "image snap context is invalid!" << dendl;
 	return -EIO;
       }
