@@ -1490,14 +1490,15 @@ namespace librbd {
   void close_image(ImageCtx *ictx)
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
-    if (ictx->parent) {
-      close_image(ictx->parent);
-      ictx->parent = NULL;
-    }
     if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes
     else
       flush(ictx);
+
+    if (ictx->parent) {
+      close_image(ictx->parent);
+      ictx->parent = NULL;
+    }
 
     if (ictx->wctx)
       ictx->unregister_watch();
