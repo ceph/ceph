@@ -439,7 +439,9 @@ namespace librbd {
       return r;
 
     Mutex::Locker l(ictx->md_lock);
-    r = add_snap(ictx, snap_name);
+    do {
+      r = add_snap(ictx, snap_name);
+    } while (r == -ESTALE);
 
     if (r < 0)
       return r;

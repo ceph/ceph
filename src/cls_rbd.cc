@@ -1968,6 +1968,9 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
   snap_name = s.c_str();
 
+  if (header->snap_seq > snap_id)
+    return -ESTALE;
+
   const char *cur_snap_name;
   for (cur_snap_name = snap_names; cur_snap_name < end; cur_snap_name += strlen(cur_snap_name) + 1) {
     if (strncmp(cur_snap_name, snap_name, end - cur_snap_name) == 0)
