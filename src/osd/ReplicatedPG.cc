@@ -5767,16 +5767,8 @@ void ReplicatedPG::on_change()
   dout(10) << "on_change" << dendl;
   apply_and_flush_repops(is_primary());
 
-  // clear reserved scrub state
   clear_scrub_reserved();
-
-  // clear scrub state
-  if (scrub_block_writes) {
-    scrub_clear_state();
-  } else if (is_scrubbing()) {
-    state_clear(PG_STATE_SCRUBBING);
-    state_clear(PG_STATE_REPAIR);
-  }
+  scrub_clear_state();
 
   context_registry_on_change();
 

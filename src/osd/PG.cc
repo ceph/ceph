@@ -3119,9 +3119,6 @@ void PG::scrub()
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
-    state_clear(PG_STATE_REPAIR);
-    state_clear(PG_STATE_SCRUBBING);
-    clear_scrub_reserved();
     unlock();
     return;
   }
