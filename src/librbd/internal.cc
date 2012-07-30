@@ -1283,10 +1283,6 @@ namespace librbd {
 	  return r;
       } // release parent_lock
 
-      if (new_snap) {
-	_flush(ictx);
-      }
-
       if (!new_snapc.is_valid()) {
 	lderr(cct) << "image snap context is invalid!" << dendl;
 	return -EIO;
@@ -1303,6 +1299,10 @@ namespace librbd {
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
     } // release snap_lock
+
+    if (new_snap) {
+      _flush(ictx);
+    }
 
     ictx->refresh_lock.Lock();
     ictx->last_refresh = refresh_seq;
