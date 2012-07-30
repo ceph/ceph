@@ -989,6 +989,9 @@ TEST(LibRBD, TestClone)
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
   printf("made parent image \"parent\"\n");
 
+  char *data = (char *)"testdata";
+  ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 0, strlen(data), data));
+
   // can't clone a non-snapshot, expect failure
   EXPECT_NE(0, rbd_clone(ioctx, "parent", NULL, ioctx, "child", features, &order));
 
@@ -1004,7 +1007,15 @@ TEST(LibRBD, TestClone)
   ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
 	    &order));
   ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
-  printf("made and opened clone \"child\"\n"); 
+  printf("made and opened clone \"child\"\n");
+
+  // check read
+  read_test_data(child, data, 0, strlen(data));
+
+  // check write
+  ASSERT_EQ((ssize_t)strlen(data), rbd_write(child, 20, strlen(data), data));
+  read_test_data(child, data, 20, strlen(data));
+  read_test_data(child, data, 0, strlen(data));
 
   // check attributes
   ASSERT_EQ(0, rbd_stat(parent, &pinfo, sizeof(pinfo)));
