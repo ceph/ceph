@@ -27,6 +27,7 @@ extern "C" {
 #endif
 #include <string.h>
 #include "../rados/librados.h"
+#include "features.h"
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
