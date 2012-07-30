@@ -1688,6 +1688,9 @@ void PG::mark_clean()
 
   trim_past_intervals();
 
+  if (is_clean() && !snap_trimq.empty())
+    queue_snap_trim();
+
   dirty_info = true;
 }
 
