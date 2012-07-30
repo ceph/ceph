@@ -922,7 +922,9 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  r = add_snap(ictx, snap_name);
+  do {
+    r = add_snap(ictx, snap_name);
+  } while (r == -ESTALE);
 
   if (r < 0)
     return r;

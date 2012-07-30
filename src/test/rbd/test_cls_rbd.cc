@@ -25,6 +25,7 @@ using ::librbd::cls_client::snapshot_add;
 using ::librbd::cls_client::snapshot_remove;
 using ::librbd::cls_client::get_snapcontext;
 using ::librbd::cls_client::snapshot_list;
+using ::librbd::cls_client::old_snapshot_add;
 
 TEST(cls_rbd, create)
 {
@@ -331,6 +332,30 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snap_names.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0u, snap_features.size());
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, snapid_race)
+{
+   librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  buffer::list bl;
+  buffer::ptr bp(4096);
+  bp.zero();
+  bl.append(bp);
+
+  string oid = "foo";
+  ASSERT_EQ(4096, ioctx.write(oid, bl, 4096, 0));
+  ASSERT_EQ(0, old_snapshot_add(&ioctx, oid, 1, "test1"));
+  ASSERT_EQ(0, old_snapshot_add(&ioctx, oid, 3, "test3"));
+  ASSERT_EQ(-ESTALE, old_snapshot_add(&ioctx, oid, 2, "test2"));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
