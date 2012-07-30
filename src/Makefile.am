@@ -944,6 +944,7 @@ libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
+	$(srcdir)/include/rbd/features.h \
 	$(srcdir)/include/rbd/librbd.h \
 	$(srcdir)/include/rbd/librbd.hpp
 
@@ -1371,6 +1372,7 @@ noinst_HEADERS = \
 	include/rados/page.h\
 	include/rados/crc32c.h\
 	include/rados/buffer.h\
+	include/rbd/features.h\
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
 	librados/AioCompletionImpl.h\
