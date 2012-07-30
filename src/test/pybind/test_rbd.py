@@ -429,6 +429,16 @@ class TestClone(object):
         eq(self.clone.overlap(), IMG_SIZE / 2)
 
     def test_resize_io(self):
+        parent_data = self.image.read(IMG_SIZE / 2, 256)
+        self.clone.resize(IMG_SIZE / 2 + 128)
+        child_data = self.clone.read(IMG_SIZE / 2, 128)
+        eq(child_data, parent_data[:128])
+        self.clone.resize(IMG_SIZE)
+        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        eq(child_data, parent_data[:128] + ('\0' * 128))
+        self.clone.resize(IMG_SIZE / 2 + 1)
+        child_data = self.clone.read(IMG_SIZE / 2, 1)
+        eq(child_data, parent_data[0])
         self.clone.resize(0)
         self.clone.resize(IMG_SIZE)
         child_data = self.clone.read(IMG_SIZE / 2, 256)
