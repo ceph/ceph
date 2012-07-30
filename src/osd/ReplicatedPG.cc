@@ -3553,6 +3553,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	waiting_for_ondisk.erase(repop->v);
       }
 
+      // clear out acks, we sent the commits above
+      if (waiting_for_ack.count(repop->v)) {
+	assert(waiting_for_ack.begin()->first == repop->v);
+	waiting_for_ack.erase(repop->v);
+      }
+
       if (m->wants_ondisk() && !repop->sent_disk) {
 	// send commit.
 	MOSDOpReply *reply = repop->ctx->reply;
