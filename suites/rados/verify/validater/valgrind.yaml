@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    valgrind:
+      mon: [--tool=memcheck]
+      osd: [--tool=memcheck]
+      mds: [--tool=memcheck]
