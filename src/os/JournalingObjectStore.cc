@@ -290,7 +290,8 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
     
   if (journal && journal->is_writeable()) {
     bufferlist tbl;
-    unsigned data_len = 0, data_align = 0;
+    unsigned data_len = 0;
+    int data_align = -1; // -1 indicates that we don't care about the alignment
     for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++) {
       ObjectStore::Transaction *t = *p;
       if (t->get_data_length() > data_len &&
