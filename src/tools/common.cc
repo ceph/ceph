@@ -160,7 +160,8 @@ static void send_command(CephToolCtx *ctx)
       if (!ctx->concise)
 	*ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
 
-      messenger->send_message(m, osdmap->get_inst(n));
+      command_con = messenger->get_connection(osdmap->get_inst(n));
+      messenger->send_message(m, command_con);
     }
     return;
   }
@@ -551,6 +552,19 @@ void Admin::ms_handle_connect(Connection *con) {
       send_command(ctx);
     ctx->lock.Unlock();
   }
+}
+
+bool Admin::ms_handle_reset(Connection *con)
+{
+  Mutex::Locker l(ctx->lock);
+  if (con == command_con) {
+    command_con->put();
+    command_con = NULL;
+    if (pending_cmd.size())
+      send_command(ctx);
+    return true;
+  }
+  return false;
 }
 
 bool Admin::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, 
