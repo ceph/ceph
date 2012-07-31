@@ -639,7 +639,7 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 
   oss << " name=" << user;
 
-  char key_name[strlen(user) + strlen("client.")];
+  char key_name[strlen(user) + strlen("client.")+1];
   snprintf(key_name, sizeof(key_name), "client.%s", user);
   char secret_buf[MAX_SECRET_LEN];
   char *secret = NULL;
