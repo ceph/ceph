@@ -439,11 +439,14 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   // start up network
   messenger = new SimpleMessenger(g_ceph_context, entity_name_t::CLIENT(), "client",
                                   getpid());
+  messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   messenger->start();
+
+  ctx->mc.set_messenger(messenger);
+
   ctx->dispatcher = new Admin(ctx.get());
   messenger->add_dispatcher_head(ctx->dispatcher);
 
-  ctx->mc.set_messenger(messenger);
   int r = ctx->mc.init();
   if (r < 0)
     return NULL;
