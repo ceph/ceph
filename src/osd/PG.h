@@ -1306,8 +1306,10 @@ public:
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< GotLog >,
+	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
+      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const GotLog&);
