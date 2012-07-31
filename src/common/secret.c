@@ -58,6 +58,11 @@ static int set_kernel_secret(const char *secret, const char *key_name)
   char payload[((secret_len * 3) / 4) + 4];
   char error_buf[80];
 
+  if (!secret_len) {
+    fprintf(stderr, "secret is empty.\n");
+    return -EINVAL;
+  }
+
   ret = ceph_unarmor(payload, payload+sizeof(payload), secret, secret+secret_len);
   if (ret < 0) {
     fprintf(stderr, "secret is not valid base64: %s.\n",
