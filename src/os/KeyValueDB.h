@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef KEY_VALUE_DB_H
 #define KEY_VALUE_DB_H
 
@@ -7,6 +8,7 @@
 #include <map>
 #include <string>
 #include <tr1/memory>
+#include <boost/scoped_ptr.hpp>
 #include "ObjectMap.h"
 
 using std::string;
@@ -20,15 +22,37 @@ public:
   class TransactionImpl {
   public:
     /// Set Keys
-    virtual void set(
+    void set(
       const string &prefix,                 ///< [in] Prefix for keys
       const std::map<string, bufferlist> &to_set ///< [in] keys/values to set
+    ) {
+      std::map<string, bufferlist>::const_iterator it;
+      for (it = to_set.begin(); it != to_set.end(); ++it)
+	set(prefix, it->first, it->second);
+    }
+
+    /// Set Key
+    virtual void set(
+      const string &prefix,   ///< [in] Prefix for the key
+      const string &k,	      ///< [in] Key to set
+      const bufferlist &bl    ///< [in] Value to set
       ) = 0;
 
+
     /// Removes Keys
-    virtual void rmkeys(
+    void rmkeys(
       const string &prefix,   ///< [in] Prefix to search for
       const std::set<string> &keys ///< [in] Keys to remove
+    ) {
+      std::set<string>::const_iterator it;
+      for (it = keys.begin(); it != keys.end(); ++it)
+	rmkey(prefix, *it);
+    }
+
+    /// Remove Key
+    virtual void rmkey(
+      const string &prefix,   ///< [in] Prefix to search for
+      const string &k	      ///< [in] Key to remove
       ) = 0;
 
     /// Removes keys beginning with prefix
@@ -53,24 +77,99 @@ public:
     std::map<string, bufferlist> *out ///< [out] Key value retrieved
     ) = 0;
 
-  class IteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+  class WholeSpaceIteratorImpl {
   public:
     virtual int seek_to_first() = 0;
+    virtual int seek_to_first(const string &prefix) = 0;
     virtual int seek_to_last() = 0;
-    virtual int upper_bound(const string &after) = 0;
-    virtual int lower_bound(const string &to) = 0;
+    virtual int seek_to_last(const string &prefix) = 0;
+    virtual int upper_bound(const string &prefix, const string &after) = 0;
+    virtual int lower_bound(const string &prefix, const string &to) = 0;
     virtual bool valid() = 0;
     virtual int next() = 0;
     virtual int prev() = 0;
     virtual string key() = 0;
+    virtual pair<string,string> raw_key() = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
-    virtual ~IteratorImpl() {}
+    virtual ~WholeSpaceIteratorImpl() { }
   };
+  typedef std::tr1::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
+
+  class IteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+    const string prefix;
+    WholeSpaceIterator generic_iter;
+  public:
+    IteratorImpl(const string &prefix, WholeSpaceIterator iter) :
+      prefix(prefix), generic_iter(iter) { }
+    virtual ~IteratorImpl() { }
+
+    int seek_to_first() {
+      return generic_iter->seek_to_first(prefix);
+    }
+    int seek_to_last() {
+      return generic_iter->seek_to_last(prefix);
+    }
+    int upper_bound(const string &after) {
+      return generic_iter->upper_bound(prefix, after);
+    }
+    int lower_bound(const string &to) {
+      return generic_iter->lower_bound(prefix, to);
+    }
+    bool valid() {
+      if (!generic_iter->valid())
+	return false;
+      pair<string,string> raw_key = generic_iter->raw_key();
+      return (raw_key.first == prefix);
+    }
+    int next() {
+      if (valid())
+	return generic_iter->next();
+      return status();
+    }
+    int prev() {
+      if (valid())
+	return generic_iter->prev();
+      return status();
+    }
+    string key() {
+      return generic_iter->key();
+    }
+    bufferlist value() {
+      return generic_iter->value();
+    }
+    int status() {
+      return generic_iter->status();
+    }
+  };
+
   typedef std::tr1::shared_ptr< IteratorImpl > Iterator;
-  virtual Iterator get_iterator(const string &prefix) = 0;
+
+  WholeSpaceIterator get_iterator() {
+    return _get_iterator();
+  }
+
+  Iterator get_iterator(const string &prefix) {
+    return std::tr1::shared_ptr<IteratorImpl>(
+      new IteratorImpl(prefix, get_iterator())
+    );
+  }
+
+  WholeSpaceIterator get_snapshot_iterator() {
+    return _get_snapshot_iterator();
+  }
+
+  Iterator get_snapshot_iterator(const string &prefix) {
+    return std::tr1::shared_ptr<IteratorImpl>(
+      new IteratorImpl(prefix, get_snapshot_iterator())
+    );
+  }
 
   virtual ~KeyValueDB() {}
+
+protected:
+  virtual WholeSpaceIterator _get_iterator() = 0;
+  virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
 };
 
 #endif

@@ -841,6 +841,14 @@ test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGL
 test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_keyvaluedb_atomicity
 
+test_keyvaluedb_iterators_SOURCES = test/ObjectMap/test_keyvaluedb_iterators.cc \
+                                    test/ObjectMap/KeyValueDBMemory.cc \
+                                    os/LevelDBStore.cc
+test_keyvaluedb_iterators_LDFLAGS = ${AM_LDFLAGS}
+test_keyvaluedb_iterators_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+bin_DEBUGPROGRAMS += test_keyvaluedb_iterators
+
 
 # shell scripts
 editpaths = sed \
