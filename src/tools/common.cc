@@ -71,11 +71,12 @@ string reply_rs;
 int reply_rc;
 bufferlist reply_bl;
 entity_inst_t reply_from;
-Context *resend_event = 0;
 
 OSDMap *osdmap = 0;
 
 Connection *command_con = NULL;
+Context *tick_event = 0;
+float tick_interval = 3.0;
 
 // observe (push)
 #include "mon/PGMap.h"
@@ -91,6 +92,19 @@ Connection *command_con = NULL;
 #include "messages/MCommandReply.h"
 
 static set<int> registered, seen;
+
+struct C_Tick : public Context {
+  CephToolCtx *ctx;
+  C_Tick(CephToolCtx *c) : ctx(c) {}
+  void finish(int r) {
+    if (command_con)
+      messenger->send_keepalive(command_con);
+
+    assert(tick_event == this);
+    tick_event = new C_Tick(ctx);
+    ctx->timer.add_event_after(tick_interval, tick_event);
+  }
+};
 
 static void send_command(CephToolCtx *ctx)
 {
@@ -162,6 +176,11 @@ static void send_command(CephToolCtx *ctx)
 
       command_con = messenger->get_connection(osdmap->get_inst(n));
       messenger->send_message(m, command_con);
+
+      if (tick_event)
+	ctx->timer.cancel_event(tick_event);
+      tick_event = new C_Tick(ctx);
+      ctx->timer.add_event_after(tick_interval, tick_event);
     }
     return;
   }
@@ -193,10 +212,6 @@ static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
   reply_rc = ack->r;
   reply_bl = ack->get_data();
   cmd_cond.Signal();
-  if (resend_event) {
-    ctx->timer.cancel_event(resend_event);
-    resend_event = 0;
-  }
   ctx->lock.Unlock();
   ack->put();
 }
@@ -211,9 +226,9 @@ static void handle_ack(CephToolCtx *ctx, MCommandReply *ack)
     reply_rc = ack->r;
     reply_bl = ack->get_data();
     cmd_cond.Signal();
-    if (resend_event) {
-      ctx->timer.cancel_event(resend_event);
-      resend_event = 0;
+    if (tick_event) {
+      ctx->timer.cancel_event(tick_event);
+      tick_event = 0;
     }
   }
   ctx->lock.Unlock();
