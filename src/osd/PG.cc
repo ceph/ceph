@@ -4758,6 +4758,21 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 					pg_query_t(pg_query_t::LOG, request_log_from, pg->info.history));
 }
 
+boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
+{
+  // make sure our log source didn't go down.  we need to check
+  // explicitly because it may not be part of the prior set, which
+  // means the Peering state check won't catch it going down.
+  if (!advmap.osdmap->is_up(newest_update_osd)) {
+    dout(10) << "GetLog: newest_update_osd osd." << newest_update_osd << " went down" << dendl;
+    post_event(advmap);
+    return transit< Reset >();
+  }
+
+  // let the Peering state do its checks.
+  return forward_event();
+}
+
 boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
 {
   assert(!msg);
