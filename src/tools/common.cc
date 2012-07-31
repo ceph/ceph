@@ -75,6 +75,8 @@ Context *resend_event = 0;
 
 OSDMap *osdmap = 0;
 
+Connection *command_con = NULL;
+
 // observe (push)
 #include "mon/PGMap.h"
 #include "osd/OSDMap.h"
@@ -89,55 +91,6 @@ OSDMap *osdmap = 0;
 #include "messages/MCommandReply.h"
 
 static set<int> registered, seen;
-
-static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
-{
-  epoch_t e = m->get_first();
-  assert(m->maps.count(e));
-  ctx->lock.Lock();
-  delete osdmap;
-  osdmap = new OSDMap;
-  osdmap->decode(m->maps[e]);
-  cmd_cond.Signal();
-  ctx->lock.Unlock();
-  m->put();
-}
-
-static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
-{
-  ctx->lock.Lock();
-  reply = true;
-  reply_from = ack->get_source_inst();
-  reply_rs = ack->rs;
-  reply_rc = ack->r;
-  reply_bl = ack->get_data();
-  cmd_cond.Signal();
-  if (resend_event) {
-    ctx->timer.cancel_event(resend_event);
-    resend_event = 0;
-  }
-  ctx->lock.Unlock();
-  ack->put();
-}
-
-static void handle_ack(CephToolCtx *ctx, MCommandReply *ack)
-{
-  ctx->lock.Lock();
-  if (ack->get_tid() == pending_tid) {
-    reply = true;
-    reply_from = ack->get_source_inst();
-    reply_rs = ack->rs;
-    reply_rc = ack->r;
-    reply_bl = ack->get_data();
-    cmd_cond.Signal();
-    if (resend_event) {
-      ctx->timer.cancel_event(resend_event);
-      resend_event = 0;
-    }
-  }
-  ctx->lock.Unlock();
-  ack->put();
-}
 
 static void send_command(CephToolCtx *ctx)
 {
@@ -154,6 +107,14 @@ static void send_command(CephToolCtx *ctx)
     return;
   }
 
+  if (pending_tell_pgid || pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
+    if (!osdmap) {
+      ctx->mc.sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
+      ctx->mc.renew_subs();
+      return;
+    }
+  }
+
   if (!ctx->concise)
     *ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
 
@@ -161,15 +122,6 @@ static void send_command(CephToolCtx *ctx)
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
   m->set_tid(++pending_tid);
-
-  if (pending_tell_pgid || pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
-    if (!osdmap) {
-      ctx->mc.sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
-      ctx->mc.renew_subs();
-      while (!osdmap)
-	cmd_cond.Wait(ctx->lock);
-    }
-  }
 
   if (pending_tell_pgid) {
     // pick target osd
@@ -215,6 +167,56 @@ static void send_command(CephToolCtx *ctx)
 
   reply_rc = -EINVAL;
   reply = true;
+}
+
+static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
+{
+  epoch_t e = m->get_first();
+  assert(m->maps.count(e));
+  ctx->lock.Lock();
+  delete osdmap;
+  osdmap = new OSDMap;
+  osdmap->decode(m->maps[e]);
+  if (pending_cmd.size())
+    send_command(ctx);
+  ctx->lock.Unlock();
+  m->put();
+}
+
+static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
+{
+  ctx->lock.Lock();
+  reply = true;
+  reply_from = ack->get_source_inst();
+  reply_rs = ack->rs;
+  reply_rc = ack->r;
+  reply_bl = ack->get_data();
+  cmd_cond.Signal();
+  if (resend_event) {
+    ctx->timer.cancel_event(resend_event);
+    resend_event = 0;
+  }
+  ctx->lock.Unlock();
+  ack->put();
+}
+
+static void handle_ack(CephToolCtx *ctx, MCommandReply *ack)
+{
+  ctx->lock.Lock();
+  if (ack->get_tid() == pending_tid) {
+    reply = true;
+    reply_from = ack->get_source_inst();
+    reply_rs = ack->rs;
+    reply_rc = ack->r;
+    reply_bl = ack->get_data();
+    cmd_cond.Signal();
+    if (resend_event) {
+      ctx->timer.cancel_event(resend_event);
+      resend_event = 0;
+    }
+  }
+  ctx->lock.Unlock();
+  ack->put();
 }
 
 int do_command(CephToolCtx *ctx,
