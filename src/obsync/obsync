@@ -108,7 +108,7 @@ class ObsyncException(Exception):
             self.comment = e
         else:
             # from another exception
-            self.tb = format_exc(100000)
+            self.tb = traceback.format_exc(100000)
             self.comment = None
         self.ty = ty
 
