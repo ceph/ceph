@@ -108,7 +108,7 @@ namespace librbd {
     info.num_objs = howmany(info.size, get_block_size(obj_order));
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
-	   RBD_MAX_BLOCK_NAME_SIZE);
+	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE, ictx->object_prefix.length()));
     // clear deprecated fields
     info.parent_pool = -1L;
     info.parent_name[0] = '\0';
