@@ -2741,7 +2741,8 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
     return r;
 
   bufferlist in, out;
-  rgw_cls_usage_log_read_op call;
+  rgw_cls_usage_log_trim_op call;
+  call.user = user;
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
   ::encode(call, in);
