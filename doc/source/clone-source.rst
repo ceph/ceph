@@ -20,6 +20,10 @@ repository.
 
 	git status
 
+   If they are, run::
+
+        git submodule update
+
 Choose a Branch
 ---------------
 Once you clone the source code and submodules, your Ceph repository 
