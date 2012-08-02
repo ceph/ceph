@@ -3837,23 +3837,6 @@ void FileStore::start_sync(Context *onsafe)
   dout(10) << "start_sync" << dendl;
 }
 
-void FileStore::trigger_commit(uint64_t seq)
-{
-  /*
-   * crib the lock -> journal_lock.  we need to start the sync under lock,
-   * but once we release lock it will block because journal_lock is held.
-   * _trigger_commit() expects journal_lock to be held by the caller.
-   */
-  lock.Lock();
-  dout(10) << "trigger_commit seq" << dendl;
-  force_sync = true;
-  sync_cond.Signal();
-  journal_lock.Lock();
-  lock.Unlock();
-  _trigger_commit(seq);
-  journal_lock.Unlock();
-}
-
 void FileStore::sync()
 {
   Mutex l("FileStore::sync");
