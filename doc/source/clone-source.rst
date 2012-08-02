@@ -9,22 +9,14 @@ Clone the Source
 ----------------
 To clone the Ceph source code repository, execute::
 
-	git clone https://github.com/ceph/ceph.git
+	git clone --recursive https://github.com/ceph/ceph.git
 
 Once ``git clone`` executes, you should have a full copy of the Ceph 
 repository.
 
-Clone the Submodules
---------------------
-Before you can build Ceph, you must navigate to your new repository and get 
-the ``init`` submodule and the ``update`` submodule::
-
-	cd ceph
-	git submodule init
-	git submodule update
-
-.. tip:: Make sure you maintain the latest copies of these submodules. 
-   Running ``git status`` will tell you if the submodules are out of date::
+.. tip:: Make sure you maintain the latest copies of the submodules
+   included in the repository. Running ``git status`` will tell you if
+   the submodules are out of date::
 
 	git status
 
