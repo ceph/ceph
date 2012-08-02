@@ -117,8 +117,6 @@ private:
     }
   } sync_thread;
 
-  void trigger_commit(uint64_t);
-
   void sync_fs(); // actuall sync underlying fs
 
   // -- op workqueue --
