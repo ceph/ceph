@@ -35,6 +35,10 @@ the time of mount.
 A subdirectory subdir may be specified if a subset of the file system
 is to be mounted.
 
+Mount helper application conventions dictate that the first two
+options are device to be mounted and destination path. Options must be
+passed only after these fixed arguments.
+
 
 Options
 =======
