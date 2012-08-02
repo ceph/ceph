@@ -4,7 +4,7 @@
   where the options are:
     -l, --list                    will list all keys and capabilities present in
                                   the keyring
-    -p, --print                   will print an encoded key for the specified
+    -p, --print-key               will print an encoded key for the specified
                                   entityname. This is suitable for the
                                   'mount -o secret=..' argument
     -C, --create-keyring          will create a new keyring, overwriting any
