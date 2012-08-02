@@ -18,6 +18,7 @@ repository.
    included in the repository. Running ``git status`` will tell you if
    the submodules are out of date::
 
+	cd ceph
 	git status
 
    If they are, run::
