@@ -221,6 +221,15 @@ class CephManager:
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['pg_stats']
 
+    def get_single_pg_stats(self, pgid):
+        all_stats = self.get_pg_stats()
+
+        for pg in all_stats:
+            if pg['pgid'] == pgid:
+                return pg
+
+        return None
+
     def get_osd_dump(self):
         out = self.raw_cluster_cmd('--', 'osd','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
