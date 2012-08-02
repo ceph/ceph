@@ -9,7 +9,7 @@ Clone the Source
 ----------------
 To clone the Ceph source code repository, execute::
 
-	git clone git@github.com:ceph/ceph.git
+	git clone https://github.com/ceph/ceph.git
 
 Once ``git clone`` executes, you should have a full copy of the Ceph 
 repository.
