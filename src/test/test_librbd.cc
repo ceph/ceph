@@ -997,11 +997,14 @@ TEST(LibRBD, TestClone)
 
   // create a snapshot, reopen as the parent we're interested in
   ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  printf("made snapshot \"parent@parent_snap\"\n");
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, "parent_snap"));
-  printf("made snapshot \"parent@parent_snap\"\n");
 
-  // - validate "no clone if not preserved" when preserved is available
+  ASSERT_EQ(-ENOSYS, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
+	    &order));
+
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
 
   // This clone and open should work
   ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
