@@ -232,6 +232,19 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
 
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_protect_snap(self):
+        self.image.create_snap('snap1')
+        assert(not self.image.is_protected_snap('snap1'))
+        self.image.protect_snap('snap1')
+        assert(self.image.is_protected_snap('snap1'))
+        assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
+        self.image.unprotect_snap('snap1')
+        assert(not self.image.is_protected_snap('snap1'))
+        self.image.remove_snap('snap1')
+        assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
+        assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
+
     def test_remove_with_snap(self):
         self.image.create_snap('snap1')
         assert_raises(ImageHasSnapshots, remove_image)
@@ -396,16 +409,24 @@ class TestClone(object):
         self.image.write(data, IMG_SIZE / 2)
         self.image.create_snap('snap1')
         global features
+        self.image.protect_snap('snap1')
         self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
         self.clone = Image(ioctx, 'clone')
 
     def tearDown(self):
         global ioctx
+        self.image.unprotect_snap('snap1')
         self.image.remove_snap('snap1')
         self.image.close()
         remove_image()
         self.clone.close()
         self.rbd.remove(ioctx, 'clone')
+
+    def test_unprotected(self):
+        self.image.create_snap('snap2')
+        global features
+        assert_raises(FunctionNotSupported, self.rbd.clone, ioctx, IMG_NAME, 'snap2', ioctx, 'clone2', features)
+        self.image.remove_snap('snap2')
 
     def test_stat(self):
         image_info = self.image.stat()

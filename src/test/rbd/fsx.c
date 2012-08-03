@@ -814,6 +814,11 @@ do_clone()
 		exit(164);
 	}
 
+	if ((ret = rbd_snap_protect(image, "snap")) < 0) {
+		simple_err("do_clone: rbd protect snap", ret);
+		exit(164);
+	}
+
 	clone_imagename(imagename, sizeof(imagename), num_clones);
 	clone_imagename(lastimagename, sizeof(lastimagename),
 			num_clones - 1);
@@ -875,6 +880,7 @@ check_clones()
 		unlink(filename);
 		/* remove the snapshot if it exists, ignore
 		   the error from the last clone. */
+		rbd_snap_unprotect(cur_image, "snap");
 		rbd_snap_remove(cur_image, "snap");
 		rbd_close(cur_image);
 		rbd_remove(ioctx, imagename);

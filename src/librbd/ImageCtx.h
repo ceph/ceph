@@ -90,6 +90,7 @@ namespace librbd {
     librados::snap_t get_snap_id(std::string in_snap_name) const;
     int get_snap_name(snapid_t snap_id, std::string *out_snap_name) const;
     int get_snap_size(std::string in_snap_name, uint64_t *out_size) const;
+    int is_snap_protected(string in_snap_name, bool *is_protected) const;
     void add_snap(std::string in_snap_name, librados::snap_t id,
 		  uint64_t in_size, uint64_t features,
 		  cls_client::parent_info parent,
