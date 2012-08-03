@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/buffer.h"
@@ -225,6 +225,53 @@ namespace librbd {
     {
       bufferlist inbl, outbl;
       return ioctx->exec(oid, "rbd", "remove_parent", inbl, outbl);
+    }
+
+    int add_child(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t p_poolid, const std::string &p_imageid,
+		  snapid_t p_snapid, const std::string &c_imageid)
+    {
+      bufferlist in, out;
+      ::encode(p_poolid, in);
+      ::encode(p_imageid, in);
+      ::encode(p_snapid, in);
+      ::encode(c_imageid, in);
+
+      return ioctx->exec(oid, "rbd", "add_child", in, out);
+    }
+
+    int remove_child(librados::IoCtx *ioctx, const std::string &oid,
+		     uint64_t p_poolid, const std::string &p_imageid,
+		     snapid_t p_snapid, const std::string &c_imageid)
+    {
+      bufferlist in, out;
+      ::encode(p_poolid, in);
+      ::encode(p_imageid, in);
+      ::encode(p_snapid, in);
+      ::encode(c_imageid, in);
+
+      return ioctx->exec(oid, "rbd", "remove_child", in, out);
+    }
+
+    int get_children(librados::IoCtx *ioctx, const std::string &oid,
+		     uint64_t p_poolid, const std::string &p_imageid,
+		     snapid_t p_snapid, set<string>& children)
+    {
+      bufferlist in, out;
+      ::encode(p_poolid, in);
+      ::encode(p_imageid, in);
+      ::encode(p_snapid, in);
+
+      int r = ioctx->exec(oid, "rbd", "get_children", in, out);
+      if (r < 0)
+	return r;
+      bufferlist::iterator it = out.begin();
+      try {
+	::decode(children, it);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
     }
 
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
