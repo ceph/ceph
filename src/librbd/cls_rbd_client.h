@@ -56,6 +56,15 @@ namespace librbd {
 		   int64_t parent_pool, const std::string& parent_image,
 		   snapid_t parent_snap_id, uint64_t parent_overlap);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
+    int add_child(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t p_poolid, const std::string &p_imageid,
+		  snapid_t p_snapid, const std::string &c_imageid);
+    int remove_child(librados::IoCtx *ioctx, const std::string &oid,
+		     uint64_t p_poolid, const std::string &p_imageid,
+		     snapid_t p_snapid, const std::string &c_imageid);
+    int get_children(librados::IoCtx *ioctx, const std::string &oid,
+		     uint64_t p_poolid, const std::string &p_imageid,
+		     snapid_t p_snapid, set<string>& children);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,

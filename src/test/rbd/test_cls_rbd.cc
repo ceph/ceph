@@ -26,6 +26,9 @@ using ::librbd::cls_client::set_parent;
 using ::librbd::cls_client::remove_parent;
 using ::librbd::cls_client::snapshot_add;
 using ::librbd::cls_client::snapshot_remove;
+using ::librbd::cls_client::add_child;
+using ::librbd::cls_client::remove_child;
+using ::librbd::cls_client::get_children;
 using ::librbd::cls_client::get_snapcontext;
 using ::librbd::cls_client::snapshot_list;
 using ::librbd::cls_client::list_locks;
@@ -134,6 +137,50 @@ TEST(cls_rbd, get_and_set_id)
   ASSERT_EQ(0, get_id(&ioctx, oid, &id));
   ASSERT_EQ(id, valid_id);
 
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, add_remove_child)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  string oid = "rbd_children_test";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+
+  string parent_image = "parent_id";
+  string snapname = "parent_snap";
+  snapid_t snapid(10);
+  string child_image = "child_id";
+  uint64_t poolid = ioctx.get_id();
+  set<string>children;
+
+  // nonexistent children cannot be listed or removed
+  ASSERT_EQ(-ENOENT, get_children(&ioctx, oid, poolid, parent_image, snapid,
+	    children));
+  ASSERT_EQ(-ENOENT, remove_child(&ioctx, oid, poolid, parent_image, snapid,
+	    child_image));
+
+  // make a parent with a snapshot
+  ASSERT_EQ(0, create_image(&ioctx, parent_image, 2<<20, 0,
+			    RBD_FEATURE_LAYERING, parent_image));
+  ASSERT_EQ(0, snapshot_add(&ioctx, parent_image, snapid, snapname));
+
+  // add, verify it showed up
+  ASSERT_EQ(0, add_child(&ioctx, oid, poolid, parent_image, snapid,
+            child_image));
+  ASSERT_EQ(0, get_children(&ioctx, oid, poolid, parent_image, snapid,
+	    children));
+  bool found = (children.find(child_image) != children.end());
+  ASSERT_EQ(found, true);
+
+  ASSERT_EQ(0, remove_child(&ioctx, oid, poolid, parent_image, snapid,
+	    child_image));
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
