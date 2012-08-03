@@ -9,6 +9,7 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
+#include "librbd/cls_rbd.h"
 #include "librbd/ImageCtx.h"
 
 #include "librbd/internal.h"
@@ -1194,6 +1195,7 @@ namespace librbd {
     vector<uint64_t> snap_sizes;
     vector<uint64_t> snap_features;
     vector<cls_client::parent_info> snap_parents;
+    vector<uint8_t> snap_protection;
     {
       Mutex::Locker l(ictx->snap_lock);
       {
@@ -1239,7 +1241,8 @@ namespace librbd {
 	    r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
 					  new_snapc.snaps, &snap_names,
 					  &snap_sizes, &snap_features,
-					  &snap_parents);
+					  &snap_parents,
+					  &snap_protection);
 	    // -ENOENT here means we raced with snapshot deletion
 	    if (r < 0 && r != -ENOENT) {
 	      lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
@@ -1271,11 +1274,13 @@ namespace librbd {
 	ictx->snaps_by_name.clear();
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
+	  uint8_t protection_status = ictx->old_format ?
+	    RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
 	  cls_client::parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
-			 snap_sizes[i], features, parent);
+			 snap_sizes[i], features, parent, protection_status);
 	}
 
 	r = refresh_parent(ictx);

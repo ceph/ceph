@@ -67,7 +67,8 @@ namespace librbd {
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
 		      std::vector<uint64_t> *features,
-		      std::vector<parent_info> *parents);
+		      std::vector<parent_info> *parents,
+		      std::vector<uint8_t> *protection_statuses);
     int assign_bid(librados::IoCtx *ioctx, const std::string &oid,
 		   uint64_t *id);
 
@@ -84,6 +85,10 @@ namespace librbd {
 		     const std::string &cookie);
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		   const std::string &locker, const std::string &cookie);
+    int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t *protection_status);
+    int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t protection_status);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
