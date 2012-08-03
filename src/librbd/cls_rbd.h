@@ -1,9 +1,18 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef __CEPH_CLS_RBD_H
 #define __CEPH_CLS_RBD_H
 
 #include "include/types.h"
 #include "include/buffer.h"
 #include "common/Formatter.h"
+
+enum {
+  RBD_PROTECTION_STATUS_UNPROTECTED  = 0,
+  RBD_PROTECTION_STATUS_UNPROTECTING = 1,
+  RBD_PROTECTION_STATUS_PROTECTED    = 2,
+  RBD_PROTECTION_STATUS_LAST         = 3
+};
 
 /// information about our parent image, if any
 struct cls_rbd_parent {
@@ -58,6 +67,7 @@ struct cls_rbd_snap {
   string name;
   uint64_t image_size;
   uint64_t features;
+  uint8_t protection_status;
   cls_rbd_parent parent;
 
   /// true if we have a parent
@@ -65,24 +75,30 @@ struct cls_rbd_snap {
     return parent.exists();
   }
 
-  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0) {}
+  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0),
+		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED)
+    {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
     ::encode(features, bl);
     ::encode(parent, bl);
+    ::encode(protection_status, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(2, p);
+    DECODE_START(3, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
     ::decode(features, p);
     if (struct_v >= 2) {
       ::decode(parent, p);
+    }
+    if (struct_v >= 3) {
+      ::decode(protection_status, p);
     }
     DECODE_FINISH(p);
   }
@@ -95,6 +111,19 @@ struct cls_rbd_snap {
       f->open_object_section("parent");
       parent.dump(f);
       f->close_section();
+    }
+    switch (protection_status) {
+    case RBD_PROTECTION_STATUS_UNPROTECTED:
+      f->dump_string("protection_status", "unprotected");
+      break;
+    case RBD_PROTECTION_STATUS_UNPROTECTING:
+      f->dump_string("protection_status", "unprotecting");
+      break;
+    case RBD_PROTECTION_STATUS_PROTECTED:
+      f->dump_string("protection_status", "protected");
+      break;
+    default:
+      assert(0);
     }
   }
   static void generate_test_instances(list<cls_rbd_snap*>& o) {
@@ -114,6 +143,7 @@ struct cls_rbd_snap {
     t->parent.id = "parent";
     t->parent.snapid = 456;
     t->parent.overlap = 12345;
+    t->protection_status = RBD_PROTECTION_STATUS_PROTECTED;
     o.push_back(t);
   }
 };

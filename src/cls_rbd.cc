@@ -52,6 +52,8 @@ cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
 cls_method_handle_t h_get_parent;
 cls_method_handle_t h_set_parent;
+cls_method_handle_t h_get_protection_status;
+cls_method_handle_t h_set_protection_status;
 cls_method_handle_t h_remove_parent;
 cls_method_handle_t h_get_snapcontext;
 cls_method_handle_t h_get_object_prefix;
@@ -699,6 +701,129 @@ int check_exists(cls_method_context_t hctx)
 }
 
 /**
+ * get the current protection status of the specified snapshot
+ *
+ * Input:
+ * @param snap_id (uint64_t) which snapshot to get the status of
+ *
+ * Output:
+ * @param status (uint8_t) one of:
+ * RBD_PROTECTION_STATUS_{PROTECTED, UNPROTECTED, UNPROTECTING}
+ *
+ * @returns 0 on success, negative error code on failure
+ * @returns -EINVAL if snapid is CEPH_NOSNAP
+ */
+int get_protection_status(cls_method_context_t hctx, bufferlist *in,
+			  bufferlist *out)
+{
+  snapid_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "get_protection_status: invalid decode");
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_protection_status snap_id=%llu", snap_id.val);
+
+  if (snap_id == CEPH_NOSNAP)
+    return -EINVAL;
+
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(snap_id.val, &snapshot_key);
+  r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    CLS_ERR("could not read key for snapshot id %llu", snap_id.val);
+    return r;
+  }
+
+  if (snap.protection_status >= RBD_PROTECTION_STATUS_LAST) {
+    CLS_ERR("invalid protection status for snap id %llu: %u",
+	    snap_id.val, snap.protection_status);
+    return -EIO;
+  }
+
+  ::encode(snap.protection_status, *out);
+  return 0;
+}
+
+/**
+ * set the proctection status of a snapshot
+ *
+ * Input:
+ * @param snapid (uint64_t) which snapshot to set the status of
+ * @param status (uint8_t) one of:
+ * RBD_PROTECTION_STATUS_{PROTECTED, UNPROTECTED, UNPROTECTING}
+ *
+ * @returns 0 on success, negative error code on failure
+ * @returns -EINVAL if snapid is CEPH_NOSNAP
+ */
+int set_protection_status(cls_method_context_t hctx, bufferlist *in,
+			  bufferlist *out)
+{
+  snapid_t snap_id;
+  uint8_t status;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+    ::decode(status, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "set_protection_status: invalid decode");
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r < 0) {
+    CLS_LOG(20, "image does not support layering");
+    return r;
+  }
+
+  CLS_LOG(20, "set_protection_status snapid=%llu status=%u",
+	  snap_id.val, status);
+
+  if (snap_id == CEPH_NOSNAP)
+    return -EINVAL;
+
+  if (status >= RBD_PROTECTION_STATUS_LAST) {
+    CLS_LOG(10, "invalid protection status for snap id %llu: %u",
+	    snap_id.val, status);
+    return -EINVAL;
+  }
+
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(snap_id.val, &snapshot_key);
+  r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    CLS_ERR("could not read key for snapshot id %d", snap_id.val);
+    return r;
+  }
+
+  snap.protection_status = status;
+  bufferlist snapshot_bl;
+  ::encode(snap, snapshot_bl);
+  r = cls_cxx_map_set_val(hctx, snapshot_key, &snapshot_bl);
+  if (r < 0) {
+    CLS_ERR("error writing snapshot metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
  * get the current parent, if any
  *
  * Input:
@@ -1099,16 +1224,19 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   CLS_LOG(20, "snapshot_remove id=%llu", snap_id.val);
 
-  // check if the key exists. we can rely on remove_key doing this for
+  // check if the key exists. we can't rely on remove_key doing this for
   // us, since OMAPRMKEYS returns success if the key is not there.
   // bug or feature? sounds like a bug, since tmap did not have this
   // behavior, but cls_rgw may rely on it...
+  cls_rbd_snap snap;
   string snapshot_key;
-  bufferlist snapbl;
   key_from_snap_id(snap_id, &snapshot_key);
-  int r = cls_cxx_map_get_val(hctx, snapshot_key, &snapbl);
+  int r = read_key(hctx, snapshot_key, &snap);
   if (r == -ENOENT)
     return -ENOENT;
+
+  if (snap.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED)
+    return -EBUSY;
 
   r = cls_cxx_map_remove_key(hctx, snapshot_key);
   if (r < 0) {
@@ -1860,6 +1988,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "remove_parent",
 			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
 			  remove_parent, &h_remove_parent);
+  cls_register_cxx_method(h_class, "set_protection_status",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  set_protection_status, &h_set_protection_status);
+  cls_register_cxx_method(h_class, "get_protection_status",
+			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  get_protection_status, &h_get_protection_status);
 
   /* methods for the rbd_id.$image_name objects */
   cls_register_cxx_method(h_class, "get_id",
