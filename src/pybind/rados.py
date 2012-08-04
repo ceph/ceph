@@ -627,6 +627,15 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
 
+    def trunc(self, key, size):
+        self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
+        ret = self.librados.rados_trunc(self.io, c_char_p(key), c_size_t(size))
+        if ret < 0:
+            raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
+        return ret
+
     def stat(self, key):
         """Stat object, returns, size/timestamp"""
         self.require_ioctx_open()
