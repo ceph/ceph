@@ -656,7 +656,8 @@ namespace librbd {
 
     if (p_imctx->old_format) {
       lderr(cct) << "parent image must be in new format" << dendl;
-      return -EINVAL;
+      r = -EINVAL;
+      goto err_close_parent;
     }
 
     p_imctx->md_lock.Lock();
@@ -669,7 +670,8 @@ namespace librbd {
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
-      return -EINVAL;
+      r = -EINVAL;
+      goto err_close_parent;
     }
 
     if (!snap_protected) {
