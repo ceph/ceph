@@ -83,6 +83,13 @@ class TestIoctx(object):
         self.ioctx.write('abc', 'a\0b\0c')
         eq(self.ioctx.read('abc'), 'a\0b\0c')
 
+    def test_trunc(self):
+        self.ioctx.write('abc', 'abc')
+        self.ioctx.trunc('abc', 2)
+        eq(self.ioctx.read('abc'), 'ab')
+        size = self.ioctx.stat('abc')[0]
+        eq(size, 2)
+
     def test_list_objects_empty(self):
         eq(list(self.ioctx.list_objects()), [])
 
