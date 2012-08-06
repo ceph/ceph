@@ -40,6 +40,7 @@ using namespace librados;
 #include <dirent.h>
 #include <stdexcept>
 #include <climits>
+#include <locale>
 
 #include "common/errno.h"
 
@@ -1373,7 +1374,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       for (map<string, bufferlist>::const_iterator it = values.begin();
 	   it != values.end(); ++it) {
-	cout << it->first << " (" << it->second.length() << " bytes) :\n";
+	// dump key in hex if it contains nonprintable characters
+	if (std::count_if(it->first.begin(), it->first.end(),
+	    (int (*)(int))isprint) < (int)it->first.length()) {
+	  cout << "key: (" << it->first.length() << " bytes):\n";
+	  bufferlist keybl;
+	  keybl.append(it->first);
+	  keybl.hexdump(cout);
+	} else {
+	  cout << it->first;
+	}
+	cout << std::endl;
+	cout << "value: (" << it->second.length() << " bytes) :\n";
 	it->second.hexdump(cout);
 	cout << std::endl;
       }
