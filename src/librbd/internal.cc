@@ -988,7 +988,7 @@ namespace librbd {
     if (size > ictx->size) {
       ldout(cct, 2) << "expanding image " << ictx->size << " -> " << size
 		    << dendl;
-      // TODO: make ictx->set_size 
+      // TODO: make ictx->set_size
     } else {
       ldout(cct, 2) << "shrinking image " << ictx->size << " -> " << size
 		    << dendl;
