@@ -83,6 +83,22 @@ mon_osd_report_timeout). ::
 Revert "lost" objects to their prior state, either a previous version
 or delete them if they were just created.
 
+	$ ceph pg scrub <pgid>
+
+Instruct a PG to scrub. Scrubbing performs a consistency check of all
+replicas. During a scrub, the object metadata of all replicas is
+compared. If any discrepancy is found, the PG is marked inconsistent.
+
+	$ ceph pg deep-scrub <pgid>
+
+Instruct a PG to deep-scrub. A deep scrub is a deeper consistency check
+of all replicas. The contents of objects are compared in addition to the
+metadata. If any discrepancy is found, the PG is marked inconsistent.
+
+	$ ceph pg repair <pgid>
+
+Used on an inconsistent PG, it "fixes" objects that are inconsistent
+between replicas by replacing them with the primary's copy.
 
 OSD subsystem
 -------------
@@ -257,18 +273,18 @@ Get the value of a pool setting. Valid fields are:
 
 	$ ceph osd scrub N
 
-Sends a scrub command to osdN. To send the command to all osds, use ``*``.
-TODO: what does this actually do ::
+Instructs all PGs on osdN to scrub. To send them command to all osds,
+use ``*``.
 
 	$ ceph osd deep-scrub N
 
-Sends a deep scrub command to osdN. A deep scrub compares both the
-metadata and the contents of objects between replicas.
+Instructs all PGs on osdN to deep-scrub. To send them command to all
+osds, use ``*``.
 
 	$ ceph osd repair N
 
-Sends a repair command to osdN. To send the command to all osds, use ``*``.
-TODO: what does this actually do
+Instructs all PGs on osdN to repair. To send them command to all osds,
+use ``*``.
 
 ::
 
