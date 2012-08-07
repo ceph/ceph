@@ -424,6 +424,25 @@ namespace librbd {
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
+    // If this is the last snapshot, and the base image has no parent,
+    // that could be because the parent was flattened before the snapshots
+    // were removed.  In any case, this is now the time we should
+    // remove the child from the child list.
+    if (ictx->snaps.size() == 1 && (ictx->parent_md.pool_id == -1)) {
+      SnapInfo *snapinfo;
+      Mutex::Locker l(ictx->snap_lock);
+      r = ictx->get_snapinfo(snap_id, &snapinfo);
+      if (r < 0)
+	return r;
+      if (snapinfo->parent.pool_id != -1) {
+	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				     snapinfo->parent.pool_id,
+				     snapinfo->parent.image_id,
+				     snapinfo->parent.snap_id, ictx->id);
+	if (r < 0)
+	  return r;
+      }
+    }
     r = rm_snap(ictx, snap_name);
     if (r < 0)
       return r;
@@ -626,6 +645,13 @@ namespace librbd {
 			       p_imctx->id, p_imctx->snap_id, size);
     if (r < 0) {
       lderr(cct) << "couldn't set parent: " << r << dendl;
+      goto err_close_child;
+    }
+
+    r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, p_poolid, p_imctx->id,
+			      p_imctx->snap_id, c_imctx->id);
+    if (r < 0) {
+      lderr(cct) << "couldn't add child: " << r << dendl;
       goto err_close_child;
     }
     ldout(cct, 2) << "done." << dendl;
@@ -949,8 +975,24 @@ namespace librbd {
       ictx->md_lock.Lock();
       trim_image(ictx, 0, prog_ctx);
       ictx->md_lock.Unlock();
+
+      ictx->parent_lock.Lock();
+      // struct assignment
+      cls_client::parent_info parent_info = ictx->parent_md;
+      ictx->parent_lock.Unlock();
       close_image(ictx);
 
+      if (parent_info.pool_id != -1) {
+	ldout(cct, 2) << "removing child from children list..." << dendl;
+	int r = cls_client::remove_child(&io_ctx, RBD_CHILDREN,
+					 parent_info.pool_id,
+					 parent_info.image_id,
+					 parent_info.snap_id, id);
+	if (r < 0) {
+	  lderr(cct) << "error removing child from children list" << dendl;
+	  return r;
+	}
+      }
       ldout(cct, 2) << "removing header..." << dendl;
       r = io_ctx.remove(header_oid);
       if (r < 0 && r != -ENOENT) {
@@ -990,7 +1032,7 @@ namespace librbd {
 		   << cpp_strerror(-r) << dendl;
 	return r;
       }
-    }
+    } 
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
@@ -1616,7 +1658,27 @@ namespace librbd {
       ofs += cblksize;
     }
 
+    // remove parent from this (base) image
     r = cls_client::remove_parent(&ictx->md_ctx, ictx->header_oid);
+    if (r < 0) {
+      lderr(ictx->cct) << "error removing parent" << dendl;
+      return r;
+    }
+
+    // and if there are no snaps, remove from the children object as well
+    // (if snapshots remain, they have their own parent info, and the child
+    // will be removed when the last snap goes away)
+    if (ictx->snaps.empty()) {
+      ldout(ictx->cct, 2) << "removing child from children list..." << dendl;
+      int r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				       ictx->parent_md.pool_id,
+				       ictx->parent_md.image_id,
+				       ictx->parent_md.snap_id, ictx->id);
+      if (r < 0) {
+	lderr(ictx->cct) << "error removing child from children list" << dendl;
+	return r;
+      }
+    }
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
     ldout(ictx->cct, 20) << "finished flattening" << dendl;
