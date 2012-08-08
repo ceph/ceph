@@ -123,12 +123,17 @@ def run_job(job_config, archive_path):
         ) as tmp:
         os.write(tmp, yaml.safe_dump(job_config['config']))
         arg.append(tmp.name)
-        try:
-            subprocess.check_call(
-                args=arg,
-                close_fds=True,
-                )
-        except subprocess.CalledProcessError as e:
-            log.exception(e)
+        p = subprocess.Popen(
+            args=arg,
+            close_fds=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            )
+        child = logging.getLogger(__name__ + '.child')
+        for line in p.stdout:
+            child.info(': %s', line.rstrip('\n'))
+        p.wait()
+        if p.returncode != 0:
+            log.error('Child exited with code %s', e)
         else:
             log.info('Success!')
