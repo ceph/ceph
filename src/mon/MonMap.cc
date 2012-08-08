@@ -265,8 +265,11 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   // -m foo?
   if (!conf->mon_host.empty()) {
     int r = build_from_host_list(conf->mon_host, "noname-");
-    if (r < 0)
-      errout << "unable to parse addrs in '" << conf->mon_host << "'" << std::endl;
+    if (r < 0) {
+      errout << "unable to parse addrs in '" << conf->mon_host << "'"
+             << std::endl;
+      return r;
+    }
     return 0;
   }
 
