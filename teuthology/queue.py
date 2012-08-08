@@ -117,18 +117,18 @@ def run_job(job_config, archive_path):
         arg.extend(['--description', job_config['description']])
     arg.append('--')
 
-    tmp_fp, tmp_path = tempfile.mkstemp()
-    try:
-        os.write(tmp_fp, yaml.safe_dump(job_config['config']))
-        arg.append(tmp_path)
-        subprocess.check_call(
-            args=arg,
-            close_fds=True,
-            )
-    except subprocess.CalledProcessError as e:
-        log.exception(e)
-    else:
-        log.info('Success!')
-    finally:
-        os.close(tmp_fp)
-        os.unlink(tmp_path)
+    with tempfile.NamedTemporaryFile(
+        prefix='teuthology-worker.',
+        suffix='.tmp',
+        ) as tmp:
+        try:
+            os.write(tmp, yaml.safe_dump(job_config['config']))
+            arg.append(tmp.name)
+            subprocess.check_call(
+                args=arg,
+                close_fds=True,
+                )
+        except subprocess.CalledProcessError as e:
+            log.exception(e)
+        else:
+            log.info('Success!')
