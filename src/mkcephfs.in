@@ -298,8 +298,8 @@ if [ -n "$prepareosdfs" ]; then
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
     name="$type.$id"
 
-    get_conf osd_data "" "osd data"
-    get_conf osd_journal "" "osd journal"
+    get_conf osd_data "/var/lib/ceph/osd/ceph-$id" "osd data"
+    get_conf osd_journal "$osd_data/journal" "osd journal"
     get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
     get_conf btrfs_devs "" "btrfs devs"
 
