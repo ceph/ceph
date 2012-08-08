@@ -230,14 +230,6 @@ fi
 
 ### init-daemon ###
 
-create_private_key()
-{
-    get_conf keyring "$dir/keyring.$name" "keyring"
-    echo "creating private key for $name keyring $keyring"
-    $BINDIR/ceph-authtool --create-keyring --gen-key -n $name $keyring
-    $BINDIR/ceph-authtool -p -n $name $keyring > $dir/key.$name
-}
-
 if [ -n "$initdaemon" ]; then
     name=$initdaemon
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
@@ -257,12 +249,19 @@ if [ -n "$initdaemon" ]; then
     fi
 
     if [ $type = "osd" ]; then
-	$BINDIR/ceph-osd -c $conf --monmap $dir/monmap -i $id --mkfs
-	create_private_key
+	$BINDIR/ceph-osd -c $conf --monmap $dir/monmap -i $id --mkfs --mkkey
+
+	get_conf osd_data "/var/lib/ceph/osd/ceph-$id" "osd_data"
+	get_conf osd_keyring "$osd_data/keyring" "keyring"
+	$BINDIR/ceph-authtool -p -n $name $osd_keyring > $dir/key.$name
     fi
     
     if [ $type = "mds" ]; then
-	create_private_key
+	get_conf mds_data "/var/lib/ceph/mds/ceph-$id" "mds_data"
+	get_conf mds_keyring "$mds_data/keyring" "keyring"
+	echo "creating private key for $name keyring $mds_keyring"
+	$BINDIR/ceph-authtool --create-keyring --gen-key -n $name $mds_keyring
+	$BINDIR/ceph-authtool -p -n $name $mds_keyring > $dir/key.$name
     fi
 
     if [ $type = "mon" ]; then
