@@ -72,6 +72,7 @@ Where ``osd.0`` is the first OSD in the cluster.
    start-cluster
    Check Cluster Health <check-cluster-health>
    stop-cluster
+   debug
 
 See `Operations`_ for more detailed information.
 
