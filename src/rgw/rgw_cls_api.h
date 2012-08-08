@@ -497,16 +497,18 @@ struct rgw_cls_usage_log_trim_op {
   string user;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(start_epoch, bl);
     ::encode(end_epoch, bl);
+    ::encode(user, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(start_epoch, bl);
     ::decode(end_epoch, bl);
+    ::decode(user, bl);
     DECODE_FINISH(bl);
   }
 };
