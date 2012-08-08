@@ -146,6 +146,8 @@ public:
     raw *_raw;
     unsigned _off, _len;
 
+    void release();
+
   public:
     ptr() : _raw(0), _off(0), _len(0) {}
     ptr(raw *r);
@@ -162,7 +164,6 @@ public:
 
     raw *clone();
     void swap(ptr& other);
-    void release();
 
     // misc
     bool at_buffer_head() const { return _off == 0; }
