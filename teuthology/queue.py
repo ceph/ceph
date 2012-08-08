@@ -121,9 +121,9 @@ def run_job(job_config, archive_path):
         prefix='teuthology-worker.',
         suffix='.tmp',
         ) as tmp:
+        os.write(tmp, yaml.safe_dump(job_config['config']))
+        arg.append(tmp.name)
         try:
-            os.write(tmp, yaml.safe_dump(job_config['config']))
-            arg.append(tmp.name)
             subprocess.check_call(
                 args=arg,
                 close_fds=True,
