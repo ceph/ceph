@@ -11,6 +11,7 @@ using namespace std;
 #include "common/Formatter.h"
 #include "global/global_init.h"
 #include "common/errno.h"
+#include "include/utime.h"
 
 #include "common/armor.h"
 #include "rgw_user.h"
@@ -46,6 +47,7 @@ void _usage()
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
   cerr << "  bucket info                show bucket information\n";
+  cerr << "  object rm                  remove object\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
   cerr << "  pools list                 list placement active set\n";
@@ -84,6 +86,8 @@ void _usage()
   cerr << "                             user data\n";
   cerr << "   --purge-keys              when specified, subuser removal will also purge all the\n";
   cerr << "                             subuser keys\n";
+  cerr << "   --lazy-remove             defer the removal of the tail of an object until the intent\n";
+  cerr << "                             log is processed.\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
@@ -134,6 +138,7 @@ enum {
   OPT_USAGE_SHOW,
   OPT_USAGE_TRIM,
   OPT_TEMP_REMOVE,
+  OPT_OBJECT_RM,
 };
 
 static uint32_t str_to_perm(const char *str)
@@ -205,6 +210,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "usage") == 0 ||
+      strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "temp") == 0) {
     *need_more = true;
     return 0;
@@ -276,6 +282,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "pools") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_POOLS_LIST;
+  } else if (strcmp(prev_cmd, "object") == 0) {
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_OBJECT_RM;
   }
 
   return -EINVAL;
@@ -547,6 +556,36 @@ static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, s
   }
 }
 
+static int remove_shadow_file_now(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)
+{
+  int r = rgwstore->delete_obj(NULL,obj);
+  return r;
+}
+
+static int remove_shadow_file_eventually(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)
+{
+  int r = rgw_log_intent(obj, DEL_OBJ, ceph_clock_now(g_ceph_context),
+                         g_conf->rgw_intent_log_object_name_utc);
+
+  return r;
+}
+
+static int remove_object(rgw_bucket& bucket, std::string& object, bool delete_object_tail_later)
+{
+  int ret = -EINVAL;
+  RGWRadosCtx *rctx = new RGWRadosCtx();
+  rgw_obj obj(bucket,object);
+
+  if (delete_object_tail_later)
+    rgwstore->set_intent_cb(rctx, remove_shadow_file_eventually);
+  else
+    rgwstore->set_intent_cb(rctx, remove_shadow_file_now);
+
+  ret = rgwstore->delete_obj(rctx, obj);
+
+  return ret;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -587,6 +626,7 @@ int main(int argc, char **argv)
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
   int yes_i_really_mean_it = false;
+  int delete_object_tail_later = false;
   int max_buckets = -1;
 
   std::string val;
@@ -664,6 +704,8 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
+    }  else if (ceph_argparse_binary_flag(args, i, &delete_object_tail_later, NULL, "--lazy-remove", (char*)NULL)) {
+      delete_object_tail_later = true;
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
@@ -1498,6 +1540,15 @@ next:
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
     }   
+  }
+
+  if (opt_cmd == OPT_OBJECT_RM) {
+    int ret = remove_object(bucket, object, delete_object_tail_later);
+
+    if (ret < 0) {
+      cerr << "ERROR: object remove returned ret=" << ret << std::endl;
+      return 1;
+    }
   }
 
   return 0;
