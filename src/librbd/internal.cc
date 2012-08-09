@@ -631,7 +631,7 @@ namespace librbd {
       goto err_close_parent;
     }
 
-    uint64_t p_poolid;
+    int64_t p_poolid;
     p_poolid = p_ioctx.get_id();
 
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx);
