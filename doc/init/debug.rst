@@ -344,9 +344,9 @@ To inject debug or logging configuration settings at runtime, execute ``ceph``
 with the type of daemon, specify ``tell`` and ``injectargs`` with a key
 and value, as follows:: 
 
-	ceph [osd|mon|mds] tell injectargs --{key} {value} [--{key} {value} ...]
+	ceph [osd|mon|mds] tell injectargs {daemon-id} --{key} {value} [--{key} {value} ...]
  
-For example:: 
+The following example tells ``osd.0`` to set ``debug osd`` to ``20``::  
 
-	ceph osd tell injectargs --debug_osd 20
+	ceph osd tell 0 injectargs --debug_osd 20
  
