@@ -9,6 +9,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -22,6 +24,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -59,6 +63,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -72,6 +78,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -109,6 +117,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -122,6 +132,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -159,6 +171,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -172,6 +186,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -209,6 +225,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -222,6 +240,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -259,6 +279,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -272,6 +294,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -309,6 +333,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -322,6 +348,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -359,6 +387,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -372,6 +402,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
@@ -409,6 +441,8 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    flatten <image-name>                        fill clone with parent data
+                                                (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
@@ -422,6 +456,8 @@
     snap rollback <snap-name>                   rollback image to snapshot
     snap rm <snap-name>                         deletes a snapshot
     snap purge <image-name>                     deletes all snapshots
+    snap protect <snap-name>                    prevent a snapshot from being deleted
+    snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
     map <image-name>                            map image to a block device
                                                 using the kernel
