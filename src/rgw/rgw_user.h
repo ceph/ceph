@@ -44,31 +44,31 @@ extern bool rgw_user_is_authenticated(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWUserInfo& info, bool exclusive);
+extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(string& user_id, RGWUserInfo& info);
+extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(string& email, RGWUserInfo& info);
+extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(string& swift_name, RGWUserInfo& info);
+extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(string& access_key, RGWUserInfo& info);
+extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
-extern int rgw_delete_user(RGWUserInfo& user);
+extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user);
 /**
  * Store a list of the user's buckets, with associated functinos.
  */
@@ -129,23 +129,23 @@ WRITE_CLASS_ENCODER(RGWUserBuckets)
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_stats);
+extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets, bool need_stats);
 
 /**
  * Store the set of buckets associated with a user.
  * This completely overwrites any previously-stored list, so be careful!
  * Returns 0 on success, -ERR# otherwise.
  */
-extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
+extern int rgw_write_buckets_attr(RGWRados *store, string user_id, RGWUserBuckets& buckets);
 
-extern int rgw_add_bucket(string user_id, rgw_bucket& bucket);
-extern int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket);
+extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket);
+extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket);
 
 /*
  * remove the different indexes
   */
-extern int rgw_remove_key_index(RGWAccessKey& access_key);
-extern int rgw_remove_uid_index(string& uid);
-extern int rgw_remove_email_index(string& email);
-extern int rgw_remove_swift_name_index(string& swift_name);
+extern int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key);
+extern int rgw_remove_uid_index(RGWRados *store, string& uid);
+extern int rgw_remove_email_index(RGWRados *store, string& email);
+extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 #endif

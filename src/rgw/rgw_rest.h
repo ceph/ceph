@@ -17,8 +17,8 @@ protected:
 public:
   RGWGetObj_REST() {}
 
-  virtual void init(struct req_state *s, RGWHandler *h) {
-    RGWGetObj::init(s, h);
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWGetObj::init(store, s, h);
     sent_header = false;
   }
 
@@ -184,7 +184,7 @@ class RGWRESTMgr {
 public:
   RGWRESTMgr();
   ~RGWRESTMgr();
-  RGWHandler *get_handler(struct req_state *s, FCGX_Request *fcgx,
+  RGWHandler *get_handler(RGWRados *store, struct req_state *s, FCGX_Request *fcgx,
 			  int *init_error);
 };
 

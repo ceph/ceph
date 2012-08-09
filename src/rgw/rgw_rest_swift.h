@@ -147,7 +147,7 @@ public:
   RGWHandler_REST_SWIFT() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_SWIFT() {}
 
-  int init(struct req_state *state, FCGX_Request *fcgx);
+  int init(RGWRados *store, struct req_state *state, FCGX_Request *fcgx);
   int authorize();
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }

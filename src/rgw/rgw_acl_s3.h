@@ -13,6 +13,8 @@
 
 using namespace std;
 
+class RGWRados;
+
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
 public:
@@ -100,7 +102,7 @@ public:
     _acl.to_xml(out);
     out << "</AccessControlPolicy>";
   }
-  int rebuild(ACLOwner *owner, RGWAccessControlPolicy& dest);
+  int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
   bool compare_group_name(string& id, ACLGroupTypeEnum group);
   virtual bool create_canned(string id, string name, string canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
