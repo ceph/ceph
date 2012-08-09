@@ -20,6 +20,7 @@
 #include <time.h>
 #include <strings.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/mman.h>
 #ifdef HAVE_ERR_H
 #include <err.h>
