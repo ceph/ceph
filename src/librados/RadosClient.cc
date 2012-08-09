@@ -103,6 +103,17 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
   return 0;
 }
 
+int librados::RadosClient::get_fsid(std::string *s)
+{
+  if (!s)
+    return -EINVAL;
+  Mutex::Locker l(lock);
+  ostringstream oss;
+  oss << osdmap.get_fsid();
+  *s = oss.str();
+  return 0;
+}
+
 int librados::RadosClient::connect()
 {
   common_init_finish(cct);
