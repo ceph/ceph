@@ -283,25 +283,27 @@ done:
   return ret;
 }
 
-int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
+int rgw_log_intent(rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc)
 {
   rgw_bucket intent_log_bucket(RGW_INTENT_LOG_POOL_NAME);
 
   rgw_intent_log_entry entry;
   entry.obj = obj;
   entry.intent = (uint32_t)intent;
-  entry.op_time = s->time;
+  entry.op_time = timestamp;
 
   struct tm bdt;
-  time_t t = entry.op_time.sec();
-  if (s->cct->_conf->rgw_intent_log_object_name_utc)
+  time_t t = timestamp.sec();
+  if (utc)
     gmtime_r(&t, &bdt);
   else
     localtime_r(&t, &bdt);
 
-  char buf[obj.bucket.name.size() + s->bucket.bucket_id.size() + 16];
+  struct rgw_bucket& bucket = obj.bucket;
+
+  char buf[bucket.name.size() + bucket.bucket_id.size() + 16];
   sprintf(buf, "%.4d-%.2d-%.2d-%s-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
-	  s->bucket.bucket_id.c_str(), obj.bucket.name.c_str());
+          bucket.bucket_id.c_str(), obj.bucket.name.c_str());
   string oid(buf);
   rgw_obj log_obj(intent_log_bucket, oid);
 
@@ -320,4 +322,9 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 
 done:
   return ret;
+}
+
+int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
+{
+  return rgw_log_intent(obj, intent, s->time, s->cct->_conf->rgw_intent_log_object_name_utc);
 }
