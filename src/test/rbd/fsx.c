@@ -759,7 +759,8 @@ do_punch_hole(unsigned offset, unsigned length)
 		prt("%lu punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
-	if ((ret = rbd_discard(image, offset, length)) < 0) {
+	if ((ret = rbd_discard(image, (unsigned long long) offset,
+			       (unsigned long long) length)) < 0) {
 		prt("%punch hole: %x to %x\n", offset, length);
 		prterrcode("do_punch_hole: discard", ret);
 		report_failure(161);

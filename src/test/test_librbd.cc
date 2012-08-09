@@ -616,7 +616,7 @@ void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, siz
   assert(written == (ssize_t)len);
 }
 
-void aio_discard_test_data(rbd_image_t image, uint64_t off, size_t len)
+void aio_discard_test_data(rbd_image_t image, uint64_t off, uint64_t len)
 {
   rbd_completion_t comp;
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);

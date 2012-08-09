@@ -70,7 +70,7 @@ TEST(cls_rbd, copyup)
   // copyup of 0-len nonexistent object should create new 0-len object
   ioctx.remove(oid);
   ASSERT_EQ(0, copyup(&ioctx, oid, inbl));
-  size_t size;
+  uint64_t size;
   ASSERT_EQ(0, ioctx.stat(oid, &size, NULL));
   ASSERT_EQ(0U, size);
 
