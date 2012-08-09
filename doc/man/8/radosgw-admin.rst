@@ -50,6 +50,9 @@ Commands
 :command:`bucket unlink`
   Remove a bucket
 
+:command:'object rm'
+  Remove an object
+
 :command:`key create`
   Create an access key
 
@@ -122,6 +125,10 @@ Options
 
    The librados auid
 
+.. option:: --lazy-remove
+
+   Defer removal of object tail
+   
 
 Examples
 ========
