@@ -155,7 +155,7 @@ struct RGWObjState {
 
 struct RGWRadosCtx {
   map<rgw_obj, RGWObjState> objs_state;
-  int (*intent_cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
+  int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
   void *user_ctx;
   RGWObjState *get_state(rgw_obj& obj) {
     if (obj.object.size()) {
@@ -181,13 +181,13 @@ struct RGWRadosCtx {
       objs_state[new_obj].prefetch_data = true;
     }
   }
-  void set_intent_cb(int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+  void set_intent_cb(int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     intent_cb = cb;
   }
 
-  int notify_intent(rgw_obj& obj, RGWIntentEvent intent) {
+  int notify_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent) {
     if (intent_cb) {
-      return intent_cb(user_ctx, obj, intent);
+      return intent_cb(store, user_ctx, obj, intent);
     }
     return 0;
   }
@@ -559,7 +559,7 @@ public:
   }
   // to notify upper layer that we need to do some operation on an object, and it's up to
   // the upper layer to schedule this operation.. e.g., log intent in intent log
-  void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+  void set_intent_cb(void *ctx, int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
     rctx->set_intent_cb(cb);
   }
@@ -673,7 +673,6 @@ public:
   }
 };
 
-#define rgwstore RGWRados::store
 
 
 #endif

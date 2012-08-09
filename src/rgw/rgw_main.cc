@@ -121,6 +121,7 @@ struct RGWRequest
 };
 
 class RGWProcess {
+  RGWRados *store;
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
@@ -178,8 +179,8 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, int num_threads)
-    : m_tp(cct, "RGWProcess::m_tp", num_threads),
+  RGWProcess(CephContext *cct, RGWRados *rgwstore, int num_threads)
+    : store(rgwstore), m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
@@ -236,10 +237,10 @@ void RGWProcess::run()
   m_tp.stop();
 }
 
-static int call_log_intent(void *ctx, rgw_obj& obj, RGWIntentEvent intent)
+static int call_log_intent(RGWRados *store, void *ctx, rgw_obj& obj, RGWIntentEvent intent)
 {
   struct req_state *s = (struct req_state *)ctx;
-  return rgw_log_intent(s, obj, intent);
+  return rgw_log_intent(store, s, obj, intent);
 }
 
 void RGWProcess::handle_request(RGWRequest *req)
@@ -257,14 +258,14 @@ void RGWProcess::handle_request(RGWRequest *req)
   rgw_env.init(g_ceph_context, fcgx->envp);
 
   struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
-  s->obj_ctx = rgwstore->create_context(s);
-  rgwstore->set_intent_cb(s->obj_ctx, call_log_intent);
+  s->obj_ctx = store->create_context(s);
+  store->set_intent_cb(s->obj_ctx, call_log_intent);
 
   req->log(s, "initializing");
 
   RGWOp *op = NULL;
   int init_error = 0;
-  RGWHandler *handler = rest.get_handler(s, fcgx, &init_error);
+  RGWHandler *handler = rest.get_handler(store, s, fcgx, &init_error);
   if (init_error != 0) {
     abort_early(s, init_error);
     goto done;
@@ -318,14 +319,14 @@ void RGWProcess::handle_request(RGWRequest *req)
   req->log(s, "executing");
   op->execute();
 done:
-  rgw_log_op(s);
+  rgw_log_op(store, s);
 
   int http_ret = s->err.http_ret;
 
   req->log_format(s, "http status=%d", http_ret);
 
   handler->put_op(op);
-  rgwstore->destroy_context(s->obj_ctx);
+  store->destroy_context(s->obj_ctx);
   FCGX_Finish_r(fcgx);
   delete req;
 
@@ -420,7 +421,8 @@ int main(int argc, const char **argv)
   RGWStoreManager store_manager;
 
   int r = 0;
-  if (!store_manager.init(g_ceph_context, true)) {
+  RGWRados *store = store_manager.init(g_ceph_context, true);
+  if (!store) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     r = EIO;
   }
@@ -435,9 +437,9 @@ int main(int argc, const char **argv)
   if (r) 
     return 1;
 
-  rgw_log_usage_init(g_ceph_context);
+  rgw_log_usage_init(g_ceph_context, store);
 
-  RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
+  RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size);
   process.run();
 
   rgw_log_usage_finalize();

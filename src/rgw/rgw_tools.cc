@@ -14,7 +14,7 @@
 
 static map<string, string> ext_mime_map;
 
-int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive, map<string, bufferlist> *pattrs)
+int rgw_put_obj(RGWRados *rgwstore, string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
@@ -33,7 +33,7 @@ int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, 
   return ret;
 }
 
-int rgw_get_obj(void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, map<string, bufferlist> *pattrs)
+int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, map<string, bufferlist> *pattrs)
 {
   int ret;
   struct rgw_err err;
