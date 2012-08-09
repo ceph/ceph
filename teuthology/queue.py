@@ -122,6 +122,7 @@ def run_job(job_config, archive_path):
         suffix='.tmp',
         ) as tmp:
         yaml.safe_dump(data=job_config['config'], stream=tmp)
+        tmp.flush()
         arg.append(tmp.name)
         p = subprocess.Popen(
             args=arg,
