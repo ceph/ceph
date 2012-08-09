@@ -121,7 +121,7 @@ def run_job(job_config, archive_path):
         prefix='teuthology-worker.',
         suffix='.tmp',
         ) as tmp:
-        os.write(tmp, yaml.safe_dump(job_config['config']))
+        yaml.safe_dump(data=job_config['config'], stream=tmp)
         arg.append(tmp.name)
         p = subprocess.Popen(
             args=arg,
