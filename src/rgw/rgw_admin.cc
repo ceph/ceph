@@ -47,6 +47,7 @@ void _usage()
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
   cerr << "  bucket info                show bucket information\n";
+  cerr << "  bucket rm                  remove bucket\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -86,6 +87,8 @@ void _usage()
   cerr << "                             user data\n";
   cerr << "   --purge-keys              when specified, subuser removal will also purge all the\n";
   cerr << "                             subuser keys\n";
+  cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
+  cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
   cerr << "   --lazy-remove             defer the removal of the tail of an object until the intent\n";
   cerr << "                             log is processed.\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
@@ -128,6 +131,7 @@ enum {
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
+  OPT_BUCKET_RM,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -259,6 +263,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_BUCKET_UNLINK;
     if (strcmp(cmd, "stats") == 0)
       return OPT_BUCKET_STATS;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_BUCKET_RM;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_LOG_LIST;
@@ -586,6 +592,73 @@ static int remove_object(rgw_bucket& bucket, std::string& object, bool delete_ob
   return ret;
 }
 
+static int remove_bucket(rgw_bucket& bucket, bool delete_children, bool delete_object_tail_later)
+{
+  int ret;
+  map<RGWObjCategory, RGWBucketStats> stats;
+  std::vector<RGWObjEnt> objs;
+  std::string prefix, delim, marker, ns;
+  map<string, bool> common_prefixes;
+  rgw_obj obj;
+  RGWBucketInfo info;
+  bufferlist bl;
+
+  static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
+  ret = rgwstore->get_bucket_stats(bucket, stats);
+  if (ret < 0)
+    return ret;
+
+  obj.bucket = bucket;
+  int max = 1000;
+
+  ret = rgw_get_obj(NULL, pi_buckets_rados, bucket.name, bl, NULL);
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    cerr << "ERROR: could not decode buffer info, caught buffer::error" << std::endl;
+    return -EIO;
+  }
+
+  if (delete_children) {
+    ret = rgwstore->list_objects(bucket, max, prefix, delim, marker, objs, common_prefixes,
+                                 false, ns, (bool *)false, NULL);
+    if (ret < 0)
+      return ret;
+
+    while (objs.size() > 0) {
+      std::vector<RGWObjEnt>::iterator it = objs.begin();
+      for (it = objs.begin(); it != objs.end(); it++) {
+        ret = remove_object(bucket, (*it).name, delete_object_tail_later);
+        if (ret < 0)
+          return ret;
+      }
+      objs.clear();
+
+      ret = rgwstore->list_objects(bucket, max, prefix, delim, marker, objs, common_prefixes,
+                                   false, ns, (bool *)false, NULL);
+      if (ret < 0)
+        return ret;
+    }
+  }
+
+  ret = rgwstore->delete_bucket(bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not remove bucket " << bucket.name
+        << " with " << max << " item(s)" << std::endl;
+
+    return ret;
+  }
+
+  ret = rgw_remove_user_bucket_info(info.owner, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: unable to remove user bucket information" << std::endl;
+  }
+
+  return ret;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -626,6 +699,7 @@ int main(int argc, char **argv)
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
   int yes_i_really_mean_it = false;
+  int delete_child_objects = false;
   int delete_object_tail_later = false;
   int max_buckets = -1;
 
@@ -704,12 +778,15 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-    }  else if (ceph_argparse_binary_flag(args, i, &delete_object_tail_later, NULL, "--lazy-remove", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
+      delete_child_objects = true;
+    } else if (ceph_argparse_binary_flag(args, i, &delete_object_tail_later, NULL, "--lazy-remove", (char*)NULL)) {
       delete_object_tail_later = true;
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
-      // do nothing
+      delete_child_objects = true;
+      purge_data = true;
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
@@ -1306,10 +1383,22 @@ next:
   
   if (opt_cmd == OPT_USER_RM) {
     RGWUserBuckets buckets;
+    int ret;
+
     if (rgw_read_user_buckets(user_id, buckets, false) >= 0) {
       map<string, RGWBucketEnt>& m = buckets.get_buckets();
-      if (m.size() > 0) {
-        cerr << "user bucket list not empty, can't remove user" << std::endl;
+
+      if (m.size() > 0 && purge_data) {
+        for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
+          ret = remove_bucket(((*it).second).bucket, true, delete_object_tail_later);
+
+          if (ret < 0)
+            return ret;
+        }
+      }
+
+      if (m.size() > 0 && !purge_data) {
+        cerr << "ERROR: specify --purge-data to remove a user with a non-empty bucket list" << std::endl;
         return 1;
       }
     }
@@ -1547,6 +1636,15 @@ next:
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned ret=" << ret << std::endl;
+      return 1;
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_RM) {
+    int ret = remove_bucket(bucket, delete_child_objects, delete_object_tail_later);
+
+    if (ret < 0) {
+      cerr << "ERROR: bucket remove returned ret=" << ret << std::endl;
       return 1;
     }
   }
