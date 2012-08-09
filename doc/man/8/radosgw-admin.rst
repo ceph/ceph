@@ -50,6 +50,9 @@ Commands
 :command:`bucket unlink`
   Remove a bucket
 
+:command:'bucket rm'
+  Remove a bucket
+
 :command:'object rm'
   Remove an object
 
@@ -125,6 +128,14 @@ Options
 
    The librados auid
 
+.. option:: --purge-data
+
+   Remove user data before user removal
+   
+.. option:: --purge-objects
+
+   Remove all objects before bucket removal
+
 .. option:: --lazy-remove
 
    Defer removal of object tail
@@ -151,6 +162,10 @@ Generate a new user::
 Remove a user::
 
         $ radosgw-admin user rm --uid=johnny
+        
+Remove a user and all associated buckets with their contents::
+
+        $ radosgw-admin user rm --uid=johnny --purge-data
 
 Remove a bucket::
 
