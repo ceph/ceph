@@ -645,8 +645,7 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children, bool delete_o
 
   ret = rgwstore->delete_bucket(bucket);
   if (ret < 0) {
-    cerr << "ERROR: could not remove bucket " << bucket.name
-        << " with " << max << " item(s)" << std::endl;
+    cerr << "ERROR: could not remove bucket " << bucket.name << std::endl;
 
     return ret;
   }
@@ -1635,7 +1634,7 @@ next:
     int ret = remove_object(bucket, object, delete_object_tail_later);
 
     if (ret < 0) {
-      cerr << "ERROR: object remove returned ret=" << ret << std::endl;
+      cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
   }
@@ -1644,7 +1643,7 @@ next:
     int ret = remove_bucket(bucket, delete_child_objects, delete_object_tail_later);
 
     if (ret < 0) {
-      cerr << "ERROR: bucket remove returned ret=" << ret << std::endl;
+      cerr << "ERROR: bucket remove returned: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
   }
