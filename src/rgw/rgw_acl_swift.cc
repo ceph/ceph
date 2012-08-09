@@ -54,7 +54,7 @@ static bool uid_is_public(string& uid)
          sub.compare(".referrer") == 0;
 }
 
-void RGWAccessControlPolicy_SWIFT::add_grants(vector<string>& uids, int perm)
+void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, vector<string>& uids, int perm)
 {
   vector<string>::iterator iter;
   for (iter = uids.begin(); iter != uids.end(); ++iter ) {
@@ -64,7 +64,7 @@ void RGWAccessControlPolicy_SWIFT::add_grants(vector<string>& uids, int perm)
     if (uid_is_public(uid)) {
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
       acl.add_grant(&grant);
-    } else if (rgw_get_user_info_by_uid(uid, grant_user) < 0) {
+    } else if (rgw_get_user_info_by_uid(store, uid, grant_user) < 0) {
       ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
       /* skipping silently */
     } else {
@@ -74,7 +74,7 @@ void RGWAccessControlPolicy_SWIFT::add_grants(vector<string>& uids, int perm)
   }
 }
 
-bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read_list, string& write_list)
+bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, string& id, string& name, string& read_list, string& write_list)
 {
   acl.create_default(id, name);
   owner.set_id(id);
@@ -88,7 +88,7 @@ bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read
       return false;
     }
 
-    add_grants(uids, SWIFT_PERM_READ);
+    add_grants(store, uids, SWIFT_PERM_READ);
   }
   if (write_list.size()) {
     vector<string> uids;
@@ -98,7 +98,7 @@ bool RGWAccessControlPolicy_SWIFT::create(string& id, string& name, string& read
       return false;
     }
 
-    add_grants(uids, SWIFT_PERM_WRITE);
+    add_grants(store, uids, SWIFT_PERM_WRITE);
   }
   return true;
 }

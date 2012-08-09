@@ -729,7 +729,7 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
   bufferlist bl;
   ::encode(info, bl);
 
-  int ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_obj(this, info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
   if (ret < 0)
     return ret;
 
@@ -747,7 +747,7 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
 
   rgw_obj obj(pi_buckets_rados, avail_pools);
 
-  int ret = rgw_get_obj(NULL, pi_buckets_rados, avail_pools, map_bl);
+  int ret = rgw_get_obj(this, NULL, pi_buckets_rados, avail_pools, map_bl);
   if (ret < 0) {
     goto read_omap;
   }
@@ -1213,7 +1213,7 @@ int RGWRados::copy_obj(void *ctx,
     attrset = attrs;
   }
 
-  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
+  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
 
@@ -1221,7 +1221,7 @@ int RGWRados::copy_obj(void *ctx,
 
   return ret;
 done_err:
-  rgwstore->delete_obj(ctx, shadow_obj, false);
+  delete_obj(ctx, shadow_obj, false);
   finish_get_obj(&handle);
   return r;
 }
@@ -1318,7 +1318,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 {
   RGWBucketInfo bucket_info;
-  int ret = rgwstore->get_bucket_info(NULL, bucket.name, bucket_info);
+  int ret = get_bucket_info(NULL, bucket.name, bucket_info);
   if (ret < 0) {
     return ret;
   }
@@ -1682,7 +1682,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
       state->clear();
       return r;
     } else {
-      int ret = rctx->notify_intent(dest_obj, DEL_OBJ);
+      int ret = rctx->notify_intent(this, dest_obj, DEL_OBJ);
       if (ret < 0) {
         ldout(cct, 0) << "WARNING: failed to log intent ret=" << ret << dendl;
       }
@@ -2441,7 +2441,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 {
   bufferlist bl;
 
-  int ret = rgw_get_obj(ctx, pi_buckets_rados, bucket_name, bl, pattrs);
+  int ret = rgw_get_obj(this, ctx, pi_buckets_rados, bucket_name, bl, pattrs);
   if (ret < 0) {
     if (ret != -ENOENT)
       return ret;
@@ -2472,7 +2472,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   string unused;
 
-  int ret = rgw_put_obj(unused, pi_buckets_rados, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_obj(this, unused, pi_buckets_rados, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
 
   return ret;
 }
@@ -2860,7 +2860,7 @@ int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)
     string id;
     map<std::string, bufferlist> attrs;
     rgw_bucket pool(RGW_USAGE_LOG_POOL_NAME);
-    r = rgwstore->create_bucket(id, pool, attrs, true);
+    r = create_bucket(id, pool, attrs, true);
     if (r < 0)
       return r;
  
@@ -3117,7 +3117,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
         break;
       }
-      r = rgwstore->delete_obj(NULL, entry.obj, false);
+      r = delete_obj(NULL, entry.obj, false);
       if (r < 0 && r != -ENOENT) {
         cerr << "failed to remove obj: " << entry.obj << std::endl;
         complete = false;

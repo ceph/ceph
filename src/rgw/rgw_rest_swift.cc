@@ -347,7 +347,7 @@ int RGWPutMetadata_REST_SWIFT::get_params()
 
     if (read_attr || write_attr) {
       RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-      int r = swift_policy.create(s->user.user_id, s->user.display_name, read_list, write_list);
+      int r = swift_policy.create(store, s->user.user_id, s->user.display_name, read_list, write_list);
       if (r < 0)
         return r;
 
@@ -562,7 +562,7 @@ RGWOp *RGWHandler_REST_SWIFT::get_copy_op()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  bool authorized = rgw_verify_os_token(s);
+  bool authorized = rgw_verify_swift_token(store, s);
   if (!authorized)
     return -EPERM;
 
@@ -571,11 +571,11 @@ int RGWHandler_REST_SWIFT::authorize()
   return 0;
 }
 
-int RGWHandler_REST_SWIFT::init(struct req_state *state, FCGX_Request *fcgx)
+int RGWHandler_REST_SWIFT::init(RGWRados *store, struct req_state *state, FCGX_Request *fcgx)
 {
   state->copy_source = state->env->get("HTTP_X_COPY_FROM");
 
   state->dialect = "swift";
 
-  return RGWHandler_REST::init(state, fcgx);
+  return RGWHandler_REST::init(store, state, fcgx);
 }

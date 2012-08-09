@@ -4,6 +4,8 @@
 #include "rgw_common.h"
 #include "include/utime.h"
 
+class RGWRados;
+
 #define RGW_LOG_POOL_NAME ".log"
 #define RGW_INTENT_LOG_POOL_NAME ".intent-log"
 #define RGW_USAGE_LOG_POOL_NAME ".usage"
@@ -117,10 +119,10 @@ struct rgw_intent_log_entry {
 };
 WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 
-int rgw_log_op(struct req_state *s);
-int rgw_log_intent(rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc);
-int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
-void rgw_log_usage_init(CephContext *cct);
+int rgw_log_op(RGWRados *store, struct req_state *s);
+int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc);
+int rgw_log_intent(RGWRados *store, struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
+void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
 
 #endif

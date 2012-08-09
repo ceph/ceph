@@ -312,7 +312,7 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
 /*
   can only be called on object that was parsed
  */
-int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& dest)
+int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest)
 {
   if (!owner)
     return -EINVAL;
@@ -323,7 +323,7 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
   }
 
   RGWUserInfo owner_info;
-  if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
+  if (rgw_get_user_info_by_uid(store, owner->get_id(), owner_info) < 0) {
     ldout(cct, 10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
@@ -354,7 +354,7 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
           return -EINVAL;
         }
         ldout(cct, 10) << "grant user email=" << email << dendl;
-        if (rgw_get_user_info_by_email(email, grant_user) < 0) {
+        if (rgw_get_user_info_by_email(store, email, grant_user) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
           return -ERR_UNRESOLVABLE_EMAIL;
         }
@@ -369,7 +369,7 @@ int RGWAccessControlPolicy_S3::rebuild(ACLOwner *owner, RGWAccessControlPolicy& 
           }
         }
     
-        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(uid, grant_user) < 0) {
+        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(store, uid, grant_user) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           return -EINVAL;
         } else {
