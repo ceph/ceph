@@ -50,11 +50,26 @@ Commands
 :command:`bucket unlink`
   Remove a bucket
 
+:command:'bucket rm'
+  Remove a bucket
+
+:command:'object rm'
+  Remove an object
+
 :command:`key create`
   Create an access key
 
 :command:`key rm`
   Remove an access key
+
+:command:'pool add'
+  Add an existing pool for data placement
+
+:command:`pool rm`
+  Remove an existing pool from data placement set
+
+:command:`pools list`
+  List placement active set
 
 :command:`policy`
   Display bucket/object policy
@@ -122,6 +137,18 @@ Options
 
    The librados auid
 
+.. option:: --purge-data
+
+   Remove user data before user removal
+   
+.. option:: --purge-objects
+
+   Remove all objects before bucket removal
+
+.. option:: --lazy-remove
+
+   Defer removal of object tail
+   
 
 Examples
 ========
@@ -144,6 +171,10 @@ Generate a new user::
 Remove a user::
 
         $ radosgw-admin user rm --uid=johnny
+        
+Remove a user and all associated buckets with their contents::
+
+        $ radosgw-admin user rm --uid=johnny --purge-data
 
 Remove a bucket::
 
