@@ -1493,6 +1493,26 @@ namespace librbd {
     return r;
   }
 
+  // common snap_set functionality for snap_set and open_image
+
+  int _snap_set(ImageCtx *ictx, const char *snap_name)
+  {
+    Mutex::Locker l1(ictx->snap_lock);
+    Mutex::Locker l2(ictx->parent_lock);
+    int r;
+    if ((snap_name != NULL) && (strlen(snap_name) != 0)) {
+      r = ictx->snap_set(snap_name);
+    } else {
+      ictx->snap_unset();
+      r = 0;
+    }
+    if (r < 0) {
+      return r;
+    }
+    refresh_parent(ictx);
+    return 0;
+  }
+
   int snap_set(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
@@ -1500,18 +1520,7 @@ namespace librbd {
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
-
-    Mutex::Locker l(ictx->snap_lock);
-    if (snap_name) {
-      int r = ictx->snap_set(snap_name);
-      if (r < 0) {
-	return r;
-      }
-    } else {
-      ictx->snap_unset();
-    }
-
-    return 0;
+    return _snap_set(ictx, snap_name);
   }
 
   int open_image(ImageCtx *ictx, bool watch)
@@ -1531,12 +1540,7 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    if (ictx->snap_name.length()) {
-      Mutex::Locker l(ictx->snap_lock);
-      r = ictx->snap_set(ictx->snap_name);
-      if (r < 0)
-	return r;
-    }
+    _snap_set(ictx, ictx->snap_name.c_str());
 
     if (watch) {
       r = ictx->register_watch();
