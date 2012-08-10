@@ -184,6 +184,16 @@ struct RGWPoolIterCtx {
 
 struct RGWRadosParams {
   rgw_bucket domain_root;
+  rgw_bucket control_pool;
+  rgw_bucket gc_pool;
+  rgw_bucket log_pool;
+  rgw_bucket intent_log_pool;
+  rgw_bucket usage_log_pool;
+
+  rgw_bucket user_keys_pool;
+  rgw_bucket user_email_pool;
+  rgw_bucket user_swift_pool;
+  rgw_bucket user_uid_pool;
 
   void init_default();
 };

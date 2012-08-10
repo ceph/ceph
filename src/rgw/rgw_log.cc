@@ -8,8 +8,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
-
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
   const char *p = s->env->get(name);
@@ -265,13 +263,13 @@ int rgw_log_op(RGWRados *store, struct req_state *s)
   string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				      s->bucket.bucket_id, entry.bucket.c_str());
 
-  rgw_obj obj(log_bucket, oid);
+  rgw_obj obj(store->params.log_pool, oid);
 
   int ret = store->append_async(obj, bl.length(), bl);
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
-    ret = store->create_bucket(id, log_bucket, attrs, true);
+    ret = store->create_bucket(id, store->params.log_pool, attrs, true);
     if (ret < 0)
       goto done;
     // retry
@@ -286,7 +284,7 @@ done:
 
 int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc)
 {
-  rgw_bucket intent_log_bucket(RGW_INTENT_LOG_POOL_NAME);
+  rgw_bucket intent_log_bucket(store->params.intent_log_pool);
 
   rgw_intent_log_entry entry;
   entry.obj = obj;

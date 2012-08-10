@@ -37,8 +37,6 @@ namespace ceph {
 using ceph::crypto::MD5;
 
 
-#define RGW_CONTROL_BUCKET ".rgw.control"
-
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
