@@ -648,6 +648,15 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
+class StoreRef {
+  RGWRados *s;
+public:
+  StoreRef(RGWRados *_s) : s(_s) {}
+  ~StoreRef() {
+    RGWStoreManager::close_storage(s);
+  }
+};
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -841,12 +850,13 @@ int main(int argc, char **argv)
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
                     opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
 
-  RGWStoreManager store_manager;
-  store = store_manager.init(g_ceph_context, false);
+  store = RGWStoreManager::get_storage(g_ceph_context, false);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
   }
+
+  StoreRef s(store);
 
   if (opt_cmd != OPT_USER_CREATE && 
       opt_cmd != OPT_LOG_SHOW && opt_cmd != OPT_LOG_LIST && opt_cmd != OPT_LOG_RM && 
@@ -1192,11 +1202,11 @@ int main(int argc, char **argv)
         aclbl.clear();
         policy.encode(aclbl);
 
-        r = rgwstore->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
+        r = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
         if (r < 0)
           return r;
 
-        r = rgw_add_bucket(info.user_id, bucket);
+        r = rgw_add_bucket(store, info.user_id, bucket);
         if (r < 0)
           return r;
       }
@@ -1636,7 +1646,7 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
-    int ret = remove_object(bucket, object);
+    int ret = remove_object(store, bucket, object);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -1662,7 +1672,7 @@ next:
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      ret = rgwstore->list_gc_objs(&index, marker, 1000, result, &truncated);
+      ret = store->list_gc_objs(&index, marker, 1000, result, &truncated);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;
@@ -1694,7 +1704,7 @@ next:
   }
 
   if (opt_cmd == OPT_GC_PROCESS) {
-    int ret = rgwstore->process_gc();
+    int ret = store->process_gc();
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;

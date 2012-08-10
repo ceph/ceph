@@ -36,9 +36,6 @@ using namespace std;
 static RGWCache<RGWRados> cached_rados_provider;
 static RGWRados rados_provider;
 
-RGWRados* RGWRados::store;
-
-
 static string notify_oid_prefix = "notify";
 static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
@@ -106,32 +103,6 @@ void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
     objs_state[new_obj].prefetch_data = true;
   }
 }
-
-RGWRados *RGWRados::init_storage_provider(CephContext *cct, bool use_gc_thread)
-{
-  int use_cache = cct->_conf->rgw_cache_enabled;
-  store = NULL;
-  if (!use_cache) {
-    store = &rados_provider;
-  } else {
-    store = &cached_rados_provider;
-  }
-
-  if (store->initialize(cct, use_gc_thread) < 0)
-    store = NULL;
-
-  return store;
-}
-
-void RGWRados::close_storage()
-{
-  if (!store)
-    return;
-
-  store->finalize();
-  store = NULL;
-}
-
 
 void RGWRados::finalize()
 {
@@ -3225,3 +3196,32 @@ uint64_t RGWRados::next_bucket_id()
   Mutex::Locker l(bucket_id_lock);
   return ++max_bucket_id;
 }
+
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread)
+{
+  int use_cache = cct->_conf->rgw_cache_enabled;
+  RGWRados *store = NULL;
+  if (!use_cache) {
+    store = new RGWRados;
+  } else {
+    store = new RGWCache<RGWRados>; 
+  }
+
+  if (store->initialize(cct, use_gc_thread) < 0) {
+    delete store;
+    return NULL;
+  }
+
+  return store;
+}
+
+void RGWStoreManager::close_storage(RGWRados *store)
+{
+  if (!store)
+    return;
+
+  store->finalize();
+
+  delete store;
+}
+
