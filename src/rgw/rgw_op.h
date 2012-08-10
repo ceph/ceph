@@ -684,8 +684,8 @@ protected:
 public:
   RGWDeleteMultiObj() {}
 
-  virtual void init(struct req_state *s, RGWHandler *h) {
-    RGWOp::init(s, h);
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
     ret = 0;
     max_to_delete = 1000;
     len = 0;

@@ -183,7 +183,7 @@ int RGWGC::process(int index, int max_secs)
             delete ctx;
             ctx = new IoCtx;
           }
-	  ret = rgwstore->rados->ioctx_create(obj.pool.c_str(), *ctx);
+	  ret = store->rados->ioctx_create(obj.pool.c_str(), *ctx);
 	  if (ret < 0) {
 	    dout(0) << "ERROR: failed to create ioctx pool=" << obj.pool << dendl;
 	    continue;
