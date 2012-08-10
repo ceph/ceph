@@ -363,7 +363,7 @@ void RGWGetObj::execute()
 
     if (ofs <= end) {
       if (start_time > gc_invalidate_time) {
-	int r = rgwstore->defer_gc(s->obj_ctx, obj);
+	int r = store->defer_gc(s->obj_ctx, obj);
 	if (r < 0) {
 	  dout(0) << "WARNING: could not defer gc entry for obj" << dendl;
 	}
@@ -1812,8 +1812,8 @@ void RGWDeleteMultiObj::execute()
         ++iter, num_processed++) {
 
     rgw_obj obj(bucket,(*iter));
-    rgwstore->set_atomic(s->obj_ctx, obj);
-    ret = rgwstore->delete_obj(s->obj_ctx, obj);
+    store->set_atomic(s->obj_ctx, obj);
+    ret = store->delete_obj(s->obj_ctx, obj);
     result = make_pair(*iter, ret);
 
     send_partial_response(result);

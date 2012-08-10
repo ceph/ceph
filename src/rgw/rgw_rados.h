@@ -314,10 +314,6 @@ public:
   virtual int initialize();
   virtual void finalize();
 
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
-  static void close_storage();
-  static RGWRados *store;
-
   /** set up a bucket listing. handle is filled in. */
   virtual int list_buckets_init(RGWAccessHandle *handle);
   /** 
@@ -661,18 +657,15 @@ public:
 };
 
 class RGWStoreManager {
-  RGWRados *store;
 public:
-  RGWStoreManager(): store(NULL) {}
-  ~RGWStoreManager() {
-    if (store) {
-      RGWRados::close_storage();
-    }
-  }
-  RGWRados *init(CephContext *cct, bool use_gc_thread) {
-    store = RGWRados::init_storage_provider(cct, use_gc_thread);
+  RGWStoreManager() {}
+  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread) {
+    RGWRados *store = init_storage_provider(cct, use_gc_thread);
     return store;
   }
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
+  static void close_storage(RGWRados *store);
+
 };
 
 

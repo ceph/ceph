@@ -418,10 +418,9 @@ int main(int argc, const char **argv)
 
   sighandler_term = signal(SIGTERM, godown_alarm);
   
-  RGWStoreManager store_manager;
 
   int r = 0;
-  RGWRados *store = store_manager.init(g_ceph_context, true);
+  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context, true);
   if (!store) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     r = EIO;
@@ -447,6 +446,8 @@ int main(int argc, const char **argv)
   rgw_perf_stop(g_ceph_context);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
+
+  RGWStoreManager::close_storage(store);
 
   return 0;
 }
