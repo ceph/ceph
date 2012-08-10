@@ -19,8 +19,6 @@ static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_POOL_NAME);
 static rgw_bucket ui_swift_bucket(USER_INFO_SWIFT_POOL_NAME);
 static rgw_bucket ui_uid_bucket(USER_INFO_UID_POOL_NAME);
 
-rgw_bucket rgw_root_bucket(RGW_ROOT_BUCKET);
-
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */

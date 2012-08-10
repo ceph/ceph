@@ -575,7 +575,7 @@ static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, s
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
 {
   int ret = -EINVAL;
-  RGWRadosCtx *rctx = new RGWRadosCtx();
+  RGWRadosCtx *rctx = new RGWRadosCtx(store);
   rgw_obj obj(bucket,object);
 
   ret = store->delete_obj(rctx, obj);
@@ -594,7 +594,6 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children)
   RGWBucketInfo info;
   bufferlist bl;
 
-  static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
   ret = store->get_bucket_stats(bucket, stats);
   if (ret < 0)
     return ret;
@@ -602,7 +601,7 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children)
   obj.bucket = bucket;
   int max = 1000;
 
-  ret = rgw_get_obj(store, NULL, pi_buckets_rados, bucket.name, bl, NULL);
+  ret = rgw_get_obj(store, NULL, store->params.domain_root, bucket.name, bl, NULL);
 
   bufferlist::iterator iter = bl.begin();
   try {
