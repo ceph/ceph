@@ -6,10 +6,6 @@
 
 class RGWRados;
 
-#define RGW_LOG_POOL_NAME ".log"
-#define RGW_INTENT_LOG_POOL_NAME ".intent-log"
-#define RGW_USAGE_LOG_POOL_NAME ".usage"
-
 struct rgw_log_entry {
   string object_owner;
   string bucket_owner;
