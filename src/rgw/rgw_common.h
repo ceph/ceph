@@ -37,10 +37,6 @@ namespace ceph {
 using ceph::crypto::MD5;
 
 
-#define RGW_ROOT_BUCKET ".rgw"
-
-#define RGW_GC_BUCKET ".rgw.gc"
-
 #define RGW_CONTROL_BUCKET ".rgw.control"
 
 #define RGW_ATTR_PREFIX  "user.rgw."
@@ -496,8 +492,6 @@ inline ostream& operator<<(ostream& out, const rgw_bucket b) {
     out << "(@" << b.pool << "[" << b.marker << "])";
   return out;
 }
-
-extern rgw_bucket rgw_root_bucket;
 
 enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
