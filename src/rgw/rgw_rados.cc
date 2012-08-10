@@ -46,8 +46,6 @@ static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
 static string avail_pools = ".pools.avail";
 
-static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
-
 
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
@@ -56,6 +54,11 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 
 #define dout_subsys ceph_subsys_rgw
+
+void RGWRadosParams::init_default()
+{
+  domain_root = ".rgw";
+}
 
 
 class RGWWatcher : public librados::WatchCtx {
@@ -67,6 +70,33 @@ public:
     rados->watch_cb(opcode, ver, bl);
   }
 };
+
+RGWObjState *RGWRadosCtx::get_state(rgw_obj& obj) {
+  if (obj.object.size()) {
+    return &objs_state[obj];
+  } else {
+    rgw_obj new_obj(store->params.domain_root, obj.bucket.name);
+    return &objs_state[new_obj];
+  }
+}
+
+void RGWRadosCtx::set_atomic(rgw_obj& obj) {
+  if (obj.object.size()) {
+    objs_state[obj].is_atomic = true;
+  } else {
+    rgw_obj new_obj(store->params.domain_root, obj.bucket.name);
+    objs_state[new_obj].is_atomic = true;
+  }
+}
+
+void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
+  if (obj.object.size()) {
+    objs_state[obj].prefetch_data = true;
+  } else {
+    rgw_obj new_obj(store->params.domain_root, obj.bucket.name);
+    objs_state[new_obj].prefetch_data = true;
+  }
+}
 
 RGWRados *RGWRados::init_storage_provider(CephContext *cct, bool use_gc_thread)
 {
@@ -120,6 +150,8 @@ int RGWRados::initialize()
   if (ret < 0)
    return ret;
 
+  params.init_default();
+
   ret = open_root_pool_ctx();
   if (ret < 0)
     return ret;
@@ -161,15 +193,17 @@ void RGWRados::finalize_watch()
  */
 int RGWRados::open_root_pool_ctx()
 {
-  int r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
+  const string& pool = params.domain_root.name;
+  const char *pool_str = pool.c_str();
+  int r = rados->ioctx_create(pool_str, root_pool_ctx);
   if (r == -ENOENT) {
-    r = rados->pool_create(RGW_ROOT_BUCKET);
+    r = rados->pool_create(pool_str);
     if (r == -EEXIST)
       r = 0;
     if (r < 0)
       return r;
 
-    r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
+    r = rados->ioctx_create(pool_str, root_pool_ctx);
   }
 
   return r;
@@ -692,8 +726,10 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     uint32_t nop = 0;
     ::encode(nop, bl);
 
+    const string& pool = params.domain_root.name;
+    const char *pool_str = pool.c_str();
     librados::IoCtx id_io_ctx;
-    r = rados->ioctx_create(RGW_ROOT_BUCKET, id_io_ctx);
+    r = rados->ioctx_create(pool_str, id_io_ctx);
     if (r < 0)
       return r;
 
@@ -729,7 +765,7 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
   bufferlist bl;
   ::encode(info, bl);
 
-  int ret = rgw_put_obj(this, info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_obj(this, info.owner, params.domain_root, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
   if (ret < 0)
     return ret;
 
@@ -745,9 +781,9 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
   string pool_name;
   bool write_map = false;
 
-  rgw_obj obj(pi_buckets_rados, avail_pools);
+  rgw_obj obj(params.domain_root, avail_pools);
 
-  int ret = rgw_get_obj(this, NULL, pi_buckets_rados, avail_pools, map_bl);
+  int ret = rgw_get_obj(this, NULL, params.domain_root, avail_pools, map_bl);
   if (ret < 0) {
     goto read_omap;
   }
@@ -819,7 +855,7 @@ int RGWRados::update_placement_map()
 {
   bufferlist header;
   map<string, bufferlist> m;
-  rgw_obj obj(pi_buckets_rados, avail_pools);
+  rgw_obj obj(params.domain_root, avail_pools);
   int ret = omap_get_all(obj, header, m);
   if (ret < 0)
     return ret;
@@ -840,7 +876,7 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
   if (ret < 0) // DNE, or something
     return ret;
 
-  rgw_obj obj(pi_buckets_rados, avail_pools);
+  rgw_obj obj(params.domain_root, avail_pools);
   bufferlist empty_bl;
   ret = omap_set(obj, new_pool, empty_bl);
 
@@ -852,7 +888,7 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
 
 int RGWRados::remove_bucket_placement(std::string& old_pool)
 {
-  rgw_obj obj(pi_buckets_rados, avail_pools);
+  rgw_obj obj(params.domain_root, avail_pools);
   int ret = omap_del(obj, old_pool);
 
   // don't care about return value
@@ -867,7 +903,7 @@ int RGWRados::list_placement_set(set<string>& names)
   map<string, bufferlist> m;
   string pool_name;
 
-  rgw_obj obj(pi_buckets_rados, avail_pools);
+  rgw_obj obj(params.domain_root, avail_pools);
   int ret = omap_get_all(obj, header, m);
   if (ret < 0)
     return ret;
@@ -1260,7 +1296,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
     }
   } while (is_truncated);
 
-  rgw_obj obj(rgw_root_bucket, bucket.name);
+  rgw_obj obj(params.domain_root, bucket.name);
   r = delete_obj(NULL, obj, true);
   if (r < 0)
     return r;
@@ -1577,7 +1613,7 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket.name;
-    actual_bucket = rgw_root_bucket;
+    actual_bucket = params.domain_root;
   }
 
   int r = open_bucket_ctx(actual_bucket, io_ctx);
@@ -1757,7 +1793,7 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket.name;
-    actual_bucket = rgw_root_bucket;
+    actual_bucket = params.domain_root;
   }
 
   int r = open_bucket_ctx(actual_bucket, io_ctx);
@@ -1807,7 +1843,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket.name;
-    actual_bucket = rgw_root_bucket;
+    actual_bucket = params.domain_root;
   }
 
   int r = open_bucket_ctx(actual_bucket, io_ctx);
@@ -1925,7 +1961,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   state->io_ctx.locator_set_key(key);
 
   if (!rctx) {
-    new_ctx = new RGWRadosCtx();
+    new_ctx = new RGWRadosCtx(this);
     rctx = new_ctx;
   }
 
@@ -2253,7 +2289,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
   if (!rctx) {
-    new_ctx = new RGWRadosCtx();
+    new_ctx = new RGWRadosCtx(this);
     rctx = new_ctx;
   }
 
@@ -2441,7 +2477,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 {
   bufferlist bl;
 
-  int ret = rgw_get_obj(this, ctx, pi_buckets_rados, bucket_name, bl, pattrs);
+  int ret = rgw_get_obj(this, ctx, params.domain_root, bucket_name, bl, pattrs);
   if (ret < 0) {
     if (ret != -ENOENT)
       return ret;
@@ -2472,7 +2508,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   string unused;
 
-  int ret = rgw_put_obj(this, unused, pi_buckets_rados, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_obj(this, unused, params.domain_root, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
 
   return ret;
 }
