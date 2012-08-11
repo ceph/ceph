@@ -25,11 +25,11 @@ class SimpleMessenger;
  * and listens for incoming connections.
  */
 class Accepter : public Thread {
-public:
   SimpleMessenger *msgr;
   bool done;
   int listen_sd;
 
+public:
   Accepter(SimpleMessenger *r) : msgr(r), done(false), listen_sd(-1) {}
     
   void *entry();
