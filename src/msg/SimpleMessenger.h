@@ -482,10 +482,6 @@ public:
   bool get_need_addr() const { return need_addr; }
   void set_need_addr(bool b) { need_addr = b; }
 
-  uint64_t get_nonce() const {
-    return nonce;
-  }
-
 private:
   /**
    *  false; set to true if the SimpleMessenger bound to a specific address;

@@ -285,7 +285,7 @@ int SimpleMessenger::start()
   lock.Unlock();
 
   if (did_bind)
-    accepter.start();
+    accepter.start(nonce);
 
   reaper_started = true;
   reaper_thread.create();

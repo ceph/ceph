@@ -28,6 +28,7 @@ class Accepter : public Thread {
   SimpleMessenger *msgr;
   bool done;
   int listen_sd;
+  uint64_t nonce;
 
 public:
   Accepter(SimpleMessenger *r) : msgr(r), done(false), listen_sd(-1) {}
@@ -36,7 +37,7 @@ public:
   void stop();
   int bind(entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
   int rebind(int avoid_port);
-  int start();
+  int start(uint64_t nonce);
 };
 
 
