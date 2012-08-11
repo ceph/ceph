@@ -649,6 +649,13 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   lock.Unlock();
 }
 
+void SimpleMessenger::unlearn_addr()
+{
+  lock.Lock();
+  need_addr = true;
+  lock.Unlock();
+}
+
 void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
