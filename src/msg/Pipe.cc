@@ -179,8 +179,7 @@ int Pipe::accept()
   
   // identify peer
   char banner[strlen(CEPH_BANNER)+1];
-  rc = tcp_read(banner, strlen(CEPH_BANNER));
-  if (rc < 0) {
+  if (tcp_read(banner, strlen(CEPH_BANNER)) < 0) {
     ldout(msgr->cct,10) << "accept couldn't read banner" << dendl;
     state = STATE_CLOSED;
     return -1;
@@ -196,8 +195,7 @@ int Pipe::accept()
     bufferptr tp(sizeof(peer_addr));
     addrbl.push_back(tp);
   }
-  rc = tcp_read(addrbl.c_str(), addrbl.length());
-  if (rc < 0) {
+  if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
     ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
     state = STATE_CLOSED;
     return -1;
@@ -232,8 +230,7 @@ int Pipe::accept()
   int reply_tag = 0;
   uint64_t existing_seq = -1;
   while (1) {
-    rc = tcp_read((char*)&connect, sizeof(connect));
-    if (rc < 0) {
+    if (tcp_read((char*)&connect, sizeof(connect)) < 0) {
       ldout(msgr->cct,10) << "accept couldn't read connect" << dendl;
       goto fail_unlocked;
     }
@@ -632,8 +629,7 @@ int Pipe::connect()
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
-  rc = tcp_read((char*)&banner, strlen(CEPH_BANNER));
-  if (rc < 0) {
+  if (tcp_read((char*)&banner, strlen(CEPH_BANNER)) < 0) {
     ldout(msgr->cct,2) << "connect couldn't read banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
@@ -658,8 +654,7 @@ int Pipe::connect()
     bufferptr p(sizeof(paddr) * 2);
     addrbl.push_back(p);
   }
-  rc = tcp_read(addrbl.c_str(), addrbl.length());
-  if (rc < 0) {
+  if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
     ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
@@ -1104,8 +1099,7 @@ void Pipe::reader()
     char buf[80];
     char tag = -1;
     ldout(msgr->cct,20) << "reader reading tag..." << dendl;
-    int rc = tcp_read((char*)&tag, 1);
-    if (rc < 0) {
+    if (tcp_read((char*)&tag, 1) < 0) {
       pipe_lock.Lock();
       ldout(msgr->cct,2) << "reader couldn't read tag, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       fault(false, true);

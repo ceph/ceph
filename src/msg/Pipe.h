@@ -243,7 +243,7 @@ class DispatchQueue;
      *
      * @param buf buffer to read into
      * @param len exact number of bytes to read
-     * @return negative error code, or the number of bytes (always == len) read.
+     * @return 0 for success, or -1 on error
      */
     int tcp_read(char *buf, int len);
 
