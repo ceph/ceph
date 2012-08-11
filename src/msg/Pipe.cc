@@ -685,8 +685,7 @@ int Pipe::connect()
 
   ldout(msgr->cct,20) << "connect peer addr for me is " << peer_addr_for_me << dendl;
 
-  if (msgr->need_addr)
-    msgr->learned_addr(peer_addr_for_me);
+  msgr->learned_addr(peer_addr_for_me);
 
   ::encode(msgr->my_inst.addr, myaddrbl);
 

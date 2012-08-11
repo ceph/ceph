@@ -630,6 +630,13 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   // be careful here: multiple threads may block here, and readers of
   // my_inst.addr do NOT hold any lock.
+
+  // this always goes from true -> false under the protection of the
+  // mutex.  if it is already false, we need not retake the mutex at
+  // all.
+  if (!need_addr)
+    return;
+
   lock.Lock();
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
