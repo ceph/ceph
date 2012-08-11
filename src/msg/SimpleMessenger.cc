@@ -25,7 +25,7 @@
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, msgr)
+#define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
   return *_dout << "-- " << msgr->get_myaddr() << " ";
 }
@@ -49,8 +49,7 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
-    local_connection(new Connection),
-    msgr(this)
+    local_connection(new Connection)
 {
   pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
   init_local_connection();
@@ -184,8 +183,8 @@ void SimpleMessenger::dispatch_throttle_release(uint64_t msize)
 {
   if (msize) {
     ldout(cct,10) << "dispatch_throttle_release " << msize << " to dispatch throttler "
-	    << msgr->dispatch_throttler.get_current() << "/"
-	    << msgr->dispatch_throttler.get_max() << dendl;
+	    << dispatch_throttler.get_current() << "/"
+	    << dispatch_throttler.get_max() << dendl;
     dispatch_throttler.put(msize);
   }
 }
@@ -257,7 +256,7 @@ int SimpleMessenger::bind(entity_addr_t bind_addr)
   // bind to a socket
   int r = accepter.bind(bind_addr);
   if (r >= 0)
-    msgr->did_bind = true;
+    did_bind = true;
   return r;
 }
 
@@ -301,7 +300,7 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
   p->pipe_lock.Lock();
   p->start_reader();
   p->pipe_lock.Unlock();
-  msgr->pipes.insert(p);
+  pipes.insert(p);
   lock.Unlock();
   return p;
 }
@@ -645,6 +644,6 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 void SimpleMessenger::init_local_connection()
 {
-  local_connection->peer_addr = msgr->my_inst.addr;
-  local_connection->peer_type = msgr->my_type;
+  local_connection->peer_addr = my_inst.addr;
+  local_connection->peer_type = my_type;
 }
