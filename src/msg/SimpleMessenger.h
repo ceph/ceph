@@ -529,8 +529,6 @@ public:
   /// con used for sending messages to ourselves
   Connection *local_connection;
 
-  SimpleMessenger *msgr; //hack to make dout macro work, will fix
-
   /**
    * @defgroup SimpleMessenger internals
    * @{
