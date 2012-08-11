@@ -287,7 +287,7 @@ namespace librbd {
     assert(snap_lock.is_locked());
     assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
-      return parent_md.pool_id;
+      return parent_md.spec.pool_id;
     }
     string in_snap_name;
     int r = get_snap_name(in_snap_id, &in_snap_name);
@@ -296,7 +296,7 @@ namespace librbd {
     map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return -1;
-    return p->second.parent.pool_id;
+    return p->second.parent.spec.pool_id;
   }
 
   string ImageCtx::get_parent_image_id(snap_t in_snap_id) const
@@ -304,7 +304,7 @@ namespace librbd {
     assert(snap_lock.is_locked());
     assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
-      return parent_md.image_id;
+      return parent_md.spec.image_id;
     }
     string in_snap_name;
     int r = get_snap_name(in_snap_id, &in_snap_name);
@@ -313,7 +313,7 @@ namespace librbd {
     map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return "";
-    return p->second.parent.image_id;
+    return p->second.parent.spec.image_id;
   }
 
   uint64_t ImageCtx::get_parent_snap_id(snap_t in_snap_id) const
@@ -321,7 +321,7 @@ namespace librbd {
     assert(snap_lock.is_locked());
     assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
-      return parent_md.snap_id;
+      return parent_md.spec.snap_id;
     }
     string in_snap_name;
     int r = get_snap_name(in_snap_id, &in_snap_name);
@@ -330,7 +330,7 @@ namespace librbd {
     map<string, SnapInfo>::const_iterator p = snaps_by_name.find(in_snap_name);
     if (p == snaps_by_name.end())
       return CEPH_NOSNAP;
-    return p->second.parent.snap_id;
+    return p->second.parent.spec.snap_id;
   }
 
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const

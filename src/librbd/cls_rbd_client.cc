@@ -91,9 +91,9 @@ namespace librbd {
 	::decode(*lockers, iter);
 	::decode(*exclusive_lock, iter);
 	// get_parent
-	::decode(parent->pool_id, iter);
-	::decode(parent->image_id, iter);
-	::decode(parent->snap_id, iter);
+	::decode(parent->spec.pool_id, iter);
+	::decode(parent->spec.image_id, iter);
+	::decode(parent->spec.snap_id, iter);
 	::decode(parent->overlap, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -184,8 +184,7 @@ namespace librbd {
     }
 
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   snapid_t snap_id, int64_t *parent_pool,
-		   string *parent_image, snapid_t *parent_snap_id,
+		   snapid_t snap_id, parent_spec *pspec, 
 		   uint64_t *parent_overlap)
     {
       bufferlist inbl, outbl;
@@ -197,9 +196,9 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = outbl.begin();
-	::decode(*parent_pool, iter);
-	::decode(*parent_image, iter);
-	::decode(*parent_snap_id, iter);
+	::decode(pspec->pool_id, iter);
+	::decode(pspec->image_id, iter);
+	::decode(pspec->snap_id, iter);
 	::decode(*parent_overlap, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -209,13 +208,12 @@ namespace librbd {
     }
 
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   int64_t parent_pool, const string& parent_image,
-		   snapid_t parent_snap_id, uint64_t parent_overlap)
+		   parent_spec pspec, uint64_t parent_overlap)
     {
       bufferlist inbl, outbl;
-      ::encode(parent_pool, inbl);
-      ::encode(parent_image, inbl);
-      ::encode(parent_snap_id, inbl);
+      ::encode(pspec.pool_id, inbl);
+      ::encode(pspec.image_id, inbl);
+      ::encode(pspec.snap_id, inbl);
       ::encode(parent_overlap, inbl);
 
       return ioctx->exec(oid, "rbd", "set_parent", inbl, outbl);
@@ -228,39 +226,36 @@ namespace librbd {
     }
 
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
-		  uint64_t p_poolid, const std::string &p_imageid,
-		  snapid_t p_snapid, const std::string &c_imageid)
+		  parent_spec pspec, const std::string &c_imageid)
     {
       bufferlist in, out;
-      ::encode(p_poolid, in);
-      ::encode(p_imageid, in);
-      ::encode(p_snapid, in);
+      ::encode(pspec.pool_id, in);
+      ::encode(pspec.image_id, in);
+      ::encode(pspec.snap_id, in);
       ::encode(c_imageid, in);
 
       return ioctx->exec(oid, "rbd", "add_child", in, out);
     }
 
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t p_poolid, const std::string &p_imageid,
-		     snapid_t p_snapid, const std::string &c_imageid)
+		     parent_spec pspec, const std::string &c_imageid)
     {
       bufferlist in, out;
-      ::encode(p_poolid, in);
-      ::encode(p_imageid, in);
-      ::encode(p_snapid, in);
+      ::encode(pspec.pool_id, in);
+      ::encode(pspec.image_id, in);
+      ::encode(pspec.snap_id, in);
       ::encode(c_imageid, in);
 
       return ioctx->exec(oid, "rbd", "remove_child", in, out);
     }
 
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t p_poolid, const std::string &p_imageid,
-		     snapid_t p_snapid, set<string>& children)
+		     parent_spec pspec, set<string>& children)
     {
       bufferlist in, out;
-      ::encode(p_poolid, in);
-      ::encode(p_imageid, in);
-      ::encode(p_snapid, in);
+      ::encode(pspec.pool_id, in);
+      ::encode(pspec.image_id, in);
+      ::encode(pspec.snap_id, in);
 
       int r = ioctx->exec(oid, "rbd", "get_children", in, out);
       if (r < 0)
@@ -365,9 +360,9 @@ namespace librbd {
 	  ::decode((*features)[i], iter);
 	  ::decode(incompat_features, iter);
 	  // get_parent
-	  ::decode((*parents)[i].pool_id, iter);
-	  ::decode((*parents)[i].image_id, iter);
-	  ::decode((*parents)[i].snap_id, iter);
+	  ::decode((*parents)[i].spec.pool_id, iter);
+	  ::decode((*parents)[i].spec.image_id, iter);
+	  ::decode((*parents)[i].spec.snap_id, iter);
 	  ::decode((*parents)[i].overlap, iter);
 	}
       } catch (const buffer::error &err) {

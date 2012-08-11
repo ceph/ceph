@@ -14,13 +14,27 @@
 
 namespace librbd {
   namespace cls_client {
-
-    struct parent_info {
+    struct parent_spec {
       int64_t pool_id;
       string image_id;
       snapid_t snap_id;
+      parent_spec() : pool_id(-1), snap_id(CEPH_NOSNAP) {}
+      parent_spec(uint64_t pool_id, string image_id, snapid_t snap_id) :
+	pool_id(pool_id), image_id(image_id), snap_id(snap_id) {}
+      bool operator==(const parent_spec &other) {
+	return ((this->pool_id == other.pool_id) &&
+		(this->image_id == other.image_id) &&
+		(this->snap_id == other.snap_id));
+      }
+      bool operator!=(const parent_spec &other) {
+	return !(*this == other);
+      }
+    };
+
+    struct parent_info {
+      struct parent_spec spec;
       uint64_t overlap;
-      parent_info() : pool_id(-1), snap_id(CEPH_NOSNAP), overlap(0) {}
+      parent_info() : overlap(0) {}
     };
 
     // high-level interface to the header
@@ -49,22 +63,17 @@ namespace librbd {
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   snapid_t snap_id, int64_t *parent_pool,
-		   std::string *parent_image, snapid_t *parent_snap_id,
+		   snapid_t snap_id, parent_spec *pspec,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   int64_t parent_pool, const std::string& parent_image,
-		   snapid_t parent_snap_id, uint64_t parent_overlap);
+		   parent_spec pspec, uint64_t parent_overlap);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
-		  uint64_t p_poolid, const std::string &p_imageid,
-		  snapid_t p_snapid, const std::string &c_imageid);
+		  parent_spec pspec, const std::string &c_imageid);
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t p_poolid, const std::string &p_imageid,
-		     snapid_t p_snapid, const std::string &c_imageid);
+		     parent_spec pspec, const std::string &c_imageid);
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
-		     uint64_t p_poolid, const std::string &p_imageid,
-		     snapid_t p_snapid, set<string>& children);
+		     parent_spec pspec, set<string>& children);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,

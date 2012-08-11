@@ -428,17 +428,15 @@ namespace librbd {
     // that could be because the parent was flattened before the snapshots
     // were removed.  In any case, this is now the time we should
     // remove the child from the child list.
-    if (ictx->snaps.size() == 1 && (ictx->parent_md.pool_id == -1)) {
+    if (ictx->snaps.size() == 1 && (ictx->parent_md.spec.pool_id == -1)) {
       SnapInfo *snapinfo;
       Mutex::Locker l(ictx->snap_lock);
       r = ictx->get_snapinfo(snap_id, &snapinfo);
       if (r < 0)
 	return r;
-      if (snapinfo->parent.pool_id != -1) {
+      if (snapinfo->parent.spec.pool_id != -1) {
 	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-				     snapinfo->parent.pool_id,
-				     snapinfo->parent.image_id,
-				     snapinfo->parent.snap_id, ictx->id);
+				     snapinfo->parent.spec, ictx->id);
 	if (r < 0)
 	  return r;
       }
@@ -622,6 +620,9 @@ namespace librbd {
       order = p_imctx->order;
     }
 
+    cls_client::parent_spec pspec(p_ioctx.get_id(), p_imctx->id,
+				  p_imctx->snap_id);
+
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
@@ -631,9 +632,6 @@ namespace librbd {
       goto err_close_parent;
     }
 
-    int64_t p_poolid;
-    p_poolid = p_ioctx.get_id();
-
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx);
     r = open_image(c_imctx, true);
     if (r < 0) {
@@ -641,15 +639,13 @@ namespace librbd {
       goto err_remove;
     }
 
-    r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, p_poolid,
-			       p_imctx->id, p_imctx->snap_id, size);
+    r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, pspec, size);
     if (r < 0) {
       lderr(cct) << "couldn't set parent: " << r << dendl;
       goto err_close_child;
     }
 
-    r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, p_poolid, p_imctx->id,
-			      p_imctx->snap_id, c_imctx->id);
+    r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, pspec, c_imctx->id);
     if (r < 0) {
       lderr(cct) << "couldn't add child: " << r << dendl;
       goto err_close_child;
@@ -915,12 +911,13 @@ namespace librbd {
 	return r;
       }
       parent_info = &(snapinfo->parent);
-      if (parent_info->pool_id == -1)
+      if (parent_info->spec.pool_id == -1)
 	return 0;
     }
     if (parent_pool_name) {
       Rados rados(ictx->md_ctx);
-      r = rados.pool_reverse_lookup(parent_info->pool_id, parent_pool_name);
+      r = rados.pool_reverse_lookup(parent_info->spec.pool_id,
+				    parent_pool_name);
       if (r < 0) {
 	lderr(ictx->cct) << "error looking up pool name" << cpp_strerror(r)
 			 << dendl;
@@ -929,7 +926,8 @@ namespace librbd {
 
     if (parent_snap_name) {
       Mutex::Locker l(ictx->parent->snap_lock);
-      r = ictx->parent->get_snap_name(parent_info->snap_id, parent_snap_name);
+      r = ictx->parent->get_snap_name(parent_info->spec.snap_id,
+				      parent_snap_name);
       if (r < 0) {
 	lderr(ictx->cct) << "error finding parent snap name: "
 			 << cpp_strerror(r) << dendl;
@@ -939,7 +937,7 @@ namespace librbd {
 
     if (parent_name) {
       r = cls_client::dir_get_name(&ictx->parent->md_ctx, RBD_DIRECTORY,
-				   parent_info->image_id, parent_name);
+				   parent_info->spec.image_id, parent_name);
       if (r < 0) {
 	lderr(ictx->cct) << "error getting parent image name: "
 			 << cpp_strerror(r) << dendl;
@@ -982,12 +980,10 @@ namespace librbd {
       ictx->parent_lock.Unlock();
       close_image(ictx);
 
-      if (parent_info.pool_id != -1) {
+      if (parent_info.spec.pool_id != -1) {
 	ldout(cct, 2) << "removing child from children list..." << dendl;
 	int r = cls_client::remove_child(&io_ctx, RBD_CHILDREN,
-					 parent_info.pool_id,
-					 parent_info.image_id,
-					 parent_info.snap_id, id);
+					 parent_info.spec, id);
 	if (r < 0) {
 	  lderr(cct) << "error removing child from children list" << dendl;
 	  return r;
@@ -1627,7 +1623,7 @@ namespace librbd {
     Mutex::Locker l2(ictx->snap_lock);
     Mutex::Locker l3(ictx->parent_lock);
     // can't flatten a non-clone
-    if (ictx->parent_md.pool_id == -1) {
+    if (ictx->parent_md.spec.pool_id == -1) {
       lderr(ictx->cct) << "image has no parent" << dendl;
       return -EINVAL;
     }
@@ -1675,9 +1671,7 @@ namespace librbd {
     if (ictx->snaps.empty()) {
       ldout(ictx->cct, 2) << "removing child from children list..." << dendl;
       int r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-				       ictx->parent_md.pool_id,
-				       ictx->parent_md.image_id,
-				       ictx->parent_md.snap_id, ictx->id);
+				       ictx->parent_md.spec, ictx->id);
       if (r < 0) {
 	lderr(ictx->cct) << "error removing child from children list" << dendl;
 	return r;
