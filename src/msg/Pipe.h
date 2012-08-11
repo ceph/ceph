@@ -238,9 +238,41 @@ class DispatchQueue;
         ::shutdown(sd, SHUT_RDWR);
     }
 
+    /**
+     * do a blocking read of len bytes from socket
+     *
+     * @param buf buffer to read into
+     * @param len exact number of bytes to read
+     * @return negative error code, or the number of bytes (always == len) read.
+     */
     int tcp_read(char *buf, int len);
+
+    /**
+     * wait for bytes to become available on the socket
+     *
+     * @return 0 for success, or -1 on error
+     */
     int tcp_read_wait();
+
+    /**
+     * non-blocking read of available bytes on socket
+     *
+     * This is expected to be used after tcp_read_wait(), and will return
+     * an error if there is no data on the socket to consume.
+     *
+     * @param buf buffer to read into
+     * @param len maximum number of bytes to read
+     * @return bytes read, or -1 on error or when there is no data
+     */
     int tcp_read_nonblocking(char *buf, int len);
+
+    /**
+     * blocking write of bytes to socket
+     *
+     * @param buf buffer
+     * @param len number of bytes to write
+     * @return 0 for success, or -1 on error
+     */
     int tcp_write(const char *buf, int len);
 
   };
