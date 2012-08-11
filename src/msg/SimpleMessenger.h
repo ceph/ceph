@@ -480,7 +480,6 @@ private:
 
 public:
   bool get_need_addr() const { return need_addr; }
-  void set_need_addr(bool b) { need_addr = b; }
 
 private:
   /**
@@ -574,6 +573,13 @@ public:
    * probably shouldn't be called by anybody else.
    */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
+
+  /**
+   * Tell the SimpleMessenger its address is no longer known
+   *
+   * This happens when we rebind to a new port.
+   */
+  void unlearn_addr();
 
   /**
    * Get the Policy associated with a type of peer.
