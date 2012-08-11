@@ -934,7 +934,7 @@ void Pipe::requeue_sent(uint64_t max_acked)
  * Tears down the Pipe's message queues, and removes them from the DispatchQueue
  * Must hold pipe_lock prior to calling.
  */
-void Pipe::discard_queue()
+void Pipe::discard_out_queue()
 {
   ldout(msgr->cct,10) << "discard_queue" << dendl;
 
@@ -994,7 +994,7 @@ void Pipe::fault(bool onconnect, bool onread)
     msgr->lock.Unlock();
 
     in_q->discard_queue();
-    discard_queue();
+    discard_out_queue();
 
     // disconnect from Connection, and mark it failed.  future messages
     // will be dropped.
@@ -1053,7 +1053,7 @@ void Pipe::was_session_reset()
 
   ldout(msgr->cct,10) << "was_session_reset" << dendl;
   in_q->discard_queue();
-  discard_queue();
+  discard_out_queue();
 
   msgr->dispatch_queue.queue_remote_reset(connection_state);
 
