@@ -129,9 +129,9 @@ int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
   
   msgr->set_myaddr(bind_addr);
   if (bind_addr != entity_addr_t())
-    msgr->set_need_addr(false);
-  else 
-    msgr->set_need_addr(true);
+    msgr->learned_addr(bind_addr);
+  else
+    assert(msgr->get_need_addr());  // should still be true.
 
   if (msgr->get_myaddr().get_port() == 0) {
     listen_addr.nonce = nonce;
@@ -150,6 +150,9 @@ int Accepter::rebind(int avoid_port)
   ldout(msgr->cct,1) << "accepter.rebind avoid " << avoid_port << dendl;
   
   stop();
+
+  // invalidate our previously learned address.
+  msgr->unlearn_addr();
 
   entity_addr_t addr = msgr->get_myaddr();
   int old_port = addr.get_port();
