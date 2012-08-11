@@ -134,7 +134,7 @@ int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
     msgr->set_need_addr(true);
 
   if (msgr->get_myaddr().get_port() == 0) {
-    listen_addr.nonce = msgr->get_nonce();
+    listen_addr.nonce = nonce;
     msgr->set_myaddr(listen_addr);
   }
 
@@ -158,13 +158,14 @@ int Accepter::rebind(int avoid_port)
   ldout(msgr->cct,10) << " will try " << addr << dendl;
   int r = bind(addr, old_port, avoid_port);
   if (r == 0)
-    start();
+    start(nonce);
   return r;
 }
 
-int Accepter::start()
+int Accepter::start(uint64_t nonce)
 {
   ldout(msgr->cct,1) << "accepter.start" << dendl;
+  this->nonce = nonce;
 
   // start thread
   create();
