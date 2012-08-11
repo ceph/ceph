@@ -539,6 +539,8 @@ TEST(cls_rbd, parents)
 
   // old image should fail
   ASSERT_EQ(0, create_image(&ioctx, "old", 33<<20, 22, 0, "old_blk."));
+  // this next test is no longer valid after 56bc369983e197d29496eb75bc3f7b9b05d98bf6
+  // ASSERT_EQ(-ENOEXEC, get_parent(&ioctx, "old", CEPH_NOSNAP, &pspec, &size));
   pspec = parent_spec(-1, "parent", 3);
   ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, "old", parent_spec(-1, "parent", 3), 10<<20));
   ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, "old"));
