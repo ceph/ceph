@@ -158,17 +158,20 @@ public:
    * currently believes to be its own.
    */
   const entity_addr_t& get_myaddr() { return my_inst.addr; }
+protected:
   /**
    * set messenger's address
    */
   void set_myaddr(entity_addr_t a) { my_inst.addr = a; }
+public:
   /**
    * Retrieve the Messenger's name.
    *
    * @return A const reference to the name this Messenger
    * currently believes to be its own.
    */
-  const entity_name_t& get_myname() { return my_inst.name; }  /**
+  const entity_name_t& get_myname() { return my_inst.name; }
+  /**
    * Set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
    * times may have bad results.

@@ -387,6 +387,7 @@ public:
   Accepter accepter;
   DispatchQueue dispatch_queue;
 
+  friend class Accepter;
 
   /**
    * Register a new pipe for accept
