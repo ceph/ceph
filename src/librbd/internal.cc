@@ -418,29 +418,43 @@ namespace librbd {
       return r;
 
     Mutex::Locker l(ictx->md_lock);
-    ictx->snap_lock.Lock();
-    snap_t snap_id = ictx->get_snap_id(snap_name);
-    ictx->snap_lock.Unlock();
-    if (snap_id == CEPH_NOSNAP)
-      return -ENOENT;
+    snap_t snap_id;
 
-    // If this is the last snapshot, and the base image has no parent,
-    // that could be because the parent was flattened before the snapshots
-    // were removed.  In any case, this is now the time we should
-    // remove the child from the child list.
-    if (ictx->snaps.size() == 1 && (ictx->parent_md.spec.pool_id == -1)) {
-      SnapInfo *snapinfo;
-      Mutex::Locker l(ictx->snap_lock);
-      r = ictx->get_snapinfo(snap_id, &snapinfo);
-      if (r < 0)
+    {
+      // block for purposes of auto-destruction of l2 on early return
+      Mutex::Locker l2(ictx->snap_lock);
+      snap_id = ictx->get_snap_id(snap_name);
+      if (snap_id == CEPH_NOSNAP)
+	return -ENOENT;
+
+      SnapInfo *oursnap;
+      r = ictx->get_snapinfo(snap_id, &oursnap);
+      if (r < 0) {
+	lderr(ictx->cct) << "snap_remove: can't get snapinfo" << dendl;
 	return r;
-      if (snapinfo->parent.spec.pool_id != -1) {
-	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-				     snapinfo->parent.spec, ictx->id);
-	if (r < 0)
-	  return r;
+      }
+
+      // scan base image and snapshots, and if this snapshot contains the
+      // only remaining reference to its parent, remove the child from that
+      // parent's list
+      map<string, SnapInfo>::iterator it;
+      for (it = ictx->snaps_by_name.begin();
+	   it != ictx->snaps_by_name.end(); ++it) {
+	// skip our own snapinfo
+	if (it->second.id == snap_id)
+	  continue;
+	if (it->second.parent.spec == oursnap->parent.spec)
+	  break;
+      }
+      if ((ictx->parent_md.spec != oursnap->parent.spec) &&
+	  (it == ictx->snaps_by_name.end())) {
+	  r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				       oursnap->parent.spec, ictx->id);
+	  if (r < 0)
+	    return r;
       }
     }
+
     r = rm_snap(ictx, snap_name);
     if (r < 0)
       return r;
@@ -980,15 +994,25 @@ namespace librbd {
       ictx->parent_lock.Unlock();
       close_image(ictx);
 
+      // scan snapshots; if none of them refer to this parent,
+      // remove the child from parent's list
       if (parent_info.spec.pool_id != -1) {
-	ldout(cct, 2) << "removing child from children list..." << dendl;
-	int r = cls_client::remove_child(&io_ctx, RBD_CHILDREN,
+	map<string, SnapInfo>::iterator it;
+	for (it = ictx->snaps_by_name.begin();
+	     it != ictx->snaps_by_name.end(); ++it) {
+	  if (it->second.parent.spec == parent_info.spec)
+	    break;
+	}
+	if (it == ictx->snaps_by_name.end()) {
+	    r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
 					 parent_info.spec, id);
-	if (r < 0) {
-	  lderr(cct) << "error removing child from children list" << dendl;
-	  return r;
+	  if (r < 0) {
+	    lderr(cct) << "error removing child from children list" << dendl;
+	    return r;
+	  }
 	}
       }
+
       ldout(cct, 2) << "removing header..." << dendl;
       r = io_ctx.remove(header_oid);
       if (r < 0 && r != -ENOENT) {
