@@ -214,7 +214,7 @@ void SimpleMessenger::reaper()
     pipe_reap_queue.pop_front();
     ldout(cct,10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
-    p->discard_queue();
+    p->discard_out_queue();
     p->pipe_lock.Unlock();
     p->unregister_pipe();
     assert(pipes.count(p));
