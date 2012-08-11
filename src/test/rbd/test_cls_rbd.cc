@@ -157,26 +157,34 @@ TEST(cls_rbd, add_remove_child)
   string snapname = "parent_snap";
   snapid_t snapid(10);
   string parent_image = "parent_id";
-  string child_image = "child_id";
   set<string>children;
   parent_spec pspec(ioctx.get_id(), parent_image, snapid);
 
   // nonexistent children cannot be listed or removed
   ASSERT_EQ(-ENOENT, get_children(&ioctx, oid, pspec, children));
-  ASSERT_EQ(-ENOENT, remove_child(&ioctx, oid, pspec, child_image));
+  ASSERT_EQ(-ENOENT, remove_child(&ioctx, oid, pspec, "child1"));
 
-  // make a parent with a snapshot
+  // create the parent and snapshot
   ASSERT_EQ(0, create_image(&ioctx, parent_image, 2<<20, 0,
 			    RBD_FEATURE_LAYERING, parent_image));
   ASSERT_EQ(0, snapshot_add(&ioctx, parent_image, snapid, snapname));
 
-  // add, verify it showed up
-  ASSERT_EQ(0, add_child(&ioctx, oid, pspec, child_image));
+  // add child to it, verify it showed up
+  ASSERT_EQ(0, add_child(&ioctx, oid, pspec, "child1"));
   ASSERT_EQ(0, get_children(&ioctx, oid, pspec, children));
-  bool found = (children.find(child_image) != children.end());
-  ASSERT_EQ(found, true);
+  ASSERT_TRUE(children.find("child1") != children.end());
+  // add another child to it, verify it showed up
+  ASSERT_EQ(0, add_child(&ioctx, oid, pspec, "child2"));
+  ASSERT_EQ(0, get_children(&ioctx, oid, pspec, children));
+  ASSERT_TRUE(children.find("child2") != children.end());
+  // remove first, verify it's gone
+  ASSERT_EQ(0, remove_child(&ioctx, oid, pspec, "child1"));
+  ASSERT_EQ(0, get_children(&ioctx, oid, pspec, children));
+  ASSERT_FALSE(children.find("child1") != children.end());
+  // remove second, verify list empty
+  ASSERT_EQ(0, remove_child(&ioctx, oid, pspec, "child2"));
+  ASSERT_EQ(-ENOENT, get_children(&ioctx, oid, pspec, children));
 
-  ASSERT_EQ(0, remove_child(&ioctx, oid, pspec, child_image));
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
