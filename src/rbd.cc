@@ -222,12 +222,14 @@ static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   return 0;
 }
 
-static int do_show_info(const char *imgname, librbd::Image& image)
+static int do_show_info(const char *imgname, librbd::Image& image,
+			const char *snapname)
 {
   librbd::image_info_t info;
   string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
   uint64_t overlap, features;
+  bool snap_protected;
   int r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
@@ -244,6 +246,12 @@ static int do_show_info(const char *imgname, librbd::Image& image)
   if (r < 0)
     return r;
 
+  if (snapname) {
+    r = image.snap_is_protected(snapname, &snap_protected);
+    if (r < 0)
+      return r;
+  }
+
   cout << "rbd image '" << imgname << "':\n"
        << "\tsize " << prettybyte_t(info.size) << " in "
        << info.num_objs << " objects"
@@ -257,6 +265,12 @@ static int do_show_info(const char *imgname, librbd::Image& image)
        << std::endl
        << "\tfeatures: " << feature_str(features)
        << std::endl;
+
+  // snapshot info, if present
+  if (snapname) {
+    cout << "\tprotected: " << (snap_protected ? "True" : "False")
+	 << std::endl;
+  }
 
   // parent info, if present 
   if ((image.parent_info(&parent_pool, &parent_name, &parent_snapname) == 0) &&
@@ -1370,7 +1384,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_INFO:
-    r = do_show_info(imgname, image);
+    r = do_show_info(imgname, image, snapname);
     if (r < 0) {
       cerr << "error: " << cpp_strerror(-r) << std::endl;
       exit(1);
