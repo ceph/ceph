@@ -36,11 +36,13 @@
  * Accepter
  */
 
-int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
+int Accepter::bind(entity_addr_t &bind_addr, uint64_t _nonce, int avoid_port1, int avoid_port2)
 {
   const md_config_t *conf = msgr->cct->_conf;
   // bind to a socket
   ldout(msgr->cct,10) << "accepter.bind" << dendl;
+
+  nonce = _nonce;
   
   int family;
   switch (bind_addr.get_family()) {
@@ -161,14 +163,13 @@ int Accepter::rebind(int avoid_port)
   ldout(msgr->cct,10) << " will try " << addr << dendl;
   int r = bind(addr, old_port, avoid_port);
   if (r == 0)
-    start(nonce);
+    start();
   return r;
 }
 
-int Accepter::start(uint64_t nonce)
+int Accepter::start()
 {
   ldout(msgr->cct,1) << "accepter.start" << dendl;
-  this->nonce = nonce;
 
   // start thread
   create();

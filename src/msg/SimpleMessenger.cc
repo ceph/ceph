@@ -254,7 +254,7 @@ int SimpleMessenger::bind(entity_addr_t bind_addr)
   lock.Unlock();
 
   // bind to a socket
-  int r = accepter.bind(bind_addr);
+  int r = accepter.bind(bind_addr, nonce);
   if (r >= 0)
     did_bind = true;
   return r;
@@ -285,7 +285,7 @@ int SimpleMessenger::start()
   lock.Unlock();
 
   if (did_bind)
-    accepter.start(nonce);
+    accepter.start();
 
   reaper_started = true;
   reaper_thread.create();
