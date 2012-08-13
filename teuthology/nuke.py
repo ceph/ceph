@@ -241,7 +241,7 @@ def synch_clocks(remotes, log):
         proc.exitstatus.get()
 
 def main():
-    from gevent import monkey; monkey.patch_all()
+    from gevent import monkey; monkey.patch_all(dns=False)
     from .orchestra import monkey; monkey.patch_all()
     from teuthology.run import config_file
 
