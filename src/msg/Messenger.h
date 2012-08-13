@@ -231,9 +231,14 @@ public:
    */
   virtual void set_policy(int type, Policy p) = 0;
   /**
-   * Get the Policy associated with a type of peer.
-   * @param t The peer type to get the default policy for.
+   * Set the Policy associated with a type of peer.
    *
+   * This can be called either on initial setup, or after connections
+   * are already established.  However, the policies for existing
+   * connections will not be affected; the new policy will only apply
+   * to future connections.
+   *
+   * @param t The peer type to get the default policy for.
    * @return A const Policy reference.
    */
   virtual Policy get_policy(int t) = 0;
@@ -246,6 +251,7 @@ public:
   /**
    * Set a Throttler which is applied to all Messages from the given
    * type of peer.
+   *
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
@@ -257,6 +263,7 @@ public:
   virtual void set_policy_throttler(int type, Throttle *t) = 0;
   /**
    * Set the default send priority
+   *
    * This is an init-time function and must be called *before* calling
    * start().
    *
