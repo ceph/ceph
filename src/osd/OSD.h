@@ -198,7 +198,6 @@ public:
     osdmap = map;
   }
 
-
   int get_nodeid() const { return whoami; }
 
   // -- scrub scheduling --
@@ -282,7 +281,6 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
-
   OSDMapRef get_map(epoch_t e);
   OSDMapRef add_map(OSDMap *o) {
     Mutex::Locker l(map_cache_lock);
@@ -354,6 +352,8 @@ protected:
   void tick();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
+
+  void check_osdmap_features();
 
 public:
   ClassHandler  *class_handler;
