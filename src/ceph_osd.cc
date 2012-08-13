@@ -352,16 +352,16 @@ int main(int argc, const char **argv)
 			       Messenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
   client_messenger->set_policy(entity_name_t::TYPE_MON,
-                               Messenger::Policy::client(supported,
-							 CEPH_FEATURE_UID |
-							 CEPH_FEATURE_PGID64 |
-							 CEPH_FEATURE_OSDENC));
+                               Messenger::Policy::lossy_client(supported,
+							       CEPH_FEATURE_UID |
+							       CEPH_FEATURE_PGID64 |
+							       CEPH_FEATURE_OSDENC));
   //try to poison pill any OSD connections on the wrong address
   client_messenger->set_policy(entity_name_t::TYPE_OSD,
 			       Messenger::Policy::stateless_server(0,0));
   
   cluster_messenger->set_default_policy(Messenger::Policy::stateless_server(0, 0));
-  cluster_messenger->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::client(0,0));
+  cluster_messenger->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0,0));
   cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
 				Messenger::Policy::lossless_peer(supported,
 								 CEPH_FEATURE_UID |
@@ -371,7 +371,7 @@ int main(int argc, const char **argv)
 				Messenger::Policy::stateless_server(0, 0));
 
   messenger_hbclient->set_policy(entity_name_t::TYPE_OSD,
-			     Messenger::Policy::client(0, 0));
+			     Messenger::Policy::lossy_client(0, 0));
   messenger_hbserver->set_policy(entity_name_t::TYPE_OSD,
 			     Messenger::Policy::stateless_server(0, 0));
 

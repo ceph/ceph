@@ -447,11 +447,17 @@ private:
   // -- heartbeat --
   /// information about a heartbeat peer
   struct HeartbeatInfo {
+    entity_inst_t inst; ///< peer
     Connection *con;    ///< peer connection
     utime_t first_tx;   ///< time we sent our first ping request
     utime_t last_tx;    ///< last time we sent a ping request
     utime_t last_rx;    ///< last time we got a ping reply
     epoch_t epoch;      ///< most recent epoch we wanted this peer
+  };
+  /// state attached to outgoing heartbeat connections
+  struct HeartbeatSession : public RefCountedObject {
+    int peer;
+    HeartbeatSession(int p) : peer(p) {}
   };
   Mutex heartbeat_lock;
   map<int, int> debug_heartbeat_drops_remaining;
@@ -464,6 +470,7 @@ private:
   Messenger *hbclient_messenger, *hbserver_messenger;
   
   void _add_heartbeat_peer(int p);
+  bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();
@@ -488,7 +495,9 @@ public:
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     };
-    bool ms_handle_reset(Connection *con) { return false; }
+    bool ms_handle_reset(Connection *con) {
+      return osd->heartbeat_reset(con);
+    }
     void ms_handle_remote_reset(Connection *con) {}
   public:
     OSD *osd;
