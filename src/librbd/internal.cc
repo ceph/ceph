@@ -874,24 +874,46 @@ namespace librbd {
 
     Mutex::Locker l(ictx->snap_lock);
     Mutex::Locker l2(ictx->parent_lock);
-    if (!ictx->parent)
-      return -ENOENT;
 
+    cls_client::parent_info *parent_info;
+
+    if (ictx->snap_id == CEPH_NOSNAP) {
+      if (!ictx->parent)
+	return 0;
+      parent_info = &(ictx->parent_md);
+    } else {
+      SnapInfo *snapinfo;
+      r = ictx->get_snapinfo(ictx->snap_id, &snapinfo);
+      if (r < 0) {
+	lderr(ictx->cct) << "Can't find snapshot id" << ictx->snap_id << dendl;
+	return r;
+      }
+      parent_info = &(snapinfo->parent);
+      if (parent_info->pool_id == -1)
+	return 0;
+    }
     if (parent_pool_name) {
       Rados rados(ictx->md_ctx);
-      r = rados.pool_reverse_lookup(ictx->parent->md_ctx.get_id(),
-				    parent_pool_name);
+      r = rados.pool_reverse_lookup(parent_info->pool_id, parent_pool_name);
       if (r < 0) {
-	lderr(ictx->cct) << "error looking up pool name" << dendl;
+	lderr(ictx->cct) << "error looking up pool name" << cpp_strerror(r)
+			 << dendl;
       }
     }
 
-    if (parent_snap_name)
-      *parent_snap_name = ictx->parent->snap_name;
+    if (parent_snap_name) {
+      Mutex::Locker l(ictx->parent->snap_lock);
+      r = ictx->parent->get_snap_name(parent_info->snap_id, parent_snap_name);
+      if (r < 0) {
+	lderr(ictx->cct) << "error finding parent snap name: "
+			 << cpp_strerror(r) << dendl;
+	return r;
+      }
+    }
 
     if (parent_name) {
       r = cls_client::dir_get_name(&ictx->parent->md_ctx, RBD_DIRECTORY,
-				   ictx->parent->id, parent_name);
+				   parent_info->image_id, parent_name);
       if (r < 0) {
 	lderr(ictx->cct) << "error getting parent image name: "
 			 << cpp_strerror(r) << dendl;

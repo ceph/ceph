@@ -211,6 +211,20 @@ namespace librbd {
     return -ENOENT;
   }
 
+  int ImageCtx::get_snapinfo(snapid_t in_snap_id, SnapInfo **out_snapinfo)
+  {
+    assert(snap_lock.is_locked());
+    map<string, SnapInfo>::iterator it;
+
+    for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
+      if (it->second.id == in_snap_id) {
+	*out_snapinfo = &(it->second);
+	return 0;
+      }
+    }
+    return -ENOENT;
+  }
+
   int ImageCtx::get_snap_size(string in_snap_name, uint64_t *out_size) const
   {
     assert(snap_lock.is_locked());
