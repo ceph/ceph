@@ -163,9 +163,11 @@ public:
    * you destroy SimpleMessenger.
    */
   void set_policy_throttler(int type, Throttle *t) {
-    assert (!started && !did_bind);
-    assert(policy_map.count(type));
-    policy_map[type].throttler = t;
+    Mutex::Locker l(policy_lock);
+    if (policy_map.count(type))
+      policy_map[type].throttler = t;
+    else
+      default_policy.throttler = t;
   }
   /**
    * Bind the SimpleMessenger to a specific address. If bind_addr
