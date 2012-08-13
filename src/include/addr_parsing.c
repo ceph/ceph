@@ -103,9 +103,8 @@ char *resolve_addrs(const char *orig_str)
 
     r = getaddrinfo(tok, port_str, &hint, &res);
     if (r < 0) {
-      char error_buf[80];
       printf("server name not found: %s (%s)\n", tok,
-	     strerror_r(errno, error_buf, sizeof(error_buf)));
+	     gai_strerror(r));
       free(new_str);
       free(buf);
       return 0;
