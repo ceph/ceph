@@ -587,11 +587,14 @@ public:
    *
    * @return A const Policy reference.
    */
-  const Policy& get_policy(int t) {
+  Policy get_policy(int t) {
     if (policy_map.count(t))
       return policy_map[t];
     else
       return default_policy;
+  }
+  Policy get_default_policy() {
+    return default_policy;
   }
 
   /**
