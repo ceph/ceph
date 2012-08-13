@@ -215,6 +215,7 @@ public:
   list<Cond*> waiting_for_mdsmap;
 
   void got_mds_push(int mds);
+  void _closed_mds_session(int mds, MetaSession *s);
   void handle_client_session(MClientSession *m);
   void send_reconnect(int mds);
   void resend_unsafe_requests(int mds);
