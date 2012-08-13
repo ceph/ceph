@@ -348,9 +348,7 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_PGID64;
 
   client_messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
-  client_messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			       Messenger::Policy::stateless_server(supported, 0));
-  client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
+  client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);  // default, actually
   client_messenger->set_policy(entity_name_t::TYPE_MON,
                                Messenger::Policy::lossy_client(supported,
 							       CEPH_FEATURE_UID |
