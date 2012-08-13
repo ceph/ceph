@@ -1075,11 +1075,13 @@ libcommon_files = \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
+	msg/Accepter.cc \
+	msg/DispatchQueue.cc \
 	msg/Message.cc \
 	msg/Messenger.cc \
+	msg/Pipe.cc \
 	msg/SimpleMessenger.cc \
 	msg/msg_types.cc \
-	msg/tcp.cc \
 	os/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
@@ -1592,12 +1594,14 @@ noinst_HEADERS = \
         mon/mon_types.h\
 	mount/canonicalize.c\
 	mount/mtab.c\
+	msg/Accepter.h\
+	msg/DispatchQueue.h\
         msg/Dispatcher.h\
         msg/Message.h\
         msg/Messenger.h\
+	msg/Pipe.h\
         msg/SimpleMessenger.h\
         msg/msg_types.h\
-        msg/tcp.h\
 	objclass/objclass.h\
 	obsync/obsync\
 	obsync/boto_tool\

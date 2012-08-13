@@ -64,6 +64,7 @@ bool pending_tell_pgid;
 uint64_t pending_tid = 0;
 EntityName pending_target;
 pg_t pending_target_pgid;
+bool cmd_waiting_for_osdmap = false;
 vector<string> pending_cmd;
 bufferlist pending_bl;
 bool reply;
@@ -71,9 +72,12 @@ string reply_rs;
 int reply_rc;
 bufferlist reply_bl;
 entity_inst_t reply_from;
-Context *resend_event = 0;
 
 OSDMap *osdmap = 0;
+
+Connection *command_con = NULL;
+Context *tick_event = 0;
+float tick_interval = 3.0;
 
 // observe (push)
 #include "mon/PGMap.h"
@@ -90,54 +94,18 @@ OSDMap *osdmap = 0;
 
 static set<int> registered, seen;
 
-static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
-{
-  epoch_t e = m->get_first();
-  assert(m->maps.count(e));
-  ctx->lock.Lock();
-  delete osdmap;
-  osdmap = new OSDMap;
-  osdmap->decode(m->maps[e]);
-  cmd_cond.Signal();
-  ctx->lock.Unlock();
-  m->put();
-}
+struct C_Tick : public Context {
+  CephToolCtx *ctx;
+  C_Tick(CephToolCtx *c) : ctx(c) {}
+  void finish(int r) {
+    if (command_con)
+      messenger->send_keepalive(command_con);
 
-static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
-{
-  ctx->lock.Lock();
-  reply = true;
-  reply_from = ack->get_source_inst();
-  reply_rs = ack->rs;
-  reply_rc = ack->r;
-  reply_bl = ack->get_data();
-  cmd_cond.Signal();
-  if (resend_event) {
-    ctx->timer.cancel_event(resend_event);
-    resend_event = 0;
+    assert(tick_event == this);
+    tick_event = new C_Tick(ctx);
+    ctx->timer.add_event_after(tick_interval, tick_event);
   }
-  ctx->lock.Unlock();
-  ack->put();
-}
-
-static void handle_ack(CephToolCtx *ctx, MCommandReply *ack)
-{
-  ctx->lock.Lock();
-  if (ack->get_tid() == pending_tid) {
-    reply = true;
-    reply_from = ack->get_source_inst();
-    reply_rs = ack->rs;
-    reply_rc = ack->r;
-    reply_bl = ack->get_data();
-    cmd_cond.Signal();
-    if (resend_event) {
-      ctx->timer.cancel_event(resend_event);
-      resend_event = 0;
-    }
-  }
-  ctx->lock.Unlock();
-  ack->put();
-}
+};
 
 static void send_command(CephToolCtx *ctx)
 {
@@ -154,6 +122,15 @@ static void send_command(CephToolCtx *ctx)
     return;
   }
 
+  if (pending_tell_pgid || pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
+    if (!osdmap) {
+      ctx->mc.sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
+      ctx->mc.renew_subs();
+      cmd_waiting_for_osdmap = true;
+      return;
+    }
+  }
+
   if (!ctx->concise)
     *ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
 
@@ -161,15 +138,6 @@ static void send_command(CephToolCtx *ctx)
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
   m->set_tid(++pending_tid);
-
-  if (pending_tell_pgid || pending_target.get_type() == (int)entity_name_t::TYPE_OSD) {
-    if (!osdmap) {
-      ctx->mc.sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
-      ctx->mc.renew_subs();
-      while (!osdmap)
-	cmd_cond.Wait(ctx->lock);
-    }
-  }
 
   if (pending_tell_pgid) {
     // pick target osd
@@ -208,13 +176,67 @@ static void send_command(CephToolCtx *ctx)
       if (!ctx->concise)
 	*ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
 
-      messenger->send_message(m, osdmap->get_inst(n));
+      command_con = messenger->get_connection(osdmap->get_inst(n));
+      messenger->send_message(m, command_con);
+
+      if (tick_event)
+	ctx->timer.cancel_event(tick_event);
+      tick_event = new C_Tick(ctx);
+      ctx->timer.add_event_after(tick_interval, tick_event);
     }
     return;
   }
 
   reply_rc = -EINVAL;
   reply = true;
+}
+
+static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
+{
+  epoch_t e = m->get_first();
+  assert(m->maps.count(e));
+  ctx->lock.Lock();
+  delete osdmap;
+  osdmap = new OSDMap;
+  osdmap->decode(m->maps[e]);
+  if (cmd_waiting_for_osdmap) {
+    cmd_waiting_for_osdmap = false;
+    send_command(ctx);
+  }
+  ctx->lock.Unlock();
+  m->put();
+}
+
+static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
+{
+  ctx->lock.Lock();
+  reply = true;
+  reply_from = ack->get_source_inst();
+  reply_rs = ack->rs;
+  reply_rc = ack->r;
+  reply_bl = ack->get_data();
+  cmd_cond.Signal();
+  ctx->lock.Unlock();
+  ack->put();
+}
+
+static void handle_ack(CephToolCtx *ctx, MCommandReply *ack)
+{
+  ctx->lock.Lock();
+  if (ack->get_tid() == pending_tid) {
+    reply = true;
+    reply_from = ack->get_source_inst();
+    reply_rs = ack->rs;
+    reply_rc = ack->r;
+    reply_bl = ack->get_data();
+    cmd_cond.Signal();
+    if (tick_event) {
+      ctx->timer.cancel_event(tick_event);
+      tick_event = 0;
+    }
+  }
+  ctx->lock.Unlock();
+  ack->put();
 }
 
 int do_command(CephToolCtx *ctx,
@@ -437,11 +459,14 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   // start up network
   messenger = new SimpleMessenger(g_ceph_context, entity_name_t::CLIENT(), "client",
                                   getpid());
+  messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   messenger->start();
+
+  ctx->mc.set_messenger(messenger);
+
   ctx->dispatcher = new Admin(ctx.get());
   messenger->add_dispatcher_head(ctx->dispatcher);
 
-  ctx->mc.set_messenger(messenger);
   int r = ctx->mc.init();
   if (r < 0)
     return NULL;
@@ -546,6 +571,19 @@ void Admin::ms_handle_connect(Connection *con) {
       send_command(ctx);
     ctx->lock.Unlock();
   }
+}
+
+bool Admin::ms_handle_reset(Connection *con)
+{
+  Mutex::Locker l(ctx->lock);
+  if (con == command_con) {
+    command_con->put();
+    command_con = NULL;
+    if (pending_cmd.size())
+      send_command(ctx);
+    return true;
+  }
+  return false;
 }
 
 bool Admin::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, 

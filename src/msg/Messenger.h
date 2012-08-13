@@ -64,6 +64,8 @@ public:
     bool lossy;
     /// If true, the underlying connection can't be re-established from this end.
     bool server;
+    /// If true, we will standby when idle
+    bool standby;
     /**
      *  The throttler is used to limit how much data is held by Messages from
      *  the associated Connection(s). When reading in a new Message, the Messenger
@@ -77,25 +79,30 @@ public:
     uint64_t features_required;
 
     Policy()
-      : lossy(false), server(false), throttler(NULL),
+      : lossy(false), server(false), standby(false), throttler(NULL),
 	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(0) {}
-    Policy(bool l, bool s, uint64_t sup, uint64_t req)
-      : lossy(l), server(s), throttler(NULL),
+  private:
+    Policy(bool l, bool s, bool st, uint64_t sup, uint64_t req)
+      : lossy(l), server(s), standby(st), throttler(NULL),
 	features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(req) {}
 
+  public:
     static Policy stateful_server(uint64_t sup, uint64_t req) {
-      return Policy(false, true, sup, req);
+      return Policy(false, true, true, sup, req);
     }
     static Policy stateless_server(uint64_t sup, uint64_t req) {
-      return Policy(true, true, sup, req);
+      return Policy(true, true, false, sup, req);
     }
     static Policy lossless_peer(uint64_t sup, uint64_t req) {
-      return Policy(false, false, sup, req);
+      return Policy(false, false, true, sup, req);
     }
-    static Policy client(uint64_t sup, uint64_t req) {
-      return Policy(false, false, sup, req);
+    static Policy lossy_client(uint64_t sup, uint64_t req) {
+      return Policy(true, false, false, sup, req);
+    }
+    static Policy lossless_client(uint64_t sup, uint64_t req) {
+      return Policy(false, false, false, sup, req);
     }
   };
 
@@ -141,19 +148,30 @@ public:
    */
   const entity_inst_t& get_myinst() { return my_inst; }
   /**
+   * set messenger's instance
+   */
+  void set_myinst(entity_inst_t i) { my_inst = i; }
+  /**
    * Retrieve the Messenger's address.
    *
    * @return A const reference to the address this Messenger
    * currently believes to be its own.
    */
   const entity_addr_t& get_myaddr() { return my_inst.addr; }
+protected:
+  /**
+   * set messenger's address
+   */
+  void set_myaddr(entity_addr_t a) { my_inst.addr = a; }
+public:
   /**
    * Retrieve the Messenger's name.
    *
    * @return A const reference to the name this Messenger
    * currently believes to be its own.
    */
-  const entity_name_t& get_myname() { return my_inst.name; }  /**
+  const entity_name_t& get_myname() { return my_inst.name; }
+  /**
    * Set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
    * times may have bad results.
@@ -488,6 +506,7 @@ protected:
    * @defgroup Dispatcher Interfacing
    * @{
    */
+public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
@@ -521,6 +540,20 @@ protected:
 	 p++)
       (*p)->ms_handle_connect(con);
   }
+
+  /**
+   * Notify each Dispatcher of a new incomming Connection. Call
+   * this function whenever a new Connection is accepted.
+   *
+   * @param con Pointer to the new Connection.
+   */
+  void ms_deliver_handle_accept(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_accept(con);
+  }
+
   /**
    * Notify each Dispatcher of a Connection which may have lost
    * Messages. Call this function whenever you detect that a lossy Connection
