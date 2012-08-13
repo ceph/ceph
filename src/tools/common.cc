@@ -64,6 +64,7 @@ bool pending_tell_pgid;
 uint64_t pending_tid = 0;
 EntityName pending_target;
 pg_t pending_target_pgid;
+bool cmd_waiting_for_osdmap = false;
 vector<string> pending_cmd;
 bufferlist pending_bl;
 bool reply;
@@ -125,6 +126,7 @@ static void send_command(CephToolCtx *ctx)
     if (!osdmap) {
       ctx->mc.sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
       ctx->mc.renew_subs();
+      cmd_waiting_for_osdmap = true;
       return;
     }
   }
@@ -197,8 +199,10 @@ static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
   delete osdmap;
   osdmap = new OSDMap;
   osdmap->decode(m->maps[e]);
-  if (pending_cmd.size())
+  if (cmd_waiting_for_osdmap) {
+    cmd_waiting_for_osdmap = false;
     send_command(ctx);
+  }
   ctx->lock.Unlock();
   m->put();
 }
