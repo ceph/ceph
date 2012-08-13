@@ -136,7 +136,7 @@ public:
    * @param p The Policy to apply.
    */
   void set_default_policy(Policy p) {
-    assert(!started && !did_bind);
+    Mutex::Locker l(policy_lock);
     default_policy = p;
   }
   /**
@@ -148,7 +148,7 @@ public:
    * @param p The policy to apply.
    */
   void set_policy(int type, Policy p) {
-    assert(!started && !did_bind);
+    Mutex::Locker l(policy_lock);
     policy_map[type] = p;
   }
   /**
@@ -502,6 +502,9 @@ private:
 
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
+
+  /// lock protecting policy
+  Mutex policy_lock;
   /// the default Policy we use for Pipes
   Policy default_policy;
   /// map specifying different Policies for specific peer types
@@ -588,12 +591,14 @@ public:
    * @return A const Policy reference.
    */
   Policy get_policy(int t) {
+    Mutex::Locker l(policy_lock);
     if (policy_map.count(t))
       return policy_map[t];
     else
       return default_policy;
   }
   Policy get_default_policy() {
+    Mutex::Locker l(policy_lock);
     return default_policy;
   }
 
