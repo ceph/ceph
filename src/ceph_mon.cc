@@ -401,8 +401,6 @@ int main(int argc, const char **argv)
   messenger->set_policy_throttler(entity_name_t::TYPE_OSD, &client_throttler);
   messenger->set_policy_throttler(entity_name_t::TYPE_MDS, &client_throttler);
 
-  global_print_banner();
-
   cout << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
        << " mon_data " << g_conf->mon_data

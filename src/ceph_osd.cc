@@ -330,8 +330,6 @@ int main(int argc, const char **argv)
   messenger_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbserver->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  global_print_banner();
-
   cout << "starting osd." << whoami
        << " at " << client_messenger->get_myaddr()
        << " osd_data " << g_conf->osd_data
