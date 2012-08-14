@@ -121,6 +121,8 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
     lockdep_register_ceph_context(cct);
   }
   register_assert_context(cct);
+
+  output_ceph_version();
 }
 
 void global_print_banner(void)

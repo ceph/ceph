@@ -233,8 +233,6 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  global_print_banner();
-
   Messenger *messenger = Messenger::create(g_ceph_context,
 					   entity_name_t::MDS(-1), "mds",
 					   getpid());
