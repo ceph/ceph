@@ -1533,7 +1533,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
   const md_config_t *conf = cct->_conf;
 
   // count osds
-  int maxosd = 0;
+  int maxosd = 0, numosd = 0;
 
   vector<string> sections;
   conf->get_all_sections(sections);
@@ -1547,6 +1547,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     if (*end != '\0')
       continue;
 
+    numosd++;
     if (o > maxosd)
       maxosd = o;
   }
@@ -1569,8 +1570,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].set_pg_num((maxosd + 1) << pg_bits);
-    pools[pool].set_pgp_num((maxosd + 1) << pgp_bits);
+    pools[pool].set_pg_num((numosd + 1) << pg_bits);
+    pools[pool].set_pgp_num((numosd + 1) << pgp_bits);
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
