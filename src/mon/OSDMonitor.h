@@ -64,6 +64,8 @@ private:
   void encode_pending(bufferlist &bl);
   void on_active();
 
+  void update_msgr_features();
+
   void share_map_with_random_osd();
 
   void update_logger();

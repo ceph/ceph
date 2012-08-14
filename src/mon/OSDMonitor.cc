@@ -149,6 +149,38 @@ void OSDMonitor::update_from_paxos()
 
   share_map_with_random_osd();
   update_logger();
+
+  // make sure our feature bits reflect the latest map
+  update_msgr_features();
+}
+
+void OSDMonitor::update_msgr_features()
+{
+  set<int> types;
+  types.insert((int)entity_name_t::TYPE_OSD);
+  types.insert((int)entity_name_t::TYPE_CLIENT);
+  types.insert((int)entity_name_t::TYPE_MDS);
+  types.insert((int)entity_name_t::TYPE_MON);
+
+  if (osdmap.crush->has_nondefault_tunables()) {
+    for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
+      if (!(mon->messenger->get_policy(*q).features_required & CEPH_FEATURE_CRUSH_TUNABLES)) {
+	dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature" << dendl;
+	Messenger::Policy p = mon->messenger->get_policy(*q);
+	p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
+	mon->messenger->set_policy(*q, p);
+      }
+    }
+  } else {
+    for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
+      if (mon->messenger->get_policy(*q).features_required & CEPH_FEATURE_CRUSH_TUNABLES) {
+	dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature" << dendl;
+	Messenger::Policy p = mon->messenger->get_policy(*q);
+	p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
+	mon->messenger->set_policy(*q, p);
+      }
+    }
+  }
 }
 
 bool OSDMonitor::thrash()
