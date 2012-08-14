@@ -512,8 +512,8 @@ public:
    */
   void build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		    int num_osd, int pg_bits, int pgp_bits);
-  void build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-			      int pg_bits, int pgp_bits);
+  int build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
+			     int pg_bits, int pgp_bits);
   static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				     map<int, const char*>& poolsets, int num_osd);
   static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,

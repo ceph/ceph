@@ -1520,8 +1520,8 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   crush.finalize();
 }
 
-void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-				    int pg_bits, int pgp_bits)
+int OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
+				   int pg_bits, int pgp_bits)
 {
   ldout(cct, 10) << "build_simple_from_conf with "
 		 << pg_bits << " pg bits per osd, "
@@ -1533,7 +1533,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
   const md_config_t *conf = cct->_conf;
 
   // count osds
-  int maxosd = 0;
+  int maxosd = 0, numosd = 0;
 
   vector<string> sections;
   conf->get_all_sections(sections);
@@ -1547,6 +1547,11 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     if (*end != '\0')
       continue;
 
+    if (o > cct->_conf->mon_max_osd) {
+      lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
+      return -ERANGE;
+    }
+    numosd++;
     if (o > maxosd)
       maxosd = o;
   }
@@ -1569,8 +1574,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].set_pg_num((maxosd + 1) << pg_bits);
-    pools[pool].set_pgp_num((maxosd + 1) << pgp_bits);
+    pools[pool].set_pg_num((numosd + 1) << pg_bits);
+    pools[pool].set_pgp_num((numosd + 1) << pgp_bits);
     pools[pool].last_change = epoch;
     if (p->first == CEPH_DATA_RULE)
       pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
@@ -1584,6 +1589,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
+
+  return 0;
 }
 
 void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
