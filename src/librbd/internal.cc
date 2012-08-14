@@ -776,13 +776,13 @@ reprotect_and_return_err:
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
-      r = -EINVAL;
+      r = -ENOSYS;
       goto err_close_parent;
     }
 
     if (!snap_protected) {
       lderr(cct) << "parent snapshot must be protected" << dendl;
-      r = -ENOSYS;
+      r = -EINVAL;
       goto err_close_parent;
     }
 

@@ -425,7 +425,7 @@ class TestClone(object):
     def test_unprotected(self):
         self.image.create_snap('snap2')
         global features
-        assert_raises(FunctionNotSupported, self.rbd.clone, ioctx, IMG_NAME, 'snap2', ioctx, 'clone2', features)
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, IMG_NAME, 'snap2', ioctx, 'clone2', features)
         self.image.remove_snap('snap2')
 
     def test_stat(self):
