@@ -129,7 +129,8 @@ OPTION(mon_max_osd, OPT_INT, 10000)
 OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
 OPTION(mon_slurp_timeout, OPT_DOUBLE, 10.0)
 OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
-OPTION(mon_client_bytes, OPT_U64, 500ul<<20)  // client msg data allowed in memory (in bytes)
+OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
+OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(paxos_max_join_drift, OPT_INT, 10)       // max paxos iterations before we must first slurp
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update

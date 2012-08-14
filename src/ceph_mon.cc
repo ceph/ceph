@@ -398,8 +398,14 @@ int main(int argc, const char **argv)
   Throttle client_throttler(g_ceph_context, "mon_client_bytes",
 			    g_conf->mon_client_bytes);
   messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
-  messenger->set_policy_throttler(entity_name_t::TYPE_OSD, &client_throttler);
-  messenger->set_policy_throttler(entity_name_t::TYPE_MDS, &client_throttler);
+
+  // throttle daemon traffic
+  // NOTE: actual usage on the leader may multiply by the number of
+  // monitors if they forward large update messages from daemons.
+  Throttle daemon_throttler(g_ceph_context, "mon_daemon_bytes",
+			    g_conf->mon_daemon_bytes);
+  messenger->set_policy_throttler(entity_name_t::TYPE_OSD, &daemon_throttler);
+  messenger->set_policy_throttler(entity_name_t::TYPE_MDS, &daemon_throttler);
 
   cout << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
