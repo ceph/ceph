@@ -992,7 +992,6 @@ namespace librbd {
       // struct assignment
       cls_client::parent_info parent_info = ictx->parent_md;
       ictx->parent_lock.Unlock();
-      close_image(ictx);
 
       // scan snapshots; if none of them refer to this parent,
       // remove the child from parent's list
@@ -1012,6 +1011,7 @@ namespace librbd {
 	  }
 	}
       }
+      close_image(ictx);
 
       ldout(cct, 2) << "removing header..." << dendl;
       r = io_ctx.remove(header_oid);
