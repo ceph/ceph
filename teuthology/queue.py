@@ -135,6 +135,6 @@ def run_job(job_config, archive_path):
             child.info(': %s', line.rstrip('\n'))
         p.wait()
         if p.returncode != 0:
-            log.error('Child exited with code %s', e)
+            log.error('Child exited with code %d', p.returncode)
         else:
             log.info('Success!')
