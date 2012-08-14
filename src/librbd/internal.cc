@@ -514,22 +514,85 @@ namespace librbd {
     if (r < 0)
       return r;
 
+    uint64_t features;
+    ictx->get_features(ictx->snap_id, &features);
+    if ((features & RBD_FEATURE_LAYERING) == 0) {
+      lderr(ictx->cct) << "snap_unprotect: image must support layering"
+		       << dendl;
+      return -ENOSYS;
+    }
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
     snap_t snap_id = ictx->get_snap_id(snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
-    // TODO: go through the unprotecting state as well, once
-    // rbd_children is implemented
+    uint8_t current_status;
+    r = cls_client::get_protection_status(&ictx->md_ctx,
+					  ictx->header_oid,
+					  snap_id,
+					  &current_status);
+    if ((r == 0) && (current_status == RBD_PROTECTION_STATUS_UNPROTECTED)) {
+      lderr(ictx->cct) << "snap_unprotect: snapshot not protected" << dendl;
+      return -EINVAL;
+    }
+    r = cls_client::set_protection_status(&ictx->md_ctx,
+					  ictx->header_oid,
+					  snap_id,
+					  RBD_PROTECTION_STATUS_UNPROTECTING);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    cls_client::parent_spec pspec(ictx->md_ctx.get_id(), ictx->id,
+				  ictx->snap_id);
+    // search all pools for children depending on this snapshot
+    Rados rados(ictx->md_ctx);
+    std::list<std::string> pools;
+    rados.pool_list(pools);
+    std::list<std::string>::const_iterator it;
+    std::set<std::string>children;
+    for (it = pools.begin(); it != pools.end(); it++) {
+      IoCtx pool_ioctx;
+      r = rados.ioctx_create(it->c_str(), pool_ioctx);
+      if (r < 0) {
+	lderr(ictx->cct) << "snap_unprotect: can't create ioctx for pool "
+			 << *it << dendl;
+	goto reprotect_and_return_err;
+      }
+      r = get_children(&pool_ioctx, RBD_CHILDREN, pspec, children);
+      // key should not exist for this parent if there is no entry
+      if (((r < 0) && (r != -ENOENT))) {
+	lderr(ictx->cct) << "can't get children for pool " << *it << dendl;
+	goto reprotect_and_return_err;
+      }
+      // if we found a child, can't unprotect
+      if (r == 0) {
+	lderr(ictx->cct) << "snap_unprotect: snap has children" << dendl;
+	// XXX return code?
+	r = -EINVAL;
+	goto reprotect_and_return_err;
+      }
+      pool_ioctx.close();	// last one out will self-destruct
+    }
+    assert(it == pools.end());
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
 					  snap_id,
 					  RBD_PROTECTION_STATUS_UNPROTECTED);
-    if (r < 0)
-      return r;
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     return 0;
+
+reprotect_and_return_err:
+    int proterr = cls_client::set_protection_status(&ictx->md_ctx,
+						    ictx->header_oid,
+						    snap_id,
+					      RBD_PROTECTION_STATUS_PROTECTED);
+    if (proterr < 0) {
+      lderr(ictx->cct) << "snap_unprotect: can't reprotect image" << dendl;
+    }
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return r;
   }
 
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
