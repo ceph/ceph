@@ -169,6 +169,7 @@ public:
   ~PerfCountersBuilder();
   void add_u64(int key, const char *name);
   void add_u64_counter(int key, const char *name);
+  void add_u64_avg(int key, const char *name);
   void add_fl(int key, const char *name);
   void add_fl_avg(int key, const char *name);
   PerfCounters* create_perf_counters();
