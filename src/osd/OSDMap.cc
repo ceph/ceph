@@ -1520,8 +1520,8 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   crush.finalize();
 }
 
-void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-				    int pg_bits, int pgp_bits)
+int OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
+				   int pg_bits, int pgp_bits)
 {
   ldout(cct, 10) << "build_simple_from_conf with "
 		 << pg_bits << " pg bits per osd, "
@@ -1547,6 +1547,10 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     if (*end != '\0')
       continue;
 
+    if (o > cct->_conf->mon_max_osd) {
+      lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
+      return -ERANGE;
+    }
     numosd++;
     if (o > maxosd)
       maxosd = o;
@@ -1585,6 +1589,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
+
+  return 0;
 }
 
 void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,

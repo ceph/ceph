@@ -189,7 +189,9 @@ int main(int argc, const char **argv)
   if (create_from_conf) {
     uuid_d fsid;
     memset(&fsid, 0, sizeof(uuid_d));
-    osdmap.build_simple_from_conf(g_ceph_context, 0, fsid, pg_bits, pgp_bits);
+    int r = osdmap.build_simple_from_conf(g_ceph_context, 0, fsid, pg_bits, pgp_bits);
+    if (r < 0)
+      return -1;
     modified = true;
   }
 
