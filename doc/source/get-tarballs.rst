@@ -9,3 +9,4 @@ source code. You may download source code tarballs for Ceph releases here:
 
 
 .. _Ceph Release Tarballs: http://ceph.com/download/
+.. _Ceph Release Tarballs (EU mirror): http://eu.ceph.com/download/
