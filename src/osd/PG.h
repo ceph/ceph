@@ -1564,9 +1564,7 @@ WRITE_CLASS_ENCODER(PG::OndiskLog)
 
 ostream& operator<<(ostream& out, const PG& pg);
 
-namespace boost {
-  void intrusive_ptr_add_ref(PG *pg);
-  void intrusive_ptr_release(PG *pg);
-};
+void intrusive_ptr_add_ref(PG *pg);
+void intrusive_ptr_release(PG *pg);
 
 #endif

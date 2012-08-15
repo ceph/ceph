@@ -5714,5 +5714,5 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
   return false;
 }
 
-void boost::intrusive_ptr_add_ref(PG *pg) { pg->get(); }
-void boost::intrusive_ptr_release(PG *pg) { pg->put(); }
+void intrusive_ptr_add_ref(PG *pg) { pg->get(); }
+void intrusive_ptr_release(PG *pg) { pg->put(); }
