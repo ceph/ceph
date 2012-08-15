@@ -644,8 +644,10 @@ void Paxos::handle_lease(MMonPaxos *lease)
     lease_expire = lease->lease_timestamp;
 
     // check for extreme clock skew.
-    if (lease_expire < ceph_clock_now(g_ceph_context)) {
-      derr << "lease_expire from " << lease->get_source_inst() << " is in the past (" << lease_expire << "); clocks are too skewed for us to function" << dendl;
+    utime_t now = ceph_clock_now(g_ceph_context);
+    if (lease_expire < now) {
+      utime_t diff = now - lease_expire;
+      derr << "lease_expire from " << lease->get_source_inst() << " is " << diff << " seconds in the past; mons are laggy or clocks are too skewed" << dendl;
     }
   }
 
