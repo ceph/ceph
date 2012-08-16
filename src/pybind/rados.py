@@ -242,6 +242,17 @@ Rados object in state %s." % (self.state))
                 break
         return filter(lambda name: name != '', c_names.raw.split('\0'))
 
+    def get_fsid(self):
+        self.require_state("connected")
+        fsid_len = 36
+        fsid = create_string_buffer(fsid_len + 1)
+        ret = self.librados.rados_cluster_fsid(self.cluster,
+                                               byref(fsid),
+                                               fsid_len + 1)
+        if ret < 0:
+            raise make_ex(ret, "error getting cluster fsid")
+        return fsid.value
+
     def open_ioctx(self, ioctx_name):
         self.require_state("connected")
         if not isinstance(ioctx_name, str):
