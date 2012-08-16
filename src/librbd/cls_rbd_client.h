@@ -15,15 +15,24 @@
 namespace librbd {
   namespace cls_client {
 
+    struct parent_info {
+      int64_t pool_id;
+      string image_id;
+      snapid_t snap_id;
+      uint64_t overlap;
+      parent_info() : pool_id(-1), snap_id(CEPH_NOSNAP), overlap(0) {}
+    };
+
     // high-level interface to the header
     int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			       std::string *object_prefix, uint8_t *order);
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
-                             std::set<std::pair<std::string, std::string> >* lockers,
-                             bool *exclusive_lock,
-                             ::SnapContext *snapc);
+			     std::set<std::pair<std::string, std::string> >* lockers,
+			     bool *exclusive_lock,
+			     ::SnapContext *snapc,
+			     parent_info *parent);
 
     // low-level interface (mainly for testing)
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -57,18 +66,26 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features);
+		      std::vector<uint64_t> *features,
+		      std::vector<parent_info> *parents,
+		      std::vector<uint8_t> *protection_statuses);
     int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-                   std::set<std::pair<std::string, std::string> > &locks,
-                   bool &exclusive);
+		   std::set<std::pair<std::string, std::string> > &locks,
+		   bool &exclusive);
+    int copyup(librados::IoCtx *ioctx, const std::string &oid,
+	       bufferlist data);
     int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-                             const std::string &cookie);
+			     const std::string &cookie);
     int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-                          const std::string &cookie);
+			  const std::string &cookie);
     int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-                     const std::string &cookie);
+		     const std::string &cookie);
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-                   const std::string &locker, const std::string &cookie);
+		   const std::string &locker, const std::string &cookie);
+    int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t *protection_status);
+    int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t protection_status);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);

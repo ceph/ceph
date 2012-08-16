@@ -349,9 +349,14 @@ endif
 
 # librbd
 librbd_la_SOURCES = \
-	librbd.cc \
+	librbd/librbd.cc \
+	librbd/AioCompletion.cc \
+	librbd/AioRequest.cc \
 	librbd/cls_rbd_client.cc \
+	librbd/ImageCtx.cc \
+	librbd/internal.cc \
 	librbd/LibrbdWriteback.cc \
+	librbd/WatchCtx.cc \
 	osdc/ObjectCacher.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
@@ -969,6 +974,7 @@ libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
+	$(srcdir)/include/rbd/features.h \
 	$(srcdir)/include/rbd/librbd.h \
 	$(srcdir)/include/rbd/librbd.hpp
 
@@ -1401,15 +1407,22 @@ noinst_HEADERS = \
 	include/rados/page.h\
 	include/rados/crc32c.h\
 	include/rados/buffer.h\
+	include/rbd/features.h\
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
 	librados/AioCompletionImpl.h\
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
 	librados/RadosClient.h\
+	librbd/AioCompletion.h\
+	librbd/AioRequest.h\
 	librbd/cls_rbd.h\
 	librbd/cls_rbd_client.h\
+	librbd/ImageCtx.h\
+	librbd/internal.h\
 	librbd/LibrbdWriteback.h\
+	librbd/SnapInfo.h\
+	librbd/WatchCtx.h\
 	logrotate.conf\
 	json_spirit/json_spirit.h\
 	json_spirit/json_spirit_error_position.h\

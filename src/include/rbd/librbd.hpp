@@ -95,12 +95,15 @@ public:
   int parent_info(std::string *parent_poolname, std::string *parent_name,
 		      std::string *parent_snapname);
   int old_format(uint8_t *old);
+  int size(uint64_t *size);
   int features(uint64_t *features);
   int overlap(uint64_t *overlap);
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
 
+  int flatten();
+  int flatten_with_progress(ProgressContext &prog_ctx);
   /* cooperative locking */
   int list_locks(std::set<std::pair<std::string, std::string> > &locks,
                  bool &exclusive);
@@ -115,6 +118,9 @@ public:
   int snap_remove(const char *snapname);
   int snap_rollback(const char *snap_name);
   int snap_rollback_with_progress(const char *snap_name, ProgressContext& pctx);
+  int snap_protect(const char *snap_name);
+  int snap_unprotect(const char *snap_name);
+  int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
 
   /* I/O */

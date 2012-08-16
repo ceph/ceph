@@ -3,7 +3,7 @@ from rados import (Rados, Object, ObjectExists, ObjectNotFound,
                    ANONYMOUS_AUID, ADMIN_AUID)
 import threading
 
-class TestPool(object):
+class TestRados(object):
 
     def setUp(self):
         self.rados = Rados(conffile='')
@@ -50,6 +50,10 @@ class TestPool(object):
         self.rados.create_pool('a' * 500)
         eq(set(['a' * 500]), self.list_non_default_pools())
         self.rados.delete_pool('a' * 500)
+
+    def test_get_fsid(self):
+        fsid = self.rados.get_fsid()
+        eq(len(fsid), 36)
 
 class TestIoctx(object):
 
