@@ -395,7 +395,6 @@ public:
   }
 
 
-  list<OpRequestRef> op_waiters;
   list<OpRequestRef> op_queue;  // op queue
 
   bool dirty_info, dirty_log;
@@ -625,6 +624,7 @@ protected:
 
   // pg waiters
   bool flushed;
+  list<OpRequestRef> waiting_for_map;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
