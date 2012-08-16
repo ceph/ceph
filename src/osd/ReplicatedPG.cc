@@ -5737,7 +5737,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   }
 
   if (requeue) {
-    op_waiters.splice(op_waiters.end(), rq);
+    waiting_for_map.splice(waiting_for_map.end(), rq);
   }
 }
 
