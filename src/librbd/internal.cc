@@ -1331,7 +1331,7 @@ namespace librbd {
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
 	  uint8_t protection_status = ictx->old_format ?
-	    RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
+	    (uint8_t)RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
 	  cls_client::parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
