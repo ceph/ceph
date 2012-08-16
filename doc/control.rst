@@ -141,9 +141,9 @@ Create a cluster snapshot. ::
 
 Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
 
-	$ ceph osd create [<id>]
+	$ ceph osd create [<uuid>]
 
-Create a new OSD. If no ID is given, a new ID is automatically selected
+Create a new OSD. If no UUID is given, a new UUID is automatically selected
 if possible. ::
 
 	$ ceph osd rm [<id>...]
