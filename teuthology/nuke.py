@@ -158,6 +158,21 @@ def remove_osd_mounts(ctx, log):
             ],
         )
 
+def remove_osd_tmpfs(ctx, log):
+    """
+    unmount tmpfs mounts
+    """
+    from .orchestra import run
+    ctx.cluster.run(
+        args=[
+            'grep', '/mnt', '/etc/mtab', run.Raw('|'),
+            'awk', '{print $2}', run.Raw('|'),
+            'xargs', '-r',
+            'sudo', 'umount', run.Raw(';'),
+            'true'
+            ],
+        )
+
 def reboot(ctx, remotes, log):
     import time
     nodes = {}
@@ -344,6 +359,9 @@ def nuke_helper(ctx, log):
 
     log.info('Unmount any osd data directories...')
     remove_osd_mounts(ctx, log)
+
+    log.info('Unmount any osd tmpfs dirs...')
+    remove_osd_tmpfs(ctx, log)
 
     log.info('Dealing with any kernel mounts...')
     kernel_mounts = find_kernel_mounts(ctx, log)

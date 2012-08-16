@@ -343,6 +343,17 @@ def cluster(ctx, config):
                 teuthology.roles_of_type(roles_for_host, 'osd'), devs
                 )
             log.info('journal map: %s', roles_to_journals)
+
+        if config.get('tmpfs_journal'):
+            log.info('tmpfs journal enabled')
+            roles_to_journals = {}
+            remote.run( args=[ 'sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt' ] )
+            for osd in teuthology.roles_of_type(roles_for_host, 'osd'):
+                tmpfs = '/mnt/osd.%s' % osd
+                roles_to_journals[osd] = tmpfs
+                remote.run( args=[ 'truncate', '-s', '1500M', tmpfs ] )
+            log.info('journal map: %s', roles_to_journals)
+
         remote_to_roles_to_devs[remote] = roles_to_devs
         remote_to_roles_to_journals[remote] = roles_to_journals
 
@@ -364,6 +375,9 @@ def cluster(ctx, config):
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
+
+    if config.get('tmpfs_journal'):
+        conf['journal dio'] = False
 
     ctx.ceph = argparse.Namespace()
     ctx.ceph.conf = conf
@@ -759,6 +773,12 @@ def cluster(ctx, config):
                         ]
                     )
 
+        for remote, roles_for_host in osds.remotes.iteritems():
+            remote.run(
+                args=[ 'sudo', 'umount', '-f', '/mnt' ],
+                check_status=False,
+            )
+
         if ctx.archive is not None:
             # archive mon data, too
             log.info('Archiving mon data...')
@@ -1041,6 +1061,7 @@ def task(ctx, config):
                 mkfs_options=config.get('mkfs_options', None),
                 mount_options=config.get('mount_options',None),
                 block_journal=config.get('block_journal', None),
+                tmpfs_journal=config.get('tmpfs_journal', None),
                 log_whitelist=config.get('log-whitelist', []),
                 )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
