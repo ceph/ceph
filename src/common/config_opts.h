@@ -165,6 +165,7 @@ OPTION(client_oc_max_dirty_age, OPT_DOUBLE, 5.0)      // max age in cache before
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_big_writes, OPT_BOOL, true)
+OPTION(fuse_debug, OPT_BOOL, true)
 OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_mon_retry_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_timeout, OPT_DOUBLE, 10.0)    // before we ask for a map
