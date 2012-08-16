@@ -64,6 +64,7 @@ different than debug builds."
        exit 1
     fi
     CFLAGS="${CFLAGS} -fno-omit-frame-pointer -O2"
+    CXXFLAGS="${CXXFLAGS} -fno-omit-frame-pointer -O2"
     debug_level=1
 fi
 
