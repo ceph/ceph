@@ -2757,7 +2757,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   }
 
   else if (cmd[0] == "cpu_profiler") {
-    cpu_profiler_handle_command(cmd, clog);
+    cpu_profiler_handle_command(cmd, ss);
   }
 
   else if (cmd[0] == "dump_pg_recovery_stats") {

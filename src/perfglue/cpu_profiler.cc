@@ -18,43 +18,38 @@
 #include <google/profiler.h>
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
-				 LogClient &clog)
+				 ostream& out)
 {
   if (cmd[1] == "start") {
     if (cmd.size() < 3) {
-      clog.info() << "cpu_profiler: you must give an argument to start: a "
-	          << "file name to log to.\n";
+      out << "cpu_profiler: you must give an argument to start: a "
+	  << "file name to log to.";
       return;
     }
     const char *file = cmd[2].c_str();
     int r = ProfilerStart(file);
-    clog.info() << "cpu_profiler: starting logging to " << file
-		<< ", r=" << r << "\n";
+    out << "cpu_profiler: starting logging to " << file
+	<< ", r=" << r;
   }
   else if (cmd[1] == "status") {
-    if (ProfilingIsEnabledForAllThreads())
-      clog.info() << "cpu_profiler is enabled\n";
-    else
-      clog.info() << "cpu_profiler is not enabled\n";
     ProfilerState st;
     ProfilerGetCurrentState(&st);
-    clog.info() << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
-		<< " start_time " << st.start_time
-		<< " profile_name " << st.profile_name
-		<< " samples " << st.samples_gathered
-		<< "\n";
+    out << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
+	<< " start_time " << st.start_time
+	<< " profile_name " << st.profile_name
+	<< " samples " << st.samples_gathered;
   }
   else if (cmd[1] == "flush") {
-    clog.info() << "cpu_profiler: flushing\n";
     ProfilerFlush();
+    out << "cpu_profiler: flushed";
   }
   else if (cmd[1] == "stop") {
-    clog.info() << "cpu_profiler: flushing and stopping\n";
     ProfilerFlush();
     ProfilerStop();
+    out << "cpu_profiler: flushed and stopped";
   }
   else {
-    clog.info() << "can't understand cpu_profiler command. Expected one of: "
-		<< "start,status,flush,stop.\n";
+    out << "cpu_profiler: unrecognized command " << cmd
+	<< "; expected one of start, status, flush, stop.";
   }
 }
