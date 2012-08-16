@@ -5772,6 +5772,10 @@ void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
 
+  // requeue everything in the reverse order they should be
+  // reexamined.
+  requeue_ops(waiting_for_map);
+
   clear_scrub_reserved();
   scrub_clear_state();
 
