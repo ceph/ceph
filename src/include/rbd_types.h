@@ -19,7 +19,7 @@
 #include <sys/types.h>
 #endif
 
-
+#include "rbd/features.h"
 
 /* New-style rbd image 'foo' consists of objects
  *   rbd_id.foo              - id of image
@@ -32,11 +32,6 @@
 #define RBD_HEADER_PREFIX      "rbd_header."
 #define RBD_DATA_PREFIX        "rbd_data."
 #define RBD_ID_PREFIX          "rbd_id."
-
-#define RBD_FEATURE_LAYERING      1
-
-#define RBD_FEATURES_INCOMPATIBLE (RBD_FEATURE_LAYERING)
-#define RBD_FEATURES_ALL          (RBD_FEATURE_LAYERING)
 
 /*
  * old-style rbd image 'foo' consists of objects

@@ -1254,6 +1254,11 @@ int librados::Rados::cluster_stat(cluster_stat_t& result)
   return r;
 }
 
+int librados::Rados::cluster_fsid(string *fsid)
+{
+  return client->get_fsid(fsid);
+}
+
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
 {
   PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;
@@ -1445,6 +1450,18 @@ extern "C" int rados_pool_reverse_lookup(rados_t cluster, int64_t id,
     return -ERANGE;
   strcpy(buf, name.c_str());
   return name.length();
+}
+
+extern "C" int rados_cluster_fsid(rados_t cluster, char *buf,
+				  size_t maxlen)
+{
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  std::string fsid;
+  radosp->get_fsid(&fsid);
+  if (fsid.length() >= maxlen)
+    return -ERANGE;
+  strcpy(buf, fsid.c_str());
+  return fsid.length();
 }
 
 extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
