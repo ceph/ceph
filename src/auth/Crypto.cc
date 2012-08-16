@@ -58,28 +58,24 @@ static int get_random_bytes(int len, bufferlist& bl)
 
 // ---------------------------------------------------
 
-int CryptoNone::
-create(bufferptr& secret)
+int CryptoNone::create(bufferptr& secret)
 {
   return 0;
 }
 
-int CryptoNone::
-validate_secret(bufferptr& secret)
+int CryptoNone::validate_secret(bufferptr& secret)
 {
   return 0;
 }
 
-void CryptoNone::
-encrypt(const bufferptr& secret, const bufferlist& in,
-	bufferlist& out, std::string &error) const
+void CryptoNone::encrypt(const bufferptr& secret, const bufferlist& in,
+			 bufferlist& out, std::string &error) const
 {
   out = in;
 }
 
-void CryptoNone::
-decrypt(const bufferptr& secret, const bufferlist& in,
-	bufferlist& out, std::string &error) const
+void CryptoNone::decrypt(const bufferptr& secret, const bufferlist& in,
+			 bufferlist& out, std::string &error) const
 {
   out = in;
 }
@@ -229,9 +225,8 @@ int CryptoAES::validate_secret(bufferptr& secret)
   return 0;
 }
 
-void CryptoAES::
-encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
-	std::string &error) const
+void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
+			std::string &error) const
 {
   if (secret.length() < AES_KEY_LEN) {
     error = "key is too short";
@@ -271,9 +266,8 @@ encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
 #endif
 }
 
-void CryptoAES::
-decrypt(const bufferptr& secret, const bufferlist& in, 
-	bufferlist& out, std::string &error) const
+void CryptoAES::decrypt(const bufferptr& secret, const bufferlist& in, 
+			bufferlist& out, std::string &error) const
 {
 #ifdef USE_CRYPTOPP
   const unsigned char *key = (const unsigned char *)secret.c_str();
@@ -348,7 +342,7 @@ int CryptoKey::set_secret(CephContext *cct, int type, bufferptr& s)
   this->type = type;
   created = ceph_clock_now(cct);
 
-  CryptoHandler *h = get_crypto_handler(type);
+  CryptoHandler *h = cct->get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   int ret = h->validate_secret(s);
@@ -366,16 +360,15 @@ int CryptoKey::create(CephContext *cct, int t)
   type = t;
   created = ceph_clock_now(cct);
 
-  CryptoHandler *h = get_crypto_handler(type);
+  CryptoHandler *h = cct->get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   return h->create(secret);
 }
 
-void CryptoKey::
-encrypt(const bufferlist& in, bufferlist& out, std::string &error) const
+void CryptoKey::encrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
 {
-  CryptoHandler *h = get_crypto_handler(type);
+  CryptoHandler *h = cct->get_crypto_handler(type);
   if (!h) {
     ostringstream oss;
     oss << "CryptoKey::encrypt: key type " << type << " not supported.";
@@ -384,10 +377,9 @@ encrypt(const bufferlist& in, bufferlist& out, std::string &error) const
   h->encrypt(this->secret, in, out, error);
 }
 
-void CryptoKey::
-decrypt(const bufferlist& in, bufferlist& out, std::string &error) const
+void CryptoKey::decrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
 {
-  CryptoHandler *h = get_crypto_handler(type);
+  CryptoHandler *h = cct->get_crypto_handler(type);
   if (!h) {
     ostringstream oss;
     oss << "CryptoKey::decrypt: key type " << type << " not supported.";

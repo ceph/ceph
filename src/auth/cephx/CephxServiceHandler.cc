@@ -75,7 +75,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       uint64_t expected_key;
       std::string error;
-      cephx_calc_client_server_challenge(secret, server_challenge,
+      cephx_calc_client_server_challenge(cct, secret, server_challenge,
 					 req.client_challenge, &expected_key, error);
       if (!error.empty()) {
 	ldout(cct, 0) << " cephx_calc_client_server_challenge error: " << error << dendl;

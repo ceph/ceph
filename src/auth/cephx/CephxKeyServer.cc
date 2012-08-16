@@ -258,7 +258,7 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;
-  CryptoHandler *crypto = get_crypto_handler(CEPH_CRYPTO_AES);
+  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (!crypto)
     return false;
 
@@ -359,7 +359,7 @@ bool KeyServer::get_rotating_encrypted(const EntityName& name,
   RotatingSecrets secrets = rotate_iter->second;
 
   std::string error;
-  encode_encrypt(secrets, specific_key, enc_bl, error);
+  encode_encrypt(cct, secrets, specific_key, enc_bl, error);
   if (!error.empty())
     return false;
 

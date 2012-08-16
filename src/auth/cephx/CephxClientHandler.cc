@@ -50,7 +50,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
     std::string error;
-    cephx_calc_client_server_challenge(secret, server_challenge,
+    cephx_calc_client_server_challenge(cct, secret, server_challenge,
 				       req.client_challenge, &req.key, error);
     if (!error.empty()) {
       ldout(cct, 20) << "cephx_calc_client_server_challenge error: " << error << dendl;
@@ -156,7 +156,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	CryptoKey secret_key;
 	keyring->get_secret(cct->_conf->name, secret_key);
 	std::string error;
-	decode_decrypt(secrets, secret_key, indata, error);
+	decode_decrypt(cct, secrets, secret_key, indata, error);
 	if (error.empty()) {
 	  rotating_secrets->set_secrets(secrets);
 	} else {

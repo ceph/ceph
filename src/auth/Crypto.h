@@ -77,8 +77,8 @@ public:
 
   // --
   int create(CephContext *cct, int type);
-  void encrypt(const bufferlist& in, bufferlist& out, std::string &error) const;
-  void decrypt(const bufferlist& in, bufferlist& out, std::string &error) const;
+  void encrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const;
+  void decrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const;
 
   void to_str(std::string& s) const;
 };
