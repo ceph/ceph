@@ -518,6 +518,7 @@ namespace librados
                        std::string& category,
 		       std::map<std::string, stats_map>& stats);
     int cluster_stat(cluster_stat_t& result);
+    int cluster_fsid(std::string *fsid);
 
     /* pool aio */
     static PoolAsyncCompletion *pool_async_create_completion();

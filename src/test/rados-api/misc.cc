@@ -27,6 +27,19 @@ TEST(LibRadosMisc, VersionPP) {
   Rados::version(&major, &minor, &extra);
 }
 
+TEST(LibRadosMisc, ClusterFSID) {
+  rados_t cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+
+  char fsid[37];
+  ASSERT_EQ(-ERANGE, rados_cluster_fsid(cluster, fsid, sizeof(fsid) - 1));
+  ASSERT_EQ(sizeof(fsid) - 1,
+            (size_t)rados_cluster_fsid(cluster, fsid, sizeof(fsid)));
+
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
 static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
 				      const std::string &key)
 {
