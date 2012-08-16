@@ -14,6 +14,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
 -P                               profiling build
+-p                               google profiler
 -O <level>                       optimize
 
 EOF
@@ -28,7 +29,7 @@ debug_level=0
 verbose=0
 profile=0
 CONFIGURE_FLAGS=""
-while getopts  "d:e:hHTPvO:" flag
+while getopts  "d:e:hHTPpvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -36,6 +37,7 @@ do
     O) CFLAGS="${CFLAGS} -O$OPTARG";;
 
     P) profile=1;;
+    p) with_profiler="--with-profiler" ;;
 
     h) usage
         exit 0;;
