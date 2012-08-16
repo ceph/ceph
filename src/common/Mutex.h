@@ -94,6 +94,9 @@ public:
   bool is_locked() const {
     return (nlock > 0);
   }
+  bool is_locked_by_me() const {
+    return nlock > 0 && locked_by == pthread_self();
+  }
 
   bool TryLock() {
     int r = pthread_mutex_trylock(&_m);
