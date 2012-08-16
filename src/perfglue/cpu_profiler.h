@@ -19,9 +19,7 @@
 #include <string>
 #include <vector>
 
-class LogClient;
-
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
-				 LogClient &clog);
+				 ostream& out);
 
 #endif

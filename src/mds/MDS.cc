@@ -766,7 +766,9 @@ void MDS::handle_command(MMonCommand *m)
     } else dout(0) << "bad migrate_dir syntax" << dendl;
   } 
   else if (m->cmd[0] == "cpu_profiler") {
-    cpu_profiler_handle_command(m->cmd, clog);
+    ostringstream ss;
+    cpu_profiler_handle_command(m->cmd, ss);
+    clog.info() << ss.str();
   }
  else if (m->cmd[0] == "heap") {
    if (!ceph_using_tcmalloc())
