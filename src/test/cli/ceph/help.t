@@ -43,7 +43,7 @@
     ceph osd crush set <osd-id> <name> <weight> [<loc1> [<loc2> ...]]
     ceph osd crush move <bucketname> <loc1> [<loc2> ...]
     ceph osd crush reweight <name> <weight>
-    ceph osd create [<osd-id>]
+    ceph osd create [<uuid>]
     ceph osd rm <osd-id> [<osd-id>...]
     ceph osd lost [--yes-i-really-mean-it]
     ceph osd reweight <osd-id> <weight>
