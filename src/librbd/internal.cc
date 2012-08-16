@@ -1246,7 +1246,7 @@ namespace librbd {
 
     int r;
     ::SnapContext new_snapc;
-    bool new_snap;
+    bool new_snap = false;
     vector<string> snap_names;
     vector<uint64_t> snap_sizes;
     vector<uint64_t> snap_features;
