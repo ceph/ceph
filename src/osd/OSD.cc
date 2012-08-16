@@ -3519,11 +3519,16 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (superblock.oldest_map) {
+    int num = 0;
     for (epoch_t e = superblock.oldest_map; e < m->oldest_map; ++e) {
       dout(20) << " removing old osdmap epoch " << e << dendl;
       t.remove(coll_t::META_COLL, get_osdmap_pobject_name(e));
       t.remove(coll_t::META_COLL, get_inc_osdmap_pobject_name(e));
       superblock.oldest_map = e+1;
+      num++;
+      if (num >= g_conf->osd_target_transaction_size &&
+	  num > (last - first))  // make sure we at least keep pace with incoming maps
+	break;
     }
   }
 
