@@ -1534,6 +1534,7 @@ main(int argc, char **argv)
 	free(temp_buf);
 
 	prt("All operations completed A-OK!\n");
+	fclose(fsxlogf);
 
 	exit(0);
 	return 0;
