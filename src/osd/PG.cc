@@ -123,9 +123,15 @@ std::string PG::gen_prefix() const
 {
   stringstream out;
   OSDMapRef mapref = osdmap_ref;
-  out << "osd." << osd->whoami 
-      << " pg_epoch: " << (mapref ? mapref->get_epoch():0)
-      << " " << *this << " ";
+  if (_lock.is_locked_by_me()) {
+    out << "osd." << osd->whoami
+	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
+	<< " " << *this << " ";
+  } else {
+    out << "osd." << osd->whoami
+	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
+	<< " pg[" << info.pgid << "(unlocked)] ";
+  }
   return out.str();
 }
   
