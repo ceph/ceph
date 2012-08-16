@@ -5737,7 +5737,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   }
 
   if (requeue) {
-    waiting_for_map.splice(waiting_for_map.end(), rq);
+    requeue_ops(rq);
   }
 }
 
@@ -5771,14 +5771,13 @@ void ReplicatedPG::on_activate()
 void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
-  apply_and_flush_repops(is_primary());
 
   clear_scrub_reserved();
   scrub_clear_state();
 
   context_registry_on_change();
 
-  // take object waiters
+  // requeue object waiters
   requeue_object_waiters(waiting_for_missing_object);
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
@@ -5786,8 +5785,12 @@ void ReplicatedPG::on_change()
     requeue_ops(p->second);
     finish_degraded_object(p->first);
   }
+
   requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
+
+  // this will requeue ops we were working on but didn't finish
+  apply_and_flush_repops(is_primary());
 
   // clear pushing/pulling maps
   pushing.clear();
