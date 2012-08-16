@@ -115,4 +115,28 @@ extern CryptoHandler *get_crypto_handler(int type);
 extern int get_random_bytes(char *buf, int len);
 
 
+class CryptoNone : public CryptoHandler {
+public:
+  CryptoNone() { }
+  ~CryptoNone() {}
+  int create(bufferptr& secret);
+  int validate_secret(bufferptr& secret);
+  void encrypt(const bufferptr& secret, const bufferlist& in,
+	      bufferlist& out, std::string &error) const;
+  void decrypt(const bufferptr& secret, const bufferlist& in,
+	      bufferlist& out, std::string &error) const;
+};
+
+class CryptoAES : public CryptoHandler {
+public:
+  CryptoAES() { }
+  ~CryptoAES() {}
+  int create(bufferptr& secret);
+  int validate_secret(bufferptr& secret);
+  void encrypt(const bufferptr& secret, const bufferlist& in,
+	       bufferlist& out, std::string &error) const;
+  void decrypt(const bufferptr& secret, const bufferlist& in, 
+	      bufferlist& out, std::string &error) const;
+};
+
 #endif

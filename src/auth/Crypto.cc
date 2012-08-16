@@ -58,18 +58,6 @@ static int get_random_bytes(int len, bufferlist& bl)
 
 // ---------------------------------------------------
 
-class CryptoNone : public CryptoHandler {
-public:
-  CryptoNone() { }
-  ~CryptoNone() {}
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-};
-
 int CryptoNone::
 create(bufferptr& secret)
 {
@@ -221,18 +209,6 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
 #else
 # error "No supported crypto implementation found."
 #endif
-
-class CryptoAES : public CryptoHandler {
-public:
-  CryptoAES() { }
-  ~CryptoAES() {}
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	       bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in, 
-	      bufferlist& out, std::string &error) const;
-};
 
 int CryptoAES::create(bufferptr& secret)
 {
