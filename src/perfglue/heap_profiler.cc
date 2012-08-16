@@ -86,34 +86,33 @@ void ceph_heap_profiler_dump(const char *reason)
 }
 
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
-                                       LogClient &clog)
+                                       ostream& out)
 {
   if (cmd.size() == 2 && cmd[1] == "dump") {
-    if (!ceph_heap_profiler_running())
-      clog.info() << "heap profiler not running; can't dump!\n";
-    else {
-      char *heap_stats = new char[1024];
-      ceph_heap_profiler_stats(heap_stats, 1024);
-      clog.info() << g_conf->name << "dumping heap profile now.\n"
-		  << heap_stats << std::endl;
-      ceph_heap_profiler_dump("admin request");
+    if (!ceph_heap_profiler_running()) {
+      out << "heap profiler not running; can't dump";
+      return;
     }
+    char *heap_stats = new char[1024];
+    ceph_heap_profiler_stats(heap_stats, 1024);
+    out << g_conf->name << "dumping heap profile now.\n"
+	<< heap_stats;
+    ceph_heap_profiler_dump("admin request");
   } else if (cmd.size() == 2 && cmd[1] == "start_profiler") {
     ceph_heap_profiler_start();
-    clog.info() << g_conf->name << " started profiler \n";
+    out << g_conf->name << " started profiler";
   } else if (cmd.size() == 2 && cmd[1] == "stop_profiler") {
     ceph_heap_profiler_stop();
-    clog.info() << g_conf->name << " stopped profiler\n";
+    out << g_conf->name << " stopped profiler";
   } else if (cmd.size() == 2 && cmd[1] == "release") {
     ceph_heap_release_free_memory();
-    clog.info() << g_conf->name << " releasing free RAM back "
-                << "to system.\n";
+    out << g_conf->name << " releasing free RAM back to system.";
   } else if (cmd.size() == 2 && cmd[1] == "stats") {
     char *heap_stats = new char[1024];
     ceph_heap_profiler_stats(heap_stats, 1024);
-    clog.info() << g_conf->name << "tcmalloc heap stats:"
-		<< heap_stats << std::endl;
+    out << g_conf->name << "tcmalloc heap stats:"
+	<< heap_stats;
   } else {
-    clog.warn() << "unknown command " << cmd << std::endl;
+    out << "unknown command " << cmd;
   }
 }
