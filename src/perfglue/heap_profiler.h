@@ -44,6 +44,6 @@ void ceph_heap_profiler_stop();
 void ceph_heap_profiler_dump(const char *reason);
 
 void ceph_heap_profiler_handle_command(const std::vector<std::string> &cmd,
-                                       LogClient& clog);
+                                       ostream& out);
 
 #endif /* HEAP_PROFILER_H_ */

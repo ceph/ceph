@@ -2688,7 +2688,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   
   else if (cmd[0] == "heap") {
     if (ceph_using_tcmalloc()) {
-      ceph_heap_profiler_handle_command(cmd, clog);
+      ceph_heap_profiler_handle_command(cmd, ss);
     } else {
       r = -EOPNOTSUPP;
       ss << "could not issue heap profiler command -- not using tcmalloc!";
