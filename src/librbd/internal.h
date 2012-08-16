@@ -167,7 +167,7 @@ namespace librbd {
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
                 AioCompletion *c);
-  int aio_discard(ImageCtx *ictx, uint64_t off, size_t len, AioCompletion *c);
+  int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
                char *buf, AioCompletion *c);
   int flush(ImageCtx *ictx);
