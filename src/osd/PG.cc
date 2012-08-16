@@ -1518,7 +1518,7 @@ void PG::do_request(OpRequestRef op)
   // do any pending flush
   do_pending_flush();
   if (must_delay_request(op)) {
-    op_waiters.push_back(op);
+    waiting_for_map.push_back(op);
     return;
   } else if (can_discard_request(op)) {
     return;
@@ -4115,7 +4115,7 @@ void PG::queue_op(OpRequestRef op)
 void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
-  requeue_ops(op_waiters);
+  requeue_ops(waiting_for_map);
   for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
        i != peering_waiters.end();
        ++i) osd->queue_for_peering(this);
