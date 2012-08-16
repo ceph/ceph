@@ -1,0 +1,45 @@
+#!/bin/bash -ex
+
+# this should be run from the src directory in the ceph.git
+
+CEPH_SRC=$(pwd)
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CEPH_SRC/.libs"
+export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
+PATH="$PATH:$CEPH_SRC"
+
+recreate_pool() {
+    POOL_NAME=$1
+    PG_NUM=100
+    ceph osd pool delete $POOL_NAME
+    ceph osd pool create $POOL_NAME $PG_NUM
+}
+
+run_cli_tests() {
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/import_export.sh
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/copy.sh
+}
+
+run_api_tests() {
+    recreate_pool rbd
+    # skip many_snaps since it takes several minutes
+    # skip remove_with_watcher until #2533 is fixed
+    nosetests -v test_rbd -e '.*many_snaps' -e '.*remove_with_watcher'
+    # test_librbd creates its own pools
+    test_librbd
+}
+
+run_api_tests
+run_cli_tests
+
+RBD_CREATE_ARGS="--new-format"
+run_cli_tests
+
+for i in 0 1
+do
+    RBD_FEATURES=$i
+    run_api_tests
+done
+
+echo OK

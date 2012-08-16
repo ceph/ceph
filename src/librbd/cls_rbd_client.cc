@@ -31,8 +31,10 @@ namespace librbd {
       try {
 	bufferlist::iterator iter = outbl.begin();
 	uint64_t size;
+	// get_size
 	::decode(*order, iter);
 	::decode(size, iter);
+	// get_object_prefix
 	::decode(*object_prefix, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -46,22 +48,28 @@ namespace librbd {
 			     uint64_t *incompatible_features,
                              std::set<std::pair<std::string, std::string> > *lockers,
                              bool *exclusive_lock,
-			     ::SnapContext *snapc)
+			     ::SnapContext *snapc,
+			     parent_info *parent)
     {
       assert(size);
       assert(features);
       assert(incompatible_features);
+      assert(lockers);
+      assert(exclusive_lock);
       assert(snapc);
+      assert(parent);
 
       librados::ObjectReadOperation op;
-      bufferlist sizebl, featuresbl, empty;
+      bufferlist sizebl, featuresbl, parentbl, empty;
       snapid_t snap = CEPH_NOSNAP;
       ::encode(snap, sizebl);
       ::encode(snap, featuresbl);
+      ::encode(snap, parentbl);
       op.exec("rbd", "get_size", sizebl);
       op.exec("rbd", "get_features", featuresbl);
       op.exec("rbd", "get_snapcontext", empty);
       op.exec("rbd", "list_locks", empty);
+      op.exec("rbd", "get_parent", parentbl);
 
       bufferlist outbl;
       int r = ioctx->operate(oid, &op, &outbl);
@@ -71,13 +79,22 @@ namespace librbd {
       try {
 	bufferlist::iterator iter = outbl.begin();
 	uint8_t order;
+	// get_size
 	::decode(order, iter);
 	::decode(*size, iter);
+	// get_features
 	::decode(*features, iter);
 	::decode(*incompatible_features, iter);
+	// get_snapcontext
 	::decode(*snapc, iter);
+	// list_locks
 	::decode(*lockers, iter);
 	::decode(*exclusive_lock, iter);
+	// get_parent
+	::decode(parent->pool_id, iter);
+	::decode(parent->image_id, iter);
+	::decode(parent->snap_id, iter);
+	::decode(parent->overlap, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -255,7 +272,9 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features)
+		      std::vector<uint64_t> *features,
+		      std::vector<parent_info> *parents,
+		      std::vector<uint8_t> *protection_statuses)
     {
       names->clear();
       names->resize(ids.size());
@@ -263,17 +282,26 @@ namespace librbd {
       sizes->resize(ids.size());
       features->clear();
       features->resize(ids.size());
+      parents->clear();
+      parents->resize(ids.size());
+      protection_statuses->clear();
+      protection_statuses->resize(ids.size());
+
       librados::ObjectReadOperation op;
       for (vector<snapid_t>::const_iterator it = ids.begin();
 	   it != ids.end(); ++it) {
-	bufferlist bl1, bl2, bl3;
 	snapid_t snap_id = it->val;
+	bufferlist bl1, bl2, bl3, bl4, bl5;
 	::encode(snap_id, bl1);
 	op.exec("rbd", "get_snapshot_name", bl1);
 	::encode(snap_id, bl2);
 	op.exec("rbd", "get_size", bl2);
 	::encode(snap_id, bl3);
 	op.exec("rbd", "get_features", bl3);
+	::encode(snap_id, bl4);
+	op.exec("rbd", "get_parent", bl4);
+	::encode(snap_id, bl5);
+	op.exec("rbd", "get_protection_status", bl5);
       }
 
       bufferlist outbl;
@@ -286,11 +314,21 @@ namespace librbd {
 	for (size_t i = 0; i < ids.size(); ++i) {
 	  uint8_t order;
 	  uint64_t incompat_features;
+	  // get_snapshot_name
 	  ::decode((*names)[i], iter);
+	  // get_size
 	  ::decode(order, iter);
 	  ::decode((*sizes)[i], iter);
+	  // get_features
 	  ::decode((*features)[i], iter);
 	  ::decode(incompat_features, iter);
+	  // get_parent
+	  ::decode((*parents)[i].pool_id, iter);
+	  ::decode((*parents)[i].image_id, iter);
+	  ::decode((*parents)[i].snap_id, iter);
+	  ::decode((*parents)[i].overlap, iter);
+	  // get_protection_status
+	  ::decode((*protection_statuses)[i], iter);
 	}
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -351,27 +389,33 @@ namespace librbd {
     }
 
     int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-                   std::set<std::pair<std::string, std::string> > &locks,
-                   bool &exclusive)
+		   std::set<std::pair<std::string, std::string> > &locks,
+		   bool &exclusive)
     {
       bufferlist in, out;
       int r = ioctx->exec(oid, "rbd", "list_locks", in, out);
       if (r < 0) {
-        return r;
+	return r;
       }
 
       bufferlist::iterator iter = out.begin();
       try {
-        ::decode(locks, iter);
-        ::decode(exclusive, iter);
+	::decode(locks, iter);
+	::decode(exclusive, iter);
       } catch (const buffer::error &err) {
-        return -EBADMSG;
+	return -EBADMSG;
       }
       return 0;
     }
 
+    int copyup(librados::IoCtx *ioctx, const std::string &oid,
+	       bufferlist data) {
+      bufferlist out;
+      return ioctx->exec(oid, "rbd", "copyup", data, out);
+    }
+
     int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-                             const std::string &cookie)
+			     const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(cookie, in);
@@ -379,7 +423,7 @@ namespace librbd {
     }
 
     int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-                          const std::string &cookie)
+			  const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(cookie, in);
@@ -387,19 +431,48 @@ namespace librbd {
     }
 
     int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-                         const std::string &cookie)
+		     const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(cookie, in);
       return ioctx->exec(oid, "rbd", "unlock_image", in, out);
     }
     int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-                   const std::string &locker, const std::string &cookie)
+		   const std::string &locker, const std::string &cookie)
     {
       bufferlist in, out;
       ::encode(locker, in);
       ::encode(cookie, in);
       return ioctx->exec(oid, "rbd", "break_lock", in, out);
+    }
+
+    int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t *protection_status)
+    {
+      bufferlist in, out;
+      ::encode(snap_id.val, in);
+
+      int r = ioctx->exec(oid, "rbd", "get_protection_status", in, out);
+      if (r < 0)
+	return r;
+
+      try {
+	bufferlist::iterator iter = out.begin();
+	::decode(*protection_status, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t protection_status)
+    {
+      bufferlist in, out;
+      ::encode(snap_id, in);
+      ::encode(protection_status, in);
+      return ioctx->exec(oid, "rbd", "set_protection_status", in, out);
     }
 
     /************************ rbd_id object methods ************************/

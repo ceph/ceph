@@ -27,6 +27,7 @@ extern "C" {
 #endif
 #include <string.h>
 #include "../rados/librados.h"
+#include "features.h"
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
@@ -84,6 +85,7 @@ int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 			     librbd_progress_fn_t cb, void *cbdata);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 int rbd_get_old_format(rbd_image_t image, uint8_t *old);
+int rbd_get_size(rbd_image_t image, uint64_t *size);
 int rbd_get_features(rbd_image_t image, uint64_t *features);
 int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
 int rbd_get_parent_info(rbd_image_t image,
@@ -102,7 +104,32 @@ int rbd_snap_remove(rbd_image_t image, const char *snapname);
 int rbd_snap_rollback(rbd_image_t image, const char *snapname);
 int rbd_snap_rollback_with_progress(rbd_image_t image, const char *snapname,
 				    librbd_progress_fn_t cb, void *cbdata);
+/**
+ * Prevent a snapshot from being deleted until it is unprotected.
+ *
+ * @param snap_name which snapshot to protect
+ * @returns 0 on success, negative error code on failure
+ */
+int rbd_snap_protect(rbd_image_t image, const char *snap_name);
+/**
+ * Allow a snaphshot to be deleted.
+ *
+ * @param snap_name which snapshot to unprotect
+ * @returns 0 on success, negative error code on failure
+ */
+int rbd_snap_unprotect(rbd_image_t image, const char *snap_name);
+/**
+ * Determine whether a snapshot is protected.
+ *
+ * @param snap_name which snapshot query
+ * @param is_protected where to store the result (0 or 1)
+ * @returns 0 on success, negative error code on failure
+ */
+int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
+			  int *is_protected);
 int rbd_snap_set(rbd_image_t image, const char *snapname);
+
+int rbd_flatten(rbd_image_t image);
 
 /* cooperative locking */
 /**

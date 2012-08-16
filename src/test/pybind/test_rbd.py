@@ -1,16 +1,19 @@
+import functools
 import random
 import struct
 import os
 
-from nose import with_setup
+from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
-                 ImageBusy, ImageHasSnapshots, RBD_FEATURE_LAYERING)
+                 ImageBusy, ImageHasSnapshots, ReadOnlyImage,
+                 RBD_FEATURE_LAYERING)
 
 
 rados = None
 ioctx = None
+features = None
 IMG_NAME = 'foo'
 IMG_SIZE = 8 << 20 # 8 MiB
 IMG_ORDER = 22 # 4 MiB objects
@@ -22,6 +25,10 @@ def setUp():
     assert rados.pool_exists('rbd')
     global ioctx
     ioctx = rados.open_ioctx('rbd')
+    global features
+    features = os.getenv("RBD_FEATURES")
+    if features is not None:
+        features = int(features)
 
 def tearDown():
     global ioctx
@@ -30,10 +37,7 @@ def tearDown():
     rados.shutdown()
 
 def create_image():
-    global features
-    features = os.getenv("RBD_FEATURES")
     if features is not None:
-        features = int(features)
         RBD().create(ioctx, IMG_NAME, IMG_SIZE, IMG_ORDER, old_format=False,
                      features=int(features))
     else:
@@ -41,7 +45,20 @@ def create_image():
 
 def remove_image():
     RBD().remove(ioctx, IMG_NAME)
-    
+
+def require_features(required_features):
+    def wrapper(fn):
+        def _require_features(*args, **kwargs):
+            global features
+            if features is None:
+                raise SkipTest
+            for feature in required_features:
+                if feature & features != feature:
+                    raise SkipTest
+            return fn(*args, **kwargs)
+        return functools.wraps(fn)(_require_features)
+    return wrapper
+
 def test_version():
     RBD().version()
 
@@ -136,6 +153,22 @@ class TestImage(object):
         info = self.image.stat()
         check_stat(info, new_size, IMG_ORDER)
 
+    def test_size(self):
+        eq(IMG_SIZE, self.image.size())
+        self.image.create_snap('snap1')
+        new_size = IMG_SIZE * 2
+        self.image.resize(new_size)
+        eq(new_size, self.image.size())
+        self.image.create_snap('snap2')
+        self.image.set_snap('snap2')
+        eq(new_size, self.image.size())
+        self.image.set_snap('snap1')
+        eq(IMG_SIZE, self.image.size())
+        self.image.set_snap(None)
+        eq(new_size, self.image.size())
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+
     def test_resize_down(self):
         new_size = IMG_SIZE / 2
         data = rand_data(256)
@@ -198,6 +231,19 @@ class TestImage(object):
         eq(['snap1'], map(lambda snap: snap['name'], self.image.list_snaps()))
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_protect_snap(self):
+        self.image.create_snap('snap1')
+        assert(not self.image.is_protected_snap('snap1'))
+        self.image.protect_snap('snap1')
+        assert(self.image.is_protected_snap('snap1'))
+        assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
+        self.image.unprotect_snap('snap1')
+        assert(not self.image.is_protected_snap('snap1'))
+        self.image.remove_snap('snap1')
+        assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
+        assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
 
     def test_remove_with_snap(self):
         self.image.create_snap('snap1')
@@ -350,43 +396,138 @@ class TestImage(object):
         eq(read, data)
         self.image.remove_snap('snap1')
 
-    def test_clone(self):
-        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
-            return 0
+class TestClone(object):
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def setUp(self):
+        global ioctx
+        global features
+        self.rbd = RBD()
+        create_image()
+        self.image = Image(ioctx, IMG_NAME)
+        data = rand_data(256)
+        self.image.write(data, IMG_SIZE / 2)
         self.image.create_snap('snap1')
-        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
-        with Image(ioctx, 'clone') as clone:
-            image_info = self.image.stat()
-            clone_info = clone.stat()
-            eq(clone_info['size'], image_info['size'])
-            eq(clone_info['size'], clone.overlap())
-        RBD().remove(ioctx, 'clone')
+        global features
+        self.image.protect_snap('snap1')
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+        self.clone = Image(ioctx, 'clone')
+
+    def tearDown(self):
+        global ioctx
+        self.image.unprotect_snap('snap1')
         self.image.remove_snap('snap1')
+        self.image.close()
+        remove_image()
+        self.clone.close()
+        self.rbd.remove(ioctx, 'clone')
 
-    def test_clone_resize(self):
-        if features is None or (features & RBD_FEATURE_LAYERING) == 0:
-            return 0
-        self.image.create_snap('snap1')
-        RBD().clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
-        with Image(ioctx, 'clone') as clone:
-            image_info = self.image.stat()
-            clone_info = clone.stat()
-            eq(clone_info['size'], image_info['size'])
-            eq(clone_info['size'], clone.overlap())
+    def test_unprotected(self):
+        self.image.create_snap('snap2')
+        global features
+        assert_raises(FunctionNotSupported, self.rbd.clone, ioctx, IMG_NAME, 'snap2', ioctx, 'clone2', features)
+        self.image.remove_snap('snap2')
 
-            clone.resize(IMG_SIZE / 2)
-            image_info = self.image.stat()
-            clone_info = clone.stat()
-            eq(clone_info['size'], IMG_SIZE / 2)
-            eq(image_info['size'], IMG_SIZE)
-            eq(clone.overlap(), IMG_SIZE / 2)
+    def test_stat(self):
+        image_info = self.image.stat()
+        clone_info = self.clone.stat()
+        eq(clone_info['size'], image_info['size'])
+        eq(clone_info['size'], self.clone.overlap())
 
-            clone.resize(IMG_SIZE * 2)
-            image_info = self.image.stat()
-            clone_info = clone.stat()
-            eq(clone_info['size'], IMG_SIZE * 2)
-            eq(image_info['size'], IMG_SIZE)
-            eq(clone.overlap(), IMG_SIZE / 2)
+    def test_resize_stat(self):
+        self.clone.resize(IMG_SIZE / 2)
+        image_info = self.image.stat()
+        clone_info = self.clone.stat()
+        eq(clone_info['size'], IMG_SIZE / 2)
+        eq(image_info['size'], IMG_SIZE)
+        eq(self.clone.overlap(), IMG_SIZE / 2)
 
-        RBD().remove(ioctx, 'clone')
-        self.image.remove_snap('snap1')
+        self.clone.resize(IMG_SIZE * 2)
+        image_info = self.image.stat()
+        clone_info = self.clone.stat()
+        eq(clone_info['size'], IMG_SIZE * 2)
+        eq(image_info['size'], IMG_SIZE)
+        eq(self.clone.overlap(), IMG_SIZE / 2)
+
+    def test_resize_io(self):
+        parent_data = self.image.read(IMG_SIZE / 2, 256)
+        self.clone.resize(IMG_SIZE / 2 + 128)
+        child_data = self.clone.read(IMG_SIZE / 2, 128)
+        eq(child_data, parent_data[:128])
+        self.clone.resize(IMG_SIZE)
+        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        eq(child_data, parent_data[:128] + ('\0' * 128))
+        self.clone.resize(IMG_SIZE / 2 + 1)
+        child_data = self.clone.read(IMG_SIZE / 2, 1)
+        eq(child_data, parent_data[0])
+        self.clone.resize(0)
+        self.clone.resize(IMG_SIZE)
+        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        eq(child_data, '\0' * 256)
+
+    def test_read(self):
+        parent_data = self.image.read(IMG_SIZE / 2, 256)
+        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        eq(child_data, parent_data)
+
+    def test_write(self):
+        parent_data = self.image.read(IMG_SIZE / 2, 256)
+        new_data = rand_data(256)
+        self.clone.write(new_data, IMG_SIZE / 2 + 256)
+        child_data = self.clone.read(IMG_SIZE / 2 + 256, 256)
+        eq(child_data, new_data)
+        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        eq(child_data, parent_data)
+        parent_data = self.image.read(IMG_SIZE / 2 + 256, 256)
+        eq(parent_data, '\0' * 256)
+
+class TestFlatten(TestClone):
+
+    def test_errors(self):
+        # test that we can't flatten a non-clone
+        assert_raises(InvalidArgument, self.image.flatten)
+
+        # test that we can't flatten a snapshot
+        self.clone.create_snap('snap2')
+        self.clone.set_snap('snap2')
+        assert_raises(ReadOnlyImage, self.clone.flatten)
+        self.clone.remove_snap('snap2')
+
+    def check_flatten_with_order(self, new_order):
+        global ioctx
+        global features
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone2',
+                       features, new_order)
+        #with Image(ioctx, 'clone2') as clone:
+        clone2 = Image(ioctx, 'clone2')
+        clone2.flatten()
+        eq(clone2.overlap(), 0)
+        clone2.close()
+        self.rbd.remove(ioctx, 'clone2')
+
+        # flatten after resizing to non-block size
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone2',
+                       features, new_order)
+        with Image(ioctx, 'clone2') as clone:
+            clone.resize(IMG_SIZE / 2 - 1)
+            clone.flatten()
+            eq(0, clone.overlap())
+        self.rbd.remove(ioctx, 'clone2')
+
+        # flatten after resizing to non-block size
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone2',
+                       features, new_order)
+        with Image(ioctx, 'clone2') as clone:
+            clone.resize(IMG_SIZE / 2 + 1)
+            clone.flatten()
+            eq(clone.overlap(), 0)
+        self.rbd.remove(ioctx, 'clone2')
+
+    def test_basic(self):
+        self.check_flatten_with_order(IMG_ORDER)
+
+    def test_smaller_order(self):
+        self.check_flatten_with_order(IMG_ORDER - 2)
+
+    def test_larger_order(self):
+        self.check_flatten_with_order(IMG_ORDER + 2)
