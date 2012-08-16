@@ -18,12 +18,12 @@ _rbd()
         prev="${COMP_WORDS[COMP_CWORD-1]}"
 
         if [[ ${cur} == -* ]] ; then
-            COMPREPLY=( $(compgen -W "-c --conf -m -d -f -p --pool --snap -i -o --image --dest --dest-pool --path --size --user --secret" -- ${cur}) )
+            COMPREPLY=( $(compgen -W "-c --conf -m -d -f -p --pool --snap -i -o --image --dest --dest-pool --path --size --id --keyfile" -- ${cur}) )
             return 0
         fi
 
         case "${prev}" in
-            --conf | -c | --path | --secret)
+            --conf | -c | --path | --keyfile | --keyring)
                 COMPREPLY=( $(compgen -f ${cur}) )
                 return 0
                 ;;

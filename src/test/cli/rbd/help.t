@@ -44,5 +44,5 @@
                                  (1 << order) bytes. Default is 22 (4 MB).
   
   For the map command:
-    --user <username>            rados user to authenticate as
-    --secret <path>              file containing secret key for use with cephx
+    --id <username>              rados user (without 'client.' prefix) to authenticate as
+    --keyfile <path>             file containing secret key for use with cephx

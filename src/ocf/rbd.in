@@ -200,10 +200,10 @@ rbd_start() {
     fi
 
     if [ -n "${OCF_RESKEY_user}" ]; then
-        rbd_map_options="--user ${OCF_RESKEY_user}"
+        rbd_map_options="--id ${OCF_RESKEY_user}"
     fi
     if [ -n "${OCF_RESKEY_secret}" ]; then
-        rbd_map_options="$rbd_map_options --secret ${OCF_RESKEY_secret}"
+        rbd_map_options="$rbd_map_options --keyfile ${OCF_RESKEY_secret}"
     fi
 
     rbd_name="${OCF_RESKEY_pool}/${OCF_RESKEY_name}"

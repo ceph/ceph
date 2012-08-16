@@ -49,7 +49,7 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
   return 0;
 }
 
-static int set_kernel_secret(const char *secret, const char *key_name)
+int set_kernel_secret(const char *secret, const char *key_name)
 {
   /* try to submit key to kernel via the keys api */
   key_serial_t serial;
