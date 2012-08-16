@@ -773,8 +773,11 @@ void MDS::handle_command(MMonCommand *m)
  else if (m->cmd[0] == "heap") {
    if (!ceph_using_tcmalloc())
      clog.info() << "tcmalloc not enabled, can't use heap profiler commands\n";
-   else
-     ceph_heap_profiler_handle_command(m->cmd, clog);
+   else {
+     ostringstream ss;
+     ceph_heap_profiler_handle_command(m->cmd, ss);
+     clog.info() << ss.str();
+   }
  } else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
 }
