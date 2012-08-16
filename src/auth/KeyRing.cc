@@ -38,15 +38,14 @@ int KeyRing::from_ceph_context(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;
 
-  int ret = 0;
+  int ret = -ENOENT;
   string filename;
+
   if (ceph_resolve_file_search(conf->keyring, filename)) {
     ret = load(cct, filename);
-    if (ret == 0)
-      return 0;
-
-    lderr(cct) << "failed to load " << filename
-	       << ": " << cpp_strerror(ret) << dendl;
+    if (ret < 0)
+      lderr(cct) << "failed to load " << filename
+		 << ": " << cpp_strerror(ret) << dendl;
   }
 
   if (!conf->key.empty()) {
@@ -83,7 +82,7 @@ int KeyRing::from_ceph_context(CephContext *cct)
     return 0;
   }
 
-  return -ENOENT;
+  return ret;
 }
 
 KeyRing *KeyRing::create_empty()
