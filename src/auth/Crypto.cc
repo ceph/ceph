@@ -304,39 +304,6 @@ void CryptoAES::decrypt(const bufferptr& secret, const bufferlist& in,
 
 // ---------------------------------------------------
 
-static CryptoNone *crypto_none = 0;
-static CryptoAES *crypto_aes = 0;
-
-void crypto_init_handlers()
-{
-  crypto_none = new CryptoNone;
-  crypto_aes = new CryptoAES;
-}
-
-void crypto_shutdown_handlers()
-{
-  assert(crypto_none);
-  delete crypto_none;
-  crypto_none = NULL;
-  assert(crypto_aes);
-  delete crypto_aes;
-  crypto_aes = NULL;
-}
-
-CryptoHandler *get_crypto_handler(int type)
-{
-  switch (type) {
-    case CEPH_CRYPTO_NONE:
-      return crypto_none;
-    case CEPH_CRYPTO_AES:
-      return crypto_aes;
-    default:
-      return NULL;
-  }
-}
-
-// ---------------------------------------------------
-
 int CryptoKey::set_secret(CephContext *cct, int type, bufferptr& s)
 {
   this->type = type;
