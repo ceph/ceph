@@ -491,6 +491,13 @@ namespace librbd {
 
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
+    uint64_t features;
+    ictx->get_features(ictx->snap_id, &features);
+    if ((features & RBD_FEATURE_LAYERING) == 0) {
+      lderr(ictx->cct) << "snap_protect: image must support layering"
+		       << dendl;
+      return -ENOSYS;
+    }
     snap_t snap_id = ictx->get_snap_id(snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
@@ -522,9 +529,9 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    uint64_t features;
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
+    uint64_t features;
     ictx->get_features(ictx->snap_id, &features);
     if ((features & RBD_FEATURE_LAYERING) == 0) {
       lderr(ictx->cct) << "snap_unprotect: image must support layering"
