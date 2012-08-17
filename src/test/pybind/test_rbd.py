@@ -8,7 +8,7 @@ from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 RBD_FEATURE_LAYERING)
+                 FunctionNotSupported, RBD_FEATURE_LAYERING)
 
 
 rados = None
@@ -452,19 +452,18 @@ class TestClone(object):
         eq(image, IMG_NAME)
         eq(snap, 'snap1')
 
-        # close and remove this pool's clone
-        self.clone.close()
-        self.rbd.remove(ioctx, 'clone')
-
-        # check that we cannot yet remove the parent snap
+        # 2 children, check that cannot remove the parent snap
         assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
 
         # close and remove other pool's clone
         self.other_clone.close()
         self.rbd.remove(other_ioctx, 'other_clone')
 
-        # now removing the parent snap should succeed
+        # check that we cannot yet remove the parent snap
         assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
+
+        other_ioctx.close()
+        rados.delete_pool('rbd2')
 
         # unprotect, remove parent snap happen in cleanup, and should succeed
 
