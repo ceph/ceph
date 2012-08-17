@@ -565,7 +565,7 @@ namespace librbd {
     std::list<std::string> pools;
     rados.pool_list(pools);
     std::list<std::string>::const_iterator it;
-    std::set<std::string>children;
+    std::set<std::string> children;
     for (it = pools.begin(); it != pools.end(); it++) {
       IoCtx pool_ioctx;
       r = rados.ioctx_create(it->c_str(), pool_ioctx);
@@ -589,7 +589,7 @@ namespace librbd {
       }
       pool_ioctx.close();	// last one out will self-destruct
     }
-    assert(it == pools.end());
+    // didn't find any child in any pool, go ahead with unprotect
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
 					  snap_id,
