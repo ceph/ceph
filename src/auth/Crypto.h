@@ -108,10 +108,6 @@ public:
 		      bufferlist& out, std::string &error) const = 0;
 };
 
-extern void crypto_init_handlers();
-extern void crypto_shutdown_handlers();
-extern CryptoHandler *get_crypto_handler(int type);
-
 extern int get_random_bytes(char *buf, int len);
 
 
