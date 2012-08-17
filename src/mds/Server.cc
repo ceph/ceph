@@ -1124,8 +1124,11 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // inodes ops.
   case CEPH_MDS_OP_LOOKUP:
   case CEPH_MDS_OP_LOOKUPSNAP:
+    handle_client_getattr(mdr, true);
+    break;
+
   case CEPH_MDS_OP_GETATTR:
-    handle_client_stat(mdr);
+    handle_client_getattr(mdr, false);
     break;
 
   case CEPH_MDS_OP_LOOKUPPARENT:
@@ -1859,7 +1862,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    bool want_auth,
 				    bool no_want_auth, /* for readdir, who doesn't want auth _even_if_ it's
 							  a snapped dir */
-				    ceph_file_layout **layout) 
+				    ceph_file_layout **layout,
+				    bool no_lookup)    // true if we cannot return a null dentry lease
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1874,7 +1878,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
-      reply_request(mdr, r, NULL, mdr->dn[n][mdr->dn[n].size()-1]);
+      reply_request(mdr, r, NULL, no_lookup ? NULL : mdr->dn[n][mdr->dn[n].size()-1]);
     } else if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
       Context *c = new C_MDS_TryFindInode(this, mdr);
@@ -2086,11 +2090,11 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 // ===============================================================================
 // STAT
 
-void Server::handle_client_stat(MDRequest *mdr)
+void Server::handle_client_getattr(MDRequest *mdr, bool is_lookup)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *ref = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
+  CInode *ref = rdlock_path_pin_ref(mdr, 0, rdlocks, false, false, NULL, !is_lookup);
   if (!ref) return;
 
   /*
@@ -2123,7 +2127,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
   reply_request(mdr, 0, ref,
-		req->get_op() == CEPH_MDS_OP_LOOKUP ? mdr->dn[0].back() : 0);
+		is_lookup ? mdr->dn[0].back() : 0);
 }
 
 /* This function will clean up the passed mdr*/
