@@ -27,7 +27,8 @@ namespace librbd {
   public:
     AioRequest();
     AioRequest(ImageCtx *ictx, const std::string &oid, uint64_t image_ofs,
-	       size_t len, librados::snap_t snap_id, Context *completion);
+	       size_t len, librados::snap_t snap_id, Context *completion,
+	       bool hide_enoent);
     virtual ~AioRequest();
 
     uint64_t offset()
@@ -43,6 +44,8 @@ namespace librbd {
     void complete(int r)
     {
       if (should_complete(r)) {
+	if (m_hide_enoent && r == -ENOENT)
+	  r = 0;
 	m_completion->complete(r);
 	delete this;
       }
@@ -64,6 +67,7 @@ namespace librbd {
     Context *m_completion;
     AioCompletion *m_parent_completion;
     ceph::bufferlist m_read_data;
+    bool m_hide_enoent;
   };
 
   class AioRead : public AioRequest {
@@ -71,7 +75,7 @@ namespace librbd {
     AioRead(ImageCtx *ictx, const std::string &oid, uint64_t image_ofs,
 	    size_t len, librados::snap_t snap_id, bool sparse,
 	    Context *completion)
-      : AioRequest(ictx, oid, image_ofs, len, snap_id, completion),
+      : AioRequest(ictx, oid, image_ofs, len, snap_id, completion, false),
 	m_tried_parent(false), m_sparse(sparse) {
       m_ioctx.snap_set_read(m_snap_id);
     }
@@ -97,7 +101,7 @@ namespace librbd {
     AbstractWrite();
     AbstractWrite(ImageCtx *ictx, const std::string &oid, uint64_t image_ofs,
 		  size_t len, librados::snap_t snap_id, Context *completion,
-		  bool has_parent, const ::SnapContext &snapc);
+		  bool has_parent, const ::SnapContext &snapc, bool hide_enoent);
     virtual ~AbstractWrite() {}
     virtual bool should_complete(int r);
     virtual int send();
@@ -144,7 +148,7 @@ namespace librbd {
 	     const ceph::bufferlist &data, const ::SnapContext &snapc,
 	     librados::snap_t snap_id, bool has_parent, Context *completion)
       : AbstractWrite(ictx, oid, image_ofs, data.length(), snap_id, completion,
-		      has_parent, snapc),
+		      has_parent, snapc, false),
 	m_write_data(data) {
       guard_write();
       m_write.write(m_block_ofs, data);
@@ -166,7 +170,7 @@ namespace librbd {
 	      const ::SnapContext &snapc, librados::snap_t snap_id,
 	      bool has_parent, Context *completion)
       : AbstractWrite(ictx, oid, image_ofs, 0, snap_id, completion,
-		      has_parent, snapc) {
+		      has_parent, snapc, true) {
       if (has_parent)
 	m_write.truncate(0);
       else
@@ -187,7 +191,7 @@ namespace librbd {
 		const ::SnapContext &snapc, librados::snap_t snap_id,
 		bool has_parent, Context *completion)
       : AbstractWrite(ictx, oid, image_ofs, 0, snap_id, completion,
-		 has_parent, snapc) {
+		      has_parent, snapc, true) {
       guard_write();
       m_write.truncate(m_block_ofs);
     }
@@ -205,7 +209,7 @@ namespace librbd {
 	    size_t len, const ::SnapContext &snapc, librados::snap_t snap_id,
 	    bool has_parent, Context *completion)
       : AbstractWrite(ictx, oid, image_ofs, len, snap_id, completion,
-		      has_parent, snapc) {
+		      has_parent, snapc, true) {
       guard_write();
       m_write.zero(m_block_ofs, len);
     }
