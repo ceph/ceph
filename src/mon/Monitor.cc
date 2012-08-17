@@ -1293,8 +1293,11 @@ void Monitor::handle_command(MMonCommand *m)
       }
       if (!ceph_using_tcmalloc())
 	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
-      else
-	ceph_heap_profiler_handle_command(m->cmd, clog);
+      else {
+	ostringstream ss;
+	ceph_heap_profiler_handle_command(m->cmd, ss);
+	rs = ss.str();
+      }
     }
     if (m->cmd[0] == "quorum") {
       if (!access_all) {

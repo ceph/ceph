@@ -25,6 +25,10 @@ supported. ::
 
 	echo deb http://ceph.com/debian/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
+For the European users there is also a mirror in the Netherlands at http://eu.ceph.com/ ::
+
+	echo deb http://eu.ceph.com/debian/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
 Add Development Release Packages
 --------------------------------
 
@@ -44,6 +48,10 @@ See `the Debian repository`_ for a complete list of distributions
 supported. ::
 
 	echo deb http://ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+For the European users there is also a mirror in the Netherlands at http://eu.ceph.com/ ::
+
+	echo deb http://eu.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Add Development Testing Packages
 --------------------------------

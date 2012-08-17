@@ -67,6 +67,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   waiting_on_backfill(0),
   role(0),
   state(0),
+  send_notify(false),
   need_up_thru(false),
   need_flush(false),
   last_peering_reset(0),
@@ -122,9 +123,15 @@ std::string PG::gen_prefix() const
 {
   stringstream out;
   OSDMapRef mapref = osdmap_ref;
-  out << "osd." << osd->whoami 
-      << " pg_epoch: " << (mapref ? mapref->get_epoch():0)
-      << " " << *this << " ";
+  if (_lock.is_locked_by_me()) {
+    out << "osd." << osd->whoami
+	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
+	<< " " << *this << " ";
+  } else {
+    out << "osd." << osd->whoami
+	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
+	<< " pg[" << info.pgid << "(unlocked)] ";
+  }
   return out.str();
 }
   
@@ -1188,8 +1195,8 @@ bool PG::choose_acting(int& newest_update_osd)
   vector<int> want;
 
   if (!calc_acting(newest_update_osd, want)) {
-    dout(10) << "choose_acting failed, marking pg down" << dendl;
-    state_set(PG_STATE_DOWN);
+    dout(10) << "choose_acting failed" << dendl;
+    assert(want_acting.empty());
     return false;
   }
 
@@ -1293,8 +1300,9 @@ void PG::activate(ObjectStore::Transaction& t,
 
   // twiddle pg state
   state_set(PG_STATE_ACTIVE);
-  state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
+
+  send_notify = false;
 
   if (is_primary()) {
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -1516,7 +1524,7 @@ void PG::do_request(OpRequestRef op)
   // do any pending flush
   do_pending_flush();
   if (must_delay_request(op)) {
-    op_waiters.push_back(op);
+    waiting_for_map.push_back(op);
     return;
   } else if (can_discard_request(op)) {
     return;
@@ -1685,6 +1693,9 @@ void PG::mark_clean()
   info.history.last_epoch_clean = get_osdmap()->get_epoch();
 
   trim_past_intervals();
+
+  if (is_clean() && !snap_trimq.empty())
+    queue_snap_trim();
 
   dirty_info = true;
 }
@@ -3114,9 +3125,6 @@ void PG::scrub()
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
-    state_clear(PG_STATE_REPAIR);
-    state_clear(PG_STATE_SCRUBBING);
-    clear_scrub_reserved();
     unlock();
     return;
   }
@@ -3849,21 +3857,15 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     // take active waiters
     requeue_ops(waiting_for_active);
 
-    // new primary?
-    if (role == 0) {
-      // i am new primary
-      state_clear(PG_STATE_STRAY);
-    } else {
-      // i am now replica|stray.  we need to send a notify.
-      state_set(PG_STATE_STRAY);
-    }
+    // should we tell the primary we are here?
+    send_notify = (role != 0);
       
   } else {
     // no role change.
     // did primary change?
     if (get_primary() != oldprimary) {    
       // we need to announce
-      state_set(PG_STATE_STRAY);
+      send_notify = true;
         
       dout(10) << *this << " " << oldacting << " -> " << acting 
 	       << ", acting primary " 
@@ -3893,7 +3895,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 {
   assert(!is_primary());
-  assert(is_stray() || is_active());
 
   if (info.last_backfill.is_max()) {
     info.stats = oinfo.stats;
@@ -3973,6 +3974,8 @@ ostream& operator<<(ostream& out, const PG& pg)
   }
 
   out << " " << pg_state_string(pg.get_state());
+  if (pg.should_send_notify())
+    out << " NOTIFY";
 
   //out << " (" << pg.log.tail << "," << pg.log.head << "]";
   if (pg.missing.num_missing()) {
@@ -4118,7 +4121,7 @@ void PG::queue_op(OpRequestRef op)
 void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
-  requeue_ops(op_waiters);
+  requeue_ops(waiting_for_map);
   for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
        i != peering_waiters.end();
        ++i) osd->queue_for_peering(this);
@@ -4290,6 +4293,16 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+
+  // do we tell someone we're here?
+  pg->send_notify = (pg->role != 0);
+
+  return transit< Reset >();
+}
+
 boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -4410,7 +4423,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
 boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->is_stray() && pg->get_primary() >= 0) {
+  if (pg->should_send_notify() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg_notify_t(pg->get_osdmap()->get_epoch(),
 							 pg->get_osdmap()->get_epoch(),
@@ -4727,6 +4740,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
+    assert(pg->want_acting.size());
     post_event(NeedActingChange());
     return discard_event();
   }
@@ -4851,7 +4865,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
 boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->is_stray() && pg->get_primary() >= 0) {
+  if (pg->should_send_notify() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg_notify_t(pg->get_osdmap()->get_epoch(),
 							 pg->get_osdmap()->get_epoch(),
@@ -4970,7 +4984,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->is_stray() && pg->get_primary() >= 0) {
+  if (pg->should_send_notify() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg_notify_t(pg->get_osdmap()->get_epoch(),
 							 pg->get_osdmap()->get_epoch(),
@@ -5169,7 +5183,11 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   // adjust acting?
   if (!pg->choose_acting(newest_update_osd)) {
-    post_event(NeedActingChange());
+    if (pg->want_acting.size()) {
+      post_event(NeedActingChange());
+    } else {
+      post_event(IsIncomplete());
+    }
     return;
   }
 
@@ -5202,6 +5220,21 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
     newest_update_osd,
     pg_query_t(pg_query_t::LOG, request_log_from, pg->info.history,
 	       pg->get_osdmap()->get_epoch()));
+}
+
+boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
+{
+  // make sure our log source didn't go down.  we need to check
+  // explicitly because it may not be part of the prior set, which
+  // means the Peering state check won't catch it going down.
+  if (!advmap.osdmap->is_up(newest_update_osd)) {
+    dout(10) << "GetLog: newest_update_osd osd." << newest_update_osd << " went down" << dendl;
+    post_event(advmap);
+    return transit< Reset >();
+  }
+
+  // let the Peering state do its checks.
+  return forward_event();
 }
 
 boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
@@ -5318,6 +5351,7 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
   pg->state_set(PG_STATE_INCOMPLETE);
   pg->update_stats();
 }
+
 void PG::RecoveryState::Incomplete::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -5730,5 +5764,5 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
   return false;
 }
 
-void boost::intrusive_ptr_add_ref(PG *pg) { pg->get(); }
-void boost::intrusive_ptr_release(PG *pg) { pg->put(); }
+void intrusive_ptr_add_ref(PG *pg) { pg->get(); }
+void intrusive_ptr_release(PG *pg) { pg->put(); }

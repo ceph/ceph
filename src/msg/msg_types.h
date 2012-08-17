@@ -15,13 +15,21 @@
 #ifndef CEPH_MSG_TYPES_H
 #define CEPH_MSG_TYPES_H
 
+#include <netinet/in.h>
+
 #include "include/types.h"
 #include "include/blobhash.h"
-#include "tcp.h"
 #include "include/encoding.h"
 
 namespace ceph {
   class Formatter;
+}
+
+inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
+  return strncmp((const char*)&a, (const char*)&b, sizeof(a)) == 0;
+}
+inline bool operator!=(const sockaddr_in& a, const sockaddr_in& b) {
+  return strncmp((const char*)&a, (const char*)&b, sizeof(a)) != 0;
 }
 
 extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);

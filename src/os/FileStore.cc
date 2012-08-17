@@ -787,6 +787,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
   plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
   plb.add_fl_avg(l_os_j_lat, "journal_latency");
+  plb.add_u64_counter(l_os_j_wr, "journal_wr");
+  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes");
   plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
   plb.add_u64(l_os_oq_ops, "op_queue_ops");
   plb.add_u64_counter(l_os_ops, "ops");
@@ -1164,7 +1166,7 @@ int FileStore::mkjournal()
     if (ret < 0) {
       ret = journal->create();
       if (ret)
-	dout(0) << "mkjournal error creating journal on " << journalpath
+	derr << "mkjournal error creating journal on " << journalpath
 		<< ": " << cpp_strerror(ret) << dendl;
       else
 	dout(0) << "mkjournal created journal on " << journalpath << dendl;

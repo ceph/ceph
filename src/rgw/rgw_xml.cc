@@ -70,7 +70,7 @@ xml_end(const char *el)
 void XMLObj::
 xml_handle_data(const char *s, int len)
 {
-  data = string(s, len);
+  data.append(s, len);
 }
 
 string& XMLObj::

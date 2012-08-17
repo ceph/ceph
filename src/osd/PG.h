@@ -395,7 +395,6 @@ public:
   }
 
 
-  list<OpRequestRef> op_waiters;
   list<OpRequestRef> op_queue;  // op queue
 
   bool dirty_info, dirty_log;
@@ -431,6 +430,8 @@ public:
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   unsigned    state;   // PG_STATE_*
+
+  bool send_notify;    ///< true if we are non-primary and should notify the primary
 
 public:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
@@ -623,6 +624,7 @@ protected:
 
   // pg waiters
   bool flushed;
+  list<OpRequestRef> waiting_for_map;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
@@ -1075,11 +1077,12 @@ public:
 
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Reset >,
-	boost::statechart::transition< Load, Reset >,
+	boost::statechart::custom_reaction< Load >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
+      boost::statechart::result react(const Load&);
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
@@ -1166,8 +1169,7 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::transition< NeedActingChange, WaitActingChange >,
-	boost::statechart::transition< IsIncomplete, Incomplete >
+	boost::statechart::transition< NeedActingChange, WaitActingChange >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MNotifyRec&);
@@ -1191,12 +1193,6 @@ public:
       void exit();
     };
 
-    struct Incomplete : boost::statechart::state< Incomplete, Primary>,
-			NamedState {
-      Incomplete(my_context ctx);
-      void exit();
-    };
-    
     struct GetInfo;
     struct Active;
 
@@ -1309,8 +1305,11 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< GotLog >
+	boost::statechart::custom_reaction< GotLog >,
+	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
+      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const GotLog&);
@@ -1360,6 +1359,11 @@ public:
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap& am);
       boost::statechart::result react(const MLogRec& logrec);
+    };
+
+    struct Incomplete : boost::statechart::state< Incomplete, Peering>, NamedState {
+      Incomplete(my_context ctx);
+      void exit();
     };
 
 
@@ -1419,6 +1423,7 @@ public:
   void state_clear(int m) { state &= ~m; }
 
   bool is_complete() const { return info.last_complete == info.last_update; }
+  bool should_send_notify() const { return send_notify; }
 
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
@@ -1427,7 +1432,6 @@ public:
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
-  bool       is_stray() const { return state_test(PG_STATE_STRAY); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 
@@ -1566,9 +1570,7 @@ WRITE_CLASS_ENCODER(PG::OndiskLog)
 
 ostream& operator<<(ostream& out, const PG& pg);
 
-namespace boost {
-  void intrusive_ptr_add_ref(PG *pg);
-  void intrusive_ptr_release(PG *pg);
-};
+void intrusive_ptr_add_ref(PG *pg);
+void intrusive_ptr_release(PG *pg);
 
 #endif

@@ -17,6 +17,8 @@
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
     bucket info                show bucket information
+    bucket rm                  remove bucket
+    object rm                  remove object
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -55,6 +57,10 @@
                                user data
      --purge-keys              when specified, subuser removal will also purge all the
                                subuser keys
+     --purge-objects           remove a bucket's objects before deleting it
+                               (NOTE: required to delete a non-empty bucket)
+     --lazy-remove             defer the removal of the tail of an object until the intent
+                               log is processed.
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value

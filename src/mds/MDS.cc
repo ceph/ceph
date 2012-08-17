@@ -774,13 +774,18 @@ void MDS::handle_command(MMonCommand *m)
     } else dout(0) << "bad migrate_dir syntax" << dendl;
   } 
   else if (m->cmd[0] == "cpu_profiler") {
-    cpu_profiler_handle_command(m->cmd, clog);
+    ostringstream ss;
+    cpu_profiler_handle_command(m->cmd, ss);
+    clog.info() << ss.str();
   }
  else if (m->cmd[0] == "heap") {
    if (!ceph_using_tcmalloc())
      clog.info() << "tcmalloc not enabled, can't use heap profiler commands\n";
-   else
-     ceph_heap_profiler_handle_command(m->cmd, clog);
+   else {
+     ostringstream ss;
+     ceph_heap_profiler_handle_command(m->cmd, ss);
+     clog.info() << ss.str();
+   }
  } else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
 }
@@ -2046,15 +2051,27 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       s = new Session;
       s->inst.addr = con->get_peer_addr();
       s->inst.name = n;
-      dout(10) << " new session " << s << " for " << s->inst << dendl;
+      dout(10) << " new session " << s << " for " << s->inst << " con " << con << dendl;
       con->set_priv(s);
       s->connection = con;
       sessionmap.add_session(s);
     } else {
-      dout(10) << " existing session " << s << " for " << s->inst << dendl;
+      dout(10) << " existing session " << s << " for " << s->inst << " existing con " << s->connection
+	       << ", new/authorizing con " << con << dendl;
       con->set_priv(s->get());
-      s->connection = con;
-   }
+
+      // Wait until we fully accept the connection before setting
+      // s->connection.  In particular, if there are multiple incoming
+      // connection attempts, they will all get their authorizer
+      // validated, but some of them may "lose the race" and get
+      // dropped.  We only want to consider the winner(s).  See
+      // ms_handle_accept().  This is important for Sessions we replay
+      // from the journal on recovery that don't have established
+      // messenger state; we want the con from only the winning
+      // connect attempt(s).  (Normal reconnects that don't follow MDS
+      // recovery are reconnected to the existing con by the
+      // messenger.)
+    }
 
     /*
     s->caps.set_allow_all(caps_info.allow_all);
@@ -2071,3 +2088,15 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 };
 
 
+void MDS::ms_handle_accept(Connection *con)
+{
+  Session *s = (Session *)con->get_priv();
+  dout(10) << "ms_handle_accept " << con->get_peer_addr() << " con " << con << " session " << s << dendl;
+  if (s) {
+    s->put();
+    if (s->connection != con) {
+      dout(10) << " session connection " << s->connection << " -> " << con << dendl;
+      s->connection = con;
+    }
+  }
+}

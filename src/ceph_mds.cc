@@ -233,8 +233,6 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  global_print_banner();
-
   Messenger *messenger = Messenger::create(g_ceph_context,
 					   entity_name_t::MDS(-1), "mds",
 					   getpid());
@@ -249,11 +247,11 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_PGID64;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
-  messenger->set_default_policy(Messenger::Policy::client(supported, required));
+  messenger->set_default_policy(Messenger::Policy::lossy_client(supported, required));
   messenger->set_policy(entity_name_t::TYPE_MON,
-			Messenger::Policy::client(supported,
-						  CEPH_FEATURE_UID |
-						  CEPH_FEATURE_PGID64));
+			Messenger::Policy::lossy_client(supported,
+							CEPH_FEATURE_UID |
+							CEPH_FEATURE_PGID64));
   messenger->set_policy(entity_name_t::TYPE_MDS,
 			Messenger::Policy::lossless_peer(supported,
 							 CEPH_FEATURE_UID));

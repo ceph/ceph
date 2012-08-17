@@ -73,6 +73,8 @@ void usage()
 "  clone [--order <bits>] <parentsnap> <clonename>\n"
 "                                              clone a snapshot into a COW\n"
 "                                               child image\n"
+"  flatten <image-name>                        fill clone with parent data\n"
+"                                              (make it independent)\n"
 "  resize --size <MB> <image-name>             resize (expand or contract) image\n"
 "  rm <image-name>                             delete an image\n"
 "  export <image-name> <path>                  export image to file\n"
@@ -86,6 +88,8 @@ void usage()
 "  snap rollback <snap-name>                   rollback image to snapshot\n"
 "  snap rm <snap-name>                         deletes a snapshot\n"
 "  snap purge <image-name>                     deletes all snapshots\n"
+"  snap protect <snap-name>                    prevent a snapshot from being deleted\n"
+"  snap unprotect <snap-name>                  allow a snapshot to be deleted\n"
 "  watch <image-name>                          watch events on image\n"
 "  map <image-name>                            map image to a block device\n"
 "                                              using the kernel\n"
@@ -198,6 +202,18 @@ static int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
 		    c_order);
 }
 
+static int do_flatten(librbd::Image& image)
+{
+  MyProgressContext pc("Image flatten");
+  int r = image.flatten_with_progress(pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, const char *destname)
 {
@@ -207,12 +223,14 @@ static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   return 0;
 }
 
-static int do_show_info(const char *imgname, librbd::Image& image)
+static int do_show_info(const char *imgname, librbd::Image& image,
+			const char *snapname)
 {
   librbd::image_info_t info;
   string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
   uint64_t overlap, features;
+  bool snap_protected;
   int r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
@@ -229,6 +247,12 @@ static int do_show_info(const char *imgname, librbd::Image& image)
   if (r < 0)
     return r;
 
+  if (snapname) {
+    r = image.snap_is_protected(snapname, &snap_protected);
+    if (r < 0)
+      return r;
+  }
+
   cout << "rbd image '" << imgname << "':\n"
        << "\tsize " << prettybyte_t(info.size) << " in "
        << info.num_objs << " objects"
@@ -242,6 +266,12 @@ static int do_show_info(const char *imgname, librbd::Image& image)
        << std::endl
        << "\tfeatures: " << feature_str(features)
        << std::endl;
+
+  // snapshot info, if present
+  if (snapname) {
+    cout << "\tprotected: " << (snap_protected ? "True" : "False")
+	 << std::endl;
+  }
 
   // parent info, if present 
   if ((image.parent_info(&parent_pool, &parent_name, &parent_snapname) == 0) &&
@@ -338,6 +368,24 @@ static int do_purge_snaps(librbd::Image& image)
   }
 
   pc.finish();
+  return 0;
+}
+
+static int do_protect_snap(librbd::Image& image, const char *snapname)
+{
+  int r = image.snap_protect(snapname);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+static int do_unprotect_snap(librbd::Image& image, const char *snapname)
+{
+  int r = image.snap_unprotect(snapname);
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
@@ -928,6 +976,7 @@ enum {
   OPT_INFO,
   OPT_CREATE,
   OPT_CLONE,
+  OPT_FLATTEN,
   OPT_RESIZE,
   OPT_RM,
   OPT_EXPORT,
@@ -939,6 +988,8 @@ enum {
   OPT_SNAP_REMOVE,
   OPT_SNAP_LIST,
   OPT_SNAP_PURGE,
+  OPT_SNAP_PROTECT,
+  OPT_SNAP_UNPROTECT,
   OPT_WATCH,
   OPT_MAP,
   OPT_UNMAP,
@@ -957,6 +1008,8 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_CREATE;
     if (strcmp(cmd, "clone") == 0)
       return OPT_CLONE;
+    if (strcmp(cmd, "flatten") == 0)
+      return OPT_FLATTEN;
     if (strcmp(cmd, "resize") == 0)
       return OPT_RESIZE;
     if (strcmp(cmd, "rm") == 0)
@@ -994,6 +1047,10 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_SNAP_LIST;
     if (strcmp(cmd, "purge") == 0)
       return OPT_SNAP_PURGE;
+    if (strcmp(cmd, "protect") == 0)
+      return OPT_SNAP_PROTECT;
+    if (strcmp(cmd, "unprotect") == 0)
+      return OPT_SNAP_UNPROTECT;
   }
 
   return OPT_NO_CMD;
@@ -1107,6 +1164,7 @@ int main(int argc, const char **argv)
 	break;
       case OPT_INFO:
       case OPT_CREATE:
+      case OPT_FLATTEN:
       case OPT_RESIZE:
       case OPT_RM:
       case OPT_SNAP_CREATE:
@@ -1114,6 +1172,8 @@ int main(int argc, const char **argv)
       case OPT_SNAP_REMOVE:
       case OPT_SNAP_LIST:
       case OPT_SNAP_PURGE:
+      case OPT_SNAP_PROTECT:
+      case OPT_SNAP_UNPROTECT:
       case OPT_WATCH:
       case OPT_MAP:
 	set_conf_param(v, &imgname, NULL);
@@ -1173,12 +1233,15 @@ int main(int argc, const char **argv)
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY &&
-      opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE) {
+      opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
+      opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage_exit();
   }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE) && !snapname) {
+       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE ||
+       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT) &&
+      !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage_exit();
   }
@@ -1238,10 +1301,12 @@ int main(int argc, const char **argv)
   }
 
   if (imgname && talk_to_cluster &&
-      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
-       opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_SNAP_PURGE ||
-       opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY)) {
+      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO ||
+       opt_cmd == OPT_SNAP_LIST || opt_cmd == OPT_SNAP_CREATE ||
+       opt_cmd == OPT_SNAP_ROLLBACK || opt_cmd == OPT_SNAP_REMOVE ||
+       opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_EXPORT ||
+       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
+       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY || opt_cmd == OPT_FLATTEN)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
@@ -1314,6 +1379,14 @@ int main(int argc, const char **argv)
     }
     break;
 
+  case OPT_FLATTEN:
+    r = do_flatten(image);
+    if (r < 0) {
+      cerr << "flatten error: " << cpp_strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
   case OPT_RENAME:
     r = do_rename(rbd, io_ctx, imgname, destname);
     if (r < 0) {
@@ -1323,7 +1396,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_INFO:
-    r = do_show_info(imgname, image);
+    r = do_show_info(imgname, image, snapname);
     if (r < 0) {
       cerr << "error: " << cpp_strerror(-r) << std::endl;
       exit(1);
@@ -1401,8 +1474,12 @@ int main(int argc, const char **argv)
       exit(1);
     }
     r = do_remove_snap(image, snapname);
+    if (r == -EBUSY) {
+      cerr << "Snapshot '" << snapname << "' is protected from removal." << std::endl;
+      exit(1);
+    }
     if (r < 0) {
-      cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "failed to remove snapshot: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1415,6 +1492,30 @@ int main(int argc, const char **argv)
     r = do_purge_snaps(image);
     if (r < 0) {
       cerr << "removing snaps failed: " << cpp_strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
+  case OPT_SNAP_PROTECT:
+    if (!imgname) {
+      usage();
+      exit(1);
+    }
+    r = do_protect_snap(image, snapname);
+    if (r < 0) {
+      cerr << "protecting snap failed: " << cpp_strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
+  case OPT_SNAP_UNPROTECT:
+    if (!imgname) {
+      usage();
+      exit(1);
+    }
+    r = do_unprotect_snap(image, snapname);
+    if (r < 0) {
+      cerr << "unprotecting snap failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;

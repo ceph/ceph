@@ -3,7 +3,7 @@ from rados import (Rados, Object, ObjectExists, ObjectNotFound,
                    ANONYMOUS_AUID, ADMIN_AUID)
 import threading
 
-class TestPool(object):
+class TestRados(object):
 
     def setUp(self):
         self.rados = Rados(conffile='')
@@ -51,6 +51,10 @@ class TestPool(object):
         eq(set(['a' * 500]), self.list_non_default_pools())
         self.rados.delete_pool('a' * 500)
 
+    def test_get_fsid(self):
+        fsid = self.rados.get_fsid()
+        eq(len(fsid), 36)
+
 class TestIoctx(object):
 
     def setUp(self):
@@ -82,6 +86,13 @@ class TestIoctx(object):
     def test_write_zeros(self):
         self.ioctx.write('abc', 'a\0b\0c')
         eq(self.ioctx.read('abc'), 'a\0b\0c')
+
+    def test_trunc(self):
+        self.ioctx.write('abc', 'abc')
+        self.ioctx.trunc('abc', 2)
+        eq(self.ioctx.read('abc'), 'ab')
+        size = self.ioctx.stat('abc')[0]
+        eq(size, 2)
 
     def test_list_objects_empty(self):
         eq(list(self.ioctx.list_objects()), [])

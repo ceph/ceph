@@ -409,6 +409,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 
     p++;
     oc->bh_remove(this, bh);
+    delete bh;
   }
 }
 

@@ -19,7 +19,7 @@
 #include <string>
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
-				 LogClient &clog)
+				 ostream& out)
 {
-  clog.info() << "cpu_profiler support not linked in\n";
+  out << "cpu_profiler support not linked in";
 }
