@@ -31,7 +31,7 @@
 #define dout_prefix _pipe_prefix(_dout)
 ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
   return *_dout << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
-		<< " sd=" << sd
+		<< " sd=" << sd << " :" << port
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
 		<< " l=" << policy.lossy
@@ -47,7 +47,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
   : reader_thread(this), writer_thread(this),
     msgr(r),
-    sd(-1),
+    sd(-1), port(0),
     peer_type(-1),
     pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
     state(st),
@@ -155,6 +155,8 @@ int Pipe::accept()
   // and my addr
   bufferlist addrs;
   ::encode(msgr->my_inst.addr, addrs);
+
+  port = msgr->my_inst.addr.get_port();
 
   // and peer's socket addr (they might not know their ip)
   entity_addr_t socket_addr;
@@ -662,6 +664,7 @@ int Pipe::connect()
     bufferlist::iterator p = addrbl.begin();
     ::decode(paddr, p);
     ::decode(peer_addr_for_me, p);
+    port = peer_addr_for_me.get_port();
   }
 
   ldout(msgr->cct,20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
