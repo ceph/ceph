@@ -411,6 +411,25 @@ namespace librbd {
     return 0;
   }
 
+  static int scan_for_parents(ImageCtx *ictx, parent_spec &pspec,
+			      snapid_t oursnap_id)
+  {
+    if (pspec.pool_id != -1) {
+      map<string, SnapInfo>::iterator it;
+      for (it = ictx->snaps_by_name.begin();
+	   it != ictx->snaps_by_name.end(); ++it) {
+	// skip our snap id (if checking base image, CEPH_NOSNAP won't match)
+	if (it->second.id == oursnap_id)
+	  continue;
+	if (it->second.parent.spec == pspec)
+	  break;
+      }
+      if (it == ictx->snaps_by_name.end())
+	return -ENOENT;
+    }
+    return 0;
+  }
+
   int snap_remove(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << dendl;
@@ -432,24 +451,12 @@ namespace librbd {
       parent_spec our_pspec;
       r = ictx->get_parent_spec(snap_id, &our_pspec);
       if (r < 0) {
-	lderr(ictx->cct) << "snap_remove: can't get snapinfo" << dendl;
+	lderr(ictx->cct) << "snap_remove: can't get parent spec" << dendl;
 	return r;
       }
 
-      // scan base image and snapshots, and if this snapshot contains the
-      // only remaining reference to its parent, remove the child from that
-      // parent's list
-      map<string, SnapInfo>::iterator it;
-      for (it = ictx->snaps_by_name.begin();
-	   it != ictx->snaps_by_name.end(); ++it) {
-	// skip our own snap
-	if (it->second.id == snap_id)
-	  continue;
-	if (it->second.parent.spec == our_pspec)
-	  break;
-      }
-      if ((ictx->parent_md.spec != our_pspec) &&
-	  (it == ictx->snaps_by_name.end())) {
+      if (ictx->parent_md.spec != our_pspec &&
+	  (scan_for_parents(ictx, our_pspec, snap_id) == -ENOENT)) {
 	  r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
 				       our_pspec, ictx->id);
 	  if (r < 0)
@@ -993,22 +1000,12 @@ namespace librbd {
       parent_info parent_info = ictx->parent_md;
       ictx->parent_lock.Unlock();
 
-      // scan snapshots; if none of them refer to this parent,
-      // remove the child from parent's list
-      if (parent_info.spec.pool_id != -1) {
-	map<string, SnapInfo>::iterator it;
-	for (it = ictx->snaps_by_name.begin();
-	     it != ictx->snaps_by_name.end(); ++it) {
-	  if (it->second.parent.spec == parent_info.spec)
-	    break;
-	}
-	if (it == ictx->snaps_by_name.end()) {
-	    r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-					 parent_info.spec, id);
-	  if (r < 0) {
-	    lderr(cct) << "error removing child from children list" << dendl;
-	    return r;
-	  }
+      if (scan_for_parents(ictx, parent_info.spec, CEPH_NOSNAP) == -ENOENT) {
+	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				     parent_info.spec, id);
+	if (r < 0) {
+	  lderr(cct) << "error removing child from children list" << dendl;
+	  return r;
 	}
       }
       close_image(ictx);
