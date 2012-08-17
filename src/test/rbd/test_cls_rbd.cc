@@ -177,6 +177,8 @@ TEST(cls_rbd, add_remove_child)
   ASSERT_EQ(0, add_child(&ioctx, oid, pspec, "child2"));
   ASSERT_EQ(0, get_children(&ioctx, oid, pspec, children));
   ASSERT_TRUE(children.find("child2") != children.end());
+  // add child2 again, expect -EEXIST
+  ASSERT_EQ(-EEXIST, add_child(&ioctx, oid, pspec, "child2"));
   // remove first, verify it's gone
   ASSERT_EQ(0, remove_child(&ioctx, oid, pspec, "child1"));
   ASSERT_EQ(0, get_children(&ioctx, oid, pspec, children));
@@ -184,6 +186,8 @@ TEST(cls_rbd, add_remove_child)
   // remove second, verify list empty
   ASSERT_EQ(0, remove_child(&ioctx, oid, pspec, "child2"));
   ASSERT_EQ(-ENOENT, get_children(&ioctx, oid, pspec, children));
+  // try to remove again, validate -ENOENT to that as well
+  ASSERT_EQ(-ENOENT, remove_child(&ioctx, oid, pspec, "child2"));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
