@@ -1005,6 +1005,9 @@ TEST(LibRBD, TestClone)
 	    features, &order));
 
   ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  // protecting again should fail
+  ASSERT_EQ(-EBUSY, rbd_snap_protect(parent, "parent_snap"));
+  printf("can't protect a protected snap\n");
 
   // This clone and open should work
   ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
