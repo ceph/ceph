@@ -577,9 +577,9 @@ namespace librbd {
       }
       // if we found a child, can't unprotect
       if (r == 0) {
-	lderr(ictx->cct) << "snap_unprotect: snap has children" << dendl;
-	// XXX return code?
-	r = -EINVAL;
+	lderr(ictx->cct) << "snap_unprotect: can't unprotect; at least " 
+	  << children.size() << " child(ren) in pool " << it->c_str() << dendl;
+	r = -EBUSY;
 	goto reprotect_and_return_err;
       }
       pool_ioctx.close();	// last one out will self-destruct
