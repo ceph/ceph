@@ -958,6 +958,10 @@ int add_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  if (children.find(c_image_id) != children.end()) {
+    CLS_LOG(20, "add_child: child already exists: %s", c_image_id.c_str());
+    return -EEXIST;
+  }
   // add new child
   children.insert(c_imageid);
 
@@ -1008,6 +1012,10 @@ int remove_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  if (children.find(c_image_id) == children.end()) {
+    CLS_LOG(20, "remove_child: child not found: %s", c_image_id.c_str());
+    return -ENOENT;
+  }
   // find and remove child
   children.erase(c_imageid);
 
