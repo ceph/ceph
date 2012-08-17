@@ -25,15 +25,16 @@ Use ``rbd`` to map an image name to a kernel object. You must specify the
 image name, the pool name, and the client name. If you use ``cephx`` 
 authentication, you must also specify a secret. ::
 
-	sudo rbd map {image-name} --pool {pool-name} --name {client-name} --secret {client-secret}	
+  sudo rbd map {image-name} --pool {pool-name} --name {client-name}
 
 For example:: 
 
- sudo rbd map foo --pool rbd --name client.admin
+  sudo rbd map foo --pool rbd myimage --name client.admin
  
-If you use ``cephx`` authentication, you must also specify a secret. ::
+If you use ``cephx`` authentication, you must also specify a secret.  It may come from a keyring, a file containing the secret, or be specified explicitly on the command line. ::
 
-	echo "10.20.30.40  name=admin,secret=/path/to/secret rbd foo" | sudo tee /sys/bus/rbd/add 
+  sudo rbd map foo --pool rbd myimage --name client.foo --keyring /path/to/keyring
+  sudo rbd map foo --pool rbd myimage --name client.foo --keyfile /path/to/file
 
 Map a Block Device with ``add``
 -------------------------------
