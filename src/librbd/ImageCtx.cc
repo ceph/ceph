@@ -211,14 +211,14 @@ namespace librbd {
     return -ENOENT;
   }
 
-  int ImageCtx::get_snapinfo(snapid_t in_snap_id, SnapInfo **out_snapinfo)
+  int ImageCtx::get_parent_spec(snapid_t in_snap_id, parent_spec *out_pspec)
   {
     assert(snap_lock.is_locked());
     map<string, SnapInfo>::iterator it;
 
     for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
       if (it->second.id == in_snap_id) {
-	*out_snapinfo = &(it->second);
+	*out_pspec = it->second.parent.spec;
 	return 0;
       }
     }
