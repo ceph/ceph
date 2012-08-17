@@ -76,6 +76,7 @@ public:
 
   int create_ioctx(const char *name, IoCtxImpl **io);
 
+  int get_fsid(std::string *s);
   int64_t lookup_pool(const char *name);
   const char *get_pool_name(int64_t pool_id);
   int pool_get_auid(uint64_t pool_id, unsigned long long *auid);

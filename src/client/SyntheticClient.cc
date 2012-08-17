@@ -1491,13 +1491,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
        fi != ll_files.end();
        fi++) {
     dout(1) << "leftover ll_release " << fi->second << dendl;
-    if (fi->second > 0) client->ll_release(fi->second);
+    if (fi->second) client->ll_release(fi->second);
   }
   for (hash_map<int64_t,void*>::iterator fi = ll_dirs.begin();
        fi != ll_dirs.end();
        fi++) {
     dout(1) << "leftover ll_releasedir " << fi->second << dendl;
-    if (fi->second > 0) client->ll_releasedir(fi->second);
+    if (fi->second) client->ll_releasedir(fi->second);
   }
   
   return 0;

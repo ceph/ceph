@@ -283,6 +283,11 @@ void PerfCountersBuilder::add_u64(int idx, const char *name)
   add_impl(idx, name, PERFCOUNTER_U64);
 }
 
+void PerfCountersBuilder::add_u64_avg(int idx, const char *name)
+{
+  add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG);
+}
+
 void PerfCountersBuilder::add_fl(int idx, const char *name)
 {
   add_impl(idx, name, PERFCOUNTER_FLOAT);

@@ -86,7 +86,7 @@ static void usage()
   cout << "  ceph osd crush set <osd-id> <name> <weight> [<loc1> [<loc2> ...]]\n";
   cout << "  ceph osd crush move <bucketname> <loc1> [<loc2> ...]\n";
   cout << "  ceph osd crush reweight <name> <weight>\n";
-  cout << "  ceph osd create [<osd-id>]\n";
+  cout << "  ceph osd create [<uuid>]\n";
   cout << "  ceph osd rm <osd-id> [<osd-id>...]\n";
   cout << "  ceph osd lost [--yes-i-really-mean-it]\n";
   cout << "  ceph osd reweight <osd-id> <weight>\n";

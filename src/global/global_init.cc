@@ -121,6 +121,9 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
     lockdep_register_ceph_context(cct);
   }
   register_assert_context(cct);
+
+  if (code_env == CODE_ENVIRONMENT_DAEMON)
+    output_ceph_version();
 }
 
 void global_print_banner(void)

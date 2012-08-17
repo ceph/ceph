@@ -2,6 +2,48 @@
  Release Notes
 ===============
 
+v0.48.1 "argonaut"
+------------------
+
+
+Upgrading
+~~~~~~~~~
+
+* The radosgw usage trim function was effectively broken in v0.48.  Earlier it would remove more usage data than what was requested.  This is fixed in v0.48.1, but the fix is incompatible.  The v0.48 radosgw-admin tool cannot be used to initiate the trimming; please use the v0.48.1 version.
+
+* v0.48.1 now explicitly indicates support for the CRUSH_TUNABLES feature.  No other version of Ceph requires this, yet, but future versions will when the tunables are adjusted from their historical defaults.
+
+* There are no other compatibility changes between v0.48.1 and v0.48.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* mkcephfs: use default 'keyring', 'osd data', 'osd journal' paths when not specified in conf
+* msgr: various fixes to socket error handling
+* osd: reduce scrub overhead
+* osd: misc peering fixes (past_interval sharing, pgs stuck in 'peering' states)
+* osd: fail on EIO in read path (do not silently ignore read errors from failing disks)
+* osd: avoid internal heartbeat errors by breaking some large transactions into pieces
+* osd: fix osdmap catch-up during startup (catch up and then add daemon to osdmap)
+* osd: fix spurious 'misdirected op' messages
+* osd: report scrub status via 'pg ... query'
+* rbd: fix race when watch registrations are resent
+* rbd: fix rbd image id assignment scheme (new image data objects have slightly different names)
+* rbd: fix perf stats for cache hit rate
+* rbd tool: fix off-by-one in key name (crash when empty key specified)
+* rbd: more robust udev rules
+* rados tool: copy object, pool commands
+* radosgw: fix in usage stats trimming
+* radosgw: misc API compatibility fixes (date strings, ETag quoting, swift headers, etc.)
+* ceph-fuse: fix locking in read/write paths
+* mon: fix rare race corrupting on-disk data
+* config: fix admin socket 'config set' command
+* log: fix in-memory log event gathering
+* debian: remove crush headers, include librados-config
+* rpm: add ceph-disk-{activate, prepare}
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.48.1argonaut.txt>`.
+
 v0.48 "argonaut"
 ----------------
 

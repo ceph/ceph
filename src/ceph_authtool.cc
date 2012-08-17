@@ -33,7 +33,7 @@ void usage()
        << "where the options are:\n"
        << "  -l, --list                    will list all keys and capabilities present in\n"
        << "                                the keyring\n"
-       << "  -p, --print                   will print an encoded key for the specified\n"
+       << "  -p, --print-key               will print an encoded key for the specified\n"
        << "                                entityname. This is suitable for the\n"
        << "                                'mount -o secret=..' argument\n"
        << "  -C, --create-keyring          will create a new keyring, overwriting any\n"
