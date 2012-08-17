@@ -495,6 +495,15 @@ namespace librbd {
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
+    uint8_t prot;
+    r = cls_client::get_protection_status(&ictx->md_ctx, ictx->header_oid,
+					  snap_id, &prot);
+    if (r < 0)
+      return r;
+
+    if (prot == RBD_PROTECTION_STATUS_PROTECTED) 
+      return -EBUSY;
+    
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
 					  snap_id,
