@@ -7,7 +7,7 @@
 Synopsis
 ========
 
-| **mkcephfs** [ -c *ceph.conf* ] [ --mkbtrfs ] [ -a, --all-hosts [ -k
+| **mkcephfs** -c *ceph.conf* [ --mkbtrfs ] [ -a, --all-hosts [ -k
   */path/to/admin.keyring* ] ]
 
 
