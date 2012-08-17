@@ -20,18 +20,7 @@
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
 				 ostream& out)
 {
-  if (cmd[1] == "start") {
-    if (cmd.size() < 3) {
-      out << "cpu_profiler: you must give an argument to start: a "
-	  << "file name to log to.";
-      return;
-    }
-    const char *file = cmd[2].c_str();
-    int r = ProfilerStart(file);
-    out << "cpu_profiler: starting logging to " << file
-	<< ", r=" << r;
-  }
-  else if (cmd[1] == "status") {
+  if (cmd[1] == "status") {
     ProfilerState st;
     ProfilerGetCurrentState(&st);
     out << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
@@ -43,13 +32,8 @@ void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
     ProfilerFlush();
     out << "cpu_profiler: flushed";
   }
-  else if (cmd[1] == "stop") {
-    ProfilerFlush();
-    ProfilerStop();
-    out << "cpu_profiler: flushed and stopped";
-  }
   else {
     out << "cpu_profiler: unrecognized command " << cmd
-	<< "; expected one of start, status, flush, stop.";
+	<< "; expected one of status, flush.";
   }
 }
