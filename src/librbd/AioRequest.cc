@@ -21,7 +21,8 @@ namespace librbd {
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t image_ofs, size_t len,
 			 librados::snap_t snap_id,
-			 Context *completion) {
+			 Context *completion,
+			 bool hide_enoent) {
     m_ictx = ictx;
     m_ioctx.dup(ictx->data_ctx);
     m_ioctx.snap_set_read(snap_id);
@@ -32,6 +33,7 @@ namespace librbd {
     m_snap_id = snap_id;
     m_completion = completion;
     m_parent_completion = NULL;
+    m_hide_enoent = hide_enoent;
   }
 
   AioRequest::~AioRequest() {
@@ -97,8 +99,9 @@ namespace librbd {
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
 			       uint64_t image_ofs, size_t len,
 			       librados::snap_t snap_id, Context *completion,
-			       bool has_parent, const ::SnapContext &snapc)
-    : AioRequest(ictx, oid, image_ofs, len, snap_id, completion)
+			       bool has_parent, const ::SnapContext &snapc,
+			       bool hide_enoent)
+    : AioRequest(ictx, oid, image_ofs, len, snap_id, completion, hide_enoent)
   {
     m_state = LIBRBD_AIO_WRITE_FINAL;
     m_has_parent = has_parent;
