@@ -848,6 +848,10 @@ def run_daemon(ctx, config, type_):
                     valgrind_args = config['valgrind'][name]
                 run_cmd.extend(teuthology.get_valgrind_args(name, valgrind_args))
 
+            if type_ in config.get('cpu_profile'):
+                profile_path = '/tmp/cephtest/archive/log/%s.%s.prof' % (type_, id_)
+                run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
+
             run_cmd.extend(run_cmd_tail)
             ctx.daemons.add_daemon(remote, type_, id_,
                                    args=run_cmd,
@@ -1063,6 +1067,7 @@ def task(ctx, config):
                 block_journal=config.get('block_journal', None),
                 tmpfs_journal=config.get('tmpfs_journal', None),
                 log_whitelist=config.get('log-whitelist', []),
+                cpu_profile=set(config.get('cpu_profile', [])),
                 )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
