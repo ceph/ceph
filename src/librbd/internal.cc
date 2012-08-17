@@ -495,13 +495,12 @@ namespace librbd {
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
-    uint8_t prot;
-    r = cls_client::get_protection_status(&ictx->md_ctx, ictx->header_oid,
-					  snap_id, &prot);
+    bool is_protected;
+    r = ictx->is_snap_protected(snap_name, &is_protected);
     if (r < 0)
       return r;
 
-    if (prot == RBD_PROTECTION_STATUS_PROTECTED) 
+    if (is_protected)
       return -EBUSY;
     
     r = cls_client::set_protection_status(&ictx->md_ctx,
@@ -536,15 +535,14 @@ namespace librbd {
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
-    uint8_t current_status;
-    r = cls_client::get_protection_status(&ictx->md_ctx,
-					  ictx->header_oid,
-					  snap_id,
-					  &current_status);
-    if ((r == 0) && (current_status == RBD_PROTECTION_STATUS_UNPROTECTED)) {
-      lderr(ictx->cct) << "snap_unprotect: snapshot not protected" << dendl;
+    bool is_protected;
+    r = ictx->is_snap_protected(snap_name, &is_protected);
+    if (r < 0)
+      return r;
+
+    if (!is_protected)
       return -EINVAL;
-    }
+
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
 					  snap_id,
