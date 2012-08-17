@@ -713,6 +713,8 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
 
     r = set_kernel_secret(secret_str.c_str(), key_name);
     if (r >= 0) {
+      if (r == 0)
+	cerr << "warning: secret has length 0" << std::endl;
       oss << ",key=" << key_name;
     } else if (r == -ENODEV || r == -ENOSYS) {
       /* running against older kernel; fall back to secret= in options */
