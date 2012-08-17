@@ -14,7 +14,9 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
 -P                               profiling build
+-p                               google profiler
 -O <level>                       optimize
+-n                               use libnss
 
 EOF
 }
@@ -28,14 +30,17 @@ debug_level=0
 verbose=0
 profile=0
 CONFIGURE_FLAGS=""
-while getopts  "d:e:hHTPvO:" flag
+while getopts  "d:e:hHTPpnvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
 
     O) CFLAGS="${CFLAGS} -O$OPTARG";;
 
+    n) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-nss --without-cryptopp";;
+
     P) profile=1;;
+    p) with_profiler="--with-profiler" ;;
 
     h) usage
         exit 0;;
@@ -62,6 +67,7 @@ different than debug builds."
        exit 1
     fi
     CFLAGS="${CFLAGS} -fno-omit-frame-pointer -O2"
+    CXXFLAGS="${CXXFLAGS} -fno-omit-frame-pointer -O2"
     debug_level=1
 fi
 

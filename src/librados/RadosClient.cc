@@ -103,6 +103,17 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
   return 0;
 }
 
+int librados::RadosClient::get_fsid(std::string *s)
+{
+  if (!s)
+    return -EINVAL;
+  Mutex::Locker l(lock);
+  ostringstream oss;
+  oss << osdmap.get_fsid();
+  *s = oss.str();
+  return 0;
+}
+
 int librados::RadosClient::connect()
 {
   common_init_finish(cct);
@@ -131,7 +142,7 @@ int librados::RadosClient::connect()
   // require OSDREPLYMUX feature.  this means we will fail to talk to
   // old servers.  this is necessary because otherwise we won't know
   // how to decompose the reply data into its consituent pieces.
-  messenger->set_default_policy(Messenger::Policy::client(0, CEPH_FEATURE_OSDREPLYMUX));
+  messenger->set_default_policy(Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
 
   ldout(cct, 1) << "starting msgr at " << messenger->get_myaddr() << dendl;
 

@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include <map>
 #include <set>
 #include <string>
@@ -12,7 +13,11 @@ using std::string;
 
 class KeyValueDBMemory : public KeyValueDB {
 public:
-  std::map<string, std::map<string, bufferlist> > db;
+  std::map<std::pair<string,string>,bufferlist> db;
+
+  KeyValueDBMemory() { }
+  KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
+  virtual ~KeyValueDBMemory() { }
 
   int get(
     const string &prefix,
@@ -28,12 +33,13 @@ public:
 
   int set(
     const string &prefix,
-    const std::map<string, bufferlist> &to_set
+    const string &key,
+    const bufferlist &bl
     );
 
-  int rmkeys(
+  int rmkey(
     const string &prefix,
-    const std::set<string> &keys
+    const string &key
     );
 
   int rmkeys_by_prefix(
@@ -50,34 +56,34 @@ public:
 
     struct SetOp : public Context {
       KeyValueDBMemory *db;
-      string prefix;
-      std::map<string, bufferlist> to_set;
+      std::pair<string,string> key;
+      bufferlist value;
       SetOp(KeyValueDBMemory *db,
-	    const string &prefix,
-	    const std::map<string, bufferlist> &to_set)
-	: db(db), prefix(prefix), to_set(to_set) {}
+	    const std::pair<string,string> &key,
+	    const bufferlist &value)
+	: db(db), key(key), value(value) {}
       void finish(int r) {
-	db->set(prefix, to_set);
+	db->set(key.first, key.second, value);
       }
     };
-    void set(const string &prefix, const std::map<string, bufferlist> &to_set) {
-      on_commit.push_back(new SetOp(db, prefix, to_set));
+
+    void set(const string &prefix, const string &k, const bufferlist& bl) {
+      on_commit.push_back(new SetOp(db, std::make_pair(prefix, k), bl));
     }
 
     struct RmKeysOp : public Context {
       KeyValueDBMemory *db;
-      string prefix;
-      std::set<string> keys;
+      std::pair<string,string> key;
       RmKeysOp(KeyValueDBMemory *db,
-	       const string &prefix,
-	       const std::set<string> &keys)
-	: db(db), prefix(prefix), keys(keys) {}
+	       const std::pair<string,string> &key)
+	: db(db), key(key) {}
       void finish(int r) {
-	db->rmkeys(prefix, keys);
+	db->rmkey(key.first, key.second);
       }
     };
-    void rmkeys(const string &prefix, const std::set<string> &to_remove) {
-      on_commit.push_back(new RmKeysOp(db, prefix, to_remove));
+
+    void rmkey(const string &prefix, const string &key) {
+      on_commit.push_back(new RmKeysOp(db, std::make_pair(prefix, key)));
     }
 
     struct RmKeysByPrefixOp : public Context {
@@ -121,6 +127,16 @@ public:
     return static_cast<TransactionImpl_*>(trans.get())->complete();
   }
 
-  friend class MemIterator;
-  Iterator get_iterator(const string &prefix);
+private:
+  bool exists_prefix(const string &prefix) {
+    std::map<std::pair<string,string>,bufferlist>::iterator it;
+    it = db.lower_bound(std::make_pair(prefix, ""));
+    return ((it != db.end()) && ((*it).first.first == prefix));
+  }
+
+  friend class WholeSpaceMemIterator;
+
+protected:
+  WholeSpaceIterator _get_iterator();
+  WholeSpaceIterator _get_snapshot_iterator();
 };

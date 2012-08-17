@@ -1604,7 +1604,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
   if (!diri->is_dir()) {
     dout(7) << "validate_dentry_dir: not a dir" << dendl;
     reply_request(mdr, -ENOTDIR);
-    return false;
+    return NULL;
   }
 
   // which dirfrag?
@@ -1617,7 +1617,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
   if (dir->is_frozen()) {
     dout(7) << "dir is frozen " << *dir << dendl;
     dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-    return false;
+    return NULL;
   }
   
   return dir;
@@ -1871,7 +1871,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 
   // traverse
   int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
-  if (r > 0) return false; // delayed
+  if (r > 0)
+    return NULL; // delayed
   if (r < 0) {  // error
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
       reply_request(mdr, r, NULL, mdr->dn[n][mdr->dn[n].size()-1]);

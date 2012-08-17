@@ -15,10 +15,11 @@ Description
 ===========
 
 **mount.ceph** is a simple helper for mounting the Ceph file system on
-a Linux host. The only real purpose it serves is to resolve monitor
-hostname(s) into IP addresses; the Linux kernel client component does
-most of the real work. In fact, it is possible to mount a Ceph file
-system without mount.ceph by specifying monitor address(es) by IP::
+a Linux host. It serves to resolve monitor hostname(s) into IP
+addresses and read authentication keys from disk; the Linux kernel
+client component does most of the real work. In fact, it is possible
+to mount a non-authenticated Ceph file system without mount.ceph by
+specifying monitor address(es) by IP::
 
         mount -t ceph 1.2.3.4:/ mountpoint
 
@@ -33,6 +34,10 @@ the time of mount.
 
 A subdirectory subdir may be specified if a subset of the file system
 is to be mounted.
+
+Mount helper application conventions dictate that the first two
+options are device to be mounted and destination path. Options must be
+passed only after these fixed arguments.
 
 
 Options

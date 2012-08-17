@@ -349,6 +349,19 @@ int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
  */
 int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 
+/**
+ * Get the fsid of the cluster as a hexadecimal string.
+ *
+ * The fsid is a unique id of an entire Ceph cluster.
+ *
+ * @param cluster where to get the fsid
+ * @param buf where to write the fsid
+ * @param len the size of buf in bytes (should be 37)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the buffer is too short to contain the
+ * fsid
+ */
+int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
 
 /**
  * @defgroup librados_h_pools Pools

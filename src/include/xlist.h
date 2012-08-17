@@ -15,6 +15,8 @@
 #ifndef CEPH_XLIST_H
 #define CEPH_XLIST_H
 
+#include "include/assert.h"
+
 template<typename T>
 class xlist {
 public:

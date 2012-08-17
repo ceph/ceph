@@ -136,10 +136,36 @@ static bool check_str_end(const char *s)
   return true;
 }
 
+static bool check_gmt_end(const char *s)
+{
+  if (!s || !*s)
+    return false;
+
+  while (isspace(*s)) {
+    ++s;
+  }
+
+  /* check for correct timezone */
+  if ((strncmp(s, "GMT", 3) != 0) &&
+      (strncmp(s, "UTC", 3) != 0)) {
+    return false;
+  }
+
+  /* trailing space */
+  s += 3;
+  while (isspace(*s)) {
+    ++s;
+  }
+  if (*s)
+    return false;
+
+  return true;
+}
+
 static bool parse_rfc850(const char *s, struct tm *t)
 {
   memset(t, 0, sizeof(*t));
-  return check_str_end(strptime(s, "%A, %d-%b-%y %H:%M:%S GMT", t));
+  return check_gmt_end(strptime(s, "%A, %d-%b-%y %H:%M:%S ", t));
 }
 
 static bool parse_asctime(const char *s, struct tm *t)
@@ -151,7 +177,7 @@ static bool parse_asctime(const char *s, struct tm *t)
 static bool parse_rfc1123(const char *s, struct tm *t)
 {
   memset(t, 0, sizeof(*t));
-  return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
+  return check_gmt_end(strptime(s, "%a, %d %b %Y %H:%M:%S ", t));
 }
 
 static bool parse_rfc1123_alt(const char *s, struct tm *t)

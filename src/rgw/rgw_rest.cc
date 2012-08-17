@@ -347,6 +347,47 @@ int RGWInitMultipart_REST::get_params()
   return ret;
 }
 
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
+{
+#define READ_CHUNK 4096
+#define MAX_READ_CHUNK (128 * 1024)
+  int need_to_read = READ_CHUNK;
+  int total = need_to_read;
+  char *data = (char *)malloc(total + 1);
+  if (!data)
+    return -ENOMEM;
+
+  int read_len = 0, len = 0;
+  do {
+    CGI_GetStr(s, data + len, need_to_read, read_len);
+
+    len += read_len;
+
+    if (read_len == need_to_read) {
+      if (need_to_read < MAX_READ_CHUNK)
+	need_to_read *= 2;
+
+      total += need_to_read;
+
+      void *p = realloc(data, total + 1);
+      if (!p) {
+        free(data);
+        return -ENOMEM;
+      }
+      data = (char *)p;
+    } else {
+      break;
+    }
+
+  } while (true);
+  data[len] = '\0';
+
+  *pdata = data;
+  *plen = len;
+
+  return 0;
+}
+
 int RGWCompleteMultipart_REST::get_params()
 {
   upload_id = s->args.get("uploadId");
@@ -355,7 +396,6 @@ int RGWCompleteMultipart_REST::get_params()
     ret = -ENOTSUP;
     return ret;
   }
-
   size_t cl = 0;
 
   if (s->length)
@@ -369,7 +409,13 @@ int RGWCompleteMultipart_REST::get_params()
     CGI_GetStr(s, data, cl, len);
     data[len] = '\0';
   } else {
-    len = 0;
+    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || strcmp(encoding, "chunked") != 0)
+      return -ERR_LENGTH_REQUIRED;
+
+    ret = read_all_chunked_input(s, &data, &len);
+    if (ret < 0)
+      return ret;
   }
 
   return ret;

@@ -1,42 +1,18 @@
-Index: configure.in
-===================================================================
---- configure.in	(revision 29691)
-+++ configure.in	(working copy)
-@@ -1742,6 +1742,7 @@
-   packaging/svr4/pkginfo
-   plugins/Makefile
-   plugins/asn1/Makefile
-+  plugins/ceph/Makefile
-   plugins/docsis/Makefile
-   plugins/ethercat/Makefile
-   plugins/giop/Makefile
-Index: Makefile.am
-===================================================================
---- Makefile.am	(revision 29691)
-+++ Makefile.am	(working copy)
-@@ -264,6 +264,7 @@
- -include plugins/Custom.make
- plugin_ldadd = $(_CUSTOM_plugin_ldadd_) \
- 	-dlopen plugins/asn1/asn1.la \
-+	-dlopen plugins/ceph/ceph.la \
- 	-dlopen plugins/docsis/docsis.la \
- 	-dlopen plugins/ethercat/ethercat.la \
- 	-dlopen plugins/giop/cosnaming.la \
 Index: plugins/Makefile.nmake
 ===================================================================
---- plugins/Makefile.nmake	(revision 29691)
+--- plugins/Makefile.nmake	(revision 43768)
 +++ plugins/Makefile.nmake	(working copy)
 @@ -8,6 +8,7 @@
  
  PLUGIN_LIST = \
-	asn1        \
+ 	asn1        \
 +	ceph        \
-	docsis      \
-	ethercat    \
-	giop        \
+ 	docsis      \
+ 	ethercat    \
+ 	gryphon     \
 Index: plugins/Makefile.am
 ===================================================================
---- plugins/Makefile.am	(revision 29691)
+--- plugins/Makefile.am	(revision 43768)
 +++ plugins/Makefile.am	(working copy)
 @@ -24,6 +24,7 @@
  -include Custom.make
@@ -45,12 +21,60 @@ Index: plugins/Makefile.am
 +	ceph \
  	docsis \
  	ethercat \
- 	giop \
+ 	gryphon \
+Index: configure.in
+===================================================================
+--- configure.in	(revision 43768)
++++ configure.in	(working copy)
+@@ -2150,6 +2150,7 @@
+   packaging/svr4/pkginfo
+   plugins/Makefile
+   plugins/asn1/Makefile
++  plugins/ceph/Makefile
+   plugins/docsis/Makefile
+   plugins/ethercat/Makefile
+   plugins/gryphon/Makefile
+Index: Makefile.am
+===================================================================
+--- Makefile.am	(revision 43768)
++++ Makefile.am	(working copy)
+@@ -273,6 +273,7 @@
+ -include plugins/Custom.make
+ plugin_ldadd = $(_CUSTOM_plugin_ldadd_) \
+ 	-dlopen plugins/asn1/asn1.la \
++	-dlopen plugins/ceph/ceph.la \
+ 	-dlopen plugins/docsis/docsis.la \
+ 	-dlopen plugins/ethercat/ethercat.la \
+ 	-dlopen plugins/gryphon/gryphon.la \
+Index: packaging/nsis/Makefile.nmake
+===================================================================
+--- packaging/nsis/Makefile.nmake	(revision 43768)
++++ packaging/nsis/Makefile.nmake	(working copy)
+@@ -46,6 +46,7 @@
+ 
+ PLUGINS= \
+ 	../../plugins/asn1/asn1.dll \
++	../../plugins/ceph/ceph.dll \
+ 	../../plugins/docsis/docsis.dll \
+ 	../../plugins/ethercat/ethercat.dll \
+ 	../../plugins/gryphon/gryphon.dll \
+Index: packaging/nsis/wireshark.nsi
+===================================================================
+--- packaging/nsis/wireshark.nsi	(revision 43768)
++++ packaging/nsis/wireshark.nsi	(working copy)
+@@ -806,6 +806,7 @@
+ ;-------------------------------------------
+ SetOutPath '$INSTDIR\plugins\${VERSION}'
+ File "${STAGING_DIR}\plugins\${VERSION}\asn1.dll"
++File "${STAGING_DIR}\plugins\${VERSION}\ceph.dll"
+ File "${STAGING_DIR}\plugins\${VERSION}\docsis.dll"
+ File "${STAGING_DIR}\plugins\${VERSION}\ethercat.dll"
+ File "${STAGING_DIR}\plugins\${VERSION}\gryphon.dll"
 Index: epan/Makefile.am
 ===================================================================
---- epan/Makefile.am	(revision 29691)
+--- epan/Makefile.am	(revision 43768)
 +++ epan/Makefile.am	(working copy)
-@@ -201,6 +201,7 @@
+@@ -209,6 +209,7 @@
  -include ../plugins/Custom.make
  plugin_src = \
  	../plugins/asn1/packet-asn1.c \
@@ -58,27 +82,3 @@ Index: epan/Makefile.am
  	../plugins/docsis/packet-bintrngreq.c \
  	../plugins/docsis/packet-bpkmattr.c \
  	../plugins/docsis/packet-bpkmreq.c \
-Index: packaging/nsis/Makefile.nmake
-===================================================================
---- packaging/nsis/Makefile.nmake	(revision 29691)
-+++ packaging/nsis/Makefile.nmake	(working copy)
-@@ -44,6 +44,7 @@
- 
- PLUGINS= \
- 	../../plugins/asn1/asn1.dll \
-+	../../plugins/ceph/ceph.dll \
- 	../../plugins/docsis/docsis.dll \
- 	../../plugins/ethercat/ethercat.dll \
- 	../../plugins/giop/coseventcomm.dll \
-Index: packaging/nsis/wireshark.nsi
-===================================================================
---- packaging/nsis/wireshark.nsi	(revision 29691)
-+++ packaging/nsis/wireshark.nsi	(working copy)
-@@ -875,6 +875,7 @@
- ;-------------------------------------------
- SetOutPath '$INSTDIR\plugins\${VERSION}'
- File "..\..\plugins\asn1\asn1.dll"
-+File "..\..\plugins\ceph\ceph.dll"
- File "..\..\plugins\docsis\docsis.dll"
- File "..\..\plugins\ethercat\ethercat.dll"
- File "..\..\plugins\giop\coseventcomm.dll"

@@ -1439,16 +1439,15 @@ void ReplicatedPG::snap_trimmer()
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
     entity_inst_t nobody;
-    if (!mode.try_write(nobody)) {
+    if (!mode.try_write(nobody) || scrub_block_writes) {
       dout(10) << " can't write, requeueing" << dendl;
       queue_snap_trim();
       unlock();
       return;
     }
-    if (!scrub_block_writes) {
-      dout(10) << "snap_trimmer posting" << dendl;
-      snap_trimmer_machine.process_event(SnapTrim());
-    }
+
+    dout(10) << "snap_trimmer posting" << dendl;
+    snap_trimmer_machine.process_event(SnapTrim());
 
     if (snap_trimmer_machine.need_share_pg_info) {
       dout(10) << "snap_trimmer share_pg_info" << dendl;
@@ -3552,6 +3551,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  osd->reply_op_error(*i, 0, repop->v);
 	}
 	waiting_for_ondisk.erase(repop->v);
+      }
+
+      // clear out acks, we sent the commits above
+      if (waiting_for_ack.count(repop->v)) {
+	assert(waiting_for_ack.begin()->first == repop->v);
+	waiting_for_ack.erase(repop->v);
       }
 
       if (m->wants_ondisk() && !repop->sent_disk) {
@@ -5732,7 +5737,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   }
 
   if (requeue) {
-    op_waiters.splice(op_waiters.end(), rq);
+    requeue_ops(rq);
   }
 }
 
@@ -5766,22 +5771,17 @@ void ReplicatedPG::on_activate()
 void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
-  apply_and_flush_repops(is_primary());
 
-  // clear reserved scrub state
+  // requeue everything in the reverse order they should be
+  // reexamined.
+  requeue_ops(waiting_for_map);
+
   clear_scrub_reserved();
-
-  // clear scrub state
-  if (scrub_block_writes) {
-    scrub_clear_state();
-  } else if (is_scrubbing()) {
-    state_clear(PG_STATE_SCRUBBING);
-    state_clear(PG_STATE_REPAIR);
-  }
+  scrub_clear_state();
 
   context_registry_on_change();
 
-  // take object waiters
+  // requeue object waiters
   requeue_object_waiters(waiting_for_missing_object);
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
@@ -5789,8 +5789,12 @@ void ReplicatedPG::on_change()
     requeue_ops(p->second);
     finish_degraded_object(p->first);
   }
+
   requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
+
+  // this will requeue ops we were working on but didn't finish
+  apply_and_flush_repops(is_primary());
 
   // clear pushing/pulling maps
   pushing.clear();

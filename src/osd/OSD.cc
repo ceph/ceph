@@ -846,6 +846,8 @@ int OSD::init()
   osdmap = get_map(superblock.current_epoch);
   service.publish_map(osdmap);
 
+  check_osdmap_features();
+
   bind_epoch = osdmap->get_epoch();
 
   // load up pgs (as they previously existed)
@@ -1472,8 +1474,6 @@ void OSD::build_past_intervals_parallel()
     last_map = cur_map;
     cur_map = get_map(cur_epoch);
 
-    ObjectStore::Transaction t;
-
     for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
       PG *pg = i->first;
       pistate& p = i->second;
@@ -1509,13 +1509,30 @@ void OSD::build_past_intervals_parallel()
 	p.old_up = up;
 	p.old_acting = acting;
 	p.same_interval_since = cur_epoch;
-	pg->write_info(t);
       }
     }
-
-    if (!t.empty())
-      store->apply_transaction(t);
   }
+
+  // write info only at the end.  this is necessary because we check
+  // whether the past_intervals go far enough back or forward in time,
+  // but we don't check for holes.  we could avoid it by discarding
+  // the previous past_intervals and rebuilding from scratch, or we
+  // can just do this and commit all our work at the end.
+  ObjectStore::Transaction t;
+  int num = 0;
+  for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
+    PG *pg = i->first;
+    pg->write_info(t);
+
+    // don't let the transaction get too big
+    if (++num >= g_conf->osd_target_transaction_size) {
+      store->apply_transaction(t);
+      t = ObjectStore::Transaction();
+      num = 0;
+    }
+  }
+  if (!t.empty())
+    store->apply_transaction(t);
 }
 
 
@@ -1725,7 +1742,9 @@ void OSD::_add_heartbeat_peer(int p)
   map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(p);
   if (i == heartbeat_peers.end()) {
     hi = &heartbeat_peers[p];
-    hi->con = hbclient_messenger->get_connection(osdmap->get_hb_inst(p));
+    hi->inst = osdmap->get_hb_inst(p);
+    hi->con = hbclient_messenger->get_connection(hi->inst);
+    hi->con->set_priv(new HeartbeatSession(p));
     dout(10) << "_add_heartbeat_peer: new peer osd." << p
 	     << " " << hi->con->get_peer_addr() << dendl;
   } else {
@@ -2005,6 +2024,28 @@ void OSD::heartbeat()
 
   dout(30) << "heartbeat done" << dendl;
 }
+
+bool OSD::heartbeat_reset(Connection *con)
+{
+  HeartbeatSession *s = (HeartbeatSession*)con->get_priv();
+  if (s) {
+    heartbeat_lock.Lock();
+    map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
+    if (p != heartbeat_peers.end() &&
+	p->second.con == con) {
+      dout(10) << "heartbeat_reset reopen failed hb con " << con << dendl;
+      p->second.con = hbclient_messenger->get_connection(p->second.inst);
+      p->second.con->set_priv(s);
+    } else {
+      dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;
+    }
+    hbclient_messenger->mark_down(con);
+    heartbeat_lock.Unlock();
+    s->put();
+  }
+  return true;
+}
+
 
 
 // =========================================
@@ -2670,7 +2711,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   
   else if (cmd[0] == "heap") {
     if (ceph_using_tcmalloc()) {
-      ceph_heap_profiler_handle_command(cmd, clog);
+      ceph_heap_profiler_handle_command(cmd, ss);
     } else {
       r = -EOPNOTSUPP;
       ss << "could not issue heap profiler command -- not using tcmalloc!";
@@ -2739,7 +2780,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   }
 
   else if (cmd[0] == "cpu_profiler") {
-    cpu_profiler_handle_command(cmd, clog);
+    cpu_profiler_handle_command(cmd, ss);
   }
 
   else if (cmd[0] == "dump_pg_recovery_stats") {
@@ -3498,11 +3539,16 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (superblock.oldest_map) {
+    int num = 0;
     for (epoch_t e = superblock.oldest_map; e < m->oldest_map; ++e) {
       dout(20) << " removing old osdmap epoch " << e << dendl;
       t.remove(coll_t::META_COLL, get_osdmap_pobject_name(e));
       t.remove(coll_t::META_COLL, get_inc_osdmap_pobject_name(e));
       superblock.oldest_map = e+1;
+      num++;
+      if (num >= g_conf->osd_target_transaction_size &&
+	  num > (last - first))  // make sure we at least keep pace with incoming maps
+	break;
     }
   }
 
@@ -3619,6 +3665,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   clear_map_bl_cache_pins();
   map_lock.put_write();
 
+  check_osdmap_features();
+
   // yay!
   if (is_active())
     activate_map();
@@ -3638,6 +3686,47 @@ void OSD::handle_osd_map(MOSDMap *m)
     shutdown();
 
   m->put();
+}
+
+void OSD::check_osdmap_features()
+{
+  // adjust required feature bits?
+
+  // we have to be a bit careful here, because we are accessing the
+  // Policy structures without taking any lock.  in particular, only
+  // modify integer values that can safely be read by a racing CPU.
+  // since we are only accessing existing Policy structures a their
+  // current memory location, and setting or clearing bits in integer
+  // fields, and we are the only writer, this is not a problem.
+
+  Messenger::Policy p = client_messenger->get_default_policy();
+  if (osdmap->crush->has_nondefault_tunables()) {
+    if (!(p.features_required & CEPH_FEATURE_CRUSH_TUNABLES)) {
+      dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature for clients" << dendl;
+      p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
+      client_messenger->set_default_policy(p);
+    }
+    if (!(cluster_messenger->get_policy(entity_name_t::TYPE_OSD).features_required &
+	  CEPH_FEATURE_CRUSH_TUNABLES)) {
+      dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature for osds" << dendl;
+      Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
+      p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
+      cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
+    }
+  } else {
+    if (p.features_required & CEPH_FEATURE_CRUSH_TUNABLES) {
+      dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature for clients" << dendl;
+      p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
+      client_messenger->set_default_policy(p);
+    }
+    if (cluster_messenger->get_policy(entity_name_t::TYPE_OSD).features_required &
+	CEPH_FEATURE_CRUSH_TUNABLES) {
+      dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature for osds" << dendl;
+      Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
+      p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
+      cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
+    }
+  }
 }
 
 void OSD::advance_pg(epoch_t osd_epoch, PG *pg, PG::RecoveryCtx *rctx)

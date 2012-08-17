@@ -42,6 +42,13 @@ public:
    */
   virtual void ms_handle_connect(Connection *con) { };
 
+  /**
+   * Callback indicating we have accepted an incoming connection.
+   *
+   * @param con The (new or existing) Connection associated with the session
+   */
+  virtual void ms_handle_accept(Connection *con) { };
+
   /*
    * this indicates that the ordered+reliable delivery semantics have 
    * been violated.  Messages may have been lost due to a fault

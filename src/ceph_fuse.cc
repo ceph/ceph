@@ -94,6 +94,11 @@ int main(int argc, const char **argv, const char *envp[]) {
 					   entity_name_t::CLIENT(), "client",
 					   getpid());
   Client *client = new Client(messenger, &mc);
+
+  messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+  messenger->set_policy(entity_name_t::TYPE_MDS,
+			Messenger::Policy::lossless_client(0, 0));
+
   if (filer_flags) {
     client->set_filer_flags(filer_flags);
   }

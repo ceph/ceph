@@ -242,6 +242,17 @@ Rados object in state %s." % (self.state))
                 break
         return filter(lambda name: name != '', c_names.raw.split('\0'))
 
+    def get_fsid(self):
+        self.require_state("connected")
+        fsid_len = 36
+        fsid = create_string_buffer(fsid_len + 1)
+        ret = self.librados.rados_cluster_fsid(self.cluster,
+                                               byref(fsid),
+                                               fsid_len + 1)
+        if ret < 0:
+            raise make_ex(ret, "error getting cluster fsid")
+        return fsid.value
+
     def open_ioctx(self, ioctx_name):
         self.require_state("connected")
         if not isinstance(ioctx_name, str):
@@ -626,6 +637,15 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
+
+    def trunc(self, key, size):
+        self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
+        ret = self.librados.rados_trunc(self.io, c_char_p(key), c_size_t(size))
+        if ret < 0:
+            raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
+        return ret
 
     def stat(self, key):
         """Stat object, returns, size/timestamp"""

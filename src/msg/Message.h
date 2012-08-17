@@ -151,13 +151,21 @@ struct Connection : public RefCountedObject {
   entity_addr_t peer_addr;
   unsigned features;
   RefCountedObject *pipe;
+  bool failed;              /// true if we are a lossy connection that has failed.
 
   int rx_buffers_version;
   map<tid_t,pair<bufferlist,int> > rx_buffers;
 
 public:
-  Connection() : lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL),
-		 rx_buffers_version(0) {}
+  Connection()
+    : lock("Connection::lock"),
+      priv(NULL),
+      peer_type(-1),
+      features(0),
+      pipe(NULL),
+      failed(false),
+      rx_buffers_version(0) {
+  }
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -191,11 +199,24 @@ public:
       return pipe->get();
     return NULL;
   }
+  bool try_get_pipe(RefCountedObject **p) {
+    Mutex::Locker l(lock);
+    if (failed) {
+      *p = NULL;
+    } else {
+      if (pipe)
+	*p = pipe->get();
+      else
+	*p = NULL;
+    }
+    return !failed;
+  }
   void clear_pipe(RefCountedObject *old_p) {
-    if(old_p == pipe) {
+    if (old_p == pipe) {
       Mutex::Locker l(lock);
       pipe->put();
       pipe = NULL;
+      failed = true;
     }
   }
   void reset_pipe(RefCountedObject *p) {
@@ -454,10 +475,8 @@ inline ostream& operator<<(ostream& out, Message& m) {
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
 
-namespace boost {
-  void intrusive_ptr_add_ref(Message *p);
-  void intrusive_ptr_release(Message *p);
-};
+void intrusive_ptr_add_ref(Message *p);
+void intrusive_ptr_release(Message *p);
 
 
 #endif

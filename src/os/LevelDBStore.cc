@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-
+// vim: ts=8 sw=2 smarttab
 #include "LevelDBStore.h"
 
 #include <set>
@@ -28,31 +28,25 @@ int LevelDBStore::init(ostream &out)
 
 void LevelDBStore::LevelDBTransactionImpl::set(
   const string &prefix,
-  const std::map<string, bufferlist> &to_set)
+  const string &k,
+  const bufferlist &to_set_bl)
 {
-  for (std::map<string, bufferlist>::const_iterator i = to_set.begin();
-       i != to_set.end();
-       ++i) {
-    buffers.push_back(i->second);
-    buffers.rbegin()->rebuild();
-    bufferlist &bl = *(buffers.rbegin());
-    string key = combine_strings(prefix, i->first);
-    keys.push_back(key);
-    bat.Delete(leveldb::Slice(*(keys.rbegin())));
-    bat.Put(leveldb::Slice(*(keys.rbegin())),
-	    leveldb::Slice(bl.c_str(), bl.length()));
-  }
+  buffers.push_back(to_set_bl);
+  buffers.rbegin()->rebuild();
+  bufferlist &bl = *(buffers.rbegin());
+  string key = combine_strings(prefix, k);
+  keys.push_back(key);
+  bat.Delete(leveldb::Slice(*(keys.rbegin())));
+  bat.Put(leveldb::Slice(*(keys.rbegin())),
+	  leveldb::Slice(bl.c_str(), bl.length()));
 }
-void LevelDBStore::LevelDBTransactionImpl::rmkeys(const string &prefix,
-						  const std::set<string> &to_rm)
+
+void LevelDBStore::LevelDBTransactionImpl::rmkey(const string &prefix,
+					         const string &k)
 {
-  for (std::set<string>::const_iterator i = to_rm.begin();
-       i != to_rm.end();
-       ++i) {
-    string key = combine_strings(prefix, *i);
-    keys.push_back(key);
-    bat.Delete(leveldb::Slice(*(keys.rbegin())));
-  }
+  string key = combine_strings(prefix, k);
+  keys.push_back(key);
+  bat.Delete(leveldb::Slice(*(keys.rbegin())));
 }
 
 void LevelDBStore::LevelDBTransactionImpl::rmkeys_by_prefix(const string &prefix)

@@ -118,6 +118,13 @@ public:
     crush->choose_total_tries = n;
   }
 
+  bool has_nondefault_tunables() const {
+    return
+      (crush->choose_local_tries != 2 ||
+       crush->choose_local_fallback_tries != 5 ||
+       crush->choose_total_tries != 19);
+  }
+
   // bucket types
   int get_num_type_names() const {
     return type_map.size();

@@ -207,7 +207,6 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
   return;
 
  err_op:
- err_ctx:
   PK11_DestroyContext(ctx, PR_TRUE);
  err_param:
   SECITEM_FreeItem(param, PR_TRUE);

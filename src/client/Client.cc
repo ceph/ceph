@@ -1222,6 +1222,16 @@ void Client::encode_cap_releases(MetaRequest *req, int mds)
 	   << req << ", mds " << mds <<dendl;
 }
 
+void Client::_closed_mds_session(int mds, MetaSession *s)
+{
+  mount_cond.Signal();
+  if (s)
+    remove_session_caps(s);
+  kick_requests(mds, true);
+  delete s;
+  mds_sessions.erase(mds);
+}
+
 void Client::handle_client_session(MClientSession *m) 
 {
   ldout(cct, 10) << "handle_client_session " << *m << dendl;
@@ -1248,12 +1258,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_CLOSE:
-    mount_cond.Signal();
-    if (mds_session)
-      remove_session_caps(mds_session);
-    kick_requests(from, true);
-    delete mds_session;
-    mds_sessions.erase(from);
+    _closed_mds_session(from, mds_session);
     break;
 
   case CEPH_SESSION_RENEWCAPS:
@@ -6917,7 +6922,33 @@ void Client::ms_handle_remote_reset(Connection *con)
 {
   ldout(cct, 0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
-  objecter->ms_handle_remote_reset(con);
+  switch (con->get_peer_type()) {
+  case CEPH_ENTITY_TYPE_OSD:
+    objecter->ms_handle_remote_reset(con);
+    break;
+
+  case CEPH_ENTITY_TYPE_MDS:
+    {
+      // kludge to figure out which mds this is; fixme with a Connection* state
+      int mds = -1;
+      MetaSession *s = NULL;
+      for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+	   p != mds_sessions.end();
+	   ++p) {
+	if (mdsmap->get_addr(p->first) == con->get_peer_addr()) {
+	  mds = p->first;
+	  s = p->second;
+	}
+      }
+      if (mds >= 0) {
+	if (s->closing) {
+	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
+	  _closed_mds_session(mds, s);
+	}
+      }
+    }
+    break;
+  }
 }
 
 bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)

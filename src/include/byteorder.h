@@ -81,9 +81,9 @@ MAKE_LE_CLASS(32)
 MAKE_LE_CLASS(16)
 #undef MAKE_LE_CLASS
 
-#define init_le64(x) { mswab64(x) }
-#define init_le32(x) { mswab32(x) }
-#define init_le16(x) { mswab16(x) }
+#define init_le64(x) { (__u64)mswab64(x) }
+#define init_le32(x) { (__u32)mswab32(x) }
+#define init_le16(x) { (__u16)mswab16(x) }
 
   /*
 #define cpu_to_le64(x) (x)
