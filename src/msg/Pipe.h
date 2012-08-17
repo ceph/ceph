@@ -92,6 +92,7 @@ class DispatchQueue;
     }
 
     int sd;
+    int port;
     int peer_type;
     entity_addr_t peer_addr;
     Messenger::Policy policy;
