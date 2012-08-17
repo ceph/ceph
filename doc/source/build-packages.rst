@@ -39,7 +39,7 @@ Fetch the source tarball for the RPM compilation environment::
 
 	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.gz
 
-Or from the EU mirror
+Or from the EU mirror::
 
 	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/download/ceph-<version>.tar.gz
 
