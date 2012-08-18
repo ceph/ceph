@@ -544,7 +544,7 @@ namespace librbd {
       return r;
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
-    cls_client::parent_spec pspec(ictx->md_ctx.get_id(), ictx->id,
+    parent_spec pspec(ictx->md_ctx.get_id(), ictx->id,
 				  ictx->snap_id);
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
@@ -560,7 +560,7 @@ namespace librbd {
 			 << *it << dendl;
 	goto reprotect_and_return_err;
       }
-      r = get_children(&pool_ioctx, RBD_CHILDREN, pspec, children);
+      r = cls_client::get_children(&pool_ioctx, RBD_CHILDREN, pspec, children);
       // key should not exist for this parent if there is no entry
       if (((r < 0) && (r != -ENOENT))) {
 	lderr(ictx->cct) << "can't get children for pool " << *it << dendl;
