@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 
 #include "librbd/internal.h"
+#include "librbd/parent_types.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -611,6 +612,9 @@ namespace librbd {
       return r;
     }
 
+    parent_spec pspec(p_ioctx.get_id(), p_imctx->id,
+				  p_imctx->snap_id);
+
     if (p_imctx->old_format) {
       lderr(cct) << "parent image must be in new format" << dendl;
       return -EINVAL;
@@ -634,9 +638,6 @@ namespace librbd {
     if (!*c_order) {
       order = p_imctx->order;
     }
-
-    cls_client::parent_spec pspec(p_ioctx.get_id(), p_imctx->id,
-				  p_imctx->snap_id);
 
     int remove_r;
     librbd::NoOpProgressContext no_op;
@@ -912,7 +913,7 @@ namespace librbd {
     Mutex::Locker l(ictx->snap_lock);
     Mutex::Locker l2(ictx->parent_lock);
 
-    cls_client::parent_info *parent_info;
+    parent_spec *parent_spec;
 
     if (ictx->snap_id == CEPH_NOSNAP) {
       if (!ictx->parent)
@@ -991,7 +992,7 @@ namespace librbd {
 
       ictx->parent_lock.Lock();
       // struct assignment
-      cls_client::parent_info parent_info = ictx->parent_md;
+      parent_info parent_info = ictx->parent_md;
       ictx->parent_lock.Unlock();
 
       // scan snapshots; if none of them refer to this parent,
@@ -1278,7 +1279,7 @@ namespace librbd {
     vector<string> snap_names;
     vector<uint64_t> snap_sizes;
     vector<uint64_t> snap_features;
-    vector<cls_client::parent_info> snap_parents;
+    vector<parent_info> snap_parents;
     {
       Mutex::Locker l(ictx->snap_lock);
       {
@@ -1337,7 +1338,7 @@ namespace librbd {
 
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
-	  cls_client::parent_info parent;
+	  parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  vector<snap_t>::const_iterator it =
@@ -1356,7 +1357,7 @@ namespace librbd {
 	ictx->snaps_by_name.clear();
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
-	  cls_client::parent_info parent;
+	  parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,

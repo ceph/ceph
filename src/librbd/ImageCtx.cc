@@ -238,7 +238,7 @@ namespace librbd {
 
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
 			  uint64_t features,
-			  cls_client::parent_info parent)
+			  parent_info parent)
   {
     assert(snap_lock.is_locked());
     snaps.push_back(id);
