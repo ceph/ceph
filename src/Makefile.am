@@ -1421,6 +1421,7 @@ noinst_HEADERS = \
 	librbd/ImageCtx.h\
 	librbd/internal.h\
 	librbd/LibrbdWriteback.h\
+	librbd/parent_types.h\
 	librbd/SnapInfo.h\
 	librbd/WatchCtx.h\
 	logrotate.conf\
