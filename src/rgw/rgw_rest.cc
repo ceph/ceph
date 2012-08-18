@@ -253,9 +253,13 @@ void dump_continue(struct req_state *s)
   FCGX_FFlush(s->fcgx->out);
 }
 
-void dump_range(struct req_state *s, off_t ofs, off_t end, size_t total)
+void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
 {
-    CGI_PRINTF(s,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)total);
+  char range_buf[128];
+
+  /* dumping range into temp buffer first, as libfcgi will fail to digest %lld */
+  snprintf(range_buf, 128, "%lld-%lld/%lld", (long long)ofs, (long long)end, (long long)total);
+  CGI_PRINTF(s,"Content-Range: bytes %s\n", range_buf);
 }
 
 int RGWGetObj_REST::get_params()
