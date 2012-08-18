@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
+#include "librbd/cls_rbd.h"
 #include "librbd/internal.h"
 #include "librbd/WatchCtx.h"
 
@@ -225,6 +226,18 @@ namespace librbd {
     return -ENOENT;
   }
 
+  int ImageCtx::is_snap_protected(string in_snap_name, bool *is_protected) const
+  {
+    assert(snap_lock.is_locked());
+    map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
+    if (it != snaps_by_name.end()) {
+      *is_protected =
+	(it->second.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED);
+      return 0;
+    }
+    return -ENOENT;
+  }
+
   int ImageCtx::get_snap_size(string in_snap_name, uint64_t *out_size) const
   {
     assert(snap_lock.is_locked());
@@ -238,11 +251,12 @@ namespace librbd {
 
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
 			  uint64_t features,
-			  parent_info parent)
+			  parent_info parent,
+			  uint8_t protection_status)
   {
     assert(snap_lock.is_locked());
     snaps.push_back(id);
-    SnapInfo info(id, in_size, features, parent);
+    SnapInfo info(id, in_size, features, parent, protection_status);
     snaps_by_name.insert(pair<string, SnapInfo>(in_snap_name, info));
   }
 

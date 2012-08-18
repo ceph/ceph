@@ -9,6 +9,7 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
+#include "librbd/cls_rbd.h"
 #include "librbd/ImageCtx.h"
 
 #include "librbd/internal.h"
@@ -479,6 +480,72 @@ namespace librbd {
     return 0;
   }
 
+  int snap_protect(ImageCtx *ictx, const char *snap_name)
+  {
+    ldout(ictx->cct, 20) << "snap_protect " << ictx << " " << snap_name
+			 << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    Mutex::Locker l(ictx->md_lock);
+    Mutex::Locker l2(ictx->snap_lock);
+    snap_t snap_id = ictx->get_snap_id(snap_name);
+    if (snap_id == CEPH_NOSNAP)
+      return -ENOENT;
+
+    r = cls_client::set_protection_status(&ictx->md_ctx,
+					  ictx->header_oid,
+					  snap_id,
+					  RBD_PROTECTION_STATUS_PROTECTED);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return 0;
+  }
+
+  int snap_unprotect(ImageCtx *ictx, const char *snap_name)
+  {
+    ldout(ictx->cct, 20) << "snap_unprotect " << ictx << " " << snap_name
+			 << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    Mutex::Locker l(ictx->md_lock);
+    Mutex::Locker l2(ictx->snap_lock);
+    snap_t snap_id = ictx->get_snap_id(snap_name);
+    if (snap_id == CEPH_NOSNAP)
+      return -ENOENT;
+
+    // TODO: go through the unprotecting state as well, once
+    // rbd_children is implemented
+    r = cls_client::set_protection_status(&ictx->md_ctx,
+					  ictx->header_oid,
+					  snap_id,
+					  RBD_PROTECTION_STATUS_UNPROTECTED);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return 0;
+  }
+
+  int snap_is_protected(ImageCtx *ictx, const char *snap_name,
+			bool *is_protected)
+  {
+    ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
+			 << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    Mutex::Locker l(ictx->snap_lock);
+    return ictx->is_snap_protected(snap_name, is_protected);
+  }
+
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order)
   {
@@ -610,6 +677,14 @@ namespace librbd {
       return -EINVAL;
     }
 
+    bool snap_protected;
+    int order;
+    uint64_t size;
+    uint64_t p_features;
+    uint64_t p_poolid;
+    int remove_r;
+    librbd::NoOpProgressContext no_op;
+    ImageCtx *c_imctx = NULL;
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx);
     r = open_image(p_imctx, true);
@@ -624,31 +699,34 @@ namespace librbd {
 
     if (p_imctx->old_format) {
       lderr(cct) << "parent image must be in new format" << dendl;
-      return -EINVAL;
+      r = -EINVAL;
+      goto err_close_parent;
     }
 
     p_imctx->md_lock.Lock();
     p_imctx->snap_lock.Lock();
-    uint64_t p_features;
     p_imctx->get_features(p_imctx->snap_id, &p_features);
-    uint64_t size = p_imctx->get_image_size(p_imctx->snap_id);
+    size = p_imctx->get_image_size(p_imctx->snap_id);
+    p_imctx->is_snap_protected(p_imctx->snap_name, &snap_protected);
     p_imctx->snap_lock.Unlock();
     p_imctx->md_lock.Unlock();
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
-      return -EINVAL;
+      r = -EINVAL;
+      goto err_close_parent;
     }
 
-    int order = *c_order;
+    if (!snap_protected) {
+      lderr(cct) << "parent snapshot must be protected" << dendl;
+      r = -ENOSYS;
+      goto err_close_parent;
+    }
 
-    if (!*c_order) {
+    order = *c_order;
+    if (!order)
       order = p_imctx->order;
-    }
 
-    int remove_r;
-    librbd::NoOpProgressContext no_op;
-    ImageCtx *c_imctx = NULL;
     r = create(c_ioctx, c_name, size, false, features, &order);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
@@ -1275,6 +1353,7 @@ namespace librbd {
     vector<uint64_t> snap_sizes;
     vector<uint64_t> snap_features;
     vector<parent_info> snap_parents;
+    vector<uint8_t> snap_protection;
     {
       Mutex::Locker l(ictx->snap_lock);
       {
@@ -1320,7 +1399,8 @@ namespace librbd {
 	    r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
 					  new_snapc.snaps, &snap_names,
 					  &snap_sizes, &snap_features,
-					  &snap_parents);
+					  &snap_parents,
+					  &snap_protection);
 	    // -ENOENT here means we raced with snapshot deletion
 	    if (r < 0 && r != -ENOENT) {
 	      lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
@@ -1353,10 +1433,12 @@ namespace librbd {
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
 	  parent_info parent;
+	  uint8_t protection_status = ictx->old_format ?
+	    RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
-			 snap_sizes[i], features, parent);
+			 snap_sizes[i], features, parent, protection_status);
 	}
 
 	r = refresh_parent(ictx);

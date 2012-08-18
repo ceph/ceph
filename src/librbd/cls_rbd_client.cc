@@ -315,7 +315,8 @@ namespace librbd {
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
 		      std::vector<uint64_t> *features,
-		      std::vector<parent_info> *parents)
+		      std::vector<parent_info> *parents,
+		      std::vector<uint8_t> *protection_statuses)
     {
       names->clear();
       names->resize(ids.size());
@@ -325,12 +326,14 @@ namespace librbd {
       features->resize(ids.size());
       parents->clear();
       parents->resize(ids.size());
+      protection_statuses->clear();
+      protection_statuses->resize(ids.size());
 
       librados::ObjectReadOperation op;
       for (vector<snapid_t>::const_iterator it = ids.begin();
 	   it != ids.end(); ++it) {
 	snapid_t snap_id = it->val;
-	bufferlist bl1, bl2, bl3, bl4;
+	bufferlist bl1, bl2, bl3, bl4, bl5;
 	::encode(snap_id, bl1);
 	op.exec("rbd", "get_snapshot_name", bl1);
 	::encode(snap_id, bl2);
@@ -339,6 +342,8 @@ namespace librbd {
 	op.exec("rbd", "get_features", bl3);
 	::encode(snap_id, bl4);
 	op.exec("rbd", "get_parent", bl4);
+	::encode(snap_id, bl5);
+	op.exec("rbd", "get_protection_status", bl5);
       }
 
       bufferlist outbl;
@@ -364,6 +369,8 @@ namespace librbd {
 	  ::decode((*parents)[i].spec.image_id, iter);
 	  ::decode((*parents)[i].spec.snap_id, iter);
 	  ::decode((*parents)[i].overlap, iter);
+	  // get_protection_status
+	  ::decode((*protection_statuses)[i], iter);
 	}
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -497,6 +504,35 @@ namespace librbd {
       ::encode(locker, in);
       ::encode(cookie, in);
       return ioctx->exec(oid, "rbd", "break_lock", in, out);
+    }
+
+    int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t *protection_status)
+    {
+      bufferlist in, out;
+      ::encode(snap_id.val, in);
+
+      int r = ioctx->exec(oid, "rbd", "get_protection_status", in, out);
+      if (r < 0)
+	return r;
+
+      try {
+	bufferlist::iterator iter = out.begin();
+	::decode(*protection_status, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
+			      snapid_t snap_id, uint8_t protection_status)
+    {
+      bufferlist in, out;
+      ::encode(snap_id, in);
+      ::encode(protection_status, in);
+      return ioctx->exec(oid, "rbd", "set_protection_status", in, out);
     }
 
     /************************ rbd_id object methods ************************/

@@ -6,6 +6,7 @@
 #include "include/rados.h"
 #include "include/rados/librados.h"
 #include "include/types.h"
+#include "librbd/cls_rbd.h"
 #include "librbd/cls_rbd_client.h"
 
 #include "gtest/gtest.h"
@@ -47,6 +48,8 @@ using ::librbd::cls_client::dir_remove_image;
 using ::librbd::cls_client::dir_rename_image;
 using ::librbd::parent_info;
 using ::librbd::parent_spec;
+using ::librbd::cls_client::get_protection_status;
+using ::librbd::cls_client::set_protection_status;
 
 static char *random_buf(size_t len)
 {
@@ -71,7 +74,7 @@ TEST(cls_rbd, copyup)
   // copyup of 0-len nonexistent object should create new 0-len object
   ioctx.remove(oid);
   ASSERT_EQ(0, copyup(&ioctx, oid, inbl));
-  size_t size;
+  uint64_t size;
   ASSERT_EQ(0, ioctx.stat(oid, &size, NULL));
   ASSERT_EQ(0U, size);
 
@@ -535,6 +538,78 @@ TEST(cls_rbd, set_size)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
+TEST(cls_rbd, protection_status)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  uint8_t status = RBD_PROTECTION_STATUS_UNPROTECTED;
+  ASSERT_EQ(-ENOENT, get_protection_status(&ioctx, "foo",
+					   CEPH_NOSNAP, &status));
+  ASSERT_EQ(-ENOENT, set_protection_status(&ioctx, "foo",
+					   CEPH_NOSNAP, status));
+
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 0, 22, RBD_FEATURE_LAYERING, "foo"));
+  ASSERT_EQ(0, create_image(&ioctx, "bar", 0, 22, 0, "foo"));
+  ASSERT_EQ(-EINVAL, get_protection_status(&ioctx, "bar",
+					   CEPH_NOSNAP, &status));
+  ASSERT_EQ(-ENOEXEC, set_protection_status(&ioctx, "bar",
+					   CEPH_NOSNAP, status));
+  ASSERT_EQ(-EINVAL, get_protection_status(&ioctx, "foo",
+					   CEPH_NOSNAP, &status));
+  ASSERT_EQ(-EINVAL, set_protection_status(&ioctx, "foo",
+					   CEPH_NOSNAP, status));
+  ASSERT_EQ(-ENOENT, get_protection_status(&ioctx, "foo",
+					   2, &status));
+  ASSERT_EQ(-ENOENT, set_protection_status(&ioctx, "foo",
+					   2, status));
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 10, "snap1"));
+  ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
+				     10, &status));
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED, status);
+
+  ASSERT_EQ(0, set_protection_status(&ioctx, "foo",
+				     10, RBD_PROTECTION_STATUS_PROTECTED));
+  ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
+				     10, &status));
+  ASSERT_EQ(RBD_PROTECTION_STATUS_PROTECTED, status);
+  ASSERT_EQ(-EBUSY, snapshot_remove(&ioctx, "foo", 10));
+
+  ASSERT_EQ(0, set_protection_status(&ioctx, "foo",
+				     10, RBD_PROTECTION_STATUS_UNPROTECTING));
+  ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
+				     10, &status));
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTING, status);
+  ASSERT_EQ(-EBUSY, snapshot_remove(&ioctx, "foo", 10));
+
+  ASSERT_EQ(-EINVAL, set_protection_status(&ioctx, "foo",
+					   10, RBD_PROTECTION_STATUS_LAST));
+  ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
+				     10, &status));
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTING, status);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 20, "snap2"));
+  ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
+				     20, &status));
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED, status);
+  ASSERT_EQ(0, set_protection_status(&ioctx, "foo",
+				     10, RBD_PROTECTION_STATUS_UNPROTECTED));
+  ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
+				     10, &status));
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED, status);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, "foo", 10));
+  ASSERT_EQ(0, snapshot_remove(&ioctx, "foo", 20));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
 TEST(cls_rbd, parents)
 {
   librados::Rados rados;
@@ -714,12 +789,14 @@ TEST(cls_rbd, snapshots)
   vector<uint64_t> snap_features;
   SnapContext snapc;
   vector<parent_info> parents;
+  vector<uint8_t> protection_status;
 
   ASSERT_EQ(0, get_snapcontext(&ioctx, "foo", &snapc));
   ASSERT_EQ(0u, snapc.snaps.size());
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(0u, snap_names.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0u, snap_features.size());
@@ -730,7 +807,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -743,7 +821,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -756,7 +835,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -769,7 +849,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(snap_names.size(), 1u);
   ASSERT_EQ(snap_names[0], "snap1");
   ASSERT_EQ(snap_sizes[0], 10u);
@@ -783,7 +864,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[1]);
   ASSERT_EQ(1u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(2u, snap_names.size());
   ASSERT_EQ("snap2", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -798,7 +880,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[0]);
   ASSERT_EQ(1u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap2", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -819,7 +902,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[1]);
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(2u, snap_names.size());
   ASSERT_EQ("snap3", snap_names[0]);
   ASSERT_EQ(0u, snap_sizes[0]);
@@ -842,7 +926,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[0]);
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap2", snap_names[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
@@ -854,7 +939,8 @@ TEST(cls_rbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps.size());
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, "foo", snapc.snaps, &snap_names,
-			     &snap_sizes, &snap_features, &parents));
+			     &snap_sizes, &snap_features, &parents,
+			     &protection_status));
   ASSERT_EQ(0u, snap_names.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0u, snap_features.size());

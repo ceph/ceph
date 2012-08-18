@@ -616,7 +616,7 @@ void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, siz
   assert(written == (ssize_t)len);
 }
 
-void aio_discard_test_data(rbd_image_t image, uint64_t off, size_t len)
+void aio_discard_test_data(rbd_image_t image, uint64_t off, uint64_t len)
 {
   rbd_completion_t comp;
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);
@@ -997,11 +997,14 @@ TEST(LibRBD, TestClone)
 
   // create a snapshot, reopen as the parent we're interested in
   ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  printf("made snapshot \"parent@parent_snap\"\n");
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, "parent_snap"));
-  printf("made snapshot \"parent@parent_snap\"\n");
 
-  // - validate "no clone if not preserved" when preserved is available
+  ASSERT_EQ(-ENOSYS, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
+	    &order));
+
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
 
   // This clone and open should work
   ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,

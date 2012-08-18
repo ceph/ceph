@@ -320,6 +320,24 @@ namespace librbd {
     return librbd::snap_rollback(ictx, snap_name, prog_ctx);
   }
 
+  int Image::snap_protect(const char *snap_name)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::snap_protect(ictx, snap_name);
+  }
+
+  int Image::snap_unprotect(const char *snap_name)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::snap_unprotect(ictx, snap_name);
+  }
+
+  int Image::snap_is_protected(const char *snap_name, bool *is_protected)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::snap_is_protected(ictx, snap_name, is_protected);
+  }
+
   int Image::snap_list(vector<librbd::snap_info_t>& snaps)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -686,6 +704,30 @@ extern "C" void rbd_snap_list_end(rbd_snap_info_t *snaps)
     free((void *)snaps->name);
     snaps++;
   }
+}
+
+extern "C" int rbd_snap_protect(rbd_image_t image, const char *snap_name)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::snap_protect(ictx, snap_name);
+}
+
+extern "C" int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::snap_unprotect(ictx, snap_name);
+}
+
+extern "C" int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
+				     int *is_protected)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  bool protected_snap;
+  int r = librbd::snap_is_protected(ictx, snap_name, &protected_snap);
+  if (r < 0)
+    return r;
+  *is_protected = protected_snap ? 1 : 0;
+  return 0;
 }
 
 extern "C" int rbd_snap_set(rbd_image_t image, const char *snap_name)

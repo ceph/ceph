@@ -20,6 +20,7 @@
 #include <time.h>
 #include <strings.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/mman.h>
 #ifdef HAVE_ERR_H
 #include <err.h>
@@ -758,7 +759,8 @@ do_punch_hole(unsigned offset, unsigned length)
 		prt("%lu punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
-	if ((ret = rbd_discard(image, offset, length)) < 0) {
+	if ((ret = rbd_discard(image, (unsigned long long) offset,
+			       (unsigned long long) length)) < 0) {
 		prt("%punch hole: %x to %x\n", offset, length);
 		prterrcode("do_punch_hole: discard", ret);
 		report_failure(161);
@@ -811,6 +813,11 @@ do_clone()
 
 	if ((ret = rbd_snap_create(image, "snap")) < 0) {
 		simple_err("do_clone: rbd create snap", ret);
+		exit(164);
+	}
+
+	if ((ret = rbd_snap_protect(image, "snap")) < 0) {
+		simple_err("do_clone: rbd protect snap", ret);
 		exit(164);
 	}
 
@@ -875,6 +882,7 @@ check_clones()
 		unlink(filename);
 		/* remove the snapshot if it exists, ignore
 		   the error from the last clone. */
+		rbd_snap_unprotect(cur_image, "snap");
 		rbd_snap_remove(cur_image, "snap");
 		rbd_close(cur_image);
 		rbd_remove(ioctx, imagename);
