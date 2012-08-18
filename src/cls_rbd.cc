@@ -55,6 +55,9 @@ cls_method_handle_t h_set_parent;
 cls_method_handle_t h_get_protection_status;
 cls_method_handle_t h_set_protection_status;
 cls_method_handle_t h_remove_parent;
+cls_method_handle_t h_add_child;
+cls_method_handle_t h_remove_child;
+cls_method_handle_t h_get_children;
 cls_method_handle_t h_get_snapcontext;
 cls_method_handle_t h_get_object_prefix;
 cls_method_handle_t h_get_snapshot_name;
@@ -987,6 +990,216 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  return 0;
+}
+
+/**
+ * methods for dealing with rbd_children object
+ */
+
+static int decode_parent_common(bufferlist::iterator& it, uint64_t *pool_id,
+				string *image_id, snapid_t *snap_id)
+{
+  try {
+    ::decode(*pool_id, it);
+    ::decode(*image_id, it);
+    ::decode(*snap_id, it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("error decoding parent spec");
+    return -EINVAL;
+  }
+  return 0;
+}
+
+static int decode_parent(bufferlist *in, uint64_t *pool_id,
+			 string *image_id, snapid_t *snap_id)
+{
+  bufferlist::iterator it = in->begin();
+  return decode_parent_common(it, pool_id, image_id, snap_id);
+}
+
+static int decode_parent_and_child(bufferlist *in, uint64_t *pool_id,
+			           string *image_id, snapid_t *snap_id,
+				   string *c_image_id)
+{
+  bufferlist::iterator it = in->begin();
+  int r = decode_parent_common(it, pool_id, image_id, snap_id);
+  if (r < 0)
+    return r;
+  try {
+    ::decode(*c_image_id, it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("error decoding child image id");
+    return -EINVAL;
+  }
+  return 0;
+}
+
+static string parent_key(uint64_t pool_id, string image_id, snapid_t snap_id)
+{
+  bufferlist key_bl;
+  ::encode(pool_id, key_bl);
+  ::encode(image_id, key_bl);
+  ::encode(snap_id, key_bl);
+  return string(key_bl.c_str(), key_bl.length());
+}
+
+/**
+ * add child to rbd_children directory object
+ *
+ * rbd_children is a map of (p_pool_id, p_image_id, p_snap_id) to
+ * [c_image_id, [c_image_id ... ]]
+ *
+ * Input:
+ * @param p_pool_id parent pool id
+ * @param p_image_id parent image oid
+ * @param p_snap_id parent snapshot id
+ * @param c_image_id new child image oid to add
+ *
+ * @returns 0 on success, negative error on failure
+ */
+
+int add_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r;
+
+  uint64_t p_pool_id;
+  snapid_t p_snap_id;
+  string p_image_id, c_image_id;
+  // Use set for ease of erase() for remove_child()
+  std::set<string> children;
+
+  r = decode_parent_and_child(in, &p_pool_id, &p_image_id, &p_snap_id,
+			      &c_image_id);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "add_child %s to (%d, %s, %d)", c_image_id.c_str(),
+	  p_pool_id, p_image_id.c_str(), p_snap_id);
+
+  string key = parent_key(p_pool_id, p_image_id, p_snap_id);
+
+  // get current child list for parent, if any
+  r = read_key(hctx, key, &children);
+  if ((r < 0) && (r != -ENOENT)) {
+    CLS_LOG(20, "add_child: omap read failed: %d", r);
+    return r;
+  }
+
+  if (children.find(c_image_id) != children.end()) {
+    CLS_LOG(20, "add_child: child already exists: %s", c_image_id.c_str());
+    return -EEXIST;
+  }
+  // add new child
+  children.insert(c_image_id);
+
+  // write back
+  bufferlist childbl;
+  ::encode(children, childbl);
+  r = cls_cxx_map_set_val(hctx, key, &childbl);
+  if (r < 0)
+    CLS_LOG(20, "add_child: omap write failed: %d", r);
+  return r;
+}
+
+/**
+ * remove child from rbd_children directory object
+ *
+ * Input:
+ * @param p_pool_id parent pool id
+ * @param p_image_id parent image oid
+ * @param p_snap_id parent snapshot id
+ * @param c_image_id new child image oid to add
+ *
+ * @returns 0 on success, negative error on failure
+ */
+
+int remove_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r;
+
+  uint64_t p_pool_id;
+  snapid_t p_snap_id;
+  string p_image_id, c_image_id;
+  std::set<string> children;
+
+  r = decode_parent_and_child(in, &p_pool_id, &p_image_id, &p_snap_id,
+			      &c_image_id);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "remove_child %s from (%d, %s, %d)", c_image_id.c_str(),
+	       p_pool_id, p_image_id.c_str(), p_snap_id);
+
+  string key = parent_key(p_pool_id, p_image_id, p_snap_id);
+
+  // get current child list for parent.  Unlike add_child(), an empty list
+  // is an error (how can we remove something that doesn't exist?)
+  r = read_key(hctx, key, &children);
+  if (r < 0) {
+    CLS_LOG(20, "remove_child: read omap failed: %d", r);
+    return r;
+  }
+
+  if (children.find(c_image_id) == children.end()) {
+    CLS_LOG(20, "remove_child: child not found: %s", c_image_id.c_str());
+    return -ENOENT;
+  }
+  // find and remove child
+  children.erase(c_image_id);
+
+  // now empty?  remove key altogether
+  if (children.empty()) {
+    r = cls_cxx_map_remove_key(hctx, key);
+    if (r < 0)
+      CLS_LOG(20, "remove_child: remove key failed: %d", r);
+  } else {
+    // write back shortened children list
+    bufferlist childbl;
+    ::encode(children, childbl);
+    r = cls_cxx_map_set_val(hctx, key, &childbl);
+    if (r < 0)
+      CLS_LOG(20, "remove_child: write omap failed: %d ", r);
+  }
+  return r;
+}
+
+/**
+ * Input:
+ * @param p_pool_id parent pool id
+ * @param p_image_id parent image oid
+ * @param p_snap_id parent snapshot id
+ * @param c_image_id new child image oid to add
+ *
+ * Output:
+ * @param children set<string> of children
+ *
+ * @returns 0 on success, negative error on failure
+ */
+int get_children(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r;
+  uint64_t p_pool_id;
+  snapid_t p_snap_id;
+  string p_image_id;
+  std::set<string> children;
+
+  r = decode_parent(in, &p_pool_id, &p_image_id, &p_snap_id);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_children of (%d, %s, %d)",
+	  p_pool_id, p_image_id.c_str(), p_snap_id);
+
+  string key = parent_key(p_pool_id, p_image_id, p_snap_id);
+
+  r = read_key(hctx, key, &children);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_LOG(20, "get_children: read omap failed: %d", r);
+    return r;
+  }
+  ::encode(children, *out);
   return 0;
 }
 
@@ -1994,6 +2207,17 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_protection_status",
 			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
 			  get_protection_status, &h_get_protection_status);
+
+  /* methods for the rbd_children object */
+  cls_register_cxx_method(h_class, "add_child",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  add_child, &h_add_child);
+  cls_register_cxx_method(h_class, "remove_child",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  remove_child, &h_remove_child);
+  cls_register_cxx_method(h_class, "get_children",
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  get_children, &h_get_children);
 
   /* methods for the rbd_id.$image_name objects */
   cls_register_cxx_method(h_class, "get_id",

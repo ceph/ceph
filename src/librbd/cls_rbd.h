@@ -6,13 +6,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "common/Formatter.h"
-
-enum {
-  RBD_PROTECTION_STATUS_UNPROTECTED  = 0,
-  RBD_PROTECTION_STATUS_UNPROTECTING = 1,
-  RBD_PROTECTION_STATUS_PROTECTED    = 2,
-  RBD_PROTECTION_STATUS_LAST         = 3
-};
+#include "librbd/parent_types.h"
 
 /// information about our parent image, if any
 struct cls_rbd_parent {
