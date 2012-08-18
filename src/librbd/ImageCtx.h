@@ -21,6 +21,7 @@
 #include "librbd/cls_rbd_client.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/SnapInfo.h"
+#include "librbd/parent_types.h"
 
 class CephContext;
 class PerfCounters;
@@ -67,7 +68,7 @@ namespace librbd {
     std::string object_prefix;
     std::string header_oid;
     std::string id; // only used for new-format images
-    cls_client::parent_info parent_md;
+    parent_info parent_md;
     ImageCtx *parent;
 
     ObjectCacher *object_cacher;

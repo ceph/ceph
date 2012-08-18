@@ -45,8 +45,8 @@ using ::librbd::cls_client::dir_list;
 using ::librbd::cls_client::dir_add_image;
 using ::librbd::cls_client::dir_remove_image;
 using ::librbd::cls_client::dir_rename_image;
-using ::librbd::cls_client::parent_info;
-using ::librbd::cls_client::parent_spec;
+using ::librbd::parent_info;
+using ::librbd::parent_spec;
 
 static char *random_buf(size_t len)
 {
