@@ -7,7 +7,6 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
-#include "librbd/cls_rbd.h"
 #include "librbd/internal.h"
 #include "librbd/WatchCtx.h"
 

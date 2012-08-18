@@ -1004,6 +1004,10 @@ TEST(LibRBD, TestClone)
   ASSERT_EQ(-EINVAL, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
 	    features, &order));
 
+  // unprotected image should fail unprotect
+  ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
+  printf("can't unprotect an unprotected snap\n");
+
   ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
   // protecting again should fail
   ASSERT_EQ(-EBUSY, rbd_snap_protect(parent, "parent_snap"));
