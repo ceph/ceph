@@ -758,7 +758,6 @@ reprotect_and_return_err:
     int order;
     uint64_t size;
     uint64_t p_features;
-    uint64_t p_poolid;
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
@@ -1509,9 +1508,9 @@ reprotect_and_return_err:
 	ictx->snaps_by_name.clear();
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
-	  parent_info parent;
 	  uint8_t protection_status = ictx->old_format ?
 	    RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
+	  parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
