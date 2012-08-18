@@ -21,6 +21,7 @@
 #include "librbd/cls_rbd_client.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/SnapInfo.h"
+#include "librbd/parent_types.h"
 
 class CephContext;
 class PerfCounters;
@@ -67,7 +68,7 @@ namespace librbd {
     std::string object_prefix;
     std::string header_oid;
     std::string id; // only used for new-format images
-    cls_client::parent_info parent_md;
+    parent_info parent_md;
     ImageCtx *parent;
 
     ObjectCacher *object_cacher;
@@ -89,12 +90,12 @@ namespace librbd {
     void snap_unset();
     librados::snap_t get_snap_id(std::string in_snap_name) const;
     int get_snap_name(snapid_t snap_id, std::string *out_snap_name) const;
+    int get_parent_spec(snapid_t snap_id, parent_spec *pspec);
     int get_snap_size(std::string in_snap_name, uint64_t *out_size) const;
     int is_snap_protected(string in_snap_name, bool *is_protected) const;
     void add_snap(std::string in_snap_name, librados::snap_t id,
 		  uint64_t in_size, uint64_t features,
-		  cls_client::parent_info parent,
-		  uint8_t protection_status);
+		  parent_info parent, uint8_t protection_status);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
     int get_features(librados::snap_t in_snap_id,
 		     uint64_t *out_features) const;
