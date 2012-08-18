@@ -8,35 +8,13 @@
 #include "include/rados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
+#include "librbd/parent_types.h"
 
 #include <string>
 #include <vector>
 
 namespace librbd {
   namespace cls_client {
-    struct parent_spec {
-      int64_t pool_id;
-      string image_id;
-      snapid_t snap_id;
-      parent_spec() : pool_id(-1), snap_id(CEPH_NOSNAP) {}
-      parent_spec(uint64_t pool_id, string image_id, snapid_t snap_id) :
-	pool_id(pool_id), image_id(image_id), snap_id(snap_id) {}
-      bool operator==(const parent_spec &other) {
-	return ((this->pool_id == other.pool_id) &&
-		(this->image_id == other.image_id) &&
-		(this->snap_id == other.snap_id));
-      }
-      bool operator!=(const parent_spec &other) {
-	return !(*this == other);
-      }
-    };
-
-    struct parent_info {
-      struct parent_spec spec;
-      uint64_t overlap;
-      parent_info() : overlap(0) {}
-    };
-
     // high-level interface to the header
     int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			       std::string *object_prefix, uint8_t *order);
