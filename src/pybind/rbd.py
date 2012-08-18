@@ -477,7 +477,7 @@ class Image(object):
 
         :param name: the name of the snapshot
         :type name: str
-        :raises: :class:`IOError`
+        :raises: :class:`IOError`, :class:`ImageBusy`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
@@ -500,6 +500,54 @@ class Image(object):
         ret = self.librbd.rbd_snap_rollback(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error rolling back image %s to snapshot %s' % (self.name, name))
+
+    def protect_snap(self, name):
+        """
+        Mark a snapshot as protected. This means it can't be deleted
+        until it is unprotected.
+
+        :param name: the snapshot to protect
+        :type name: str
+        :raises: :class:`IOError`, :class:`ImageNotFound`
+        """
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
+        ret = self.librbd.rbd_snap_protect(self.image, c_char_p(name))
+        if ret != 0:
+            raise make_ex(ret, 'error protecting snapshot %s@%s' % (self.name, name))
+
+    def unprotect_snap(self, name):
+        """
+        Mark a snapshot unprotected. This allows it to be deleted if
+        it was protected.
+
+        :param name: the snapshot to unprotect
+        :type name: str
+        :raises: :class:`IOError`, :class:`ImageNotFound`
+        """
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
+        ret = self.librbd.rbd_snap_unprotect(self.image, c_char_p(name))
+        if ret != 0:
+            raise make_ex(ret, 'error unprotecting snapshot %s@%s' % (self.name, name))
+
+    def is_protected_snap(self, name):
+        """
+        Find out whether a snapshot is protected from deletion.
+
+        :param name: the snapshot to check
+        :type name: str
+        :returns: bool - whether the snapshot is protected
+        :raises: :class:`IOError`, :class:`ImageNotFound`
+        """
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
+        is_protected = c_int()
+        ret = self.librbd.rbd_snap_is_protected(self.image, c_char_p(name),
+                                                byref(is_protected))
+        if ret != 0:
+            raise make_ex(ret, 'error checking if snapshot %s@%s is protected' % (self.name, name))
+        return is_protected.value == 1
 
     def set_snap(self, name):
         """

@@ -99,6 +99,10 @@ namespace librbd {
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
+  int snap_protect(ImageCtx *ictx, const char *snap_name);
+  int snap_unprotect(ImageCtx *ictx, const char *snap_name);
+  int snap_is_protected(ImageCtx *ictx, const char *snap_name,
+			bool *is_protected);
   int add_snap(ImageCtx *ictx, const char *snap_name);
   int rm_snap(ImageCtx *ictx, const char *snap_name);
   int ictx_check(ImageCtx *ictx);
