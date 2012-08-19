@@ -505,9 +505,9 @@ def xfstests(ctx, config):
             properties = {}
 
         test_image = properties.get('test_image', 'test_image')
-        test_size = properties.get('test_size', 250)
+        test_size = properties.get('test_size', 1000)
         scratch_image = properties.get('scratch_image', 'scratch_image')
-        scratch_size = properties.get('scratch_size', 250)
+        scratch_size = properties.get('scratch_size', 1000)
 
         test_image_config = {}
         test_image_config['image_name'] = test_image
