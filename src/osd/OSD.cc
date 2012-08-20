@@ -3547,7 +3547,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       superblock.oldest_map = e+1;
       num++;
       if (num >= g_conf->osd_target_transaction_size &&
-	  num > (last - first))  // make sure we at least keep pace with incoming maps
+	  (uint64_t)num > (last - first))  // make sure we at least keep pace with incoming maps
 	break;
     }
   }
