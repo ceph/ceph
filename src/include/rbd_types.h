@@ -45,6 +45,22 @@
 #define RBD_DIRECTORY           "rbd_directory"
 #define RBD_INFO                "rbd_info"
 
+/*
+ * rbd_children object in each pool contains omap entries
+ * that map parent (poolid, imageid, snapid) to a list of children
+ * (imageids; snapids aren't required because we get all the snapshot
+ * info from a read of the child's header object anyway).
+ *
+ * The clone operation writes a new item to this child list, and rm or
+ * flatten removes an item, and may remove the whole entry if no children
+ * exist after the rm/flatten.
+ *
+ * When attempting to remove a parent, all pools are searched for
+ * rbd_children objects with entries referring to that parent; if any
+ * exist (and those children exist), the parent removal is prevented.
+ */
+#define RBD_CHILDREN		"rbd_children"
+
 #define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
 
 #define RBD_MAX_OBJ_NAME_SIZE	96

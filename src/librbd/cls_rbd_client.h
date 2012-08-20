@@ -8,21 +8,13 @@
 #include "include/rados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
+#include "librbd/parent_types.h"
 
 #include <string>
 #include <vector>
 
 namespace librbd {
   namespace cls_client {
-
-    struct parent_info {
-      int64_t pool_id;
-      string image_id;
-      snapid_t snap_id;
-      uint64_t overlap;
-      parent_info() : pool_id(-1), snap_id(CEPH_NOSNAP), overlap(0) {}
-    };
-
     // high-level interface to the header
     int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			       std::string *object_prefix, uint8_t *order);
@@ -49,13 +41,17 @@ namespace librbd {
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   snapid_t snap_id, int64_t *parent_pool,
-		   std::string *parent_image, snapid_t *parent_snap_id,
+		   snapid_t snap_id, parent_spec *pspec,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   int64_t parent_pool, const std::string& parent_image,
-		   snapid_t parent_snap_id, uint64_t parent_overlap);
+		   parent_spec pspec, uint64_t parent_overlap);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
+    int add_child(librados::IoCtx *ioctx, const std::string &oid,
+		  parent_spec pspec, const std::string &c_imageid);
+    int remove_child(librados::IoCtx *ioctx, const std::string &oid,
+		     parent_spec pspec, const std::string &c_imageid);
+    int get_children(librados::IoCtx *ioctx, const std::string &oid,
+		     parent_spec pspec, set<string>& children);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,

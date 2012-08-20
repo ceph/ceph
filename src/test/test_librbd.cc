@@ -1026,14 +1026,21 @@ TEST(LibRBD, TestClone)
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, "parent_snap"));
 
-  ASSERT_EQ(-ENOSYS, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
-	    &order));
+  ASSERT_EQ(-EINVAL, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
+	    features, &order));
+
+  // unprotected image should fail unprotect
+  ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
+  printf("can't unprotect an unprotected snap\n");
 
   ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  // protecting again should fail
+  ASSERT_EQ(-EBUSY, rbd_snap_protect(parent, "parent_snap"));
+  printf("can't protect a protected snap\n");
 
   // This clone and open should work
-  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child", features,
-	    &order));
+  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
+	    features, &order));
   ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
   printf("made and opened clone \"child\"\n");
 
@@ -1083,6 +1090,16 @@ TEST(LibRBD, TestClone)
   printf("sized up clone, changed size but not overlap or parent's size\n");
   
   ASSERT_EQ(0, rbd_close(child));
+
+  ASSERT_EQ(-EBUSY, rbd_snap_remove(parent, "parent_snap"));
+  printf("can't remove parent while child still exists\n");
+  ASSERT_EQ(0, rbd_remove(ioctx, "child"));
+  ASSERT_EQ(-EBUSY, rbd_snap_remove(parent, "parent_snap"));
+  printf("can't remove parent while still protected\n");
+  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_remove(parent, "parent_snap"));
+  printf("removed parent snap after unprotecting\n");
+
   ASSERT_EQ(0, rbd_close(parent));
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
