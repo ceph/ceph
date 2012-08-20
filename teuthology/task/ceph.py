@@ -848,7 +848,7 @@ def run_daemon(ctx, config, type_):
                     valgrind_args = config['valgrind'][name]
                 run_cmd.extend(teuthology.get_valgrind_args(name, valgrind_args))
 
-            if type_ in config.get('cpu_profile'):
+            if type_ in config.get('cpu_profile', []):
                 profile_path = '/tmp/cephtest/archive/log/%s.%s.prof' % (type_, id_)
                 run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
 
