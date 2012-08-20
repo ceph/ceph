@@ -415,12 +415,12 @@ class TestClone(object):
 
     def tearDown(self):
         global ioctx
+        self.clone.close()
+        self.rbd.remove(ioctx, 'clone')
         self.image.unprotect_snap('snap1')
         self.image.remove_snap('snap1')
         self.image.close()
         remove_image()
-        self.clone.close()
-        self.rbd.remove(ioctx, 'clone')
 
     def test_unprotected(self):
         self.image.create_snap('snap2')
