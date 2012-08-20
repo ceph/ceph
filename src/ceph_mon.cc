@@ -106,6 +106,11 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  if (g_conf->name.get_id().empty()) {
+    cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    usage();
+  }
+
   // -- mkfs --
   if (mkfs) {
     // resolve public_network -> public_addr
