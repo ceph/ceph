@@ -2015,6 +2015,45 @@ void Monitor::tick()
   new_tick();
 }
 
+int Monitor::check_fsid()
+{
+  ostringstream ss;
+  ss << monmap->get_fsid();
+  string us = ss.str();
+  bufferlist ebl;
+  int r = store->get_bl_ss(ebl, "cluster_fsid", 0);
+  if (r < 0)
+    return r;
+
+  string es(ebl.c_str(), ebl.length());
+
+  // only keep the first line
+  size_t pos = es.find_first_of('\n');
+  if (pos != string::npos)
+    es.resize(pos);
+
+  dout(10) << "check_fsid cluster_fsid contains '" << es << "'" << dendl;
+  if (es.length() < us.length() ||
+      strncmp(us.c_str(), es.c_str(), us.length()) != 0) {
+    derr << "error: cluster_fsid file exists with value '" << es
+	 << "', != our uuid " << monmap->get_fsid() << dendl;
+    return -EEXIST;
+  }
+
+  return 0;
+}
+
+int Monitor::write_fsid()
+{
+  ostringstream ss;
+  ss << monmap->get_fsid() << "\n";
+  string us = ss.str();
+
+  bufferlist b;
+  b.append(us);
+  return store->put_bl_ss(b, "cluster_fsid", 0);
+}
+
 /*
  * this is the closest thing to a traditional 'mkfs' for ceph.
  * initialize the monitor state machines to their initial values.
@@ -2028,10 +2067,15 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     return err;
   }
 
+  // verify cluster fsid
+  int r = check_fsid();
+  if (r < 0 && r != -ENOENT)
+    return r;
+
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  int r = store->put_bl_ss(magicbl, "magic", 0);
+  r = store->put_bl_ss(magicbl, "magic", 0);
   if (r < 0)
     return r;
 
@@ -2072,6 +2116,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist keyringbl;
   keyring.encode_plaintext(keyringbl);
   store->put_bl_ss(keyringbl, "mkfs", "keyring");
+
+  // sync and write out fsid to indicate completion.
+  store->sync();
+  r = write_fsid();
+  if (r < 0)
+    return r;
 
   return 0;
 }
