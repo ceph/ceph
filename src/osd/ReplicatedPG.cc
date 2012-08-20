@@ -2230,9 +2230,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         entity_name_t entity = ctx->reqid.name;
 	ObjectContext *obc = ctx->obc;
 
-	dout(0) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
-		<< " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
-	dout(0) << "watch: oi.user_version=" << oi.user_version.version << dendl;
+	dout(10) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
+		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
+	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
 
 	watch_info_t w(cookie, 30);  // FIXME: where does the timeout come from?
 	if (do_watch) {
