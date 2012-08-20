@@ -275,6 +275,15 @@ int Monitor::init()
     cluster_logger = pcb.create_perf_counters();
   }
 
+  // verify cluster_fsid
+  {
+    int r = check_fsid();
+    if (r == -ENOENT)
+      r = write_fsid();
+    if (r < 0)
+      return r;
+  }
+
   // open compatset
   {
     bufferlist bl;
