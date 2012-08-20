@@ -126,7 +126,8 @@ public:
 
   CInode* rdlock_path_pin_ref(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
 			      bool no_want_auth=false,
-			      ceph_file_layout **layout=NULL);
+			      ceph_file_layout **layout=NULL,
+			      bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, 
 				    set<SimpleLock*>& xlocks, bool okexist, bool mustexist, bool alwaysxlock,
 				    ceph_file_layout **layout=NULL);
@@ -135,7 +136,7 @@ public:
 
 
   // requests on existing inodes.
-  void handle_client_stat(MDRequest *mdr);
+  void handle_client_getattr(MDRequest *mdr, bool is_lookup);
   void handle_client_lookup_parent(MDRequest *mdr);
   void handle_client_lookup_hash(MDRequest *mdr);
   void _lookup_hash_2(MDRequest *mdr, int r);
