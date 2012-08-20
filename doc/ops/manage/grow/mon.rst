@@ -24,7 +24,7 @@ Adding a monitor
    usually::
 
      $ ceph mon getmap -o /tmp/monmap           # provides fsid and existing monitor addrs
-     $ ceph auth export mon. -o /tmp/monkey     # mon. auth key
+     $ ceph auth get mon. -o /tmp/monkey        # mon. auth key
      $ ceph-mon -i newname --mkfs --monmap /tmp/monmap --keyring /tmp/monkey
 
 #. Start the new monitor and it will automatically join the cluster.
