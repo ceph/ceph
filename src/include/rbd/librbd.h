@@ -109,6 +109,7 @@ int rbd_snap_rollback_with_progress(rbd_image_t image, const char *snapname,
  *
  * @param snap_name which snapshot to protect
  * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if snap is already protected
  */
 int rbd_snap_protect(rbd_image_t image, const char *snap_name);
 /**
@@ -116,6 +117,7 @@ int rbd_snap_protect(rbd_image_t image, const char *snap_name);
  *
  * @param snap_name which snapshot to unprotect
  * @returns 0 on success, negative error code on failure
+ * @returns -EINVAL if snap is not protected
  */
 int rbd_snap_unprotect(rbd_image_t image, const char *snap_name);
 /**

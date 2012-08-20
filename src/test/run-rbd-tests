@@ -5,7 +5,7 @@
 CEPH_SRC=$(pwd)
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CEPH_SRC/.libs"
 export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
-PATH="$PATH:$CEPH_SRC"
+PATH="$CEPH_SRC:$PATH"
 
 recreate_pool() {
     POOL_NAME=$1

@@ -13,6 +13,7 @@
 #include "librbd/ImageCtx.h"
 
 #include "librbd/internal.h"
+#include "librbd/parent_types.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -111,7 +112,8 @@ namespace librbd {
     info.num_objs = howmany(info.size, get_block_size(obj_order));
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
-	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE, ictx->object_prefix.length()));
+	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
+	       ictx->object_prefix.length() + 1));
     // clear deprecated fields
     info.parent_pool = -1L;
     info.parent_name[0] = '\0';
@@ -396,6 +398,25 @@ namespace librbd {
     return 0;
   }
 
+  static int scan_for_parents(ImageCtx *ictx, parent_spec &pspec,
+			      snapid_t oursnap_id)
+  {
+    if (pspec.pool_id != -1) {
+      map<string, SnapInfo>::iterator it;
+      for (it = ictx->snaps_by_name.begin();
+	   it != ictx->snaps_by_name.end(); ++it) {
+	// skip our snap id (if checking base image, CEPH_NOSNAP won't match)
+	if (it->second.id == oursnap_id)
+	  continue;
+	if (it->second.parent.spec == pspec)
+	  break;
+      }
+      if (it == ictx->snaps_by_name.end())
+	return -ENOENT;
+    }
+    return 0;
+  }
+
   int snap_remove(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << dendl;
@@ -405,11 +426,30 @@ namespace librbd {
       return r;
 
     Mutex::Locker l(ictx->md_lock);
-    ictx->snap_lock.Lock();
-    snap_t snap_id = ictx->get_snap_id(snap_name);
-    ictx->snap_lock.Unlock();
-    if (snap_id == CEPH_NOSNAP)
-      return -ENOENT;
+    snap_t snap_id;
+
+    {
+      // block for purposes of auto-destruction of l2 on early return
+      Mutex::Locker l2(ictx->snap_lock);
+      snap_id = ictx->get_snap_id(snap_name);
+      if (snap_id == CEPH_NOSNAP)
+	return -ENOENT;
+
+      parent_spec our_pspec;
+      r = ictx->get_parent_spec(snap_id, &our_pspec);
+      if (r < 0) {
+	lderr(ictx->cct) << "snap_remove: can't get parent spec" << dendl;
+	return r;
+      }
+
+      if (ictx->parent_md.spec != our_pspec &&
+	  (scan_for_parents(ictx, our_pspec, snap_id) == -ENOENT)) {
+	  r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				       our_pspec, ictx->id);
+	  if (r < 0)
+	    return r;
+      }
+    }
 
     r = rm_snap(ictx, snap_name);
     if (r < 0)
@@ -437,10 +477,25 @@ namespace librbd {
 
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
+    uint64_t features;
+    ictx->get_features(ictx->snap_id, &features);
+    if ((features & RBD_FEATURE_LAYERING) == 0) {
+      lderr(ictx->cct) << "snap_protect: image must support layering"
+		       << dendl;
+      return -ENOSYS;
+    }
     snap_t snap_id = ictx->get_snap_id(snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
+    bool is_protected;
+    r = ictx->is_snap_protected(snap_name, &is_protected);
+    if (r < 0)
+      return r;
+
+    if (is_protected)
+      return -EBUSY;
+    
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
 					  snap_id,
@@ -462,20 +517,82 @@ namespace librbd {
 
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
+    uint64_t features;
+    ictx->get_features(ictx->snap_id, &features);
+    if ((features & RBD_FEATURE_LAYERING) == 0) {
+      lderr(ictx->cct) << "snap_unprotect: image must support layering"
+		       << dendl;
+      return -ENOSYS;
+    }
     snap_t snap_id = ictx->get_snap_id(snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
-    // TODO: go through the unprotecting state as well, once
-    // rbd_children is implemented
+    bool is_protected;
+    r = ictx->is_snap_protected(snap_name, &is_protected);
+    if (r < 0)
+      return r;
+
+    if (!is_protected)
+      return -EINVAL;
+
+    r = cls_client::set_protection_status(&ictx->md_ctx,
+					  ictx->header_oid,
+					  snap_id,
+					  RBD_PROTECTION_STATUS_UNPROTECTING);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    parent_spec pspec(ictx->md_ctx.get_id(), ictx->id,
+				  ictx->snap_id);
+    // search all pools for children depending on this snapshot
+    Rados rados(ictx->md_ctx);
+    std::list<std::string> pools;
+    rados.pool_list(pools);
+    std::list<std::string>::const_iterator it;
+    std::set<std::string> children;
+    for (it = pools.begin(); it != pools.end(); it++) {
+      IoCtx pool_ioctx;
+      r = rados.ioctx_create(it->c_str(), pool_ioctx);
+      if (r < 0) {
+	lderr(ictx->cct) << "snap_unprotect: can't create ioctx for pool "
+			 << *it << dendl;
+	goto reprotect_and_return_err;
+      }
+      r = cls_client::get_children(&pool_ioctx, RBD_CHILDREN, pspec, children);
+      // key should not exist for this parent if there is no entry
+      if (((r < 0) && (r != -ENOENT))) {
+	lderr(ictx->cct) << "can't get children for pool " << *it << dendl;
+	goto reprotect_and_return_err;
+      }
+      // if we found a child, can't unprotect
+      if (r == 0) {
+	lderr(ictx->cct) << "snap_unprotect: can't unprotect; at least " 
+	  << children.size() << " child(ren) in pool " << it->c_str() << dendl;
+	r = -EBUSY;
+	goto reprotect_and_return_err;
+      }
+      pool_ioctx.close();	// last one out will self-destruct
+    }
+    // didn't find any child in any pool, go ahead with unprotect
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
 					  snap_id,
 					  RBD_PROTECTION_STATUS_UNPROTECTED);
-    if (r < 0)
-      return r;
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     return 0;
+
+reprotect_and_return_err:
+    int proterr = cls_client::set_protection_status(&ictx->md_ctx,
+						    ictx->header_oid,
+						    snap_id,
+					      RBD_PROTECTION_STATUS_PROTECTED);
+    if (proterr < 0) {
+      lderr(ictx->cct) << "snap_unprotect: can't reprotect image" << dendl;
+    }
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return r;
   }
 
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
@@ -621,7 +738,6 @@ namespace librbd {
     int order;
     uint64_t size;
     uint64_t p_features;
-    uint64_t p_poolid;
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
@@ -633,6 +749,9 @@ namespace librbd {
 		 << cpp_strerror(-r) << dendl;
       return r;
     }
+
+    parent_spec pspec(p_ioctx.get_id(), p_imctx->id,
+				  p_imctx->snap_id);
 
     if (p_imctx->old_format) {
       lderr(cct) << "parent image must be in new format" << dendl;
@@ -650,13 +769,13 @@ namespace librbd {
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
-      r = -EINVAL;
+      r = -ENOSYS;
       goto err_close_parent;
     }
 
     if (!snap_protected) {
       lderr(cct) << "parent snapshot must be protected" << dendl;
-      r = -ENOSYS;
+      r = -EINVAL;
       goto err_close_parent;
     }
 
@@ -670,8 +789,6 @@ namespace librbd {
       goto err_close_parent;
     }
 
-    p_poolid = p_ioctx.get_id();
-
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx);
     r = open_image(c_imctx, true);
     if (r < 0) {
@@ -679,10 +796,15 @@ namespace librbd {
       goto err_remove;
     }
 
-    r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, p_poolid,
-			       p_imctx->id, p_imctx->snap_id, size);
+    r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, pspec, size);
     if (r < 0) {
       lderr(cct) << "couldn't set parent: " << r << dendl;
+      goto err_close_child;
+    }
+
+    r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, pspec, c_imctx->id);
+    if (r < 0) {
+      lderr(cct) << "couldn't add child: " << r << dendl;
       goto err_close_child;
     }
     ldout(cct, 2) << "done." << dendl;
@@ -931,24 +1053,46 @@ namespace librbd {
 
     Mutex::Locker l(ictx->snap_lock);
     Mutex::Locker l2(ictx->parent_lock);
-    if (!ictx->parent)
-      return -ENOENT;
 
+    parent_spec parent_spec;
+
+    if (ictx->snap_id == CEPH_NOSNAP) {
+      if (!ictx->parent)
+	return -ENOENT;
+      parent_spec = ictx->parent_md.spec;
+    } else {
+      r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
+      if (r < 0) {
+	lderr(ictx->cct) << "Can't find snapshot id" << ictx->snap_id << dendl;
+	return r;
+      }
+      if (parent_spec.pool_id == -1)
+	return 0;
+    }
     if (parent_pool_name) {
       Rados rados(ictx->md_ctx);
-      r = rados.pool_reverse_lookup(ictx->parent->md_ctx.get_id(),
+      r = rados.pool_reverse_lookup(parent_spec.pool_id,
 				    parent_pool_name);
       if (r < 0) {
-	lderr(ictx->cct) << "error looking up pool name" << dendl;
+	lderr(ictx->cct) << "error looking up pool name" << cpp_strerror(r)
+			 << dendl;
       }
     }
 
-    if (parent_snap_name)
-      *parent_snap_name = ictx->parent->snap_name;
+    if (parent_snap_name) {
+      Mutex::Locker l(ictx->parent->snap_lock);
+      r = ictx->parent->get_snap_name(parent_spec.snap_id,
+				      parent_snap_name);
+      if (r < 0) {
+	lderr(ictx->cct) << "error finding parent snap name: "
+			 << cpp_strerror(r) << dendl;
+	return r;
+      }
+    }
 
     if (parent_name) {
       r = cls_client::dir_get_name(&ictx->parent->md_ctx, RBD_DIRECTORY,
-				   ictx->parent->id, parent_name);
+				   parent_spec.image_id, parent_name);
       if (r < 0) {
 	lderr(ictx->cct) << "error getting parent image name: "
 			 << cpp_strerror(r) << dendl;
@@ -984,6 +1128,20 @@ namespace librbd {
       ictx->md_lock.Lock();
       trim_image(ictx, 0, prog_ctx);
       ictx->md_lock.Unlock();
+
+      ictx->parent_lock.Lock();
+      // struct assignment
+      parent_info parent_info = ictx->parent_md;
+      ictx->parent_lock.Unlock();
+
+      if (scan_for_parents(ictx, parent_info.spec, CEPH_NOSNAP) == -ENOENT) {
+	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				     parent_info.spec, id);
+	if (r < 0) {
+	  lderr(cct) << "error removing child from children list" << dendl;
+	  return r;
+	}
+      }
       close_image(ictx);
 
       ldout(cct, 2) << "removing header..." << dendl;
@@ -1025,7 +1183,7 @@ namespace librbd {
 		   << cpp_strerror(-r) << dendl;
 	return r;
       }
-    }
+    } 
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
@@ -1045,7 +1203,7 @@ namespace librbd {
     if (size > ictx->size) {
       ldout(cct, 2) << "expanding image " << ictx->size << " -> " << size
 		    << dendl;
-      // TODO: make ictx->set_size 
+      // TODO: make ictx->set_size
     } else {
       ldout(cct, 2) << "shrinking image " << ictx->size << " -> " << size
 		    << dendl;
@@ -1250,7 +1408,7 @@ namespace librbd {
     vector<string> snap_names;
     vector<uint64_t> snap_sizes;
     vector<uint64_t> snap_features;
-    vector<cls_client::parent_info> snap_parents;
+    vector<parent_info> snap_parents;
     vector<uint8_t> snap_protection;
     {
       Mutex::Locker l(ictx->snap_lock);
@@ -1311,7 +1469,7 @@ namespace librbd {
 
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
-	  cls_client::parent_info parent;
+	  parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  vector<snap_t>::const_iterator it =
@@ -1332,7 +1490,7 @@ namespace librbd {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
 	  uint8_t protection_status = ictx->old_format ?
 	    (uint8_t)RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
-	  cls_client::parent_info parent;
+	  parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
 	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
@@ -1490,6 +1648,26 @@ namespace librbd {
     return r;
   }
 
+  // common snap_set functionality for snap_set and open_image
+
+  int _snap_set(ImageCtx *ictx, const char *snap_name)
+  {
+    Mutex::Locker l1(ictx->snap_lock);
+    Mutex::Locker l2(ictx->parent_lock);
+    int r;
+    if ((snap_name != NULL) && (strlen(snap_name) != 0)) {
+      r = ictx->snap_set(snap_name);
+    } else {
+      ictx->snap_unset();
+      r = 0;
+    }
+    if (r < 0) {
+      return r;
+    }
+    refresh_parent(ictx);
+    return 0;
+  }
+
   int snap_set(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
@@ -1497,18 +1675,7 @@ namespace librbd {
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
-
-    Mutex::Locker l(ictx->snap_lock);
-    if (snap_name) {
-      int r = ictx->snap_set(snap_name);
-      if (r < 0) {
-	return r;
-      }
-    } else {
-      ictx->snap_unset();
-    }
-
-    return 0;
+    return _snap_set(ictx, snap_name);
   }
 
   int open_image(ImageCtx *ictx, bool watch)
@@ -1528,12 +1695,7 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    if (ictx->snap_name.length()) {
-      Mutex::Locker l(ictx->snap_lock);
-      r = ictx->snap_set(ictx->snap_name);
-      if (r < 0)
-	return r;
-    }
+    _snap_set(ictx, ictx->snap_name.c_str());
 
     if (watch) {
       r = ictx->register_watch();
@@ -1620,7 +1782,7 @@ namespace librbd {
     Mutex::Locker l2(ictx->snap_lock);
     Mutex::Locker l3(ictx->parent_lock);
     // can't flatten a non-clone
-    if (ictx->parent_md.pool_id == -1) {
+    if (ictx->parent_md.spec.pool_id == -1) {
       lderr(ictx->cct) << "image has no parent" << dendl;
       return -EINVAL;
     }
@@ -1655,7 +1817,25 @@ namespace librbd {
       ofs += cblksize;
     }
 
+    // remove parent from this (base) image
     r = cls_client::remove_parent(&ictx->md_ctx, ictx->header_oid);
+    if (r < 0) {
+      lderr(ictx->cct) << "error removing parent" << dendl;
+      return r;
+    }
+
+    // and if there are no snaps, remove from the children object as well
+    // (if snapshots remain, they have their own parent info, and the child
+    // will be removed when the last snap goes away)
+    if (ictx->snaps.empty()) {
+      ldout(ictx->cct, 2) << "removing child from children list..." << dendl;
+      int r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				       ictx->parent_md.spec, ictx->id);
+      if (r < 0) {
+	lderr(ictx->cct) << "error removing child from children list" << dendl;
+	return r;
+      }
+    }
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
     ldout(ictx->cct, 20) << "finished flattening" << dendl;
