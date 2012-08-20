@@ -1,3 +1,4 @@
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -20,6 +21,7 @@
 #include <string>
 
 class CephContext;
+class CryptoHandler;
 
 /*
  * match encoding of struct ceph_secret
@@ -30,9 +32,13 @@ protected:
   utime_t created;
   bufferptr secret;
 
+  // cache a pointer to the handler, so we don't have to look it up
+  // for each crypto operation
+  mutable CryptoHandler *ch;
+
 public:
-  CryptoKey() : type(0) { }
-  CryptoKey(int t, utime_t c, bufferptr& s) : type(t), created(c), secret(s) { }
+  CryptoKey() : type(0), ch(NULL) { }
+  CryptoKey(int t, utime_t c, bufferptr& s) : type(t), created(c), secret(s), ch(NULL) { }
 
   void encode(bufferlist& bl) const {
     ::encode(type, bl);
@@ -100,6 +106,7 @@ static inline ostream& operator<<(ostream& out, const CryptoKey& k)
 class CryptoHandler {
 public:
   virtual ~CryptoHandler() {}
+  virtual int get_type() const = 0;
   virtual int create(bufferptr& secret) = 0;
   virtual int validate_secret(bufferptr& secret) = 0;
   virtual void encrypt(const bufferptr& secret, const bufferlist& in,
@@ -115,6 +122,9 @@ class CryptoNone : public CryptoHandler {
 public:
   CryptoNone() { }
   ~CryptoNone() {}
+  int get_type() const {
+    return CEPH_CRYPTO_NONE;
+  }
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
   void encrypt(const bufferptr& secret, const bufferlist& in,
@@ -127,6 +137,9 @@ class CryptoAES : public CryptoHandler {
 public:
   CryptoAES() { }
   ~CryptoAES() {}
+  int get_type() const {
+    return CEPH_CRYPTO_AES;
+  }
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
   void encrypt(const bufferptr& secret, const bufferlist& in,
