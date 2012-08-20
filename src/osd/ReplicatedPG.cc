@@ -2230,9 +2230,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         entity_name_t entity = ctx->reqid.name;
 	ObjectContext *obc = ctx->obc;
 
-	dout(0) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
-		<< " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
-	dout(0) << "watch: oi.user_version=" << oi.user_version.version << dendl;
+	dout(10) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
+		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
+	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
 
 	watch_info_t w(cookie, 30);  // FIXME: where does the timeout come from?
 	if (do_watch) {
@@ -5793,6 +5793,15 @@ void ReplicatedPG::on_change()
   requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
+  // take commit waiters; these are dups of what
+  // apply_and_flush_repops() will requeue.
+  for (map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.begin();
+       p != waiting_for_ondisk.end();
+       p++)
+    requeue_ops(p->second);
+  waiting_for_ondisk.clear();
+  waiting_for_ack.clear();
+
   // this will requeue ops we were working on but didn't finish
   apply_and_flush_repops(is_primary());
 
@@ -5808,16 +5817,7 @@ void ReplicatedPG::on_change()
 void ReplicatedPG::on_role_change()
 {
   dout(10) << "on_role_change" << dendl;
-
-  // take commit waiters
-  for (map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.begin();
-       p != waiting_for_ondisk.end();
-       p++)
-    requeue_ops(p->second);
-  waiting_for_ondisk.clear();
-  waiting_for_ack.clear();
 }
-
 
 
 // clear state.  called on recovery completion AND cancellation.
