@@ -8,7 +8,7 @@ from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 RBD_FEATURE_LAYERING)
+                 FunctionNotSupported, RBD_FEATURE_LAYERING)
 
 
 rados = None
@@ -425,8 +425,47 @@ class TestClone(object):
     def test_unprotected(self):
         self.image.create_snap('snap2')
         global features
-        assert_raises(FunctionNotSupported, self.rbd.clone, ioctx, IMG_NAME, 'snap2', ioctx, 'clone2', features)
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, IMG_NAME, 'snap2', ioctx, 'clone2', features)
         self.image.remove_snap('snap2')
+
+    def test_unprotect_with_children(self):
+        global features
+        # can't remove a snapshot that has dependent clones
+        assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
+
+        # validate parent info of clone created by TestClone.setUp
+        (pool, image, snap) = self.clone.parent_info()
+        eq(pool, 'rbd')
+        eq(image, IMG_NAME)
+        eq(snap, 'snap1')
+
+        # create a new pool...
+        rados.create_pool('rbd2')
+        other_ioctx = rados.open_ioctx('rbd2')
+
+        # ...with a clone of the same parent
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', other_ioctx, 'other_clone', features)
+        self.other_clone = Image(other_ioctx, 'other_clone')
+        # validate its parent info
+        (pool, image, snap) = self.other_clone.parent_info()
+        eq(pool, 'rbd')
+        eq(image, IMG_NAME)
+        eq(snap, 'snap1')
+
+        # 2 children, check that cannot remove the parent snap
+        assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
+
+        # close and remove other pool's clone
+        self.other_clone.close()
+        self.rbd.remove(other_ioctx, 'other_clone')
+
+        # check that we cannot yet remove the parent snap
+        assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
+
+        other_ioctx.close()
+        rados.delete_pool('rbd2')
+
+        # unprotect, remove parent snap happen in cleanup, and should succeed
 
     def test_stat(self):
         image_info = self.image.stat()
