@@ -335,24 +335,28 @@ int CryptoKey::create(CephContext *cct, int t)
 
 void CryptoKey::encrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
 {
-  CryptoHandler *h = cct->get_crypto_handler(type);
-  if (!h) {
-    ostringstream oss;
-    oss << "CryptoKey::encrypt: key type " << type << " not supported.";
-    return;
+  if (!ch || ch->get_type() != type) {
+    ch = cct->get_crypto_handler(type);
+    if (!ch) {
+      ostringstream oss;
+      oss << "CryptoKey::encrypt: key type " << type << " not supported.";
+      return;
+    }
   }
-  h->encrypt(this->secret, in, out, error);
+  ch->encrypt(this->secret, in, out, error);
 }
 
 void CryptoKey::decrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
 {
-  CryptoHandler *h = cct->get_crypto_handler(type);
-  if (!h) {
-    ostringstream oss;
-    oss << "CryptoKey::decrypt: key type " << type << " not supported.";
-    return;
+  if (!ch || ch->get_type() != type) {
+    ch = cct->get_crypto_handler(type);
+    if (!ch) {
+      ostringstream oss;
+      oss << "CryptoKey::decrypt: key type " << type << " not supported.";
+      return;
+    }
   }
-  h->decrypt(this->secret, in, out, error);
+  ch->decrypt(this->secret, in, out, error);
 }
 
 void CryptoKey::print(std::ostream &out) const
