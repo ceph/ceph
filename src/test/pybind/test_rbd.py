@@ -520,6 +520,29 @@ class TestClone(object):
         parent_data = self.image.read(IMG_SIZE / 2 + 256, 256)
         eq(parent_data, '\0' * 256)
 
+    def test_list_children(self):
+        global ioctx
+        global features
+        self.image.set_snap('snap1')
+        eq(self.image.list_children(), [('rbd', 'clone')])
+        self.rbd.remove(ioctx, 'clone')
+        eq(self.image.list_children(), [])
+
+        expected_children = []
+        for i in xrange(10):
+            self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone%d' % i, features)
+            expected_children.append(('rbd', 'clone%d' % i))
+            eq(self.image.list_children(), expected_children)
+
+        for i in xrange(10):
+            self.rbd.remove(ioctx, 'clone%d' % i)
+            expected_children.pop(0)
+            eq(self.image.list_children(), expected_children)
+
+        eq(self.image.list_children(), [])
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
+        eq(self.image.list_children(), [('rbd', 'clone')])
+
 class TestFlatten(TestClone):
 
     def test_errors(self):
