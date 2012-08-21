@@ -196,6 +196,8 @@ private:
 
   epoch_t blacklist(entity_addr_t a, utime_t until);
 
+  void dump_info(Formatter *f);
+
   void check_subs();
   void check_sub(Subscription *sub);
 

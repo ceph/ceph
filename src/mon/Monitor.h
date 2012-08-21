@@ -295,7 +295,7 @@ public:
    * @param status one-line status summary
    * @param detailbl optional bufferlist* to fill with a detailed report
    */
-  void get_health(string& status, bufferlist *detailbl);
+  void get_health(string& status, bufferlist *detailbl, Formatter *f);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);

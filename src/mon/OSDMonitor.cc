@@ -1492,6 +1492,13 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 }
 
+void OSDMonitor::dump_info(Formatter *f)
+{
+  f->open_object_section("osdmap");
+  osdmap.dump(f);
+  f->close_section();
+}
+
 bool OSDMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
