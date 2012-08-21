@@ -16,22 +16,17 @@
 #include "auth/Crypto.h"
 
 #include <pthread.h>
+#include <stdlib.h>
 
-static bool crypto_init = false;
-
-void ceph::crypto::assert_init() {
-  assert(crypto_init == true);
-}
+void ceph::crypto::shutdown();
 
 #ifdef USE_CRYPTOPP
-void ceph::crypto::init() {
-  crypto_init = true;
-  crypto_init_handlers();
+void ceph::crypto::init()
+{
 }
 
-void ceph::crypto::shutdown() {
-  crypto_init = false;
-  crypto_shutdown_handlers();
+void ceph::crypto::shutdown()
+{
 }
 
 // nothing
@@ -41,24 +36,18 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 
 #elif USE_NSS
 
-void ceph::crypto::init() {
-  if (crypto_init)
-    return;
-  crypto_init = true;
+void ceph::crypto::init()
+{
   SECStatus s;
   s = NSS_NoDB_Init(NULL);
   assert(s == SECSuccess);
-  crypto_init_handlers();
 }
 
-void ceph::crypto::shutdown() {
-  if (!crypto_init)
-    return;
-  crypto_init = false;
+void ceph::crypto::shutdown()
+{
   SECStatus s;
   s = NSS_Shutdown();
   assert(s == SECSuccess);
-  crypto_shutdown_handlers();
 }
 
 ceph::crypto::HMACSHA1::~HMACSHA1()

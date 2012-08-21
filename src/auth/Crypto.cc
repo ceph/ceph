@@ -58,40 +58,24 @@ static int get_random_bytes(int len, bufferlist& bl)
 
 // ---------------------------------------------------
 
-class CryptoNone : public CryptoHandler {
-public:
-  CryptoNone() { }
-  ~CryptoNone() {}
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-};
-
-int CryptoNone::
-create(bufferptr& secret)
+int CryptoNone::create(bufferptr& secret)
 {
   return 0;
 }
 
-int CryptoNone::
-validate_secret(bufferptr& secret)
+int CryptoNone::validate_secret(bufferptr& secret)
 {
   return 0;
 }
 
-void CryptoNone::
-encrypt(const bufferptr& secret, const bufferlist& in,
-	bufferlist& out, std::string &error) const
+void CryptoNone::encrypt(const bufferptr& secret, const bufferlist& in,
+			 bufferlist& out, std::string &error) const
 {
   out = in;
 }
 
-void CryptoNone::
-decrypt(const bufferptr& secret, const bufferlist& in,
-	bufferlist& out, std::string &error) const
+void CryptoNone::decrypt(const bufferptr& secret, const bufferlist& in,
+			 bufferlist& out, std::string &error) const
 {
   out = in;
 }
@@ -222,18 +206,6 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
 # error "No supported crypto implementation found."
 #endif
 
-class CryptoAES : public CryptoHandler {
-public:
-  CryptoAES() { }
-  ~CryptoAES() {}
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	       bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in, 
-	      bufferlist& out, std::string &error) const;
-};
-
 int CryptoAES::create(bufferptr& secret)
 {
   bufferlist bl;
@@ -253,9 +225,8 @@ int CryptoAES::validate_secret(bufferptr& secret)
   return 0;
 }
 
-void CryptoAES::
-encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
-	std::string &error) const
+void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
+			std::string &error) const
 {
   if (secret.length() < AES_KEY_LEN) {
     error = "key is too short";
@@ -295,9 +266,8 @@ encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
 #endif
 }
 
-void CryptoAES::
-decrypt(const bufferptr& secret, const bufferlist& in, 
-	bufferlist& out, std::string &error) const
+void CryptoAES::decrypt(const bufferptr& secret, const bufferlist& in, 
+			bufferlist& out, std::string &error) const
 {
 #ifdef USE_CRYPTOPP
   const unsigned char *key = (const unsigned char *)secret.c_str();
@@ -334,45 +304,12 @@ decrypt(const bufferptr& secret, const bufferlist& in,
 
 // ---------------------------------------------------
 
-static CryptoNone *crypto_none = 0;
-static CryptoAES *crypto_aes = 0;
-
-void crypto_init_handlers()
-{
-  crypto_none = new CryptoNone;
-  crypto_aes = new CryptoAES;
-}
-
-void crypto_shutdown_handlers()
-{
-  assert(crypto_none);
-  delete crypto_none;
-  crypto_none = NULL;
-  assert(crypto_aes);
-  delete crypto_aes;
-  crypto_aes = NULL;
-}
-
-CryptoHandler *get_crypto_handler(int type)
-{
-  switch (type) {
-    case CEPH_CRYPTO_NONE:
-      return crypto_none;
-    case CEPH_CRYPTO_AES:
-      return crypto_aes;
-    default:
-      return NULL;
-  }
-}
-
-// ---------------------------------------------------
-
 int CryptoKey::set_secret(CephContext *cct, int type, bufferptr& s)
 {
   this->type = type;
   created = ceph_clock_now(cct);
 
-  CryptoHandler *h = get_crypto_handler(type);
+  CryptoHandler *h = cct->get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   int ret = h->validate_secret(s);
@@ -390,34 +327,36 @@ int CryptoKey::create(CephContext *cct, int t)
   type = t;
   created = ceph_clock_now(cct);
 
-  CryptoHandler *h = get_crypto_handler(type);
+  CryptoHandler *h = cct->get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   return h->create(secret);
 }
 
-void CryptoKey::
-encrypt(const bufferlist& in, bufferlist& out, std::string &error) const
+void CryptoKey::encrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
 {
-  CryptoHandler *h = get_crypto_handler(type);
-  if (!h) {
-    ostringstream oss;
-    oss << "CryptoKey::encrypt: key type " << type << " not supported.";
-    return;
+  if (!ch || ch->get_type() != type) {
+    ch = cct->get_crypto_handler(type);
+    if (!ch) {
+      ostringstream oss;
+      oss << "CryptoKey::encrypt: key type " << type << " not supported.";
+      return;
+    }
   }
-  h->encrypt(this->secret, in, out, error);
+  ch->encrypt(this->secret, in, out, error);
 }
 
-void CryptoKey::
-decrypt(const bufferlist& in, bufferlist& out, std::string &error) const
+void CryptoKey::decrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
 {
-  CryptoHandler *h = get_crypto_handler(type);
-  if (!h) {
-    ostringstream oss;
-    oss << "CryptoKey::decrypt: key type " << type << " not supported.";
-    return;
+  if (!ch || ch->get_type() != type) {
+    ch = cct->get_crypto_handler(type);
+    if (!ch) {
+      ostringstream oss;
+      oss << "CryptoKey::decrypt: key type " << type << " not supported.";
+      return;
+    }
   }
-  h->decrypt(this->secret, in, out, error);
+  ch->decrypt(this->secret, in, out, error);
 }
 
 void CryptoKey::print(std::ostream &out) const
