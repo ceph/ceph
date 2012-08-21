@@ -1,4 +1,4 @@
-.TH "RBD" "8" "July 10, 2012" "dev" "Ceph"
+.TH "RBD" "8" "August 20, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -95,6 +95,7 @@ Will list all rbd images listed in the rbd_directory object.
 .TP
 .B \fBinfo\fP [\fIimage\-name\fP]
 Will dump information (such as size and order) about a specific rbd image.
+If image is a clone, information about its parent is also displayed.
 .TP
 .B \fBcreate\fP [\fIimage\-name\fP]
 Will create a new rbd image. You must also specify the size via \-\-size.
@@ -102,6 +103,13 @@ Will create a new rbd image. You must also specify the size via \-\-size.
 .B \fBclone\fP [\fIparent\-snapname\fP] [\fIimage\-name\fP]
 Will create a clone (copy\-on\-write child) of the parent snapshot.
 Size and object order will be identical to parent image unless specified.
+The parent snapshot must be protected (see \fIrbd snap protect\fP).
+.TP
+.B \fBflatten\fP [\fIimage\-name\fP]
+If image is a clone, copy all shared blocks from the parent snapshot and
+make the child independent of the parent, severing the link between
+parent snap and child.  The parent snapshot can be unprotected and
+deleted if it has no further dependent clones.
 .TP
 .B \fBresize\fP [\fIimage\-name\fP]
 Resizes rbd image. The size parameter also needs to be specified.
@@ -137,6 +145,17 @@ Removes the specified snapshot.
 .TP
 .B \fBsnap\fP purge [\fIimage\-name\fP]
 Removes all snapshots from an image.
+.TP
+.B \fBsnap\fP protect [\fIimage\-name\fP]
+Protect a snapshot from deletion, so that clones can be made of it
+(see \fIrbd clone\fP).  Snapshots must be protected before clones are made;
+protection implies that there exist dependent cloned children that
+refer to this snapshot.  \fIrbd clone\fP will fail on a nonprotected snapshot.
+.TP
+.B \fBsnap\fP unprotect [\fIimage\-name\fP]
+Unprotect a snapshot from deletion (undo \fIsnap protect\fP).  If cloned
+children remain, \fIsnap unprotect\fP fails.  (Note that clones may exist
+in different pools than the parent snapshot.)
 .TP
 .B \fBmap\fP [\fIimage\-name\fP]
 Maps the specified image to a block device via the rbd kernel module.
