@@ -9,6 +9,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -63,6 +64,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -117,6 +119,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -171,6 +174,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -225,6 +229,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -279,6 +284,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -333,6 +339,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -387,6 +394,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -441,6 +449,7 @@
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                  child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
