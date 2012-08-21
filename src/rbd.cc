@@ -73,6 +73,7 @@ void usage()
 "  clone [--order <bits>] <parentsnap> <clonename>\n"
 "                                              clone a snapshot into a COW\n"
 "                                               child image\n"
+"  children <snap-name>                        display children of snapshot\n"
 "  flatten <image-name>                        fill clone with parent data\n"
 "                                              (make it independent)\n"
 "  resize --size <MB> <image-name>             resize (expand or contract) image\n"
@@ -379,6 +380,20 @@ static int do_unprotect_snap(librbd::Image& image, const char *snapname)
   if (r < 0)
     return r;
 
+  return 0;
+}
+
+static int do_list_children(librbd::Image &image)
+{
+  set<pair<string, string> > children;
+  int r = image.list_children(&children);
+  if (r < 0)
+    return r;
+
+  for (set<pair<string, string> >::const_iterator child_it = children.begin();
+       child_it != children.end(); child_it++) {
+    cout << child_it->first << "/" << child_it->second << std::endl;
+  }
   return 0;
 }
 
@@ -970,6 +985,7 @@ enum {
   OPT_CREATE,
   OPT_CLONE,
   OPT_FLATTEN,
+  OPT_CHILDREN,
   OPT_RESIZE,
   OPT_RM,
   OPT_EXPORT,
@@ -1003,6 +1019,8 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_CLONE;
     if (strcmp(cmd, "flatten") == 0)
       return OPT_FLATTEN;
+    if (strcmp(cmd, "children") == 0)
+      return OPT_CHILDREN;
     if (strcmp(cmd, "resize") == 0)
       return OPT_RESIZE;
     if (strcmp(cmd, "rm") == 0)
@@ -1195,6 +1213,9 @@ int main(int argc, const char **argv)
       case OPT_SHOWMAPPED:
 	usage();
 	return EXIT_FAILURE;
+      case OPT_CHILDREN:
+	set_conf_param(v, &imgname, NULL);
+	break;
       default:
 	assert(0);
 	break;
@@ -1231,15 +1252,16 @@ int main(int argc, const char **argv)
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY &&
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
-      opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT) {
+      opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
+      opt_cmd != OPT_CHILDREN) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage();
     return EXIT_FAILURE;
   }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE ||
-       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT) &&
-      !snapname) {
+       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
+       opt_cmd == OPT_CHILDREN) && !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage();
     return EXIT_FAILURE;
@@ -1308,7 +1330,8 @@ int main(int argc, const char **argv)
        opt_cmd == OPT_SNAP_ROLLBACK || opt_cmd == OPT_SNAP_REMOVE ||
        opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_EXPORT ||
        opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
-       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY || opt_cmd == OPT_FLATTEN)) {
+       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY ||
+       opt_cmd == OPT_FLATTEN || opt_cmd == OPT_CHILDREN)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
@@ -1317,7 +1340,8 @@ int main(int argc, const char **argv)
   }
 
   if (snapname && talk_to_cluster &&
-      (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY)) {
+      (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
+       opt_cmd == OPT_CHILDREN)) {
     r = image.snap_set(snapname);
     if (r < 0) {
       cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
@@ -1518,6 +1542,14 @@ int main(int argc, const char **argv)
     r = do_unprotect_snap(image, snapname);
     if (r < 0) {
       cerr << "unprotecting snap failed: " << cpp_strerror(-r) << std::endl;
+      return EXIT_FAILURE;
+    }
+    break;
+
+  case OPT_CHILDREN:
+    r = do_list_children(image);
+    if (r < 0) {
+      cerr << "listing children failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;

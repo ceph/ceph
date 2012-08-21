@@ -96,6 +96,10 @@ Commands
   parent snap and child.  The parent snapshot can be unprotected and
   deleted if it has no further dependent clones.
 
+:command:`children` [*image-name*]
+  List the clones of the image at the given snapshot. This checks
+  every pool, and outputs the resulting poolname/imagename.
+
 :command:`resize` [*image-name*]
   Resizes rbd image. The size parameter also needs to be specified.
 
