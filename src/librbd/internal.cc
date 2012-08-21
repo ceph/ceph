@@ -26,6 +26,7 @@ using std::pair;
 using std::set;
 using std::string;
 using std::vector;
+// list binds to list() here, so std::list is explicitly used below
 
 using ceph::bufferlist;
 using librados::snap_t;
@@ -374,6 +375,57 @@ namespace librbd {
 	last_read = images.rbegin()->first;
       }
     } while (r == max_read);
+
+    return 0;
+  }
+
+  int list_children(ImageCtx *ictx, set<pair<string, string> >& names)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "children list " << ictx->name << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    // no children for non-layered or old format image
+    if (!ictx->features & RBD_FEATURE_LAYERING)
+      return 0;
+
+    parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
+    names.clear();
+
+    // search all pools for children depending on this snapshot
+    Rados rados(ictx->md_ctx);
+    std::list<string> pools;
+    rados.pool_list(pools);
+
+    for (std::list<string>::const_iterator it = pools.begin();
+	 it != pools.end(); ++it) {
+      IoCtx ioctx;
+      rados.ioctx_create(it->c_str(), ioctx);
+      set<string> image_ids;
+      int r = cls_client::get_children(&ioctx, RBD_CHILDREN,
+				       parent_spec, image_ids);
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "Error reading list of children from pool " << *it
+		   << dendl;
+	return r;
+      }
+
+      for (set<string>::const_iterator id_it = image_ids.begin();
+	   id_it != image_ids.end(); ++id_it) {
+	string name;
+	r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
+				     *id_it, &name);
+	if (r < 0) {
+	  lderr(cct) << "Error looking up name for image id " << *id_it
+		     << " in pool " << *it << dendl;
+	  return r;
+	}
+	names.insert(make_pair(*it, name));
+      }
+    }
 
     return 0;
   }
