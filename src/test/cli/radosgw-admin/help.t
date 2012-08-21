@@ -31,6 +31,8 @@
     usage trim                 trim usage (by user, date range)
     temp remove                remove temporary objects that were created up to
                                specified date (and optional time)
+    gc list                    dump expired garbage collection objects
+    gc process                 manually process garbage
   options:
      --uid=<id>                user id
      --auth-uid=<auid>         librados uid
@@ -59,8 +61,6 @@
                                subuser keys
      --purge-objects           remove a bucket's objects before deleting it
                                (NOTE: required to delete a non-empty bucket)
-     --lazy-remove             defer the removal of the tail of an object until the intent
-                               log is processed.
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
