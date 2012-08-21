@@ -253,9 +253,9 @@ void dump_continue(struct req_state *s)
   FCGX_FFlush(s->fcgx->out);
 }
 
-void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
+void dump_range(struct req_state *s, off_t ofs, off_t end, size_t total)
 {
-    CGI_PRINTF(s,"Content-Range: bytes %lld-%lld/%lld\n", (long long)ofs, (long long)end, (long long)total);
+    CGI_PRINTF(s,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)total);
 }
 
 int RGWGetObj_REST::get_params()
