@@ -34,7 +34,10 @@ verify_conf() {
 check_host() {
     # what host is this daemon assigned to?
     host=`$CCONF -c $conf -n $type.$id host`
-    [ "$host" = "localhost" ] && host=""
+    if [ "$host" = "localhost" ]; then
+	echo "$0: use a proper short hostname, not 'localhost', in $conf section $type.$id; skipping entry"
+	return 1
+    fi
     ssh=""
     rootssh=""
     sshdir=$PWD
