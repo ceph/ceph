@@ -269,11 +269,6 @@ OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
 OPTION(osd_journal_size, OPT_INT, 0)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
-OPTION(osd_balance_reads, OPT_BOOL, false)
-OPTION(osd_shed_reads, OPT_INT, false)     // forward from primary to replica
-OPTION(osd_shed_reads_min_latency, OPT_DOUBLE, .01)       // min local latency
-OPTION(osd_shed_reads_min_latency_diff, OPT_DOUBLE, .01)  // min latency difference
-OPTION(osd_shed_reads_min_latency_ratio, OPT_DOUBLE, 1.5)  // 1.2 == 20% higher than peer
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
 OPTION(osd_stat_refresh_interval, OPT_DOUBLE, .5)
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
@@ -281,8 +276,6 @@ OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pg_layout, OPT_INT, CEPH_PG_LAYOUT_CRUSH)
 OPTION(osd_min_rep, OPT_INT, 1)
 OPTION(osd_max_rep, OPT_INT, 10)
-OPTION(osd_min_raid_width, OPT_INT, 3)
-OPTION(osd_max_raid_width, OPT_INT, 2)
 OPTION(osd_pool_default_crush_rule, OPT_INT, 0)
 OPTION(osd_pool_default_size, OPT_INT, 2)
 OPTION(osd_pool_default_pg_num, OPT_INT, 8)
@@ -329,8 +322,6 @@ OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
 OPTION(osd_scrub_min_interval, OPT_FLOAT, 300)
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 60*60*24)   // once a day
 OPTION(osd_auto_weight, OPT_BOOL, false)
-OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0)  // seconds
-OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0) // seconds
 OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
