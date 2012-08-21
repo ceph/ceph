@@ -420,7 +420,7 @@ int main(int argc, const char **argv)
   RGWStoreManager store_manager;
 
   int r = 0;
-  if (!store_manager.init(g_ceph_context)) {
+  if (!store_manager.init(g_ceph_context, true)) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     r = EIO;
   }

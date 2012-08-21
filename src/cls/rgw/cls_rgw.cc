@@ -672,16 +672,27 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+/*
+ * We hold the garbage collection chain data under two different indexes: the first 'name' index
+ * keeps them under a unique tag that represents the chains, and a second 'time' index keeps
+ * them by their expiration timestamp
+ */
 #define GC_OBJ_NAME_INDEX 0
 #define GC_OBJ_TIME_INDEX 1
 
 static string gc_index_prefixes[] = { "0_",
                                       "1_" };
 
+static void prepend_index_prefix(const string& src, int index, string *dest)
+{
+  *dest = gc_index_prefixes[index];
+  dest->append(src);
+}
+
 static int gc_omap_get(cls_method_context_t hctx, int type, const string& key, cls_rgw_gc_obj_info *info)
 {
-  string index = gc_index_prefixes[type];
-  index.append(key);
+  string index;
+  prepend_index_prefix(key, type, &index);
 
   bufferlist bl;
   int ret = cls_cxx_map_get_val(hctx, index, &bl);
@@ -698,7 +709,7 @@ static int gc_omap_get(cls_method_context_t hctx, int type, const string& key, c
   return 0;
 }
 
-static int gc_omap_set(cls_method_context_t hctx, int type, const string& key, cls_rgw_gc_obj_info *info)
+static int gc_omap_set(cls_method_context_t hctx, int type, const string& key, const cls_rgw_gc_obj_info *info)
 {
   bufferlist bl;
   ::encode(*info, bl);
@@ -726,12 +737,19 @@ static int gc_omap_remove(cls_method_context_t hctx, int type, const string& key
   return 0;
 }
 
-void get_time_key(utime_t& ut, string& key)
+static void get_time_key(utime_t& ut, string *key)
 {
   char buf[32];
-  snprintf(buf, 32, "%011lld.%d", (long long)ut.sec(), ut.nsec());
-  key = buf;
+  snprintf(buf, 32, "%011lld.%09d", (long long)ut.sec(), ut.nsec());
+  *key = buf;
 }
+
+static bool key_in_index(const string& key, int index_type)
+{
+  const string& prefix = gc_index_prefixes[index_type]; 
+  return (key.compare(0, prefix.size(), prefix) == 0);
+}
+
 
 static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
                            cls_rgw_gc_obj_info& info)
@@ -740,7 +758,7 @@ static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
   int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, info.tag, &old_info);
   if (ret == 0) {
     string key;
-    get_time_key(old_info.time, key);
+    get_time_key(old_info.time, &key);
     ret = gc_omap_remove(hctx, GC_OBJ_TIME_INDEX, key);
     if (ret < 0 && ret != -ENOENT) {
       CLS_LOG(0, "ERROR: failed to remove key=%s\n", key.c_str());
@@ -754,7 +772,7 @@ static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
     return ret;
 
   string key;
-  get_time_key(info.time, key);
+  get_time_key(info.time, &key);
   ret = gc_omap_set(hctx, GC_OBJ_TIME_INDEX, key, &info);
   if (ret < 0)
     goto done_err;
@@ -835,28 +853,23 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker,
   if (truncated)
     *truncated = false;
 
-  string& index_prefix = gc_index_prefixes[GC_OBJ_TIME_INDEX];
-
   string start_key;
   if (key_iter.empty()) {
-    start_key = index_prefix;
-    start_key.append(marker);
+    prepend_index_prefix(marker, GC_OBJ_TIME_INDEX, &start_key);
   } else {
     start_key = key_iter;
   }
 
   utime_t now = ceph_clock_now(g_ceph_context);
   string now_str;
-  get_time_key(now, now_str);
-  end_key = gc_index_prefixes[GC_OBJ_TIME_INDEX];
-  end_key.append(now_str);
+  get_time_key(now, &now_str);
+  prepend_index_prefix(now_str, GC_OBJ_TIME_INDEX, &end_key);
 
   CLS_LOG(0, "gc_iterate_entries end_key=%s\n", end_key.c_str());
 
   string filter;
 
   do {
-    
 #define GC_NUM_KEYS 32
     int ret = cls_cxx_map_get_vals(hctx, start_key, filter, GC_NUM_KEYS, &keys);
     if (ret < 0)
@@ -871,28 +884,29 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker,
       const string& key = iter->first;
       cls_rgw_gc_obj_info e;
 
-      CLS_LOG(0, "gc_iterate_entries key=%s\n", key.c_str());
+      CLS_LOG(10, "gc_iterate_entries key=%s\n", key.c_str());
 
       if (key.compare(end_key) >= 0)
         return 0;
 
-      if (key.compare(0, index_prefix.size(), index_prefix) != 0)
-        return 0;
+      if (!key_in_index(key, GC_OBJ_TIME_INDEX))
+	return 0;
 
       ret = gc_record_decode(iter->second, e);
       if (ret < 0)
         return ret;
 
-      ret = cb(hctx, key, e, param);
-      if (ret < 0)
-        return ret;
-
-      i++;
-      if (max_entries && (i > max_entries)) {
+      if (max_entries && (i >= max_entries)) {
         *truncated = true;
         key_iter = key;
         return 0;
       }
+
+      ret = cb(hctx, key, e, param);
+      if (ret < 0)
+        return ret;
+      i++;
+
     }
     iter--;
     start_key = iter->first;
@@ -956,7 +970,7 @@ static int gc_remove(cls_method_context_t hctx, list<string>& tags)
       return ret;
 
     string time_key;
-    get_time_key(info.time, time_key);
+    get_time_key(info.time, &time_key);
     ret = gc_omap_remove(hctx, GC_OBJ_TIME_INDEX, time_key);
     if (ret < 0 && ret != -ENOENT)
       return ret;

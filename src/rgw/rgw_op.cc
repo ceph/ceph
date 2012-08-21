@@ -319,6 +319,9 @@ void RGWGetObj::execute()
   void *handle = NULL;
   utime_t start_time = s->time;
   bufferlist bl;
+  utime_t gc_invalidate_time = ceph_clock_now(s->cct);
+  gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+
 
   perfcounter->inc(l_rgw_get);
 
@@ -356,6 +359,17 @@ void RGWGetObj::execute()
     send_response(bl);
     bl.clear();
     start_time = ceph_clock_now(s->cct);
+
+    if (ofs <= end) {
+      if (start_time > gc_invalidate_time) {
+	int r = rgwstore->defer_gc(s->obj_ctx, obj);
+	if (r < 0) {
+	  dout(0) << "WARNING: could not defer gc entry for obj" << dendl;
+	}
+	gc_invalidate_time = start_time;
+        gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+      }
+    }
   }
 
   return;

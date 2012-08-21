@@ -61,6 +61,8 @@ void _usage()
   cerr << "  usage trim                 trim usage (by user, date range)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
+  cerr << "  gc list                    dump expired garbage collection objects\n";
+  cerr << "  gc process                 manually process garbage\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --auth-uid=<auid>         librados uid\n";
@@ -143,6 +145,8 @@ enum {
   OPT_USAGE_TRIM,
   OPT_TEMP_REMOVE,
   OPT_OBJECT_RM,
+  OPT_GC_LIST,
+  OPT_GC_PROCESS,
 };
 
 static uint32_t str_to_perm(const char *str)
@@ -215,7 +219,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "object") == 0 ||
-      strcmp(cmd, "temp") == 0) {
+      strcmp(cmd, "temp") == 0 ||
+      strcmp(cmd, "gc") == 0) {
     *need_more = true;
     return 0;
   }
@@ -291,6 +296,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "object") == 0) {
     if (strcmp(cmd, "rm") == 0)
       return OPT_OBJECT_RM;
+  } else if (strcmp(prev_cmd, "gc") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_GC_LIST;
+    if (strcmp(cmd, "process") == 0)
+      return OPT_GC_PROCESS;
   }
 
   return -EINVAL;
@@ -857,7 +867,7 @@ int main(int argc, char **argv)
                     opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
 
   RGWStoreManager store_manager;
-  store = store_manager.init(g_ceph_context);
+  store = store_manager.init(g_ceph_context, false);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
@@ -1648,5 +1658,52 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_GC_LIST) {
+    int ret;
+    int index = 0;
+    string marker;
+    bool truncated;
+    formatter->open_array_section("entries");
+
+    do {
+      list<cls_rgw_gc_obj_info> result;
+      ret = rgwstore->list_gc_objs(&index, marker, 1000, result, &truncated);
+      if (ret < 0) {
+	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
+	return 1;
+      }
+
+
+      list<cls_rgw_gc_obj_info>::iterator iter;
+      for (iter = result.begin(); iter != result.end(); ++iter) {
+	cls_rgw_gc_obj_info& info = *iter;
+	formatter->open_object_section("chain_info");
+	formatter->dump_string("tag", info.tag);
+	formatter->dump_stream("time") << info.time;
+	formatter->open_array_section("objs");
+        list<cls_rgw_obj>::iterator liter;
+	cls_rgw_obj_chain& chain = info.chain;
+	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
+	  cls_rgw_obj& obj = *liter;
+	  formatter->dump_string("pool", obj.pool);
+	  formatter->dump_string("oid", obj.oid);
+	  formatter->dump_string("key", obj.key);
+	}
+	formatter->close_section(); // objs
+	formatter->close_section(); // obj_chain
+	formatter->flush(cout);
+      }
+    } while (truncated);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_GC_PROCESS) {
+    int ret = rgwstore->process_gc();
+    if (ret < 0) {
+      cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+  }
   return 0;
 }
