@@ -12,28 +12,28 @@ namespace rados {
   namespace cls {
     namespace lock {
 
-      extern void lock(ObjectWriteOperation& rados_op,
+      extern void lock(librados::ObjectWriteOperation& rados_op,
                        std::string& name, ClsLockType type,
                        std::string& cookie, std::string& tag,
                        std::string description, utime_t& duration, uint8_t flags);
 
-      extern int lock(IoCtx& ioctx,
+      extern int lock(librados::IoCtx& ioctx,
                       std::string& oid,
                       std::string& name, ClsLockType type,
                       std::string& cookie, std::string& tag,
                       std::string description, utime_t& duration, uint8_t flags);
 
-      extern void unlock(ObjectWriteOperation& rados_op,
+      extern void unlock(librados::ObjectWriteOperation& rados_op,
                          std::string& name, std::string& cookie);
 
-      extern int unlock(IoCtx& ioctx, std::string& oid,
+      extern int unlock(librados::IoCtx& ioctx, std::string& oid,
                         std::string& name, std::string& cookie);
 
-      extern void break_lock(ObjectWriteOperation& op,
+      extern void break_lock(librados::ObjectWriteOperation& op,
                              std::string& name, std::string& cookie,
                              entity_name_t& locker);
 
-      extern int break_lock(IoCtx& ioctx, std::string& oid,
+      extern int break_lock(librados::IoCtx& ioctx, std::string& oid,
                             std::string& name, std::string& cookie,
                             entity_name_t& locker);
 
@@ -68,16 +68,16 @@ namespace rados {
         }
 
         /* ObjectWriteOperation */
-        void lock_exclusive(ObjectWriteOperation& ioctx);
-        void lock_shared(ObjectWriteOperation& ioctx);
-        void unlock(ObjectWriteOperation& ioctx);
-        void break_lock(ObjectWriteOperation& ioctx, entity_name_t& locker);
+        void lock_exclusive(librados::ObjectWriteOperation& ioctx);
+        void lock_shared(librados::ObjectWriteOperation& ioctx);
+        void unlock(librados::ObjectWriteOperation& ioctx);
+        void break_lock(librados::ObjectWriteOperation& ioctx, entity_name_t& locker);
 
         /* IoCtx*/
-        int lock_exclusive(IoCtx& ioctx, std::string& oid);
-        int lock_shared(IoCtx& ioctx, std::string& oid);
-        int unlock(IoCtx& ioctx, std::string& oid);
-        int break_lock(IoCtx& ioctx, std::string& oid, entity_name_t& locker);
+        int lock_exclusive(librados::IoCtx& ioctx, std::string& oid);
+        int lock_shared(librados::IoCtx& ioctx, std::string& oid);
+        int unlock(librados::IoCtx& ioctx, std::string& oid);
+        int break_lock(librados::IoCtx& ioctx, std::string& oid, entity_name_t& locker);
       };
 
     } // namespace lock
