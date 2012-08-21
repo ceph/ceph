@@ -39,6 +39,8 @@ using ceph::crypto::MD5;
 
 #define RGW_ROOT_BUCKET ".rgw"
 
+#define RGW_GC_BUCKET ".rgw.gc"
+
 #define RGW_CONTROL_BUCKET ".rgw.control"
 
 #define RGW_ATTR_PREFIX  "user.rgw."
