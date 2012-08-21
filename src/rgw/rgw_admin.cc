@@ -91,8 +91,6 @@ void _usage()
   cerr << "                             subuser keys\n";
   cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
   cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
-  cerr << "   --lazy-remove             defer the removal of the tail of an object until the intent\n";
-  cerr << "                             log is processed.\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
@@ -572,37 +570,18 @@ static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, s
   }
 }
 
-static int remove_shadow_file_now(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)
-{
-  int r = rgwstore->delete_obj(NULL,obj);
-  return r;
-}
-
-static int remove_shadow_file_eventually(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)
-{
-  int r = rgw_log_intent(obj, DEL_OBJ, ceph_clock_now(g_ceph_context),
-                         g_conf->rgw_intent_log_object_name_utc);
-
-  return r;
-}
-
-static int remove_object(rgw_bucket& bucket, std::string& object, bool delete_object_tail_later)
+static int remove_object(rgw_bucket& bucket, std::string& object)
 {
   int ret = -EINVAL;
   RGWRadosCtx *rctx = new RGWRadosCtx();
   rgw_obj obj(bucket,object);
-
-  if (delete_object_tail_later)
-    rgwstore->set_intent_cb(rctx, remove_shadow_file_eventually);
-  else
-    rgwstore->set_intent_cb(rctx, remove_shadow_file_now);
 
   ret = rgwstore->delete_obj(rctx, obj);
 
   return ret;
 }
 
-static int remove_bucket(rgw_bucket& bucket, bool delete_children, bool delete_object_tail_later)
+static int remove_bucket(rgw_bucket& bucket, bool delete_children)
 {
   int ret;
   map<RGWObjCategory, RGWBucketStats> stats;
@@ -640,7 +619,7 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children, bool delete_o
     while (objs.size() > 0) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (it = objs.begin(); it != objs.end(); it++) {
-        ret = remove_object(bucket, (*it).name, delete_object_tail_later);
+        ret = remove_object(bucket, (*it).name);
         if (ret < 0)
           return ret;
       }
@@ -709,7 +688,6 @@ int main(int argc, char **argv)
   int purge_keys = false;
   int yes_i_really_mean_it = false;
   int delete_child_objects = false;
-  int delete_object_tail_later = false;
   int max_buckets = -1;
 
   std::string val;
@@ -788,14 +766,11 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
     } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
-      delete_child_objects = true;
-    } else if (ceph_argparse_binary_flag(args, i, &delete_object_tail_later, NULL, "--lazy-remove", (char*)NULL)) {
-      delete_object_tail_later = true;
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
-      delete_child_objects = true;
-      purge_data = true;
+      delete_child_objects = purge_data;
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
@@ -1399,7 +1374,7 @@ next:
 
       if (m.size() > 0 && purge_data) {
         for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
-          ret = remove_bucket(((*it).second).bucket, true, delete_object_tail_later);
+          ret = remove_bucket(((*it).second).bucket, true);
 
           if (ret < 0)
             return ret;
@@ -1641,7 +1616,7 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
-    int ret = remove_object(bucket, object, delete_object_tail_later);
+    int ret = remove_object(bucket, object);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -1650,7 +1625,7 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    int ret = remove_bucket(bucket, delete_child_objects, delete_object_tail_later);
+    int ret = remove_bucket(bucket, delete_child_objects);
 
     if (ret < 0) {
       cerr << "ERROR: bucket remove returned: " << cpp_strerror(-ret) << std::endl;
