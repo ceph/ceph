@@ -145,7 +145,7 @@ class Elector {
    *
    * @param e Epoch to which we will update our epoch
    */
-  void bump_epoch(epoch_t e=0);
+  void bump_epoch(epoch_t e);
 
   /**
    * @defgroup Elector_h_callbacks Callbacks
@@ -352,6 +352,15 @@ class Elector {
    * @returns Our current epoch number
    */
   epoch_t get_epoch() { return epoch; }
+
+  /**
+   * advance_epoch
+   *
+   * increase election epoch by 1
+   */
+  void advance_epoch() {
+    bump_epoch(epoch + 1);
+  }
 
   /**
    * Handle received messages.

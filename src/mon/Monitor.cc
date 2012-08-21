@@ -929,6 +929,11 @@ void Monitor::start_election()
 void Monitor::win_standalone_election()
 {
   dout(1) << "win_standalone_election" << dendl;
+
+  // bump election epoch, in case the previous epoch included other
+  // monitors; we need to be able to make the distinction.
+  elector.advance_epoch();
+
   rank = monmap->get_rank(name);
   assert(rank == 0);
   set<int> q;
