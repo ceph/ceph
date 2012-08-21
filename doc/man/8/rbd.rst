@@ -80,6 +80,7 @@ Commands
 
 :command:`info` [*image-name*]
   Will dump information (such as size and order) about a specific rbd image.
+  If image is a clone, information about its parent is also displayed.
 
 :command:`create` [*image-name*]
   Will create a new rbd image. You must also specify the size via --size.
@@ -87,6 +88,13 @@ Commands
 :command:`clone` [*parent-snapname*] [*image-name*]
   Will create a clone (copy-on-write child) of the parent snapshot.
   Size and object order will be identical to parent image unless specified.
+  The parent snapshot must be protected (see `rbd snap protect`).
+
+:command:`flatten` [*image-name*]
+  If image is a clone, copy all shared blocks from the parent snapshot and
+  make the child independent of the parent, severing the link between
+  parent snap and child.  The parent snapshot can be unprotected and
+  deleted if it has no further dependent clones.
 
 :command:`resize` [*image-name*]
   Resizes rbd image. The size parameter also needs to be specified.
@@ -122,6 +130,17 @@ Commands
 
 :command:`snap` purge [*image-name*]
   Removes all snapshots from an image.
+
+:command:`snap` protect [*image-name*]
+  Protect a snapshot from deletion, so that clones can be made of it
+  (see `rbd clone`).  Snapshots must be protected before clones are made;
+  protection implies that there exist dependent cloned children that
+  refer to this snapshot.  `rbd clone` will fail on a nonprotected snapshot.
+
+:command:`snap` unprotect [*image-name*]
+  Unprotect a snapshot from deletion (undo `snap protect`).  If cloned
+  children remain, `snap unprotect` fails.  (Note that clones may exist
+  in different pools than the parent snapshot.)
 
 :command:`map` [*image-name*]
   Maps the specified image to a block device via the rbd kernel module.
