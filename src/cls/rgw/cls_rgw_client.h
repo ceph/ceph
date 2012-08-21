@@ -3,6 +3,8 @@
 
 #include "include/types.h"
 
+#include "cls_rgw_types.h"
+
 /* bucket index */
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, uint8_t op, string& tag,
                                string& name, string& locator);
@@ -26,5 +28,14 @@ void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, string& user,
                            uint64_t start_epoch, uint64_t end_epoch);
 
 void cls_rgw_usage_log_add(librados::ObjectWriteOperation& op, rgw_usage_log_info& info);
+
+/* garbage collection */
+void cls_rgw_gc_set_entry(librados::ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info);
+void cls_rgw_gc_defer_entry(librados::ObjectWriteOperation& op, uint32_t expiration_secs, const string& tag);
+
+int cls_rgw_gc_list(librados::IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
+                    list<cls_rgw_gc_obj_info>& entries, bool *truncated);
+
+void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const list<string>& tags);
 
 #endif
