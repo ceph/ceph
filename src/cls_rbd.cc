@@ -1075,7 +1075,7 @@ int add_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
 
   CLS_LOG(20, "add_child %s to (%d, %s, %d)", c_image_id.c_str(),
-	  p_pool_id, p_image_id.c_str(), p_snap_id);
+	  p_pool_id, p_image_id.c_str(), p_snap_id.val);
 
   string key = parent_key(p_pool_id, p_image_id, p_snap_id);
 
@@ -1129,7 +1129,7 @@ int remove_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
 
   CLS_LOG(20, "remove_child %s from (%d, %s, %d)", c_image_id.c_str(),
-	       p_pool_id, p_image_id.c_str(), p_snap_id);
+	       p_pool_id, p_image_id.c_str(), p_snap_id.val);
 
   string key = parent_key(p_pool_id, p_image_id, p_snap_id);
 
@@ -1189,7 +1189,7 @@ int get_children(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
 
   CLS_LOG(20, "get_children of (%d, %s, %d)",
-	  p_pool_id, p_image_id.c_str(), p_snap_id);
+	  p_pool_id, p_image_id.c_str(), p_snap_id.val);
 
   string key = parent_key(p_pool_id, p_image_id, p_snap_id);
 
