@@ -5795,8 +5795,8 @@ void ReplicatedPG::on_change()
 
   // take commit waiters; these are dups of what
   // apply_and_flush_repops() will requeue.
-  for (map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.begin();
-       p != waiting_for_ondisk.end();
+  for (map<eversion_t, list<OpRequestRef> >::reverse_iterator p = waiting_for_ondisk.rbegin();
+       p != waiting_for_ondisk.rend();
        p++)
     requeue_ops(p->second);
   waiting_for_ondisk.clear();
