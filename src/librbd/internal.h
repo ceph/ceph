@@ -76,6 +76,8 @@ namespace librbd {
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
+  int list_children(ImageCtx *ictx,
+		    std::set<pair<std::string, std::string> > & names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,

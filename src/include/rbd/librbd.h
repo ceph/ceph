@@ -133,6 +133,30 @@ int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 int rbd_flatten(rbd_image_t image);
 
+/**
+ * List all images that are cloned from the image at the
+ * snapshot that is set via rbd_snap_set().
+ *
+ * This iterates over all pools, so it should be run by a user with
+ * read access to all of them. pools_len and images_len are filled in
+ * with the number of bytes put into the pools and images buffers.
+ *
+ * If the provided buffers are too short, the required lengths are
+ * still filled in, but the data is not and -ERANGE is returned.
+ * Otherwise, the buffers are filled with the pool and image names
+ * of the children, with a '\0' after each.
+ *
+ * @param image which image (and implicitly snapshot) to list clones of
+ * @param pools buffer in which to store pool names
+ * @param pools_len number of bytes in pools buffer
+ * @param images buffer in which to store image names
+ * @param images_len number of bytes in images buffer
+ * @returns number of children on success, negative error code on failure
+ * @returns -ERANGE if either buffer is too short
+ */
+ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
+			  char *images, size_t *images_len);
+
 /* cooperative locking */
 /**
  * in params:

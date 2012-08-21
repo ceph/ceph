@@ -620,6 +620,33 @@ written." % (self.name, ret, length))
         if (ret < 0):
             raise make_ex(ret, "error flattening %s" % self.name)
 
+    def list_children(self):
+        """
+        List children of the currently set snapshot (set via set_snap()).
+
+        :returns: list - a list of (pool name, image name) tuples
+        """
+        pools_size = c_size_t(512)
+        images_size = c_size_t(512)
+        while True:
+            c_pools = create_string_buffer(pools_size.value)
+            c_images = create_string_buffer(images_size.value)
+            ret = self.librbd.rbd_list_children(self.image,
+                                                byref(c_pools),
+                                                byref(pools_size),
+                                                byref(c_images),
+                                                byref(images_size))
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing images')
+        if ret == 0:
+            return []
+        pools = c_pools.raw[:pools_size.value - 1].split('\0')
+        images = c_images.raw[:images_size.value - 1].split('\0')
+        return zip(pools, images)
+
+
 class SnapIterator(object):
     """
     Iterator over snapshot info for an image.

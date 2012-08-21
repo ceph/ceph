@@ -104,6 +104,12 @@ public:
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
+  /**
+   * Returns a pair of poolname, imagename for each clone
+   * of this image at the currently set snapshot.
+   */
+  int list_children(std::set<std::pair<std::string, std::string> > *children);
+
   /* cooperative locking */
   int list_locks(std::set<std::pair<std::string, std::string> > &locks,
                  bool &exclusive);
