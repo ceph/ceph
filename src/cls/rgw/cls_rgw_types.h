@@ -302,4 +302,89 @@ struct rgw_user_bucket {
 };
 WRITE_CLASS_ENCODER(rgw_user_bucket)
 
+enum cls_rgw_gc_op {
+  CLS_RGW_GC_DEL_OBJ,
+  CLS_RGW_GC_DEL_BUCKET,
+};
+
+struct cls_rgw_obj {
+  string pool;
+  string oid;
+  string key;
+
+  cls_rgw_obj() {}
+  cls_rgw_obj(string& _p, string& _o) : pool(_p), oid(_o) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(pool, bl);
+    ::encode(oid, bl);
+    ::encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(pool, bl);
+    ::decode(oid, bl);
+    ::decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_obj)
+
+struct cls_rgw_obj_chain {
+  list<cls_rgw_obj> objs;
+
+  cls_rgw_obj_chain() {}
+
+  void push_obj(string& pool, string& oid, string& key) {
+    cls_rgw_obj obj;
+    obj.pool = pool;
+    obj.oid = oid;
+    obj.key = key;
+    objs.push_back(obj);
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(objs, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(objs, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_obj_chain)
+
+struct cls_rgw_gc_obj_info
+{
+  string tag;
+  cls_rgw_obj_chain chain;
+  utime_t time;
+
+  cls_rgw_gc_obj_info() {}
+
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(tag, bl);
+    ::encode(chain, bl);
+    ::encode(time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(tag, bl);
+    ::decode(chain, bl);
+    ::decode(time, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
+
 #endif

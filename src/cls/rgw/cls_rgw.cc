@@ -27,6 +27,9 @@ cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
 cls_method_handle_t h_rgw_user_usage_log_read;
 cls_method_handle_t h_rgw_user_usage_log_trim;
+cls_method_handle_t h_rgw_gc_set_entry;
+cls_method_handle_t h_rgw_gc_list;
+cls_method_handle_t h_rgw_gc_remove;
 
 
 #define ROUND_BLOCK_SIZE 4096
@@ -669,19 +672,344 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+#define GC_OBJ_NAME_INDEX 0
+#define GC_OBJ_TIME_INDEX 1
+
+static string gc_index_prefixes[] = { "0_",
+                                      "1_" };
+
+static int gc_omap_get(cls_method_context_t hctx, int type, const string& key, cls_rgw_gc_obj_info *info)
+{
+  string index = gc_index_prefixes[type];
+  index.append(key);
+
+  bufferlist bl;
+  int ret = cls_cxx_map_get_val(hctx, index, &bl);
+  if (ret < 0)
+    return ret;
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(*info, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_cls_gc_omap_get(): failed to decode index=%s\n", index.c_str());
+  }
+
+  return 0;
+}
+
+static int gc_omap_set(cls_method_context_t hctx, int type, const string& key, cls_rgw_gc_obj_info *info)
+{
+  bufferlist bl;
+  ::encode(*info, bl);
+
+  string index = gc_index_prefixes[type];
+  index.append(key);
+
+  int ret = cls_cxx_map_set_val(hctx, index, &bl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+static int gc_omap_remove(cls_method_context_t hctx, int type, const string& key)
+{
+  string index = gc_index_prefixes[type];
+  index.append(key);
+
+  bufferlist bl;
+  int ret = cls_cxx_map_remove_key(hctx, index);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+void get_time_key(utime_t& ut, string& key)
+{
+  char buf[32];
+  snprintf(buf, 32, "%011lld.%d", (long long)ut.sec(), ut.nsec());
+  key = buf;
+}
+
+static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
+                           cls_rgw_gc_obj_info& info)
+{
+  cls_rgw_gc_obj_info old_info;
+  int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, info.tag, &old_info);
+  if (ret == 0) {
+    string key;
+    get_time_key(old_info.time, key);
+    ret = gc_omap_remove(hctx, GC_OBJ_TIME_INDEX, key);
+    if (ret < 0 && ret != -ENOENT) {
+      CLS_LOG(0, "ERROR: failed to remove key=%s\n", key.c_str());
+      return ret;
+    }
+  }
+  info.time = ceph_clock_now(g_ceph_context);
+  info.time += expiration_secs;
+  ret = gc_omap_set(hctx, GC_OBJ_NAME_INDEX, info.tag, &info);
+  if (ret < 0)
+    return ret;
+
+  string key;
+  get_time_key(info.time, key);
+  ret = gc_omap_set(hctx, GC_OBJ_TIME_INDEX, key, &info);
+  if (ret < 0)
+    goto done_err;
+
+  return 0;
+
+done_err:
+  CLS_LOG(0, "ERROR: gc_set_entry error info.tag=%s, ret=%d\n", info.tag.c_str(), ret);
+  gc_omap_remove(hctx, GC_OBJ_NAME_INDEX, info.tag);
+  return ret;
+}
+
+static int gc_defer_entry(cls_method_context_t hctx, const string& tag, uint32_t expiration_secs)
+{
+  cls_rgw_gc_obj_info info;
+  int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, tag, &info);
+  if (ret == -ENOENT)
+    return 0;
+  if (ret < 0)
+    return ret;
+  return gc_update_entry(hctx, expiration_secs, info);
+}
+
+int gc_record_decode(bufferlist& bl, cls_rgw_gc_obj_info& e)
+{
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(e, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: failed to decode cls_rgw_gc_obj_info");
+    return -EIO;
+  }
+  return 0;
+}
+
+static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_gc_set_entry_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_gc_set_entry(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  return gc_update_entry(hctx, op.expiration_secs, op.info);
+}
+
+static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_gc_defer_entry_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_gc_defer_entry(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  return gc_defer_entry(hctx, op.tag, op.expiration_secs);
+}
+
+static int gc_iterate_entries(cls_method_context_t hctx, const string& marker,
+                              string& key_iter, uint32_t max_entries, bool *truncated,
+                              int (*cb)(cls_method_context_t, const string&, cls_rgw_gc_obj_info&, void *),
+                              void *param)
+{
+  CLS_LOG(10, "gc_iterate_range");
+
+  map<string, bufferlist> keys;
+  string filter_prefix, end_key;
+  uint32_t i = 0;
+  string key;
+
+  if (truncated)
+    *truncated = false;
+
+  string& index_prefix = gc_index_prefixes[GC_OBJ_TIME_INDEX];
+
+  string start_key;
+  if (key_iter.empty()) {
+    start_key = index_prefix;
+    start_key.append(marker);
+  } else {
+    start_key = key_iter;
+  }
+
+  utime_t now = ceph_clock_now(g_ceph_context);
+  string now_str;
+  get_time_key(now, now_str);
+  end_key = gc_index_prefixes[GC_OBJ_TIME_INDEX];
+  end_key.append(now_str);
+
+  CLS_LOG(0, "gc_iterate_entries end_key=%s\n", end_key.c_str());
+
+  string filter;
+
+  do {
+    
+#define GC_NUM_KEYS 32
+    int ret = cls_cxx_map_get_vals(hctx, start_key, filter, GC_NUM_KEYS, &keys);
+    if (ret < 0)
+      return ret;
+
+
+    map<string, bufferlist>::iterator iter = keys.begin();
+    if (iter == keys.end())
+      break;
+
+    for (; iter != keys.end(); ++iter) {
+      const string& key = iter->first;
+      cls_rgw_gc_obj_info e;
+
+      CLS_LOG(0, "gc_iterate_entries key=%s\n", key.c_str());
+
+      if (key.compare(end_key) >= 0)
+        return 0;
+
+      if (key.compare(0, index_prefix.size(), index_prefix) != 0)
+        return 0;
+
+      ret = gc_record_decode(iter->second, e);
+      if (ret < 0)
+        return ret;
+
+      ret = cb(hctx, key, e, param);
+      if (ret < 0)
+        return ret;
+
+      i++;
+      if (max_entries && (i > max_entries)) {
+        *truncated = true;
+        key_iter = key;
+        return 0;
+      }
+    }
+    iter--;
+    start_key = iter->first;
+  } while (true);
+  return 0;
+}
+
+static int gc_list_cb(cls_method_context_t hctx, const string& key, cls_rgw_gc_obj_info& info, void *param)
+{
+  list<cls_rgw_gc_obj_info> *l = (list<cls_rgw_gc_obj_info> *)param;
+  l->push_back(info);
+  return 0;
+}
+
+static int gc_list_entries(cls_method_context_t hctx, const string& marker,
+			   uint32_t max, list<cls_rgw_gc_obj_info>& entries, bool *truncated)
+{
+  string key_iter;
+  int ret = gc_iterate_entries(hctx, marker,
+                              key_iter, max, truncated,
+                              gc_list_cb, &entries);
+  return ret;
+}
+
+static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_gc_list_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_gc_list(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  cls_rgw_gc_list_ret op_ret;
+  int ret = gc_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.truncated);
+  if (ret < 0)
+    return ret;
+
+  ::encode(op_ret, *out);
+
+  return 0;
+}
+
+static int gc_remove(cls_method_context_t hctx, list<string>& tags)
+{
+  list<string>::iterator iter;
+
+  for (iter = tags.begin(); iter != tags.end(); ++iter) {
+    string& tag = *iter;
+    cls_rgw_gc_obj_info info;
+    int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, tag, &info);
+    if (ret == -ENOENT) {
+      CLS_LOG(0, "couldn't find tag in name index tag=%s\n", tag.c_str());
+      continue;
+    }
+
+    if (ret < 0)
+      return ret;
+
+    string time_key;
+    get_time_key(info.time, time_key);
+    ret = gc_omap_remove(hctx, GC_OBJ_TIME_INDEX, time_key);
+    if (ret < 0 && ret != -ENOENT)
+      return ret;
+    if (ret == -ENOENT) {
+      CLS_LOG(0, "couldn't find key in time index key=%s\n", time_key.c_str());
+    }
+
+    ret = gc_omap_remove(hctx, GC_OBJ_NAME_INDEX, tag);
+    if (ret < 0 && ret != -ENOENT)
+      return ret;
+  }
+
+  return 0;
+}
+
+static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_gc_remove_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_gc_remove(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  return gc_remove(hctx, op.tags);
+}
+
 void __cls_init()
 {
   CLS_LOG(1, "Loaded rgw class!");
 
   cls_register("rgw", &h_class);
+
+  /* bucket index */
   cls_register_cxx_method(h_class, "bucket_init_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_init_index, &h_rgw_bucket_init_index);
   cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
+
+  /* usage logging */
   cls_register_cxx_method(h_class, "user_usage_log_add", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
   cls_register_cxx_method(h_class, "user_usage_log_read", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_user_usage_log_read, &h_rgw_user_usage_log_read);
   cls_register_cxx_method(h_class, "user_usage_log_trim", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_user_usage_log_trim, &h_rgw_user_usage_log_trim);
+
+  /* garbage collection */
+  cls_register_cxx_method(h_class, "gc_set_entry", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_cls_gc_set_entry, &h_rgw_gc_set_entry);
+  cls_register_cxx_method(h_class, "gc_defer_entry", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_cls_gc_defer_entry, &h_rgw_gc_set_entry);
+  cls_register_cxx_method(h_class, "gc_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_cls_gc_list, &h_rgw_gc_list);
+  cls_register_cxx_method(h_class, "gc_remove", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_cls_gc_remove, &h_rgw_gc_remove);
 
   return;
 }
