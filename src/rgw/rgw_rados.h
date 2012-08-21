@@ -10,6 +10,7 @@
 class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
+class RGWGC;
 
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
@@ -119,6 +120,7 @@ struct RGWObjState {
   uint64_t size;
   time_t mtime;
   bufferlist obj_tag;
+  bool fake_tag;
   RGWObjManifest manifest;
   bool has_manifest;
   string shadow_obj;
@@ -127,7 +129,7 @@ struct RGWObjState {
   bool prefetch_data;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), has_manifest(false), prefetch_data(false) {}
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), fake_tag(false), has_manifest(false), prefetch_data(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -141,6 +143,7 @@ struct RGWObjState {
   void clear() {
     has_attrs = false;
     exists = false;
+    fake_tag = false;
     size = 0;
     mtime = 0;
     obj_tag.clear();
@@ -197,8 +200,11 @@ struct RGWPoolIterCtx {
   
 class RGWRados
 {
+  friend class RGWGC;
+
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
+  int open_gc_pool_ctx();
 
   int open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
 
@@ -223,6 +229,9 @@ class RGWRados
     }
   };
 
+  RGWGC *gc;
+  bool use_gc_thread;
+
 
   int num_watchers;
   RGWWatcher **watchers;
@@ -233,13 +242,15 @@ class RGWRados
   Mutex bucket_id_lock;
   uint64_t max_bucket_id;
 
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
-  int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                         string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
-  int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                         string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
-  int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                         string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state);
+  int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
+                         librados::ObjectOperation& op, RGWObjState **state);
+  int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
+                         librados::ObjectWriteOperation& op, RGWObjState **pstate,
+			 bool reset_obj);
+  int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
+                         librados::ObjectWriteOperation& op, RGWObjState **pstate,
+			 bool reset_obj);
 
   void atomic_write_finish(RGWObjState *state, int r) {
     if (state && r == -ECANCELED) {
@@ -279,25 +290,29 @@ class RGWRados
 
 protected:
   CephContext *cct;
+  librados::Rados *rados;
+  librados::IoCtx gc_pool_ctx;        // .rgw.gc
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL), num_watchers(0), watchers(NULL), watch_handles(NULL),
-               bucket_id_lock("rados_bucket_id"), max_bucket_id(0) {}
+  RGWRados() : lock("rados_timer_lock"), timer(NULL), gc(NULL), use_gc_thread(false),
+               num_watchers(0), watchers(NULL), watch_handles(0),
+               bucket_id_lock("rados_bucket_id"), max_bucket_id(0), rados(NULL) {}
   virtual ~RGWRados() {}
 
   void tick();
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct) {
+  int initialize(CephContext *_cct, bool _use_gc_thread) {
     cct = _cct;
+    use_gc_thread = _use_gc_thread;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize();
-  virtual void finalize() {}
+  virtual void finalize();
 
-  static RGWRados *init_storage_provider(CephContext *cct);
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
   static void close_storage();
   static RGWRados *store;
 
@@ -585,6 +600,13 @@ public:
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
 
+  int gc_operate(string& oid, librados::ObjectWriteOperation *op);
+  int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op);
+  int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
+
+  int list_gc_objs(int *index, string& marker, uint32_t max, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
+  int process_gc();
+  int defer_gc(void *ctx, rgw_obj& obj);
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
@@ -633,18 +655,20 @@ public:
 
   uint64_t instance_id();
   uint64_t next_bucket_id();
+
 };
 
 class RGWStoreManager {
   RGWRados *store;
 public:
-  RGWStoreManager() : store(NULL) {}
+  RGWStoreManager(): store(NULL) {}
   ~RGWStoreManager() {
-    if (store)
+    if (store) {
       RGWRados::close_storage();
+    }
   }
-  RGWRados *init(CephContext *cct) {
-    store = RGWRados::init_storage_provider(cct);
+  RGWRados *init(CephContext *cct, bool use_gc_thread) {
+    store = RGWRados::init_storage_provider(cct, use_gc_thread);
     return store;
   }
 };

@@ -27,11 +27,11 @@ using namespace librados;
 
 #include "rgw_log.h"
 
+#include "rgw_gc.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
-
-Rados *rados = NULL;
 
 static RGWCache<RGWRados> cached_rados_provider;
 static RGWRados rados_provider;
@@ -68,7 +68,7 @@ public:
   }
 };
 
-RGWRados *RGWRados::init_storage_provider(CephContext *cct)
+RGWRados *RGWRados::init_storage_provider(CephContext *cct, bool use_gc_thread)
 {
   int use_cache = cct->_conf->rgw_cache_enabled;
   store = NULL;
@@ -78,7 +78,7 @@ RGWRados *RGWRados::init_storage_provider(CephContext *cct)
     store = &cached_rados_provider;
   }
 
-  if (store->initialize(cct) < 0)
+  if (store->initialize(cct, use_gc_thread) < 0)
     store = NULL;
 
   return store;
@@ -91,6 +91,13 @@ void RGWRados::close_storage()
 
   store->finalize();
   store = NULL;
+}
+
+
+void RGWRados::finalize()
+{
+  if (use_gc_thread)
+    gc->stop_processor();
 }
 
 /** 
@@ -116,6 +123,16 @@ int RGWRados::initialize()
   ret = open_root_pool_ctx();
   if (ret < 0)
     return ret;
+
+  ret = open_gc_pool_ctx();
+  if (ret < 0)
+    return ret;
+
+  gc = new RGWGC();
+  gc->initialize(cct, this);
+
+  if (use_gc_thread)
+    gc->start_processor();
 
   return ret;
 }
@@ -153,6 +170,22 @@ int RGWRados::open_root_pool_ctx()
       return r;
 
     r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
+  }
+
+  return r;
+}
+
+int RGWRados::open_gc_pool_ctx()
+{
+  int r = rados->ioctx_create(RGW_GC_BUCKET, gc_pool_ctx);
+  if (r == -ENOENT) {
+    r = rados->pool_create(RGW_GC_BUCKET);
+    if (r == -EEXIST)
+      r = 0;
+    if (r < 0)
+      return r;
+
+    r = rados->ioctx_create(RGW_GC_BUCKET, gc_pool_ctx);
   }
 
   return r;
@@ -915,17 +948,16 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   RGWObjState *state = NULL;
 
   if (!exclusive) {
-    r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
+    r = prepare_atomic_for_write(rctx, obj, op, &state, true);
     if (r < 0)
       return r;
+  } else {
+    op.create(true); // exclusive create
   }
-
-  op.create(exclusive);
 
   if (data) {
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
-    op.remove();
     op.write_full(*data);
   }
 
@@ -1298,18 +1330,56 @@ int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, r
   if (!state || !state->has_manifest)
     return 0;
 
+  cls_rgw_obj_chain chain;
   map<uint64_t, RGWObjManifestPart>::iterator iter;
   for (iter = state->manifest.objs.begin(); iter != state->manifest.objs.end(); ++iter) {
     rgw_obj& mobj = iter->second.loc;
     if (mobj == obj)
       continue;
-    int ret = rctx->notify_intent(mobj, DEL_OBJ);
-    if (ret < 0) {
-      ldout(cct, 0) << "WARNING: failed to log intent ret=" << ret << dendl;
-    }
+    string oid, key;
+    rgw_bucket bucket;
+    get_obj_bucket_and_oid_key(mobj, bucket, oid, key);
+    chain.push_obj(bucket.pool, oid, key);
   }
-  return 0;
+
+  string tag = state->obj_tag.c_str();
+  int ret = gc->send_chain(chain, tag, false);  // do it async
+
+  return ret;
 }
+
+int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
+{
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  if (!rctx)
+    return 0;
+
+  RGWObjState *state = NULL;
+
+  int r = get_obj_state(rctx, obj, &state);
+  if (r < 0)
+    return r;
+
+  if (!state->is_atomic) {
+    ldout(cct, 20) << "state for obj=" << obj << " is not atomic, not deferring gc operation" << dendl;
+    return -EINVAL;
+  }
+
+  if (state->obj_tag.length() == 0) {// check for backward compatibility
+    ldout(cct, 20) << "state->obj_tag is empty, not deferring gc operation" << dendl;
+    return -EINVAL;
+  }
+
+  string tag = state->obj_tag.c_str();
+
+  ldout(cct, 0) << "defer chain tag=" << tag << dendl;
+
+  return gc->defer_chain(tag, false);
+}
+
 
 /**
  * Delete an object.
@@ -1333,7 +1403,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
   ObjectWriteOperation op;
 
   RGWObjState *state;
-  r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
+  r = prepare_atomic_for_write(rctx, obj, op, &state, false);
   if (r < 0)
     return r;
 
@@ -1392,7 +1462,39 @@ int RGWRados::delete_obj(void *ctx, rgw_obj& obj, bool sync)
   return r;
 }
 
-int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state)
+static void generate_fake_tag(CephContext *cct, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
+{
+  string tag;
+
+  map<uint64_t, RGWObjManifestPart>::iterator mi = manifest.objs.begin();
+  if (mi != manifest.objs.end()) {
+    if (manifest.objs.size() > 1) // first object usually points at the head, let's skip to a more unique part
+      ++mi;
+    tag = mi->second.loc.object;
+    tag.append("_");
+  }
+
+  unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  MD5 hash;
+  hash.Update((const byte *)manifest_bl.c_str(), manifest_bl.length());
+
+  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
+  if (iter != attrset.end()) {
+    bufferlist& bl = iter->second;
+    hash.Update((const byte *)bl.c_str(), bl.length());
+  }
+
+  hash.Final(md5);
+  buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
+  tag.append(md5_str);
+
+  ldout(cct, 10) << "generate_fake_tag new tag=" << tag << dendl;
+
+  tag_bl.append(tag.c_str(), tag.size() + 1);
+}
+
+int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state)
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
@@ -1436,6 +1538,15 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     for (mi = s->manifest.objs.begin(); mi != s->manifest.objs.end(); ++mi) {
       ldout(cct, 10) << "manifest: ofs=" << mi->first << " loc=" << mi->second.loc << dendl;
     }
+
+    if (!s->obj_tag.length()) {
+      /*
+       * Uh oh, something's wrong, object with manifest should have tag. Let's
+       * create one out of the manifest, would be unique
+       */
+      generate_fake_tag(cct, s->attrset, s->manifest, manifest_bl, s->obj_tag);
+      s->fake_tag = true;
+    }
   }
   if (s->obj_tag.length())
     ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
@@ -1475,7 +1586,7 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
 
   if (rctx) {
     RGWObjState *state;
-    r = get_obj_state(rctx, obj, io_ctx, actual_obj, &state);
+    r = get_obj_state(rctx, obj, &state);
     if (r < 0)
       return r;
     if (!state->exists)
@@ -1492,13 +1603,13 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   return 0;
 }
 
-int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                            string& actual_obj, ObjectOperation& op, RGWObjState **pstate)
+int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
+                            ObjectOperation& op, RGWObjState **pstate)
 {
   if (!rctx)
     return 0;
 
-  int r = get_obj_state(rctx, obj, io_ctx, actual_obj, pstate);
+  int r = get_obj_state(rctx, obj, pstate);
   if (r < 0)
     return r;
 
@@ -1509,7 +1620,7 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCt
     return 0;
   }
 
-  if (state->obj_tag.length() > 0) {// check for backward compatibility
+  if (state->obj_tag.length() > 0 && !state->fake_tag) {// check for backward compatibility
     op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
   } else {
     ldout(cct, 20) << "state->obj_tag is empty, not appending atomic test" << dendl;
@@ -1517,19 +1628,26 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCt
   return 0;
 }
 
-int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                            string& actual_obj, ObjectWriteOperation& op, RGWObjState **pstate)
+int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
+                            ObjectWriteOperation& op, RGWObjState **pstate,
+			    bool reset_obj)
 {
-  int r = get_obj_state(rctx, obj, io_ctx, actual_obj, pstate);
+  int r = get_obj_state(rctx, obj, pstate);
   if (r < 0)
     return r;
 
   RGWObjState *state = *pstate;
 
-  bool need_guard = state->has_manifest || (state->obj_tag.length() != 0);
+  bool need_guard = (state->has_manifest || (state->obj_tag.length() != 0)) && (!state->fake_tag);
 
   if (!state->is_atomic) {
     ldout(cct, 20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
+
+    if (reset_obj) {
+      op.create(false);
+      op.remove();
+    }
+
     return 0;
   }
 
@@ -1579,10 +1697,15 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
     // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
   }
 
+  if (reset_obj) {
+    op.create(false);
+    op.remove();
+  }
+
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
   bufferlist bl;
-  bl.append(tag);
+  bl.append(tag.c_str(), tag.size() + 1);
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
@@ -1597,8 +1720,9 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
   return 0;
 }
 
-int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                            string& actual_obj, ObjectWriteOperation& op, RGWObjState **pstate)
+int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
+                            ObjectWriteOperation& op, RGWObjState **pstate,
+			    bool reset_obj)
 {
   if (!rctx) {
     *pstate = NULL;
@@ -1606,7 +1730,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   }
 
   int r;
-  r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
+  r = prepare_atomic_for_write_impl(rctx, obj, op, pstate, reset_obj);
 
   return r;
 }
@@ -1638,16 +1762,16 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   if (r < 0)
     return r;
 
-  io_ctx.locator_set_key(key);
-
   ObjectWriteOperation op;
   RGWObjState *state = NULL;
 
-  r = append_atomic_test(rctx, obj, io_ctx, actual_obj, op, &state);
+  r = append_atomic_test(rctx, obj, op, &state);
   if (r < 0)
     return r;
 
   op.setxattr(name, bl);
+
+  io_ctx.locator_set_key(key);
   r = io_ctx.operate(actual_obj, &op);
 
   if (state && r >= 0)
@@ -1693,7 +1817,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   ObjectWriteOperation op;
   RGWObjState *state = NULL;
 
-  r = append_atomic_test(rctx, obj, io_ctx, actual_obj, op, &state);
+  r = append_atomic_test(rctx, obj, op, &state);
   if (r < 0)
     return r;
 
@@ -1803,7 +1927,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     rctx = new_ctx;
   }
 
-  r = get_obj_state(rctx, obj, state->io_ctx, oid, &astate);
+  r = get_obj_state(rctx, obj, &astate);
   if (r < 0)
     goto done_err;
 
@@ -2013,7 +2137,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     }
   }
   RGWObjState *state;
-  r = prepare_atomic_for_write(rctx, dst_obj, io_ctx, dst_oid, op, &state);
+  r = prepare_atomic_for_write(rctx, dst_obj, op, &state, true);
   if (r < 0)
     return r;
 
@@ -2131,7 +2255,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     rctx = new_ctx;
   }
 
-  int r = get_obj_state(rctx, obj, state->io_ctx, oid, &astate);
+  int r = get_obj_state(rctx, obj, &astate);
   if (r < 0)
     goto done_ret;
 
@@ -2169,7 +2293,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
 
   if (reading_from_head) {
     /* only when reading from the head object do we need to do the atomic test */
-    r = append_atomic_test(rctx, read_obj, state->io_ctx, oid, op, &astate);
+    r = append_atomic_test(rctx, read_obj, op, &astate);
     if (r < 0)
       goto done_ret;
   }
@@ -2235,7 +2359,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
 
   ObjectReadOperation op;
 
-  r = append_atomic_test(rctx, obj, io_ctx, oid, op, &astate);
+  r = append_atomic_test(rctx, obj, op, &astate);
   if (r < 0)
     return r;
 
@@ -2533,6 +2657,34 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
     *is_truncated = (iter != io_ctx.objects_end());
 
   return objs.size();
+}
+
+int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
+{
+  return gc_pool_ctx.operate(oid, op);
+}
+
+int RGWRados::gc_aio_operate(string& oid, librados::ObjectWriteOperation *op)
+{
+  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  int r = gc_pool_ctx.aio_operate(oid, c, op);
+  c->release();
+  return r;
+}
+
+int RGWRados::gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl)
+{
+  return gc_pool_ctx.operate(oid, op, pbl);
+}
+
+int RGWRados::list_gc_objs(int *index, string& marker, uint32_t max, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
+{
+  return gc->list(index, marker, max, result, truncated);
+}
+
+int RGWRados::process_gc()
+{
+  return gc->process();
 }
 
 int RGWRados::cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid)
