@@ -258,7 +258,7 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
   char range_buf[128];
 
   /* dumping range into temp buffer first, as libfcgi will fail to digest %lld */
-  snprintf(range_buf, 128, "%lld-%lld/%lld", (long long)ofs, (long long)end, (long long)total);
+  snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs, (long long)end, (long long)total);
   CGI_PRINTF(s,"Content-Range: bytes %s\n", range_buf);
 }
 
