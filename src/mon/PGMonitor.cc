@@ -859,6 +859,12 @@ bool PGMonitor::check_down_pgs()
   return ret;
 }
 
+void PGMonitor::dump_info(Formatter *f)
+{
+  f->open_object_section("pgmap");
+  pg_map.dump(f);
+  f->close_section();
+}
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
