@@ -758,21 +758,31 @@ void Objecter::kick_requests(OSDSession *session)
   ldout(cct, 10) << "kick_requests for osd." << session->osd << dendl;
 
   // resend ops
+  map<tid_t,Op*> resend;  // resend in tid order
   for (xlist<Op*>::iterator p = session->ops.begin(); !p.end();) {
     Op *op = *p;
     ++p;
     logger->inc(l_osdc_op_resend);
     if (op->should_resend) {
-      send_op(op);
+      resend[op->tid] = op;
     } else {
       cancel_op(op);
     }
   }
+  while (!resend.empty()) {
+    send_op(resend.begin()->second);
+    resend.erase(resend.begin());
+  }
 
   // resend lingers
+  map<uint64_t, LingerOp*> lresend;  // resend in order
   for (xlist<LingerOp*>::iterator j = session->linger_ops.begin(); !j.end(); ++j) {
     logger->inc(l_osdc_linger_resend);
-    send_linger(*j);
+    lresend[(*j)->linger_id] = *j;
+  }
+  while (!lresend.empty()) {
+    send_linger(lresend.begin()->second);
+    lresend.erase(lresend.begin());
   }
 }
 
