@@ -157,6 +157,29 @@ void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attr
   }
 }
 
+static int policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
+{
+  map<string, bufferlist>::iterator aiter = attrset.find(RGW_ATTR_ACL);
+  if (aiter == attrset.end())
+    return -EIO;
+
+  bufferlist& bl = aiter->second;
+  bufferlist::iterator iter = bl.begin();
+  try {
+    policy->decode(iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
+    ldout(cct, 15) << "Read AccessControlPolicy";
+    s3policy->to_xml(*_dout);
+    *_dout << dendl;
+  }
+  return 0;
+}
+
 /**
  * Get the AccessControlPolicy for an object off of disk.
  * policy: must point to a valid RGWACL, and will be filled upon return.
@@ -314,6 +337,193 @@ int RGWGetObj::verify_permission()
   return 0;
 }
 
+
+int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
+{
+  ldout(s->cct, 0) << "user manifest obj=" << ent.name << dendl;
+
+  void *handle = NULL;
+  off_t cur_ofs = start_ofs;
+  off_t cur_end = end_ofs;
+  utime_t start_time = s->time;
+
+  rgw_obj part(bucket, ent.name);
+
+  map<string, bufferlist> attrs;
+
+  uint64_t obj_size, read_size;
+  void *obj_ctx = rgwstore->create_context(s);
+  RGWAccessControlPolicy obj_policy(s->cct);
+
+  ldout(s->cct, 20) << "reading obj=" << part << " ofs=" << cur_ofs << " end=" << cur_end << dendl;
+
+  rgwstore->set_atomic(obj_ctx, part);
+  rgwstore->set_prefetch_data(obj_ctx, part);
+  ret = rgwstore->prepare_get_obj(obj_ctx, part, &cur_ofs, &cur_end, &attrs, NULL,
+                                  NULL, NULL, NULL, NULL, NULL, &obj_size, &handle, &s->err);
+  if (ret < 0)
+    goto done_err;
+
+  if (obj_size != ent.size) {
+    // hmm.. something wrong, object not as expected, abort!
+    ldout(s->cct, 0) << "ERROR: expected read size=" << read_size << ", actual read size=" << ent.size << dendl;
+    ret = -EIO;
+    goto done_err;
+  }
+
+  ret = policy_from_attrset(s->cct, attrs, &obj_policy);
+  if (ret < 0)
+    goto done_err;
+
+  if (!verify_object_permission(s, bucket_policy, &obj_policy, RGW_PERM_READ)) {
+    ret = -EPERM;
+    goto done_err;
+  }
+
+  perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
+  while (cur_ofs <= cur_end) {
+    bufferlist bl;
+    read_size = cur_end - cur_ofs + 1;
+    ret = rgwstore->get_obj(obj_ctx, &handle, part, bl, cur_ofs, cur_end);
+    if (ret < 0)
+      goto done_err;
+
+    len = bl.length();
+    cur_ofs += len;
+    ofs += len;
+    ret = 0;
+    perfcounter->finc(l_rgw_get_lat,
+                      (ceph_clock_now(s->cct) - start_time));
+    send_response(bl);
+
+    start_time = ceph_clock_now(s->cct);
+  }
+
+  rgwstore->destroy_context(obj_ctx);
+  obj_ctx = NULL;
+
+  rgwstore->finish_get_obj(&handle);
+
+  return 0;
+
+done_err:
+  if (obj_ctx)
+    rgwstore->destroy_context(obj_ctx);
+  return ret;
+}
+
+int RGWGetObj::iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
+                                           uint64_t *ptotal_len, bool read_data)
+{
+  uint64_t obj_ofs = 0, len_count = 0;
+  bool found_start = false, found_end = false;
+  string delim;
+  string marker;
+  bool is_truncated;
+  string no_ns;
+  map<string, bool> common_prefixes;
+  vector<RGWObjEnt> objs;
+
+  utime_t start_time = ceph_clock_now(s->cct);
+
+  do {
+#define MAX_LIST_OBJS 100
+    int r = rgwstore->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker,
+                                   objs, common_prefixes,
+                                   true, no_ns, &is_truncated, NULL);
+    if (r < 0)
+      return r;
+
+    vector<RGWObjEnt>::iterator viter;
+
+    for (viter = objs.begin(); viter != objs.end() && !found_end; ++viter) {
+      RGWObjEnt& ent = *viter;
+      uint64_t cur_total_len = obj_ofs;
+      uint64_t start_ofs = 0, end_ofs = ent.size;
+
+      if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
+	start_ofs = ofs - obj_ofs;
+	found_start = true;
+      }
+
+      obj_ofs += ent.size;
+
+      if (!found_end && obj_ofs > (uint64_t)end) {
+	end_ofs = end - cur_total_len + 1;
+	found_end = true;
+      }
+
+      perfcounter->finc(l_rgw_get_lat,
+                       (ceph_clock_now(s->cct) - start_time));
+
+      if (found_start) {
+        len_count += end_ofs - start_ofs;
+
+        if (read_data) {
+          r = read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
+          if (r < 0)
+            return r;
+        }
+      }
+      marker = ent.name;
+
+      start_time = ceph_clock_now(s->cct);
+    }
+  } while (is_truncated && !found_end);
+
+  if (ptotal_len)
+    *ptotal_len = len_count;
+
+  return 0;
+}
+
+int RGWGetObj::handle_user_manifest(const char *prefix)
+{
+  ldout(s->cct, 2) << "RGWGetObj::handle_user_manifest() prefix=" << prefix << dendl;
+
+  string prefix_str = prefix;
+  int pos = prefix_str.find('/');
+  if (pos < 0)
+    return -EINVAL;
+
+  string bucket_name = prefix_str.substr(0, pos);
+  string obj_prefix = prefix_str.substr(pos + 1);
+
+  rgw_bucket bucket;
+
+  RGWAccessControlPolicy _bucket_policy(s->cct);
+  RGWAccessControlPolicy *bucket_policy;
+
+  if (bucket_name.compare(s->bucket.name) != 0) {
+    RGWBucketInfo bucket_info;
+    int r = rgwstore->get_bucket_info(NULL, bucket_name, bucket_info);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
+      return r;
+    }
+    bucket = bucket_info.bucket;
+    string no_obj;
+    bucket_policy = &_bucket_policy;
+    r = read_policy(s, bucket_info, bucket_policy, bucket, no_obj);
+  } else {
+    bucket = s->bucket;
+    bucket_policy = s->bucket_acl;
+  }
+
+  /* dry run to find out total length */
+  int r = iterate_user_manifest_parts(bucket, obj_prefix, bucket_policy, &total_len, false);
+  if (r < 0)
+    return r;
+
+  s->obj_size = total_len;
+
+  r = iterate_user_manifest_parts(bucket, obj_prefix, bucket_policy, NULL, true);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 void RGWGetObj::execute()
 {
   void *handle = NULL;
@@ -322,8 +532,10 @@ void RGWGetObj::execute()
   utime_t gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
+  map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
+  off_t new_ofs, new_end;
 
   ret = get_params();
   if (ret < 0)
@@ -333,10 +545,25 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done;
 
-  ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, &ofs, &end, &attrs, mod_ptr,
+  new_ofs = ofs;
+  new_end = end;
+
+  ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, &new_ofs, &new_end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
     goto done;
+
+  attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
+  if (attr_iter != attrs.end()) {
+    ret = handle_user_manifest(attr_iter->second.c_str());
+    if (ret < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
+    }
+    return;
+  }
+
+  ofs = new_ofs;
+  end = new_end;
 
   start = ofs;
 
@@ -1034,6 +1261,11 @@ void RGWPutObj::execute()
   bl.append(etag.c_str(), etag.size() + 1);
   attrs[RGW_ATTR_ETAG] = bl;
   attrs[RGW_ATTR_ACL] = aclbl;
+  if (obj_manifest) {
+    bufferlist manifest_bl;
+    manifest_bl.append(obj_manifest, strlen(obj_manifest) + 1);
+    attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
+  }
 
   if (s->content_type) {
     bl.clear();
