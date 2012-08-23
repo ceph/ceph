@@ -501,6 +501,13 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
   mdsmap.get_health(summary, detail);
 }
 
+void MDSMonitor::dump_info(Formatter *f)
+{
+  f->open_object_section("mdsmap");
+  mdsmap.dump(f);
+  f->close_section();
+}
+
 bool MDSMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
