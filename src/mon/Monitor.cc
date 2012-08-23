@@ -275,7 +275,7 @@ int Monitor::init()
     cluster_logger = pcb.create_perf_counters();
   }
 
-  // verify cluster_fsid
+  // verify cluster_uuid
   {
     int r = check_fsid();
     if (r == -ENOENT)
@@ -2030,7 +2030,7 @@ int Monitor::check_fsid()
   ss << monmap->get_fsid();
   string us = ss.str();
   bufferlist ebl;
-  int r = store->get_bl_ss(ebl, "cluster_fsid", 0);
+  int r = store->get_bl_ss(ebl, "cluster_uuid", 0);
   if (r < 0)
     return r;
 
@@ -2041,10 +2041,10 @@ int Monitor::check_fsid()
   if (pos != string::npos)
     es.resize(pos);
 
-  dout(10) << "check_fsid cluster_fsid contains '" << es << "'" << dendl;
+  dout(10) << "check_fsid cluster_uuid contains '" << es << "'" << dendl;
   if (es.length() < us.length() ||
       strncmp(us.c_str(), es.c_str(), us.length()) != 0) {
-    derr << "error: cluster_fsid file exists with value '" << es
+    derr << "error: cluster_uuid file exists with value '" << es
 	 << "', != our uuid " << monmap->get_fsid() << dendl;
     return -EEXIST;
   }
@@ -2060,7 +2060,7 @@ int Monitor::write_fsid()
 
   bufferlist b;
   b.append(us);
-  return store->put_bl_ss(b, "cluster_fsid", 0);
+  return store->put_bl_ss(b, "cluster_uuid", 0);
 }
 
 /*
