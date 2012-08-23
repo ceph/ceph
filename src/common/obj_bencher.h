@@ -63,7 +63,7 @@ protected:
   int write_bench(int secondsToRun, int concurrentios);
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
 
-  int clean_up(int num_objects, int prevPid);
+  int clean_up(int num_objects, int prevPid, int concurrentios);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;
@@ -88,7 +88,7 @@ public:
   ObjBencher() : show_time(false), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
   int aio_bench(int operation, int secondsToRun, int concurrentios, int op_size, bool cleanup);
-  int clean_up(const std::string& prefix, int concurrent_ios);
+  int clean_up(const std::string& prefix, int concurrentios);
 
   void set_show_time(bool dt) {
     show_time = dt;
