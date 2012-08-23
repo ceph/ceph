@@ -36,6 +36,7 @@ void usage(ostream& out)
 {
   out <<					\
 "usage: rest-bench [options] <write|seq>\n"
+"       rest-bench [options] cleanup <prefix>\n"
 "BENCHMARK OPTIONS\n"
 "   --seconds\n"
 "        benchmak length (default: 60)\n"
@@ -47,6 +48,8 @@ void usage(ostream& out)
 "        set the size of write ops for put or benchmarking\n"
 "   --show-time\n"
 "        prefix output lines with date and time\n"
+"   --no-cleanup\n"
+"        do not clean up data after write bench\n"
 "REST CONFIG OPTIONS\n"
 "   --api-host=bhost\n"
 "        host name\n"
@@ -72,6 +75,9 @@ enum OpType {
   OP_NONE    = 0,
   OP_GET_OBJ = 1,
   OP_PUT_OBJ = 2,
+  OP_DELETE_OBJ = 3,
+  OP_LIST_BUCKET = 4,
+  OP_CLEANUP = 5,
 };
 
 struct req_context : public RefCountedObject {
@@ -84,6 +90,9 @@ struct req_context : public RefCountedObject {
   bufferlist out_bl;
   uint64_t off;
   uint64_t len;
+  const char *list_start;
+  std::list<std::string>* list_objects;
+  int list_count;
   string oid;
   Mutex lock;
   Cond cond;
@@ -180,6 +189,25 @@ static int put_obj_callback(int size, char *buf,
   return chunk;
 }
 
+static S3Status list_bucket_callback(int is_truncated, const char *next_marker,
+                                int count, const S3ListBucketContent *objects,
+                                int prefix_count, const char **prefixes,
+                                void *cb_data)
+{
+  if (!cb_data)
+    return S3StatusOK;
+
+  struct req_context *ctx = (struct req_context *)cb_data;
+
+  ctx->list_start = next_marker;
+
+  for (int i = 0; i < count; ++i) {
+    ctx->list_objects->push_back(objects[i].key);
+  }
+
+  return S3StatusOK;
+}
+
 class RESTDispatcher {
   deque<req_context *> m_req_queue;
   ThreadPool m_tp;
@@ -187,6 +215,7 @@ class RESTDispatcher {
   S3ResponseHandler response_handler;
   S3GetObjectHandler get_obj_handler;
   S3PutObjectHandler put_obj_handler;
+  S3ListBucketHandler list_bucket_handler;
 
   struct DispatcherWQ : public ThreadPool::WorkQueue<req_context> {
     RESTDispatcher *dispatcher;
@@ -247,10 +276,15 @@ public:
     put_obj_handler.responseHandler = response_handler;
     put_obj_handler.putObjectDataCallback = put_obj_callback;
 
+    list_bucket_handler.responseHandler = response_handler;
+    list_bucket_handler.listBucketCallback = list_bucket_callback;
+
   }
   void process_context(req_context *ctx);
   void get_obj(req_context *ctx);
   void put_obj(req_context *ctx);
+  void delete_obj(req_context *ctx);
+  void list_bucket(req_context *ctx);
 
   void queue(req_context *ctx) {
     req_wq.queue(ctx);
@@ -271,6 +305,12 @@ void RESTDispatcher::process_context(req_context *ctx)
       break;
     case OP_PUT_OBJ:
       put_obj(ctx);
+      break;
+    case OP_DELETE_OBJ:
+      delete_obj(ctx);
+      break;
+    case OP_LIST_BUCKET:
+      list_bucket(ctx);
       break;
     default:
       assert(0);
@@ -308,11 +348,29 @@ void RESTDispatcher::get_obj(req_context *ctx)
                 &get_obj_handler, ctx);
 }
 
+void RESTDispatcher::delete_obj(req_context *ctx)
+{
+
+  S3_delete_object(ctx->bucket_ctx, ctx->oid.c_str(),
+                   ctx->ctx, &response_handler, ctx);
+}
+
+void RESTDispatcher::list_bucket(req_context *ctx)
+{
+  S3_list_bucket(ctx->bucket_ctx,
+                 NULL, ctx->list_start,
+                 NULL, ctx->list_count,
+                 ctx->ctx,
+                 &list_bucket_handler, ctx);
+}
+
 class RESTBencher : public ObjBencher {
   RESTDispatcher *dispatcher;
   struct req_context **completions;
   struct S3RequestContext **handles;
   S3BucketContext bucket_ctx;
+  const char *list_start;
+  bool bucket_list_done;
   string user_agent;
   string host;
   string bucket;
@@ -409,6 +467,18 @@ protected:
     return 0;
   }
 
+  int aio_remove(const std::string& oid, int slot) {
+    struct req_context *ctx = completions[slot];
+
+    ctx->get();
+    ctx->bucket_ctx = &bucket_ctx;
+    ctx->oid = oid;
+    ctx->op = OP_DELETE_OBJ;
+
+    dispatcher->queue(ctx);
+    return 0;
+  }
+
   int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
     struct req_context *ctx = new req_context;
     int ret = ctx->init_ctx();
@@ -444,6 +514,54 @@ protected:
     ctx->put();
     return ret;
   }
+  int sync_remove(const std::string& oid) {
+    struct req_context *ctx = new req_context;
+    int ret = ctx->init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+    ctx->get();
+    ctx->bucket_ctx = &bucket_ctx;
+    ctx->oid = oid;
+    ctx->op = OP_DELETE_OBJ;
+
+    dispatcher->process_context(ctx);
+    ret = ctx->ret();
+    ctx->put();
+    return ret;
+  }
+
+  bool get_objects(std::list<std::string>* objects, int num) {
+    if (bucket_list_done) {
+      bucket_list_done = false;
+      return false;
+    }
+
+    struct req_context *ctx = new req_context;
+    int ret = ctx->init_ctx();
+    if (ret < 0) {
+      return ret;
+    }
+    ctx->get();
+    ctx->bucket_ctx = &bucket_ctx;
+    ctx->list_start = list_start;
+    ctx->list_objects = objects;
+    ctx->list_count = num;
+    ctx->op = OP_LIST_BUCKET;
+
+    dispatcher->process_context(ctx);
+    ret = ctx->ret();
+
+    list_start = ctx->list_start;
+    if (list_start == NULL || strcmp(list_start, "") == 0) {
+      bucket_list_done = true;
+      list_start = NULL;
+    }
+
+    ctx->put();
+
+    return ret == 0;
+  }
 
   bool completion_is_done(int slot) {
     return completions[slot]->complete;
@@ -469,7 +587,12 @@ protected:
   }
 
 public:
-  RESTBencher(RESTDispatcher *_dispatcher) : dispatcher(_dispatcher), completions(NULL) {
+  RESTBencher(RESTDispatcher *_dispatcher) :
+      dispatcher(_dispatcher),
+      completions(NULL),
+      list_start(NULL),
+      bucket_list_done(false)
+  {
     dispatcher->start();
   }
   ~RESTBencher() { }
@@ -552,6 +675,7 @@ int main(int argc, const char **argv)
   int seconds = 60;
 
   bool show_time = false;
+  bool cleanup = true;
 
 
   for (i = args.begin(); i != args.end(); ) {
@@ -562,6 +686,8 @@ int main(int argc, const char **argv)
       exit(0);
     } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
       show_time = true;
+    } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
+      cleanup = false;
     } else if (ceph_argparse_witharg(args, i, &user_agent, "--agent", (char*)NULL)) {
       /* nothing */
     } else if (ceph_argparse_witharg(args, i, &access_key, "--access-key", (char*)NULL)) {
@@ -612,13 +738,19 @@ int main(int argc, const char **argv)
   if (args.size() < 1)
     usage_exit();
   int operation = 0;
+  const char *prefix = NULL;
   if (strcmp(args[0], "write") == 0)
     operation = OP_WRITE;
   else if (strcmp(args[0], "seq") == 0)
     operation = OP_SEQ_READ;
   else if (strcmp(args[0], "rand") == 0)
     operation = OP_RAND_READ;
-  else
+  else if (strcmp(args[0], "cleanup") == 0) {
+    if (args.size() < 2)
+      usage_exit();
+    operation = OP_CLEANUP;
+    prefix = args[1];
+  } else
     usage_exit();
 
   if (host.empty()) {
@@ -649,9 +781,15 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
-  if (ret != 0) {
-      cerr << "error during benchmark: " << ret << std::endl;
+  if (operation == OP_CLEANUP) {
+    ret = bencher.clean_up(prefix, concurrent_ios);
+    if (ret != 0)
+      cerr << "error during cleanup: " << ret << std::endl;
+  } else {
+    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
+    if (ret != 0) {
+        cerr << "error during benchmark: " << ret << std::endl;
+    }
   }
 
   return 0;
