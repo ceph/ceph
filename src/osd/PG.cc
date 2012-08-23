@@ -4646,6 +4646,16 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     pg->dirty_info = true;
   }
   pg->check_recovery_sources(pg->get_osdmap());
+
+  for (vector<int>::iterator p = pg->want_acting.begin();
+       p != pg->want_acting.end(); ++p) {
+    if (!advmap.osdmap->is_up(*p)) {
+      assert((std::find(pg->acting.begin(), pg->acting.end(), *p) !=
+	      pg->acting.end()) ||
+	     (std::find(pg->up.begin(), pg->up.end(), *p) !=
+	      pg->up.end()));
+    }
+  }
   return forward_event();
 }
     
@@ -4768,7 +4778,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
   if (pg->acting != pg->up &&
       !pg->choose_acting(newest_update_osd)) {
     assert(pg->want_acting.size());
-    post_event(NeedActingChange());
     return discard_event();
   }
 
