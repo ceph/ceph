@@ -29,6 +29,7 @@ OPTION(daemonize, OPT_BOOL, false)
 OPTION(pid_file, OPT_STR, "")
 OPTION(chdir, OPT_STR, "/")
 OPTION(max_open_files, OPT_LONGLONG, 0)
+OPTION(fatal_signal_handlers, OPT_BOOL, true)
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log")
 OPTION(log_max_new, OPT_INT, 1000)

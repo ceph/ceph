@@ -111,7 +111,9 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
-  install_standard_sighandlers();
+
+  if (g_conf->fatal_signal_handlers)
+    install_standard_sighandlers();
 
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
