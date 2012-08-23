@@ -114,6 +114,8 @@ public:
   void tick();     // check state, take actions
   void do_stop();
 
+  void dump_info(Formatter *f);
+
   void check_subs();
   void check_sub(Subscription *sub);
 

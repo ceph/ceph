@@ -18,6 +18,7 @@
 #include <signal.h>
 
 #include "Monitor.h"
+#include "common/version.h"
 
 #include "osd/OSDMap.h"
 
@@ -1105,10 +1106,14 @@ void Monitor::_mon_status(ostream& ss)
   jf.flush(ss);
 }
 
-void Monitor::get_health(string& status, bufferlist *detailbl)
+void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 {
   list<pair<health_status_t,string> > summary;
   list<pair<health_status_t,string> > detail;
+
+  if (f)
+    f->open_object_section("health");
+
   for (vector<PaxosService*>::iterator p = paxos_service.begin();
        p != paxos_service.end();
        p++) {
@@ -1116,9 +1121,17 @@ void Monitor::get_health(string& status, bufferlist *detailbl)
     s->get_health(summary, detailbl ? &detail : NULL);
   }
 
+  if (f)
+    f->open_array_section("summary");
   stringstream ss;
   health_status_t overall = HEALTH_OK;
   if (!summary.empty()) {
+    if (f) {
+      f->open_object_section("item");
+      f->dump_stream("severity") <<  summary.front().first;
+      f->dump_string("summary", summary.front().second);
+      f->close_section();
+    }
     ss << ' ';
     while (!summary.empty()) {
       if (overall > summary.front().first)
@@ -1129,15 +1142,28 @@ void Monitor::get_health(string& status, bufferlist *detailbl)
 	ss << "; ";
     }
   }
+  if (f)
+    f->close_section();
   stringstream fss;
   fss << overall;
   status = fss.str() + ss.str();
+  if (f)
+    f->dump_stream("overall_status") << overall;
 
+  if (f)
+    f->open_array_section("detail");
   while (!detail.empty()) {
+    if (f)
+      f->dump_string("item", detail.front().second);
     detailbl->append(detail.front().second);
     detailbl->append('\n');
     detail.pop_front();
   }
+  if (f)
+    f->close_section();
+
+  if (f)
+    f->close_section();
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -1251,7 +1277,7 @@ void Monitor::handle_command(MMonCommand *m)
       }
       // reply with the status for all the components
       string health;
-      get_health(health, NULL);
+      get_health(health, NULL, NULL);
       stringstream ss;
       ss << "   health " << health << "\n";
       ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
@@ -1260,6 +1286,49 @@ void Monitor::handle_command(MMonCommand *m)
       ss << "    pgmap " << pgmon()->pg_map << "\n";
       ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
       rs = ss.str();
+      r = 0;
+    }
+    if (m->cmd[0] == "report") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
+
+      JSONFormatter jf(true);
+
+      jf.open_object_section("report");
+      jf.dump_string("version", ceph_version_to_str());
+      jf.dump_string("commit", git_version_to_str());
+      jf.dump_stream("timestamp") << ceph_clock_now(NULL);
+
+      string d;
+      for (unsigned i = 1; i < m->cmd.size(); i++) {
+	if (i > 1)
+	  d += " ";
+	d += m->cmd[i];
+      }
+      jf.dump_string("tag", d);
+
+      string hs;
+      get_health(hs, NULL, &jf);
+      
+      monmon()->dump_info(&jf);
+      osdmon()->dump_info(&jf);
+      mdsmon()->dump_info(&jf);
+      pgmon()->dump_info(&jf);
+
+      jf.close_section();
+      stringstream ss;
+      jf.flush(ss);
+
+      bufferlist bl;
+      bl.append("-------- BEGIN REPORT --------\n");
+      bl.append(ss);
+      ostringstream ss2;
+      ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
+      rdata.append(bl);
+      rdata.append(ss2.str());
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
@@ -1296,7 +1365,7 @@ void Monitor::handle_command(MMonCommand *m)
 	rs = "access denied";
 	goto out;
       }
-      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
+      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL, NULL);
       r = 0;
     }
     if (m->cmd[0] == "heap") {
