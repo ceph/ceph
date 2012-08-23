@@ -420,3 +420,9 @@ int MonitorStore::put_bl_sn_map(const char *a,
   return 0;
 }
 
+void MonitorStore::sync()
+{
+  int dirfd = ::open(dir.c_str(), O_RDONLY);
+  sync_filesystem(dirfd);
+  ::close(dirfd);
+}
