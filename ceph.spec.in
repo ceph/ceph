@@ -340,11 +340,6 @@ fi
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
-%dir %{_includedir}/crush
-%{_includedir}/crush/crush.h
-%{_includedir}/crush/hash.h
-%{_includedir}/crush/mapper.h
-%{_includedir}/crush/types.h
 %dir %{_includedir}/rados
 %{_includedir}/rados/librados.h
 %{_includedir}/rados/librados.hpp
