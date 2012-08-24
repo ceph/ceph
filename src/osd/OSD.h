@@ -422,6 +422,8 @@ private:
   ThreadPool disk_tp;
   ThreadPool command_tp;
 
+  bool paused_recovery;
+
   // -- sessions --
 public:
   struct Session : public RefCountedObject {
