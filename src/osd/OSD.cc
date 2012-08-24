@@ -2316,10 +2316,12 @@ void OSD::handle_notify_timeout(void *_notif)
 
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
 
+  pg_t pgid = notif->pgid;
+
   complete_notify(_notif, obc);
   service.watch_lock.Unlock(); /* drop lock to change locking order */
 
-  put_object_context(obc, notif->pgid);
+  put_object_context(obc, pgid);
   service.watch_lock.Lock();
   /* exiting with watch_lock held */
 }
