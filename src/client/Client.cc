@@ -169,20 +169,13 @@ Client::~Client()
 
   tear_down_cache();
 
-  if (objectcacher) { 
-    delete objectcacher; 
-    objectcacher = 0; 
-  }
+  delete objectcacher;
+  delete writeback_handler;
 
-  if (writeback_handler) {
-    delete writeback_handler;
-    writeback_handler = NULL;
-  }
-
-  if (filer) { delete filer; filer = 0; }
-  if (objecter) { delete objecter; objecter = 0; }
-  if (osdmap) { delete osdmap; osdmap = 0; }
-  if (mdsmap) { delete mdsmap; mdsmap = 0; }
+  delete filer;
+  delete objecter;
+  delete osdmap;
+  delete mdsmap;
 
   delete logger;
 }
