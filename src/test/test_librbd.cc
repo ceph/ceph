@@ -535,6 +535,7 @@ int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
     }
     assert(found);
   }
+  va_end(ap);
 
   for (i = 0; i < snaps.size(); i++) {
     assert(snaps[i].name == "");
