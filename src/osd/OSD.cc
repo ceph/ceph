@@ -690,6 +690,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   recovery_tp(external_messenger->cct, "OSD::recovery_tp", g_conf->osd_recovery_threads),
   disk_tp(external_messenger->cct, "OSD::disk_tp", g_conf->osd_disk_threads),
   command_tp(external_messenger->cct, "OSD::command_tp", 1),
+  paused_recovery(false),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_need_update(true), heartbeat_epoch(0),
   hbclient_messenger(hbclientm),
@@ -3900,6 +3901,21 @@ void OSD::activate_map()
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
     monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
     monc->renew_subs();
+  }
+
+  // norecover?
+  if (osdmap->test_flag(CEPH_OSDMAP_NORECOVER)) {
+    if (!paused_recovery) {
+      dout(1) << "pausing recovery (NORECOVER flag set)" << dendl;
+      paused_recovery = true;
+      recovery_tp.pause_new();
+    }
+  } else {
+    if (paused_recovery) {
+      dout(1) << "resuming recovery (NORECOVER flag cleared)" << dendl;
+      paused_recovery = false;
+      recovery_tp.unpause();
+    }
   }
 
   // process waiters
