@@ -468,7 +468,7 @@ public:
   RemoveAttrsOp(RadosTestContext *context,
 	       const string &oid,
 	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), done(false)
+    TestOp(context, stat), oid(oid), comp(NULL), done(false)
     {}
 
   void _begin()
@@ -650,7 +650,7 @@ public:
   SetAttrsOp(RadosTestContext *context,
 	       const string &oid,
 	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), done(false)
+    TestOp(context, stat), oid(oid), comp(NULL), done(false)
     {}
 
   void _begin()
