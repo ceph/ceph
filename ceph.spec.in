@@ -287,7 +287,6 @@ fi
 %{_bindir}/ceph-coverage
 %{_bindir}/obsync
 %{_initrddir}/ceph
-%dir %{_libdir}/rados-classes
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
@@ -324,8 +323,10 @@ fi
 %ghost %dir %{_localstatedir}/run/ceph/
 %dir %{_sysconfdir}/ceph/
 /usr/sbin/rcceph
+%dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_rgw.so*
+%{_libdir}/rados-classes/libcls_lock.so*
 /sbin/ceph-disk-activate
 /sbin/ceph-disk-prepare
 
