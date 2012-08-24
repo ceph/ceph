@@ -131,7 +131,7 @@ static void xml_start(void *data, const char *el, const char **attr) {
 }
 
 RGWXMLParser::
-RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true)
+RGWXMLParser() : p(NULL), buf(NULL), buf_len(0), cur_obj(NULL), success(true)
 {
 }
 
