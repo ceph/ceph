@@ -5528,8 +5528,8 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // prepare
-  inode_t *pi = 0, *ji = 0;    // renamed inode
-  inode_t *tpi = 0, *tji = 0;  // target/overwritten inode
+  inode_t *pi = 0;    // renamed inode
+  inode_t *tpi = 0;  // target/overwritten inode
   
   // target inode
   if (!linkmerge) {
@@ -5648,14 +5648,14 @@ void Server::_rename_prepare(MDRequest *mdr,
 	// project snaprealm, too
 	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
-	tji = metablob->add_primary_dentry(straydn, true, oldin);
+	metablob->add_primary_dentry(straydn, true, oldin);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
 	// auth for targeti
 	metablob->add_dir_context(oldin->get_parent_dir());
 	mdcache->journal_cow_dentry(mdr, metablob, oldin->parent, CEPH_NOSNAP, 0, destdnl);
-	tji = metablob->add_primary_dentry(oldin->parent, true, oldin);
+	metablob->add_primary_dentry(oldin->parent, true, oldin);
       }
       if (destdn->is_auth()) {
 	// auth for dn, not targeti
@@ -5677,7 +5677,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (srci->get_parent_dn()->is_auth()) { // it's remote
 	metablob->add_dir_context(srci->get_parent_dir());
         mdcache->journal_cow_dentry(mdr, metablob, srci->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-	ji = metablob->add_primary_dentry(srci->get_parent_dn(), true, srci);
+	metablob->add_primary_dentry(srci->get_parent_dn(), true, srci);
       }
     } else {
       if (destdn->is_auth() && !destdnl->is_null())
@@ -5699,11 +5699,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       destdn->first = MAX(destdn->first, next_dest_snap);
 
     if (destdn->is_auth())
-      ji = metablob->add_primary_dentry(destdn, true, srci);
+      metablob->add_primary_dentry(destdn, true, srci);
     else if (force_journal) {
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
-      ji = metablob->add_primary_dentry(destdn, true, srci);
+      metablob->add_primary_dentry(destdn, true, srci);
     }
   }
     
@@ -5722,19 +5722,6 @@ void Server::_rename_prepare(MDRequest *mdr,
   // make renamed inode first track the dn
   if (srcdnl->is_primary() && destdn->is_auth())
     srci->first = destdn->first;  
-
-  // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
-  if (!silent) {
-    if (ji && !pi) {
-      ji->ctime = mdr->now;
-      if (linkmerge)
-	ji->nlink--;
-    }
-    if (tji && !tpi) {
-      tji->nlink--;
-      tji->ctime = mdr->now;
-    }
-  }
 
   // anchor updates?
   if (mdr->more()->src_reanchor_atid)
