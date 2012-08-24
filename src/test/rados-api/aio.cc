@@ -16,7 +16,8 @@ class AioTestData
 {
 public:
   AioTestData()
-    : m_init(false),
+    : m_cluster(NULL),
+      m_init(false),
       m_complete(false),
       m_safe(false)
   {
