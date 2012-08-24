@@ -541,9 +541,14 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	  break;
 	else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
 	  format = val;
-	else if (!epoch)
-	  epoch = atoi(*i++);
-	else
+	else if (!epoch) {
+	  long l = parse_pos_long(*i++, &ss);
+	  if (l < 0) {
+	    r = -EINVAL;
+	    goto out;
+	  }
+	  epoch = l;
+	} else
 	  i++;
       }
 
@@ -585,7 +590,12 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "getmap") {
       if (m->cmd.size() > 2) {
-	epoch_t e = atoi(m->cmd[2].c_str());
+	long l = parse_pos_long(m->cmd[2].c_str(), &ss);
+	if (l < 0) {
+	  r = -EINVAL;
+	  goto out;
+	}
+	epoch_t e = l;
 	bufferlist b;
 	mon->store->get_bl_sn(b,"mdsmap",e);
 	if (!b.length()) {
@@ -652,6 +662,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     }
   }
 
+ out:
   if (r != -1) {
     string rs;
     getline(ss, rs);
@@ -747,7 +758,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (m->cmd.size() > 1) {
     if ((m->cmd[1] == "stop" || m->cmd[1] == "deactivate") && m->cmd.size() > 2) {
-      int who = atoi(m->cmd[2].c_str());
+      int who = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (who < 0)
+	goto out;
       if (!pending_mdsmap.is_active(who)) {
 	r = -EEXIST;
 	ss << "mds." << who << " not active (" 
@@ -770,14 +783,20 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "set_max_mds" && m->cmd.size() > 2) {
-      pending_mdsmap.max_mds = atoi(m->cmd[2].c_str());
+      long l = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (l < 0)
+	goto out;
+      pending_mdsmap.max_mds = l;
       r = 0;
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
     else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
       MDSMap map;
       map.decode(m->get_data());
-      epoch_t e = atoi(m->cmd[2].c_str());
+      long l = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (l < 0)
+	goto out;
+      epoch_t e = l;
       //if (ceph_fsid_compare(&map.get_fsid(), &mon->monmap->fsid) == 0) {
       if (pending_mdsmap.epoch == e) {
 	map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
@@ -791,8 +810,13 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	//ss << "mdsmap fsid " << map.fsid << " does not match monitor fsid " << mon->monmap->fsid;
     }
     else if (m->cmd[1] == "set_state" && m->cmd.size() == 4) {
-      uint64_t gid = atoi(m->cmd[2].c_str());
-      int state = atoi(m->cmd[3].c_str());
+      long l = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (l < 0)
+	goto out;
+      uint64_t gid = l;
+      long state = parse_pos_long(m->cmd[3].c_str(), &ss);
+      if (state < 0)
+	goto out;
       if (!pending_mdsmap.is_dne_gid(gid)) {
 	MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
 	info.state = state;
@@ -808,7 +832,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = fail_mds(ss, m->cmd[2]);
     }
     else if (m->cmd[1] == "rm" && m->cmd.size() == 3) {
-      uint64_t gid = atoll(m->cmd[2].c_str());
+      int64_t gid = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (gid < 0)
+	goto out;
       int state = pending_mdsmap.get_state_gid(gid);
       if (state == 0) {
 	ss << "mds gid " << gid << " dne";
@@ -828,7 +854,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "rmfailed" && m->cmd.size() == 3) {
-      int w = atoi(m->cmd[2].c_str());
+      long w = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (w < 0)
+	goto out;
       pending_mdsmap.failed.erase(w);
       stringstream ss;
       ss << "removed failed mds." << w;
@@ -861,7 +889,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "compat" && m->cmd.size() == 4) {
-      uint64_t f = atoll(m->cmd[3].c_str());
+      int64_t f = parse_pos_long(m->cmd[3].c_str(), &ss);
+      if (f < 0)
+	goto out;
       if (m->cmd[2] == "rm_compat") {
 	if (pending_mdsmap.compat.compat.contains(f)) {
 	  ss << "removing compat feature " << f;
@@ -882,19 +912,27 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	}
       }
     } else if (m->cmd[1] == "add_data_pool" && m->cmd.size() == 3) {
-      int64_t poolid = atoi(m->cmd[2].c_str());
+      int64_t poolid = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (poolid < 0)
+	goto out;
       pending_mdsmap.add_data_pg_pool(poolid);
       ss << "added data pool " << poolid << " to mdsmap";
       r = 0;
     } else if (m->cmd[1] == "remove_data_pool" && m->cmd.size() == 3) {
-      int64_t poolid = atoi(m->cmd[2].c_str());
+      int64_t poolid = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (poolid < 0)
+	goto out;
       r = pending_mdsmap.remove_data_pg_pool(poolid);
       if (r == 0)
 	ss << "removed data pool " << poolid << " from mdsmap";
     } else if (m->cmd[1] == "newfs" && m->cmd.size() >= 4) {
       MDSMap newmap;
-      int metadata = atoi(m->cmd[2].c_str());
-      int data = atoi(m->cmd[3].c_str());
+      long metadata = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (metadata < 0)
+	goto out;
+      long data = parse_pos_long(m->cmd[3].c_str());
+      if (data < 0)
+	goto out;
       if (m->cmd.size() < 5 || m->cmd[4] != "--yes-i-really-mean-it") {
 	ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
 	r = -EPERM;
@@ -912,6 +950,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   }
   if (r == -EINVAL) 
     ss << "unrecognized command";
+ out:
   string rs;
   getline(ss, rs);
 
