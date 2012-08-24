@@ -948,8 +948,10 @@ public:
 	 const string &oid,
 	 TestOpStat *stat = 0) : 
     TestOp(context, stat),
+    completion(NULL),
     oid(oid),
     old_value(&context->cont_gen),
+    snap(0),
     retval(0),
     attrretval(0)
   {}
