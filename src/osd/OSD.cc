@@ -2214,7 +2214,7 @@ void OSD::complete_notify(void *_notif, void *_obc)
 {
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(10) << "got the last reply from pending watchers, can send response now" << dendl;
+  dout(10) << "complete_notify " << notif << " got the last reply from pending watchers, can send response now" << dendl;
   MWatchNotify *reply = notif->reply;
   client_messenger->send_message(reply, notif->session->con);
   notif->session->put();
@@ -2233,6 +2233,7 @@ void OSD::ack_notification(entity_name_t& name, void *_notif, void *_obc, Replic
   assert(service.watch_lock.is_locked());
   pg->assert_locked();
   Watch::Notification *notif = (Watch::Notification *)_notif;
+  dout(10) << "ack_notification " << name << " notif " << notif << " id " << notif->id << dendl;
   if (service.watch->ack_notification(name, notif)) {
     complete_notify(notif, _obc);
     pg->put_object_context(static_cast<ReplicatedPG::ObjectContext *>(_obc));
@@ -2315,7 +2316,7 @@ void OSD::handle_notify_timeout(void *_notif)
 {
   assert(service.watch_lock.is_locked());
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(10) << "OSD::handle_notify_timeout notif " << notif->id << dendl;
+  dout(10) << "OSD::handle_notify_timeout notif " << notif << " id " << notif->id << dendl;
 
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
 
