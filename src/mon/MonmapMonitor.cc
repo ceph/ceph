@@ -183,9 +183,14 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 	  break;
 	else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
 	  format = val;
-	else if (!epoch)
-	  epoch = atoi(*i++);
-	else
+	else if (!epoch) {
+	  long l = parse_pos_long(*i++, &ss);
+	  if (l < 0) {
+	    r = -EINVAL;
+	    goto out;
+	  }
+	  epoch = l;
+	} else
 	  i++;
       }
 
@@ -247,18 +252,19 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
         r = 0;
       } else {
         // find target
-        int target = atoi(m->cmd[2].c_str());
+        long target = parse_pos_long(m->cmd[2].c_str(), &ss);
+	if (target < 0) {
+	  r = -EINVAL;
+	  goto out;
+	}
         stringstream ss;
-        if (target == 0 && m->cmd[2] != "0") {
-          ss << "could not parse target " << m->cmd[2];
-        } else {
-          // send to target, or handle if it's me
-   	  MMonCommand *newm = new MMonCommand(m->fsid, m->version);
-	  newm->cmd.insert(newm->cmd.begin(), m->cmd.begin() + 3, m->cmd.end());
-	  mon->messenger->send_message(newm, mon->monmap->get_inst(target));
-	  ss << "fw to mon." << target;
-	  r = 0;
-        }
+
+	// send to target, or handle if it's me
+	MMonCommand *newm = new MMonCommand(m->fsid, m->version);
+	newm->cmd.insert(newm->cmd.begin(), m->cmd.begin() + 3, m->cmd.end());
+	mon->messenger->send_message(newm, mon->monmap->get_inst(target));
+	ss << "fw to mon." << target;
+	r = 0;
       }
     }
     else if (m->cmd[1] == "add")
@@ -267,6 +273,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       return false;
   }
 
+ out:
   if (r != -1) {
     string rs;
     getline(ss, rs);
