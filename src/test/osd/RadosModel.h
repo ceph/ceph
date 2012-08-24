@@ -164,6 +164,7 @@ public:
     pool_obj_cont(),
     current_snap(0),
     pool_name(pool_name),
+    next_oid(0),
     errors(0),
     max_in_flight(max_in_flight),
     cont_gen(cont_gen), seq_num(0), seq(0),
