@@ -1865,7 +1865,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
   CInode *cur = in;
-  CDentry *parentdn = cur->get_projected_parent_dn();
+  CDentry *parentdn = NULL;
   bool first = true;
   while (parent) {
     //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
