@@ -130,6 +130,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NODOWN   (1<<6)  /* block osd mark-down/failure */
 #define CEPH_OSDMAP_NOOUT    (1<<7)  /* block osd auto mark-out */
 #define CEPH_OSDMAP_NOIN     (1<<8)  /* block osd auto mark-in */
+#define CEPH_OSDMAP_NOBACKFILL (1<<9) /* block osd backfill */
 
 /*
  * The error code to return when an OSD can't handle a write
