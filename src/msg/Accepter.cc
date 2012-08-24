@@ -78,7 +78,12 @@ int Accepter::bind(entity_addr_t &bind_addr, uint64_t _nonce, int avoid_port1, i
 
     // reuse addr+port when possible
     int on = 1;
-    ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    if (rc < 0) {
+      ldout(msgr->cct,0) << "accepter.bind unable to setsockopt: "
+			 << cpp_strerror(errno) << dendl;
+      return -errno;
+    }
 
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
     if (rc < 0) {
