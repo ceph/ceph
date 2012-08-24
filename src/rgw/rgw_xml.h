@@ -40,6 +40,9 @@ protected:
   multimap<string, XMLObj *> children;
   map<string, string> attr_map;
 public:
+
+  XMLObj() : parent(NULL) {}
+
   virtual ~XMLObj();
   bool xml_start(XMLObj *parent, const char *el, const char **attr);
   virtual bool xml_end(const char *el);
