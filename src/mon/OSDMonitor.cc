@@ -1536,9 +1536,14 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  break;
 	else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
 	  format = val;
-	else if (!epoch)
-	  epoch = atoi(*i++);
-	else
+	else if (!epoch) {
+	  long l = parse_pos_long(*i++, &ss);
+	  if (l < 0) {
+	    r = -EINVAL;
+	    goto out;
+	  }
+	  epoch = l;
+	} else
 	  i++;
       }
 
@@ -1839,10 +1844,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
 	// osd crush set <id> <name> <weight> [<loc1> [<loc2> ...]]
-	int id = atoi(m->cmd[3].c_str());
+	int id = parse_pos_long(m->cmd[3].c_str(), &ss);
+	if (id < 0) {
+	  err = -EINVAL;
+	  goto out;
+	}
 	if (!osdmap.exists(id)) {
 	  err = -ENOENT;
-	  ss << "osd." << id << " does not exist.  create it before updating the crush map";
+	  ss << "osd." << m->cmd[3] << " does not exist.  create it before updating the crush map";
 	  goto out;
 	}
 
@@ -2004,7 +2013,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } while (false);
     }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
-      int newmax = atoi(m->cmd[2].c_str());
+      int newmax = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (newmax < 0) {
+	err = -EINVAL;
+	goto out;
+      }
       if (newmax < osdmap.crush->get_max_devices()) {
 	err = -ERANGE;
 	ss << "cannot set max_osd to " << newmax << " which is < crush max_devices "
@@ -2536,7 +2549,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	     (m->cmd[1] == "reweight-by-utilization")) {
       int oload = 120;
       if (m->cmd.size() > 2) {
-	oload = atoi(m->cmd[2].c_str());
+	oload = parse_pos_long(m->cmd[2].c_str(), &ss);
+	if (oload < 0) {
+	  err = -EINVAL;
+	  goto out;
+	}
       }
       string out_str;
       err = reweight_by_utilization(oload, out_str);
@@ -2553,7 +2570,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "thrash") {
-      thrash_map = atoi(m->cmd[2].c_str());
+      long l = parse_pos_long(m->cmd[2].c_str(), &ss);
+      if (l < 0) {
+	err = -EINVAL;
+	goto out;
+      }
+      thrash_map = l;
       ss << "will thrash map for " << thrash_map << " epochs";
       ret = thrash();
       err = 0;
