@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_TOOLS_COMMON_DOT_H
 #define CEPH_TOOLS_COMMON_DOT_H
 
@@ -44,7 +46,7 @@ struct Subscriptions {
   version_t last_known_version;
   string name;
 
-  Subscriptions(CephToolCtx *c) : ctx(c) { }
+  Subscriptions(CephToolCtx *c) : ctx(c), last_known_version(0) { }
 
   void handle_log(MLog *m);
 };
