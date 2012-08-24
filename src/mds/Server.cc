@@ -6107,7 +6107,6 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);   
   
-  srcdnl = srcdn->get_linkage();
   destdnl = destdn->get_linkage();
 
   mds->send_message_mds(reply, mdr->slave_to_mds);
