@@ -3148,6 +3148,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       notif->pgid = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 
       osd->watch->add_notification(notif);
+      dout(20) << " notify id " << notif->id << dendl;
 
       // connected
       for (map<entity_name_t, watch_info_t>::iterator i = obc->obs.oi.watchers.begin();
