@@ -294,9 +294,9 @@ protected:
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL), gc(NULL), use_gc_thread(false),
-               num_watchers(0), watchers(NULL), watch_handles(0),
-               bucket_id_lock("rados_bucket_id"), max_bucket_id(0), rados(NULL) {}
+  RGWRados() : lock("rados_timer_lock"), timer(NULL), num_watchers(0), watchers(NULL), watch_handles(NULL),
+               bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
+	       cct(NULL), rados(NULL) {}
   virtual ~RGWRados() {}
 
   void tick();
