@@ -167,7 +167,7 @@ protected:
   /**
    * set messenger's address
    */
-  void set_myaddr(entity_addr_t a) { my_inst.addr = a; }
+  void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
 public:
   /**
    * Retrieve the Messenger's name.
