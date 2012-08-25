@@ -354,6 +354,8 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'INFO: possible irq lock inversion dependency detected', # FIXME see #2590 and #147
                     run.Raw('|'),
+                    'grep', '-v', 'INFO: possible recursive locking detected', # FIXME see #3040
+                    run.Raw('|'),
                     'head', '-n', '1',
                     ],
                 stdout=StringIO(),
