@@ -42,10 +42,8 @@ int get_random_bytes(char *buf, int len)
   if (fd < 0)
     return -errno;
   int ret = safe_read_exact(fd, buf, len);
-  if (ret)
-    return ret;
   TEMP_FAILURE_RETRY(::close(fd));
-  return 0;
+  return ret;
 }
 
 static int get_random_bytes(int len, bufferlist& bl)
