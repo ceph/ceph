@@ -38,7 +38,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
 				 string mname, uint64_t _nonce)
   : Messenger(cct, name),
-    accepter(this),
+    accepter(this, _nonce),
     dispatch_queue(cct, this),
     reaper_thread(this),
     my_type(name.type()),
@@ -256,7 +256,7 @@ int SimpleMessenger::bind(entity_addr_t bind_addr)
   lock.Unlock();
 
   // bind to a socket
-  int r = accepter.bind(bind_addr, nonce);
+  int r = accepter.bind(bind_addr);
   if (r >= 0)
     did_bind = true;
   return r;

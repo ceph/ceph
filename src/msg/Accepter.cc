@@ -36,13 +36,11 @@
  * Accepter
  */
 
-int Accepter::bind(entity_addr_t &bind_addr, uint64_t _nonce, int avoid_port1, int avoid_port2)
+int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
 {
   const md_config_t *conf = msgr->cct->_conf;
   // bind to a socket
   ldout(msgr->cct,10) << "accepter.bind" << dendl;
-
-  nonce = _nonce;
   
   int family;
   switch (bind_addr.get_family()) {
