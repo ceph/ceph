@@ -84,11 +84,12 @@ struct LogSummary {
     while (tail.size() > 50)
       tail.pop_front();
   }
-  bool contains(LogEntryKey k) const {
+  bool contains(const LogEntryKey& k) const {
     for (list<LogEntry>::const_iterator p = tail.begin();
 	 p != tail.end();
 	 p++)
-      if (p->key() == k) return true;
+      if (p->key() == k)
+	return true;
     return false;
   }
 
