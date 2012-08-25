@@ -30,7 +30,7 @@ class MonitorStore {
   int write_bl_ss(bufferlist& bl, const char *a, const char *b,
 		  bool append);
 public:
-  MonitorStore(const std::string &d) : dir(d) { }
+  MonitorStore(const std::string &d) : dir(d), lock_fd(-1) { }
   ~MonitorStore() { }
 
   int mkfs();  // wipe
