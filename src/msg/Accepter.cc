@@ -25,6 +25,7 @@
 #include "Pipe.h"
 
 #include "common/debug.h"
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_ms
 
