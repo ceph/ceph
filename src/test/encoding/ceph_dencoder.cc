@@ -60,6 +60,9 @@ protected:
 
 public:
   DencoderBase(bool stray_okay) : m_object(new T), stray_okay(stray_okay) {}
+  ~DencoderBase() {
+    delete m_object;
+  }
 
   string decode(bufferlist bl) {
     bufferlist::iterator p = bl.begin();
