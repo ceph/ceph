@@ -994,6 +994,9 @@ void OSD::suicide(int exitcode)
     _exit(exitcode);
   }
 
+  // turn off lockdep; the surviving threads tend to fight with exit() below
+  g_lockdep = 0;
+
   derr << " pausing thread pools" << dendl;
   op_tp.pause();
   disk_tp.pause();
