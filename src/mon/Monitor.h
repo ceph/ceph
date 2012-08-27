@@ -443,5 +443,7 @@ private:
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
 
+long parse_pos_long(const char *s, ostream *pss = NULL);
+
 
 #endif
