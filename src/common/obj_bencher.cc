@@ -20,23 +20,48 @@
 #include <iostream>
 #include <fstream>
 
+#include <cerrno>
+
 #include <stdlib.h>
 #include <time.h>
 #include <sstream>
 
 
-const char *BENCH_DATA = "benchmark_write_data";
+const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
+const std::string BENCH_PREFIX = "benchmark_data";
 
-static void generate_object_name(char *s, size_t size, int objnum, int pid = 0)
-{
+static std::string generate_object_prefix(int pid = 0) {
   char hostname[30];
   gethostname(hostname, sizeof(hostname)-1);
   hostname[sizeof(hostname)-1] = 0;
-  if (pid) {
-    snprintf(s, size, "%s_%d_object%d", hostname, pid, objnum);
-  } else {
-    snprintf(s, size, "%s_%d_object%d", hostname, getpid(), objnum);
-  }
+
+  if (!pid)
+    pid = getpid();
+
+  std::ostringstream oss;
+  oss << BENCH_PREFIX << "_" << hostname << "_" << pid;
+  return oss.str();
+}
+
+static std::string generate_object_name(int objnum, int pid = 0)
+{
+  std::ostringstream oss;
+  oss << generate_object_prefix(pid) << "_object" << objnum;
+  return oss.str();
+}
+
+static std::string generate_metadata_name(int pid = 0)
+{
+  if (!pid)
+    pid = getpid();
+
+  char hostname[30];
+  gethostname(hostname, sizeof(hostname)-1);
+  hostname[sizeof(hostname)-1] = 0;
+
+  std::ostringstream oss;
+  oss << BENCH_PREFIX << "_" << hostname << "_" << pid << "_metadata";
+  return oss.str();
 }
 
 static void sanitize_object_contents (bench_data *data, int length) {
@@ -136,7 +161,7 @@ void *ObjBencher::status_printer(void *_bencher) {
   return NULL;
 }
 
-int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size) {
+int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size, bool cleanup) {
   int object_size = op_size;
   int num_objects = 0;
   char* contentsChars = new char[op_size];
@@ -145,18 +170,13 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
-    bufferlist object_data;
-    r = sync_read(BENCH_DATA, object_data, sizeof(int)*3);
-    if (r <= 0) {
+    r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
+    if (r < 0) {
       delete[] contentsChars;
-      if (r == -2)
+      if (r == -ENOENT)
 	cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
     }
-    bufferlist::iterator p = object_data.begin();
-    ::decode(object_size, p);
-    ::decode(num_objects, p);
-    ::decode(prevPid, p);
   } else {
     object_size = op_size;
   }
@@ -190,6 +210,25 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
   else if (OP_RAND_READ == operation) {
     cerr << "Random test not implemented yet!" << std::endl;
     r = -1;
+  }
+
+  if (OP_WRITE == operation && cleanup) {
+    r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
+    if (r < 0) {
+      if (r == -ENOENT)
+	cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
+      goto out;
+    }
+ 
+    r = clean_up(num_objects, prevPid, concurrentios);
+    if (r != 0) goto out;
+
+    // lastrun file
+    r = sync_remove(BENCH_LASTRUN_METADATA);
+    if (r != 0) goto out;
+
+    // prefix-based file
+    r = sync_remove(generate_metadata_name());
   }
 
  out:
@@ -234,12 +273,36 @@ static double vec_stddev(vector<double>& v)
   return sqrt(stddev);
 }
 
+int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* object_size, int* num_objects, int* prevPid) {
+  int r = 0;
+  bufferlist object_data;
+
+  r = sync_read(metadata_file, object_data, sizeof(int)*3);
+  if (r <= 0) {
+    // treat an empty file as a file that does not exist
+    if (r == 0) {
+      r = -ENOENT;
+    }
+    return r;
+  }
+  bufferlist::iterator p = object_data.begin();
+  ::decode(*object_size, p);
+  ::decode(*num_objects, p);
+  ::decode(*prevPid, p);
+
+  return 0;
+}
+
 int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
        << data.object_size << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
 
-  char* name[concurrentios];
+  std::string prefix = generate_object_prefix();
+  out(cout) << "Object prefix: " << prefix << std::endl;
+
+  std::string name[concurrentios];
+  std::string newName;
   bufferlist* contents[concurrentios];
   double total_latency = 0;
   utime_t start_times[concurrentios];
@@ -254,9 +317,8 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
 
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
-    name[i] = new char[128];
+    name[i] = generate_object_name(i);
     contents[i] = new bufferlist();
-    generate_object_name(name[i], 128, i);
     snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", i);
     contents[i]->append(data.object_contents, data.object_size);
   }
@@ -285,7 +347,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
   bufferlist* newContents;
-  char* newName;
 
   //don't need locking for reads because other thread doesn't write
 
@@ -314,8 +375,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     lock.Unlock();
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
-    newName = new char[128];
-    generate_object_name(newName, 128, data.started);
+    newName = generate_object_name(data.started);
     snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", data.started);
     newContents->append(data.object_contents, data.object_size);
     completion_wait(slot);
@@ -351,7 +411,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     ++data.started;
     ++data.in_flight;
     lock.Unlock();
-    delete[] name[slot];
     delete contents[slot];
     name[slot] = newName;
     contents[slot] = newContents;
@@ -376,7 +435,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     --data.in_flight;
     lock.Unlock();
     release_completion(slot);
-    delete[] name[slot];
     delete contents[slot];
   }
 
@@ -409,7 +467,12 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   ::encode(data.object_size, b_write);
   ::encode(data.finished, b_write);
   ::encode(getpid(), b_write);
-  sync_write(BENCH_DATA, b_write, sizeof(int)*3);
+
+  // lastrun file
+  sync_write(BENCH_LASTRUN_METADATA, b_write, sizeof(int)*3);
+
+  // PID-specific run
+  sync_write(generate_metadata_name(), b_write, sizeof(int)*3);
 
   completions_done();
 
@@ -427,7 +490,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   data.finished = 0;
 
   lock_cond lc(&lock);
-  char* name[concurrentios];
+  std::string name[concurrentios];
+  std::string newName;
   bufferlist* contents[concurrentios];
   int index[concurrentios];
   int errors = 0;
@@ -447,8 +511,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = new char[128];
-    generate_object_name(name[i], 128, i, pid);
+    name[i] = generate_object_name(i, pid);
     contents[i] = new bufferlist();
   }
 
@@ -477,7 +540,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //keep on adding new reads as old ones complete
   int slot;
-  char* newName;
   bufferlist *cur_contents;
 
   slot = 0;
@@ -503,8 +565,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       lc.cond.Wait(lock);
     }
     lock.Unlock();
-    newName = new char[128];
-    generate_object_name(newName, 128, data.started, pid);
+    newName = generate_object_name(data.started, pid);
     int current_index = index[slot];
     index[slot] = data.started;
     completion_wait(slot);
@@ -543,7 +604,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       cerr << name[slot] << " is not correct!" << std::endl;
       ++errors;
     }
-    delete name[slot];
     name[slot] = newName;
     delete cur_contents;
   }
@@ -573,7 +633,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       cerr << name[slot] << " is not correct!" << std::endl;
       ++errors;
     }
-    delete[] name[slot];
     delete contents[slot];
   }
 
@@ -610,4 +669,340 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   return -5;
 }
 
+int ObjBencher::clean_up(const std::string& prefix, int concurrentios) {
+  int r = 0;
+  int object_size;
+  int num_objects;
+  int prevPid;
 
+  std::string metadata_name = prefix;
+  metadata_name.append("_metadata");
+
+  r = fetch_bench_metadata(metadata_name, &object_size, &num_objects, &prevPid);
+  if (r < 0) {
+    // if the metadata file is not found we should try to do a linear search on the prefix
+    if (r == -ENOENT) {
+      return clean_up_slow(prefix, concurrentios);
+    }
+    else {
+      return r;
+    }
+  }
+
+  r = clean_up(num_objects, prevPid, concurrentios);
+  if (r != 0) return r;
+
+  r = sync_remove(metadata_name);
+  if (r != 0) return r;
+
+  return 0;
+}
+
+int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
+  lock_cond lc(&lock);
+  std::string name[concurrentios];
+  std::string newName;
+  int r = 0;
+  utime_t runtime;
+  int slot = 0;
+
+  lock.Lock();
+  data.done = false;
+  data.in_flight = 0;
+  data.started = 0;
+  data.finished = 0;
+  lock.Unlock();
+
+  // don't start more completions than files
+  if (num_objects < concurrentios) {
+    concurrentios = num_objects;
+  }
+
+  r = completions_init(concurrentios);
+  if (r < 0)
+    return r;
+
+  //set up initial removes
+  for (int i = 0; i < concurrentios; ++i) {
+    name[i] = generate_object_name(i, prevPid);
+  }
+
+  //start initial removes
+  for (int i = 0; i < concurrentios; ++i) {
+    create_completion(i, _aio_cb, (void *)&lc);
+    r = aio_remove(name[i], i);
+    if (r < 0) { //naughty, doesn't clean up heap
+      cerr << "r = " << r << std::endl;
+      goto ERR;
+    }
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
+    lock.Unlock();
+  }
+
+  //keep on adding new removes as old ones complete
+  while (data.started < num_objects) {
+    lock.Lock();
+    int old_slot = slot;
+    bool found = false;
+    while (1) {
+      do {
+	if (completion_is_done(slot)) {
+          found = true;
+	  break;
+	}
+        slot++;
+        if (slot == concurrentios) {
+          slot = 0;
+        }
+      } while (slot != old_slot);
+      if (found) {
+	break;
+      }
+      lc.cond.Wait(lock);
+    }
+    lock.Unlock();
+    newName = generate_object_name(data.started, prevPid);
+    completion_wait(slot);
+    lock.Lock();
+    r = completion_ret(slot);
+    if (r != 0 && r != -ENOENT) { // file does not exist
+      cerr << "remove got " << r << std::endl;
+      lock.Unlock();
+      goto ERR;
+    }
+    ++data.finished;
+    --data.in_flight;
+    lock.Unlock();
+    release_completion(slot);
+
+    //start new remove and check data if requested
+    create_completion(slot, _aio_cb, (void *)&lc);
+    r = aio_remove(newName, slot);
+    if (r < 0) {
+      goto ERR;
+    }
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
+    lock.Unlock();
+    name[slot] = newName;
+  }
+
+  //wait for final removes to complete
+  while (data.finished < data.started) {
+    slot = data.finished % concurrentios;
+    completion_wait(slot);
+    lock.Lock();
+    r = completion_ret(slot);
+    if (r != 0 && r != -ENOENT) { // file does not exist
+      cerr << "remove got " << r << std::endl;
+      lock.Unlock();
+      goto ERR;
+    }
+    ++data.finished;
+    --data.in_flight;
+    release_completion(slot);
+    lock.Unlock();
+  }
+
+  lock.Lock();
+  data.done = true;
+  lock.Unlock();
+
+  completions_done();
+
+  return 0;
+
+ ERR:
+  lock.Lock();
+  data.done = 1;
+  lock.Unlock();
+  return -5;
+}
+
+/**
+ * Return objects from the datastore which match a prefix.
+ *
+ * Clears the list and populates it with any objects which match the
+ * prefix. The list is guaranteed to have at least one item when the
+ * function returns true.
+ *
+ * @in
+ * @param prefix the prefix to match against
+ * @param objects return list of objects
+ * @returns true if there are any objects in the store which match
+ * the prefix, false if there are no more
+ */
+bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::list<std::string>* objects) {
+  std::list<std::string> unfiltered_objects;
+
+  objects->clear();
+
+  while (objects->size() == 0) {
+    bool objects_remain = get_objects(&unfiltered_objects, 20);
+    if (!objects_remain)
+      return false;
+
+    std::list<std::string>::const_iterator i = unfiltered_objects.begin();
+    for ( ; i != unfiltered_objects.end(); ++i) {
+      const std::string& next = *i;
+
+      if (next.substr(0, prefix.length()) == prefix) {
+        objects->push_back(next);
+      }
+    }
+  }
+
+  return true;
+}
+
+int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
+  lock_cond lc(&lock);
+  std::string name[concurrentios];
+  std::string newName;
+  int r = 0;
+  utime_t runtime;
+  int slot = 0;
+  std::list<std::string> objects;
+  bool objects_remain = true;
+
+  lock.Lock();
+  data.done = false;
+  data.in_flight = 0;
+  data.started = 0;
+  data.finished = 0;
+  lock.Unlock();
+
+  out(cout) << "Warning: using slow linear search" << std::endl;
+
+  r = completions_init(concurrentios);
+  if (r < 0)
+    return r;
+
+  //set up initial removes
+  for (int i = 0; i < concurrentios; ++i) {
+    if (objects.size() == 0) {
+      // if there are fewer objects than concurrent ios, don't generate extras
+      bool objects_found = more_objects_matching_prefix(prefix, &objects);
+      if (!objects_found) {
+        concurrentios = i;
+        objects_remain = false;
+        break;
+      }
+    }
+
+    name[i] = objects.front();
+    objects.pop_front();
+  }
+
+  //start initial removes
+  for (int i = 0; i < concurrentios; ++i) {
+    create_completion(i, _aio_cb, (void *)&lc);
+    r = aio_remove(name[i], i);
+    if (r < 0) { //naughty, doesn't clean up heap
+      cerr << "r = " << r << std::endl;
+      goto ERR;
+    }
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
+    lock.Unlock();
+  }
+
+  //keep on adding new removes as old ones complete
+  while (objects_remain) {
+    lock.Lock();
+    int old_slot = slot;
+    bool found = false;
+    while (1) {
+      do {
+	if (completion_is_done(slot)) {
+          found = true;
+	  break;
+	}
+        slot++;
+        if (slot == concurrentios) {
+          slot = 0;
+        }
+      } while (slot != old_slot);
+      if (found) {
+	break;
+      }
+      lc.cond.Wait(lock);
+    }
+    lock.Unlock();
+
+    // get more objects if necessary
+    if (objects.size() == 0) {
+      objects_remain = more_objects_matching_prefix(prefix, &objects);
+      // quit if there are no more
+      if (!objects_remain) {
+        break;
+      }
+    }
+
+    // get the next object
+    newName = objects.front();
+    objects.pop_front();
+
+    completion_wait(slot);
+    lock.Lock();
+    r = completion_ret(slot);
+    if (r != 0 && r != -ENOENT) { // file does not exist
+      cerr << "remove got " << r << std::endl;
+      lock.Unlock();
+      goto ERR;
+    }
+    ++data.finished;
+    --data.in_flight;
+    lock.Unlock();
+    release_completion(slot);
+
+    //start new remove and check data if requested
+    create_completion(slot, _aio_cb, (void *)&lc);
+    r = aio_remove(newName, slot);
+    if (r < 0) {
+      goto ERR;
+    }
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
+    lock.Unlock();
+    name[slot] = newName;
+  }
+
+  //wait for final removes to complete
+  while (data.finished < data.started) {
+    slot = data.finished % concurrentios;
+    completion_wait(slot);
+    lock.Lock();
+    r = completion_ret(slot);
+    if (r != 0 && r != -ENOENT) { // file does not exist
+      cerr << "remove got " << r << std::endl;
+      lock.Unlock();
+      goto ERR;
+    }
+    ++data.finished;
+    --data.in_flight;
+    release_completion(slot);
+    lock.Unlock();
+  }
+
+  lock.Lock();
+  data.done = true;
+  lock.Unlock();
+
+  completions_done();
+
+  out(cout) << "Removed " << data.finished << " object" << (data.finished != 1 ? "s" : "") << std::endl;
+
+  return 0;
+
+ ERR:
+  lock.Lock();
+  data.done = 1;
+  lock.Unlock();
+  return -5;
+}

@@ -106,6 +106,11 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  if (g_conf->name.get_id().empty()) {
+    cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    usage();
+  }
+
   // -- mkfs --
   if (mkfs) {
     // resolve public_network -> public_addr
@@ -381,9 +386,9 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_PGID64;
   messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   messenger->set_policy(entity_name_t::TYPE_MON,
-                        Messenger::Policy::lossless_peer(supported,
-                                                         CEPH_FEATURE_UID |
-                                                         CEPH_FEATURE_PGID64));
+                        Messenger::Policy::lossless_peer_reuse(supported,
+							       CEPH_FEATURE_UID |
+							       CEPH_FEATURE_PGID64));
   messenger->set_policy(entity_name_t::TYPE_OSD,
                         Messenger::Policy::stateless_server(supported,
                                                             CEPH_FEATURE_PGID64 |

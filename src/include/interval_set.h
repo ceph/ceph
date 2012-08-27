@@ -34,6 +34,9 @@ using namespace std;
 template<typename T>
 class interval_set {
  public:
+
+  class const_iterator;
+
   class iterator : public std::iterator <std::forward_iterator_tag, T>
   {
     public:

@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 
   bufferlist enc_out;
   std::string error;
-  key.encrypt(enc_in, enc_out, error);
+  key.encrypt(g_ceph_context, enc_in, enc_out, error);
   if (!error.empty()) {
     dout(0) << "couldn't encode! error " << error << dendl;
     exit(1);
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 
   dec_in = enc_out;
 
-  key.decrypt(dec_in, dec_out, error);
+  key.decrypt(g_ceph_context, dec_in, dec_out, error);
   if (!error.empty()) {
     dout(0) << "couldn't decode! error " << error << dendl;
     exit(1);

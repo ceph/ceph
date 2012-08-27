@@ -24,8 +24,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 #include "client/ioctl.h"
+#include "common/errno.h"
 
 using namespace std;
 
@@ -33,14 +35,12 @@ using namespace std;
 #define CMD_SHOW_LAYOUT 1
 #define CMD_SHOW_LOC    2
 #define CMD_SET_LAYOUT  3
+#define CMD_MAP         4
 
 void usage();
 int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
                  int *stripe_unit, int *stripe_count,
                  int *object_size, int64_t *pool, int *file_offset, bool *dir);
-int get_layout(int fd, struct ceph_ioctl_layout *layout);
-int get_location(int fd, struct ceph_ioctl_dataloc *location);
-
 
 int main (int argc, char **argv) {
   int fd = 0;
@@ -110,6 +110,41 @@ int main (int argc, char **argv) {
 	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
       return 1;
     }
+  } else if (CMD_MAP == cmd) {
+    struct stat st;
+    err = ::fstat(fd, &st);
+    if (err < 0) {
+      cerr << "error statting file: "
+	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      return 1;
+    }
+
+    struct ceph_ioctl_layout layout;
+    memset(&layout, 0, sizeof(layout));
+    err = ioctl(fd, CEPH_IOC_GET_LAYOUT, (unsigned long)&layout);
+    if (err) {
+      cerr << "Error getting layout: "
+	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      return 1;
+    }
+
+    printf("%15s  %24s  %12s  %12s  %s\n",
+	   "FILE OFFSET", "OBJECT", "OFFSET", "LENGTH", "OSD");
+
+    for (long long off = 0; off < st.st_size; off += layout.stripe_unit) {
+      struct ceph_ioctl_dataloc location;
+      location.file_offset = off;
+      err = ioctl(fd, CEPH_IOC_GET_DATALOC, (unsigned long)&location);
+      if (err) {
+	cerr << "Error getting location: "
+	     << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+	return 1;
+      }
+      printf("%15lld  %24s  %12lld  %12lld  %d\n",
+	     off, location.object_name, (long long)location.object_offset,
+	     (long long)location.block_size, (int)location.osd);
+    }
+
   } else {
     cerr << "unknown cmd somehow set!" << endl;
     usage();
@@ -127,6 +162,7 @@ void usage() {
   cerr << "   set_layout     -- set the layout on an empty file,\n"
        << "                     or the default layout on a directory" << endl;
   cerr << "   show_location  -- view the location information on a file" << endl;
+  cerr << "   map            -- display file objects, pgs, osds" << endl;
   cerr << "Options:" << endl;
   cerr << "   Useful for setting layouts:" << endl;
   cerr << "   --stripe_unit, -u:  set the size of each stripe" << endl;
@@ -168,6 +204,8 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
     *cmd = CMD_SET_LAYOUT;
   } else if (!strcmp(argv[2], "show_location")){
     *cmd = CMD_SHOW_LOC;
+  } else if (!strcmp(argv[2], "map")) {
+    *cmd = CMD_MAP;
   } else {
     cerr << "invalid command" << endl;
     return 1;

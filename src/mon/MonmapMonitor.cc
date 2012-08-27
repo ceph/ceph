@@ -131,6 +131,17 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
   }
 }
 
+void MonmapMonitor::dump_info(Formatter *f)
+{
+  f->open_object_section("monmap");
+  mon->monmap->dump(f);
+  f->open_array_section("quorum");
+  for (set<int>::iterator q = mon->get_quorum().begin(); q != mon->get_quorum().end(); ++q)
+    f->dump_int("mon", *q);
+  f->close_section();
+  f->close_section();
+}
+
 bool MonmapMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;

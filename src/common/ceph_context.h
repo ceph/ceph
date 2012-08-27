@@ -27,6 +27,9 @@ class PerfCountersCollection;
 class md_config_obs_t;
 class md_config_t;
 class CephContextHook;
+class CryptoNone;
+class CryptoAES;
+class CryptoHandler;
 
 namespace ceph {
   class HeartbeatMap;
@@ -96,6 +99,11 @@ public:
    */
   void do_command(std::string command, std::string args, bufferlist *out);
 
+  /**
+   * get a crypto handler
+   */
+  CryptoHandler *get_crypto_handler(int type);
+
 private:
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
@@ -126,6 +134,10 @@ private:
   CephContextHook *_admin_hook;
 
   ceph::HeartbeatMap *_heartbeat_map;
+
+  // crypto
+  CryptoNone *_crypto_none;
+  CryptoAES *_crypto_aes;
 };
 
 #endif

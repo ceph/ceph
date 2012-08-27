@@ -131,6 +131,8 @@ public:
 
   void check_osd_map(epoch_t epoch);
 
+  void dump_info(Formatter *f);
+
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
   void check_full_osd_health(list<pair<health_status_t,string> >& summary,

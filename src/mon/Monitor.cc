@@ -18,6 +18,7 @@
 #include <signal.h>
 
 #include "Monitor.h"
+#include "common/version.h"
 
 #include "osd/OSDMap.h"
 
@@ -273,6 +274,15 @@ int Monitor::init()
     pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed");
     pcb.add_u64(l_cluster_mds_epoch, "mds_epoch");
     cluster_logger = pcb.create_perf_counters();
+  }
+
+  // verify cluster_uuid
+  {
+    int r = check_fsid();
+    if (r == -ENOENT)
+      r = write_fsid();
+    if (r < 0)
+      return r;
   }
 
   // open compatset
@@ -1096,10 +1106,14 @@ void Monitor::_mon_status(ostream& ss)
   jf.flush(ss);
 }
 
-void Monitor::get_health(string& status, bufferlist *detailbl)
+void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 {
   list<pair<health_status_t,string> > summary;
   list<pair<health_status_t,string> > detail;
+
+  if (f)
+    f->open_object_section("health");
+
   for (vector<PaxosService*>::iterator p = paxos_service.begin();
        p != paxos_service.end();
        p++) {
@@ -1107,9 +1121,17 @@ void Monitor::get_health(string& status, bufferlist *detailbl)
     s->get_health(summary, detailbl ? &detail : NULL);
   }
 
+  if (f)
+    f->open_array_section("summary");
   stringstream ss;
   health_status_t overall = HEALTH_OK;
   if (!summary.empty()) {
+    if (f) {
+      f->open_object_section("item");
+      f->dump_stream("severity") <<  summary.front().first;
+      f->dump_string("summary", summary.front().second);
+      f->close_section();
+    }
     ss << ' ';
     while (!summary.empty()) {
       if (overall > summary.front().first)
@@ -1120,15 +1142,28 @@ void Monitor::get_health(string& status, bufferlist *detailbl)
 	ss << "; ";
     }
   }
+  if (f)
+    f->close_section();
   stringstream fss;
   fss << overall;
   status = fss.str() + ss.str();
+  if (f)
+    f->dump_stream("overall_status") << overall;
 
+  if (f)
+    f->open_array_section("detail");
   while (!detail.empty()) {
+    if (f)
+      f->dump_string("item", detail.front().second);
     detailbl->append(detail.front().second);
     detailbl->append('\n');
     detail.pop_front();
   }
+  if (f)
+    f->close_section();
+
+  if (f)
+    f->close_section();
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -1242,7 +1277,7 @@ void Monitor::handle_command(MMonCommand *m)
       }
       // reply with the status for all the components
       string health;
-      get_health(health, NULL);
+      get_health(health, NULL, NULL);
       stringstream ss;
       ss << "   health " << health << "\n";
       ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
@@ -1251,6 +1286,49 @@ void Monitor::handle_command(MMonCommand *m)
       ss << "    pgmap " << pgmon()->pg_map << "\n";
       ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
       rs = ss.str();
+      r = 0;
+    }
+    if (m->cmd[0] == "report") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
+
+      JSONFormatter jf(true);
+
+      jf.open_object_section("report");
+      jf.dump_string("version", ceph_version_to_str());
+      jf.dump_string("commit", git_version_to_str());
+      jf.dump_stream("timestamp") << ceph_clock_now(NULL);
+
+      string d;
+      for (unsigned i = 1; i < m->cmd.size(); i++) {
+	if (i > 1)
+	  d += " ";
+	d += m->cmd[i];
+      }
+      jf.dump_string("tag", d);
+
+      string hs;
+      get_health(hs, NULL, &jf);
+      
+      monmon()->dump_info(&jf);
+      osdmon()->dump_info(&jf);
+      mdsmon()->dump_info(&jf);
+      pgmon()->dump_info(&jf);
+
+      jf.close_section();
+      stringstream ss;
+      jf.flush(ss);
+
+      bufferlist bl;
+      bl.append("-------- BEGIN REPORT --------\n");
+      bl.append(ss);
+      ostringstream ss2;
+      ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
+      rdata.append(bl);
+      rdata.append(ss2.str());
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
@@ -1287,7 +1365,7 @@ void Monitor::handle_command(MMonCommand *m)
 	rs = "access denied";
 	goto out;
       }
-      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL);
+      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL, NULL);
       r = 0;
     }
     if (m->cmd[0] == "heap") {
@@ -2020,6 +2098,45 @@ void Monitor::tick()
   new_tick();
 }
 
+int Monitor::check_fsid()
+{
+  ostringstream ss;
+  ss << monmap->get_fsid();
+  string us = ss.str();
+  bufferlist ebl;
+  int r = store->get_bl_ss(ebl, "cluster_uuid", 0);
+  if (r < 0)
+    return r;
+
+  string es(ebl.c_str(), ebl.length());
+
+  // only keep the first line
+  size_t pos = es.find_first_of('\n');
+  if (pos != string::npos)
+    es.resize(pos);
+
+  dout(10) << "check_fsid cluster_uuid contains '" << es << "'" << dendl;
+  if (es.length() < us.length() ||
+      strncmp(us.c_str(), es.c_str(), us.length()) != 0) {
+    derr << "error: cluster_uuid file exists with value '" << es
+	 << "', != our uuid " << monmap->get_fsid() << dendl;
+    return -EEXIST;
+  }
+
+  return 0;
+}
+
+int Monitor::write_fsid()
+{
+  ostringstream ss;
+  ss << monmap->get_fsid() << "\n";
+  string us = ss.str();
+
+  bufferlist b;
+  b.append(us);
+  return store->put_bl_ss(b, "cluster_uuid", 0);
+}
+
 /*
  * this is the closest thing to a traditional 'mkfs' for ceph.
  * initialize the monitor state machines to their initial values.
@@ -2033,10 +2150,15 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     return err;
   }
 
+  // verify cluster fsid
+  int r = check_fsid();
+  if (r < 0 && r != -ENOENT)
+    return r;
+
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  int r = store->put_bl_ss(magicbl, "magic", 0);
+  r = store->put_bl_ss(magicbl, "magic", 0);
   if (r < 0)
     return r;
 
@@ -2077,6 +2199,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist keyringbl;
   keyring.encode_plaintext(keyringbl);
   store->put_bl_ss(keyringbl, "mkfs", "keyring");
+
+  // sync and write out fsid to indicate completion.
+  store->sync();
+  r = write_fsid();
+  if (r < 0)
+    return r;
 
   return 0;
 }
