@@ -387,6 +387,57 @@ void Objecter::dispatch(Message *m)
   }
 }
 
+void Objecter::scan_requests(bool skipped_map,
+			     map<tid_t, Op*>& need_resend,
+			     list<LingerOp*>& need_resend_linger)
+{
+  // check for changed linger mappings (_before_ regular ops)
+  for (map<tid_t,LingerOp*>::iterator p = linger_ops.begin();
+       p != linger_ops.end();
+       p++) {
+    LingerOp *op = p->second;
+    ldout(cct, 10) << " checking linger op " << op->linger_id << dendl;
+    int r = recalc_linger_op_target(op);
+    switch (r) {
+    case RECALC_OP_TARGET_NO_ACTION:
+      // resend if skipped map; otherwise do nothing.
+      if (!skipped_map)
+	break;
+      // -- fall-thru --
+    case RECALC_OP_TARGET_NEED_RESEND:
+      need_resend_linger.push_back(op);
+      linger_cancel_map_check(op);
+      break;
+    case RECALC_OP_TARGET_POOL_DNE:
+      linger_check_for_latest_map(op);
+      break;
+    }
+  }
+
+  // check for changed request mappings
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+       p != ops.end();
+       ++p) {
+    Op *op = p->second;
+    ldout(cct, 10) << " checking op " << op->tid << dendl;
+    int r = recalc_op_target(op);
+    switch (r) {
+    case RECALC_OP_TARGET_NO_ACTION:
+      // resend if skipped map; otherwise do nothing.
+      if (!skipped_map)
+	break;
+      // -- fall-thru --
+    case RECALC_OP_TARGET_NEED_RESEND:
+      need_resend[op->tid] = op;
+      op_cancel_map_check(op);
+      break;
+    case RECALC_OP_TARGET_POOL_DNE:
+      op_check_for_latest_map(op);
+      break;
+    }
+  }
+}
+
 void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(client_lock.is_locked());
@@ -450,51 +501,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
 	
-	// check for changed linger mappings (_before_ regular ops)
-	for (map<tid_t,LingerOp*>::iterator p = linger_ops.begin();
-	     p != linger_ops.end();
-	     p++) {
-	  LingerOp *op = p->second;
-	  ldout(cct, 10) << " checking linger op " << op->linger_id << dendl;
-	  int r = recalc_linger_op_target(op);
-	  switch (r) {
-	  case RECALC_OP_TARGET_NO_ACTION:
-	    // resend if skipped map; otherwise do nothing.
-	    if (!skipped_map)
-	      break;
-	    // -- fall-thru --
-	  case RECALC_OP_TARGET_NEED_RESEND:
-	    need_resend_linger.push_back(op);
-	    linger_cancel_map_check(op);
-	    break;
-	  case RECALC_OP_TARGET_POOL_DNE:
-	    linger_check_for_latest_map(op);
-	    break;
-	  }
-	}
-
-	// check for changed request mappings
-	for (hash_map<tid_t,Op*>::iterator p = ops.begin();
-	     p != ops.end();
-	     ++p) {
-	  Op *op = p->second;
-	  ldout(cct, 10) << " checking op " << op->tid << dendl;
-	  int r = recalc_op_target(op);
-	  switch (r) {
-	  case RECALC_OP_TARGET_NO_ACTION:
-	    // resend if skipped map; otherwise do nothing.
-	    if (!skipped_map)
-	      break;
-	    // -- fall-thru --
-	  case RECALC_OP_TARGET_NEED_RESEND:
-	    need_resend[op->tid] = op;
-	    op_cancel_map_check(op);
-	    break;
-	  case RECALC_OP_TARGET_POOL_DNE:
-	    op_check_for_latest_map(op);
-	    break;
-	  }
-	}
+	scan_requests(skipped_map, need_resend, need_resend_linger);
 
 	// osd addr changes?
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
@@ -517,6 +524,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
       if (m->maps.count(m->get_last())) {
 	ldout(cct, 3) << "handle_osd_map decoding full epoch " << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
+
+	scan_requests(false, need_resend, need_resend_linger);
       } else {
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
