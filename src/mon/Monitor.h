@@ -295,7 +295,7 @@ public:
    * @param status one-line status summary
    * @param detailbl optional bufferlist* to fill with a detailed report
    */
-  void get_health(string& status, bufferlist *detailbl);
+  void get_health(string& status, bufferlist *detailbl, Formatter *f);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
@@ -418,6 +418,20 @@ public:
   void stop_cluster();
 
   int mkfs(bufferlist& osdmapbl);
+
+  /**
+   * check cluster_fsid file
+   *
+   * @return EEXIST if file exists and doesn't match, 0 on match, or negative error code
+   */
+  int check_fsid();
+
+  /**
+   * write cluster_fsid file
+   *
+   * @return 0 on success, or negative error code
+   */
+  int write_fsid();
 
   void do_admin_command(std::string command, std::string args, ostream& ss);
 

@@ -84,8 +84,10 @@ void usage(ostream& out)
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
-"   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
+"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
+"                                    default is to clean up after write benchmark\n"
+"   cleanup <prefix>                 clean up a previous benchmark operation\n"
 "   load-gen [options]               generate load on the cluster\n"
 "   listomapkeys <obj-name>          list the keys in the object map\n"
 "   getomapval <obj-name> <key>      show the value for the specified key\n"
@@ -753,6 +755,8 @@ class RadosBencher : public ObjBencher {
   librados::AioCompletion **completions;
   librados::Rados& rados;
   librados::IoCtx& io_ctx;
+  librados::ObjectIterator oi;
+  bool iterator_valid;
 protected:
   int completions_init(int concurrentios) {
     completions = new librados::AioCompletion *[concurrentios];
@@ -783,11 +787,19 @@ protected:
     return io_ctx.aio_write(oid, completions[slot], bl, len, 0);
   }
 
+  int aio_remove(const std::string& oid, int slot) {
+    return io_ctx.aio_remove(oid, completions[slot]);
+  }
+
   int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
     return io_ctx.read(oid, bl, len, 0);
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
     return io_ctx.write(oid, bl, len, 0);
+  }
+
+  int sync_remove(const std::string& oid) {
+    return io_ctx.remove(oid);
   }
 
   bool completion_is_done(int slot) {
@@ -801,8 +813,32 @@ protected:
     return completions[slot]->get_return_value();
   }
 
+  bool get_objects(std::list<std::string>* objects, int num) {
+    int count = 0;
+
+    if (!iterator_valid) {
+      oi = io_ctx.objects_begin();
+      iterator_valid = true;
+    }
+
+    librados::ObjectIterator ei = io_ctx.objects_end();
+
+    if (oi == ei) {
+      iterator_valid = false;
+      return false;
+    }
+
+    objects->clear();
+    for ( ; oi != ei && count < num; ++oi) {
+      objects->push_back(oi->first);
+      ++count;
+    }
+
+    return true;
+  }
+
 public:
-  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i) {}
+  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
   ~RadosBencher() { }
 };
 
@@ -976,6 +1012,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   string oloc, target_oloc;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
+  bool cleanup = true;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
@@ -1080,6 +1117,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("show-time");
   if (i != opts.end()) {
     show_time = true;
+  }
+  i = opts.find("no-cleanup");
+  if (i != opts.end()) {
+    cleanup = false;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -1818,9 +1859,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     RadosBencher bencher(rados, io_ctx);
     bencher.set_show_time(show_time);
-    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size);
+    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
+  }
+  else if (strcmp(nargs[0], "cleanup") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    const char *prefix = nargs[1];
+    RadosBencher bencher(rados, io_ctx);
+    ret = bencher.clean_up(prefix, concurrent_ios);
+    if (ret != 0)
+      cerr << "error during cleanup: " << ret << std::endl;
   }
   else if (strcmp(nargs[0], "watch") == 0) {
     if (!pool_name || nargs.size() < 2)
@@ -1948,6 +1998,8 @@ int main(int argc, const char **argv)
       opts["pretty-format"] = "true";
     } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
       opts["show-time"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
+      opts["no-cleanup"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {

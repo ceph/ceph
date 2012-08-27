@@ -328,7 +328,8 @@ int Pipe::accept()
 
       if (connect.connect_seq == 0 && existing->connect_seq > 0) {
 	ldout(msgr->cct,0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
-	existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
+	if (policy.resetcheck)
+	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	goto replace;
       }
 
@@ -392,7 +393,8 @@ int Pipe::accept()
 
       assert(connect.connect_seq > existing->connect_seq);
       assert(connect.global_seq >= existing->peer_global_seq);
-      if (existing->connect_seq == 0) {
+      if (policy.resetcheck &&   // RESETSESSION only used by servers; peers do not reset each other
+	  existing->connect_seq == 0) {
 	ldout(msgr->cct,0) << "accept we reset (peer sent cseq " << connect.connect_seq 
 		 << ", " << existing << ".cseq = " << existing->connect_seq
 		 << "), sending RESETSESSION" << dendl;
@@ -407,7 +409,7 @@ int Pipe::accept()
 	       << " > " << existing->connect_seq << dendl;
       goto replace;
     } // existing
-    else if (connect.connect_seq > 0) {
+    else if (policy.resetcheck && connect.connect_seq > 0) {
       // we reset, and they are opening a new session
       ldout(msgr->cct,0) << "accept we reset (peer sent cseq " << connect.connect_seq << "), sending RESETSESSION" << dendl;
       msgr->lock.Unlock();
