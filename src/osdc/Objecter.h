@@ -961,6 +961,10 @@ public:
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
 
+  void scan_requests(bool skipped_map,
+		     map<tid_t, Op*>& need_resend,
+		     list<LingerOp*>& need_resend_linger);
+
   // messages
  public:
   void dispatch(Message *m);
