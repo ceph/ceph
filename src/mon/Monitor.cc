@@ -94,14 +94,14 @@ long parse_pos_long(const char *s, ostream *pss)
 {
   char *e = 0;
   long r = strtol(s, &e, 10);
-  if (e == s || e == 0) {
+  if (e == s || e == 0 || r < 0) {
     if (pss)
       *pss << "unable to parse positive integer '" << s << "'";
     return -1;
   }
   if (r < 0 || r == LONG_MAX || r == LONG_MIN) {
     if (pss)
-      *pss << "unable to parse positive integer '" << s << "'";
+      *pss << "unable to parse positive integer '" << s << "': value is negative or too large";
     return -1;
   }
   return r;
