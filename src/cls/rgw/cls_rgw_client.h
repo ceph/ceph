@@ -2,7 +2,7 @@
 #define CEPH_CLS_RGW_CLIENT_H
 
 #include "include/types.h"
-#include "rados/librados.hpp"
+#include "include/rados/librados.hpp"
 #include "cls_rgw_types.h"
 
 /* bucket index */
