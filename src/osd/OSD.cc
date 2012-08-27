@@ -5477,8 +5477,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
  */
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
-  dout(15) << *pg << " enqueue_op " << op->request << " "
-           << *(op->request) << dendl;
+  dout(15) << *pg << " enqueue_op " << op << " " << *(op->request) << dendl;
   assert(pg->is_locked());
   pg->queue_op(op);
 }
@@ -5566,7 +5565,7 @@ void OSD::dequeue_op(PG *pg)
   op = pg->op_queue.front();
   pg->op_queue.pop_front();
     
-  dout(10) << "dequeue_op " << *op->request << " pg " << *pg << dendl;
+  dout(10) << "dequeue_op " << op << " " << *op->request << " pg " << *pg << dendl;
 
   op->mark_reached_pg();
 
