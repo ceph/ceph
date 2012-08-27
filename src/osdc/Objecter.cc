@@ -588,8 +588,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::C_Op_Map_Latest::finish(int r)
 {
-  if (r < 0)
+  if (r == -EAGAIN) {
+    // ignore callback; we will retry in resend_mon_ops()
     return;
+  }
 
   Mutex::Locker l(objecter->client_lock);
 
@@ -617,8 +619,10 @@ void Objecter::C_Op_Map_Latest::finish(int r)
 
 void Objecter::C_Linger_Map_Latest::finish(int r)
 {
-  if (r < 0)
+  if (r == -EAGAIN) {
+    // ignore callback; we will retry in resend_mon_ops()
     return;
+  }
 
   Mutex::Locker l(objecter->client_lock);
 
@@ -868,6 +872,20 @@ void Objecter::resend_mon_ops()
   for (map<tid_t,PoolOp*>::iterator p = pool_ops.begin(); p!=pool_ops.end(); ++p) {
     pool_op_submit(p->second);
     logger->inc(l_osdc_poolop_resend);
+  }
+
+  for (map<tid_t, Op*>::iterator p = check_latest_map_ops.begin();
+       p != check_latest_map_ops.end();
+       ++p) {
+    monc->is_latest_map("osdmap", osdmap->get_epoch(),
+			new C_Op_Map_Latest(this, p->second->tid));
+  }
+
+  for (map<uint64_t, LingerOp*>::iterator p = check_latest_map_lingers.begin();
+       p != check_latest_map_lingers.end();
+       ++p) {
+    monc->is_latest_map("osdmap", osdmap->get_epoch(),
+			new C_Linger_Map_Latest(this, p->second->linger_id));
   }
 }
 
