@@ -260,6 +260,11 @@ Get the value of a pool setting. Valid fields are:
 Sends a scrub command to osdN. To send the command to all osds, use ``*``.
 TODO: what does this actually do ::
 
+	$ ceph osd deep-scrub N
+
+Sends a deep scrub command to osdN. A deep scrub compares both the
+metadata and the contents of objects between replicas.
+
 	$ ceph osd repair N
 
 Sends a repair command to osdN. To send the command to all osds, use ``*``.

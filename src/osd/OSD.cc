@@ -3257,6 +3257,8 @@ void OSD::handle_scrub(MOSDScrub *m)
       if (pg->is_primary()) {
 	if (m->repair)
 	  pg->state_set(PG_STATE_REPAIR);
+	if (m->deep)
+	  pg->state_set(PG_STATE_DEEP_SCRUB);
 	if (pg->queue_scrub()) {
 	  dout(10) << "queueing " << *pg << " for scrub" << dendl;
 	}
@@ -3273,6 +3275,8 @@ void OSD::handle_scrub(MOSDScrub *m)
 	if (pg->is_primary()) {
 	  if (m->repair)
 	    pg->state_set(PG_STATE_REPAIR);
+	  if (m->deep)
+	    pg->state_set(PG_STATE_DEEP_SCRUB);
 	  if (pg->queue_scrub()) {
 	    dout(10) << "queueing " << *pg << " for scrub" << dendl;
 	  }

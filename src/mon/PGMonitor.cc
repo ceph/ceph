@@ -997,7 +997,9 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       } else
 	ss << "invalid pgid '" << m->cmd[2] << "'";
     }
-    else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair") && m->cmd.size() == 3) {
+    else if ((m->cmd[1] == "scrub" ||
+	      m->cmd[1] == "deep-scrub" ||
+	      m->cmd[1] == "repair") && m->cmd.size() == 3) {
       pg_t pgid;
       r = -EINVAL;
       if (pgid.parse(m->cmd[2].c_str())) {
@@ -1008,7 +1010,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	      vector<pg_t> pgs(1);
 	      pgs[0] = pgid;
 	      mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs,
-						  m->cmd[1] == "repair"),
+						  m->cmd[1] == "repair",
+						  m->cmd[1] == "deep-scrub"),
 				    mon->osdmon()->osdmap.get_inst(osd));
 	      ss << "instructing pg " << pgid << " on osd." << osd << " to " << m->cmd[1];
 	      r = 0;
