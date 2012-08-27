@@ -25,6 +25,7 @@
 #include "common/lockdep.h"
 #include "common/Formatter.h"
 #include "log/Log.h"
+#include "auth/Crypto.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -228,7 +229,9 @@ CephContext::CephContext(uint32_t module_type_)
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
-    _heartbeat_map(NULL)
+    _heartbeat_map(NULL),
+    _crypto_none(NULL),
+    _crypto_aes(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
 
@@ -254,6 +257,9 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
+
+  _crypto_none = new CryptoNone;
+  _crypto_aes = new CryptoAES;
 }
 
 CephContext::~CephContext()
@@ -297,6 +303,8 @@ CephContext::~CephContext()
   delete _conf;
   pthread_spin_destroy(&_service_thread_lock);
 
+  delete _crypto_none;
+  delete _crypto_aes;
 }
 
 void CephContext::start_service_thread()
@@ -361,4 +369,16 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
 AdminSocket *CephContext::get_admin_socket()
 {
   return _admin_socket;
+}
+
+CryptoHandler *CephContext::get_crypto_handler(int type)
+{
+  switch (type) {
+  case CEPH_CRYPTO_NONE:
+    return _crypto_none;
+  case CEPH_CRYPTO_AES:
+    return _crypto_aes;
+  default:
+    return NULL;
+  }
 }

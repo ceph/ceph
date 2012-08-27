@@ -117,13 +117,6 @@ void usage()
 "  --keyfile <path>             file containing secret key for use with cephx\n";
 }
 
-void usage_exit()
-{
-  assert(1);
-  usage();
-  exit(1);
-}
-
 static string feature_str(uint64_t features)
 {
   string s = ""; 
@@ -1062,8 +1055,6 @@ static void set_conf_param(const char *param, const char **var1, const char **va
     *var1 = param;
   else if (var2 && !*var2)
     *var2 = param;
-  else
-    usage_exit();
 }
 
 int main(int argc, const char **argv)
@@ -1100,7 +1091,7 @@ int main(int argc, const char **argv)
       assert(r == 0);
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
+      return 0;
     } else if (ceph_argparse_flag(args, i, "--new-format", (char*)NULL)) {
       old_format = false;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
@@ -1114,13 +1105,13 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_withlonglong(args, i, &sizell, &err, "-s", "--size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       size = sizell << 20;   // bytes to MB
     } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
       path = strdup(val.c_str());
@@ -1138,13 +1129,15 @@ int main(int argc, const char **argv)
   i = args.begin();
   if (i == args.end()) {
     cerr << "you must specify a command." << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
   else if (strcmp(*i, "snap") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
       cerr << "which snap command do you want?" << std::endl;
-      usage_exit();
+      usage();
+      return EXIT_FAILURE;
     }
     opt_cmd = get_cmd(*i, true);
   }
@@ -1153,7 +1146,8 @@ int main(int argc, const char **argv)
   }
   if (opt_cmd == OPT_NO_CMD) {
     cerr << "error parsing command '" << *i << "'" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   for (i = args.erase(i); i != args.end(); ++i) {
@@ -1199,8 +1193,8 @@ int main(int argc, const char **argv)
 	}
 	break;
       case OPT_SHOWMAPPED:
-	usage_exit();
-	break;
+	usage();
+	return EXIT_FAILURE;
       default:
 	assert(0);
 	break;
@@ -1209,12 +1203,14 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_EXPORT && !imgname) {
     cerr << "error: image name was not specified" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   if (opt_cmd == OPT_IMPORT && !path) {
     cerr << "error: path was not specified" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   if (opt_cmd == OPT_IMPORT && !destname)
@@ -1223,7 +1219,8 @@ int main(int argc, const char **argv)
   if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && opt_cmd != OPT_SHOWMAPPED &&
       !imgname) {
     cerr << "error: image name was not specified" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   // do this unconditionally so we can parse pool/image@snapshot into
@@ -1236,14 +1233,16 @@ int main(int argc, const char **argv)
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE ||
        opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT) &&
       !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, (char **)&dest_snapname);
@@ -1258,24 +1257,27 @@ int main(int argc, const char **argv)
 
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE) && !destname ) {
     cerr << "error: destination image name was not specified" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_CLONE) && dest_snapname) {
     cerr << "error: cannot clone to a snapshot" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_CLONE) && size) {
     cerr << "error: clone must begin at size of parent" << std::endl;
-    usage_exit();
+    usage();
+    return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_RENAME) && (strcmp(poolname, dest_poolname) != 0)) {
     cerr << "error: mv/rename across pools not supported" << std::endl;
     cerr << "source pool: " << poolname << " dest pool: " << dest_poolname
       << std::endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 
   bool talk_to_cluster = (opt_cmd != OPT_MAP &&
@@ -1283,12 +1285,12 @@ int main(int argc, const char **argv)
 			  opt_cmd != OPT_SHOWMAPPED);
   if (talk_to_cluster && rados.init_with_context(g_ceph_context) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
-    exit(1);
+    return EXIT_FAILURE;
   }
 
   if (talk_to_cluster && rados.connect() < 0) {
     cerr << "error: couldn't connect to the cluster!" << std::endl;
-    exit(1);
+    return EXIT_FAILURE;
   }
 
   int r;
@@ -1296,7 +1298,7 @@ int main(int argc, const char **argv)
     r = rados.ioctx_create(poolname, io_ctx);
     if (r < 0) {
       cerr << "error opening pool " << poolname << ": " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
   }
 
@@ -1310,7 +1312,7 @@ int main(int argc, const char **argv)
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
   }
 
@@ -1319,7 +1321,7 @@ int main(int argc, const char **argv)
     r = image.snap_set(snapname);
     if (r < 0) {
       cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
   }
 
@@ -1327,7 +1329,7 @@ int main(int argc, const char **argv)
     r = rados.ioctx_create(dest_poolname, dest_io_ctx);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << ": " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
   }
 
@@ -1342,7 +1344,7 @@ int main(int argc, const char **argv)
       default:
         cerr << "error: " << cpp_strerror(-r) << std::endl;
       }
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1350,17 +1352,17 @@ int main(int argc, const char **argv)
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     if (order && (order < 12 || order > 25)) {
       cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_create(rbd, io_ctx, imgname, size, &order, old_format, features);
     if (r < 0) {
       cerr << "create error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1368,14 +1370,14 @@ int main(int argc, const char **argv)
     if (order && (order < 12 || order > 25)) {
       cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
 
     r = do_clone(rbd, io_ctx, imgname, snapname, dest_io_ctx, destname,
 		 features, &order);
     if (r < 0) {
       cerr << "clone error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1383,7 +1385,7 @@ int main(int argc, const char **argv)
     r = do_flatten(image);
     if (r < 0) {
       cerr << "flatten error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1391,7 +1393,7 @@ int main(int argc, const char **argv)
     r = do_rename(rbd, io_ctx, imgname, destname);
     if (r < 0) {
       cerr << "rename error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1399,7 +1401,7 @@ int main(int argc, const char **argv)
     r = do_show_info(imgname, image, snapname);
     if (r < 0) {
       cerr << "error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1420,7 +1422,7 @@ int main(int argc, const char **argv)
       } else {
 	cerr << "delete error: " << cpp_strerror(-r) << std::endl;
       }
-      exit(-r);
+      return -r ;
     }
     break;
 
@@ -1428,120 +1430,120 @@ int main(int argc, const char **argv)
     r = do_resize(image, size);
     if (r < 0) {
       cerr << "resize error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_LIST:
     if (!imgname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_list_snaps(image);
     if (r < 0) {
       cerr << "failed to list snapshots: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_CREATE:
     if (!imgname || !snapname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "failed to create snapshot: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_ROLLBACK:
     if (!imgname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_rollback_snap(image, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_REMOVE:
     if (!imgname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_remove_snap(image, snapname);
     if (r == -EBUSY) {
       cerr << "Snapshot '" << snapname << "' is protected from removal." << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     if (r < 0) {
       cerr << "failed to remove snapshot: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_PURGE:
     if (!imgname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_purge_snaps(image);
     if (r < 0) {
       cerr << "removing snaps failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_PROTECT:
     if (!imgname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_protect_snap(image, snapname);
     if (r < 0) {
       cerr << "protecting snap failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_UNPROTECT:
     if (!imgname) {
       usage();
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_unprotect_snap(image, snapname);
     if (r < 0) {
       cerr << "unprotecting snap failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_EXPORT:
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_export(image, path);
     if (r < 0) {
       cerr << "export error: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
   case OPT_IMPORT:
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
 		  old_format, features, size);
     if (r < 0) {
       cerr << "import failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1549,7 +1551,7 @@ int main(int argc, const char **argv)
     r = do_copy(image, dest_io_ctx, destname);
     if (r < 0) {
       cerr << "copy failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1557,7 +1559,7 @@ int main(int argc, const char **argv)
     r = do_watch(io_ctx, imgname);
     if (r < 0) {
       cerr << "watch failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1565,7 +1567,7 @@ int main(int argc, const char **argv)
     r = do_kernel_add(poolname, imgname, snapname);
     if (r < 0) {
       cerr << "add failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1573,7 +1575,7 @@ int main(int argc, const char **argv)
     r = do_kernel_rm(devpath);
     if (r < 0) {
       cerr << "remove failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
 
@@ -1581,7 +1583,7 @@ int main(int argc, const char **argv)
     r = do_kernel_showmapped();
     if (r < 0) {
       cerr << "showmapped failed: " << cpp_strerror(-r) << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
     break;
   }

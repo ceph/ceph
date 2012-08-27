@@ -1756,12 +1756,20 @@ if WITH_DEBUG
 bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
 endif
 
-project.tgz: clean
-	cov-configure -co /usr/bin/gcc
-	cov-configure -co /usr/bin/g++
-	cov-build -e emit -o output make
-	tar czvf project.tgz README emit output
 
-submit-coverity:
-	scp project.tgz ceph.newdream.net:ceph.com/coverity/`git describe`.tgz
-	echo "v2;ceph;"`cat .coverity.build.pass`";MAIL;http://ceph.com/coverity/"`git describe`.tgz | mail build@submit.scan.coverity.com
+#
+# coverity rules expect:
+#  - cov-build to be in the path
+#  - password in ~/coverity.build.pass.txt
+#  - ability to scp into the ceph.com directory
+#
+project.tgz: clean
+	rm -rf cov-int
+	cov-build --dir cov-int make
+	echo Sage Weil sage@newdream.net ceph >> README
+	tar czvf project.tgz README cov-int
+	rm -f README
+
+coverity-submit:
+	scp project.tgz ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz
+	curl --data "project=ceph&password=`cat ~/coverity.build.pass.txt`&email=sage@newdream.net&url=http://ceph.com/coverity/`git describe`.tgz" http://scan5.coverity.com/cgi-bin/submit_build.py
