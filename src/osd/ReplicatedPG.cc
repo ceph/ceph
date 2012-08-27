@@ -5731,6 +5731,14 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
       dout(10) << " requeuing " << *repop->ctx->op->request << dendl;
       rq.push_back(repop->ctx->op);
       repop->ctx->op = OpRequestRef();
+
+      // also requeue any dups, interleaved into position
+      map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.find(repop->v);
+      if (p != waiting_for_ondisk.end()) {
+	dout(10) << " also requeuing ondisk waiters " << p->second << dendl;
+	rq.splice(rq.end(), p->second);
+	waiting_for_ondisk.erase(p);
+      }
     }
 
     remove_repop(repop);
@@ -5739,6 +5747,9 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   if (requeue) {
     requeue_ops(rq);
   }
+
+  assert(waiting_for_ondisk.empty());
+  waiting_for_ack.clear();
 }
 
 void ReplicatedPG::on_removal()
@@ -5793,16 +5804,8 @@ void ReplicatedPG::on_change()
   requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
-  // take commit waiters; these are dups of what
-  // apply_and_flush_repops() will requeue.
-  for (map<eversion_t, list<OpRequestRef> >::reverse_iterator p = waiting_for_ondisk.rbegin();
-       p != waiting_for_ondisk.rend();
-       p++)
-    requeue_ops(p->second);
-  waiting_for_ondisk.clear();
-  waiting_for_ack.clear();
-
-  // this will requeue ops we were working on but didn't finish
+  // this will requeue ops we were working on but didn't finish, and
+  // any dups
   apply_and_flush_repops(is_primary());
 
   // clear pushing/pulling maps
