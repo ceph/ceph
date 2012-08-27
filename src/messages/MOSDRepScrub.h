@@ -24,7 +24,7 @@
 
 struct MOSDRepScrub : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 2;
 
   pg_t pgid;             // PG to scrub
@@ -34,6 +34,7 @@ struct MOSDRepScrub : public Message {
   bool chunky;           // true for chunky scrubs
   hobject_t start;       // lower bound of scrub, inclusive
   hobject_t end;         // upper bound of scrub, exclusive
+  bool deep;             // true if scrub should be deep
 
   MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
@@ -43,17 +44,19 @@ struct MOSDRepScrub : public Message {
       scrub_from(scrub_from),
       scrub_to(scrub_to),
       map_epoch(map_epoch),
-      chunky(false) { }
+      chunky(false),
+      deep(false) { }
 
   MOSDRepScrub(pg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
-               hobject_t start, hobject_t end)
+               hobject_t start, hobject_t end, bool deep)
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_to(scrub_to),
       map_epoch(map_epoch),
       chunky(true),
       start(start),
-      end(end) { }
+      end(end),
+      deep(deep) { }
 
 
 private:
@@ -66,6 +69,7 @@ public:
     out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
         << ",epoch:" << map_epoch << ",start:" << start << ",end:" << end
         << ",chunky:" << chunky
+        << ",deep:" << deep
         << ",version:" << header.version;
     out << ")";
   }
@@ -78,6 +82,7 @@ public:
     ::encode(chunky, payload);
     ::encode(start, payload);
     ::encode(end, payload);
+    ::encode(deep, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -90,8 +95,14 @@ public:
       ::decode(chunky, p);
       ::decode(start, p);
       ::decode(end, p);
+      if (header.version >= 4) {
+        ::decode(deep, p);
+      } else {
+        deep = false;
+      }
     } else { // v2 scrub: non-chunky
       chunky = false;
+      deep = false;
     }
   }
 };

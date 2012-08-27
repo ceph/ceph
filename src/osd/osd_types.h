@@ -564,6 +564,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
 #define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
 #define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
+#define PG_STATE_DEEP_SCRUB   (1<<19) // deep scrub: check CRC32 on files
 
 std::string pg_state_string(int state);
 
@@ -862,7 +863,9 @@ struct pg_stat_t {
   __u32 parent_split_bits;
 
   eversion_t last_scrub;
+  eversion_t last_deep_scrub;
   utime_t last_scrub_stamp;
+  utime_t last_deep_scrub_stamp;
 
   object_stat_collection_t stats;
 
@@ -951,7 +954,9 @@ struct pg_history_t {
   epoch_t same_primary_since;  // same primary at least back through this epoch.
 
   eversion_t last_scrub;
+  eversion_t last_deep_scrub;
   utime_t last_scrub_stamp;
+  utime_t last_deep_scrub_stamp;
 
   pg_history_t()
     : epoch_created(0),
@@ -983,6 +988,14 @@ struct pg_history_t {
     }
     if (other.last_scrub_stamp > last_scrub_stamp) {
       last_scrub_stamp = other.last_scrub_stamp;
+      modified = true;
+    }
+    if (other.last_deep_scrub > last_deep_scrub) {
+      last_deep_scrub = other.last_deep_scrub;
+      modified = true;
+    }
+    if (other.last_deep_scrub_stamp > last_deep_scrub_stamp) {
+      last_deep_scrub_stamp = other.last_deep_scrub_stamp;
       modified = true;
     }
     return modified;
@@ -1777,8 +1790,10 @@ struct ScrubMap {
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
+    __u32 digest;
+    bool digest_present;
 
-    object(): size(0), negative(false) {}
+    object(): size(0), negative(false), digest(0), digest_present(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
