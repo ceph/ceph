@@ -737,6 +737,16 @@ test_cls_rbd_LDADD = librados.la ${UNITTEST_STATIC_LDADD}
 test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_rbd
 
+if WITH_RADOSGW
+
+test_cls_rgw_SOURCES = test/rgw/test_cls_rgw.cc \
+	test/rados-api/test.cc
+test_cls_rgw_LDADD = librados.la libcls_rgw_client.a ${UNITTEST_STATIC_LDADD}
+test_cls_rgw_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cls_rgw
+
+endif
+
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
