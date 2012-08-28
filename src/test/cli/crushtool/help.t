@@ -1,4 +1,3 @@
-# TODO help should not fail
   $ crushtool --help
   usage: crushtool ...
      --decompile|-d map    decompile a crush map to source
@@ -12,10 +11,12 @@
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r]
         [--num-rep n]
-        [--batches b]      split the CRUSH mapping into b rounds
-      --simulate           simulate placements using a RNG
+        [--batches b]      split the CRUSH mapping into b > 1 rounds
         [--weight|-w devno weight]
                            where weight is 0 to 1.0
+        [--simulate]       simulate placements using a random
+                           number generator in place of the CRUSH
+                           algorithm
      -i mapfn --add-item id weight name [--loc type name ...]
                            insert an item into the hierarchy at the
                            given location
