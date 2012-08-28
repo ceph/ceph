@@ -315,6 +315,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
+	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -1647,6 +1648,7 @@ noinst_HEADERS = \
 	rgw/rgw_formats.h\
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
+	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
 	rgw/rgw_swift.h\
 	rgw/rgw_swift_auth.h\

@@ -26,69 +26,7 @@ static void dump_status(struct req_state *s, const char *status)
   CGI_PRINTF(s,"Status: %s\n", status);
 }
 
-struct rgw_html_errors {
-  int err_no;
-  int http_ret;
-  const char *s3_code;
-};
-
-const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
-    { 0, 200, "" },
-    { STATUS_CREATED, 201, "Created" },
-    { STATUS_ACCEPTED, 202, "Accepted" },
-    { STATUS_NO_CONTENT, 204, "NoContent" },
-    { STATUS_PARTIAL_CONTENT, 206, "" },
-    { ERR_NOT_MODIFIED, 304, "NotModified" },
-    { EINVAL, 400, "InvalidArgument" },
-    { ERR_INVALID_REQUEST, 400, "InvalidRequest" },
-    { ERR_INVALID_DIGEST, 400, "InvalidDigest" },
-    { ERR_BAD_DIGEST, 400, "BadDigest" },
-    { ERR_INVALID_BUCKET_NAME, 400, "InvalidBucketName" },
-    { ERR_INVALID_OBJECT_NAME, 400, "InvalidObjectName" },
-    { ERR_UNRESOLVABLE_EMAIL, 400, "UnresolvableGrantByEmailAddress" },
-    { ERR_INVALID_PART, 400, "InvalidPart" },
-    { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
-    { ERR_REQUEST_TIMEOUT, 400, "RequestTimeout" },
-    { ERR_TOO_LARGE, 400, "EntityTooLarge" },
-    { ERR_TOO_MANY_BUCKETS, 400, "TooManyBuckets" },
-    { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
-    { EACCES, 403, "AccessDenied" },
-    { EPERM, 403, "AccessDenied" },
-    { ERR_USER_SUSPENDED, 403, "UserSuspended" },
-    { ERR_REQUEST_TIME_SKEWED, 403, "RequestTimeTooSkewed" },
-    { ENOENT, 404, "NoSuchKey" },
-    { ERR_NO_SUCH_BUCKET, 404, "NoSuchBucket" },
-    { ERR_NO_SUCH_UPLOAD, 404, "NoSuchUpload" },
-    { ERR_METHOD_NOT_ALLOWED, 405, "MethodNotAllowed" },
-    { ETIMEDOUT, 408, "RequestTimeout" },
-    { EEXIST, 409, "BucketAlreadyExists" },
-    { ENOTEMPTY, 409, "BucketNotEmpty" },
-    { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
-    { ERANGE, 416, "InvalidRange" },
-    { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
-    { ERR_INTERNAL_ERROR, 500, "InternalError" },
-};
-
-const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
-    { EACCES, 401, "AccessDenied" },
-    { EPERM, 401, "AccessDenied" },
-    { ERR_USER_SUSPENDED, 401, "UserSuspended" },
-    { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
-    { ERR_BAD_URL, 412, "Bad URL" },
-};
-
-#define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
-
-static const struct rgw_html_errors *search_err(int err_no, const struct rgw_html_errors *errs, int len)
-{
-  for (int i = 0; i < len; ++i, ++errs) {
-    if (err_no == errs->err_no)
-      return errs;
-  }
-  return NULL;
-}
-
-void flush_formatter_to_req_state(struct req_state *s, Formatter *formatter)
+void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
 {
   std::ostringstream oss;
   formatter->flush(oss);
@@ -96,7 +34,18 @@ void flush_formatter_to_req_state(struct req_state *s, Formatter *formatter)
   if (!outs.empty()) {
     CGI_PutStr(s, outs.c_str(), outs.size());
   }
+
   s->formatter->reset();
+}
+
+void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
+{
+  std::ostringstream oss;
+  formatter->flush(oss);
+  std::string outs(oss.str());
+  if (!outs.empty()) {
+    CGI_PutStr(s, outs.c_str(), outs.size());
+  }
 }
 
 void set_req_state_err(struct req_state *s, int err_no)
@@ -235,7 +184,7 @@ void end_header(struct req_state *s, const char *content_type)
   }
   CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
   s->header_ended = true;
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 void abort_early(struct req_state *s, int err_no)
@@ -243,7 +192,7 @@ void abort_early(struct req_state *s, int err_no)
   set_req_state_err(s, err_no);
   dump_errno(s);
   end_header(s);
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
 }
 
@@ -455,6 +404,53 @@ int RGWListBucketMultiparts_REST::get_params()
     marker.init(key_marker, upload_id_marker);
 
   return 0;
+}
+
+int RGWDeleteMultiObj_REST::get_params()
+{
+  static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
+  bufferlist bl;
+  RGWBucketInfo info;
+
+  bucket_name = s->bucket_name;
+
+  if (bucket_name.empty()) {
+    ret = -EINVAL;
+    return ret;
+  }
+
+  ret = rgw_get_obj(NULL, pi_buckets_rados, bucket_name, bl, NULL);
+  if (ret < 0)
+    return ret;
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    cerr << "ERROR: could not decode buffer info, caught buffer::error" << std::endl;
+    return -EIO;
+  }
+
+  // everything is probably fine, set the bucket
+  bucket = s->bucket;
+
+  size_t cl = 0;
+
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+      ret = -ENOMEM;
+      return ret;
+    }
+    CGI_GetStr(s, data, cl, len);
+    data[len] = '\0';
+  } else {
+    return -EINVAL;
+  }
+
+  return ret;
 }
 
 static void next_tok(string& str, string& tok, char delim)
@@ -912,6 +908,11 @@ int RGWHandler_REST::read_permissions(RGWOp *op_obj)
     break;
   case OP_PUT:
   case OP_POST:
+    /* is it a 'multi-object delete' request? */
+    if (s->request_params == "delete") {
+      only_bucket = true;
+      break;
+    }
     if (is_obj_update_op()) {
       only_bucket = false;
       break;

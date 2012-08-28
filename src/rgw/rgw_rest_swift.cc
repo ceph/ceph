@@ -67,7 +67,7 @@ done:
     return;
   }
 
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_REST_SWIFT::get_params()
@@ -186,7 +186,7 @@ next:
     return;
   }
 
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
@@ -270,7 +270,7 @@ void RGWCreateBucket_REST_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 void RGWDeleteBucket_REST_SWIFT::send_response()
@@ -282,7 +282,7 @@ void RGWDeleteBucket_REST_SWIFT::send_response()
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s);
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWPutObj_REST_SWIFT::get_params()
@@ -325,7 +325,7 @@ void RGWPutObj_REST_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWPutMetadata_REST_SWIFT::get_params()
@@ -366,7 +366,7 @@ void RGWPutMetadata_REST_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 void RGWDeleteObj_REST_SWIFT::send_response()
@@ -378,7 +378,7 @@ void RGWDeleteObj_REST_SWIFT::send_response()
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s);
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWCopyObj_REST_SWIFT::init_dest_policy()
@@ -481,7 +481,7 @@ send_data:
   if (get_data && !orig_ret) {
     CGI_PutStr(s, bl.c_str(), len);
   }
-  flush_formatter_to_req_state(s, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 
   return 0;
 }
