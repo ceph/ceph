@@ -507,6 +507,8 @@ int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch,
     hash = first_hash;
   }
 
+  usage.clear();
+
   do {
     map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
