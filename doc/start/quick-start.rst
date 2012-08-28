@@ -30,12 +30,14 @@ install Ceph. ::
 Add a Configuration File
 ------------------------
 
-Modify the contents of the following configuration file such that
-``localhost`` is the actual host name, and the monitor IP address 
-is the actual IP address of the host (i.e., not 127.0.0.1).Then, 
-copy the contents of the modified configuration file and save it to
-``/etc/ceph/ceph.conf``. This file will configure Ceph to operate a monitor, 
-two OSD daemons and one metadata server on your local machine. 
+Execute ``hostname`` on the command line to retrieve the name of your 
+host. Then, replace ``{localhost}`` in the sample configuration file
+with your host name. Execute ``ifconfig`` on the command line to
+retrieve the IP address of your host. Then, replace ``{ip-address}``
+with the IP address of your host. Finally, copy the contents of the 
+modified configuration file and save it to ``/etc/ceph/ceph.conf``. 
+This file will configure Ceph to operate a monitor,  two OSD daemons 
+and one metadata server on your local machine. 
 
 .. literalinclude:: ceph.conf
    :language: ini
