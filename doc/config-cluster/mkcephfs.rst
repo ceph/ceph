@@ -2,8 +2,13 @@
  Deploying with ``mkcephfs``
 =============================
 
+To deploy a test or development cluster, you can use the ``mkcephfs`` tool.
+We do not recommend using this tool for production environments.
+
+
 Enable Login to Cluster Hosts as ``root``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+=========================================
+
 To deploy with ``mkcephfs``, you will need to be able to login as ``root``
 on each host without a password. For each host, perform the following:: 
 
@@ -37,8 +42,10 @@ Modify your ``~/.ssh/config`` file to login as ``root``, as follows::
 		Hostname myserver02.fully-qualified-domain.com
 		User root
 
+
 Copy Configuration File to All Hosts
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+====================================
+
 Ceph's ``mkcephfs`` deployment script does not copy the configuration file you
 created from the Administration host to the OSD Cluster hosts. Copy the
 configuration file you created (*i.e.,* ``mycluster.conf`` in the example below)
@@ -47,13 +54,14 @@ if you are using ``mkcephfs`` to deploy Ceph.
 
 ::
 
-	cd /etc/ceph
-	ssh myserver01 sudo tee /etc/ceph/ceph.conf <ceph.conf
-	ssh myserver02 sudo tee /etc/ceph/ceph.conf <ceph.conf
-	ssh myserver03 sudo tee /etc/ceph/ceph.conf <ceph.conf
+	ssh myserver01 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	ssh myserver02 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	ssh myserver03 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+
 
 Create the Default Directories
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+==============================
+
 The ``mkcephfs`` deployment script does not create the default server directories. 
 Create server directories for each instance of a Ceph daemon. The ``host`` 
 variables in the ``ceph.conf`` file determine which host runs each instance of 
@@ -76,8 +84,10 @@ On ``myserver03``::
 	sudo mkdir /var/lib/ceph/mon/ceph-c
 	sudo mkdir /var/lib/ceph/mds/ceph-a
 
+
 Run ``mkcephfs``
-~~~~~~~~~~~~~~~~
+================
+
 Once you have copied your Ceph Configuration to the OSD Cluster hosts
 and created the default directories, you may deploy Ceph with the 
 ``mkcephfs`` script.
@@ -99,8 +109,8 @@ provide passwords. For example::
 
 	service ceph -a start
 
-See `Start | Stop the Cluster`_ for details.
+See `Operating a Cluster`_ for details.
 
 
 .. _Authentication: ../authentication
-.. _Start | Stop the Cluster: ../../init/
+.. _Operating a Cluster: ../../init/
