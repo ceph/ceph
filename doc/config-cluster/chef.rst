@@ -5,6 +5,8 @@
 We use Chef cookbooks to deploy Ceph. See `Managing Cookbooks with Knife`_ for details
 on using ``knife``.  For Chef installation instructions, see `Installing Chef`_.
 
+.. _clonecbs:
+
 Clone the Required Cookbooks
 ----------------------------
 
@@ -13,6 +15,8 @@ To get the cookbooks for Ceph, clone them from git.::
 	cd ~/chef-cookbooks
 	git clone https://github.com/opscode-cookbooks/apache2.git
 	git clone https://github.com/ceph/ceph-cookbooks.git ceph
+
+.. _addcbpaths:
 
 Add the Required Cookbook Paths
 -------------------------------
@@ -35,6 +39,8 @@ Becomes::
 		'/some/other/path/to/cookbooks/'
 	]
 
+.. _installcbs:
+
 Install the Cookbooks
 ---------------------
 
@@ -42,6 +48,8 @@ To install Ceph, you must upload the Ceph cookbooks and the Apache cookbooks
 (for use with RADOSGW) to your Chef server. :: 
 
 	knife cookbook upload apache2 ceph
+
+.. _configcephenv:
 
 Configure your Ceph Environment
 -------------------------------
@@ -110,6 +118,8 @@ Advanced users (i.e., developers and QA) may also add ``"ceph_branch": "{branch}
 to ``default-attributes``, replacing ``{branch}`` with the name of the branch you
 wish to use (e.g., ``master``). 
 
+.. configroles:
+
 Configure the Roles
 -------------------
 
@@ -124,6 +134,8 @@ their respective role files. ::
 	knife role from file roles/ceph-mon.rb
 	knife role from file roles/ceph-mds.rb
 	knife role from file roles/ceph-radosgw.rb
+
+.. _confignodes:
 
 Configure Nodes
 ---------------
@@ -155,8 +167,9 @@ Then, add at least one of::
 	"role[ceph-mds]"
 	"role[ceph-radosgw]"
 
-If you add more than one role, separate them with a comma. Replace the 
-``{hostname}`` setting of the ``name`` key to the host name for the node. ::
+If you add more than one role, separate them with a comma. Run ``hostname``
+on your command line, and replace the ``{hostname}`` setting of the ``name`` 
+key to the host name for the node. ::
 
 	{
   		"chef_environment": "Ceph",
@@ -173,18 +186,30 @@ If you add more than one role, separate them with a comma. Replace the
   		]
 	}
 
+.. _prepdisks:
+
 Prepare OSD Disks
 -----------------
 
-For the Ceph 0.48 Argonaut release, install ``gdisk`` and configure the OSD
-hard disks for use with Ceph. Replace ``{fsid}`` with the UUID you generated
-while using ``uuidgen -r``. 
+Configuring a node with an OSD role tells Chef that the node will run at
+least one OSD. However, you may run many OSDs on one host. For example, 
+you may run one ``ceph-osd`` daemon for each data disk on the system. 
+This step prepares the OSD disk(s) and tells Chef how many OSDs the 
+node will be running.
+
+
+For the Ceph 0.48 Argonaut release, install ``gdisk``:: 
+
+	sudo apt-get install gdisk
+
+For the Ceph 0.48 Argonaut release, on each hard disk that will store data for
+an OSD daemon, configure the  hard disk for use with Ceph. Replace ``{fsid}``
+with the UUID you generated  while using ``uuidgen -r``. 
 
 .. important: This procedure will erase all information in ``/dev/{disk}``.
 
 :: 
-
-	sudo apt-get install gdisk
+	
 	sudo sgdisk /dev/{disk} --zap-all --clear --mbrtogpt --largest-new=1 --change-name=1:'ceph data' --typecode=1:{fsid}
 
 Create a file system and allocate the disk to your cluster. Specify a 
@@ -202,6 +227,8 @@ Finally, simulate a hotplug event. ::
 	sudo udevadm trigger --subsystem-match=block --action=add
 	
 
+.. _runchefclient:
+
 Run ``chef-client`` on each Node
 --------------------------------
 
@@ -210,6 +237,7 @@ on each node. For example::
 
 	sudo chef-client
 
+.. _proceedtoops:
 
 Proceed to Operating the Cluster
 --------------------------------
