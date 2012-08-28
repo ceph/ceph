@@ -1679,6 +1679,7 @@ noinst_HEADERS = \
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
+	rgw/rgw_html_errors.h\
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
 	rgw/rgw_gc.h\
