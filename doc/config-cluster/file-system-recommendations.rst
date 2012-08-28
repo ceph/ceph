@@ -9,7 +9,7 @@ disk. Newer kernels should work fine.
 
 Use ``hdparm`` to disable write caching on the hard disk::
 
-	hdparm -W 0 /dev/hda 0
+	sudo hdparm -W 0 /dev/hda 0
 
 In production environments, we recommend running OSDs with an operating system
 disk, and a separate disk(s) for data. If you run data and an operating system
