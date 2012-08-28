@@ -481,7 +481,7 @@ void MonClient::_reopen_session()
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    finisher.queue(version_requests.begin()->second->context, -1);
+    finisher.queue(version_requests.begin()->second->context, -EAGAIN);
     version_requests.erase(version_requests.begin());
   }
 
@@ -696,7 +696,7 @@ struct C_IsLatestMap : public Context {
   version_t have;
   C_IsLatestMap(Context *f, version_t h) : onfinish(f), have(h) {}
   void finish(int r) {
-    onfinish->complete(have != newest);
+    onfinish->complete(r == 0 ? (have != newest) : r);
   }
 };
 
