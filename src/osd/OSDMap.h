@@ -87,6 +87,23 @@ WRITE_CLASS_ENCODER(osd_info_t)
 ostream& operator<<(ostream& out, const osd_info_t& info);
 
 
+struct osd_xinfo_t {
+  utime_t down_stamp;      ///< timestamp when we were last marked down
+  __u32 laggy_probability; ///< 0 = definitely not laggy, 0xffffffff definitely laggy
+  __u32 laggy_interval;    ///< average interval between being marked laggy and recovering
+
+  osd_xinfo_t() : laggy_probability(0), laggy_interval(0) {}
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  static void generate_test_instances(list<osd_xinfo_t*>& o);
+};
+WRITE_CLASS_ENCODER(osd_xinfo_t)
+
+ostream& operator<<(ostream& out, const osd_xinfo_t& xi);
+
+
 /** OSDMap
  */
 class OSDMap {
@@ -118,6 +135,7 @@ public:
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
     map<int32_t,epoch_t> new_lost;
     map<int32_t,uuid_d> new_uuid;
+    map<int32_t,osd_xinfo_t> new_xinfo;
 
     map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
@@ -177,6 +195,7 @@ private:
   map<string,int64_t> name_pool;
 
   std::tr1::shared_ptr< vector<uuid_d> > osd_uuid;
+  vector<osd_xinfo_t> osd_xinfo;
 
   hash_map<entity_addr_t,utime_t> blacklist;
 
@@ -355,6 +374,11 @@ private:
   const osd_info_t& get_info(int osd) const {
     assert(osd < max_osd);
     return osd_info[osd];
+  }
+
+  const osd_xinfo_t& get_xinfo(int osd) const {
+    assert(osd < max_osd);
+    return osd_xinfo[osd];
   }
   
   int get_any_up_osd() const {
