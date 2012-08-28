@@ -807,7 +807,7 @@ protected:
   }
 
   int completion_wait(int slot) {
-    return completions[slot]->wait_for_safe();
+    return completions[slot]->wait_for_safe_and_cb();
   }
   int completion_ret(int slot) {
     return completions[slot]->get_return_value();
