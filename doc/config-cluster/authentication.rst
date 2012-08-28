@@ -50,12 +50,12 @@ simple strings specifying some access permissions for a given server type.
 Each server type has its own string.  All capabilities are simply listed
 in ``{type}`` and ``{capability}`` pairs on the command line::
 
-        sudo ceph auth get-or-create client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
+	sudo ceph auth get-or-create client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
 
 For example, to create a user ``client.foo`` with access 'rw' for
 daemon type 'osd' and 'r' for daemon type 'mon'::
 
-        sudo ceph auth get-or-create client.foo osd rw mon r > keyring.foo
+	sudo ceph auth get-or-create client.foo osd rw mon r > keyring.foo
 
 .. note: User names are associated to user types, which include ``client``
    ``admin``, ``osd``, ``mon``, and ``mds``. In most cases, you will be 
@@ -79,20 +79,29 @@ their keyrings inside their data directory.  The default keyring
 locations, and the capabilities necessary for the daemon to function,
 are shown below.
 
-+-----------+---------------------------+---------------------------------------------+
-| Daemon    | Default keyring location  | Default caps                                |
-+===========+===========================+=============================================+
-| ceph-mon  | $mon_data/keyring         | n/a                                         |
-+-----------+---------------------------+---------------------------------------------+
-| ceph-osd  | $osd_data/keyring         | mon 'allow rwx' osd 'allow *'               |
-+-----------+---------------------------+---------------------------------------------+
-| ceph-mds  | $mds_data/keyring         | mds 'allow rwx' mds 'allow *' osd 'allow *' |
-+-----------+---------------------------+---------------------------------------------+
-| radosgw   | $rgw_data/keyring         | mon 'allow r' osd 'allow rwx'               |
-+-----------+---------------------------+---------------------------------------------+
+``ceph-mon``
+
+:Location: ``$mon_data/keyring``
+:Capabilities: N/A
+
+``ceph-osd``
+
+:Location: ``$osd_data/keyring``
+:Capabilities: ``mon 'allow rwx' osd 'allow *'``
+
+``ceph-mds``
+
+:Location: ``$mds_data/keyring``
+:Capabilities: ``mds 'allow rwx' mds 'allow *' osd 'allow *'``
+
+``radosgw``
+
+:Location: ``$rgw_data/keyring``
+:Capabilities: mon 'allow r' osd 'allow rwx'
+
 
 Note that the monitor keyring contains a key but no capabilities, and
-is not part of the cluster auth database.
+is not part of the cluster ``auth`` database.
 
 The daemon data directory locations default to directories of the form::
 
