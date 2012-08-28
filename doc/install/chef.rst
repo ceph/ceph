@@ -11,6 +11,8 @@ Chef defines three types of entities:
 
 See `Chef Architecture Introduction`_ for details.
 
+.. _createuser:
+
 Create a ``chef`` User
 ----------------------
 The ``chef-client`` command requires the proper privileges to install and manage
@@ -34,6 +36,8 @@ need to add the following to the ``/etc/sudoers`` file::
 .. important:: Do not change the file permissions on ``/etc/sudoers``. Use a
    suitable tool such as ``visudo``.
 	
+.. _genkeys:
+
 Generate SSH Keys for Chef Clients
 ----------------------------------
 Chef's ``knife`` tool can run ``ssh``. To streamline deployments, we 
@@ -66,6 +70,8 @@ logging in as ``chef`` when no username is specified. ::
 		Hostname myserver02.fqdn-or-ip-address.com
 		User chef
 
+.. _installruby:
+
 Installing Ruby
 ---------------
 Chef requires you to install Ruby. Use the version applicable to your current 
@@ -73,6 +79,8 @@ Linux distribution and install Ruby on all of your hosts. ::
 
 	sudo apt-get update
 	sudo apt-get install ruby
+
+.. _installchefserver:
 
 Installing Chef and Chef Server on a Server
 -------------------------------------------
@@ -125,6 +133,7 @@ The Chef web UI will prompt you to enter the username and password.
 Once you have entered the temporary password, the Chef web UI will prompt you
 to enter a new password.
 
+.. _installchef:
 
 Install Chef on all Remaining Hosts
 -----------------------------------
@@ -156,6 +165,7 @@ For example::
 
 	http://fqdn-or-ip-address.com:4000
 
+.. _configknife:
 
 Configuring Knife
 -----------------
@@ -209,6 +219,7 @@ default value so that it points to the ``.chef`` directory.
 *Please enter the path to a chef repository (or leave blank):*
 Leave the entry field blank and press **Enter**.
 
+.. _addcbpath:
 
 Add a Cookbook Path
 -------------------
@@ -224,6 +235,8 @@ Then create the path if it doesn't already exist. ::
 This is where you will store local copies of cookbooks before uploading
 them to the Chef server.
 
+.. _cpvalpem:
+
 Copy ``validation.pem`` to Nodes
 --------------------------------
 Copy the ``/etc/chef/validation.pem`` file from your Chef server to
@@ -233,6 +246,8 @@ execute it. ::
 
 	sudo cat /etc/chef/validation.pem | ssh {nodename} "exec sudo tee /etc/chef/validation.pem >/dev/null"
 
+.. _runchefcli:
+
 Run ``chef-client`` on each Chef Node
 -------------------------------------
 Run the ``chef-client`` on each Chef Node so that the nodes
@@ -240,6 +255,8 @@ register with the Chef server. ::
 
 	ssh chef-node
 	sudo chef-client
+
+.. _verifynodes:
 
 Verify Nodes
 ------------
