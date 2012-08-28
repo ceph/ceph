@@ -1,7 +1,6 @@
 
 #include "CrushTester.h"
 
-// a better RNG to be found within
 #include <stdlib.h>
 
 
@@ -145,14 +144,15 @@ void CrushTester::adjust_weights(vector<__u32>& weight)
   }
 }
 
-bool CrushTester::check_valid_placement(int ruleno, vector<int> out, const vector<__u32>& weight){
+bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector<__u32>& weight)
+{
 
   bool valid_placement = true;
   vector<int> included_devices;
   map<string,string> seen_devices;
 
   // first do the easy check that all devices are "up"
-  for (vector<int>::iterator it = out.begin(); it != out.end(); it++){
+  for (vector<int>::iterator it = in.begin(); it != in.end(); it++){
     if (weight[(*it)] == 0){
       valid_placement = false;
       break;
@@ -193,7 +193,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> out, const vecto
     }
   }
 
-  // find out if we are only dealing with osd's
+  // find in if we are only dealing with osd's
   bool only_osd_affected;
   if (affected_types.size() == 1){
     if ( (affected_types.back() == min_map_type_name) && (min_map_type_name == "osd") ){
@@ -295,6 +295,7 @@ void CrushTester::write_integer_indexed_vector_data_string(vector<string> &dst, 
   // write the data buffer to the destination
   dst.push_back( data_buffer.str() );
 }
+
 void CrushTester::write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<float> vector_data)
 {
   stringstream data_buffer (stringstream::in | stringstream::out);
@@ -313,6 +314,7 @@ void CrushTester::write_integer_indexed_vector_data_string(vector<string> &dst, 
   // write the data buffer to the destination
   dst.push_back( data_buffer.str() );
 }
+
 void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, int index, int scalar_data)
 {
   stringstream data_buffer (stringstream::in | stringstream::out);
@@ -342,7 +344,6 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-
 int CrushTester::test()
 {
   if (min_rule < 0 || max_rule < 0) {
@@ -356,6 +357,11 @@ int CrushTester::test()
 
   // initial osd weights
   vector<__u32> weight;
+
+  /*
+   * note device weight is set by crushtool
+   * (likely due to a given a command line option)
+   */
   for (int o = 0; o < crush.get_max_devices(); o++) {
     if (device_weight.count(o)) {
       weight.push_back(device_weight[o]);
@@ -365,6 +371,7 @@ int CrushTester::test()
       weight.push_back(0);
     }
   }
+
   if (output_utilization_all)
     err << "devices weights (hex): " << hex << weight << dec << std::endl;
 
@@ -510,7 +517,7 @@ int CrushTester::test()
           << ":\t" << per[i] << std::endl;
 
       for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); p++)
-        if ( output_statistics || p->first != nr)
+        if (output_statistics)
           err << "rule " << r << " (" << crush.get_rule_name(r) << ") num_rep " << nr
           << " result size == " << p->first << ":\t"
           << p->second << "/" << (max_x-min_x+1) << std::endl;

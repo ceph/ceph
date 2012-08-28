@@ -36,11 +36,42 @@ class CrushTester {
 
   string output_data_file_name;
 
-
+/*
+ * mark a ratio of devices down, can be used to simulate placement distributions
+ * under degrated cluster conditions
+ */
   void adjust_weights(vector<__u32>& weight);
+
+  /*
+   * Get the maximum number of devices that could be selected to satisfy ruleno.
+   */
   int get_maximum_affected_by_rule(int ruleno);
+
+  /*
+   * for maps where in devices have non-sequential id numbers, return a mapping of device id
+   * to a sequential id number. For example, if we have devices with id's 0 1 4 5 6 return a map
+   * where:
+   *     0 = 0
+   *     1 = 1
+   *     4 = 2
+   *     5 = 3
+   *     6 = 4
+   *
+   * which can help make post-processing easier
+   */
   map<int,int> get_collapsed_mapping();
-  bool check_valid_placement(int ruleno, vector<int> out, const vector<__u32>& weight);
+
+  /*
+   * Essentially a re-implementation of CRUSH. Given a vector of devices
+   * check that the vector represents a valid placement for a given ruleno.
+   */
+  bool check_valid_placement(int ruleno, vector<int> in, const vector<__u32>& weight);
+
+  /*
+   * Generate a random selection of devices which satisfies ruleno. Essentially a
+   * monte-carlo simulator for CRUSH placements which can be used to compare the
+   * statistical distribution of the CRUSH algorithm to a random number generator
+   */
   int random_placement(int ruleno, vector<int>& out, int maxout, vector<__u32>& weight);
 
   // scaffolding to store data for off-line processing

@@ -25,7 +25,7 @@ some since then):
 
        http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
 
-The tool has three modes of operation.
+The tool has four modes of operation.
 
 .. option:: -c map.txt
 
@@ -41,6 +41,9 @@ The tool has three modes of operation.
    will create a relatively generic map with the given layer
    structure. See below for examples.
 
+.. option:: --test ...
+   will perform a dry run of a CRUSH mapping for a range of input object 
+   names, see crushtool --help for more information. 
 
 Options
 =======
