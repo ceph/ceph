@@ -508,20 +508,20 @@ int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch,
   }
 
   do {
-    map<rgw_user_bucket, rgw_usage_log_entry> usage;
+    map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
 
     int ret =  cls_obj_usage_log_read(hash, user, start_epoch, end_epoch, num,
-                                    usage_iter.read_iter, usage, is_truncated);
+                                    usage_iter.read_iter, ret_usage, is_truncated);
     if (ret == -ENOENT)
       goto next;
 
     if (ret < 0)
       return ret;
 
-    num -= usage.size();
+    num -= ret_usage.size();
 
-    for (iter = usage.begin(); iter != usage.end(); ++iter) {
+    for (iter = ret_usage.begin(); iter != ret_usage.end(); ++iter) {
       usage[iter->first].aggregate(iter->second);
     }
 
