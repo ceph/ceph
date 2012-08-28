@@ -5727,10 +5727,12 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
       apply_repop(repop);
     repop->aborted = true;
 
-    if (requeue && repop->ctx->op) {
-      dout(10) << " requeuing " << *repop->ctx->op->request << dendl;
-      rq.push_back(repop->ctx->op);
-      repop->ctx->op = OpRequestRef();
+    if (requeue) {
+      if (repop->ctx->op) {
+	dout(10) << " requeuing " << *repop->ctx->op->request << dendl;
+	rq.push_back(repop->ctx->op);
+	repop->ctx->op = OpRequestRef();
+      }
 
       // also requeue any dups, interleaved into position
       map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.find(repop->v);
@@ -5746,9 +5748,10 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 
   if (requeue) {
     requeue_ops(rq);
+    assert(waiting_for_ondisk.empty());
   }
 
-  assert(waiting_for_ondisk.empty());
+  waiting_for_ondisk.clear();
   waiting_for_ack.clear();
 }
 
