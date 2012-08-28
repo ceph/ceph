@@ -4,9 +4,11 @@
 
 #include "rgw_op.h"
 
-extern void flush_formatter_to_req_state(struct req_state *s,
+extern void rgw_flush_formatter_and_reset(struct req_state *s,
 					 ceph::Formatter *formatter);
 
+extern void rgw_flush_formatter(struct req_state *s,
+                                         ceph::Formatter *formatter);
 
 class RGWGetObj_REST : public RGWGetObj
 {
@@ -137,6 +139,14 @@ class RGWListBucketMultiparts_REST : public RGWListBucketMultiparts {
 public:
   RGWListBucketMultiparts_REST() {}
   ~RGWListBucketMultiparts_REST() {}
+
+  int get_params();
+};
+
+class RGWDeleteMultiObj_REST : public RGWDeleteMultiObj {
+public:
+  RGWDeleteMultiObj_REST() {}
+  ~RGWDeleteMultiObj_REST() {}
 
   int get_params();
 };

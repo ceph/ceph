@@ -665,6 +665,43 @@ public:
   virtual const char *name() { return "list_bucket_multiparts"; }
 };
 
+class RGWDeleteMultiObj : public RGWOp {
+protected:
+  int ret;
+  int max_to_delete;
+  size_t len;
+  char *data;
+  string bucket_name;
+  rgw_bucket bucket;
+  bool quiet;
+  bool status_dumped;
+
+
+public:
+  RGWDeleteMultiObj() {}
+
+  virtual void init(struct req_state *s, RGWHandler *h) {
+    RGWOp::init(s, h);
+    ret = 0;
+    max_to_delete = 1000;
+    len = 0;
+    data = NULL;
+    bucket_name = "";
+    quiet = false;
+    status_dumped = false;
+  }
+  int verify_permission();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_status() = 0;
+  virtual void begin_response() = 0;
+  virtual void send_partial_response(pair<string,int>& result) = 0;
+  virtual void end_response() = 0;
+  virtual const char *name() { return "multi_object_delete"; }
+};
+
+
 class RGWHandler {
 protected:
   struct req_state *s;
