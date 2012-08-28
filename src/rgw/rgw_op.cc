@@ -17,6 +17,7 @@
 #include "rgw_user.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
+#include "rgw_multi_del.h"
 
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
@@ -1740,6 +1741,85 @@ void RGWListBucketMultiparts::execute()
   }
 done:
   send_response();
+}
+
+int RGWDeleteMultiObj::verify_permission()
+{
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWDeleteMultiObj::execute()
+{
+  RGWMultiDelDelete *multi_delete;
+  vector<string>::iterator iter;
+  RGWMultiDelXMLParser parser;
+  pair<string,int> result;
+  int num_processed = 0;
+
+  ret = get_params();
+  if (ret < 0) {
+    goto error;
+  }
+
+  if (!data) {
+    ret = -EINVAL;
+    goto error;
+  }
+
+  if (!parser.init()) {
+    ret = -EINVAL;
+    goto error;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    ret = -EINVAL;
+    goto error;
+  }
+
+  multi_delete = (RGWMultiDelDelete *)parser.find_first("Delete");
+  if (!multi_delete) {
+    ret = -EINVAL;
+    goto error;
+  }
+
+  if (multi_delete->is_quiet())
+    quiet = true;
+
+  begin_response();
+  if (multi_delete->objects.size() == 0) {
+    goto done;
+  }
+
+  for (iter = multi_delete->objects.begin();
+        iter != multi_delete->objects.end() && num_processed < max_to_delete;
+        ++iter, num_processed++) {
+
+    rgw_obj obj(bucket,(*iter));
+    rgwstore->set_atomic(s->obj_ctx, obj);
+    ret = rgwstore->delete_obj(s->obj_ctx, obj);
+    result = make_pair(*iter, ret);
+
+    send_partial_response(result);
+  }
+
+  /*  set the return code to zero, errors at this point will be
+  dumped to the response */
+  ret = 0;
+
+done:
+  // will likely segfault if begin_response() has not been called
+  end_response();
+  free(data);
+  return;
+
+error:
+  send_status();
+  free(data);
+  return;
+
 }
 
 int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)

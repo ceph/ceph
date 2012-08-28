@@ -3,9 +3,12 @@
 #define TIME_BUF_SIZE 128
 
 #include "rgw_op.h"
+#include "rgw_html_errors.h"
 #include "rgw_acl_s3.h"
 
 #define RGW_AUTH_GRACE_MINS 15
+
+void rgw_get_errno_s3(struct rgw_html_errors *e, int err_no);
 
 class RGWGetObj_REST_S3 : public RGWGetObj_REST
 {
@@ -148,6 +151,18 @@ public:
 
   void send_response();
 };
+
+class RGWDeleteMultiObj_REST_S3 : public RGWDeleteMultiObj_REST {
+public:
+  RGWDeleteMultiObj_REST_S3() {}
+  ~RGWDeleteMultiObj_REST_S3() {}
+
+  void send_status();
+  void begin_response();
+  void send_partial_response(pair<string,int>& result);
+  void end_response();
+};
+
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
