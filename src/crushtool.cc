@@ -99,10 +99,12 @@ void usage()
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
   cout << "      [--num-rep n]\n";
-  cout << "      [--batches b]      split the CRUSH mapping into b rounds\n";
-  cout << "    --simulate           simulate placements using a RNG\n";
+  cout << "      [--batches b]      split the CRUSH mapping into b > 1 rounds\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
+  cout << "      [--simulate]       simulate placements using a random\n";
+  cout << "                         number generator in place of the CRUSH\n";
+  cout << "                         algorithm\n";
   cout << "   -i mapfn --add-item id weight name [--loc type name ...]\n";
   cout << "                         insert an item into the hierarchy at the\n";
   cout << "                         given location\n";
@@ -165,6 +167,8 @@ int main(int argc, const char **argv)
   bool compile = false;
   bool decompile = false;
   bool test = false;
+  bool display = false;
+  bool write_to_file = false;
   bool verbose = false;
   bool unsafe_tunables = false;
 
@@ -213,14 +217,19 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
     } else if (ceph_argparse_flag(args, i, "--show_utilization", (char*)NULL)) {
+      display = true;
       tester.set_output_utilization(true);
     } else if (ceph_argparse_flag(args, i, "--show_utilization_all", (char*)NULL)) {
+      display = true;
       tester.set_output_utilization_all(true);
     } else if (ceph_argparse_flag(args, i, "--show_statistics", (char*)NULL)) {
+      display = true;
       tester.set_output_statistics(true);
     } else if (ceph_argparse_flag(args, i, "--show_bad_mappings", (char*)NULL)) {
+      display = true;
       tester.set_output_bad_mappings(true);
     } else if (ceph_argparse_flag(args, i, "--show_choose_tries", (char*)NULL)) {
+      display = true;
       tester.set_output_choose_tries(true);
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
@@ -277,6 +286,7 @@ int main(int argc, const char **argv)
       i = args.erase(i);
       add_loc[type] = name;
     } else if (ceph_argparse_flag(args, i, "--output-csv", (char*)NULL)) {
+      write_to_file = true;
       tester.set_output_data_file(true);
       tester.set_output_csv(true);
     } else if (ceph_argparse_flag(args, i, "--help-output", (char*)NULL)) {
@@ -379,6 +389,11 @@ int main(int argc, const char **argv)
     else {
       ++i;
     }
+  }
+
+  if (test && !display && !write_to_file) {
+    cerr << "WARNING: no output selected!" << std::endl;
+    usage();
   }
 
   if (decompile + compile + build > 1) {
