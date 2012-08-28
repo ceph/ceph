@@ -2396,7 +2396,7 @@ void OSD::_send_boot()
     hbserver_messenger->set_addr_unknowns(hb_addr);
     dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
-  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr, cluster_addr);
+  MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_addr, cluster_addr);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
 	   << ", hb addr " << hb_addr
