@@ -246,6 +246,16 @@ public:
   // version requests
 public:
   void is_latest_map(string map, version_t cur_ver, Context *onfinish);
+
+  /**
+   * get latest known version(s) of cluster map
+   *
+   * @param map string name of map (e.g., 'osdmap')
+   * @param newest pointer where newest map version will be stored
+   * @param oldest pointer where oldest map version will be stored
+   * @param onfinish context that will be triggered on completion
+   * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
+   */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
 
 private:
