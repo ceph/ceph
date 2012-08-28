@@ -886,6 +886,21 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
       pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(begin, end);
     }
 
+    osd_xinfo_t xi = osdmap.get_xinfo(from);
+    if (m->boot_epoch == 0) {
+      xi.laggy_probability = xi.laggy_probability / 3;
+      xi.laggy_interval = xi.laggy_interval / 3;
+      dout(10) << " not laggy, new xi " << xi << dendl;
+    } else {
+      if (xi.down_stamp.sec()) {
+	int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
+	xi.laggy_interval = (xi.laggy_interval * 2 + interval) / 3;
+      }
+      xi.laggy_probability = ((long long)xi.laggy_probability * 2ull + 0xffffffffull) / 3;
+      dout(10) << " laggy, now xi " << xi << dendl;
+    }
+    pending_inc.new_xinfo[from] = xi;
+
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
   }
