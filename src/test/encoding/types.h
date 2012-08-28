@@ -19,6 +19,7 @@ TYPE(entity_addr_t)
 
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
+TYPE(osd_xinfo_t)
 TYPEWITHSTRAYDATA(OSDMap)
 TYPEWITHSTRAYDATA(OSDMap::Incremental)
 
