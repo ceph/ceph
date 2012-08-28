@@ -116,6 +116,8 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
     read_iter = result.next_iter;
     if (is_truncated)
       *is_truncated = result.truncated;
+
+    usage = result.usage;
   } catch (buffer::error& e) {
     return -EINVAL;
   }
