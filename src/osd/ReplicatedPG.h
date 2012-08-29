@@ -828,7 +828,7 @@ protected:
     list<ObjectStore::Transaction*> tls;
     
     RepModify() : pg(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
-		  bytes_written(0) {}
+		  epoch_started(0), bytes_written(0) {}
   };
 
   struct C_OSD_RepModifyApply : public Context {
