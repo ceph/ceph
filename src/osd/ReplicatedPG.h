@@ -383,7 +383,7 @@ public:
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
