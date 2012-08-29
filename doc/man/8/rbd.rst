@@ -41,6 +41,19 @@ Options
 Parameters
 ==========
 
+.. option:: --format format
+
+   Specifies which object layout to use. The default is 1.
+
+   * format 1 - Use the original format for a new rbd image. This format is
+     understood by all versions of librbd and the kernel rbd module, but
+     does not support newer features like cloning.
+
+   * format 2 - Use the second rbd format, which is supported by
+     librbd (but not the kernel rbd module) at this time. This adds
+     support for cloning and is more easily extensible to allow more
+     features in the future.
+
 .. option:: --size size-in-mb
 
    Specifies the size (in megabytes) of the new rbd image.
