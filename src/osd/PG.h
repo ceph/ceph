@@ -281,7 +281,8 @@ public:
     uint64_t zero_to;                // first non-zeroed byte of log.
     bool has_checksums;
 
-    OndiskLog() : tail(0), head(0), zero_to(0) {}
+    OndiskLog() : tail(0), head(0), zero_to(0),
+		  has_checksums(true) {}
 
     uint64_t length() { return head - tail; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
