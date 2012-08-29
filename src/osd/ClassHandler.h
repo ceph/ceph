@@ -29,7 +29,7 @@ public:
       return flags;
     }
 
-    ClassMethod() : cls(0), func(0), cxx_func(0) {}
+    ClassMethod() : cls(0), flags(0), func(0), cxx_func(0) {}
   };
 
   struct ClassData {
