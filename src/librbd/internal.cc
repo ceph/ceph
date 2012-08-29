@@ -859,11 +859,29 @@ reprotect_and_return_err:
       lderr(cct) << "couldn't add child: " << r << dendl;
       goto err_close_child;
     }
+
+    p_imctx->snap_lock.Lock();
+    r = p_imctx->is_snap_protected(p_imctx->snap_name, &snap_protected);
+    p_imctx->snap_lock.Unlock();
+
+    if (r < 0 || !snap_protected) {
+      // we lost the race with unprotect
+      r = -EINVAL;
+      goto err_remove_child;
+    }
+
     ldout(cct, 2) << "done." << dendl;
     close_image(c_imctx);
     close_image(p_imctx);
     return 0;
 
+  err_remove_child:
+    remove_r = cls_client::remove_child(&c_ioctx, RBD_CHILDREN, pspec,
+					c_imctx->id);
+    if (remove_r < 0) {
+     lderr(cct) << "Error removing failed clone from list of children: "
+		 << cpp_strerror(remove_r) << dendl;
+    }
   err_close_child:
     close_image(c_imctx);
   err_remove:
