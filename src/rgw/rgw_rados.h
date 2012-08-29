@@ -195,8 +195,40 @@ struct RGWRadosParams {
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
 
+  int init(CephContext *cct, RGWRados *store);
   void init_default();
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(domain_root, bl);
+    ::encode(control_pool, bl);
+    ::encode(gc_pool, bl);
+    ::encode(log_pool, bl);
+    ::encode(intent_log_pool, bl);
+    ::encode(usage_log_pool, bl);
+    ::encode(user_keys_pool, bl);
+    ::encode(user_email_pool, bl);
+    ::encode(user_swift_pool, bl);
+    ::encode(user_uid_pool, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+    ::decode(domain_root, bl);
+    ::decode(control_pool, bl);
+    ::decode(gc_pool, bl);
+    ::decode(log_pool, bl);
+    ::decode(intent_log_pool, bl);
+    ::decode(usage_log_pool, bl);
+    ::decode(user_keys_pool, bl);
+    ::decode(user_email_pool, bl);
+    ::decode(user_swift_pool, bl);
+    ::decode(user_uid_pool, bl);
+    DECODE_FINISH(bl);
+  }
 };
+WRITE_CLASS_ENCODER(RGWRadosParams);
   
 class RGWRados
 {
