@@ -184,7 +184,7 @@ public:
     Mutex::Locker l(publish_lock);
     return superblock;
   }
-  void publish_superblock(OSDSuperblock block) {
+  void publish_superblock(const OSDSuperblock &block) {
     Mutex::Locker l(publish_lock);
     superblock = block;
   }
