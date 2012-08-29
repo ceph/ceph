@@ -1134,6 +1134,7 @@ int OSD::shutdown()
 
   delete service.watch;
 
+  osd_lock.Unlock();
   return r;
 }
 
