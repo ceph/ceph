@@ -412,27 +412,11 @@ int RGWListBucketMultiparts_REST::get_params()
 
 int RGWDeleteMultiObj_REST::get_params()
 {
-  static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
-  bufferlist bl;
-  RGWBucketInfo info;
-
   bucket_name = s->bucket_name;
 
   if (bucket_name.empty()) {
     ret = -EINVAL;
     return ret;
-  }
-
-  ret = rgw_get_obj(NULL, pi_buckets_rados, bucket_name, bl, NULL);
-  if (ret < 0)
-    return ret;
-
-  bufferlist::iterator iter = bl.begin();
-  try {
-    ::decode(info, iter);
-  } catch (buffer::error& err) {
-    cerr << "ERROR: could not decode buffer info, caught buffer::error" << std::endl;
-    return -EIO;
   }
 
   // everything is probably fine, set the bucket
