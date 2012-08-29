@@ -74,12 +74,12 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
   ::encode(ui, uid_bl);
   ::encode(info, uid_bl);
 
-  ret = rgw_put_obj(store, info.user_id, store->params.user_uid_pool, info.user_id, uid_bl.c_str(), uid_bl.length(), exclusive);
+  ret = rgw_put_system_obj(store, store->params.user_uid_pool, info.user_id, uid_bl.c_str(), uid_bl.length(), exclusive);
   if (ret < 0)
     return ret;
 
   if (info.user_email.size()) {
-    ret = rgw_put_obj(store, info.user_id, store->params.user_email_pool, info.user_email, uid_bl.c_str(), uid_bl.length(), exclusive);
+    ret = rgw_put_system_obj(store, store->params.user_email_pool, info.user_email, uid_bl.c_str(), uid_bl.length(), exclusive);
     if (ret < 0)
       return ret;
   }
@@ -88,7 +88,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      ret = rgw_put_obj(store, k.id, store->params.user_keys_pool, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
+      ret = rgw_put_system_obj(store, store->params.user_keys_pool, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
       if (ret < 0)
         return ret;
     }
@@ -97,7 +97,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
   map<string, RGWAccessKey>::iterator siter;
   for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
     RGWAccessKey& k = siter->second;
-    ret = rgw_put_obj(store, info.user_id, store->params.user_swift_pool, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
+    ret = rgw_put_system_obj(store, store->params.user_swift_pool, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
     if (ret < 0)
       return ret;
   }

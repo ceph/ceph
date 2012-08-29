@@ -267,9 +267,8 @@ int rgw_log_op(RGWRados *store, struct req_state *s)
 
   int ret = store->append_async(obj, bl.length(), bl);
   if (ret == -ENOENT) {
-    string id;
     map<std::string, bufferlist> attrs;
-    ret = store->create_bucket(id, store->params.log_pool, attrs, true);
+    ret = store->create_pool(store->params.log_pool, attrs, true);
     if (ret < 0)
       goto done;
     // retry
@@ -313,7 +312,7 @@ int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const u
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
-    ret = store->create_bucket(id, intent_log_bucket, attrs, true);
+    ret = store->create_pool(intent_log_bucket, attrs, true);
     if (ret < 0)
       goto done;
     ret = store->append_async(log_obj, bl.length(), bl);

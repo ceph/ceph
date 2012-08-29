@@ -215,8 +215,6 @@ class RGWRados
     GetObjState() : sent_data(false) {}
   };
 
-  int set_buckets_auid(vector<rgw_bucket>& buckets, uint64_t auid);
-
   Mutex lock;
   SafeTimer *timer;
 
@@ -356,18 +354,21 @@ public:
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
+  virtual int create_pool(rgw_bucket& bucket,
+                          map<std::string,bufferlist>& attrs,
+                          bool exclusive);
+
   /**
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int create_bucket(string& owner, rgw_bucket& bucket,
                             map<std::string,bufferlist>& attrs,
-                            bool system_bucket, bool exclusive = true,
-                            uint64_t auid = 0);
+                            bool exclusive = true);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int remove_bucket_placement(std::string& new_pool);
   virtual int list_placement_set(set<string>& names);
-  virtual int create_pools(vector<string>& names, vector<int>& retcodes, int auid = 0);
+  virtual int create_pools(vector<string>& names, vector<int>& retcodes);
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
