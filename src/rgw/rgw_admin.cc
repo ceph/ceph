@@ -67,7 +67,6 @@ void _usage()
   cerr << "  gc process                 manually process garbage\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
-  cerr << "   --auth-uid=<auid>         librados uid\n";
   cerr << "   --subuser=<name>          subuser name\n";
   cerr << "   --access-key=<key>        S3 access key\n";
   cerr << "   --email=<email>\n";
@@ -337,7 +336,6 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->open_object_section("user_info");
 
   formatter->dump_string("user_id", info.user_id);
-  formatter->dump_int("rados_uid", info.auid);
   formatter->dump_string("display_name", info.display_name);
   formatter->dump_string("email", info.user_email);
   formatter->dump_int("suspended", (int)info.suspended);
@@ -388,7 +386,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   cout << std::endl;
 }
 
-static int create_bucket(string bucket_str, string& user_id, string& display_name, uint64_t auid)
+static int create_bucket(string bucket_str, string& user_id, string& display_name)
 {
   RGWAccessControlPolicy policy, old_policy;
   map<string, bufferlist> attrs;
@@ -409,7 +407,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = store->create_bucket(user_id, bucket, attrs, false, auid);
+  ret = store->create_bucket(user_id, bucket, attrs);
   if (ret && ret != -EEXIST)   
     goto done;
 
@@ -675,7 +673,6 @@ int main(int argc, char **argv)
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
   bool specified_perm_mask = false;
-  uint64_t auid = -1;
   RGWUserInfo info;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
@@ -751,7 +748,6 @@ int main(int argc, char **argv)
 	cerr << errs.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-      auid = tmp;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
       max_buckets = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
@@ -1034,8 +1030,6 @@ int main(int argc, char **argv)
       info.display_name = display_name;
     if (!user_email.empty())
       info.user_email = user_email;
-    if (auid != (uint64_t)-1)
-      info.auid = auid;
     if (!subuser.empty()) {
       RGWSubUser u = info.subusers[subuser];
       u.name = subuser;
@@ -1212,7 +1206,7 @@ int main(int argc, char **argv)
       }
     } else {
       // the bucket seems not to exist, so we should probably create it...
-      r = create_bucket(bucket_name.c_str(), uid_str, info.display_name, info.auid);
+      r = create_bucket(bucket_name.c_str(), uid_str, info.display_name);
       if (r < 0)
         cerr << "error linking bucket to user: r=" << r << std::endl;
       return -r;

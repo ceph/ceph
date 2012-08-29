@@ -662,85 +662,87 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 }
 
 /**
+ * create a rados pool, associated meta info
+ * returns 0 on success, -ERR# otherwise.
+ */
+int RGWRados::create_pool(rgw_bucket& bucket, 
+			  map<std::string, bufferlist>& attrs, 
+			  bool exclusive)
+{
+  int ret = 0;
+
+  librados::ObjectWriteOperation op;
+  op.create(exclusive);
+
+  for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
+    op.setxattr(iter->first.c_str(), iter->second);
+
+  bufferlist outbl;
+  ret = root_pool_ctx.operate(bucket.name, &op);
+  if (ret < 0)
+    return ret;
+
+  ret = rados->pool_create(bucket.pool.c_str(), 0);
+  if (ret == -EEXIST)
+    ret = 0;
+  if (ret < 0) {
+    root_pool_ctx.remove(bucket.name.c_str());
+  } else {
+    bucket.pool = bucket.name;
+  }
+
+  return ret;
+}
+/**
  * create a bucket with name bucket and the given list of attrs
  * returns 0 on success, -ERR# otherwise.
  */
 int RGWRados::create_bucket(string& owner, rgw_bucket& bucket, 
 			    map<std::string, bufferlist>& attrs, 
-			    bool system_bucket,
-			    bool exclusive, uint64_t auid)
+			    bool exclusive)
 {
   int ret = 0;
 
-  if (system_bucket) {
-    librados::ObjectWriteOperation op;
-    op.create(exclusive);
+  ret = select_bucket_placement(bucket.name, bucket);
+  if (ret < 0)
+    return ret;
+  librados::IoCtx io_ctx; // context for new bucket
 
-    for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
-      op.setxattr(iter->first.c_str(), iter->second);
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
 
-    bufferlist outbl;
-    ret = root_pool_ctx.operate(bucket.name, &op);
-    if (ret < 0)
-      return ret;
+  bufferlist bl;
+  uint32_t nop = 0;
+  ::encode(nop, bl);
 
-    ret = rados->pool_create(bucket.pool.c_str(), auid);
-    if (ret == -EEXIST)
-      ret = 0;
-    if (ret < 0) {
-      root_pool_ctx.remove(bucket.name.c_str());
-    } else {
-      bucket.pool = bucket.name;
-    }
-  } else {
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to store bucket info" << dendl;
-      return ret;
-    }
+  const string& pool = params.domain_root.name;
+  const char *pool_str = pool.c_str();
+  librados::IoCtx id_io_ctx;
+  r = rados->ioctx_create(pool_str, id_io_ctx);
+  if (r < 0)
+    return r;
 
-    ret = select_bucket_placement(bucket.name, bucket);
-    if (ret < 0)
-      return ret;
-    librados::IoCtx io_ctx; // context for new bucket
+  uint64_t iid = instance_id();
+  uint64_t bid = next_bucket_id();
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%llu.%llu", (long long)iid, (long long)bid); 
+  bucket.marker = buf;
+  bucket.bucket_id = bucket.marker;
 
-    int r = open_bucket_ctx(bucket, io_ctx);
-    if (r < 0)
-      return r;
+  string dir_oid =  dir_oid_prefix;
+  dir_oid.append(bucket.marker);
 
-    bufferlist bl;
-    uint32_t nop = 0;
-    ::encode(nop, bl);
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  r = cls_rgw_init_index(io_ctx, op, dir_oid);
+  if (r < 0 && r != -EEXIST)
+    return r;
 
-    const string& pool = params.domain_root.name;
-    const char *pool_str = pool.c_str();
-    librados::IoCtx id_io_ctx;
-    r = rados->ioctx_create(pool_str, id_io_ctx);
-    if (r < 0)
-      return r;
-
-    uint64_t iid = instance_id();
-    uint64_t bid = next_bucket_id();
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%llu.%llu", (long long)iid, (long long)bid); 
-    bucket.marker = buf;
-    bucket.bucket_id = bucket.marker;
-
-    string dir_oid =  dir_oid_prefix;
-    dir_oid.append(bucket.marker);
-
-    librados::ObjectWriteOperation op;
-    op.create(true);
-    r = cls_rgw_init_index(io_ctx, op, dir_oid);
-    if (r < 0 && r != -EEXIST)
-      return r;
-
-    RGWBucketInfo info;
-    info.bucket = bucket;
-    info.owner = owner;
-    ret = store_bucket_info(info, &attrs, exclusive);
-    if (ret == -EEXIST)
-      return ret;
-  }
+  RGWBucketInfo info;
+  info.bucket = bucket;
+  info.owner = owner;
+  ret = store_bucket_info(info, &attrs, exclusive);
 
   return ret;
 }
@@ -750,7 +752,7 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
   bufferlist bl;
   ::encode(info, bl);
 
-  int ret = rgw_put_obj(this, info.owner, params.domain_root, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_system_obj(this, params.domain_root, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
   if (ret < 0)
     return ret;
 
@@ -902,7 +904,7 @@ int RGWRados::list_placement_set(set<string>& names)
   return names.size();
 }
 
-int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int auid)
+int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
 {
   vector<string>::iterator iter;
   vector<librados::PoolAsyncCompletion *> completions;
@@ -912,7 +914,7 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int aui
     librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
     completions.push_back(c);
     string& name = *iter;
-    int ret = rados->pool_create_async(name.c_str(), auid, c);
+    int ret = rados->pool_create_async(name.c_str(), c);
     rets.push_back(ret);
   }
 
@@ -2491,9 +2493,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   ::encode(info, bl);
 
-  string unused;
-
-  int ret = rgw_put_obj(this, unused, params.domain_root, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_system_obj(this, params.domain_root, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
 
   return ret;
 }
@@ -2882,7 +2882,7 @@ int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)
     string id;
     map<std::string, bufferlist> attrs;
     rgw_bucket pool(usage_log_pool);
-    r = create_bucket(id, pool, attrs, true);
+    r = create_bucket(id, pool, attrs);
     if (r < 0)
       return r;
  
