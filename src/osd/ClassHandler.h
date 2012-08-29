@@ -53,6 +53,7 @@ public:
     ClassMethod *_get_method(const char *mname);
 
     ClassData() : status(CLASS_UNKNOWN), 
+		  handler(NULL),
 		  handle(NULL) {}
     ~ClassData() { }
 
