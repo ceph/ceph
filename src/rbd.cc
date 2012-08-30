@@ -72,7 +72,8 @@ void usage()
 "  create [--order <bits>] --size <MB> <name>  create an empty image\n"
 "  clone [--order <bits>] <parentsnap> <clonename>\n"
 "                                              clone a snapshot into a COW\n"
-"                                               child image\n"
+"                                              child image\n"
+"  children <snap-name>                        display children of snapshot\n"
 "  flatten <image-name>                        fill clone with parent data\n"
 "                                              (make it independent)\n"
 "  resize --size <MB> <image-name>             resize (expand or contract) image\n"
@@ -111,8 +112,9 @@ void usage()
 "  --size <size in MB>          size of image for create and resize\n"
 "  --order <bits>               the object size in bits; object size will be\n"
 "                               (1 << order) bytes. Default is 22 (4 MB).\n"
-"\n"
-"For the map command:\n"
+"  --format <format-number>     format to use when creating an image\n"
+"                               format 1 is the original format (default)\n"
+"                               format 2 supports cloning\n"
 "  --id <username>              rados user (without 'client.' prefix) to authenticate as\n"
 "  --keyfile <path>             file containing secret key for use with cephx\n";
 }
@@ -166,13 +168,13 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, uint64_t size, int *order,
-		     bool old_format, uint64_t features)
+		     int format, uint64_t features)
 {
   int r;
   if (features == 0) 
     features = RBD_FEATURES_ALL;
 
-  if (old_format)
+  if (format == 1)
     r = rbd.create(io_ctx, imgname, size, order);
   else
     r = rbd.create2(io_ctx, imgname, size, features, order);
@@ -255,10 +257,12 @@ static int do_show_info(const char *imgname, librbd::Image& image,
        << std::endl
        << "\tblock_name_prefix: " << info.block_name_prefix
        << std::endl
-       << "\told format: " << (old_format ? "True" : "False")
-       << std::endl
-       << "\tfeatures: " << feature_str(features)
+       << "\tformat: " << (old_format ? "1" : "2")
        << std::endl;
+
+  if (!old_format) {
+    cout << "\tfeatures: " << feature_str(features) << std::endl;
+  }
 
   // snapshot info, if present
   if (snapname) {
@@ -379,6 +383,20 @@ static int do_unprotect_snap(librbd::Image& image, const char *snapname)
   if (r < 0)
     return r;
 
+  return 0;
+}
+
+static int do_list_children(librbd::Image &image)
+{
+  set<pair<string, string> > children;
+  int r = image.list_children(&children);
+  if (r < 0)
+    return r;
+
+  for (set<pair<string, string> >::const_iterator child_it = children.begin();
+       child_it != children.end(); child_it++) {
+    cout << child_it->first << "/" << child_it->second << std::endl;
+  }
   return 0;
 }
 
@@ -505,7 +523,7 @@ done_img:
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, int *order, const char *path,
-		     bool old_format, uint64_t features, int64_t size)
+		     int format, uint64_t features, int64_t size)
 {
   int fd, r;
   struct stat stat_buf;
@@ -543,7 +561,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   assert(imgname);
 
-  r = do_create(rbd, io_ctx, imgname, size, order, old_format, features);
+  r = do_create(rbd, io_ctx, imgname, size, order, format, features);
   if (r < 0) {
     cerr << "image creation failed" << std::endl;
     return r;
@@ -970,6 +988,7 @@ enum {
   OPT_CREATE,
   OPT_CLONE,
   OPT_FLATTEN,
+  OPT_CHILDREN,
   OPT_RESIZE,
   OPT_RM,
   OPT_EXPORT,
@@ -1003,6 +1022,8 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_CLONE;
     if (strcmp(cmd, "flatten") == 0)
       return OPT_FLATTEN;
+    if (strcmp(cmd, "children") == 0)
+      return OPT_CHILDREN;
     if (strcmp(cmd, "resize") == 0)
       return OPT_RESIZE;
     if (strcmp(cmd, "rm") == 0)
@@ -1075,7 +1096,8 @@ int main(int argc, const char **argv)
   const char *poolname = NULL;
   uint64_t size = 0;  // in bytes
   int order = 0;
-  bool old_format = true;
+  bool format_specified = false;
+  int format = 1;
   uint64_t features = RBD_FEATURE_LAYERING;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL, *devpath = NULL;
 
@@ -1093,7 +1115,15 @@ int main(int argc, const char **argv)
       usage();
       return 0;
     } else if (ceph_argparse_flag(args, i, "--new-format", (char*)NULL)) {
-      old_format = false;
+      format = 2;
+      format_specified = true;
+    } else if (ceph_argparse_withint(args, i, &format, &err, "--format",
+				     (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      format_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       poolname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-pool", (char*)NULL)) {
@@ -1195,9 +1225,27 @@ int main(int argc, const char **argv)
       case OPT_SHOWMAPPED:
 	usage();
 	return EXIT_FAILURE;
+      case OPT_CHILDREN:
+	set_conf_param(v, &imgname, NULL);
+	break;
       default:
 	assert(0);
 	break;
+    }
+  }
+
+  if (format_specified && opt_cmd != OPT_IMPORT && opt_cmd != OPT_CREATE) {
+    cerr << "error: format can only be set when "
+	 << "creating or importing an image" << std::endl;
+    usage();
+    return EXIT_FAILURE;
+  }
+
+  if (format_specified) {
+    if (format < 1 || format > 2) {
+      cerr << "error: format must be 1 or 2" << std::endl;
+      usage();
+      return EXIT_FAILURE;
     }
   }
 
@@ -1231,15 +1279,16 @@ int main(int argc, const char **argv)
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY &&
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
-      opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT) {
+      opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
+      opt_cmd != OPT_CHILDREN) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage();
     return EXIT_FAILURE;
   }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE ||
-       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT) &&
-      !snapname) {
+       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
+       opt_cmd == OPT_CHILDREN) && !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage();
     return EXIT_FAILURE;
@@ -1308,7 +1357,8 @@ int main(int argc, const char **argv)
        opt_cmd == OPT_SNAP_ROLLBACK || opt_cmd == OPT_SNAP_REMOVE ||
        opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_EXPORT ||
        opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
-       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY || opt_cmd == OPT_FLATTEN)) {
+       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY ||
+       opt_cmd == OPT_FLATTEN || opt_cmd == OPT_CHILDREN)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
@@ -1317,7 +1367,8 @@ int main(int argc, const char **argv)
   }
 
   if (snapname && talk_to_cluster &&
-      (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY)) {
+      (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
+       opt_cmd == OPT_CHILDREN)) {
     r = image.snap_set(snapname);
     if (r < 0) {
       cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
@@ -1359,7 +1410,7 @@ int main(int argc, const char **argv)
       usage();
       return EXIT_FAILURE;
     }
-    r = do_create(rbd, io_ctx, imgname, size, &order, old_format, features);
+    r = do_create(rbd, io_ctx, imgname, size, &order, format, features);
     if (r < 0) {
       cerr << "create error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
@@ -1522,6 +1573,14 @@ int main(int argc, const char **argv)
     }
     break;
 
+  case OPT_CHILDREN:
+    r = do_list_children(image);
+    if (r < 0) {
+      cerr << "listing children failed: " << cpp_strerror(-r) << std::endl;
+      return EXIT_FAILURE;
+    }
+    break;
+
   case OPT_EXPORT:
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
@@ -1540,7 +1599,7 @@ int main(int argc, const char **argv)
       return EXIT_FAILURE;
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
-		  old_format, features, size);
+		  format, features, size);
     if (r < 0) {
       cerr << "import failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
