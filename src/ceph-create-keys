@@ -1,0 +1,145 @@
+#!/usr/bin/python
+import argparse
+import errno
+import json
+import logging
+import os
+import subprocess
+import sys
+import time
+
+
+log = logging.getLogger(os.path.basename(sys.argv[0]))
+
+QUORUM_STATES = ['leader', 'peon']
+
+def wait_for_quorum(cluster, mon_id):
+    while True:
+        p = subprocess.Popen(
+            args=[
+                'ceph',
+                '--cluster={cluster}'.format(cluster=cluster),
+                '--admin-daemon=/var/run/ceph/{cluster}-mon.{mon_id}.asok'.format(
+                    cluster=cluster,
+                    mon_id=mon_id,
+                    ),
+                'mon_status',
+                ],
+            stdout=subprocess.PIPE,
+            )
+        out = p.stdout.read()
+        returncode = p.wait()
+        if returncode != 0:
+            log.info('ceph-mon admin socket not ready yet.')
+            time.sleep(1)
+            continue
+
+        data = json.loads(out)
+        state = data['state']
+        if state not in QUORUM_STATES:
+            log.info('ceph-mon is not in quorum: %r', state)
+            time.sleep(1)
+            continue
+
+        break
+
+
+def get_key(cluster, mon_id):
+    path = '/etc/ceph/{cluster}.client.admin.keyring'.format(
+        cluster=cluster,
+        )
+    if os.path.exists(path):
+        log.info('Key exists already: %s', path)
+        return
+    tmp = '{path}.{pid}.tmp'.format(
+        path=path,
+        pid=os.getpid(),
+        )
+    wait_for_quorum(cluster=cluster, mon_id=mon_id)
+    while True:
+        try:
+            with file(tmp, 'w') as f:
+                os.fchmod(f.fileno(), 0600)
+                log.info('Talking to monitor...')
+                returncode = subprocess.call(
+                    args=[
+                        'ceph',
+                        '--cluster={cluster}'.format(cluster=cluster),
+                        '--name=mon.',
+                        '--keyring=/var/lib/ceph/mon/{cluster}-{mon_id}/keyring'.format(
+                            cluster=cluster,
+                            mon_id=mon_id,
+                            ),
+                        'auth',
+                        'get-or-create',
+                        'client.admin',
+                        'mon', 'allow *',
+                        'osd', 'allow *',
+                        'mds', 'allow',
+                        ],
+                    stdout=f,
+                    )
+            if returncode != 0:
+                log.info('Cannot get or create admin key')
+                time.sleep(1)
+                continue
+
+            os.rename(tmp, path)
+            break
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError as e:
+                if e.errno == errno.ENOENT:
+                    pass
+                else:
+                    raise
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Create Ceph client.admin key when ceph-mon is ready',
+        )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true', default=None,
+        help='be more verbose',
+        )
+    parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        help='name of the cluster',
+        )
+    parser.add_argument(
+        '--id', '-i',
+        metavar='ID',
+        help='id of a ceph-mon that is coming up',
+        required=True,
+        )
+    parser.set_defaults(
+        cluster='ceph',
+        )
+    parser.set_defaults(
+        # we want to hold on to this, for later
+        prog=parser.prog,
+        )
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_args()
+
+    loglevel = logging.INFO
+    if args.verbose:
+        loglevel = logging.DEBUG
+
+    logging.basicConfig(
+        level=loglevel,
+        )
+
+    get_key(cluster=args.cluster, mon_id=args.id)
+
+
+if __name__ == '__main__':
+    main()
