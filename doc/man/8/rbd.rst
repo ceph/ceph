@@ -69,12 +69,12 @@ Parameters
 
 .. option:: --id username
 
-   Specifies the username (without the ``client.'' prefix) to use with the map command.
+   Specifies the username (without the ``client.`` prefix) to use with the map command.
 
 .. option:: --keyfile filename
 
    Specifies a file containing the secret to use with the map command.
-   If not specified, ``client.admin'' will be used by default.
+   If not specified, ``client.admin`` will be used by default.
 
 .. option:: --keyring filename
 
@@ -94,14 +94,18 @@ Commands
 :command:`info` [*image-name*]
   Will dump information (such as size and order) about a specific rbd image.
   If image is a clone, information about its parent is also displayed.
+  If a snapshot is specified, whether it is protected is shown as well.
 
 :command:`create` [*image-name*]
   Will create a new rbd image. You must also specify the size via --size.
 
 :command:`clone` [*parent-snapname*] [*image-name*]
   Will create a clone (copy-on-write child) of the parent snapshot.
-  Size and object order will be identical to parent image unless specified.
+  Object order will be identical to that of the parent image unless
+  specified. Size will be the same as the parent snapshot.
+
   The parent snapshot must be protected (see `rbd snap protect`).
+  This requires format 2.
 
 :command:`flatten` [*image-name*]
   If image is a clone, copy all shared blocks from the parent snapshot and
@@ -109,9 +113,13 @@ Commands
   parent snap and child.  The parent snapshot can be unprotected and
   deleted if it has no further dependent clones.
 
+  This requires format 2.
+
 :command:`children` [*image-name*]
   List the clones of the image at the given snapshot. This checks
   every pool, and outputs the resulting poolname/imagename.
+
+  This requires format 2.
 
 :command:`resize` [*image-name*]
   Resizes rbd image. The size parameter also needs to be specified.
@@ -128,6 +136,7 @@ Commands
 
 :command:`cp` [*src-image*] [*dest-image*]
   Copies the content of a src-image into the newly created dest-image.
+  dest-image will have the same size, order, and format as src-image.
 
 :command:`mv` [*src-image*] [*dest-image*]
   Renames an image.  Note: rename across pools is not supported.
@@ -152,12 +161,17 @@ Commands
   Protect a snapshot from deletion, so that clones can be made of it
   (see `rbd clone`).  Snapshots must be protected before clones are made;
   protection implies that there exist dependent cloned children that
-  refer to this snapshot.  `rbd clone` will fail on a nonprotected snapshot.
+  refer to this snapshot.  `rbd clone` will fail on a nonprotected
+  snapshot.
+
+  This requires format 2.
 
 :command:`snap` unprotect [*image-name*]
   Unprotect a snapshot from deletion (undo `snap protect`).  If cloned
   children remain, `snap unprotect` fails.  (Note that clones may exist
   in different pools than the parent snapshot.)
+
+  This requires format 2.
 
 :command:`map` [*image-name*]
   Maps the specified image to a block device via the rbd kernel module.
@@ -203,9 +217,13 @@ To create a new snapshot::
 
        rbd snap create mypool/myimage@mysnap
 
-To create a copy-on-write clone of a snapshot::
+To create a copy-on-write clone of a protected snapshot::
 
-       rbd clone myimage@mysnap cloneimage
+       rbd clone mypool/myimage@mysnap otherpool/cloneimage
+
+To see which clones of a snapshot exist::
+
+       rbd children mypool/myimage@mysnap
 
 To delete a snapshot::
 
@@ -213,11 +231,24 @@ To delete a snapshot::
 
 To map an image via the kernel with cephx enabled::
 
-       rbd map myimage --id admin --keyfile secretfile
+       rbd map mypool/myimage --id admin --keyfile secretfile
 
 To unmap an image::
 
        rbd unmap /dev/rbd0
+
+To create an image and a clone from it::
+
+       rbd import --format 2 image mypool/parent
+       rbd snap create --snap snapname mypool/parent
+       rbd snap protect mypool/parent@snap
+       rbd clone mypool/parent@snap otherpool/child
+
+To change an image from one format to another, export it and then
+import it as the desired format::
+
+       rbd export mypool/myimage@snap /tmp/img
+       rbd import --format 2 /tmp/img mypool/myimage2
 
 
 Availability
