@@ -1,17 +1,39 @@
-==========================
- Ceph Configuration Files
-==========================
-When you start the Ceph service, the initialization process activates a series
-of daemons that run in the background. The hosts in a typical RADOS cluster run
-at least one of three processes or daemons:
+==================
+ Configuring Ceph
+==================
 
-- RADOS (``ceph-osd``)
+When you start the Ceph service, the initialization process activates a series
+of daemons that run in the background. The hosts in a typical Ceph cluster run
+at least one of four daemons:
+
+- Object Storage Device (``ceph-osd``)
 - Monitor (``ceph-mon``)
 - Metadata Server (``ceph-mds``)
+- Ceph Gateway (``radosgw``)
 
-Each process or daemon looks for a ``ceph.conf`` file that provides its
-configuration settings. The default ``ceph.conf`` locations in sequential
-order include:
+For your convenience, each daemon has a series of default values (*i.e.*, many
+are set by  ``ceph/src/common/config_opts.h``). You may override these settings
+with a Ceph configuration file.
+
+
+The ceph.conf File
+==================
+
+When you start a Ceph cluster, each daemon looks for a ``ceph.conf`` file that
+provides its configuration settings. For manual deployments, you need to create
+a ``ceph.conf`` file to configure your cluster. For third party tools that
+create configuration files for you (*e.g.*, Chef), you may use the information
+contained herein as a reference. The ``ceph.conf`` file defines:
+
+- Cluster membership
+- Host names
+- Host addresses
+- Paths to keyrings
+- Paths to journals
+- Paths to data
+- Other runtime options
+
+The default ``ceph.conf`` locations in sequential order include:
 
 #. ``$CEPH_CONF`` (*i.e.,* the path following the ``$CEPH_CONF`` environment variable)
 #. ``-c path/path``  (*i.e.,* the ``-c`` command line argument)
@@ -20,166 +42,324 @@ order include:
 #. ``./ceph.conf`` (*i.e.,* in the current working directory)
 
 
-The ``ceph.conf`` file provides the settings for each Ceph daemon. Once you
-have installed the Ceph packages on the OSD Cluster hosts, you need to create
-a ``ceph.conf`` file to configure your OSD cluster.
+The ``ceph.conf`` file uses an *ini* style syntax. You can add comments to the
+``ceph.conf`` file by preceding comments with a semi-colon (;) or a pound sign
+(#).  For example:
 
-Creating ``ceph.conf``
-----------------------
-The ``ceph.conf`` file defines:
+.. code-block:: ini
 
-- Cluster Membership
-- Host Names
-- Paths to Hosts
-- Runtime Options
-
-You can add comments to the ``ceph.conf`` file by preceding comments with
-a semi-colon (;). For example::
-
-	; <--A semi-colon precedes a comment
-	; A comment may be anything, and always follows a semi-colon on each line.
-	; We recommend that you provide comments in your configuration file(s).
-
-Configuration File Basics
-~~~~~~~~~~~~~~~~~~~~~~~~~
-The ``ceph.conf`` file configures each instance of the three common processes
-in a RADOS cluster.
-
-+-----------------+--------------+--------------+-----------------+-------------------------------------------------+
-| Setting Scope   | Process      | Setting      | Instance Naming | Description                                     |
-+=================+==============+==============+=================+=================================================+
-| All Modules     |     All      | ``[global]`` | N/A             | Settings affect all instances of all daemons.   |
-+-----------------+--------------+--------------+-----------------+-------------------------------------------------+
-| RADOS           | ``ceph-osd`` |  ``[osd]``   | Numeric         | Settings affect RADOS instances only.           |
-+-----------------+--------------+--------------+-----------------+-------------------------------------------------+
-| Monitor         | ``ceph-mon`` |  ``[mon]``   | Alphanumeric    | Settings affect monitor instances only.         |
-+-----------------+--------------+--------------+-----------------+-------------------------------------------------+
-| Metadata Server | ``ceph-mds`` |  ``[mds]``   | Alphanumeric    | Settings affect MDS instances only.             |
-+-----------------+--------------+--------------+-----------------+-------------------------------------------------+
+	# <--A number (#) sign precedes a comment.
+	; A comment may be anything. 
+	# Comments always follow a semi-colon (;) or a pound (#) on each line.
+	# The end of the line terminates a comment.
+	# We recommend that you provide comments in your configuration file(s).
 
 
+ceph.conf Settings
+==================
 
-Metavariables
-~~~~~~~~~~~~~
-The configuration system supports certain 'metavariables,' which are typically
-used in ``[global]`` or process/daemon settings. If metavariables occur inside
-a configuration value, Ceph expands them into a concrete value--similar to how
-Bash shell expansion works.
+The ``ceph.conf`` file can configure all daemons in a cluster, or all daemons of
+a particular type. To configure a series of daemons, the settings must be
+included under the processes that will receive the configuration as follows: 
 
-There are a few different metavariables:
+``[global]``
 
-+--------------+----------------------------------------------------------------------------------------------------------+
-| Metavariable | Description                                                                                              |
-+==============+==========================================================================================================+
-| ``$host``    | Expands to the host name of the current daemon.                                                          |
-+--------------+----------------------------------------------------------------------------------------------------------+
-| ``$type``    | Expands to one of ``mds``, ``osd``, or ``mon``, depending on the type of the current daemon.             |
-+--------------+----------------------------------------------------------------------------------------------------------+
-|  ``$id``     | Expands to the daemon identifier. For ``osd.0``, this would be ``0``; for ``mds.a``, it would be ``a``.  |
-+--------------+----------------------------------------------------------------------------------------------------------+
-|  ``$num``    | Same as ``$id``.                                                                                         |
-+--------------+----------------------------------------------------------------------------------------------------------+
-| ``$name``    | Expands to ``$type.$id``.                                                                                |
-+--------------+----------------------------------------------------------------------------------------------------------+
-| ``$cluster`` | Expands to the cluster name. Useful when running multiple clusters on the same hardware.                 |
-+--------------+----------------------------------------------------------------------------------------------------------+
+:Description: Settings under ``[global]`` affect all daemons in a Ceph cluster. 
+:Example: ``auth supported = cephx``
 
-Global Settings
-~~~~~~~~~~~~~~~
-The Ceph configuration file supports a hierarchy of settings, where child
-settings inherit the settings of the parent. Global settings affect all
-instances of all processes in the cluster. Use the ``[global]`` setting for
-values that are common for all hosts in the cluster. You can override each
+``[osd]``
+
+:Description: Settings under ``[osd]`` affect all ``ceph-osd`` daemons in the cluster.
+:Example: ``osd journal size = 1000``
+
+``[mon]``
+
+:Description: Settings under ``[mon]`` affect all ``ceph-mon`` daemons in the cluster.
+:Example: ``mon addr = 10.0.0.101:6789``
+
+
+``[mds]``
+
+:Description: Settings under ``[mds]`` affect all ``ceph-mds`` daemons in the cluster. 
+:Example: ``host = myserver01``
+
+
+Global settings affect all instances of all daemon in the cluster. Use the ``[global]`` 
+setting for values that are common for all daemons in the cluster. You can override each
 ``[global]`` setting by:
 
 #. Changing the setting in a particular process type (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
 #. Changing the setting in a particular process (*e.g.,* ``[osd.1]`` )
 
 Overriding a global setting affects all child processes, except those that
-you specifically override. For example::
+you specifically override. 
+
+A typical global setting involves activating authentication. For example:
+
+.. code-block:: ini
 
 	[global]
-		; Enable authentication between hosts within the cluster.
+		# Enable authentication between hosts within the cluster.
 		auth supported = cephx
 
-Process/Daemon Settings
-~~~~~~~~~~~~~~~~~~~~~~~
-You can specify settings that apply to a particular type of process. When you
+
+You can specify settings that apply to a particular type of daemon. When you
 specify settings under ``[osd]``, ``[mon]`` or ``[mds]`` without specifying a
 particular instance, the setting will apply to all OSDs, monitors or metadata
 daemons respectively.
 
-For details on settings for each type of daemon, 
-see the following sections. 
-
-.. toctree::
-
-	OSD Settings <osd-config-ref>
-	Monitor Settings <mon-config-ref>
-	Metadata Server Settings <mds-config-ref>	
-
-Instance Settings
-~~~~~~~~~~~~~~~~~
-You may specify settings for particular instances of an daemon. You may specify
+You may specify settings for particular instances of a daemon. You may specify
 an instance by entering its type, delimited by a period (.) and by the
 instance ID. The instance ID for an OSD is always numeric, but it may be
-alphanumeric for monitors and metadata servers. ::
+alphanumeric for monitors and metadata servers.
+
+.. code-block:: ini
 
 	[osd.1]
-		; settings affect osd.1 only.
-	[mon.a1]
-		; settings affect mon.a1 only.
-	[mds.b2]
-		; settings affect mds.b2 only.
+		# settings affect osd.1 only.
 		
+	[mon.a]	
+		# settings affect mon.a only.
+		
+	[mds.b]
+		# settings affect mds.b only.
 
-``host`` and ``addr`` Settings
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The `Hardware Recommendations <../../install/hardware-recommendations>`_ section
-provides some hardware guidelines for configuring the cluster. It is possible
-for a single host to run multiple daemons. For example, a single host with
-multiple disks or RAIDs may run one ``ceph-osd`` for each disk or RAID.
-Additionally, a host may run both a ``ceph-mon`` and an ``ceph-osd`` daemon
-on the same host. Ideally, you will have a host for a particular type of
-process. For example, one host may run ``ceph-osd`` daemons, another host
-may run a ``ceph-mds`` daemon, and other hosts may run ``ceph-mon`` daemons.
 
-Each host has a name identified by the ``host`` setting, and a network location
-(i.e., domain name or IP address) identified by the ``addr`` setting. For example::
+Metavariables
+=============
+
+Metavariables simplify cluster configuration dramatically. When a metavariable
+is set in a configuration value, Ceph expands the metavariable into a concrete
+value. Metavariables are very powerful when used within the ``[global]``,
+``[osd]``, ``[mon]`` or ``[mds]`` sections of your configuration file. Ceph
+metavariables are similar to Bash shell expansion.
+
+Ceph supports the following metavariables: 
+
+
+``$cluster``
+
+:Description: Expands to the cluster name. Useful when running multiple clusters on the same hardware.
+:Example: ``/etc/ceph/$cluster.keyring``
+:Default: ``ceph``
+
+
+``$type``
+
+:Description: Expands to one of ``mds``, ``osd``, or ``mon``, depending on the type of the current daemon.
+:Example: ``/var/lib/ceph/$type``
+
+
+``$id``
+
+:Description: Expands to the daemon identifier. For ``osd.0``, this would be ``0``; for ``mds.a``, it would be ``a``.
+:Example: ``/var/lib/ceph/$type/$cluster-$id``
+
+
+``$host``
+
+:Description: Expands to the host name of the current daemon.
+
+
+``$name``
+
+:Description: Expands to ``$type.$id``.
+:Example: ``/var/run/ceph/$cluster-$name.asok``
+
+
+Common Settings
+===============
+
+The `Hardware Recommendations`_ section provides some hardware guidelines for
+configuring the cluster. It is possible for a single host to run multiple
+daemons. For example, a single host with multiple disks or RAIDs may run one
+``ceph-osd`` for each disk or RAID. Additionally, a host may run both a
+``ceph-mon`` and an ``ceph-osd`` daemon on the same host. Ideally, you will have
+a host for a particular type of process. For example, one host may run
+``ceph-osd`` daemons, another host may run a ``ceph-mds`` daemon, and other
+hosts may run ``ceph-mon`` daemons.
+
+Each host has a name identified by the ``host`` setting. Monitors also  specify
+a network address and port (i.e., domain name or IP address) identified by the
+``addr`` setting.  A basic configuration file will typically specify only
+minimal settings for  each instance of a daemon. For example:
+
+.. code-block:: ini
 
 	[mon.a]
 		host = hostName
 		mon addr = 150.140.130.120:6789
+		
 	[osd.0]
 		host = hostName
 
+
+.. _Hardware Recommendations: ../../install/hardware-recommendations
+
+Network Configuration
+=====================
+
+Monitors listen on port 6789 by default, while metadata servers and OSDs listen
+on the first available port beginning at 6800. Ensure that you open port 6789 on
+hosts that run a monitor daemon, and open one port beginning at port 6800 for
+each OSD or metadata server that runs on the host. Ports are host-specific, so
+you don't need to open any more ports open than the number of daemons running on
+that host, other than potentially a few spares. You may consider opening a few
+additional ports in case a daemon fails and restarts without letting go of the
+port such that the restarted daemon binds to a new port. If you set up separate
+public and  cluster networks, you may need to make entries for each network.
+For example:: 
+
+	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
+
+
+In our `hardware recommendations`_ section, we recommend having at least two NIC
+cards, because Ceph can support two networks: a public (front-side) network, and
+a cluster (back-side) network. Ceph functions just fine with a public network
+only. You only need to specify the public and cluster network settings if you
+use both public and cluster networks.
+
+There are several reasons to consider operating two separate networks. First,
+OSDs handle data replication for the clients. When OSDs replicate data more than
+once, the network load between OSDs easily dwarfs the network load between
+clients and the Ceph cluster. This can introduce latency and create a
+performance problem. Second, while most people are generally civil, a very tiny
+segment of the population likes to engage in what's known as a Denial of Service
+(DoS) attack. When traffic between OSDs gets disrupted, placement groups may no
+longer reflect an ``active + clean`` state, which may prevent users from reading
+and writing data. A great way to defeat this type of attack is to maintain a
+completely separate cluster network that doesn't connect directly to the
+internet.
+
+To configure the networks, add the following options to the ``[global]`` section
+of your ``ceph.conf`` file. 
+
+.. code-block:: ini
+
+	[global]
+		public network {public-network-ip-address/netmask}
+		cluster network {enter cluster-network-ip-address/netmask}
+	
+To configure Ceph hosts to use the networks, you should set the following options
+in the daemon instance sections of your ``ceph.conf`` file. 
+
+.. code-block:: ini
+
+	[osd.0]
+		public network {host-public-ip-address}
+		cluster network {host-cluster-ip-address}
+
+.. _hardware recommendations: ../../install/hardware-recommendations
+
+
 Monitor Configuration
-~~~~~~~~~~~~~~~~~~~~~
-Ceph typically deploys with 3 monitors to ensure high availability should a
-monitor instance crash. An odd number of monitors (3) ensures that the Paxos
-algorithm can determine which version of the cluster map is the most accurate.
+=====================
+
+Ceph production clusters typically deploy with a minimum 3 monitors to ensure
+high availability should a monitor instance crash. An odd number of monitors (3)
+ensures that the Paxos algorithm can determine which version of the cluster map
+is the most recent from a quorum of monitors.
 
 .. note:: You may deploy Ceph with a single monitor, but if the instance fails,
 	  the lack of a monitor may interrupt data service availability.
 
-Ceph monitors typically listen on port ``6789``. For example:: 
+Ceph monitors typically listen on port ``6789``. For example:
+
+.. code-block:: ini 
 
 	[mon.a]
 		host = hostName
 		mon addr = 150.140.130.120:6789
 
-Example Configuration File
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+By default, Ceph expects that you will store a monitor's data under the following path:: 
+
+	/var/lib/ceph/mon/$cluster-$id
+	
+You must create the corresponding directory yourself. With metavariables fully 
+expressed and a cluster named "ceph", the foregoing directory would evaluate to:: 
+
+	/var/lib/ceph/mon/ceph-a
+	
+You may override this path using the ``mon data`` setting. We don't recommend 
+changing the default location. Create the default directory on your new monitor host. :: 
+
+	ssh {new-mon-host}
+	sudo mkdir /var/lib/ceph/mon/ceph-{mon-letter}
+
+
+OSD Configuration
+=================
+
+Ceph production clusters typically deploy OSDs where one host has one OSD daemon
+running a filestore on one data disk. A typical deployment specifies a journal 
+size and whether the file store's extended attributes (XATTRs) use an 
+object map (i.e., when running on the ``ext4`` filesystem). For example: 
+
+.. code-block:: ini
+
+	[osd]
+		osd journal size = 10000
+		filestore xattr use omap = true #enables the object map. Only if running ext4.
+		
+	[osd.0]
+		hostname = {hostname}
+
+
+By default, Ceph expects that you will store an OSD's data with the following path:: 
+
+	/var/lib/ceph/osd/$cluster-$id
+	
+You must create the corresponding directory yourself. With metavariables fully 
+expressed and a cluster named "ceph", the foregoing directory would evaluate to:: 
+
+	/var/lib/ceph/osd/ceph-0
+	
+You may override this path using the ``osd data`` setting. We don't recommend 
+changing the default location. Create the default directory on your new OSD host. :: 
+
+	ssh {new-osd-host}
+	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}	
+
+The ``osd data`` path ideally leads to a mount point with a hard disk that is
+separate from the hard disk storing and running the operating system and
+daemons. If the OSD is for a disk other than the OS disk, prepare it for
+use with Ceph, and mount it to the directory you just created:: 
+
+	ssh {new-osd-host}
+	sudo mkfs -t {fstype} /dev/{disk}
+	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
+
+We recommend using the ``xfs`` file system or the ``btrfs`` file system when 
+running :command:mkfs. 
+
+By default, Ceph expects that you will store an OSDs journal with the following path:: 
+
+	/var/lib/ceph/osd/$cluster-$id/journal
+
+Without performance optimization, Ceph stores the journal on the same disk as
+the OSDs data. An OSD optimized for performance may use a separate disk to store
+journal data (e.g., a solid state drive delivers high performance journaling).
+
+Ceph's default ``osd journal size`` is 0, so you will need to set this in your 
+``ceph.conf`` file. A journal size should find the product of the ``filestore
+min sync interval`` and the expected throughput, and multiple the product by 
+two (2)::  
+	  
+	osd journal size = {2 * (expected throughput * filestore min sync interval)}
+
+The expected throughput number should include the expected disk throughput
+(i.e., sustained data transfer rate), and network throughput. For example, 
+a 7200 RPM disk will likely have approximately 100 MB/s. Taking the ``min()``
+of the disk and network throughput should provide a reasonable expected 
+throughput. Some users just start off with a 10GB journal size. For 
+example::
+
+	osd journal size = 10000
+
+
+Example ceph.conf
+=================
 
 .. literalinclude:: demo-ceph.conf
    :language: ini
 
-
-``iptables`` Configuration
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-Monitors listen on port 6789, while metadata servers and OSDs listen on the first
-available port beginning at 6800. Ensure that you open port 6789 on hosts that run
-a monitor daemon, and open one port beginning at port 6800 for each OSD or metadata
-server that runs on the host. For example:: 
-
-	iptables -A INPUT -m multiport -p tcp -s 192.168.1.0/24 --dports 6789,6800:6803 -j ACCEPT
