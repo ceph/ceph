@@ -2,434 +2,410 @@
  OSD Config Reference
 ======================
 
+
+
+``osd uuid``
+
+:Description: The universally unique identifier (UUID) for the OSD.
+:Type: UUID
+:Default: None
+
+
+``osd data`` 
+
+:Description: The path to the OSDs data. You must create the directory. You should mount a data disk at this mount point. We do not recommend changing the default. 
+:Type: String
+:Default: ``/var/lib/chef/osd/$cluster-$id``
+
+
+``osd journal`` 
+
+:Description: The path to the OSD's journal.You must create the directory. You may mount a separate disk here to separate journal data from OSD data.
+:Type: String
+:Default: ``/var/lib/ceph/osd/$cluster-$id/journal``
+
+
+``osd journal size`` 
+
+:Description: The size of the journal in megabytes.
+:Type: 32-bit Integer
+:Default: ``0``
+:Recommended: Begin with 10GB. Should approximate twice the product of the expected speed multiplied by ``filestore min sync interval``.
+
+
+``osd max write size`` 
+
+:Description: The maximum size of a write in megabytes.
+:Type: 32-bit Integer
+:Default: ``90``
+
+
+``osd client message size cap`` 
+
+:Description: The largest client data message allowed in memory.
+:Type: 64-bit Integer Unsigned
+:Default: 500MB default. ``500*1024L*1024L`` 
+
+
+``osd stat refresh interval`` 
+
+:Description: The status refresh interval in seconds.
+:Type: 64-bit Integer Unsigned
+:Default: ``.5``
+
+
+``osd pg bits`` 
+
+:Description: Placement group bits per OSD.
+:Type: 32-bit Integer
+:Default: ``6`` 
+
+
+``osd pgp bits`` 
+
+:Description: The number of bits per OSD for PGPs.
+:Type: 32-bit Integer
+:Default: ``4``
+
+
+``osd pg layout`` 
+
+:Description: Placement group layout. 
+:Type: 32-bit Integer
+:Default: ``2``
+
+
+``osd pool default crush rule`` 
+
+:Description: The default CRUSH rule to use when creating a pool.
+:Type: 32-bit Integer
+:Default: ``0``
+
+
+``osd pool default size`` 
+
+:Description: The default size of an OSD pool in gigabytes. The default value is the same as ``--size 2`` with ``mkpool``.
+:Type: 32-bit Integer
+:Default: ``2`` 
+
+
+``osd pool default pg num`` 
+
+:Description: The default number of placement groups for a pool. The default value is the same as ``pg_num`` with ``mkpool``.
+:Type: 32-bit Integer
+:Default: ``8`` 
+
+
+``osd pool default pgp num`` 
+
+:Description: The default number of placement groups for placement for a pool. The default value is the same as ``pgp_num`` with ``mkpool``. PG and PGP should be equal (for now).
+:Type: 32-bit Integer
+:Default: ``8``
+
+
+``osd map dedup``
+
+:Description: Enable removing duplicates in the OSD map. 
+:Type: Boolean
+:Default: ``true``
+
+
+``osd map cache size`` 
+
+:Description: The size of the OSD map cache in megabytes.
+:Type: 32-bit Integer
+:Default: ``500``
+
+
+``osd map cache bl size``
+
+:Description: The size of the in-memory OSD map cache in OSD daemons. 
+:Type: 32-bit Integer
+:Default: ``50``
+
+
+``osd map cache bl inc size``
+
+:Description: The size of the in-memory OSD map cache incrementals in OSD daemons.
+:Type: 32-bit Integer
+:Default: ``100``
+
+
+``osd map message max`` 
+
+:Description: The maximum map entries allowed per MOSDMap message.
+:Type: 32-bit Integer
+:Default: ``100``
+
+
+``osd op threads`` 
+
+:Description: The number of OSD operation threads. Set to ``0`` to disable it. Increasing the number may increase the request processing rate.
+:Type: 32-bit Integer
+:Default: ``2`` 
+
+
+``osd op thread timeout`` 
+
+:Description: The OSD operation thread timeout in seconds.
+:Type: 32-bit Integer
+:Default: ``30`` 
+
+
+``osd disk threads`` 
+
+:Description: The number of disk threads, which are used to perform background disk intensive OSD operations such as scrubbing and snap trimming.
+:Type: 32-bit Integer
+:Default: ``1`` 
+
+
+``osd recovery threads`` 
+
+:Description: The number of threads for recovering data.
+:Type: 32-bit Integer
+:Default: ``1``
+
+
+``osd recover clone overlap`` 
+
+:Description: Preserves clone overlap during recovery and data migration.
+:Type: Boolean
+:Default: ``false`` 
+
+
+``osd backfill scan min`` 
+
+:Description: The scan interval in seconds for backfill operations.
+:Type: 32-bit Integer
+:Default: ``64`` 
+
+
+``osd backfill scan max`` 
+
+:Description: The maximum scan interval in seconds for backfill operations.
+:Type: 32-bit Integer
+:Default: ``512`` 
+
+
+``osd backlog thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a backlog thread.
+:Type: 32-bit Integer
+:Default: ``60*60*1`` 
+
+
+``osd recovery thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a recovery thread.
+:Type: 32-bit Integer
+:Default: ``30`` 
+
+
+``osd snap trim thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a snap trim thread.
+:Type: 32-bit Integer
+:Default: ``60*60*1`` 
+
+
+``osd scrub thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a scrub thread.
+:Type: 32-bit Integer
+:Default: ``60`` 
+
+
+``osd scrub finalize thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a scrub finalize thread.
+:Type: 32-bit Integer
+:Default: 60*10 
+
+
+``osd remove thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a remove OSD thread.
+:Type: 32-bit Integer
+:Default: 60*60 
+
+
+``osd command thread timeout`` 
+
+:Description: The maximum time in seconds before timing out a command thread.
+:Type: 32-bit Integer
+:Default: ``10*60`` 
+
+
+``osd heartbeat address``
+
+:Description: An OSD's network address for heartbeats. 
+:Type: Address
+:Default: The host address.
+
+
+``osd heartbeat interval`` 
+
+:Description: How often an OSD pings its peers (in seconds).
+:Type: 32-bit Integer
+:Default: ``6``
+
+
+``osd heartbeat grace`` 
+
+:Description: The elapsed time when an OSD hasn't shown a heartbeat that the cluster considers it ``down``. 
+:Type: 32-bit Integer
+:Default: ``20``
+
+
+``osd _mon_heartbeat interval`` 
+
+:Description: How often the OSD pings a monitor if it has no OSD peers.
+:Type: 32-bit Integer
+:Default: ``30`` 
+
+
+``osd mon report interval max`` 
+
+:Description: The maximum time in seconds for an OSD to report to a monitor before the monitor considers the OSD ``down``.
+:Type: 32-bit Integer
+:Default: ``120`` 
+
+
+``osd mon report interval min`` 
+
+:Description: The number of minutes between reports that include ``pg stats``, ``up thru``, ``boot`` and ``failures``.
+:Type: 32-bit Integer
+:Default: ``5`` 
+
+
+``osd mon ack timeout`` 
+
+:Description: The number of seconds to wait for a monitor to acknowledge a request for statistics.
+:Type: 32-bit Integer
+:Default: ``30`` 
+
+
+``osd min down reporters`` 
+
+:Description: The minimum number of OSDs required to report a ``down`` OSD.
+:Type: 32-bit Integer
+:Default: ``1``
+
+
+``osd min down reports`` 
+
+:Description: The minimum number of times an OSD must report that another is ``down``.
+:Type: 32-bit Integer
+:Default: ``3`` 
+
+
+``osd recovery delay start`` 
+
+:Description: After peering completes, Ceph will delay for the specified number of seconds before starting to recover objects.
+:Type: Float
+:Default: ``15`` 
+
+
+``osd recovery max active`` 
+
+:Description: The number of active recovery requests per OSD at one time. More accelerates recovery, but places an increased load on the cluster.
+:Type: 32-bit Integer
+:Default: ``5``
+
+
+``osd recovery max chunk`` 
+
+:Description: The maximum size of a recovered chunk of data to push. 
+:Type: 64-bit Integer Unsigned
+:Default: ``1 << 20`` 
+
+
+``osd max scrubs`` 
+
+:Description: The maximum number of scrub operations for an OSD.
+:Type: 32-bit Int
+:Default: ``1`` 
+
+
+``osd scrub load threshold`` 
+
+:Description: The maximum CPU load. Ceph will not scrub when the CPU load is higher than this number. Default is 50%.
+:Type: Float
+:Default: ``0.5`` 
+
+
+``osd scrub min interval`` 
+
+:Description: The maximum interval in seconds for scrubbing the OSD.
+:Type: Float
+:Default: 5 minutes. ``300`` 
+
+
+``osd scrub max interval`` 
+
+:Description: The maximum interval in seconds for scrubbing the OSD.
+:Type: Float
+:Default: Once per day. ``60*60*24`` 
+
+
+``osd class dir`` 
+
+:Description: The class path for RADOS class plug-ins.
+:Type: String
+:Default: ``$libdir/rados-classes``
+
+
+``osd check for log corruption`` 
+
+:Description: Check log files for corruption. Can be computationally expensive.
+:Type: Boolean
+:Default: ``false`` 
+
+
+``osd default notify timeout`` 
+
+:Description: The OSD default notification timeout (in seconds).
+:Type: 32-bit Integer Unsigned
+:Default: ``30`` 
+
+
+``osd min pg log entries`` 
+
+:Description: The minimum number of placement group logs to maintain when trimming log files.
+:Type: 32-bit Int Unsigned
+:Default: 1000
+
+
+``osd op complaint time`` 
+
+:Description: An operation becomes complaint worthy after the specified number of seconds have elapsed.
+:Type: Float
+:Default: ``30`` 
+
+
+``osd command max records`` 
+
+:Description: Limits the number of lost objects to return. 
+:Type: 32-bit Integer
+:Default: ``256`` 
+
+
 ``osd auto upgrade tmap`` 
 
 :Description: Uses ``tmap`` for ``omap`` on old objects.
 :Type: Boolean
-:Default: True 
+:Default: ``true``
+ 
 
 ``osd tmapput sets users tmap`` 
 
 :Description: Uses ``tmap`` for debugging only.
 :Type: Boolean
-:Default: False 
+:Default: ``false`` 
 
-``osd data`` 
-
-:Description: 
-:Type: String
-:Default: None 
-
-``osd journal`` 
-
-:Description: 
-:Type: String
-:Default: None 
-
-``osd journal size`` 
-
-:Description: The size of the journal in MBs.
-:Type: 32-bit Int
-:Default: 0 
-
-``osd max write size`` 
-
-:Description: The size of the maximum x to write in MBs.
-:Type: 32-bit Int
-:Default: 90 
-
-``osd balance reads`` 
-
-:Description: Load balance reads?
-:Type: Boolean
-:Default: False 
-
-``osd shed reads`` 
-
-:Description: Forward from primary to replica.
-:Type: 32-bit Int
-:Default: False (0) 
-
-``osd shed reads min latency`` 
-
-:Description: The minimum local latency.
-:Type: Double
-:Default: .01 
-
-``osd shed reads min latency diff`` 
-
-:Description: Percentage difference from peer. 150% default.
-:Type: Double
-:Default: 1.5 
-
-``osd client message size cap`` 
-
-:Description: Client data allowed in-memory. 500MB default.
-:Type: 64-bit Int Unsigned
-:Default: 500*1024L*1024L 
-
-``osd stat refresh interval`` 
-
-:Description: The status refresh interval in seconds.
-:Type: 64-bit Int Unsigned
-:Default: .5 
-
-``osd pg bits`` 
-
-:Description: Placement group bits per OSD.
-:Type: 32-bit Int
-:Default: 6 
-
-``osd pgp bits`` 
-
-:Description: Placement group p bits per OSD?
-:Type: 32-bit Int
-:Default: 4 
-
-``osd pg layout`` 
-
-:Description: Placement Group bits ? per OSD?
-:Type: 32-bit Int
-:Default: 2 
-
-``osd min rep`` 
-
-:Description: Need a description.
-:Type: 32-bit Int
-:Default: 1 
-
-``osd max rep`` 
-
-:Description: Need a description.
-:Type: 32-bit Int
-:Default: 10 
-
-``osd min raid width`` 
-
-:Description: The minimum RAID width.
-:Type: 32-bit Int
-:Default: 3 
-
-``osd max raid width`` 
-
-:Description: The maximum RAID width.
-:Type: 32-bit Int
-:Default: 2 
-
-``osd pool default crush rule`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 0 
-
-``osd pool default size`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 2 
-
-``osd pool default pg num`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 8 
-
-``osd pool default pgp num`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 8 
-
-``osd map cache max`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 250 
-
-``osd map message max`` 
-
-:Description: max maps per MOSDMap message
-:Type: 32-bit Int
-:Default: 100 
-
-``osd op threads`` 
-
-:Description: 0 == no threading
-:Type: 32-bit Int
-:Default: 2 
-
-``osd disk threads`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 1 
-
-``osd recovery threads`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 1 
-
-``osd recover clone overlap`` 
-
-:Description: preserve clone overlap during rvry/migrat
-:Type: Boolean
-:Default: false 
-
-``osd backfill scan min`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 64 
-
-``osd backfill scan max`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 512 
-
-``osd op thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 30 
-
-``osd backlog thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 60*60*1 
-
-``osd recovery thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 30 
-
-``osd snap trim thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 60*60*1 
-
-``osd scrub thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 60 
-
-``osd scrub finalize thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 60*10 
-
-``osd remove thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 60*60 
-
-``osd command thread timeout`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 10*60 
-
-``osd age`` 
-
-:Description: 
-:Type: Float
-:Default: .8 
-
-``osd age time`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 0 
-
-``osd heartbeat interval`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 1 
-
-``osd mon heartbeat interval`` 
-
-:Description: if no peers | ping monitor
-:Type: 32-bit Int
-:Default: 30 
-
-``osd heartbeat grace`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 20 
-
-``osd mon report interval max`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 120 
-
-``osd mon report interval min`` 
-
-:Description: pg stats | failures | up thru | boot.
-:Type: 32-bit Int
-:Default: 5 
-
-``osd mon ack timeout`` 
-
-:Description: time out a mon if it doesn't ack stats
-:Type: 32-bit Int
-:Default: 30 
-
-``osd min down reporters`` 
-
-:Description: num OSDs needed to report a down OSD
-:Type: 32-bit Int
-:Default: 1 
-
-``osd min down reports`` 
-
-:Description: num times a down OSD must be reported
-:Type: 32-bit Int
-:Default: 3 
-
-``osd default data pool replay window`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 45 
-
-``osd preserve trimmed log`` 
-
-:Description: 
-:Type: Boolean
-:Default: true 
-
-``osd auto mark unfound lost`` 
-
-:Description: 
-:Type: Boolean
-:Default: false 
-
-``osd recovery delay start`` 
-
-:Description: 
-:Type: Float
-:Default: 15 
-
-``osd recovery max active`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 5 
-
-``osd recovery max chunk`` 
-
-:Description: max size of push chunk
-:Type: 64-bit Int Unsigned
-:Default: 1<<20 
-
-``osd recovery forget lost objects`` 
-
-:Description: off for now
-:Type: Boolean
-:Default: false 
-
-``osd max scrubs`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 1 
-
-``osd scrub load threshold`` 
-
-:Description: 
-:Type: Float
-:Default: 0.5 
-
-``osd scrub min interval`` 
-
-:Description: 
-:Type: Float
-:Default: 300 
-
-``osd scrub max interval`` 
-
-:Description: once a day
-:Type: Float
-:Default: 60*60*24 
-
-``osd auto weight`` 
-
-:Description: 
-:Type: Boolean
-:Default: false 
-
-``osd class error timeout`` 
-
-:Description: seconds
-:Type: Double
-:Default: 60.0 
-
-``osd class timeout`` 
-
-:Description: seconds
-:Type: Double
-:Default: 60*60.0 
-
-``osd class dir`` 
-
-:Description: where rados plugins are stored
-:Type: String
-:Default: $libdir/rados-classes 
-
-``osd check for log corruption`` 
-
-:Description: 
-:Type: Boolean
-:Default: false 
-
-``osd use stale snap`` 
-
-:Description: 
-:Type: Boolean
-:Default: false 
-
-``osd rollback to cluster snap`` 
-
-:Description: 
-:Type: String
-:Default: "" 
-
-``osd default notify timeout`` 
-
-:Description: default notify timeout in seconds
-:Type: 32-bit Int Unsigned
-:Default: 30 
 
 ``osd kill backfill at`` 
 
-:Description: 
-:Type: 32-bit Int
-:Default: 0 
-
-``osd min pg log entries`` 
-
-:Description: num entries to keep in pg log when trimming
-:Type: 32-bit Int Unsigned
-:Default: 1000 
-
-``osd op complaint time`` 
-
-:Description: how old in secs makes op complaint-worthy
-:Type: Float
-:Default: 30 
-
-``osd command max records`` 
-
-:Description: 
-:Type: 32-bit Int
-:Default: 256 
+:Description: For debugging only.
+:Type: 32-bit Integer
+:Default: ``0`` 
