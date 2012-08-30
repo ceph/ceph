@@ -19,6 +19,7 @@
     bucket info                show bucket information
     bucket rm                  remove bucket
     object rm                  remove object
+    cluster info               show cluster params info
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -35,7 +36,6 @@
     gc process                 manually process garbage
   options:
      --uid=<id>                user id
-     --auth-uid=<auid>         librados uid
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
      --email=<email>
