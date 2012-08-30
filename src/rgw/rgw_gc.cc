@@ -193,7 +193,9 @@ int RGWGC::process(int index, int max_secs)
 
         ctx->locator_set_key(obj.key);
 	dout(0) << "gc::process: removing " << obj.pool << ":" << obj.oid << dendl;
-        ret = ctx->remove(obj.oid);
+	ObjectWriteOperation op;
+	cls_refcount_put(op);
+        ret = ctx->operate(obj.oid, &op);
 	if (ret == -ENOENT)
 	  ret = 0;
         if (ret < 0) {
