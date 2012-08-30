@@ -1,4 +1,4 @@
-.TH "RBD" "8" "August 20, 2012" "dev" "Ceph"
+.TH "RBD" "8" "August 29, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -63,6 +63,22 @@ Interact with the given pool. Required by most commands.
 .SH PARAMETERS
 .INDENT 0.0
 .TP
+.B \-\-format format
+Specifies which object layout to use. The default is 1.
+.INDENT 7.0
+.IP \(bu 2
+format 1 \- Use the original format for a new rbd image. This format is
+understood by all versions of librbd and the kernel rbd module, but
+does not support newer features like cloning.
+.IP \(bu 2
+format 2 \- Use the second rbd format, which is supported by
+librbd (but not the kernel rbd module) at this time. This adds
+support for cloning and is more easily extensible to allow more
+features in the future.
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
+.TP
 .B \-\-size size\-in\-mb
 Specifies the size (in megabytes) of the new rbd image.
 .UNINDENT
@@ -79,13 +95,21 @@ Specifies the snapshot name for the specific operation.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-user username
-Specifies the username to use with the map command.
+.B \-\-id username
+Specifies the username (without the \fBclient.\fP prefix) to use with the map command.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-secret filename
+.B \-\-keyfile filename
 Specifies a file containing the secret to use with the map command.
+If not specified, \fBclient.admin\fP will be used by default.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-keyring filename
+Specifies a keyring file containing a secret for the specified user
+to use with the map command.  If not specified, the default keyring
+locations will be searched.
 .UNINDENT
 .SH COMMANDS
 .INDENT 0.0
@@ -96,20 +120,32 @@ Will list all rbd images listed in the rbd_directory object.
 .B \fBinfo\fP [\fIimage\-name\fP]
 Will dump information (such as size and order) about a specific rbd image.
 If image is a clone, information about its parent is also displayed.
+If a snapshot is specified, whether it is protected is shown as well.
 .TP
 .B \fBcreate\fP [\fIimage\-name\fP]
 Will create a new rbd image. You must also specify the size via \-\-size.
 .TP
 .B \fBclone\fP [\fIparent\-snapname\fP] [\fIimage\-name\fP]
 Will create a clone (copy\-on\-write child) of the parent snapshot.
-Size and object order will be identical to parent image unless specified.
+Object order will be identical to that of the parent image unless
+specified. Size will be the same as the parent snapshot.
+.sp
 The parent snapshot must be protected (see \fIrbd snap protect\fP).
+This requires format 2.
 .TP
 .B \fBflatten\fP [\fIimage\-name\fP]
 If image is a clone, copy all shared blocks from the parent snapshot and
 make the child independent of the parent, severing the link between
 parent snap and child.  The parent snapshot can be unprotected and
 deleted if it has no further dependent clones.
+.sp
+This requires format 2.
+.TP
+.B \fBchildren\fP [\fIimage\-name\fP]
+List the clones of the image at the given snapshot. This checks
+every pool, and outputs the resulting poolname/imagename.
+.sp
+This requires format 2.
 .TP
 .B \fBresize\fP [\fIimage\-name\fP]
 Resizes rbd image. The size parameter also needs to be specified.
@@ -126,6 +162,7 @@ Creates a new image and imports its data from path.
 .TP
 .B \fBcp\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
 Copies the content of a src\-image into the newly created dest\-image.
+dest\-image will have the same size, order, and format as src\-image.
 .TP
 .B \fBmv\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
 Renames an image.  Note: rename across pools is not supported.
@@ -150,12 +187,17 @@ Removes all snapshots from an image.
 Protect a snapshot from deletion, so that clones can be made of it
 (see \fIrbd clone\fP).  Snapshots must be protected before clones are made;
 protection implies that there exist dependent cloned children that
-refer to this snapshot.  \fIrbd clone\fP will fail on a nonprotected snapshot.
+refer to this snapshot.  \fIrbd clone\fP will fail on a nonprotected
+snapshot.
+.sp
+This requires format 2.
 .TP
 .B \fBsnap\fP unprotect [\fIimage\-name\fP]
 Unprotect a snapshot from deletion (undo \fIsnap protect\fP).  If cloned
 children remain, \fIsnap unprotect\fP fails.  (Note that clones may exist
 in different pools than the parent snapshot.)
+.sp
+This requires format 2.
 .TP
 .B \fBmap\fP [\fIimage\-name\fP]
 Maps the specified image to a block device via the rbd kernel module.
@@ -221,11 +263,19 @@ rbd snap create mypool/myimage@mysnap
 .ft P
 .fi
 .sp
-To create a copy\-on\-write clone of a snapshot:
+To create a copy\-on\-write clone of a protected snapshot:
 .sp
 .nf
 .ft C
-rbd clone myimage@mysnap cloneimage
+rbd clone mypool/myimage@mysnap otherpool/cloneimage
+.ft P
+.fi
+.sp
+To see which clones of a snapshot exist:
+.sp
+.nf
+.ft C
+rbd children mypool/myimage@mysnap
 .ft P
 .fi
 .sp
@@ -241,7 +291,7 @@ To map an image via the kernel with cephx enabled:
 .sp
 .nf
 .ft C
-rbd map myimage \-\-user admin \-\-secret secretfile
+rbd map mypool/myimage \-\-id admin \-\-keyfile secretfile
 .ft P
 .fi
 .sp
@@ -250,6 +300,27 @@ To unmap an image:
 .nf
 .ft C
 rbd unmap /dev/rbd0
+.ft P
+.fi
+.sp
+To create an image and a clone from it:
+.sp
+.nf
+.ft C
+rbd import \-\-format 2 image mypool/parent
+rbd snap create \-\-snap snapname mypool/parent
+rbd snap protect mypool/parent@snap
+rbd clone mypool/parent@snap otherpool/child
+.ft P
+.fi
+.sp
+To change an image from one format to another, export it and then
+import it as the desired format:
+.sp
+.nf
+.ft C
+rbd export mypool/myimage@snap /tmp/img
+rbd import \-\-format 2 /tmp/img mypool/myimage2
 .ft P
 .fi
 .SH AVAILABILITY
