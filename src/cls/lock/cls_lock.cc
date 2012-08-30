@@ -355,7 +355,7 @@ static int break_lock(cls_method_context_t hctx,
 }
 
 
- /**
+/**
  * Retrieve lock info: lockers, tag, exclusive
  *
  * Input:
@@ -400,7 +400,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 
- /**
+/**
  * Retrieve a list of locks for this object
  *
  * Input:
@@ -410,7 +410,8 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * @param out contains encoded cls_list_locks_reply
  *
  * @return 0 on success, -errno on failure.
- */static int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+ */
+static int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "list_locks");
 
