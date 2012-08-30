@@ -62,11 +62,11 @@ if you are using ``mkcephfs`` to deploy Ceph.
 Create the Default Directories
 ==============================
 
-The ``mkcephfs`` deployment script does not create the default server directories. 
-Create server directories for each instance of a Ceph daemon. The ``host`` 
-variables in the ``ceph.conf`` file determine which host runs each instance of 
-a Ceph daemon. Using the exemplary ``ceph.conf`` file, you would perform 
-the following:
+The ``mkcephfs`` deployment script does not create the default server
+directories.  Create server directories for each instance of a Ceph daemon (if
+you haven't done so already). The ``host``  variables in the ``ceph.conf`` file
+determine which host runs each instance of  a Ceph daemon. Using the exemplary
+``ceph.conf`` file, you would perform  the following:
 
 On ``myserver01``::
 
@@ -83,6 +83,13 @@ On ``myserver03``::
 	sudo mkdir /var/lib/ceph/osd/ceph-2
 	sudo mkdir /var/lib/ceph/mon/ceph-c
 	sudo mkdir /var/lib/ceph/mds/ceph-a
+
+
+Mount Disks to the Data Directories
+===================================
+
+If you are running multiple OSDs per host and one hard disk per OSD,  you should
+mount the disk under the OSD data directory (if you haven't done so already).
 
 
 Run ``mkcephfs``
