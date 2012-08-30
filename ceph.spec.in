@@ -329,6 +329,7 @@ fi
 %{_libdir}/rados-classes/libcls_lock.so*
 /sbin/ceph-disk-activate
 /sbin/ceph-disk-prepare
+/sbin/ceph-create-keys
 
 #################################################################################
 %files fuse
