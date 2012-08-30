@@ -1266,7 +1266,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
     return r;
 
   ObjectWriteOperation op;
-  op.remove();
+  cls_refcount_put(op);
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
   librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
@@ -1412,7 +1412,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
   bool ret_not_existed = (state && !state->exists);
 
   string tag;
-  op.remove();
+  cls_refcount_put(op);
   if (sync) {
     r = prepare_update_index(state, bucket, obj, tag);
     if (r < 0)
@@ -1647,7 +1647,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
 
     if (reset_obj) {
       op.create(false);
-      op.remove();
+      op.remove(); // we're not dropping reference here, actually removing object
     }
 
     return 0;
@@ -3133,6 +3133,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         if (r < 0)
           return r;
         ObjectWriteOperation op;
+        cls_refcount_put(op);
         op.remove();
         string oid = dir_oid_prefix;
         oid.append(entry.obj.bucket.marker);
