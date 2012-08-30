@@ -22,11 +22,56 @@ instance (a single context).
 
 .. note:: Ceph can run on a single host for evaluation purposes.
 
+
+.. raw:: html
+
+	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Cluster Configuration</h3>
+
+For general cluster configuration, refer to the following:
+
 .. toctree::
 
    file-system-recommendations
    Configuration <ceph-conf>
+
+
+.. raw:: html 
+
+	</td><td><h3>Configuration Reference</h3>
+
+To optimize the performance of your cluster, refer to the following:
+
+.. toctree::
+
+	General Settings <general-config-ref>
+	Monitor Settings <mon-config-ref>
+	OSD Settings <osd-config-ref>
+	Filestore Settings <filestore-config-ref>
+	Metadata Server Settings <mds-config-ref>
+	RBD Settings <rbd-config-ref>	
+
+
+.. raw:: html
+
+	</td></tr><tr><td><h3>Manual Deployment</h3>
+
+To deploy a cluster manually (this is recommended for testing and development only), refer to the following:
+
+.. toctree:: 
+
    Deploy with mkcephfs <mkcephfs>
+
+
+.. raw:: html
+
+	</td><td><h3>Chef Deployment</h3>
+
+To deploy a cluster with chef, refer to the following: 
+
+.. toctree:: 
+
    Deploy with Chef <chef>
-   Storage Pools <pools>
-   Authentication <authentication>
+   
+.. raw:: html
+
+	</td></tr></tbody></table>
