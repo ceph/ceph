@@ -51,6 +51,7 @@ void _usage()
   cerr << "  bucket info                show bucket information\n";
   cerr << "  bucket rm                  remove bucket\n";
   cerr << "  object rm                  remove object\n";
+  cerr << "  cluster info               show cluster params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
   cerr << "  pools list                 list placement active set\n";
@@ -146,6 +147,7 @@ enum {
   OPT_OBJECT_RM,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
+  OPT_CLUSTER_INFO,
 };
 
 static uint32_t str_to_perm(const char *str)
@@ -218,6 +220,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "object") == 0 ||
+      strcmp(cmd, "cluster") == 0 ||
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "gc") == 0) {
     *need_more = true;
@@ -295,6 +298,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "object") == 0) {
     if (strcmp(cmd, "rm") == 0)
       return OPT_OBJECT_RM;
+  } else if (strcmp(prev_cmd, "cluster") == 0) {
+    if (strcmp(cmd, "info") == 0)
+      return OPT_CLUSTER_INFO;
   } else if (strcmp(prev_cmd, "gc") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_GC_LIST;
@@ -1703,6 +1709,11 @@ next:
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
+  }
+
+  if (opt_cmd == OPT_CLUSTER_INFO) {
+    store->params.dump(formatter);
+    formatter->flush(cout);
   }
   return 0;
 }
