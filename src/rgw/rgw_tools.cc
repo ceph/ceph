@@ -25,7 +25,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
   int ret = rgwstore->put_obj(NULL, obj, data, size, exclusive, NULL, *pattrs);
 
   if (ret == -ENOENT) {
-    ret = rgwstore->create_pool(bucket, no_attrs, true); //all callers are using system buckets
+    ret = rgwstore->create_pool(bucket);
     if (ret >= 0)
       ret = rgwstore->put_obj(NULL, obj, data, size, exclusive, NULL, *pattrs);
   }

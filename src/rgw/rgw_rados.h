@@ -227,6 +227,7 @@ struct RGWRadosParams {
     ::decode(user_uid_pool, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWRadosParams);
   
@@ -322,10 +323,13 @@ protected:
   librados::Rados *rados;
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
 
+  bool pools_initialized;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL), gc(NULL), use_gc_thread(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
-               bucket_id_lock("rados_bucket_id"), max_bucket_id(0), rados(NULL) {}
+               bucket_id_lock("rados_bucket_id"), max_bucket_id(0), rados(NULL),
+               pools_initialized(false) {}
 
   RGWRadosParams params;
 
@@ -386,9 +390,7 @@ public:
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
-  virtual int create_pool(rgw_bucket& bucket,
-                          map<std::string,bufferlist>& attrs,
-                          bool exclusive);
+  virtual int create_pool(rgw_bucket& bucket);
 
   /**
    * create a bucket with name bucket and the given list of attrs

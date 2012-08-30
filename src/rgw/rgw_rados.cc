@@ -3,6 +3,7 @@
 #include <sys/types.h>
 
 #include "common/errno.h"
+#include "common/Formatter.h"
 
 #include "rgw_rados.h"
 #include "rgw_cache.h"
@@ -70,6 +71,22 @@ void RGWRadosParams::init_default()
   user_uid_pool = ".users.uid";
 }
 
+void RGWRadosParams::dump(Formatter *f) const
+{
+  f->open_object_section("cluster");
+  f->dump_string("domain_root", domain_root.pool);
+  f->dump_string("control_pool", control_pool.pool);
+  f->dump_string("gc_pool", gc_pool.pool);
+  f->dump_string("log_pool", log_pool.pool);
+  f->dump_string("intent_log_pool", intent_log_pool.pool);
+  f->dump_string("usage_log_pool", usage_log_pool.pool);
+  f->dump_string("user_keys_pool", user_keys_pool.pool);
+  f->dump_string("user_email_pool", user_email_pool.pool);
+  f->dump_string("user_swift_pool", user_swift_pool.pool);
+  f->dump_string("user_uid_pool ", user_uid_pool.pool);
+  f->close_section();
+}
+
 int RGWRadosParams::init(CephContext *cct, RGWRados *store)
 {
   string pool_name = cct->_conf->rgw_cluster_root_pool;
@@ -82,9 +99,7 @@ int RGWRadosParams::init(CephContext *cct, RGWRados *store)
   int ret = rgw_get_obj(store, NULL, pool, cluster_info_oid, bl);
   if (ret == -ENOENT) {
     init_default();
-    ::encode(*this, bl);
-    ret = rgw_put_system_obj(store, pool, cluster_info_oid, bl.c_str(), bl.length(), true, NULL);
-    return ret;
+    return 0; // don't try to store obj, we're not fully initialized yet
   }
   if (ret < 0)
     return ret;
@@ -172,6 +187,8 @@ int RGWRados::initialize()
   ret = open_gc_pool_ctx();
   if (ret < 0)
     return ret;
+
+  pools_initialized = true;
 
   gc = new RGWGC();
   gc->initialize(cct, this);
@@ -305,6 +322,9 @@ int RGWRados::open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx)
 {
   int r = rados->ioctx_create(bucket.pool.c_str(), io_ctx);
   if (r != -ENOENT)
+    return r;
+
+  if (!pools_initialized)
     return r;
 
   /* couldn't find bucket, might be a racing bucket creation,
@@ -698,33 +718,19 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
  * create a rados pool, associated meta info
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_pool(rgw_bucket& bucket, 
-			  map<std::string, bufferlist>& attrs, 
-			  bool exclusive)
+int RGWRados::create_pool(rgw_bucket& bucket) 
 {
   int ret = 0;
-
-  librados::ObjectWriteOperation op;
-  op.create(exclusive);
-
-  for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
-    op.setxattr(iter->first.c_str(), iter->second);
-
-  bufferlist outbl;
-  ret = root_pool_ctx.operate(bucket.name, &op);
-  if (ret < 0)
-    return ret;
 
   ret = rados->pool_create(bucket.pool.c_str(), 0);
   if (ret == -EEXIST)
     ret = 0;
-  if (ret < 0) {
-    root_pool_ctx.remove(bucket.name.c_str());
-  } else {
-    bucket.pool = bucket.name;
-  }
+  if (ret < 0)
+    return ret;
 
-  return ret;
+  bucket.pool = bucket.name;
+
+  return 0;
 }
 /**
  * create a bucket with name bucket and the given list of attrs
