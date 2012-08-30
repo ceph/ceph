@@ -7,7 +7,8 @@
     create [--order <bits>] --size <MB> <name>  create an empty image
     clone [--order <bits>] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
-                                                 child image
+                                                child image
+    children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
     resize --size <MB> <image-name>             resize (expand or contract) image
@@ -46,7 +47,8 @@
     --size <size in MB>          size of image for create and resize
     --order <bits>               the object size in bits; object size will be
                                  (1 << order) bytes. Default is 22 (4 MB).
-  
-  For the map command:
+    --format <format-number>     format to use when creating an image
+                                 format 1 is the original format (default)
+                                 format 2 supports cloning
     --id <username>              rados user (without 'client.' prefix) to authenticate as
     --keyfile <path>             file containing secret key for use with cephx

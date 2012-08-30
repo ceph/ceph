@@ -266,6 +266,12 @@ namespace librbd {
     return librbd::flatten(ictx, prog_ctx);
   }
 
+  int Image::list_children(set<pair<string, string> > *children)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::list_children(ictx, *children);
+  }
+
   int Image::list_locks(set<pair<string, string> > &locks,
 			bool &exclusive)
   {
@@ -734,6 +740,48 @@ extern "C" int rbd_snap_set(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::snap_set(ictx, snap_name);
+}
+
+extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
+				     size_t *pools_len, char *images,
+				     size_t *images_len)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  set<pair<string, string> > image_set;
+
+  int r = librbd::list_children(ictx, image_set);
+  if (r < 0)
+    return r;
+
+  size_t pools_total = 0;
+  size_t images_total = 0;
+  for (set<pair<string, string> >::const_iterator it = image_set.begin();
+       it != image_set.end(); ++it) {
+    pools_total += it->first.length() + 1;
+    images_total += it->second.length() + 1;
+  }
+
+  bool too_short = false;
+  if (pools_total > *pools_len)
+    too_short = true;
+  if (images_total > *images_len)
+    too_short = true;
+  *pools_len = pools_total;
+  *images_len = images_total;
+  if (too_short)
+    return -ERANGE;
+
+  char *pools_p = pools;
+  char *images_p = images;
+  for (set<pair<string, string> >::const_iterator it = image_set.begin();
+       it != image_set.end(); ++it) {
+    strcpy(pools_p, it->first.c_str());
+    pools_p += it->first.length() + 1;
+    strcpy(images_p, it->second.c_str());
+    images_p += it->second.length() + 1;
+  }
+
+  return image_set.size();
 }
 
 extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,
