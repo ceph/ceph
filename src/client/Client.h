@@ -20,6 +20,7 @@
 
 // stl
 #include <string>
+#include <memory>
 #include <set>
 #include <map>
 #include <fstream>
@@ -34,6 +35,8 @@ using namespace __gnu_cxx;
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
+
+#include "barrier.h"
 
 #include "mds/mdstypes.h"
 
@@ -734,8 +737,12 @@ public:
 		    uint64_t length,
 		    ceph_file_layout* layout);
 
-
+#if 0
   map<uint64_t, pair<uint32_t, list<Cond*> > > outstanding_block_writes;
+#else
+  map<uint64_t, BarrierContext* > barriers;
+#endif
+
   int ll_write_block(vinodeno_t vino, uint64_t blockid,
 		     char* buf, uint64_t offset,
 		     uint64_t length, ceph_file_layout* layout,

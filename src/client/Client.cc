@@ -84,6 +84,9 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
 
+#define cldout(cl, v)  dout_impl((cl)->cct, dout_subsys, v) \
+  *_dout << "client." << cl->whoami << " "
+
 #define  tout(cct)       if (!cct->_conf->client_trace.empty()) traceout
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
@@ -7762,38 +7765,6 @@ int Client::ll_read_block(vinodeno_t vino, uint64_t blockid,
   return r;
 }
 
-/*
- * we keep count of uncommitted sync writes on the inode, so that
- * ll_commit_blocks can do the right thing.
- *
- * This is just a hacked copy of Ceph's sync callback.
- */
-class C_Block_Sync : public Context {
-    Client *cl;
-    uint64_t inode;
-public:
-    C_Block_Sync(Client *c, uint64_t i) : cl(c), inode(i) {
-	std::cout << "C_Block_Sync for "
-		  << inode << std::endl;
-	cl->outstanding_block_writes[inode].first++;
-    }
-    void finish(int) {
-	std::cout << "C_Block_Sync::finish() for "
-		  << inode << std::endl;
-	std::cout << "There are "
-		  << cl->outstanding_block_writes[inode].first
-		  << " transactions waiting to confirm and "
-		  << cl->outstanding_block_writes[inode].second.size()
-		  << " waiters." << std::endl;
-
-	cl->outstanding_block_writes[inode].first--;
-	cl->signal_cond_list(cl->outstanding_block_writes[inode].second);
-	if (cl->outstanding_block_writes[inode].first == 0) {
-	    cl->outstanding_block_writes.erase(inode);
-	}
-    }
-};
-
 /* It appears that the OSD doesn't return success unless the entire
    buffer was written, return the write length on success. */
 
@@ -7814,7 +7785,8 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
       onsafe = new C_SafeCond(&flock, &cond, &done, &r);
   } else {
       onack = new C_SafeCond(&flock, &cond, &done, &r);
-      onsafe = new C_Block_Sync(this, vino.ino);
+      onsafe = new C_Block_Sync(this, vino.ino,
+				barrier_interval(offset, length));
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;
@@ -7823,9 +7795,8 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
   bufferlist bl;
   bl.push_back(bp);
 
-  std::cout << "ll_block_write for "
-	    << vino.ino << "." << blockid
-	    << std::endl;
+  ldout(cct, 1) << "ll_block_write for " << vino.ino << "." << blockid
+		<< dendl;
 
   fakesnap.seq = snapseq;
 
@@ -7855,20 +7826,19 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
 
 int Client::ll_commit_blocks(vinodeno_t vino,
 			     uint64_t offset __attribute__((unused)),
-			     uint64_t range __attribute__((unused)))
+			     uint64_t length __attribute__((unused)))
 {
     Mutex::Locker lock(client_lock);
-    Cond cond;
-    uint64_t inode = vino.ino;
+    BarrierContext *bctx;
+    uint64_t ino = vino.ino;
 
-    std::cout << "ll_commit_blocks for "
-	      << vino.ino << " from " << offset
-	      << " to " << range << std::endl;
-
-    if ((outstanding_block_writes.count(inode) != 0) &&
-	(outstanding_block_writes[inode].first != 0)) {
-	outstanding_block_writes[inode].second.push_back(&cond);
-	cond.Wait(client_lock);
+    ldout(cct, 1) << "ll_commit_blocks for " << vino.ino << " from " 
+		  << offset << " to " << length << dendl;
+    
+    bctx = this->barriers[ino];
+    if (bctx) {
+      barrier_interval civ(offset, length);
+      bctx->commit_barrier(civ);
     }
 
     return 0;
