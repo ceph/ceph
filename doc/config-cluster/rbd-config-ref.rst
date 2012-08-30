@@ -53,6 +53,7 @@ section of your configuration file. The settings include:
 :Description: The ``dirty`` limit in bytes at which the cache triggers write-back.  If ``0``, uses write-through caching.
 :Type: 64-bit Integer
 :Required: No
+:Constraint: Must be less than ``rbd cache size``.
 :Default: ``24 MiB``
 
 
@@ -61,12 +62,13 @@ section of your configuration file. The settings include:
 :Description: The ``dirty target`` before the cache begins writing data to the data storage. Does not block writes to the cache.
 :Type: 64-bit Integer
 :Required: No
+:Constraint: Must be less than ``rbd cache max dirty``.
 :Default: ``16 MiB``
 
 
 ``rbd cache max dirty age``
 
-:Description: The number of seconds in the cache before writeback starts. 
+:Description: The number of seconds dirty data is in the cache before writeback starts. 
 :Type: Float
 :Required: No
 :Default: ``1.0``
