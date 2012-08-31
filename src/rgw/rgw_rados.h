@@ -444,6 +444,15 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                struct rgw_err *err);
+
+  int copy_obj_data(void *ctx,
+	       void *handle, off_t end,
+               rgw_obj& dest_obj,
+               rgw_obj& src_obj,
+	       time_t *mtime,
+               map<string, bufferlist>& attrs,
+               RGWObjCategory category,
+               struct rgw_err *err);
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
