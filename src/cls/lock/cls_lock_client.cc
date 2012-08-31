@@ -125,23 +125,23 @@ namespace rados {
         return 0;
       }
 
-      int get_lock_info(IoCtx *ioctx, const string& oid, const string& lock,
-                        map<locker_id_t, locker_info_t> *lockers,
-                        ClsLockType *lock_type,
-                        string *tag)
+      void get_lock_info_start(ObjectReadOperation *rados_op,
+			       const string& name)
       {
-        bufferlist in, out;
+        bufferlist in;
         cls_lock_get_info_op op;
-        op.name = lock;
+        op.name = name;
         ::encode(op, in);
-        int r = ioctx->exec(oid, "lock", "get_info", in, out);
-        if (r < 0)
-          return r;
+        rados_op->exec("lock", "get_info", in);
+      }
 
+      int get_lock_info_finish(bufferlist::iterator *iter,
+			       map<locker_id_t, locker_info_t> *lockers,
+			       ClsLockType *type, string *tag)
+      {
         cls_lock_get_info_reply ret;
-        bufferlist::iterator iter = out.begin();
         try {
-          ::decode(ret, iter);
+          ::decode(ret, *iter);
         } catch (buffer::error& err) {
 	  return -EBADMSG;
         }
@@ -150,8 +150,8 @@ namespace rados {
           *lockers = ret.lockers;
         }
 
-        if (lock_type) {
-          *lock_type = ret.lock_type;
+        if (type) {
+          *type = ret.lock_type;
         }
 
         if (tag) {
@@ -159,6 +159,20 @@ namespace rados {
         }
 
         return 0;
+      }
+
+      int get_lock_info(IoCtx *ioctx, const string& oid, const string& name,
+                        map<locker_id_t, locker_info_t> *lockers,
+                        ClsLockType *type, string *tag)
+      {
+        ObjectReadOperation op;
+        get_lock_info_start(&op, name);
+	bufferlist out;
+        int r = ioctx->operate(oid, &op, &out);
+	if (r < 0)
+	  return r;
+	bufferlist::iterator it = out.begin();
+	return get_lock_info_finish(&it, lockers, type, tag);
       }
 
       void Lock::lock_shared(ObjectWriteOperation *op)
