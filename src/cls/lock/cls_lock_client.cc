@@ -33,10 +33,10 @@ namespace rados {
     namespace lock {
 
       void lock(ObjectWriteOperation& rados_op,
-                string& name, ClsLockType type,
-                string& cookie, string& tag,
-                string description,
-                utime_t& duration, uint8_t flags)
+                const string& name, ClsLockType type,
+                const string& cookie, const string& tag,
+                const string& description,
+                const utime_t& duration, uint8_t flags)
       {
         cls_lock_lock_op op;
         op.name = name;
@@ -52,10 +52,11 @@ namespace rados {
       }
 
       int lock(IoCtx& ioctx,
-               string& oid,
-               string& name, ClsLockType type,
-               string& cookie, string& tag,
-               string description, utime_t& duration, uint8_t flags)
+               const string& oid,
+               const string& name, ClsLockType type,
+               const string& cookie, const string& tag,
+               const string& description, const utime_t& duration,
+	       uint8_t flags)
       {
         ObjectWriteOperation op;
         lock(op, name, type, cookie, tag, description, duration, flags);
@@ -63,7 +64,7 @@ namespace rados {
       }
 
       void unlock(ObjectWriteOperation& rados_op,
-                  string& name, string& cookie)
+                  const string& name, const string& cookie)
       {
         cls_lock_unlock_op op;
         op.name = name;
@@ -74,8 +75,8 @@ namespace rados {
         rados_op.exec("lock", "unlock", in);
       }
 
-      int unlock(IoCtx& ioctx, string& oid,
-                 string& name, string& cookie)
+      int unlock(IoCtx& ioctx, const string& oid,
+                 const string& name, const string& cookie)
       {
         ObjectWriteOperation op;
         unlock(op, name, cookie);
@@ -83,8 +84,8 @@ namespace rados {
       }
 
       void break_lock(ObjectWriteOperation& rados_op,
-                      string& name, string& cookie,
-                      entity_name_t& locker)
+                      const string& name, const string& cookie,
+                      const entity_name_t& locker)
       {
         cls_lock_break_op op;
         op.name = name;
@@ -95,16 +96,16 @@ namespace rados {
         rados_op.exec("lock", "break_lock", in);
       }
 
-      int break_lock(IoCtx& ioctx, string& oid,
-                     string& name, string& cookie,
-                     entity_name_t& locker)
+      int break_lock(IoCtx& ioctx, const string& oid,
+                     const string& name, const string& cookie,
+                     const entity_name_t& locker)
       {
         ObjectWriteOperation op;
         break_lock(op, name, cookie, locker);
         return ioctx.operate(oid, &op);
       }
 
-      int list_locks(IoCtx& ioctx, string& oid, list<string> *locks)
+      int list_locks(IoCtx& ioctx, const string& oid, list<string> *locks)
       {
         bufferlist in, out;
         int r = ioctx.exec(oid, "lock", "list_locks", in, out);
@@ -124,7 +125,7 @@ namespace rados {
         return 0;
       }
 
-      int get_lock_info(IoCtx& ioctx, string& oid, string& lock,
+      int get_lock_info(IoCtx& ioctx, const string& oid, const string& lock,
                         map<locker_id_t, locker_info_t> *lockers,
                         ClsLockType *lock_type,
                         string *tag)
@@ -166,7 +167,7 @@ namespace rados {
              cookie, tag, description, duration, flags);
       }
 
-      int Lock::lock_shared(IoCtx& ioctx, string& oid)
+      int Lock::lock_shared(IoCtx& ioctx, const string& oid)
       {
         return lock(ioctx, oid, name, LOCK_SHARED,
                     cookie, tag, description, duration, flags);
@@ -178,7 +179,7 @@ namespace rados {
              cookie, tag, description, duration, flags);
       }
 
-      int Lock::lock_exclusive(IoCtx& ioctx, string& oid)
+      int Lock::lock_exclusive(IoCtx& ioctx, const string& oid)
       {
         return lock(ioctx, oid, name, LOCK_EXCLUSIVE,
                     cookie, tag, description, duration, flags);
@@ -189,17 +190,17 @@ namespace rados {
 	rados::cls::lock::unlock(op, name, cookie);
       }
 
-      int Lock::unlock(IoCtx& ioctx, string& oid)
+      int Lock::unlock(IoCtx& ioctx, const string& oid)
       {
         return rados::cls::lock::unlock(ioctx, oid, name, cookie);
       }
 
-      void Lock::break_lock(ObjectWriteOperation& op, entity_name_t& locker)
+      void Lock::break_lock(ObjectWriteOperation& op, const entity_name_t& locker)
       {
 	rados::cls::lock::break_lock(op, name, cookie, locker);
       }
 
-      int Lock::break_lock(IoCtx& ioctx, string& oid, entity_name_t& locker)
+      int Lock::break_lock(IoCtx& ioctx, const string& oid, const entity_name_t& locker)
       {
           return rados::cls::lock::break_lock(ioctx, oid, name, cookie, locker);
       }
