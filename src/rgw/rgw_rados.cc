@@ -1141,7 +1141,7 @@ int RGWRados::copy_obj(void *ctx,
                RGWObjCategory category,
                struct rgw_err *err)
 {
-  int ret, r;
+  int ret;
   uint64_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
@@ -1164,9 +1164,133 @@ int RGWRados::copy_obj(void *ctx,
   if (ret < 0)
     return ret;
 
+  if (replace_attrs) {
+    attrset = attrs;
+  }
+
+  RGWObjManifest manifest;
+  RGWObjState *astate = NULL;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  ret = get_obj_state(rctx, src_obj, &astate);
+  if (ret < 0)
+    return ret;
+
+  vector<rgw_obj> ref_objs;
+
+  bool copy_data = !astate->has_manifest;
+  bool copy_first = false;
+  if (astate->has_manifest) {
+    if (astate->manifest.objs.size() < 2) {
+      copy_data = true;
+    } else {
+      map<uint64_t, RGWObjManifestPart>::iterator iter = astate->manifest.objs.begin();
+      RGWObjManifestPart part = iter->second;
+      if (part.loc == src_obj) {
+	if (part.size > RGW_MAX_CHUNK_SIZE)  // should never happen
+	  copy_data = true;
+	else
+          copy_first = true;
+      }
+    }
+  }
+
+  if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
+    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, err);
+  }
+
+  map<uint64_t, RGWObjManifestPart>::iterator miter = astate->manifest.objs.begin();
+
+  if (copy_first) // we need to copy first chunk, not increase refcount
+    ++miter;
+
+  RGWObjManifestPart *first_part = &miter->second;
+  string oid, key;
+  rgw_bucket bucket;
+  get_obj_bucket_and_oid_key(first_part->loc, bucket, oid, key);
+  librados::IoCtx io_ctx;
+
+  ret = open_bucket_ctx(bucket, io_ctx);
+  if (ret < 0)
+    return ret;
+
+  bufferlist first_chunk;
+
+  for (; miter != astate->manifest.objs.end(); ++miter) {
+    RGWObjManifestPart& part = miter->second;
+    ObjectWriteOperation op;
+    manifest.objs[miter->first] = part;
+    cls_rgw_refcount_get(op);
+
+    get_obj_bucket_and_oid_key(part.loc, bucket, oid, key);
+    io_ctx.locator_set_key(key);
+
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0)
+      goto done_ret;
+
+    ref_objs.push_back(part.loc);
+  }
+
+  if (copy_first) {
+    ret = get_obj(ctx, &handle, src_obj, first_chunk, 0, RGW_MAX_CHUNK_SIZE);
+    if (ret < 0)
+      goto done_ret;
+
+    first_part = &manifest.objs[0];
+    first_part->loc = dest_obj;
+    first_part->loc_ofs = 0;
+    first_part->size = first_chunk.length();
+  }
+
+  manifest.obj_size = total_len;
+
+  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, false, NULL, &first_chunk, &manifest);
+  if (mtime)
+    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
+
+  return 0;
+
+done_ret:
+  vector<rgw_obj>::iterator riter;
+
+  /* rollback reference */
+  for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
+    ObjectWriteOperation op;
+    cls_rgw_refcount_put(op);
+
+    get_obj_bucket_and_oid_key(*riter, bucket, oid, key);
+    io_ctx.locator_set_key(key);
+
+    int r = io_ctx.operate(oid, &op);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
+    }
+  }
+  return ret;
+}
+
+
+int RGWRados::copy_obj_data(void *ctx,
+	       void *handle, off_t end,
+               rgw_obj& dest_obj,
+               rgw_obj& src_obj,
+	       time_t *mtime,
+               map<string, bufferlist>& attrs,
+               RGWObjCategory category,
+               struct rgw_err *err)
+{
   bufferlist first_chunk;
   RGWObjManifest manifest;
   RGWObjManifestPart *first_part;
+
+  rgw_obj shadow_obj = dest_obj;
+  string shadow_oid;
+
+  append_rand_alpha(cct, dest_obj.object, shadow_oid, 32);
+  shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
+
+  int ret, r;
+  off_t ofs = 0;
 
   do {
     bufferlist bl;
@@ -1209,11 +1333,7 @@ int RGWRados::copy_obj(void *ctx,
   }
   manifest.obj_size = ofs;
 
-  if (replace_attrs) {
-    attrset = attrs;
-  }
-
-  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
+  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, false, NULL, &first_chunk, &manifest);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
 
