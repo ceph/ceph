@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
@@ -12,38 +15,38 @@ namespace rados {
   namespace cls {
     namespace lock {
 
-      extern void lock(librados::ObjectWriteOperation& rados_op,
+      extern void lock(librados::ObjectWriteOperation *rados_op,
                        const std::string& name, ClsLockType type,
                        const std::string& cookie, const std::string& tag,
                        const std::string& description, const utime_t& duration,
-		       uint8_t flags);
+                       uint8_t flags);
 
-      extern int lock(librados::IoCtx& ioctx,
+      extern int lock(librados::IoCtx *ioctx,
                       const std::string& oid,
                       const std::string& name, ClsLockType type,
                       const std::string& cookie, const std::string& tag,
                       const std::string& description, const utime_t& duration,
-		      uint8_t flags);
+                      uint8_t flags);
 
-      extern void unlock(librados::ObjectWriteOperation& rados_op,
+      extern void unlock(librados::ObjectWriteOperation *rados_op,
                          const std::string& name, const std::string& cookie);
 
-      extern int unlock(librados::IoCtx& ioctx, const std::string& oid,
+      extern int unlock(librados::IoCtx *ioctx, const std::string& oid,
                         const std::string& name, const std::string& cookie);
 
-      extern void break_lock(librados::ObjectWriteOperation& op,
+      extern void break_lock(librados::ObjectWriteOperation *op,
                              const std::string& name, const std::string& cookie,
                              const entity_name_t& locker);
 
-      extern int break_lock(librados::IoCtx& ioctx, const std::string& oid,
+      extern int break_lock(librados::IoCtx *ioctx, const std::string& oid,
                             const std::string& name, const std::string& cookie,
                             const entity_name_t& locker);
 
-      extern int list_locks(librados::IoCtx& ioctx, const std::string& oid,
-			    list<std::string> *locks);
-      extern int get_lock_info(librados::IoCtx& ioctx, const std::string& oid,
-			       const std::string& lock,
-			       map<locker_id_t, locker_info_t> *lockers,
+      extern int list_locks(librados::IoCtx *ioctx, const std::string& oid,
+                            list<std::string> *locks);
+      extern int get_lock_info(librados::IoCtx *ioctx, const std::string& oid,
+                               const std::string& lock,
+                               map<locker_id_t, locker_info_t> *lockers,
                                ClsLockType *lock_type,
                                std::string *tag);
 
@@ -72,16 +75,16 @@ namespace rados {
         }
 
         /* ObjectWriteOperation */
-        void lock_exclusive(librados::ObjectWriteOperation& ioctx);
-        void lock_shared(librados::ObjectWriteOperation& ioctx);
-        void unlock(librados::ObjectWriteOperation& ioctx);
-        void break_lock(librados::ObjectWriteOperation& ioctx, const entity_name_t& locker);
+        void lock_exclusive(librados::ObjectWriteOperation *ioctx);
+        void lock_shared(librados::ObjectWriteOperation *ioctx);
+        void unlock(librados::ObjectWriteOperation *ioctx);
+        void break_lock(librados::ObjectWriteOperation *ioctx, const entity_name_t& locker);
 
         /* IoCtx*/
-        int lock_exclusive(librados::IoCtx& ioctx, const std::string& oid);
-        int lock_shared(librados::IoCtx& ioctx, const std::string& oid);
-        int unlock(librados::IoCtx& ioctx, const std::string& oid);
-        int break_lock(librados::IoCtx& ioctx, const std::string& oid,
+        int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
+        int lock_shared(librados::IoCtx *ioctx, const std::string& oid);
+        int unlock(librados::IoCtx *ioctx, const std::string& oid);
+        int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		       const entity_name_t& locker);
       };
 
