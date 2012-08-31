@@ -117,7 +117,7 @@ namespace rados {
         try {
           ::decode(ret, iter);
         } catch (buffer::error& err) {
-          cerr << __func__ << ": failed to decode response" << std::endl;
+	  return -EBADMSG;
         }
 
         *locks = ret.locks;
@@ -143,7 +143,7 @@ namespace rados {
         try {
           ::decode(ret, iter);
         } catch (buffer::error& err) {
-          cerr << __func__ << ": failed to decode response" << std::endl;
+	  return -EBADMSG;
         }
 
         if (lockers) {
