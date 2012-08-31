@@ -139,7 +139,7 @@ int RGWGC::process(int index, int max_secs)
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(store->gc_pool_ctx, obj_names[index]);
+  int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
   if (ret == -EBUSY) { /* already locked by another gc processor */
     dout(0) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
     return 0;
@@ -218,7 +218,7 @@ int RGWGC::process(int index, int max_secs)
 done:
   if (remove_tags.size())
     remove(index, remove_tags);
-  l.unlock(store->gc_pool_ctx, obj_names[index]);
+  l.unlock(&store->gc_pool_ctx, obj_names[index]);
   delete ctx;
   return 0;
 }
