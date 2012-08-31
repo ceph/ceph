@@ -13,33 +13,37 @@ namespace rados {
     namespace lock {
 
       extern void lock(librados::ObjectWriteOperation& rados_op,
-                       std::string& name, ClsLockType type,
-                       std::string& cookie, std::string& tag,
-                       std::string description, utime_t& duration, uint8_t flags);
+                       const std::string& name, ClsLockType type,
+                       const std::string& cookie, const std::string& tag,
+                       const std::string& description, const utime_t& duration,
+		       uint8_t flags);
 
       extern int lock(librados::IoCtx& ioctx,
-                      std::string& oid,
-                      std::string& name, ClsLockType type,
-                      std::string& cookie, std::string& tag,
-                      std::string description, utime_t& duration, uint8_t flags);
+                      const std::string& oid,
+                      const std::string& name, ClsLockType type,
+                      const std::string& cookie, const std::string& tag,
+                      const std::string& description, const utime_t& duration,
+		      uint8_t flags);
 
       extern void unlock(librados::ObjectWriteOperation& rados_op,
-                         std::string& name, std::string& cookie);
+                         const std::string& name, const std::string& cookie);
 
-      extern int unlock(librados::IoCtx& ioctx, std::string& oid,
-                        std::string& name, std::string& cookie);
+      extern int unlock(librados::IoCtx& ioctx, const std::string& oid,
+                        const std::string& name, const std::string& cookie);
 
       extern void break_lock(librados::ObjectWriteOperation& op,
-                             std::string& name, std::string& cookie,
-                             entity_name_t& locker);
+                             const std::string& name, const std::string& cookie,
+                             const entity_name_t& locker);
 
-      extern int break_lock(librados::IoCtx& ioctx, std::string& oid,
-                            std::string& name, std::string& cookie,
-                            entity_name_t& locker);
+      extern int break_lock(librados::IoCtx& ioctx, const std::string& oid,
+                            const std::string& name, const std::string& cookie,
+                            const entity_name_t& locker);
 
-      extern int list_locks(librados::IoCtx& ioctx, std::string& oid, list<std::string> *locks);
-      extern int get_lock_info(librados::IoCtx& ioctx, std::string& oid, std::string& lock,
-                               map<locker_id_t, locker_info_t> *lockers,
+      extern int list_locks(librados::IoCtx& ioctx, const std::string& oid,
+			    list<std::string> *locks);
+      extern int get_lock_info(librados::IoCtx& ioctx, const std::string& oid,
+			       const std::string& lock,
+			       map<locker_id_t, locker_info_t> *lockers,
                                ClsLockType *lock_type,
                                std::string *tag);
 
@@ -71,13 +75,14 @@ namespace rados {
         void lock_exclusive(librados::ObjectWriteOperation& ioctx);
         void lock_shared(librados::ObjectWriteOperation& ioctx);
         void unlock(librados::ObjectWriteOperation& ioctx);
-        void break_lock(librados::ObjectWriteOperation& ioctx, entity_name_t& locker);
+        void break_lock(librados::ObjectWriteOperation& ioctx, const entity_name_t& locker);
 
         /* IoCtx*/
-        int lock_exclusive(librados::IoCtx& ioctx, std::string& oid);
-        int lock_shared(librados::IoCtx& ioctx, std::string& oid);
-        int unlock(librados::IoCtx& ioctx, std::string& oid);
-        int break_lock(librados::IoCtx& ioctx, std::string& oid, entity_name_t& locker);
+        int lock_exclusive(librados::IoCtx& ioctx, const std::string& oid);
+        int lock_shared(librados::IoCtx& ioctx, const std::string& oid);
+        int unlock(librados::IoCtx& ioctx, const std::string& oid);
+        int break_lock(librados::IoCtx& ioctx, const std::string& oid,
+		       const entity_name_t& locker);
       };
 
     } // namespace lock

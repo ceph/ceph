@@ -1940,8 +1940,10 @@ reprotect_and_return_err:
      * checks that we think we will succeed. But for now, let's not
      * duplicate that code.
      */
-    return cls_client::lock_image_exclusive(&ictx->md_ctx,
-					    ictx->header_oid, cookie);
+    return cls::lock::lock(&ictx->md_ctx, ictx->header_oid,
+			   RBD_LOCK_NAME, LOCK_EXCLUSIVE,
+			   cookie, "", "", utime_t(), 0)
+			   cookie);
   }
 
   int lock_shared(ImageCtx *ictx, const string& cookie)
