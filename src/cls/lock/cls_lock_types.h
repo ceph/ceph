@@ -1,9 +1,10 @@
 #ifndef CEPH_CLS_LOCK_TYPES_H
 #define CEPH_CLS_LOCK_TYPES_H
 
-#include "include/types.h"
 #include "include/encoding.h"
+#include "include/types.h"
 #include "include/utime.h"
+#include "msg/msg_types.h"
 
 /* lock flags */
 #define LOCK_FLAG_RENEW 0x1        /* idempotent lock acquire */
