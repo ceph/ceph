@@ -61,8 +61,6 @@ void Paxos::init()
 	   << accepted_pn << " last_committed: " << last_committed
 	   << " first_committed: " << first_committed << dendl;
 
-  //slurping = get_store()->get(get_name(), "slurping");
-
   dout(10) << "init" << dendl;
 }
 
@@ -1216,34 +1214,6 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *onfinished)
 
 bool Paxos::is_consistent()
 {
-  bool consistent = true;
-  if (first_committed > last_committed)
-    consistent = false;
-  if (slurping != 0)
-    consistent = false;
-
-  if (!(consistent || (slurping == 1))) {
-    dout(5) << "consistent: " << consistent 
-	    << " slurping: " << slurping << dendl;
-  }
-  assert(consistent || (slurping == 1));
-  return consistent;
-}
-
-void Paxos::start_slurping()
-{
-  if (slurping != 1) {
-    slurping = 1;
-//    get_store()->put(get_name(), "slurping", 1);
-  }
-}
-
-void Paxos::end_slurping()
-{
-  if (slurping == 1) {
-    slurping = 0;
-  //  get_store()->put(get_name(), "slurping", slurping);
-  }
-  assert(is_consistent());
+  return (first_committed <= last_committed);
 }
 
