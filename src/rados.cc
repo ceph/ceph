@@ -327,48 +327,44 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   if (check_stdio && strcmp(infile, "-") == 0)
     stdio = true;
 
-  if (stdio) {
-    char buf[256];
-    while(!cin.eof()) {
-      cin.getline(buf, 256);
-      indata.append(buf);
-      indata.append('\n');
-    }
-  } else {
-    int ret, fd = open(infile, O_RDONLY);
-    if (fd < 0) {
-      char buf[80];
-      cerr << "error reading input file " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-      return 1;
-    }
-    char *buf = new char[op_size];
-    int count = op_size;
-    uint64_t offset = 0;
-    while (count == op_size) {
-      count = read(fd, buf, op_size);
-      if (count == 0) {
-        if (!offset) {
-          int ret = io_ctx.create(oid, true);
-          if (ret < 0)
-            cerr << "WARNING: could not create object: " << oid << std::endl;
-        }
-        continue;
-      }
-      indata.append(buf, count);
-      if (offset == 0)
-	ret = io_ctx.write_full(oid, indata);
-      else
-	ret = io_ctx.write(oid, indata, count, offset);
-      indata.clear();
-
-      if (ret < 0) {
-        close(fd);
-        return ret;
-      }
-      offset += count;
-    }
-    close(fd);
+  int ret;
+  int fd = 0;
+  if (!stdio)
+    fd = open(infile, O_RDONLY);
+  if (fd < 0) {
+    char buf[80];
+    cerr << "error reading input file " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+    return 1;
   }
+  char *buf = new char[op_size];
+  int count = op_size;
+  uint64_t offset = 0;
+  while (count != 0) {
+    count = read(fd, buf, op_size);
+    if (count == 0) {
+      if (!offset) {
+	int ret = io_ctx.create(oid, true);
+	if (ret < 0) {
+	  cerr << "WARNING: could not create object: " << oid << std::endl;
+	  return 1;
+	}
+      }
+      continue;
+    }
+    indata.append(buf, count);
+    if (offset == 0)
+      ret = io_ctx.write_full(oid, indata);
+    else
+      ret = io_ctx.write(oid, indata, count, offset);
+    indata.clear();
+
+    if (ret < 0) {
+      close(fd);
+      return ret;
+    }
+    offset += count;
+  }
+  close(fd);
   return 0;
 }
 
