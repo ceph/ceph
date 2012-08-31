@@ -844,7 +844,7 @@ public:
 
 static int do_lock_cmd(std::vector<const char*> &nargs,
                        const std::map < std::string, std::string > &opts,
-                       IoCtx ioctx,
+                       IoCtx *ioctx,
 		       Formatter *formatter)
 {
   char buf[128];
@@ -1958,7 +1958,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!formatter) {
       formatter = new JSONFormatter(pretty_format);
     }
-    ret = do_lock_cmd(nargs, opts, io_ctx, formatter);
+    ret = do_lock_cmd(nargs, opts, &io_ctx, formatter);
   } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage_exit();
