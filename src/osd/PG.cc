@@ -3923,11 +3923,6 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 {
   assert(!is_primary());
 
-  if (info.last_backfill.is_max()) {
-    info.stats = oinfo.stats;
-    dirty_info = true;
-  }
-
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   if (info.history.merge(oinfo.history))
     dirty_info = true;
