@@ -1179,6 +1179,13 @@ int RGWCopyObj::verify_permission()
 
   dest_bucket = dest_bucket_info.bucket;
 
+  rgw_obj src_obj(src_bucket, src_object);
+  rgwstore->set_atomic(s->obj_ctx, src_obj);
+  rgwstore->set_prefetch_data(s->obj_ctx, src_obj);
+
+  rgw_obj dest_obj(dest_bucket, dest_object);
+  rgwstore->set_atomic(s->obj_ctx, dest_obj);
+
   /* check source object permissions */
   ret = read_policy(s, src_bucket_info, &src_policy, src_bucket, src_object);
   if (ret < 0)
