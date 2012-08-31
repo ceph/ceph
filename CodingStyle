@@ -72,6 +72,14 @@ by section.
    Don't sweat it, unless the license varies from that of the project
    (LGPL2) or the code origin isn't reflected by the git history.
 
+* Formatting > Tabs:
+  Indent width is two spaces.  When runs of 8 spaces can be compressed
+  to a single tab character, do so. The standard Emacs/Vim settings
+  header is:
+
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 * Formatting > Conditionals:
 
    - No spaces inside conditionals please, e.g.
