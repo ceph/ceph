@@ -114,6 +114,7 @@ private:
     warn_interval_multiplier(1),
     lock("OpRequest::lock"),
     tracker(tracker),
+    hit_flag_points(0), latest_flag_point(0),
     seq(0) {
     received_time = request->get_recv_stamp();
     tracker->register_inflight_op(&xitem);

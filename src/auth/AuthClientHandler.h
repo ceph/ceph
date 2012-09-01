@@ -39,7 +39,7 @@ protected:
 
 public:
   AuthClientHandler(CephContext *cct_) 
-    : cct(cct_), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0) {}
+    : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0) {}
   virtual ~AuthClientHandler() {}
 
   void init(EntityName& n) { name = n; }

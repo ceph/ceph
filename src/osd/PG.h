@@ -171,7 +171,7 @@ public:
     version_t last_requested;           // last object requested by primary
 
     /****/
-    IndexedLog() {}
+    IndexedLog() : last_requested(0) {}
 
     void claim_log(const pg_log_t& o) {
       log = o.log;
@@ -281,7 +281,8 @@ public:
     uint64_t zero_to;                // first non-zeroed byte of log.
     bool has_checksums;
 
-    OndiskLog() : tail(0), head(0), zero_to(0) {}
+    OndiskLog() : tail(0), head(0), zero_to(0),
+		  has_checksums(true) {}
 
     uint64_t length() { return head - tail; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
@@ -497,7 +498,7 @@ public:
     const char *state_name;
     utime_t enter_time;
     const char *get_state_name() { return state_name; }
-    NamedState() : enter_time(ceph_clock_now(g_ceph_context)) {}
+    NamedState() : state_name(0), enter_time(ceph_clock_now(g_ceph_context)) {}
     virtual ~NamedState() {}
   };
 
@@ -1395,7 +1396,7 @@ public:
 
  public:
   PG(OSDService *o, OSDMapRef curmap,
-     PGPool pool, pg_t p, const hobject_t& loid, const hobject_t& ioid);
+     const PGPool &pool, pg_t p, const hobject_t& loid, const hobject_t& ioid);
   virtual ~PG();
 
  private:

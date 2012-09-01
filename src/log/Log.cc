@@ -288,7 +288,9 @@ void Log::dump_recent()
 void Log::start()
 {
   assert(!is_started());
+  pthread_mutex_lock(&m_queue_mutex);
   m_stop = false;
+  pthread_mutex_unlock(&m_queue_mutex);
   create();
 }
 

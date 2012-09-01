@@ -694,7 +694,7 @@ struct C_IsLatestMap : public Context {
   Context *onfinish;
   version_t newest;
   version_t have;
-  C_IsLatestMap(Context *f, version_t h) : onfinish(f), have(h) {}
+  C_IsLatestMap(Context *f, version_t h) : onfinish(f), newest(0), have(h) {}
   void finish(int r) {
     onfinish->complete(r == 0 ? (have != newest) : r);
   }

@@ -383,7 +383,7 @@ public:
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
@@ -828,7 +828,7 @@ protected:
     list<ObjectStore::Transaction*> tls;
     
     RepModify() : pg(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
-		  bytes_written(0) {}
+		  epoch_started(0), bytes_written(0) {}
   };
 
   struct C_OSD_RepModifyApply : public Context {
@@ -918,7 +918,7 @@ protected:
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
-	       PGPool _pool, pg_t p, const hobject_t& oid,
+	       const PGPool &_pool, pg_t p, const hobject_t& oid,
 	       const hobject_t& ioid);
   ~ReplicatedPG() {}
 
