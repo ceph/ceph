@@ -21,6 +21,7 @@ endif
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
 extraopts += --with-ocf --with-rest-bench --with-nss
+extraopts += --enable-cephfs-java
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
