@@ -272,32 +272,35 @@ namespace librbd {
     return librbd::list_children(ictx, *children);
   }
 
-  int Image::list_locks(set<pair<string, string> > &locks,
-			bool &exclusive)
+  int Image::list_lockers(std::list<librbd::locker_t> *lockers,
+			  bool *exclusive, string *tag)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::list_locks(ictx, locks, exclusive);
+    return librbd::list_lockers(ictx, lockers, exclusive, tag);
   }
 
   int Image::lock_exclusive(const string& cookie)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::lock_exclusive(ictx, cookie);
+    return librbd::lock(ictx, true, cookie, "");
   }
-  int Image::lock_shared(const string& cookie)
+
+  int Image::lock_shared(const string& cookie, const std::string& tag)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::lock_shared(ictx, cookie);
+    return librbd::lock(ictx, false, cookie, tag);
   }
+
   int Image::unlock(const string& cookie)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::unlock(ictx, cookie);
   }
-  int Image::break_lock(const string& other_locker, const string& cookie)
+
+  int Image::break_lock(const string& client, const string& cookie)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::break_lock(ictx, other_locker, cookie);
+    return librbd::break_lock(ictx, client, cookie);
   }
 
   int Image::snap_create(const char *snap_name)
@@ -784,63 +787,86 @@ extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
   return image_set.size();
 }
 
-extern "C" int rbd_list_lockers(rbd_image_t image, int *exclusive,
-                                char **lockers_and_cookies, int *max_entries)
+extern "C" ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
+				    char *tag, size_t *tag_len,
+				    char *clients, size_t *clients_len,
+				    char *cookies, size_t *cookies_len,
+				    char *addrs, size_t *addrs_len)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  set<pair<string, string> > locks;
+  std::list<librbd::locker_t> lockers;
   bool exclusive_bool;
+  string tag_str;
 
-  if (*max_entries <= 0) {
-    return -ERANGE;
-  }
-
-  int r = list_locks(ictx, locks, exclusive_bool);
-  if (r < 0) {
+  int r = list_lockers(ictx, &lockers, &exclusive_bool, &tag_str);
+  if (r < 0)
     return r;
-  }
+
+  ldout(ictx->cct, 20) << "list_lockers r = " << r << " lockers.size() = " << lockers.size() << dendl;
+
   *exclusive = (int)exclusive_bool;
-  bool fits = locks.size() * 2 <= (size_t)*max_entries;
-  *max_entries = locks.size() * 2;
-  if (!fits) {
-    return -ERANGE;
+  size_t clients_total = 0;
+  size_t cookies_total = 0;
+  size_t addrs_total = 0;
+  for (list<librbd::locker_t>::const_iterator it = lockers.begin();
+       it != lockers.end(); ++it) {
+    clients_total += it->client.length() + 1;
+    cookies_total += it->cookie.length() + 1;
+    addrs_total += it->address.length() + 1;
   }
 
-  set<pair<string, string> >::iterator p;
-  int i = 0;
-  for (p = locks.begin();
-      p != locks.end();
-      ++p) {
-    lockers_and_cookies[i] = strdup(p->first.c_str());
-    lockers_and_cookies[i+1] = strdup(p->second.c_str());
-    i+=2;
+  bool too_short = ((clients_total > *clients_len) ||
+		    (cookies_total > *cookies_len) ||
+		    (addrs_total > *addrs_len) ||
+		    (tag_str.length() + 1 > *tag_len));
+  *clients_len = clients_total;
+  *cookies_len = cookies_total;
+  *addrs_len = addrs_total;
+  *tag_len = tag_str.length() + 1;
+  if (too_short)
+    return -ERANGE;
+
+  strcpy(tag, tag_str.c_str());
+  char *clients_p = clients;
+  char *cookies_p = cookies;
+  char *addrs_p = addrs;
+  for (list<librbd::locker_t>::const_iterator it = lockers.begin();
+       it != lockers.end(); ++it) {
+    strcpy(clients_p, it->client.c_str());
+    clients_p += it->client.length() + 1;
+    strcpy(cookies_p, it->cookie.c_str());
+    cookies_p += it->cookie.length() + 1;
+    strcpy(addrs_p, it->address.c_str());
+    addrs_p += it->address.length() + 1;
   }
-  return 0;
+
+  return lockers.size();
 }
 
 extern "C" int rbd_lock_exclusive(rbd_image_t image, const char *cookie)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::lock_exclusive(ictx, cookie);
+  return librbd::lock(ictx, true, cookie ? cookie : "", "");
 }
 
-extern "C" int rbd_lock_shared(rbd_image_t image, const char *cookie)
+extern "C" int rbd_lock_shared(rbd_image_t image, const char *cookie,
+			       const char *tag)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::lock_shared(ictx, cookie);
+  return librbd::lock(ictx, false, cookie ? cookie : "", tag ? tag : "");
 }
 
 extern "C" int rbd_unlock(rbd_image_t image, const char *cookie)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::unlock(ictx, cookie);
+  return librbd::unlock(ictx, cookie ? cookie : "");
 }
 
-extern "C" int rbd_break_lock(rbd_image_t image, const char *locker,
-                              const char *cookie)
+extern "C" int rbd_break_lock(rbd_image_t image, const char *client,
+			      const char *cookie)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::break_lock(ictx, locker, cookie);
+  return librbd::break_lock(ictx, client, cookie ? cookie : "");
 }
 
 /* I/O */
