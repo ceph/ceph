@@ -3,6 +3,7 @@
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=1
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
+[ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
 
 extra_conf=""
 new=0
@@ -12,6 +13,7 @@ start_all=1
 start_mon=0
 start_mds=0
 start_osd=0
+start_rgw=0
 localhost=0
 nodaemon=0
 smallmds=0
@@ -50,6 +52,9 @@ case $1 in
 	    ;;
     -l | --localhost )
 	    localhost=1
+	    ;;
+    -r )
+	    start_rgw=1
 	    ;;
     --new | -n )
 	    new=1
@@ -229,7 +234,6 @@ if [ "$cephx" -eq 1 ]; then
 else
     CEPH_ADM="$CEPH_BIN/ceph -c $conf"
 fi
-
 
 MONS=""
 count=0
@@ -446,6 +450,77 @@ EOF
     cmd="$CEPH_ADM mds set_max_mds $CEPH_NUM_MDS"
     echo $cmd
     $cmd
+fi
+
+
+# rgw
+if [ "$start_rgw" -eq 1 ]; then
+    for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+    do
+	rgwport=$(( 8000 + $rgw ))
+	if [ "$new" -eq 1 ]; then
+	    if [ $overwrite_conf -eq 1 ]; then
+		    dnsname=`hostname -f`
+		    cat <<EOF >> $conf
+[client.radosgw.rgw$rgw]
+        host = $HOSTNAME
+$DAEMONOPTS
+        keyring = out/keyring.client.radosgw.rgw$rgw
+        rgw socket path = out/sock.client.radosgw.rgw$rgw
+        rgw dns name = $dnsname
+EOF
+		    mkdir -p out/htdocs
+		    mkdir -p out/fastcgi_sock
+		    cat <<EOF > out/apache.conf
+LoadModule env_module /usr/lib/apache2/modules/mod_env.so
+LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
+LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
+
+Listen $rgwport
+ServerName rgwtest.example.com
+
+ServerRoot $PWD/out
+ErrorLog $PWD/out/apache.error.log
+LogFormat "%h l %u %t \"%r\" %>s %b \"{Referer}i\" \"%{User-agent}i\"" combined
+CustomLog $PWD/out/apache.access.log combined
+PidFile $PWD/out/apache.pid
+DocumentRoot $PWD/out/htdocs
+FastCgiIPCDir $PWD/out/fastcgi_sock
+FastCgiExternalServer $PWD/out/htdocs/rgw.fcgi -socket $PWD/out/sock.client.radosgw.rgw$rgw
+RewriteEngine On
+
+RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+# Set fastcgi environment variables.
+# Note that this is separate from Unix environment variables!
+SetEnv RGW_LOG_LEVEL 20
+SetEnv RGW_PRINT_CONTINUE yes
+SetEnv RGW_SHOULD_LOG yes
+
+<Directory $PWD/out/htdocs>
+  Options +ExecCGI
+  AllowOverride All
+  SetHandler fastcgi-script
+</Directory>
+
+AllowEncodedSlashes On
+ServerSignature Off
+EOF
+		    $SUDO $CEPH_ADM auth get-or-create client.radosgw.rgw$rgw osd 'allow rwx' mon 'allow r' -o out/keyring.client.radosgw.rgw$rgw
+
+		    #akey=`echo $$ | md5sum | cut -c 1-20`
+		    #skey=`dd if=/dev/urandom of=/tmp/random.$$ bs=1 count=40 2>/dev/null ; base64 < /tmp/random.$$ ; rm /tmp/random.$$`
+		    akey='0555b35654ad1656d804'
+		    skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
+		    echo access key $akey
+		    echo secret key $skey
+		    $CEPH_BIN/radosgw-admin user create --uid tester --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com
+	    fi
+	fi
+	echo start rgw$rgw on http://localhost:$rgwport
+	run 'rgw' $SUDO $CEPH_BIN/radosgw -n client.radosgw.rgw$rgw $ARGS
+	run 'apache2' $SUDO apache2 -f $PWD/out/apache.conf
+    done
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
