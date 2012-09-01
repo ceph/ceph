@@ -1282,7 +1282,7 @@ struct qi {
   int item;
   int depth;
   float weight;
-  qi() {}
+  qi() : item(0), depth(0), weight(0) {}
   qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
 };
 

@@ -594,7 +594,7 @@ int Pipe::connect()
   struct msghdr msg;
   struct iovec msgvec[2];
   int msglen;
-  char banner[strlen(CEPH_BANNER)];
+  char banner[strlen(CEPH_BANNER) + 1];  // extra byte makes coverity happy
   entity_addr_t paddr;
   entity_addr_t peer_addr_for_me, socket_addr;
   AuthAuthorizer *authorizer = NULL;

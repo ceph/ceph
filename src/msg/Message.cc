@@ -615,12 +615,14 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   // it against compat_version.
   if (m->get_header().version &&
       m->get_header().version < header.compat_version) {
-    ldout(cct, 0) << "will not decode message of type " << type
-		  << " version " << header.version
-		  << " because compat_version " << header.compat_version
-		  << " > supported version " << m->get_header().version << dendl;
-    if (cct->_conf->ms_die_on_bad_msg)
-      assert(0);
+    if (cct) {
+      ldout(cct, 0) << "will not decode message of type " << type
+		    << " version " << header.version
+		    << " because compat_version " << header.compat_version
+		    << " > supported version " << m->get_header().version << dendl;
+      if (cct->_conf->ms_die_on_bad_msg)
+	assert(0);
+    }
     m->put();
     return 0;
   }

@@ -973,8 +973,8 @@ struct pg_history_t {
       last_epoch_clean = other.last_epoch_clean;
       modified = true;
     }
-    if (last_epoch_split < other.last_epoch_started) {
-      last_epoch_split = other.last_epoch_started; 
+    if (last_epoch_split < other.last_epoch_split) {
+      last_epoch_split = other.last_epoch_split; 
       modified = true;
     }
     if (other.last_scrub > last_scrub) {
@@ -1085,7 +1085,7 @@ struct pg_notify_t {
   static void generate_test_instances(list<pg_notify_t*> &o);
 };
 WRITE_CLASS_ENCODER(pg_notify_t)
-ostream &operator<<(ostream &lhs, const pg_notify_t notify);
+ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
 
 
 /**

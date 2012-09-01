@@ -133,6 +133,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
     probe->onfinish->finish(probe->err);
     delete probe->onfinish;
     delete probe;
+    return;
   }
 
   // analyze!

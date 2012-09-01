@@ -1360,7 +1360,7 @@ void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
   o.push_back(new pg_notify_t(3,10,pg_info_t()));
 }
 
-ostream &operator<<(ostream &lhs, const pg_notify_t notify)
+ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 {
   return lhs << "(query_epoch:" << notify.query_epoch
 	     << ", epoch_sent:" << notify.epoch_sent

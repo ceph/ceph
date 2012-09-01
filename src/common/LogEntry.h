@@ -44,7 +44,7 @@ struct LogEntryKey {
   uint64_t seq;
 
   LogEntryKey() {}
-  LogEntryKey(entity_inst_t w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
+  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -84,11 +84,12 @@ struct LogSummary {
     while (tail.size() > 50)
       tail.pop_front();
   }
-  bool contains(LogEntryKey k) const {
+  bool contains(const LogEntryKey& k) const {
     for (list<LogEntry>::const_iterator p = tail.begin();
 	 p != tail.end();
 	 p++)
-      if (p->key() == k) return true;
+      if (p->key() == k)
+	return true;
     return false;
   }
 
