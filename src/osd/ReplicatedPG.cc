@@ -5952,16 +5952,23 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
     // second chance to recovery replicas
     started = recover_replicas(max);
   }
+
+  bool deferred_backfill = false;
   if (backfill_target >= 0 && started < max &&
       missing.num_missing() == 0 &&
       !waiting_on_backfill) {
-    started += recover_backfill(max - started);
+    if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
+      dout(10) << "deferring backfill due to NOBACKFILL" << dendl;
+      deferred_backfill = true;
+    } else {
+      started += recover_backfill(max - started);
+    }
   }
 
   dout(10) << " started " << started << dendl;
   osd->logger->inc(l_osd_rop, started);
 
-  if (started || recovery_ops_active > 0)
+  if (started || recovery_ops_active > 0 || deferred_backfill)
     return started;
 
   assert(recovery_ops_active == 0);
