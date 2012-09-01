@@ -164,6 +164,7 @@ public:
     pool_obj_cont(),
     current_snap(0),
     pool_name(pool_name),
+    next_oid(0),
     errors(0),
     max_in_flight(max_in_flight),
     cont_gen(cont_gen), seq_num(0), seq(0),
@@ -467,7 +468,7 @@ public:
   RemoveAttrsOp(RadosTestContext *context,
 	       const string &oid,
 	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), done(false)
+    TestOp(context, stat), oid(oid), comp(NULL), done(false)
     {}
 
   void _begin()
@@ -556,7 +557,7 @@ public:
   TmapPutOp(RadosTestContext *context,
 	       const string &oid,
 	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), done(false)
+    TestOp(context, stat), oid(oid), comp(NULL), done(false)
     {}
 
   void _begin()
@@ -649,7 +650,7 @@ public:
   SetAttrsOp(RadosTestContext *context,
 	       const string &oid,
 	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), done(false)
+    TestOp(context, stat), oid(oid), comp(NULL), done(false)
     {}
 
   void _begin()
@@ -948,8 +949,10 @@ public:
 	 const string &oid,
 	 TestOpStat *stat = 0) : 
     TestOp(context, stat),
+    completion(NULL),
     oid(oid),
     old_value(&context->cont_gen),
+    snap(0),
     retval(0),
     attrretval(0)
   {}

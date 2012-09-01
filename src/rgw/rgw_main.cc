@@ -327,9 +327,9 @@ done:
   handler->put_op(op);
   rgwstore->destroy_context(s->obj_ctx);
   FCGX_Finish_r(fcgx);
-  delete req;
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
+  delete req;
 }
 
 class C_InitTimeout : public Context {

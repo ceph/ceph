@@ -49,7 +49,9 @@ public:
       watchers[name] = state;
     }
 
-    Notification(entity_name_t& n, OSD::Session *s, uint64_t c, bufferlist& b) : name(n), session(s), cookie(c), bl(b) { }
+    Notification(entity_name_t& n, OSD::Session *s, uint64_t c, bufferlist& b)
+      : name(n), id(0), session(s), cookie(c), reply(0), timeout(0),
+	obc(0), bl(b) { }
   };
 
   class C_NotifyTimeout : public Context {

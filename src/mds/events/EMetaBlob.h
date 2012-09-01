@@ -546,11 +546,11 @@ private:
   }
 
   // return remote pointer to to-be-journaled inode
-  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
-    return add_primary_dentry(add_dir(dn->get_dir(), false),
-                              dn, dirty, in);
+  void add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
+    add_primary_dentry(add_dir(dn->get_dir(), false),
+		       dn, dirty, in);
   }
-  inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, CInode *in=0) {
+  void add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, CInode *in=0) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
@@ -579,30 +579,27 @@ private:
 									 in->symlink, snapbl,
 									 dirty, default_layout,
 									 &in->old_inodes)));
-    if (pi)
-      lump.get_dfull().back()->inode = *pi;
-    return &lump.get_dfull().back()->inode;
   }
 
   // convenience: primary or remote?  figure it out.
-  inode_t *add_dentry(CDentry *dn, bool dirty) {
+  void add_dentry(CDentry *dn, bool dirty) {
     dirlump& lump = add_dir(dn->get_dir(), false);
-    return add_dentry(lump, dn, dirty);
+    add_dentry(lump, dn, dirty);
   }
-  inode_t *add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
+  void add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // primary or remote
     if (dn->get_projected_linkage()->is_remote()) {
       add_remote_dentry(dn, dirty);
-      return 0;
+      return;
     } else if (dn->get_projected_linkage()->is_null()) {
       add_null_dentry(dn, dirty);
-      return 0;
+      return;
     }
     assert(dn->get_projected_linkage()->is_primary());
-    return add_primary_dentry(dn, dirty);
+    add_primary_dentry(dn, dirty);
   }
 
-  inode_t *add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+  void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 		    map<string,bufferptr> *px=0) {
     in->last_journaled = my_offset;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
@@ -631,7 +628,6 @@ private:
 		       *pi, *pdft, *px,
 		       in->symlink, snapbl,
 		       dirty, default_layout, &in->old_inodes);
-    return &root->inode;
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false, bool isnew=false) {

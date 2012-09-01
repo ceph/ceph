@@ -31,11 +31,11 @@ class Accepter : public Thread {
   uint64_t nonce;
 
 public:
-  Accepter(SimpleMessenger *r) : msgr(r), done(false), listen_sd(-1) {}
+  Accepter(SimpleMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
     
   void *entry();
   void stop();
-  int bind(entity_addr_t &bind_addr, uint64_t _nonce, int avoid_port1=0, int avoid_port2=0);
+  int bind(entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
   int rebind(int avoid_port);
   int start();
 };

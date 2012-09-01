@@ -114,7 +114,7 @@ public:
       thread_is_free_lock("OmapBench::thread_is_free_lock"),
       data_lock("OmapBench::data_lock"),
       busythreads_count(0),
-      safe(aio_is_safe),
+      comp(NULL), safe(aio_is_safe),
       pool_name("data"),
       rados_id("admin"),
       prefix(rados_id+".obj."),

@@ -140,6 +140,7 @@ const ContDesc &ObjectDesc::most_recent() {
 void ObjectDesc::update(const ContDesc &next) {
   layers.push_front(next);
   return;
+  /*
   interval_set<uint64_t> fall_through;
   fall_through.insert(0, cont_gen->get_length(next));
   for (list<ContDesc>::iterator i = layers.begin();
@@ -155,6 +156,7 @@ void ObjectDesc::update(const ContDesc &next) {
     fall_through.subtract(valid);
     ++i;
   }
+  */
 }
 
 bool ObjectDesc::check(bufferlist &to_check) {
