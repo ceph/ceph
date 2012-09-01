@@ -82,6 +82,7 @@ SUBSYS(heartbeatmap, 1, 5)
 SUBSYS(perfcounter, 1, 5)
 SUBSYS(rgw, 1, 5)                 // log level for the Rados gateway
 SUBSYS(hadoop, 1, 5)
+SUBSYS(javaclient, 1, 5)
 SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 5)
 
