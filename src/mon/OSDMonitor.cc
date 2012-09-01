@@ -2073,6 +2073,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noin") {
       return prepare_unset_flag(m, CEPH_OSDMAP_NOIN);
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "nobackfill") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOBACKFILL);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "nobackfill") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOBACKFILL);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "norecover") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NORECOVER);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "norecover") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NORECOVER);
+    }
     else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
       // ** DISABLE THIS FOR NOW **
       ss << "cluster snapshot currently disabled (broken implementation)";
