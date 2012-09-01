@@ -40,8 +40,12 @@ namespace librbd {
     std::map<std::string, SnapInfo> snaps_by_name;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
-    std::set<std::pair<std::string, std::string> > locks;
+
+    std::map<rados::cls::lock::locker_id_t,
+	     rados::cls::lock::locker_info_t> lockers;
     bool exclusive_locked;
+    std::string lock_tag;
+
     std::string name;
     std::string snap_name;
     IoCtx data_ctx, md_ctx;

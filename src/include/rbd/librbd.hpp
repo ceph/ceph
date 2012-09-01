@@ -39,6 +39,12 @@ namespace librbd {
     std::string name;
   } snap_info_t;
 
+  typedef struct {
+    std::string client;
+    std::string cookie;
+    std::string address;
+  } locker_t;
+
   typedef rbd_image_info_t image_info_t;
 
   class ProgressContext
@@ -110,13 +116,13 @@ public:
    */
   int list_children(std::set<std::pair<std::string, std::string> > *children);
 
-  /* cooperative locking */
-  int list_locks(std::set<std::pair<std::string, std::string> > &locks,
-                 bool &exclusive);
+  /* advisory locking (see librbd.h for details) */
+  int list_lockers(std::list<locker_t> *lockers,
+		   bool *exclusive, std::string *tag);
   int lock_exclusive(const std::string& cookie);
-  int lock_shared(const std::string& cookie);
+  int lock_shared(const std::string& cookie, const std::string& tag);
   int unlock(const std::string& cookie);
-  int break_lock(const std::string& other_locker, const std::string& cookie);
+  int break_lock(const std::string& client, const std::string& cookie);
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
