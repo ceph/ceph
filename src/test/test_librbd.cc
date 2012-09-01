@@ -33,6 +33,7 @@
 
 #include "rados-api/test.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 
 using namespace std;
 
@@ -1228,4 +1229,75 @@ TEST(LibRBD, ListChildren)
   // destroy_one_pool also closes the cluster; do this one step at a time
   ASSERT_EQ(0, rados_pool_delete(cluster, pool_name1.c_str()));
   ASSERT_EQ(0, destroy_one_pool(pool_name2, &cluster));
+}
+
+TEST(LibRBD, LockingPP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 2 << 20;
+    std::string cookie1 = "foo";
+    std::string cookie2 = "bar";
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    // no lockers initially
+    std::list<librbd::locker_t> lockers;
+    std::string tag;
+    bool exclusive;
+    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
+    ASSERT_EQ(0u, lockers.size());
+    ASSERT_EQ("", tag);
+
+    // exclusive lock is exclusive
+    ASSERT_EQ(0, image.lock_exclusive(cookie1));
+    ASSERT_EQ(-EEXIST, image.lock_exclusive(cookie1));
+    ASSERT_EQ(-EBUSY, image.lock_exclusive(""));
+    ASSERT_EQ(-EEXIST, image.lock_shared(cookie1, ""));
+    ASSERT_EQ(-EBUSY, image.lock_shared(cookie1, "test"));
+    ASSERT_EQ(-EBUSY, image.lock_shared("", "test"));
+    ASSERT_EQ(-EBUSY, image.lock_shared("", ""));
+
+    // list exclusive
+    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
+    ASSERT_TRUE(exclusive);
+    ASSERT_EQ("", tag);
+    ASSERT_EQ(1u, lockers.size());
+    ASSERT_EQ(cookie1, lockers.front().cookie);
+
+    // unlock
+    ASSERT_EQ(-ENOENT, image.unlock(""));
+    ASSERT_EQ(-ENOENT, image.unlock(cookie2));
+    ASSERT_EQ(0, image.unlock(cookie1));
+    ASSERT_EQ(-ENOENT, image.unlock(cookie1));
+    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
+    ASSERT_EQ(0u, lockers.size());
+
+    ASSERT_EQ(0, image.lock_shared(cookie1, ""));
+    ASSERT_EQ(-EEXIST, image.lock_shared(cookie1, ""));
+    ASSERT_EQ(0, image.lock_shared(cookie2, ""));
+    ASSERT_EQ(-EEXIST, image.lock_shared(cookie2, ""));
+    ASSERT_EQ(-EEXIST, image.lock_exclusive(cookie1));
+    ASSERT_EQ(-EEXIST, image.lock_exclusive(cookie2));
+    ASSERT_EQ(-EBUSY, image.lock_exclusive(""));
+    ASSERT_EQ(-EBUSY, image.lock_exclusive("test"));
+
+    // list shared
+    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
+    ASSERT_EQ(2u, lockers.size());
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }

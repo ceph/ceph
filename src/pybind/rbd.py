@@ -646,6 +646,107 @@ written." % (self.name, ret, length))
         images = c_images.raw[:images_size.value - 1].split('\0')
         return zip(pools, images)
 
+    def list_lockers(self):
+        """
+        List clients that have locked the image and information
+        about the lock.
+
+        :returns: dict - contains keys tag, exclusive, and lockers
+                  tag - the tag associated with the lock
+                        (every additional locker must use the same tag)
+                  exclusive - boolean indicating whether the lock is
+                              exclusive or shared
+                  lockers - a list of (client, cookie, address) tuples
+        """
+        clients_size = c_size_t(512)
+        cookies_size = c_size_t(512)
+        addrs_size = c_size_t(512)
+        tag_size = c_size_t(512)
+        exclusive = c_int(0)
+
+        while True:
+            c_clients = create_string_buffer(clients_size.value)
+            c_cookies = create_string_buffer(cookies_size.value)
+            c_addrs = create_string_buffer(addrs_size.value)
+            c_tag = create_string_buffer(tag_size.value)
+            ret = self.librbd.rbd_list_lockers(self.image,
+                                               byref(exclusive),
+                                               byref(c_tag),
+                                               byref(tag_size),
+                                               byref(c_clients),
+                                               byref(clients_size),
+                                               byref(c_cookies),
+                                               byref(cookies_size),
+                                               byref(c_addrs),
+                                               byref(addrs_size))
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing images')
+        if ret == 0:
+            return []
+        clients = c_clients.raw[:clients_size.value - 1].split('\0')
+        cookies = c_cookies.raw[:cookies_size.value - 1].split('\0')
+        addrs = c_addrs.raw[:addrs_size.value - 1].split('\0')
+        return {
+            'tag'       : c_tag.value,
+            'exclusive' : exclusive.value == 1,
+            'lockers'   : zip(clients, cookies, addrs),
+            }
+
+    def lock_exclusive(self, cookie):
+        """
+        Take an exclusive lock on the image.
+
+        :raises: :class:`ImageBusy` if a different client or cookie locked it
+                 :class:`ImageExists` if the same client and cookie locked it
+        """
+        if not isinstance(cookie, str):
+            raise TypeError('cookie must be a string')
+        ret = self.librbd.rbd_lock_exclusive(self.image, c_char_p(cookie))
+        if ret < 0:
+            raise make_ex(ret, 'error acquiring exclusive lock on image')
+
+    def lock_shared(self, cookie, tag):
+        """
+        Take a shared lock on the image. The tag must match
+        that of the existing lockers, if any.
+
+        :raises: :class:`ImageBusy` if a different client or cookie locked it
+                 :class:`ImageExists` if the same client and cookie locked it
+        """
+        if not isinstance(cookie, str):
+            raise TypeError('cookie must be a string')
+        if not isinstance(tag, str):
+            raise TypeError('tag must be a string')
+        ret = self.librbd.rbd_lock_shared(self.image, c_char_p(cookie),
+                                          c_char_p(tag))
+        if ret < 0:
+            raise make_ex(ret, 'error acquiring shared lock on image')
+
+    def unlock(self, cookie):
+        """
+        Release a lock on the image that was locked by this rados client.
+        """
+        if not isinstance(cookie, str):
+            raise TypeError('cookie must be a string')
+        ret = self.librbd.rbd_unlock(self.image, c_char_p(cookie))
+        if ret < 0:
+            raise make_ex(ret, 'error unlocking image')
+
+    def break_lock(self, client, cookie):
+        """
+        Release a lock held by another rados client.
+        """
+        if not isinstance(client, str):
+            raise TypeError('client must be a string')
+        if not isinstance(cookie, str):
+            raise TypeError('cookie must be a string')
+        ret = self.librbd.rbd_break_lock(self.image, c_char_p(client),
+                                         c_char_p(cookie))
+        if ret < 0:
+            raise make_ex(ret, 'error unlocking image')
+
 
 class SnapIterator(object):
     """
