@@ -121,13 +121,16 @@ namespace librbd {
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 
   /* cooperative locking */
-  int list_locks(ImageCtx *ictx,
-                 std::set<std::pair<std::string, std::string> > &locks,
-                 bool &exclusive);
-  int lock_exclusive(ImageCtx *ictx, const std::string& cookie);
-  int lock_shared(ImageCtx *ictx, const std::string& cookie);
+  int list_lockers(ImageCtx *ictx,
+		   std::list<locker_t> *locks,
+		   bool *exclusive,
+		   std::string *tag);
+  int lock(ImageCtx *ictx, bool exclusive, const std::string& cookie,
+	   const std::string& tag);
+  int lock_shared(ImageCtx *ictx, const std::string& cookie,
+		  const std::string& tag);
   int unlock(ImageCtx *ictx, const std::string& cookie);
-  int break_lock(ImageCtx *ictx, const std::string& lock_holder,
+  int break_lock(ImageCtx *ictx, const std::string& client,
                  const std::string& cookie);
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);

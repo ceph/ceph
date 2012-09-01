@@ -395,6 +395,41 @@ class TestImage(object):
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.remove_snap('snap1')
+        
+    def test_lock_unlock(self):
+        assert_raises(ImageNotFound, self.image.unlock, '')
+        self.image.lock_exclusive('')
+        assert_raises(ImageExists, self.image.lock_exclusive, '')
+        assert_raises(ImageBusy, self.image.lock_exclusive, 'test')
+        assert_raises(ImageExists, self.image.lock_shared, '', '')
+        assert_raises(ImageBusy, self.image.lock_shared, 'foo', '')
+        self.image.unlock('')
+
+    def test_list_lockers(self):
+        eq([], self.image.list_lockers())
+        self.image.lock_exclusive('test')
+        lockers = self.image.list_lockers()
+        eq(1, len(lockers['lockers']))
+        _, cookie, _ = lockers['lockers'][0]
+        eq(cookie, 'test')
+        eq('', lockers['tag'])
+        assert lockers['exclusive']
+        self.image.unlock('test')
+        eq([], self.image.list_lockers())
+
+        num_shared = 10
+        for i in xrange(num_shared):
+            self.image.lock_shared(str(i), 'tag')
+        lockers = self.image.list_lockers()
+        eq('tag', lockers['tag'])
+        assert not lockers['exclusive']
+        eq(num_shared, len(lockers['lockers']))
+        cookies = sorted(map(lambda x: x[1], lockers['lockers']))
+        for i in xrange(num_shared):
+            eq(str(i), cookies[i])
+            self.image.unlock(str(i))
+        eq([], self.image.list_lockers())
+
 
 class TestClone(object):
 
