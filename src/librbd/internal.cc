@@ -6,6 +6,8 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "cls/lock/cls_lock_client.h"
+#include "include/stringify.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
@@ -262,6 +264,8 @@ namespace librbd {
     if (ictx) {
       assert(ictx->md_lock.is_locked());
       ictx->refresh_lock.Lock();
+      ldout(ictx->cct, 20) << "notify_change refresh_seq = " << ictx->refresh_seq
+			   << " last_refresh = " << ictx->last_refresh << dendl;
       ++ictx->refresh_seq;
       ictx->refresh_lock.Unlock();
     }
@@ -1486,6 +1490,7 @@ reprotect_and_return_err:
       Mutex::Locker l(ictx->snap_lock);
       {
 	Mutex::Locker l2(ictx->parent_lock);
+	ictx->lockers.clear();
 	if (ictx->old_format) {
 	  r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
 	  if (r < 0) {
@@ -1495,9 +1500,20 @@ reprotect_and_return_err:
 	  r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
 					    &snap_names, &snap_sizes, &new_snapc);
 	  if (r < 0) {
-	    lderr(cct) << "Error listing snapshots: " << cpp_strerror(r) << dendl;
+	    lderr(cct) << "Error listing snapshots: " << cpp_strerror(r)
+		       << dendl;
 	    return r;
 	  }
+	  ClsLockType lock_type;
+	  r = rados::cls::lock::get_lock_info(&ictx->md_ctx, ictx->header_oid,
+					      RBD_LOCK_NAME, &ictx->lockers,
+					      &lock_type, &ictx->lock_tag);
+	  if (r < 0) {
+	    lderr(cct) << "Error getting lock info: " << cpp_strerror(r)
+		       << dendl;
+	    return r;
+	  }
+	  ictx->exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
 	  ictx->order = ictx->header.options.order;
 	  ictx->size = ictx->header.image_size;
 	  ictx->object_prefix = ictx->header.block_name;
@@ -1507,8 +1523,9 @@ reprotect_and_return_err:
 	    r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
 						 &ictx->size, &ictx->features,
 						 &incompatible_features,
-						 &ictx->locks,
+						 &ictx->lockers,
 						 &ictx->exclusive_locked,
+						 &ictx->lock_tag,
 						 &new_snapc,
 						 &ictx->parent_md);
 	    if (r < 0) {
@@ -1754,7 +1771,7 @@ reprotect_and_return_err:
   {
     ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
 			 << " name = '" << ictx->name
-			 << " id = '" << ictx->id
+			 << "' id = '" << ictx->id
 			 << "' snap_name = '"
 			 << ictx->snap_name << "'" << dendl;
     int r = ictx->init();
@@ -1917,9 +1934,10 @@ reprotect_and_return_err:
     return r;
   }
 
-  int list_locks(ImageCtx *ictx,
-		 set<pair<string, string> > &locks,
-		 bool &exclusive)
+  int list_lockers(ImageCtx *ictx,
+		   std::list<locker_t> *lockers,
+		   bool *exclusive,
+		   string *tag)
   {
     ldout(ictx->cct, 20) << "list_locks on image " << ictx << dendl;
 
@@ -1928,40 +1946,94 @@ reprotect_and_return_err:
       return r;
 
     Mutex::Locker locker(ictx->md_lock);
-    locks = ictx->locks;
-    exclusive = ictx->exclusive_locked;
+    if (exclusive)
+      *exclusive = ictx->exclusive_locked;
+    if (tag)
+      *tag = ictx->lock_tag;
+    if (lockers) {
+      lockers->clear();
+      map<rados::cls::lock::locker_id_t,
+	  rados::cls::lock::locker_info_t>::const_iterator it;
+      for (it = ictx->lockers.begin(); it != ictx->lockers.end(); ++it) {
+	locker_t locker;
+	locker.client = stringify(it->first.locker);
+	locker.cookie = it->first.cookie;
+	locker.address = stringify(it->second.addr);
+	lockers->push_back(locker);
+      }
+    }
+
     return 0;
   }
 
-  int lock_exclusive(ImageCtx *ictx, const string& cookie)
+  int lock(ImageCtx *ictx, bool exclusive, const string& cookie,
+	   const string& tag)
   {
+    ldout(ictx->cct, 20) << "lock image " << ictx << " exclusive=" << exclusive
+			 << " cookie='" << cookie << "' tag='" << tag << "'"
+			 << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
     /**
      * If we wanted we could do something more intelligent, like local
      * checks that we think we will succeed. But for now, let's not
      * duplicate that code.
      */
-    return cls::lock::lock(&ictx->md_ctx, ictx->header_oid,
-			   RBD_LOCK_NAME, LOCK_EXCLUSIVE,
-			   cookie, "", "", utime_t(), 0)
-			   cookie);
-  }
-
-  int lock_shared(ImageCtx *ictx, const string& cookie)
-  {
-    return cls_client::lock_image_shared(&ictx->md_ctx,
-					 ictx->header_oid, cookie);
+    Mutex::Locker locker(ictx->md_lock);
+    r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
+			       exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
+			       cookie, tag, "", utime_t(), 0);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return 0;
   }
 
   int unlock(ImageCtx *ictx, const string& cookie)
   {
-    return cls_client::unlock_image(&ictx->md_ctx, ictx->header_oid, cookie);
+    ldout(ictx->cct, 20) << "unlock image " << ictx
+			 << " cookie='" << cookie << "'" << dendl;
+
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    Mutex::Locker locker(ictx->md_lock);
+    r = rados::cls::lock::unlock(&ictx->md_ctx, ictx->header_oid,
+				 RBD_LOCK_NAME, cookie);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return 0;
   }
 
-  int break_lock(ImageCtx *ictx, const string& lock_holder,
+  int break_lock(ImageCtx *ictx, const string& client,
 		 const string& cookie)
   {
-    return cls_client::break_lock(&ictx->md_ctx, ictx->header_oid,
-				  lock_holder, cookie);
+    ldout(ictx->cct, 20) << "break_lock image " << ictx << " client='" << client
+			 << "' cookie='" << cookie << "'" << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    entity_name_t lock_client;
+    if (!lock_client.parse(client)) {
+      lderr(ictx->cct) << "Unable to parse client '" << client
+		       << "'" << dendl;
+      return -EINVAL;
+    }
+    Mutex::Locker locker(ictx->md_lock);
+    r = rados::cls::lock::break_lock(&ictx->md_ctx, ictx->header_oid,
+				     RBD_LOCK_NAME, cookie, lock_client);
+    if (r < 0)
+      return r;
+    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    return 0;
   }
 
   void rbd_ctx_cb(completion_t cb, void *arg)
