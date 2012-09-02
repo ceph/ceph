@@ -152,7 +152,6 @@ void BarrierContext::complete(C_Block_Sync &cbs)
     case CBlockSync_State_Unclaimed:
         /* cool, no waiting */
         outstanding_writes.erase(iter);
-        return;
         break;
     case CBlockSync_State_Committing:
     {
