@@ -31,8 +31,8 @@ For general cluster configuration, refer to the following:
 
 .. toctree::
 
-   file-system-recommendations
-   Configuration <ceph-conf>
+   Disks and Filesystems <file-system-recommendations>
+   ceph-conf
 
 
 .. raw:: html 
@@ -48,7 +48,8 @@ To optimize the performance of your cluster, refer to the following:
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
 	Metadata Server Settings <mds-config-ref>
-	RBD Settings <rbd-config-ref>	
+	RBD Settings <rbd-config-ref>
+	Log / Debug Settings <log-and-debug-ref>	
 
 
 .. raw:: html
