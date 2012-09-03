@@ -196,8 +196,8 @@ minimal settings for  each instance of a daemon. For example:
 
 .. _Hardware Recommendations: ../../install/hardware-recommendations
 
-Network Configuration
-=====================
+Networks
+========
 
 Monitors listen on port 6789 by default, while metadata servers and OSDs listen
 on the first available port beginning at 6800. Ensure that you open port 6789 on
@@ -252,8 +252,8 @@ in the daemon instance sections of your ``ceph.conf`` file.
 .. _hardware recommendations: ../../install/hardware-recommendations
 
 
-Monitor Configuration
-=====================
+Monitors
+========
 
 Ceph production clusters typically deploy with a minimum 3 monitors to ensure
 high availability should a monitor instance crash. An odd number of monitors (3)
@@ -287,8 +287,8 @@ changing the default location. Create the default directory on your new monitor 
 	sudo mkdir /var/lib/ceph/mon/ceph-{mon-letter}
 
 
-OSD Configuration
-=================
+OSDs
+====
 
 Ceph production clusters typically deploy OSDs where one host has one OSD daemon
 running a filestore on one data disk. A typical deployment specifies a journal 
@@ -356,6 +356,131 @@ example::
 
 	osd journal size = 10000
 
+Logs / Debugging
+================
+
+Ceph is still on the leading edge, so you may encounter situations that require
+modifying logging output and using Ceph's debugging. To activate Ceph's
+debugging output (*i.e.*, ``dout()``), you may add ``debug`` settings to your
+configuration. Ceph's logging levels operate on a scale of 1 to 20, where 1 is
+terse and 20 is verbose. Subsystems common to each daemon may be set under
+``[global]`` in your configuration  file. Subsystems for particular daemons are
+set under the daemon section in your configuration file (*e.g.*, ``[mon]``,
+``[osd]``, ``[mds]``). For example:: 
+
+	[global]
+		debug ms = 1
+		
+	[mon]
+		debug mon = 20
+		debug paxos = 20
+		debug auth = 20
+		 
+ 	[osd]
+ 		debug osd = 20
+ 		debug filestore = 20
+ 		debug journal = 20
+ 		debug monc = 20
+ 		
+	[mds]
+		debug mds = 20
+		debug mds balancer = 20
+		debug mds log = 20
+		debug mds migrator = 20
+
+When your system is running well, choose appropriate logging levels and remove 
+unnecessary debugging settings to ensure your cluster runs optimally. Logging
+debug output messages is relatively slow, and a waste of resources when operating
+your cluster. 
+
+.. tip: When debug output slows down your system, the latency can hide race conditions.
+
+Each subsystem has a logging level for its output logs,  and for its logs
+in-memory. You may set different values for each of these subsystems by setting
+a log file level and a memory  level for debug logging. For example:: 
+
+	debug {subsystem} {log-level}/{memory-level}
+	#for example
+	debug mds log 1/20
+
++--------------------+-----------+--------------+
+| Subsystem          | Log Level | Memory Level |
++====================+===========+==============+
+| ``default``        |     0     |      5       |
++--------------------+-----------+--------------+
+| ``lockdep``        |     0     |      5       |
++--------------------+-----------+--------------+
+| ``context``        |     0     |      5       |
++--------------------+-----------+--------------+
+| ``crush``          |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mds``            |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mds balancer``   |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mds locker``     |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mds log``        |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mds log expire`` |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mds migrator``   |     1     |      5       |
++--------------------+-----------+--------------+
+| ``buffer``         |     0     |      0       |
++--------------------+-----------+--------------+
+| ``timer``          |     0     |      5       |
++--------------------+-----------+--------------+
+| ``filer``          |     0     |      5       |
++--------------------+-----------+--------------+
+| ``objecter``       |     0     |      0       |
++--------------------+-----------+--------------+
+| ``rados``          |     0     |      5       |
++--------------------+-----------+--------------+
+| ``rbd``            |     0     |      5       |
++--------------------+-----------+--------------+
+| ``journaler``      |     0     |      5       |
++--------------------+-----------+--------------+
+| ``objectcacher``   |     0     |      5       |
++--------------------+-----------+--------------+
+| ``client``         |     0     |      5       |
++--------------------+-----------+--------------+
+| ``osd``            |     0     |      5       |
++--------------------+-----------+--------------+
+| ``optracker``      |     0     |      5       |
++--------------------+-----------+--------------+
+| ``objclass``       |     0     |      5       |
++--------------------+-----------+--------------+
+| ``filestore``      |     1     |      5       |
++--------------------+-----------+--------------+
+| ``journal``        |     1     |      5       |
++--------------------+-----------+--------------+
+| ``ms``             |     0     |      5       |
++--------------------+-----------+--------------+
+| ``mon``            |     1     |      5       |
++--------------------+-----------+--------------+
+| ``monc``           |     0     |      5       |
++--------------------+-----------+--------------+
+| ``paxos``          |     0     |      5       |
++--------------------+-----------+--------------+
+| ``tp``             |     0     |      5       |
++--------------------+-----------+--------------+
+| ``auth``           |     1     |      5       |
++--------------------+-----------+--------------+
+| ``finisher``       |     1     |      5       |
++--------------------+-----------+--------------+
+| ``heartbeatmap``   |     1     |      5       |
++--------------------+-----------+--------------+
+| ``perfcounter``    |     1     |      5       |
++--------------------+-----------+--------------+
+| ``rgw``            |     1     |      5       |
++--------------------+-----------+--------------+
+| ``hadoop``         |     1     |      5       |
++--------------------+-----------+--------------+
+| ``asok``           |     1     |      5       |
++--------------------+-----------+--------------+
+| ``throttle``       |     1     |      5       |
++--------------------+-----------+--------------+
+
 
 Example ceph.conf
 =================
@@ -363,8 +488,8 @@ Example ceph.conf
 .. literalinclude:: demo-ceph.conf
    :language: ini
 
-Runtime Configuration
-=====================
+Runtime Changes
+===============
 
 Ceph allows you to make changes to the configuration of an ``ceph-osd``,
 ``ceph-mon``, or ``ceph-mds`` daemon at runtime. This capability is quite
