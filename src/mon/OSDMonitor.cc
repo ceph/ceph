@@ -705,6 +705,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
       failure_info.erase(target_osd);
       return true;
     }
+    mon->no_reply(m);
   } else {
     // remove the report
     if (failure_info.count(target_osd)) {
@@ -721,6 +722,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     } else {
       dout(10) << " no failure_info for osd." << target_osd << dendl;
     }
+    mon->no_reply(m);
   }
   
   return false;
