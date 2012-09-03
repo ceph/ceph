@@ -363,3 +363,24 @@ Example ceph.conf
 .. literalinclude:: demo-ceph.conf
    :language: ini
 
+Runtime Configuration
+=====================
+
+Ceph allows you to make changes to the configuration of an ``ceph-osd``,
+``ceph-mon``, or ``ceph-mds`` daemon at runtime. This capability is quite
+useful for increasing/decreasing logging output, enabling/disabling debug
+settings, and even for runtime optimization. The following reflects runtime
+configuration usage::
+
+	ceph {daemon-type} tell {id or *} injectargs --{name} {value} [--{name} {value}]
+	
+Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
+the  runtime setting to all daemons of a particular type with ``*``, or specify
+a specific  daemon's ID (i.e., its number or letter). For example, to increase
+debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
+
+	ceph osd tell 0 injectargs --debug_osd 20
+
+In your ``ceph.conf`` file, you may use spaces when specifying a setting name. 
+When specifying a setting name on the command line, ensure that you use an 
+underscore (``_``) between terms (e.g., ``debug osd`` becomes ``debug_osd``).
