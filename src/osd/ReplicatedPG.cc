@@ -3268,6 +3268,13 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   ::encode(ctx->new_snapset, bss);
   assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
 
+  // append to log
+  int logopcode = pg_log_entry_t::MODIFY;
+  if (!ctx->new_obs.exists)
+    logopcode = pg_log_entry_t::DELETE;
+  ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version, old_version,
+				ctx->reqid, ctx->mtime));
+
   if (ctx->new_obs.exists) {
     ctx->new_obs.oi.version = ctx->at_version;
     ctx->new_obs.oi.prior_version = old_version;
@@ -3327,13 +3334,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->op_t.setattr(coll, snapoid, OI_ATTR, bv);
     ctx->op_t.setattr(coll, snapoid, SS_ATTR, bss);
   }
-
-  // append to log
-  int logopcode = pg_log_entry_t::MODIFY;
-  if (!ctx->new_obs.exists)
-    logopcode = pg_log_entry_t::DELETE;
-  ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version, old_version,
-				ctx->reqid, ctx->mtime));
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
