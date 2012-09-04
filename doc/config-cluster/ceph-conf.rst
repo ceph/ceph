@@ -15,6 +15,7 @@ For your convenience, each daemon has a series of default values (*i.e.*, many
 are set by  ``ceph/src/common/config_opts.h``). You may override these settings
 with a Ceph configuration file.
 
+.. _ceph-conf-file:
 
 The ceph.conf File
 ==================
@@ -54,6 +55,7 @@ The ``ceph.conf`` file uses an *ini* style syntax. You can add comments to the
 	# The end of the line terminates a comment.
 	# We recommend that you provide comments in your configuration file(s).
 
+.. _ceph-conf-settings:
 
 ceph.conf Settings
 ==================
@@ -124,6 +126,7 @@ alphanumeric for monitors and metadata servers.
 	[mds.b]
 		# settings affect mds.b only.
 
+.. _ceph-metavariables:
 
 Metavariables
 =============
@@ -166,6 +169,7 @@ Ceph supports the following metavariables:
 :Description: Expands to ``$type.$id``.
 :Example: ``/var/run/ceph/$cluster-$name.asok``
 
+.. _ceph-conf-common-settings:
 
 Common Settings
 ===============
@@ -195,6 +199,8 @@ minimal settings for  each instance of a daemon. For example:
 
 
 .. _Hardware Recommendations: ../../install/hardware-recommendations
+
+.. _ceph-network-config:
 
 Networks
 ========
@@ -252,6 +258,8 @@ in the daemon instance sections of your ``ceph.conf`` file.
 .. _hardware recommendations: ../../install/hardware-recommendations
 
 
+.. _ceph-monitor-config:
+
 Monitors
 ========
 
@@ -286,6 +294,8 @@ changing the default location. Create the default directory on your new monitor 
 	ssh {new-mon-host}
 	sudo mkdir /var/lib/ceph/mon/ceph-{mon-letter}
 
+
+.. _ceph-osd-config:
 
 OSDs
 ====
@@ -355,6 +365,8 @@ throughput. Some users just start off with a 10GB journal size. For
 example::
 
 	osd journal size = 10000
+
+.. _ceph-logging-and-debugging:
 
 Logs / Debugging
 ================
@@ -487,6 +499,8 @@ Example ceph.conf
 
 .. literalinclude:: demo-ceph.conf
    :language: ini
+
+.. _ceph-runtime-config:
 
 Runtime Changes
 ===============
