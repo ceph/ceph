@@ -688,10 +688,16 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
 
+  double halflife = (double)g_conf->mon_osd_laggy_halflife;
+  double decay_k = ::log(.5) / halflife;
+
   // scale grace period based on historical probability of 'lagginess'
   // (false positive failures due to slowness).
   const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
-  double my_grace = (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+  double decay = exp((double)failed_for * decay_k);
+  dout(20) << " halflife " << halflife << " decay_k " << decay_k
+	   << " failed_for " << failed_for << " decay " << decay << dendl;
+  double my_grace = decay * (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
   utime_t grace = orig_grace;
   grace += my_grace;
 
@@ -706,7 +712,9 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
        p != fi.reporters.end();
        p++) {
     const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
-    peer_grace += (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+    utime_t elapsed = now - xi.down_stamp;
+    double decay = exp((double)elapsed * decay_k);
+    peer_grace += decay * (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
   }
   peer_grace /= (double)fi.reporters.size();
   grace += peer_grace;
