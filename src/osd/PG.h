@@ -773,54 +773,93 @@ public:
 
 
   // -- scrub --
-  set<int> scrub_reserved_peers;
-  map<int,ScrubMap> scrub_received_maps;
-  bool finalizing_scrub;
-  bool scrub_block_writes;
-  bool scrub_active;
-  bool scrub_reserved, scrub_reserve_failed;
-  int scrub_waiting_on;
-  set<int> scrub_waiting_on_whom;
-  epoch_t scrub_epoch_start;
-  ScrubMap primary_scrubmap;
-  MOSDRepScrub *active_rep_scrub;
+  struct Scrubber {
+    Scrubber() :
+      reserved(false), reserve_failed(false),
+      block_writes(false), active(false), waiting_on(0),
+      errors(0), fixed(0), active_rep_scrub(0),
+      finalizing(false), is_chunky(false), state(INACTIVE)
+    {
+    }
 
-  bool scrub_is_chunky;
+    // metadata
+    set<int> reserved_peers;
+    bool reserved, reserve_failed;
+    epoch_t epoch_start;
 
-  hobject_t scrub_start;
-  hobject_t scrub_end;
-  eversion_t scrub_subset_last_update;
-  int scrub_errors;
-  int scrub_fixed;
+    // common to both scrubs
+    bool block_writes;
+    bool active;
+    int waiting_on;
+    set<int> waiting_on_whom;
+    int errors;
+    int fixed;
+    ScrubMap primary_scrubmap;
+    map<int,ScrubMap> received_maps;
+    MOSDRepScrub *active_rep_scrub;
+
+    // classic scrub
+    bool finalizing;
+
+    // chunky scrub
+    bool is_chunky;
+    hobject_t start, end;
+    eversion_t subset_last_update;
+
+    // chunky scrub state
+    enum State {
+      INACTIVE,
+      NEW_CHUNK,
+      WAIT_PUSHES,
+      WAIT_LAST_UPDATE,
+      BUILD_MAP,
+      WAIT_REPLICAS,
+      COMPARE_MAPS,
+      FINISH,
+    } state;
+
+    static const char *state_string(const PG::Scrubber::State& state) {
+      const char *ret = NULL;
+      switch( state )
+      {
+        case INACTIVE: ret = "INACTIVE"; break;
+        case NEW_CHUNK: ret = "NEW_CHUNK"; break;
+        case WAIT_PUSHES: ret = "WAIT_PUSHES"; break;
+        case WAIT_LAST_UPDATE: ret = "WAIT_LAST_UPDATE"; break;
+        case BUILD_MAP: ret = "BUILD_MAP"; break;
+        case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;
+        case COMPARE_MAPS: ret = "COMPARE_MAPS"; break;
+        case FINISH: ret = "FINISH"; break;
+      }
+      return ret;
+    }
+
+    bool is_chunky_scrub_active() const { return state != INACTIVE; }
+
+    // clear all state
+    void reset() {
+      finalizing = false;
+      block_writes = false;
+      active = false;
+      waiting_on = 0;
+      waiting_on_whom.clear();
+      if (active_rep_scrub) {
+        active_rep_scrub->put();
+        active_rep_scrub = NULL;
+      }
+      received_maps.clear();
+
+      state = PG::Scrubber::INACTIVE;
+      start = hobject_t();
+      end = hobject_t();
+      subset_last_update = eversion_t();
+      errors = 0;
+      fixed = 0;
+    }
+
+  } scrubber;
 
   int active_pushes;
-
-  enum ScrubState {
-    SCRUB_INACTIVE,
-    SCRUB_NEW_CHUNK,
-    SCRUB_WAIT_PUSHES,
-    SCRUB_WAIT_LAST_UPDATE,
-    SCRUB_BUILD_MAP,
-    SCRUB_WAIT_REPLICAS,
-    SCRUB_COMPARE_MAPS,
-    SCRUB_FINISH,
-  } scrub_state;
-
-  static const char *scrub_string(const PG::ScrubState& state) {
-    const char *ret = NULL;
-    switch( state )
-    {
-      case SCRUB_INACTIVE: ret = "SCRUB_INACTIVE"; break;
-      case SCRUB_NEW_CHUNK: ret = "SCRUB_NEW_CHUNK"; break;
-      case SCRUB_WAIT_PUSHES: ret = "SCRUB_WAIT_PUSHES"; break;
-      case SCRUB_WAIT_LAST_UPDATE: ret = "SCRUB_WAIT_LAST_UPDATE"; break;
-      case SCRUB_BUILD_MAP: ret = "SCRUB_BUILD_MAP"; break;
-      case SCRUB_WAIT_REPLICAS: ret = "SCRUB_WAIT_REPLICAS"; break;
-      case SCRUB_COMPARE_MAPS: ret = "SCRUB_COMPARE_MAPS"; break;
-      case SCRUB_FINISH: ret = "SCRUB_FINISH"; break;
-    }
-    return ret;
-  }
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
@@ -1480,8 +1519,6 @@ public:
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
-
-  bool       is_chunky_scrub_active() const { return scrub_state != SCRUB_INACTIVE; }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
