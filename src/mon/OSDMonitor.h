@@ -123,6 +123,9 @@ private:
 
   map<int,double> osd_weight;
 
+  void check_failures(utime_t now);
+  bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+
   // map thrashing
   int thrash_map;
   int thrash_last_up_osd;
