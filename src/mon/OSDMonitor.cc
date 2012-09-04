@@ -673,6 +673,47 @@ bool OSDMonitor::can_mark_in(int i)
   return true;
 }
 
+void OSDMonitor::check_failures(utime_t now)
+{
+  for (map<int,failure_info_t>::iterator p = failure_info.begin();
+       p != failure_info.end();
+       ++p) {
+    check_failure(now, p->first, p->second);
+  }
+}
+
+bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
+{
+  utime_t grace(g_conf->osd_heartbeat_grace, 0);
+  utime_t max_failed_since = fi.get_failed_since();
+  utime_t failed_for = now - max_failed_since;
+
+  dout(10) << " osd." << target_osd << " has "
+	   << fi.reporters.size() << " reporters and "
+	   << fi.num_reports << " reports, "
+	   << grace << " grace, max_failed_since " << max_failed_since
+	   << dendl;
+
+  if (failed_for >= grace &&
+      ((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
+      (fi.num_reports >= g_conf->osd_min_down_reports)) {
+    dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
+    pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+
+    mon->clog.info() << osdmap.get_inst(target_osd) << " failed ("
+		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
+		     << failed_for << ")\n";
+
+    list<MOSDFailure*> msgs;
+    fi.take_report_messages(msgs);
+    failure_info.erase(target_osd);
+
+    paxos->wait_for_commit(new C_Reported(this, msgs));
+    return true;
+  }
+  return false;
+}
+
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
   dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
@@ -697,33 +738,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     if (old)
       mon->no_reply(old);
 
-    utime_t grace(g_conf->osd_heartbeat_grace, 0);
-    utime_t max_failed_since = fi.get_failed_since();
-    utime_t failed_for = now - max_failed_since;
-
-    dout(10) << " osd." << target_osd << " has "
-	     << fi.reporters.size() << " reporters and "
-	     << fi.num_reports << " reports, "
-	     << grace << " grace, max_failed_since " << max_failed_since
-	     << dendl;
-
-    if (failed_for >= grace &&
-	((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
-        (fi.num_reports >= g_conf->osd_min_down_reports)) {
-      dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
-      pending_inc.new_state[target_osd] = CEPH_OSD_UP;
-
-      mon->clog.info() << m->get_target() << " failed ("
-		       << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
-		       << failed_for << ")\n";
-
-      list<MOSDFailure*> msgs;
-      fi.take_report_messages(msgs);
-      failure_info.erase(target_osd);
-
-      paxos->wait_for_commit(new C_Reported(this, msgs));
-      return true;
-    }
+    return check_failure(now, target_osd, fi);
   } else {
     // remove the report
     if (failure_info.count(target_osd)) {
@@ -1325,10 +1340,12 @@ void OSDMonitor::tick()
   if (!mon->is_leader()) return;
 
   bool do_propose = false;
-
-  // mark down osds out?
   utime_t now = ceph_clock_now(g_ceph_context);
 
+  // mark osds down?
+  check_failures(now);
+
+  // mark down osds out?
 
   /* can_mark_out() checks if we can mark osds as being out. The -1 has no
    * influence at all. The decision is made based on the ratio of "in" osds,
