@@ -31,7 +31,7 @@ Add a Configuration File
 ------------------------
 
 Execute ``hostname`` on the command line to retrieve the name of your 
-host. Then, replace ``{localhost}`` in the sample configuration file
+host. Then, replace ``{hostname}`` in the sample configuration file
 with your host name. Execute ``ifconfig`` on the command line to
 retrieve the IP address of your host. Then, replace ``{ip-address}``
 with the IP address of your host. Finally, copy the contents of the 
