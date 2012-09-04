@@ -143,7 +143,7 @@ class DispatchQueue;
     int write_ack(uint64_t s);
     int write_keepalive();
 
-    void fault(bool onconnect=false, bool reader=false);
+    void fault(bool reader=false);
 
     void was_session_reset();
 
