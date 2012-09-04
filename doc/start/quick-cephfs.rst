@@ -2,6 +2,8 @@
  Ceph FS Quick Start
 =====================
 
+.. important:: **We do not recommend using Ceph FS in a production environment yet.**  RBD, ``librbd``, RADOS, ``librados`` and RADOS Gateway are production ready.
+
 To mount the Ceph FS filesystem, you must have a running Ceph cluster. You may 
 execute this quick start on a separate host if you have the Ceph packages and 
 the ``/etc/ceph/ceph.conf`` file installed with the appropriate IP address
