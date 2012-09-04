@@ -593,6 +593,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
   m->put();
 
   monc->sub_got("osdmap", osdmap->get_epoch());
+
+  if (!waiting_for_map.empty())
+    maybe_request_map();
 }
 
 void Objecter::C_Op_Map_Latest::finish(int r)
@@ -745,7 +748,7 @@ void Objecter::wait_for_osd_map()
 }
 
 
-void Objecter::maybe_request_map(epoch_t epoch)
+void Objecter::maybe_request_map()
 {
   int flag = 0;
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
@@ -754,13 +757,16 @@ void Objecter::maybe_request_map(epoch_t epoch)
     ldout(cct, 10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
     flag = CEPH_SUBSCRIBE_ONETIME;
   }
-  if (!epoch) {
-    epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
-  }
+  epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
   if (monc->sub_want("osdmap", epoch, flag))
     monc->renew_subs();
 }
 
+void Objecter::wait_for_new_map(Context *c, epoch_t epoch, int err)
+{
+  waiting_for_map[epoch].push_back(pair<Context *, int>(c, err));
+  maybe_request_map();
+}
 
 void Objecter::kick_requests(OSDSession *session)
 {
