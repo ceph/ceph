@@ -2,23 +2,29 @@
  Authentication
 ================
 
+Ceph provides two authentication modes: 
+
+- **None:** Any user can access data without authentication.
+- **Cephx**: Ceph requires user authentication in a manner similar to Kerberos.
+
+Cephx uses shared secret keys for authentication, meaning both the client and
+the monitor cluster have a copy of the client's secret key.  The authentication
+protocol is such that both parties are able to prove to each other they have a
+copy of the key without actually revealing it.  This provides mutual
+authentication, which means the cluster is sure the user possesses the secret
+key, and the user is sure that the cluster has a copy of the secret key.
+
 Default users and pools are suitable for initial testing purposes. For test bed 
 and production environments, you should create users and assign pool access to 
 the users.
 
-Enabling Authentication
------------------------
-In the ``[global]`` settings of your ``ceph.conf`` file, you must enable 
-authentication for your cluster. ::
+.. important:: The ``cephx`` protocol supports authentication only. Cephx 
+   currently **does not** address man-in-the-middle attacks. We will address
+   this in an upcoming release.
+   
+.. important: The ``cephx`` protocol does not address data encryption in transport 
+   (e.g., SSL/TLS) or encryption at rest.
 
-	[global]
-		auth supported = cephx
-
-The valid values are ``cephx`` or ``none``. If you specify ``cephx``,
-Ceph will look for the keyring in the default search path, which
-includes ``/etc/ceph/keyring``.  You can override this location by
-adding a ``keyring`` option in the ``[global]`` section of your
-``ceph.conf`` file, but this is not recommended.
 
 The ``client.admin`` Key
 ------------------------
@@ -105,7 +111,7 @@ is not part of the cluster ``auth`` database.
 
 The daemon data directory locations default to directories of the form::
 
-  /var/lib/ceph/$daemontype/$cluster-$id
+  /var/lib/ceph/$type/$cluster-$id
 
 For example, ``osd.12`` would be::
 
@@ -113,7 +119,15 @@ For example, ``osd.12`` would be::
 
 You can override these locations, but it is not recommended.
 
-The monitor key can be created with ``ceph-authtool`` command, and
-must be identical across all monitors::
+Monitor Keyrings
+================
+
+Use the ``ceph-authtool`` command to generate a monitor key and kerying. ::
 
       sudo ceph-authtool {keyring} --create-keyring --gen-key -n mon.
+
+A cluster with multiple monitors must have identical keyrings for all 
+monitors. So you must copy the keyring to each monitor host under the
+following directory::
+
+  /var/lib/ceph/mon/$cluster-$id
