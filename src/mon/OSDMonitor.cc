@@ -691,13 +691,30 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   // scale grace period based on historical probability of 'lagginess'
   // (false positive failures due to slowness).
   const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
+  double my_grace = (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
   utime_t grace = orig_grace;
-  grace += (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+  grace += my_grace;
+
+  // consider the peers reporting a failure a proxy for a potential
+  // 'subcluster' over the overall cluster that is similarly
+  // laggy.  this is clearly not true in all cases, but will sometimes
+  // help us localize the grace correction to a subset of the system
+  // (say, a rack with a bad switch) that is unhappy.
+  assert(fi.reporters.size());
+  double peer_grace = 0;
+  for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
+       p != fi.reporters.end();
+       p++) {
+    const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
+    peer_grace += (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+  }
+  peer_grace /= (double)fi.reporters.size();
+  grace += peer_grace;
 
   dout(10) << " osd." << target_osd << " has "
 	   << fi.reporters.size() << " reporters and "
 	   << fi.num_reports << " reports, "
-	   << grace << " grace (" << orig_grace << "), max_failed_since " << max_failed_since
+	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
   if (failed_for >= grace &&
