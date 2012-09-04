@@ -960,7 +960,7 @@ void Pipe::discard_out_queue()
 }
 
 
-void Pipe::fault(bool onconnect, bool onread)
+void Pipe::fault(bool onread)
 {
   const md_config_t *conf = msgr->cct->_conf;
   assert(pipe_lock.is_locked());
@@ -972,7 +972,7 @@ void Pipe::fault(bool onconnect, bool onread)
   }
   
   char buf[80];
-  if (!onconnect) ldout(msgr->cct,2) << "fault " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+  ldout(msgr->cct,2) << "fault " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
@@ -1021,15 +1021,13 @@ void Pipe::fault(bool onconnect, bool onread)
       ldout(msgr->cct,0) << "fault, server, going to standby" << dendl;
       state = STATE_STANDBY;
     } else {
-      if (!onconnect)
-	ldout(msgr->cct,0) << "fault, initiating reconnect" << dendl;
+      ldout(msgr->cct,0) << "fault, initiating reconnect" << dendl;
       connect_seq++;
       state = STATE_CONNECTING;
     }
     backoff = utime_t();
   } else if (backoff == utime_t()) {
-    if (!onconnect)
-      ldout(msgr->cct,0) << "fault" << dendl;
+    ldout(msgr->cct,0) << "fault" << dendl;
     backoff.set_from_double(conf->ms_initial_backoff);
   } else {
     ldout(msgr->cct,10) << "fault waiting " << backoff << dendl;
@@ -1096,7 +1094,7 @@ void Pipe::reader()
     if (tcp_read((char*)&tag, 1) < 0) {
       pipe_lock.Lock();
       ldout(msgr->cct,2) << "reader couldn't read tag, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      fault(false, true);
+      fault(true);
       continue;
     }
 
@@ -1114,7 +1112,7 @@ void Pipe::reader()
       pipe_lock.Lock();
       if (rc < 0) {
 	ldout(msgr->cct,2) << "reader couldn't read ack seq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	fault(false, true);
+	fault(true);
       } else if (state != STATE_CLOSED) {
         handle_ack(seq);
       }
@@ -1130,7 +1128,7 @@ void Pipe::reader()
       
       if (!m) {
 	if (r < 0)
-	  fault(false, true);
+	  fault(true);
 	continue;
       }
 
@@ -1181,7 +1179,7 @@ void Pipe::reader()
     else {
       ldout(msgr->cct,0) << "reader bad tag " << (int)tag << dendl;
       pipe_lock.Lock();
-      fault(false, true);
+      fault(true);
     }
   }
 
