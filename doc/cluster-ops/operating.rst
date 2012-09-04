@@ -21,7 +21,7 @@ The ``ceph`` service options include:
 +=================+==========+=================================================+
 | ``--verbose``   |  ``-v``  | Use verbose logging.                            |
 +-----------------+----------+-------------------------------------------------+
-| ``--valgrind``  | ``N/A``  | (Developers only) Use `Valgrind`_ debugging.    |
+| ``--valgrind``  | ``N/A``  | (Dev and QA only) Use `Valgrind`_ debugging.    |
 +-----------------+----------+-------------------------------------------------+
 | ``--allhosts``  |  ``-a``  | Execute on all hosts in ``ceph.conf.``          |
 |                 |          | Otherwise, it only executes on ``localhost``.   |
