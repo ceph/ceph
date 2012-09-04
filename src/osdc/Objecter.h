@@ -523,7 +523,7 @@ class Objecter {
   bool keep_balanced_budget;
   bool honor_osdmap_full;
 
-  void maybe_request_map(epoch_t epoch=0);
+  void maybe_request_map();
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
@@ -997,10 +997,7 @@ private:
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
 
-  void wait_for_new_map(Context *c, epoch_t epoch, int replyCode=0) {
-    maybe_request_map(epoch);
-    waiting_for_map[epoch].push_back(pair<Context *, int>(c, replyCode));
-  }
+  void wait_for_new_map(Context *c, epoch_t epoch, int err=0);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() { return global_op_flags; }
