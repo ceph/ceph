@@ -35,14 +35,16 @@ class MOSDBoot;
 class MMonCommand;
 class MPoolSnap;
 class MOSDMap;
+class MOSDFailure;
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
   int num_reports;          ///< reports from this reporter
   utime_t failed_since;     ///< when they think it failed
+  MOSDFailure *msg;         ///< most recent failure message
 
-  failure_reporter_t() : num_reports(0) {}
-  failure_reporter_t(utime_t s) : num_reports(1), failed_since(s) {}
+  failure_reporter_t() : num_reports(0), msg(NULL) {}
+  failure_reporter_t(utime_t s) : num_reports(1), failed_since(s), msg(NULL) {}
 };
 
 /// information about all failure reports for one osd
@@ -65,18 +67,35 @@ struct failure_info_t {
     return max_failed_since;
   }
 
-  void add_report(int who, utime_t failed_since) {
+  // set the message for the latest report.  return any old message we had,
+  // if any, so we can discard it.
+  MOSDFailure *add_report(int who, utime_t failed_since, MOSDFailure *msg) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end()) {
       if (max_failed_since == utime_t())
 	max_failed_since = failed_since;
       else if (max_failed_since < failed_since)
 	max_failed_since = failed_since;
-      reporters[who] = failure_reporter_t(failed_since);
+      p = reporters.insert(map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
     } else {
       p->second.num_reports++;
     }
     num_reports++;
+
+    MOSDFailure *ret = p->second.msg;
+    p->second.msg = msg;
+    return ret;
+  }
+
+  void take_report_messages(list<MOSDFailure*>& ls) {
+    for (map<int, failure_reporter_t>::iterator p = reporters.begin();
+	 p != reporters.end();
+	 ++p) {
+      if (p->second.msg) {
+	ls.push_back(p->second.msg);
+	p->second.msg = NULL;
+      }
+    }
   }
 
   void cancel_report(int who) {
@@ -147,7 +166,7 @@ private:
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
-  void _reported_failure(MOSDFailure *m);
+  void _reported_failure(list<MOSDFailure*>& m);
 
   bool preprocess_boot(class MOSDBoot *m);
   bool prepare_boot(class MOSDBoot *m);
@@ -203,14 +222,20 @@ private:
   };
   struct C_Reported : public Context {
     OSDMonitor *cmon;
-    MOSDFailure *m;
-    C_Reported(OSDMonitor *cm, MOSDFailure *m_) : 
-      cmon(cm), m(m_) {}
+    list<MOSDFailure*> msgs;
+    C_Reported(OSDMonitor *cm, list<MOSDFailure*>& m_)
+      : cmon(cm) {
+      msgs.swap(m_);
+    }
     void finish(int r) {
       if (r >= 0)
-	cmon->_reported_failure(m);
-      else
-	cmon->dispatch((PaxosServiceMessage*)m);
+	cmon->_reported_failure(msgs);
+      else {
+	while (!msgs.empty()) {
+	  cmon->dispatch((PaxosServiceMessage*)msgs.front());
+	  msgs.pop_front();
+	}
+      }
     }
   };
   struct C_PoolOp : public Context {
