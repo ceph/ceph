@@ -684,14 +684,20 @@ void OSDMonitor::check_failures(utime_t now)
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
-  utime_t grace(g_conf->osd_heartbeat_grace, 0);
+  utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
+
+  // scale grace period based on historical probability of 'lagginess'
+  // (false positive failures due to slowness).
+  const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
+  utime_t grace = orig_grace;
+  grace += (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
 
   dout(10) << " osd." << target_osd << " has "
 	   << fi.reporters.size() << " reporters and "
 	   << fi.num_reports << " reports, "
-	   << grace << " grace, max_failed_since " << max_failed_since
+	   << grace << " grace (" << orig_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
   if (failed_for >= grace &&
@@ -702,7 +708,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
     mon->clog.info() << osdmap.get_inst(target_osd) << " failed ("
 		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
-		     << failed_for << ")\n";
+		     << failed_for << " >= grace " << grace << ")\n";
 
     list<MOSDFailure*> msgs;
     fi.take_report_messages(msgs);
