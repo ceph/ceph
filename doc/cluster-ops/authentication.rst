@@ -60,19 +60,19 @@ To enable ``cephx`` on a cluster without authentication:
 
     ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mds/ceph-{$id}/keyring
 
-#. Enable ``cephx`` authentication for versions ``0.52`` and above by setting
+#. Enable ``cephx`` authentication for versions ``0.51`` and above by setting
    the following options in the ``[global]`` section of your ``ceph.conf``::
 
     auth cluster required = cephx
     auth service required = cephx
     auth client required = cephx
 
-#. Or, enable ``cephx`` authentication for versions ``0.51`` and below by
+#. Or, enable ``cephx`` authentication for versions ``0.50`` and below by
    setting the following option in the ``[global]`` section of your ``ceph.conf``::
 
     auth supported = cephx
 
-.. deprecated:: 0.52
+.. deprecated:: 0.51
 
 
 The ``client.admin`` Key
@@ -158,7 +158,7 @@ is not part of the cluster ``auth`` database.
 
 The daemon data directory locations default to directories of the form::
 
-  /var/lib/ceph/$daemontype/$cluster-$id
+  /var/lib/ceph/$type/$cluster-$id
 
 For example, ``osd.12`` would be::
 
