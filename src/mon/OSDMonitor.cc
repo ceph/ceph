@@ -693,11 +693,18 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     // add a report
     failure_info_t& fi = failure_info[target_osd];
     fi.add_report(reporter, failed_since);
+
+    utime_t grace(g_conf->osd_heartbeat_grace, 0);
+    utime_t max_failed_since = fi.get_failed_since();
+
     dout(10) << " osd." << target_osd << " has "
 	     << fi.reporters.size() << " reporters and "
-	     << fi.num_reports << " reports" << dendl;
+	     << fi.num_reports << " reports, "
+	     << grace << " grace, max_failed_since " << max_failed_since
+	     << dendl;
 
-    if (((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
+    if (max_failed_since + grace < now &&
+	((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
         (fi.num_reports >= g_conf->osd_min_down_reports)) {
       dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
       pending_inc.new_state[target_osd] = CEPH_OSD_UP;
