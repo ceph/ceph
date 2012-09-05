@@ -16,6 +16,7 @@
 #include <sstream>
 #include <stdlib.h>
 #include <signal.h>
+#include <limits.h>
 
 #include "Monitor.h"
 #include "common/version.h"
