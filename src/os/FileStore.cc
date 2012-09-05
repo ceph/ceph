@@ -4545,6 +4545,38 @@ bool FileStore::collection_empty(coll_t c)
   return ls.size() > 0;
 }
 
+int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
+                                     snapid_t seq, vector<hobject_t> *ls)
+{
+  int r = 0;
+  bool done = false;
+  hobject_t next = start;
+
+  while (!done) {
+    r = collection_list_partial(c, next,
+                                get_ideal_list_min(), get_ideal_list_max(),
+                                seq, ls, &next);
+    if (r < 0)
+      return r;
+
+    // special case for empty collection
+    if (ls->size() == 0) {
+      break;
+    }
+
+    while (ls->size() > 0 && ls->back() >= end) {
+      ls->pop_back();
+      done = true;
+    }
+
+    if (next >= end) {
+      done = true;
+    }
+  }
+
+  return 0;
+}
+
 int FileStore::collection_list_partial(coll_t c, hobject_t start,
 				       int min, int max, snapid_t seq,
 				       vector<hobject_t> *ls, hobject_t *next)
