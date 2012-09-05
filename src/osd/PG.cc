@@ -1233,6 +1233,8 @@ bool PG::choose_acting(int& newest_update_osd)
     } else
       osd->queue_want_pg_temp(info.pgid, want);
     return false;
+  } else {
+    want_acting.clear();
   }
   dout(10) << "choose_acting want " << want << " (== acting)" << dendl;
   return true;
