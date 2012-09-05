@@ -688,35 +688,38 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
 
-  double halflife = (double)g_conf->mon_osd_laggy_halflife;
-  double decay_k = ::log(.5) / halflife;
-
-  // scale grace period based on historical probability of 'lagginess'
-  // (false positive failures due to slowness).
-  const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
-  double decay = exp((double)failed_for * decay_k);
-  dout(20) << " halflife " << halflife << " decay_k " << decay_k
-	   << " failed_for " << failed_for << " decay " << decay << dendl;
   utime_t grace = orig_grace;
-  double my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
-  grace += my_grace;
+  double my_grace = 0, peer_grace = 0;
+  if (g_conf->mon_osd_adjust_heartbeat_grace) {
+    double halflife = (double)g_conf->mon_osd_laggy_halflife;
+    double decay_k = ::log(.5) / halflife;
 
-  // consider the peers reporting a failure a proxy for a potential
-  // 'subcluster' over the overall cluster that is similarly
-  // laggy.  this is clearly not true in all cases, but will sometimes
-  // help us localize the grace correction to a subset of the system
-  // (say, a rack with a bad switch) that is unhappy.
-  assert(fi.reporters.size());
-  for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
-       p != fi.reporters.end();
-       p++) {
-    const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
-    utime_t elapsed = now - xi.down_stamp;
-    double decay = exp((double)elapsed * decay_k);
-    peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+    // scale grace period based on historical probability of 'lagginess'
+    // (false positive failures due to slowness).
+    const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
+    double decay = exp((double)failed_for * decay_k);
+    dout(20) << " halflife " << halflife << " decay_k " << decay_k
+	     << " failed_for " << failed_for << " decay " << decay << dendl;
+    my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+    grace += my_grace;
+
+    // consider the peers reporting a failure a proxy for a potential
+    // 'subcluster' over the overall cluster that is similarly
+    // laggy.  this is clearly not true in all cases, but will sometimes
+    // help us localize the grace correction to a subset of the system
+    // (say, a rack with a bad switch) that is unhappy.
+    assert(fi.reporters.size());
+    for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
+	 p != fi.reporters.end();
+	 p++) {
+      const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
+      utime_t elapsed = now - xi.down_stamp;
+      double decay = exp((double)elapsed * decay_k);
+      peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+    }
+    peer_grace /= (double)fi.reporters.size();
+    grace += peer_grace;
   }
-  peer_grace /= (double)fi.reporters.size();
-  grace += peer_grace;
 
   dout(10) << " osd." << target_osd << " has "
 	   << fi.reporters.size() << " reporters and "
@@ -1397,17 +1400,21 @@ void OSDMonitor::tick()
       if (osdmap.is_down(o) &&
 	  osdmap.is_in(o) &&
 	  can_mark_out(o)) {
-	// scale grace period the same way we do the heartbeat grace.
-	const osd_xinfo_t& xi = osdmap.get_xinfo(o);
 	utime_t orig_grace(g_conf->mon_osd_down_out_interval, 0);
-	double halflife = (double)g_conf->mon_osd_laggy_halflife;
-	double decay_k = ::log(.5) / halflife;
-	double decay = exp((double)down * decay_k);
-	dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
-		 << " down for " << down << " decay " << decay << dendl;
-	double my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
 	utime_t grace = orig_grace;
-	grace += my_grace;
+	double my_grace = 0.0;
+
+	if (g_conf->mon_osd_adjust_down_out_interval) {
+	  // scale grace period the same way we do the heartbeat grace.
+	  const osd_xinfo_t& xi = osdmap.get_xinfo(o);
+	  double halflife = (double)g_conf->mon_osd_laggy_halflife;
+	  double decay_k = ::log(.5) / halflife;
+	  double decay = exp((double)down * decay_k);
+	  dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
+		   << " down for " << down << " decay " << decay << dendl;
+	  my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+	  grace += my_grace;
+	}
 
 	if (g_conf->mon_osd_down_out_interval > 0 &&
 	    down.sec() >= grace) {
