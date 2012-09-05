@@ -424,6 +424,22 @@ struct ObjectOperation {
     }
   }
 
+  void omap_cmp(const std::map<std::string, pair<bufferlist, int> > &assertions,
+		int *prval) {
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAP_CMP);
+    bufferlist bl;
+    ::encode(assertions, bl);
+    op.op.extent.offset = 0;
+    op.op.extent.length = bl.length();
+    op.indata.claim_append(bl);
+    if (prval) {
+      unsigned p = ops.size() - 1;
+      out_rval[p] = prval;
+      out_bl[p] = NULL;
+      out_handler[p] = NULL;
+    }
+  }
+
   void omap_get_header(bufferlist *bl, int *prval) {
     add_op(CEPH_OSD_OP_OMAPGETHEADER);
     unsigned p = ops.size() - 1;

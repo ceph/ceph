@@ -480,7 +480,7 @@ int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
 }
 
 int cls_cxx_map_set_vals(cls_method_context_t hctx,
-			 std::map<string, bufferlist> *map)
+			 const std::map<string, bufferlist> *map)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);

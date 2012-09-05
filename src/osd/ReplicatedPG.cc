@@ -2664,7 +2664,62 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	::encode(out, osd_op.outdata);
       }
       break;
+    case CEPH_OSD_OP_OMAP_CMP:
+      {
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	map<string, pair<bufferlist, int> > assertions;
+	::decode(assertions, bp);
+	
+	map<string, bufferlist> out;
+	set<string> to_get;
+	for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
+	     i != assertions.end();
+	     ++i)
+	  to_get.insert(i->first);
+	int r = osd->store->omap_get_values(coll, soid, to_get, &out);
+	if (r < 0) {
+	  result = r;
+	  break;
+	}
 
+	r = 0;
+	bufferlist empty;
+	for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
+	     i != assertions.end();
+	     ++i) {
+	  bufferlist &bl = out.count(i->first) ? 
+	    out[i->first] : empty;
+	  switch (i->second.second) {
+	  case CEPH_OSD_CMPXATTR_OP_EQ:
+	    if (!(bl == i->second.first)) {
+	      r = -ECANCELED;
+	    }
+	    break;
+	  case CEPH_OSD_CMPXATTR_OP_LT:
+	    if (!(bl < i->second.first)) {
+	      r = -ECANCELED;
+	    }
+	    break;
+	  case CEPH_OSD_CMPXATTR_OP_GT:
+	    if (!(bl > i->second.first)) {
+	      r = -ECANCELED;
+	    }
+	    break;
+	  default:
+	    r = -EINVAL;
+	    break;
+	  }
+	  if (r < 0)
+	    break;
+	}
+	if (r < 0) {
+	  result = r;
+	}
+      }
+      break;
       // OMAP Write ops
     case CEPH_OSD_OP_OMAPSETVALS:
       {

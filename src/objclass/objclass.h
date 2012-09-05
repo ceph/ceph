@@ -126,7 +126,7 @@ extern int cls_cxx_map_get_val(cls_method_context_t hctx,
 extern int cls_cxx_map_set_val(cls_method_context_t hctx,
                                const string &key, bufferlist *inbl);
 extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
-                                std::map<string, bufferlist> *map);
+                                const std::map<string, bufferlist> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key);
 extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist *inbl);
