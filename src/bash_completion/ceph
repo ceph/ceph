@@ -36,7 +36,7 @@ _ceph()
                 return 0
                 ;;
             pg)
-                COMPREPLY=( $(compgen -W "stat dump getmap map send_pg_creates scrub repair" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "stat dump getmap map send_pg_creates scrub deep-scrub repair" -- ${cur}) )
                 return 0
                 ;;
             osd)
