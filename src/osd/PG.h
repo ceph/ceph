@@ -1028,48 +1028,19 @@ public:
       *out << "Activate from " << query_epoch << std::endl;
     }
   };
-  struct Initialize : boost::statechart::event< Initialize > {
-    Initialize() : boost::statechart::event< Initialize >() {}
-    void print(std::ostream *out) const {
-      *out << "Initialize" << std::endl;
-    }
+#define TrivialEvent(T) struct T : boost::statechart::event< T > { \
+    T() : boost::statechart::event< T >() {}			   \
+    void print(std::ostream *out) const {			   \
+      *out << #T << std::endl;					   \
+    }								   \
   };
-  struct Load : boost::statechart::event< Load > {
-    Load() : boost::statechart::event< Load >() {}
-    void print(std::ostream *out) const {
-      *out << "Load" << std::endl;
-    }
-  };
-  struct GotInfo : boost::statechart::event< GotInfo > {
-    GotInfo() : boost::statechart::event< GotInfo >() {}
-    void print(std::ostream *out) const {
-      *out << "GotInfo" << std::endl;
-    }
-  };
-  struct NeedUpThru : boost::statechart::event< NeedUpThru > {
-    NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
-    void print(std::ostream *out) const {
-      *out << "NeedUpThru" << std::endl;
-    }
-  };
-  struct CheckRepops : boost::statechart::event< CheckRepops > {
-    CheckRepops() : boost::statechart::event< CheckRepops >() {};
-    void print(std::ostream *out) const {
-      *out << "CheckRepops" << std::endl;
-    }
-  };
-  struct NullEvt : boost::statechart::event< NullEvt > {
-    NullEvt() : boost::statechart::event< NullEvt >() {};
-    void print(std::ostream *out) const {
-      *out << "NullEvt" << std::endl;
-    }
-  };
-  struct FlushedEvt : boost::statechart::event< FlushedEvt > {
-    FlushedEvt() : boost::statechart::event< FlushedEvt >() {};
-    void print(std::ostream *out) const {
-      *out << "FlushedEvt" << std::endl;
-    }
-  };
+  TrivialEvent(Initialize)
+  TrivialEvent(Load)
+  TrivialEvent(GotInfo)
+  TrivialEvent(NeedUpThru)
+  TrivialEvent(CheckRepops)
+  TrivialEvent(NullEvt)
+  TrivialEvent(FlushedEvt)
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
