@@ -752,6 +752,12 @@ test_cls_rbd_LDADD = librados.la ${UNITTEST_STATIC_LDADD}
 test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_rbd
 
+test_cls_refcount_SOURCES = test/cls_refcount/test_cls_refcount.cc \
+	test/rados-api/test.cc
+test_cls_refcount_LDADD = librados.la libcls_refcount_client.a ${UNITTEST_STATIC_LDADD}
+test_cls_refcount_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cls_refcount
+
 if WITH_RADOSGW
 
 test_cls_rgw_SOURCES = test/rgw/test_cls_rgw.cc \
