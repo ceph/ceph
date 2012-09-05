@@ -697,8 +697,8 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   double decay = exp((double)failed_for * decay_k);
   dout(20) << " halflife " << halflife << " decay_k " << decay_k
 	   << " failed_for " << failed_for << " decay " << decay << dendl;
-  double my_grace = decay * (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
   utime_t grace = orig_grace;
+  double my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
   grace += my_grace;
 
   // consider the peers reporting a failure a proxy for a potential
@@ -707,14 +707,13 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   // help us localize the grace correction to a subset of the system
   // (say, a rack with a bad switch) that is unhappy.
   assert(fi.reporters.size());
-  double peer_grace = 0;
   for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
        p != fi.reporters.end();
        p++) {
     const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
     utime_t elapsed = now - xi.down_stamp;
     double decay = exp((double)elapsed * decay_k);
-    peer_grace += decay * (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+    peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
   }
   peer_grace /= (double)fi.reporters.size();
   grace += peer_grace;
@@ -947,15 +946,19 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
     osd_xinfo_t xi = osdmap.get_xinfo(from);
     if (m->boot_epoch == 0) {
-      xi.laggy_probability = xi.laggy_probability / 3;
-      xi.laggy_interval = xi.laggy_interval / 3;
+      xi.laggy_probability *= (1.0 - g_conf->mon_osd_laggy_weight);
+      xi.laggy_interval *= (1.0 - g_conf->mon_osd_laggy_weight);
       dout(10) << " not laggy, new xi " << xi << dendl;
     } else {
       if (xi.down_stamp.sec()) {
 	int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
-	xi.laggy_interval = (xi.laggy_interval * 2 + interval) / 3;
+	xi.laggy_interval =
+	  interval * g_conf->mon_osd_laggy_weight +
+	  xi.laggy_interval * (1.0 - g_conf->mon_osd_laggy_weight);
       }
-      xi.laggy_probability = ((long long)xi.laggy_probability * 2ull + 0xffffffffull) / 3;
+      xi.laggy_probability =
+	g_conf->mon_osd_laggy_weight +
+	xi.laggy_probability * (1.0 - g_conf->mon_osd_laggy_weight);
       dout(10) << " laggy, now xi " << xi << dendl;
     }
     pending_inc.new_xinfo[from] = xi;
@@ -1402,7 +1405,7 @@ void OSDMonitor::tick()
 	double decay = exp((double)down * decay_k);
 	dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
 		 << " down for " << down << " decay " << decay << dendl;
-	double my_grace = decay * (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+	double my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
 	utime_t grace = orig_grace;
 	grace += my_grace;
 

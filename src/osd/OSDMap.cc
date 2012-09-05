@@ -88,7 +88,7 @@ ostream& operator<<(ostream& out, const osd_info_t& info)
 void osd_xinfo_t::dump(Formatter *f) const
 {
   f->dump_stream("down_stamp") << down_stamp;
-  f->dump_float("laggy_probability", (float)laggy_probability / (float)0xffffffff);
+  f->dump_float("laggy_probability", laggy_probability);
   f->dump_int("laggy_interval", laggy_interval);
 }
 
@@ -96,7 +96,8 @@ void osd_xinfo_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(down_stamp, bl);
-  ::encode(laggy_probability, bl);
+  __u32 lp = laggy_probability * 0xfffffffful;
+  ::encode(lp, bl);
   ::encode(laggy_interval, bl);
   ENCODE_FINISH(bl);
 }
@@ -105,7 +106,9 @@ void osd_xinfo_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START(1, bl);
   ::decode(down_stamp, bl);
-  ::decode(laggy_probability, bl);
+  __u32 lp;
+  ::decode(lp, bl);
+  laggy_probability = (float)lp / (float)0xffffffff;
   ::decode(laggy_interval, bl);
   DECODE_FINISH(bl);
 }
@@ -115,14 +118,14 @@ void osd_xinfo_t::generate_test_instances(list<osd_xinfo_t*>& o)
   o.push_back(new osd_xinfo_t);
   o.push_back(new osd_xinfo_t);
   o.back()->down_stamp = utime_t(2, 3);
-  o.back()->laggy_probability = 0x37232232;
+  o.back()->laggy_probability = .123;
   o.back()->laggy_interval = 123456;
 }
 
 ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
 {
   return out << "down_stamp " << xi.down_stamp
-	     << " laggy_probability " << ((float)xi.laggy_probability / (float)0xffffffff)
+	     << " laggy_probability " << xi.laggy_probability
 	     << " laggy_interval " << xi.laggy_interval;
 }
 
