@@ -1394,10 +1394,22 @@ void OSDMonitor::tick()
       if (osdmap.is_down(o) &&
 	  osdmap.is_in(o) &&
 	  can_mark_out(o)) {
+	// scale grace period the same way we do the heartbeat grace.
+	const osd_xinfo_t& xi = osdmap.get_xinfo(o);
+	utime_t orig_grace(g_conf->mon_osd_down_out_interval, 0);
+	double halflife = (double)g_conf->mon_osd_laggy_halflife;
+	double decay_k = ::log(.5) / halflife;
+	double decay = exp((double)down * decay_k);
+	dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
+		 << " down for " << down << " decay " << decay << dendl;
+	double my_grace = decay * (double)xi.laggy_interval * ((double)xi.laggy_probability / (double)0xffffffffull);
+	utime_t grace = orig_grace;
+	grace += my_grace;
+
 	if (g_conf->mon_osd_down_out_interval > 0 &&
-	    down.sec() >= g_conf->mon_osd_down_out_interval) {
+	    down.sec() >= grace) {
 	  dout(10) << "tick marking osd." << o << " OUT after " << down
-		   << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
+		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
 	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
 
 	  // set the AUTOOUT bit.
