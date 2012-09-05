@@ -247,10 +247,10 @@ class RGWRados
                          librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj);
+			 bool reset_obj, const string *ptag);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj);
+			 bool reset_obj, const string *ptag);
 
   void atomic_write_finish(RGWObjState *state, int r) {
     if (state && r == -ECANCELED) {
@@ -281,7 +281,7 @@ class RGWRados
     v.push_back(info);
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
   }
-  int delete_obj_impl(void *ctx, rgw_obj& src_obj, bool sync);
+  int delete_obj_impl(void *ctx, rgw_obj& src_obj);
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
@@ -375,7 +375,7 @@ public:
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-              RGWObjManifest *manifest);
+              RGWObjManifest *manifest, const string *ptag);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
@@ -385,7 +385,7 @@ public:
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     bufferlist bl;
     bl.append(data, len);
-    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl, NULL);
+    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl, NULL, NULL);
     return ret;
   }
   virtual int aio_wait(void *handle);
@@ -463,7 +463,7 @@ public:
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, rgw_obj& src_obj, bool sync = true);
+  virtual int delete_obj(void *ctx, rgw_obj& src_obj);
 
   /**
    * Get the attributes for an object.
