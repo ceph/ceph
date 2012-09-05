@@ -1488,7 +1488,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   crush.set_type_name(3, "row");
   crush.set_type_name(4, "room");
   crush.set_type_name(5, "datacenter");
-  crush.set_type_name(6, "pool");
+  crush.set_type_name(6, "root");
 
   // root
   int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL);
@@ -1498,7 +1498,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     map<string,string> loc;
     loc["host"] = "localhost";
     loc["rack"] = "localrack";
-    loc["pool"] = "default";
+    loc["root"] = "default";
     ldout(cct, 10) << " adding osd." << o << " at " << loc << dendl;
     char name[8];
     sprintf(name, "osd.%d", o);
@@ -1610,7 +1610,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
   crush.set_type_name(3, "row");
   crush.set_type_name(4, "room");
   crush.set_type_name(5, "datacenter");
-  crush.set_type_name(6, "pool");
+  crush.set_type_name(6, "root");
 
   set<string> hosts, racks;
 
@@ -1640,7 +1640,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     conf->get_val_from_conf_file(sections, "row", row, false);
     conf->get_val_from_conf_file(sections, "room", room, false);
     conf->get_val_from_conf_file(sections, "datacenter", dc, false);
-    conf->get_val_from_conf_file(sections, "pool", pool, false);
+    conf->get_val_from_conf_file(sections, "root", pool, false);
 
     if (host.length() == 0)
       host = "unknownhost";
@@ -1659,7 +1659,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
       loc["room"] = room;
     if (dc.size())
       loc["datacenter"] = dc;
-    loc["pool"] = "default";
+    loc["root"] = "default";
 
     ldout(cct, 5) << " adding osd." << o << " at " << loc << dendl;
     crush.insert_item(cct, o, 1.0, *i, loc);
