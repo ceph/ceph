@@ -185,6 +185,14 @@ void librados::ObjectReadOperation::omap_get_vals_by_keys(
   o->omap_get_vals_by_keys(keys, map, prval);
 }
 
+void librados::ObjectOperation::omap_cmp(
+  const std::map<std::string, pair<bufferlist, int> > &assertions,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->omap_cmp(assertions, prval);
+}
+
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    const std::string& filter_prefix,

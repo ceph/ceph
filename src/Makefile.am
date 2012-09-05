@@ -218,6 +218,10 @@ omapbench_SOURCES = test/omap_bench.cc
 omapbench_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += omapbench
 
+kvstorebench_SOURCES = test/kv_store_bench.cc key_value_store/kv_flat_btree_async.cc
+kvstorebench_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += kvstorebench
+
 multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += multi_stress_watch 
@@ -478,6 +482,17 @@ libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
 lib_LTLIBRARIES += libhadoopcephfs.la
 endif
+
+## key_value_store classes
+
+# key_value_store: key value store class
+libcls_kvs_la_SOURCES = key_value_store/cls_kvs.cc
+libcls_kvs_la_CFLAGS = ${AM_CFLAGS}
+libcls_kvs_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_kvs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_kvs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_kvs.la
 
 ## System tests
 libsystest_la_SOURCES = \
@@ -1458,6 +1473,9 @@ noinst_HEADERS = \
 	json_spirit/json_spirit_writer.h\
 	json_spirit/json_spirit_writer_options.h\
 	json_spirit/json_spirit_writer_template.h\
+	key_value_store/key_value_structure.h\
+	key_value_store/kv_flat_btree_async.h\
+	key_value_store/kvs_arg_types.h\
 	log/Entry.h\
 	log/EntryQueue.h\
 	log/Log.h\
@@ -1703,6 +1721,8 @@ noinst_HEADERS = \
 	global/pidfile.h\
 	common/sync_filesystem.h \
 	test/encoding/types.h \
+	test/kv_store_bench.h \
+	test/omap_bench.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \
