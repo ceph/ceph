@@ -427,10 +427,30 @@ public:
     }
 
   };
+
+  /*
+   * efficient hash of one or more bufferlists
+   */
+
+  class hash {
+    __u32 crc;
+
+  public:
+    hash() : crc(0) { }
+
+    void update(buffer::list& bl) {
+      crc = bl.crc32c(crc);
+    }
+
+    __u32 digest() {
+      return crc;
+    }
+  };
 };
 
 typedef buffer::ptr bufferptr;
 typedef buffer::list bufferlist;
+typedef buffer::hash bufferhash;
 
 
 inline bool operator>(bufferlist& l, bufferlist& r) {
@@ -495,6 +515,11 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
 inline std::ostream& operator<<(std::ostream& out, buffer::error& e)
 {
   return out << e.what();
+}
+
+inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
+  l.update(r);
+  return l;
 }
 
 }
