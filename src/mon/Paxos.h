@@ -623,7 +623,7 @@ private:
    *
    * @param value The value being proposed to the quorum
    */
-  void begin(bufferlist& value);
+  void begin(bufferlist& value, version_t global_version);
   /**
    * Accept or decline (by ignoring) a proposal from the Leader.
    *

@@ -285,11 +285,13 @@ void Paxos::handle_last(MMonPaxos *last)
 	     << num_last << " peons" << dendl;
 
     // did this person send back an accepted but uncommitted value?
+    version_t uncommitted_gv = 0;
     if (last->uncommitted_pn &&
 	last->uncommitted_pn > uncommitted_pn) {
       uncommitted_v = last->last_committed+1;
       uncommitted_pn = last->uncommitted_pn;
       uncommitted_value = last->values[uncommitted_v];
+      uncommitted_gv = last->gv[uncommitted_v];
       dout(10) << "we learned an uncommitted value for " << uncommitted_v 
 	       << " pn " << uncommitted_pn
 	       << " " << uncommitted_value.length() << " bytes"
@@ -326,7 +328,7 @@ void Paxos::handle_last(MMonPaxos *last)
       if (uncommitted_v == last_committed+1 &&
 	  uncommitted_value.length()) {
 	dout(10) << "that's everyone.  begin on old learned value" << dendl;
-	begin(uncommitted_value);
+	begin(uncommitted_value, uncommitted_gv);
       } else {
 	// active!
 	dout(10) << "that's everyone.  active!" << dendl;
@@ -358,10 +360,11 @@ void Paxos::collect_timeout()
 
 
 // leader
-void Paxos::begin(bufferlist& v)
+void Paxos::begin(bufferlist& v, version_t gv)
 {
   dout(10) << "begin for " << last_committed+1 << " " 
 	   << v.length() << " bytes"
+	   << " gv " << gv
 	   << dendl;
 
   assert(mon->is_leader());
@@ -990,11 +993,13 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
   // cancel lease renewal and timeout events.
   cancel_events();
 
+  version_t global_version = mon->get_global_paxos_version();
+
   // ok!
-  dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes" << dendl;
+  dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes, gv " << global_version << dendl;
   if (oncommit)
     waiting_for_commit.push_back(oncommit);
-  begin(bl);
+  begin(bl, global_version);
   
   return true;
 }
