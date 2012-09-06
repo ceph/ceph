@@ -46,7 +46,6 @@ void _usage()
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
-  cerr << "  bucket info                show bucket information\n";
   cerr << "  bucket rm                  remove bucket\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
