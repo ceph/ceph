@@ -592,7 +592,8 @@ static int init_entities_from_header(struct req_state *s)
     goto done;
   }
 
-  if (strcmp(s->bucket_name, "auth") == 0)
+  if (g_conf->rgw_swift_auth_entry.size() &&
+      g_conf->rgw_swift_auth_entry.compare(s->bucket_name) == 0)
     s->prot_flags |= RGW_REST_SWIFT_AUTH;
 
   if (pos >= 0) {
