@@ -897,6 +897,7 @@ MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
   int len = 0;
   for (; v <= pax->get_version(); v++) {
     len += store->get_bl_sn(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    r->gv[m->machine_name][v] = store->get_global_version(m->machine_name.c_str(), v);
     for (list<string>::iterator p = pax->extra_state_dirs.begin();
          p != pax->extra_state_dirs.end();
          ++p) {
@@ -955,7 +956,7 @@ void Monitor::handle_probe_data(MMonProbe *m)
     for (map<string, map<version_t, bufferlist> >::iterator p = m->paxos_values.begin();
 	 p != m->paxos_values.end();
 	 ++p) {
-      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
+      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end(), &m->gv[p->first]);
     }
 
     pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
