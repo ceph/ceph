@@ -1,5 +1,10 @@
 .. index:: control, commands
 
+.. ==========================================================================
+..  THIS FILE IS DEPRECATED. PLEASE REFER TO ceph/doc/cluster-ops/config.rst
+.. ==========================================================================
+
+
 =================
  Control commands
 =================
