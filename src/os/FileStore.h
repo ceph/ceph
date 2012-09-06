@@ -438,6 +438,8 @@ public:
   int collection_list_partial(coll_t c, hobject_t start,
 			      int min, int max, snapid_t snap,
 			      vector<hobject_t> *ls, hobject_t *next);
+  int collection_list_range(coll_t c, hobject_t start, hobject_t end,
+                            snapid_t seq, vector<hobject_t> *ls);
 
   // omap (see ObjectStore.h for documentation)
   int omap_get(coll_t c, const hobject_t &hoid, bufferlist *header,

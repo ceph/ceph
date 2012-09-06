@@ -78,12 +78,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pg_stats_valid(false),
   osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
   finish_sync_event(NULL),
-  finalizing_scrub(false),
-  scrub_block_writes(false),
-  scrub_active(false),
-  scrub_reserved(false), scrub_reserve_failed(false),
-  scrub_waiting_on(0),
-  active_rep_scrub(0),
+  active_pushes(0),
   recovery_state(this)
 {
 }
@@ -981,7 +976,7 @@ void PG::clear_primary_state()
 
   log.reset_recovery_pointers();
 
-  scrub_reserved_peers.clear();
+  scrubber.reserved_peers.clear();
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
 }
@@ -1238,6 +1233,8 @@ bool PG::choose_acting(int& newest_update_osd)
     } else
       osd->queue_want_pg_temp(info.pgid, want);
     return false;
+  } else {
+    want_acting.clear();
   }
   dout(10) << "choose_acting want " << want << " (== acting)" << dendl;
   return true;
@@ -1931,6 +1928,8 @@ void PG::update_stats()
     info.stats.created = info.history.epoch_created;
     info.stats.last_scrub = info.history.last_scrub;
     info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
+    info.stats.last_deep_scrub = info.history.last_deep_scrub;
+    info.stats.last_deep_scrub_stamp = info.history.last_deep_scrub_stamp;
     info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
     utime_t now = ceph_clock_now(g_ceph_context);
@@ -2685,22 +2684,22 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
 /*
  * when holding pg and sched_scrub_lock, then the states are:
  *   scheduling:
- *     scrub_reserved = true
+ *     scrubber.reserved = true
  *     scrub_rserved_peers includes whoami
  *     osd->scrub_pending++
  *   scheduling, replica declined:
- *     scrub_reserved = true
- *     scrub_reserved_peers includes -1
+ *     scrubber.reserved = true
+ *     scrubber.reserved_peers includes -1
  *     osd->scrub_pending++
  *   pending:
- *     scrub_reserved = true
- *     scrub_reserved_peers.size() == acting.size();
+ *     scrubber.reserved = true
+ *     scrubber.reserved_peers.size() == acting.size();
  *     pg on scrub_wq
  *     osd->scrub_pending++
  *   scrubbing:
- *     scrub_reserved = false;
- *     scrub_reserved_peers empty
- *     osd->scrub_active++
+ *     scrubber.reserved = false;
+ *     scrubber.reserved_peers empty
+ *     osd->scrubber.active++
  */
 
 // returns false if waiting for a reply
@@ -2717,31 +2716,36 @@ bool PG::sched_scrub()
     return true;
   }
 
+  if (ceph_clock_now(g_ceph_context) > info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
+    dout(10) << "sched_scrub: scrub will be deep" << dendl;
+    scrubber.deep = true;
+  }
+
   bool ret = false;
-  if (!scrub_reserved) {
-    assert(scrub_reserved_peers.empty());
+  if (!scrubber.reserved) {
+    assert(scrubber.reserved_peers.empty());
     if (osd->inc_scrubs_pending()) {
       dout(20) << "sched_scrub: reserved locally, reserving replicas" << dendl;
-      scrub_reserved = true;
-      scrub_reserved_peers.insert(osd->whoami);
+      scrubber.reserved = true;
+      scrubber.reserved_peers.insert(osd->whoami);
       scrub_reserve_replicas();
     } else {
       dout(20) << "sched_scrub: failed to reserve locally" << dendl;
     }
   }
-  if (scrub_reserved) {
-    if (scrub_reserve_failed) {
+  if (scrubber.reserved) {
+    if (scrubber.reserve_failed) {
       dout(20) << "sched_scrub: failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
       ret = true;
-    } else if (scrub_reserved_peers.size() == acting.size()) {
+    } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
       queue_scrub();
       ret = true;
     } else {
-      // none declined, since scrub_reserved is set
-      dout(20) << "sched_scrub: reserved " << scrub_reserved_peers << ", waiting for replicas" << dendl;
+      // none declined, since scrubber.reserved is set
+      dout(20) << "sched_scrub: reserved " << scrubber.reserved_peers << ", waiting for replicas" << dendl;
     }
   }
 
@@ -2767,29 +2771,40 @@ void PG::sub_op_scrub_map(OpRequestRef op)
 
   dout(10) << " got osd." << from << " scrub map" << dendl;
   bufferlist::iterator p = m->get_data().begin();
-  if (scrub_received_maps.count(from)) {
-    ScrubMap incoming;
-    incoming.decode(p, info.pgid.pool());
-    dout(10) << "from replica " << from << dendl;
-    dout(10) << "map version is " << incoming.valid_through << dendl;
-    scrub_received_maps[from].merge_incr(incoming);
-  } else {
-    scrub_received_maps[from].decode(p, info.pgid.pool());
+
+  if (scrubber.is_chunky) { // chunky scrub
+    scrubber.received_maps[from].decode(p, info.pgid.pool());
+    dout(10) << "map version is " << scrubber.received_maps[from].valid_through << dendl;
+  } else {               // classic scrub
+    if (scrubber.received_maps.count(from)) {
+      ScrubMap incoming;
+      incoming.decode(p, info.pgid.pool());
+      dout(10) << "from replica " << from << dendl;
+      dout(10) << "map version is " << incoming.valid_through << dendl;
+      scrubber.received_maps[from].merge_incr(incoming);
+    } else {
+      scrubber.received_maps[from].decode(p, info.pgid.pool());
+    }
   }
 
-  --scrub_waiting_on;
-  scrub_waiting_on_whom.erase(from);
-  if (scrub_waiting_on == 0) {
-    if (finalizing_scrub) { // incremental lists received
-      osd->scrub_finalize_wq.queue(this);
-    } else {                // initial lists received
-      scrub_block_writes = true;
-      if (last_update_applied == info.last_update) {
-        finalizing_scrub = true;
-        scrub_gather_replica_maps();
-        ++scrub_waiting_on;
-        scrub_waiting_on_whom.insert(osd->whoami);
-        osd->scrub_wq.queue(this);
+  --scrubber.waiting_on;
+  scrubber.waiting_on_whom.erase(from);
+
+  if (scrubber.waiting_on == 0) {
+    if (scrubber.is_chunky) { // chunky scrub
+      osd->scrub_wq.queue(this);
+    } else {                  // classic scrub
+      if (scrubber.finalizing) { // incremental lists received
+        osd->scrub_finalize_wq.queue(this);
+      } else {                // initial lists received
+        scrubber.block_writes = true;
+        if (last_update_applied == info.last_update) {
+          scrubber.finalizing = true;
+          scrub_gather_replica_maps();
+          ++scrubber.waiting_on;
+          scrubber.waiting_on_whom.insert(osd->whoami);
+          osd->scrub_wq.queue(this);
+        }
       }
     }
   }
@@ -2798,9 +2813,10 @@ void PG::sub_op_scrub_map(OpRequestRef op)
 /* 
  * pg lock may or may not be held
  */
-void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
+void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
 {
-  dout(10) << "_scan_list scanning " << ls.size() << " objects" << dendl;
+  dout(10) << "_scan_list scanning " << ls.size() << " objects"
+           << (deep ? " deeply" : "") << dendl;
   int i = 0;
   for (vector<hobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
@@ -2814,6 +2830,23 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
       o.size = st.st_size;
       assert(!o.negative);
       osd->store->getattrs(coll, poid, o.attrs);
+
+      // calculate the CRC32 on deep scrubs
+      if (deep) {
+        bufferhash h;
+        bufferlist bl;
+        int r;
+        __u64 pos = 0;
+        while ( (r = osd->store->read(coll, poid, pos,
+                                      g_conf->osd_deep_scrub_stride, bl)) > 0) {
+          h << bl;
+          pos += bl.length();
+          bl.clear();
+        }
+        o.digest = h.digest();
+        o.digest_present = true;
+      }
+
       dout(25) << "_scan_list  " << poid << dendl;
     } else {
       dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
@@ -2821,7 +2854,8 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
   }
 }
 
-void PG::_request_scrub_map(int replica, eversion_t version)
+// send scrub v2-compatible messages (classic scrub)
+void PG::_request_scrub_map_classic(int replica, eversion_t version)
 {
   assert(replica != osd->whoami);
   dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
@@ -2832,23 +2866,37 @@ void PG::_request_scrub_map(int replica, eversion_t version)
                                        get_osdmap()->get_cluster_inst(replica));
 }
 
+// send scrub v3 messages (chunky scrub)
+void PG::_request_scrub_map(int replica, eversion_t version,
+                            hobject_t start, hobject_t end,
+                            bool deep)
+{
+  assert(replica != osd->whoami);
+  dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
+  MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version,
+                                              get_osdmap()->get_epoch(),
+                                              start, end, deep);
+  osd->cluster_messenger->send_message(repscrubop,
+                                       get_osdmap()->get_cluster_inst(replica));
+}
+
 void PG::sub_op_scrub_reserve(OpRequestRef op)
 {
   MOSDSubOp *m = (MOSDSubOp*)op->request;
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_reserve" << dendl;
 
-  if (scrub_reserved) {
+  if (scrubber.reserved) {
     dout(10) << "Ignoring reserve request: Already reserved" << dendl;
     return;
   }
 
   op->mark_started();
 
-  scrub_reserved = osd->inc_scrubs_pending();
+  scrubber.reserved = osd->inc_scrubs_pending();
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  ::encode(scrub_reserved, reply->get_data());
+  ::encode(scrubber.reserved, reply->get_data());
   osd->cluster_messenger->send_message(reply, m->get_connection());
 }
 
@@ -2858,7 +2906,7 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
-  if (!scrub_reserved) {
+  if (!scrubber.reserved) {
     dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
     return;
   }
@@ -2870,16 +2918,16 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
   bool reserved;
   ::decode(reserved, p);
 
-  if (scrub_reserved_peers.find(from) != scrub_reserved_peers.end()) {
+  if (scrubber.reserved_peers.find(from) != scrubber.reserved_peers.end()) {
     dout(10) << " already had osd." << from << " reserved" << dendl;
   } else {
     if (reserved) {
       dout(10) << " osd." << from << " scrub reserve = success" << dendl;
-      scrub_reserved_peers.insert(from);
+      scrubber.reserved_peers.insert(from);
     } else {
       /* One decline stops this pg from being scheduled for scrubbing. */
       dout(10) << " osd." << from << " scrub reserve = fail" << dendl;
-      scrub_reserve_failed = true;
+      scrubber.reserve_failed = true;
     }
     sched_scrub();
   }
@@ -2904,7 +2952,7 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
   dout(7) << "sub_op_scrub_stop" << dendl;
 
   // see comment in sub_op_scrub_reserve
-  scrub_reserved = false;
+  scrubber.reserved = false;
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   osd->cluster_messenger->send_message(reply, m->get_connection());
@@ -2913,11 +2961,11 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
 void PG::clear_scrub_reserved()
 {
   osd->scrub_wq.dequeue(this);
-  scrub_reserved_peers.clear();
-  scrub_reserve_failed = false;
+  scrubber.reserved_peers.clear();
+  scrubber.reserve_failed = false;
 
-  if (scrub_reserved) {
-    scrub_reserved = false;
+  if (scrubber.reserved) {
+    scrubber.reserved = false;
     osd->dec_scrubs_pending();
   }
 }
@@ -2955,6 +3003,38 @@ void PG::scrub_unreserve_replicas()
 }
 
 /*
+ * build a scrub map over a chunk without releasing the lock
+ * only used by chunky scrub
+ */
+int PG::build_scrub_map_chunk(ScrubMap &map,
+                              hobject_t start, hobject_t end, bool deep)
+{
+  dout(10) << "build_scrub_map" << dendl;
+  dout(20) << "scrub_map_chunk [" << start << "," << end << ")" << dendl;
+
+  map.valid_through = info.last_update;
+
+  // objects
+  vector<hobject_t> ls;
+  int ret = osd->store->collection_list_range(coll, start, end, 0, &ls);
+  if (ret < 0) {
+    dout(5) << "collection_list_range error: " << ret << dendl;
+    return ret;
+  }
+
+  _scan_list(map, ls, deep);
+
+  // pg attrs
+  osd->store->collection_getattrs(coll, map.attrs);
+
+  // log
+  osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
+  dout(10) << " done.  pg log is " << map.logbl.length() << " bytes" << dendl;
+
+  return 0;
+}
+
+/*
  * build a (sorted) summary of pg content for purposes of scrubbing
  * called while holding pg lock
  */ 
@@ -2975,7 +3055,7 @@ void PG::build_scrub_map(ScrubMap &map)
   vector<hobject_t> ls;
   osd->store->collection_list(coll, ls);
 
-  _scan_list(map, ls);
+  _scan_list(map, ls, false);
   lock();
 
   if (epoch != info.history.same_interval_since) {
@@ -3023,7 +3103,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
     }
   }
 
-  _scan_list(map, ls);
+  _scan_list(map, ls, false);
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
 
@@ -3054,24 +3134,32 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
 
 /* replica_scrub
  *
+ * Classic behavior:
+ *
  * If msg->scrub_from is not set, replica_scrub calls build_scrubmap to
  * build a complete map (with the pg lock dropped).
  *
- * If msg->scrub_from is set, replica_scrub sets finalizing_scrub.
+ * If msg->scrub_from is set, replica_scrub sets scrubber.finalizing.
  * Similarly to scrub, if last_update_applied is behind info.last_update
  * replica_scrub returns to be requeued by sub_op_modify_applied.
  * replica_scrub then builds an incremental scrub map with the 
  * pg lock held.
+ *
+ * Chunky behavior:
+ *
+ * Wait for last_update_applied to match msg->scrub_to as above. Wait
+ * for pushes to complete in case of recent recovery. Build a single
+ * scrubmap of objects that are in the range [msg->start, msg->end).
  */
 void PG::replica_scrub(MOSDRepScrub *msg)
 {
-  assert(!active_rep_scrub);
+  assert(!scrubber.active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
   if (msg->map_epoch < info.history.same_interval_since) {
-    if (finalizing_scrub) {
+    if (scrubber.finalizing) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
-      finalizing_scrub = 0;
+      scrubber.finalizing = 0;
     } else {
       dout(10) << "replica_scrub discarding old replica_scrub from "
 	       << msg->map_epoch << " < " << info.history.same_interval_since 
@@ -3081,27 +3169,47 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   }
 
   ScrubMap map;
-  if (msg->scrub_from > eversion_t()) {
-    if (finalizing_scrub) {
-      assert(last_update_applied == info.last_update);
-      assert(last_update_applied == msg->scrub_to);
-    } else {
-      finalizing_scrub = 1;
-      if (last_update_applied != msg->scrub_to) {
-	active_rep_scrub = msg;
-	msg->get();
-	return;
-      }
-    }
-    build_inc_scrub_map(map, msg->scrub_from);
-    finalizing_scrub = 0;
-  } else {
-    build_scrub_map(map);
-  }
 
-  if (msg->map_epoch < info.history.same_interval_since) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    return;
+  if (msg->chunky) { // chunky scrub
+    if (last_update_applied < msg->scrub_to) {
+      dout(10) << "waiting for last_update_applied to catch up" << dendl;
+      scrubber.active_rep_scrub = msg;
+      msg->get();
+      return;
+    }
+
+    if (active_pushes > 0) {
+      dout(10) << "waiting for active pushes to finish" << dendl;
+      scrubber.active_rep_scrub = msg;
+      msg->get();
+      return;
+    }
+
+    build_scrub_map_chunk(map, msg->start, msg->end, msg->deep);
+
+  } else {
+    if (msg->scrub_from > eversion_t()) {
+      if (scrubber.finalizing) {
+        assert(last_update_applied == info.last_update);
+        assert(last_update_applied == msg->scrub_to);
+      } else {
+        scrubber.finalizing = 1;
+        if (last_update_applied != msg->scrub_to) {
+          scrubber.active_rep_scrub = msg;
+          msg->get();
+          return;
+        }
+      }
+      build_inc_scrub_map(map, msg->scrub_from);
+      scrubber.finalizing = 0;
+    } else {
+      build_scrub_map(map);
+    }
+
+    if (msg->map_epoch < info.history.same_interval_since) {
+      dout(10) << "scrub  pg changed, aborting" << dendl;
+      return;
+    }
   }
 
   vector<OSDOp> scrub(1);
@@ -3120,30 +3228,11 @@ void PG::replica_scrub(MOSDRepScrub *msg)
 /* Scrub:
  * PG_STATE_SCRUBBING is set when the scrub is queued
  * 
- * Once the initial scrub has completed and the requests have gone out to 
- * replicas for maps, we set scrub_active and wait for the replicas to
- * complete their maps. Once the maps are received, scrub_block_writes is set.
- * scrub_waiting_on is set to the number of maps outstanding (active.size()).
- *
- * If last_update_applied is behind the head of the log, scrub returns to be
- * requeued by op_applied.
- *
- * Once last_update_applied == info.last_update, scrub catches itself up and
- * decrements scrub_waiting_on.
- *
- * sub_op_scrub_map similarly decrements scrub_waiting_on for each map received.
- * 
- * Once scrub_waiting_on hits 0 (either in scrub or sub_op_scrub_map) 
- * scrub_finalize is queued.
- * 
- * In scrub_finalize, if any replica maps are too old, new ones are requested,
- * scrub_waiting_on is reset, and scrub_finalize returns to be requeued by
- * sub_op_scrub_map.  If all maps are up to date, scrub_finalize checks 
- * the maps and performs repairs.
+ * scrub will be chunky if all OSDs in PG support chunky scrub
+ * scrub will fall back to classic in any other case
  */
 void PG::scrub()
 {
-
   lock();
   if (deleting) {
     unlock();
@@ -3157,101 +3246,436 @@ void PG::scrub()
     return;
   }
 
-  if (!scrub_active) {
+  // when we're starting a scrub, we need to determine which type of scrub to do
+  if (!scrubber.active) {
+    OSDMapRef curmap = osd->get_osdmap();
+    scrubber.is_chunky = true;
+    for (unsigned i=1; i<acting.size(); i++) {
+      Connection *con = osd->cluster_messenger->get_connection(curmap->get_cluster_inst(acting[i]));
+      if (!(con->features & CEPH_FEATURE_CHUNKY_SCRUB)) {
+        dout(20) << "OSD " << acting[i]
+                 << " does not support chunky scrubs, falling back to classic"
+                 << dendl;
+        scrubber.is_chunky = false;
+        break;
+      }
+    }
+
+    if (scrubber.is_chunky) {
+      scrubber.deep = state_test(PG_STATE_DEEP_SCRUB);
+    } else {
+      state_clear(PG_STATE_DEEP_SCRUB);
+    }
+
+    dout(10) << "starting a new " << (scrubber.is_chunky ? "chunky" : "classic") << " scrub" << dendl;
+  }
+
+  if (scrubber.is_chunky) {
+    chunky_scrub();
+  } else {
+    classic_scrub();
+  }
+
+  unlock();
+}
+
+/*
+ * Classic scrub is a two stage scrub: an initial scrub with writes enabled
+ * followed by a finalize with writes blocked.
+ *
+ * A request is sent out to all replicas for initial scrub maps. Once they reply
+ * (sub_op_scrub_map) writes are blocked for all objects in the PG.
+ *
+ * Finalize: Primaries and replicas wait for all writes in the log to be applied
+ * (op_applied), then builds an incremental scrub of all the changes since the
+ * beginning of the scrub.
+ *
+ * Once the primary has received all maps, it compares them and performs
+ * repairs.
+ *
+ * The initial stage of the scrub is handled by scrub_wq and the final stage by
+ * scrub_finalize_wq.
+ *
+ * Relevant variables:
+ *
+ * scrubber.waiting_on (int)
+ * scrubber.waiting_on_whom
+ *    Number of people who still need to build an initial/incremental scrub map.
+ *    This is decremented in sub_op_scrub_map.
+ *
+ * last_update_applied
+ *    The last update that's hit the disk. In the finalize stage, we block
+ *    writes and wait for all writes to flush by checking:
+ *
+ *      last_update_appied == info.last_update
+ *
+ *    This is checked in op_applied.
+ *
+ *  scrubber.block_writes
+ *    Flag to determine if writes are blocked.
+ *
+ *  finalizing scrub
+ *    Flag set when we're in the finalize stage.
+ *
+ */
+void PG::classic_scrub()
+{
+  if (!scrubber.active) {
     dout(10) << "scrub start" << dendl;
-    scrub_active = true;
+    scrubber.active = true;
 
     update_stats();
-    scrub_received_maps.clear();
-    scrub_epoch_start = info.history.same_interval_since;
+    scrubber.received_maps.clear();
+    scrubber.epoch_start = info.history.same_interval_since;
 
     osd->sched_scrub_lock.Lock();
-    if (scrub_reserved) {
+    if (scrubber.reserved) {
       --(osd->scrubs_pending);
       assert(osd->scrubs_pending >= 0);
-      scrub_reserved = false;
-      scrub_reserved_peers.clear();
+      scrubber.reserved = false;
+      scrubber.reserved_peers.clear();
     }
     ++(osd->scrubs_active);
     osd->sched_scrub_lock.Unlock();
 
-    /* scrub_waiting_on == 0 iff all replicas have sent the requested maps and
+    /* scrubber.waiting_on == 0 iff all replicas have sent the requested maps and
      * the primary has done a final scrub (which in turn can only happen if
      * last_update_applied == info.last_update)
      */
-    scrub_waiting_on = acting.size();
-    scrub_waiting_on_whom.insert(acting.begin(), acting.end());
+    scrubber.waiting_on = acting.size();
+    scrubber.waiting_on_whom.insert(acting.begin(), acting.end());
 
     // request maps from replicas
     for (unsigned i=1; i<acting.size(); i++) {
-      _request_scrub_map(acting[i], eversion_t());
+      _request_scrub_map_classic(acting[i], eversion_t());
     }
 
     // Unlocks and relocks...
-    primary_scrubmap = ScrubMap();
-    build_scrub_map(primary_scrubmap);
+    scrubber.primary_scrubmap = ScrubMap();
+    build_scrub_map(scrubber.primary_scrubmap);
 
-    if (scrub_epoch_start != info.history.same_interval_since) {
+    if (scrubber.epoch_start != info.history.same_interval_since) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
       scrub_clear_state();
       scrub_unreserve_replicas();
-      unlock();
       return;
     }
 
-    --scrub_waiting_on;
-    scrub_waiting_on_whom.erase(osd->whoami);
+    --scrubber.waiting_on;
+    scrubber.waiting_on_whom.erase(osd->whoami);
 
-    if (scrub_waiting_on == 0) {
+    if (scrubber.waiting_on == 0) {
       // the replicas have completed their scrub map, so lock out writes
-      scrub_block_writes = true;
+      scrubber.block_writes = true;
     } else {
       dout(10) << "wait for replicas to build initial scrub map" << dendl;
-      unlock();
       return;
     }
 
     if (last_update_applied != info.last_update) {
       dout(10) << "wait for cleanup" << dendl;
-      unlock();
       return;
     }
 
-    // fall through if last_update_applied == info.last_update and scrub_waiting_on == 0
+    // fall through if last_update_applied == info.last_update and scrubber.waiting_on == 0
 
     // request incrementals from replicas
     scrub_gather_replica_maps();
-    ++scrub_waiting_on;
-    scrub_waiting_on_whom.insert(osd->whoami);
+    ++scrubber.waiting_on;
+    scrubber.waiting_on_whom.insert(osd->whoami);
   }
     
   dout(10) << "clean up scrub" << dendl;
   assert(last_update_applied == info.last_update);
 
-  finalizing_scrub = true;
+  scrubber.finalizing = true;
 
-  if (scrub_epoch_start != info.history.same_interval_since) {
+  if (scrubber.epoch_start != info.history.same_interval_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     scrub_clear_state();
     scrub_unreserve_replicas();
-    unlock();
     return;
   }
   
-  if (primary_scrubmap.valid_through != log.head) {
+  if (scrubber.primary_scrubmap.valid_through != log.head) {
     ScrubMap incr;
-    build_inc_scrub_map(incr, primary_scrubmap.valid_through);
-    primary_scrubmap.merge_incr(incr);
+    build_inc_scrub_map(incr, scrubber.primary_scrubmap.valid_through);
+    scrubber.primary_scrubmap.merge_incr(incr);
   }
   
-  --scrub_waiting_on;
-  scrub_waiting_on_whom.erase(osd->whoami);
-  if (scrub_waiting_on == 0) {
+  --scrubber.waiting_on;
+  scrubber.waiting_on_whom.erase(osd->whoami);
+  if (scrubber.waiting_on == 0) {
     assert(last_update_applied == info.last_update);
     osd->scrub_finalize_wq.queue(this);
   }
-  
-  unlock();
+}
+
+/*
+ * Chunky scrub scrubs objects one chunk at a time with writes blocked for that
+ * chunk.
+ *
+ * The object store is partitioned into chunks which end on hash boundaries. For
+ * each chunk, the following logic is performed:
+ *
+ *  (1) Block writes on the chunk
+ *  (2) Request maps from replicas
+ *  (3) Wait for pushes to be applied (after recovery)
+ *  (4) Wait for writes to flush on the chunk
+ *  (5) Wait for maps from replicas
+ *  (6) Compare / repair all scrub maps
+ *
+ * This logic is encoded in the very linear state machine:
+ *
+ *           +------------------+
+ *  _________v__________        |
+ * |                    |       |
+ * |      INACTIVE      |       |
+ * |____________________|       |
+ *           |                  |
+ *           |   +----------+   |
+ *  _________v___v______    |   |
+ * |                    |   |   |
+ * |      NEW_CHUNK     |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |     WAIT_PUSHES    |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |  WAIT_LAST_UPDATE  |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |      BUILD_MAP     |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |    WAIT_REPLICAS   |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |    COMPARE_MAPS    |   |   |
+ * |____________________|   |   |
+ *           |   |          |   |
+ *           |   +----------+   |
+ *  _________v__________        |
+ * |                    |       |
+ * |       FINISH       |       |
+ * |____________________|       |
+ *           |                  |
+ *           +------------------+
+ *
+ * The primary determines the last update from the subset by walking the log. If
+ * it sees a log entry pertaining to a file in the chunk, it tells the replicas
+ * to wait until that update is applied before building a scrub map. Both the
+ * primary and replicas will wait for any active pushes to be applied.
+ *
+ * In contrast to classic_scrub, chunky_scrub is entirely handled by scrub_wq.
+ *
+ * scrubber.state encodes the current state of the scrub (refer to state diagram
+ * for details).
+ */
+void PG::chunky_scrub() {
+  // check for map changes
+  if (scrubber.is_chunky_scrub_active()) {
+    if (scrubber.epoch_start != info.history.same_interval_since) {
+      dout(10) << "scrub  pg changed, aborting" << dendl;
+      scrub_clear_state();
+      scrub_unreserve_replicas();
+      return;
+    }
+  }
+
+  bool done = false;
+  int ret;
+
+  while (!done) {
+    dout(20) << "scrub state " << Scrubber::state_string(scrubber.state) << dendl;
+
+    switch (scrubber.state) {
+      case PG::Scrubber::INACTIVE:
+        dout(10) << "scrub start" << dendl;
+
+        update_stats();
+        scrubber.epoch_start = info.history.same_interval_since;
+        scrubber.active = true;
+
+        osd->sched_scrub_lock.Lock();
+        if (scrubber.reserved) {
+          --(osd->scrubs_pending);
+          assert(osd->scrubs_pending >= 0);
+          scrubber.reserved = false;
+          scrubber.reserved_peers.clear();
+        }
+        ++(osd->scrubs_active);
+        osd->sched_scrub_lock.Unlock();
+
+        scrubber.start = hobject_t();
+        scrubber.state = PG::Scrubber::NEW_CHUNK;
+
+        break;
+
+      case PG::Scrubber::NEW_CHUNK:
+        scrubber.primary_scrubmap = ScrubMap();
+        scrubber.received_maps.clear();
+
+        {
+
+          // get the start and end of our scrub chunk
+          //
+          // start and end need to lie on a hash boundary. We test for this by
+          // requesting a list and searching backward from the end looking for a
+          // boundary. If there's no boundary, we request a list after the first
+          // list, and so forth.
+
+          bool boundary_found = false;
+          hobject_t start = scrubber.start;
+          while (!boundary_found) {
+            vector<hobject_t> objects;
+            ret = osd->store->collection_list_partial(coll, start,
+                                                      5, 5, 0,
+                                                      &objects, &scrubber.end);
+            assert(ret >= 0);
+
+            // in case we don't find a boundary: start again at the end
+            start = scrubber.end;
+
+            // special case: reached end of file store, implicitly a boundary
+            if (objects.size() == 0) {
+              break;
+            }
+
+            // search backward from the end looking for a boundary
+            objects.push_back(scrubber.end);
+            while (!boundary_found && objects.size() > 1) {
+              hobject_t end = objects.back();
+              objects.pop_back();
+
+              if (objects.back().get_filestore_key() != end.get_filestore_key()) {
+                scrubber.end = end;
+                boundary_found = true;
+              }
+            }
+          }
+        }
+
+        scrubber.block_writes = true;
+
+        // walk the log to find the latest update that affects our chunk
+        scrubber.subset_last_update = eversion_t();
+        for (list<pg_log_entry_t>::iterator p = log.log.begin();
+             p != log.log.end();
+             ++p) {
+          if (p->soid >= scrubber.start && p->soid < scrubber.end)
+            scrubber.subset_last_update = p->version;
+        }
+
+        // ask replicas to wait until last_update_applied >= scrubber.subset_last_update and then scan
+        scrubber.waiting_on_whom.insert(osd->whoami);
+        ++scrubber.waiting_on;
+
+        // request maps from replicas
+        for (unsigned i=1; i<acting.size(); i++) {
+          _request_scrub_map(acting[i], scrubber.subset_last_update,
+                             scrubber.start, scrubber.end, scrubber.deep);
+          scrubber.waiting_on_whom.insert(acting[i]);
+          ++scrubber.waiting_on;
+        }
+
+        scrubber.state = PG::Scrubber::WAIT_PUSHES;
+
+        break;
+
+      case PG::Scrubber::WAIT_PUSHES:
+        if (active_pushes == 0) {
+          scrubber.state = PG::Scrubber::WAIT_LAST_UPDATE;
+        } else {
+          dout(15) << "wait for pushes to apply" << dendl;
+          done = true;
+        }
+        break;
+
+      case PG::Scrubber::WAIT_LAST_UPDATE:
+        if (last_update_applied >= scrubber.subset_last_update) {
+          scrubber.state = PG::Scrubber::BUILD_MAP;
+        } else {
+          // will be requeued by op_applied
+          dout(15) << "wait for writes to flush" << dendl;
+          done = true;
+        }
+        break;
+
+      case PG::Scrubber::BUILD_MAP:
+        assert(last_update_applied >= scrubber.subset_last_update);
+
+        // build my own scrub map
+        ret = build_scrub_map_chunk(scrubber.primary_scrubmap,
+                                    scrubber.start, scrubber.end,
+                                    scrubber.deep);
+        if (ret < 0) {
+          dout(5) << "error building scrub map: " << ret << ", aborting" << dendl;
+          scrub_clear_state();
+          scrub_unreserve_replicas();
+          return;
+        }
+
+        --scrubber.waiting_on;
+        scrubber.waiting_on_whom.erase(osd->whoami);
+
+        scrubber.state = PG::Scrubber::WAIT_REPLICAS;
+        break;
+
+      case PG::Scrubber::WAIT_REPLICAS:
+        if (scrubber.waiting_on > 0) {
+          // will be requeued by sub_op_scrub_map
+          dout(10) << "wait for replicas to build scrub map" << dendl;
+          done = true;
+        } else {
+          scrubber.state = PG::Scrubber::COMPARE_MAPS;
+        }
+        break;
+
+      case PG::Scrubber::COMPARE_MAPS:
+        assert(last_update_applied >= scrubber.subset_last_update);
+        assert(scrubber.waiting_on == 0);
+
+        scrub_compare_maps();
+        scrubber.block_writes = false;
+
+        // requeue the writes from the chunk that just finished
+        requeue_ops(waiting_for_active);
+
+        if (scrubber.end < hobject_t::get_max()) {
+          // schedule another leg of the scrub
+          scrubber.start = scrubber.end;
+
+          scrubber.state = PG::Scrubber::NEW_CHUNK;
+          osd->scrub_wq.queue(this);
+          done = true;
+        } else {
+          scrubber.state = PG::Scrubber::FINISH;
+        }
+
+        break;
+
+      case PG::Scrubber::FINISH:
+        scrub_finish();
+        scrubber.state = PG::Scrubber::INACTIVE;
+        done = true;
+
+        break;
+
+      default:
+        assert(0);
+    }
+  }
 }
 
 void PG::scrub_clear_state()
@@ -3259,6 +3683,7 @@ void PG::scrub_clear_state()
   assert(_lock.is_locked());
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_REPAIR);
+  state_clear(PG_STATE_DEEP_SCRUB);
   update_stats();
 
   // active -> nothing.
@@ -3266,35 +3691,29 @@ void PG::scrub_clear_state()
 
   requeue_ops(waiting_for_active);
 
-  finalizing_scrub = false;
-  scrub_block_writes = false;
-  scrub_active = false;
-  scrub_waiting_on = 0;
-  scrub_waiting_on_whom.clear();
-  if (active_rep_scrub) {
-    active_rep_scrub->put();
-    active_rep_scrub = NULL;
-  }
-  scrub_received_maps.clear();
+  scrubber.reset();
+
+  // type-specific state clear
+  _scrub_clear_state();
 }
 
 bool PG::scrub_gather_replica_maps() {
-  assert(scrub_waiting_on == 0);
+  assert(scrubber.waiting_on == 0);
   assert(_lock.is_locked());
 
-  for (map<int,ScrubMap>::iterator p = scrub_received_maps.begin();
-       p != scrub_received_maps.end();
+  for (map<int,ScrubMap>::iterator p = scrubber.received_maps.begin();
+       p != scrubber.received_maps.end();
        p++) {
     
-    if (scrub_received_maps[p->first].valid_through != log.head) {
-      scrub_waiting_on++;
-      scrub_waiting_on_whom.insert(p->first);
+    if (scrubber.received_maps[p->first].valid_through != log.head) {
+      scrubber.waiting_on++;
+      scrubber.waiting_on_whom.insert(p->first);
       // Need to request another incremental map
-      _request_scrub_map(p->first, p->second.valid_through);
+      _request_scrub_map_classic(p->first, p->second.valid_through);
     }
   }
   
-  if (scrub_waiting_on > 0) {
+  if (scrubber.waiting_on > 0) {
     return false;
   } else {
     return true;
@@ -3310,6 +3729,16 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
     ok = false;
     errorstream << "size " << candidate.size 
 		<< " != known size " << auth.size;
+  }
+  if (auth.digest_present && candidate.digest_present) {
+    if (auth.digest != candidate.digest) {
+      if (!ok)
+        errorstream << ", ";
+      ok = false;
+
+      errorstream << "digest " << candidate.digest
+                  << " != known digest " << auth.digest;
+    }
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
@@ -3375,6 +3804,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 				      j->second->objects[*k],
 				      ss)) {
 	    cur_inconsistent.insert(j->first);
+            ++scrubber.errors;
 	    errorstream << info.pgid << " osd." << acting[j->first]
 			<< ": soid " << *k << " " << ss.str() << std::endl;
 	  }
@@ -3398,33 +3828,11 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
   }
 }
 
-void PG::scrub_finalize() {
-  lock();
-  if (deleting) {
-    unlock();
-    return;
-  }
-
-  assert(last_update_applied == info.last_update);
-
-  if (scrub_epoch_start != info.history.same_interval_since) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    scrub_clear_state();
-    scrub_unreserve_replicas();
-    unlock();
-    return;
-  }
-  
-  if (!scrub_gather_replica_maps()) {
-    dout(10) << "maps not yet up to date, sent out new requests" << dendl;
-    unlock();
-    return;
-  }
-
-  dout(10) << "scrub_finalize has maps, analyzing" << dendl;
-  int errors = 0, fixed = 0;
+void PG::scrub_compare_maps() {
+  dout(10) << "scrub_compare_maps has maps, analyzing" << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
-  const char *mode = repair ? "repair":"scrub";
+  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
@@ -3439,12 +3847,12 @@ void PG::scrub_finalize() {
     map<int,ScrubMap *> maps;
 
     dout(2) << "scrub   osd." << acting[0] << " has " 
-	    << primary_scrubmap.objects.size() << " items" << dendl;
-    maps[0] = &primary_scrubmap;
+	    << scrubber.primary_scrubmap.objects.size() << " items" << dendl;
+    maps[0] = &scrubber.primary_scrubmap;
     for (unsigned i=1; i<acting.size(); i++) {
       dout(2) << "scrub   osd." << acting[i] << " has " 
-	      << scrub_received_maps[acting[i]].objects.size() << " items" << dendl;
-      maps[i] = &scrub_received_maps[acting[i]];
+	      << scrubber.received_maps[acting[i]].objects.size() << " items" << dendl;
+      maps[i] = &scrubber.received_maps[acting[i]];
     }
 
     _compare_scrubmaps(maps, missing, inconsistent, authoritative, ss);
@@ -3480,6 +3888,7 @@ void PG::scrub_finalize() {
 			    &maps[i->second]->objects[i->first],
 			    acting[*j],
 			    acting[i->second]);
+              ++scrubber.fixed;
 	    }
 	  }
 
@@ -3489,31 +3898,76 @@ void PG::scrub_finalize() {
   }
 
   // ok, do the pg-type specific scrubbing
-  _scrub(primary_scrubmap, errors, fixed);
+  _scrub(scrubber.primary_scrubmap);
+}
+
+void PG::scrub_finalize() {
+  lock();
+  if (deleting) {
+    unlock();
+    return;
+  }
+
+  assert(last_update_applied == info.last_update);
+
+  if (scrubber.epoch_start != info.history.same_interval_since) {
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    scrub_clear_state();
+    scrub_unreserve_replicas();
+    unlock();
+    return;
+  }
+
+  if (!scrub_gather_replica_maps()) {
+    dout(10) << "maps not yet up to date, sent out new requests" << dendl;
+    unlock();
+    return;
+  }
+
+  scrub_compare_maps();
+
+  scrub_finish();
+
+  dout(10) << "scrub done" << dendl;
+  unlock();
+}
+
+// the part that actually finalizes a scrub
+void PG::scrub_finish() {
+  bool repair = state_test(PG_STATE_REPAIR);
+  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+
+  // type-specific finish (can tally more errors)
+  _scrub_finish();
+
+  if (scrubber.errors == 0 || (repair && (scrubber.errors - scrubber.fixed) == 0))
+    state_clear(PG_STATE_INCONSISTENT);
 
   {
     stringstream oss;
     oss << info.pgid << " " << mode << " ";
-    if (errors)
-      oss << errors << " errors";
+    if (scrubber.errors)
+      oss << scrubber.errors << " errors";
     else
       oss << "ok";
     if (repair)
-      oss << ", " << fixed << " fixed";
+      oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";
-    if (errors)
+    if (scrubber.errors)
       osd->clog.error(oss);
     else
       osd->clog.info(oss);
   }
 
-  if (errors == 0 || (repair && (errors - fixed) == 0))
-    state_clear(PG_STATE_INCONSISTENT);
-
   // finish up
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   info.history.last_scrub = info.last_update;
   info.history.last_scrub_stamp = ceph_clock_now(g_ceph_context);
+  if (scrubber.deep) {
+    info.history.last_deep_scrub = info.last_update;
+    info.history.last_deep_scrub_stamp = ceph_clock_now(g_ceph_context);
+  }
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
   {
@@ -3529,9 +3983,6 @@ void PG::scrub_finalize() {
   if (is_active() && is_primary()) {
     share_pg_info();
   }
-
-  dout(10) << "scrub done" << dendl;
-  unlock();
 }
 
 void PG::share_pg_info()
@@ -4823,15 +5274,15 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 
   {
     q.f->open_object_section("scrub");
-    q.f->dump_stream("scrub_epoch_start") << pg->scrub_epoch_start;
-    q.f->dump_int("scrub_active", pg->scrub_active);
-    q.f->dump_int("scrub_block_writes", pg->scrub_block_writes);
-    q.f->dump_int("finalizing_scrub", pg->finalizing_scrub);
-    q.f->dump_int("scrub_waiting_on", pg->scrub_waiting_on);
+    q.f->dump_stream("scrubber.epoch_start") << pg->scrubber.epoch_start;
+    q.f->dump_int("scrubber.active", pg->scrubber.active);
+    q.f->dump_int("scrubber.block_writes", pg->scrubber.block_writes);
+    q.f->dump_int("scrubber.finalizing", pg->scrubber.finalizing);
+    q.f->dump_int("scrubber.waiting_on", pg->scrubber.waiting_on);
     {
-      q.f->open_array_section("scrub_waiting_on_whom");
-      for (set<int>::iterator p = pg->scrub_waiting_on_whom.begin();
-	   p != pg->scrub_waiting_on_whom.end();
+      q.f->open_array_section("scrubber.waiting_on_whom");
+      for (set<int>::iterator p = pg->scrubber.waiting_on_whom.begin();
+	   p != pg->scrubber.waiting_on_whom.end();
 	   ++p) {
 	q.f->dump_int("osd", *p);
       }
@@ -4928,7 +5379,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QuerySta
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
-  q.f->dump_int("finalizing_scrub", pg->finalizing_scrub);
+  q.f->dump_int("scrubber.finalizing", pg->scrubber.finalizing);
   q.f->close_section();
   return forward_event();
 }

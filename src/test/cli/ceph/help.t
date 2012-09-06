@@ -56,6 +56,7 @@
     ceph osd pool rename <pool> <new pool name>
     ceph osd pool set <pool> <field> <value>
     ceph osd scrub <osd-id>
+    ceph osd deep-scrub <osd-id>
     ceph osd repair <osd-id>
     ceph osd tell N bench [bytes per write] [total bytes]
   

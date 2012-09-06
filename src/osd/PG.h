@@ -773,17 +773,98 @@ public:
 
 
   // -- scrub --
-  set<int> scrub_reserved_peers;
-  map<int,ScrubMap> scrub_received_maps;
-  bool finalizing_scrub;
-  bool scrub_block_writes;
-  bool scrub_active;
-  bool scrub_reserved, scrub_reserve_failed;
-  int scrub_waiting_on;
-  set<int> scrub_waiting_on_whom;
-  epoch_t scrub_epoch_start;
-  ScrubMap primary_scrubmap;
-  MOSDRepScrub *active_rep_scrub;
+  struct Scrubber {
+    Scrubber() :
+      reserved(false), reserve_failed(false),
+      block_writes(false), active(false), waiting_on(0),
+      errors(0), fixed(0), active_rep_scrub(0),
+      finalizing(false), is_chunky(false), state(INACTIVE),
+      deep(false)
+    {
+    }
+
+    // metadata
+    set<int> reserved_peers;
+    bool reserved, reserve_failed;
+    epoch_t epoch_start;
+
+    // common to both scrubs
+    bool block_writes;
+    bool active;
+    int waiting_on;
+    set<int> waiting_on_whom;
+    int errors;
+    int fixed;
+    ScrubMap primary_scrubmap;
+    map<int,ScrubMap> received_maps;
+    MOSDRepScrub *active_rep_scrub;
+
+    // classic scrub
+    bool finalizing;
+
+    // chunky scrub
+    bool is_chunky;
+    hobject_t start, end;
+    eversion_t subset_last_update;
+
+    // chunky scrub state
+    enum State {
+      INACTIVE,
+      NEW_CHUNK,
+      WAIT_PUSHES,
+      WAIT_LAST_UPDATE,
+      BUILD_MAP,
+      WAIT_REPLICAS,
+      COMPARE_MAPS,
+      FINISH,
+    } state;
+
+    // deep scrub
+    bool deep;
+
+    static const char *state_string(const PG::Scrubber::State& state) {
+      const char *ret = NULL;
+      switch( state )
+      {
+        case INACTIVE: ret = "INACTIVE"; break;
+        case NEW_CHUNK: ret = "NEW_CHUNK"; break;
+        case WAIT_PUSHES: ret = "WAIT_PUSHES"; break;
+        case WAIT_LAST_UPDATE: ret = "WAIT_LAST_UPDATE"; break;
+        case BUILD_MAP: ret = "BUILD_MAP"; break;
+        case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;
+        case COMPARE_MAPS: ret = "COMPARE_MAPS"; break;
+        case FINISH: ret = "FINISH"; break;
+      }
+      return ret;
+    }
+
+    bool is_chunky_scrub_active() const { return state != INACTIVE; }
+
+    // clear all state
+    void reset() {
+      finalizing = false;
+      block_writes = false;
+      active = false;
+      waiting_on = 0;
+      waiting_on_whom.clear();
+      if (active_rep_scrub) {
+        active_rep_scrub->put();
+        active_rep_scrub = NULL;
+      }
+      received_maps.clear();
+
+      state = PG::Scrubber::INACTIVE;
+      start = hobject_t();
+      end = hobject_t();
+      subset_last_update = eversion_t();
+      errors = 0;
+      fixed = 0;
+      deep = false;
+    }
+
+  } scrubber;
+
+  int active_pushes;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
@@ -795,14 +876,24 @@ public:
 			  map<hobject_t, int> &authoritative,
 			  ostream &errorstream);
   void scrub();
+  void classic_scrub();
+  void chunky_scrub();
+  void scrub_compare_maps();
   void scrub_finalize();
+  void scrub_finish();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
-  void _scan_list(ScrubMap &map, vector<hobject_t> &ls);
-  void _request_scrub_map(int replica, eversion_t version);
+  void _scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep);
+  void _request_scrub_map_classic(int replica, eversion_t version);
+  void _request_scrub_map(int replica, eversion_t version,
+                          hobject_t start, hobject_t end, bool deep);
+  int build_scrub_map_chunk(ScrubMap &map,
+                            hobject_t start, hobject_t end, bool deep);
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
-  virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  virtual void _scrub(ScrubMap &map) { }
+  virtual void _scrub_clear_state() { }
+  virtual void _scrub_finish() { }
   virtual coll_t get_temp_coll() = 0;
   virtual bool have_temp_coll() = 0;
   void clear_scrub_reserved();
