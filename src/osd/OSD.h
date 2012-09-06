@@ -26,6 +26,7 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/LogClient.h"
+#include "common/AsyncReserver.h"
 
 #include "os/ObjectStore.h"
 #include "OSDCap.h"
@@ -254,6 +255,11 @@ public:
     tid_lock.Unlock();
     return t;
   }
+
+  // -- backfill_reservation --
+  Finisher reserver_finisher;
+  AsyncReserver<pg_t> local_reserver;
+  AsyncReserver<pg_t> remote_reserver;
 
   // -- pg_temp --
   Mutex pg_temp_lock;
@@ -904,6 +910,7 @@ protected:
   void handle_pg_scan(OpRequestRef op);
 
   void handle_pg_backfill(OpRequestRef op);
+  void handle_pg_backfill_reserve(OpRequestRef op);
 
   void handle_pg_remove(OpRequestRef op);
   void _remove_pg(PG *pg);
