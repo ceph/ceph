@@ -335,7 +335,9 @@ void Paxos::handle_last(MMonPaxos *last)
 	// wake people up
 	finish_contexts(g_ceph_context, waiting_for_active);
 	finish_contexts(g_ceph_context, waiting_for_readable);
-	finish_contexts(g_ceph_context, waiting_for_writeable);
+	//finish_contexts(g_ceph_context, waiting_for_writeable);
+
+	mon->recovered_machine(machine_id);
       }
     }
   } else {
@@ -383,10 +385,14 @@ void Paxos::begin(bufferlist& v)
     // we're alone, take it easy
     commit();
     state = STATE_ACTIVE;
+
     finish_contexts(g_ceph_context, waiting_for_active);
     finish_contexts(g_ceph_context, waiting_for_commit);
     finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
+    //finish_contexts(g_ceph_context, waiting_for_writeable);
+
+    mon->recovered_machine(machine_id);
+
     return;
   }
 
@@ -488,13 +494,15 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // yay!
     state = STATE_ACTIVE;
     extend_lease();
-  
+
     // wake people up
     finish_contexts(g_ceph_context, waiting_for_active);
     finish_contexts(g_ceph_context, waiting_for_commit);
     finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
-  }
+    //finish_contexts(g_ceph_context, waiting_for_writeable);
+
+    mon->recovered_machine(machine_id);
+    }
   accept->put();
 }
 
@@ -818,9 +826,11 @@ void Paxos::leader_init()
   new_value.clear();
 
   if (mon->get_quorum().size() == 1) {
-    state = STATE_ACTIVE;			    
+    state = STATE_ACTIVE;
+    mon->recovered_machine(machine_id);
     return;
-  } 
+  }
+
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
@@ -947,6 +957,12 @@ version_t Paxos::read_current(bufferlist &bl)
 
 bool Paxos::is_writeable()
 {
+  // do not allow new paxos writes until all paxos machines have
+  // recovered.  this ensures that the global versions we choose at
+  // proposal time are sanely ordered.
+  if (!mon->is_all_paxos_recovered())
+    return false;
+
   if (mon->get_quorum().size() == 1) return true;
   return
     mon->is_leader() &&
