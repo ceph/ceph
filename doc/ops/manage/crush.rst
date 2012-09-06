@@ -74,10 +74,9 @@ the same fashion as with ``osd crush set ...``::
 
 where
 
-  * ``name`` is the name of the bucket to move.  (To move a device,
-    see :ref:`adjusting-crush-set`.)
+  * ``name`` is the name of the bucket to move.
   * ``loc`` is a list of ``what=where`` pairs indicating where the bucket should
-    be moved.  See :ref:`adjusting-crush-set`.
+    be moved.
 
 
 Adjusting the CRUSH weight
@@ -169,21 +168,21 @@ If you can ensure that all clients are running recent code, you can
 adjust the tunables by extracting the CRUSH map, modifying the values,
 and reinjecting it into the cluster.
 
- * Extract the latest CRUSH map::
+* Extract the latest CRUSH map::
 
-   ceph osd getcrushmap -o /tmp/crush
+	ceph osd getcrushmap -o /tmp/crush
 
- * Adjust tunables.  These values appear to offer the best behavior
-   for both large and small clusters we tested with.  You will need to
-   additionally specify the ``--enable-unsafe-tunables`` argument to
-   ``crushtool`` for this to work.  Please use this option with
-   extreme care.::
+* Adjust tunables.  These values appear to offer the best behavior
+  for both large and small clusters we tested with.  You will need to
+  additionally specify the ``--enable-unsafe-tunables`` argument to
+  ``crushtool`` for this to work.  Please use this option with
+  extreme care.::
 
-   crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
+	crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
 
- * Reinject modified map::
+* Reinject modified map::
 
-   ceph osd setcrushmap -i /tmp/crush.new
+	ceph osd setcrushmap -i /tmp/crush.new
 
 Legacy values
 ~~~~~~~~~~~~~
