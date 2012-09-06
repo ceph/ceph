@@ -64,4 +64,3 @@ src/kvstorebench
 
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/
-/nbproject/private/
