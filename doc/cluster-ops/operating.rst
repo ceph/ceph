@@ -66,7 +66,7 @@ Where ``osd.0`` is the first OSD in the cluster.
 
 
 Starting a Cluster
-------------------
+==================
 
 To start your Ceph cluster, execute ``ceph`` with the ``start`` command. 
 The usage may differ based upon your Linux distribution. For example, for most
@@ -91,7 +91,7 @@ example::
 
 
 Stopping a Cluster
-------------------
+==================
 
 To stop your Ceph cluster, execute ``ceph`` with the ``stop`` command. 
 The usage may differ based upon your Linux distribution. For example, for most
