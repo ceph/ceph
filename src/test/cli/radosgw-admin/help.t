@@ -16,7 +16,6 @@
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
-    bucket info                show bucket information
     bucket rm                  remove bucket
     object rm                  remove object
     pool add                   add an existing pool for data placement
