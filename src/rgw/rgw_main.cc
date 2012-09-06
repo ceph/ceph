@@ -318,7 +318,7 @@ void RGWProcess::handle_request(RGWRequest *req)
   req->log(s, "executing");
   op->execute();
 done:
-  rgw_log_op(s);
+  rgw_log_op(s, (op ? op->name() : "unknown"));
 
   int http_ret = s->err.http_ret;
 
