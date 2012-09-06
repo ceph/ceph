@@ -1649,10 +1649,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	r = 0;
       }
     }
-    else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair")) {
+    else if ((m->cmd[1] == "scrub" ||
+	      m->cmd[1] == "deep-scrub" ||
+	      m->cmd[1] == "repair")) {
       if (m->cmd.size() <= 2) {
 	r = -EINVAL;
-	ss << "usage: osd [scrub|repair] <who>";
+	ss << "usage: osd [scrub|deep-scrub|repair] <who>";
 	goto out;
       }
       if (m->cmd[2] == "*") {
@@ -1662,7 +1664,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  if (osdmap.is_up(i)) {
 	    ss << (c++ ? ",":"") << i;
 	    mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
-						m->cmd[1] == "repair"),
+						m->cmd[1] == "repair",
+						m->cmd[1] == "deep-scrub"),
 				  osdmap.get_inst(i));
 	  }	    
 	r = 0;
@@ -1671,7 +1674,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	long osd = strtol(m->cmd[2].c_str(), 0, 10);
 	if (osdmap.is_up(osd)) {
 	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
-					      m->cmd[1] == "repair"),
+					      m->cmd[1] == "repair",
+					      m->cmd[1] == "deep-scrub"),
 				osdmap.get_inst(osd));
 	  r = 0;
 	  ss << "osd." << osd << " instructed to " << m->cmd[1];

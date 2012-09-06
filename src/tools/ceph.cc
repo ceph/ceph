@@ -99,6 +99,7 @@ static void usage()
   cout << "  ceph osd pool rename <pool> <new pool name>\n";
   cout << "  ceph osd pool set <pool> <field> <value>\n";
   cout << "  ceph osd scrub <osd-id>\n";
+  cout << "  ceph osd deep-scrub <osd-id>\n";
   cout << "  ceph osd repair <osd-id>\n";
   cout << "  ceph osd tell N bench [bytes per write] [total bytes]\n";
   cout << "\n";
