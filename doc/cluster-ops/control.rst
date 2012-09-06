@@ -277,7 +277,7 @@ writes 1 GB in total in 4-MB increments. ::
 
 
 MDS Subsystem
--------------
+=============
 
 Change configuration parameters on a running mds. ::
 
@@ -297,7 +297,7 @@ Displays the status of all metadata servers.
 
 
 Mon Subsystem
--------------
+=============
 
 Show monitor stats::
 
