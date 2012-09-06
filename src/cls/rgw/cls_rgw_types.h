@@ -198,24 +198,17 @@ struct rgw_bucket_dir {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir)
 
-
-struct rgw_usage_log_entry {
-  string owner;
-  string bucket;
-  uint64_t epoch;
+struct rgw_usage_data {
   uint64_t bytes_sent;
   uint64_t bytes_received;
   uint64_t ops;
   uint64_t successful_ops;
 
-  rgw_usage_log_entry() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
-  rgw_usage_log_entry(string& o, string& b, uint64_t s, uint64_t r) : owner(o), bucket(b), bytes_sent(s), bytes_received(r), ops(0), successful_ops(0) {}
+  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
+  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(owner, bl);
-    ::encode(bucket, bl);
-    ::encode(epoch, bl);
     ::encode(bytes_sent, bl);
     ::encode(bytes_received, bl);
     ::encode(ops, bl);
@@ -223,16 +216,59 @@ struct rgw_usage_log_entry {
     ENCODE_FINISH(bl);
   }
 
-
-   void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(owner, bl);
-    ::decode(bucket, bl);
-    ::decode(epoch, bl);
     ::decode(bytes_sent, bl);
     ::decode(bytes_received, bl);
     ::decode(ops, bl);
     ::decode(successful_ops, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void aggregate(const rgw_usage_data& usage) {
+    bytes_sent += usage.bytes_sent;
+    bytes_received += usage.bytes_received;
+    ops += usage.ops;
+    successful_ops += usage.successful_ops;
+  }
+};
+WRITE_CLASS_ENCODER(rgw_usage_data)
+
+
+struct rgw_usage_log_entry {
+  string owner;
+  string bucket;
+  uint64_t epoch;
+  map<string, rgw_usage_data> usage_map;
+
+  rgw_usage_log_entry() {}
+  rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    ::encode(owner, bl);
+    ::encode(bucket, bl);
+    ::encode(epoch, bl);
+    ::encode(usage_map, bl);
+    ENCODE_FINISH(bl);
+  }
+
+
+   void decode(bufferlist::iterator& bl) {
+    DECODE_START(2, bl);
+    ::decode(owner, bl);
+    ::decode(bucket, bl);
+    ::decode(epoch, bl);
+    if (struct_v < 2) {
+      rgw_usage_data usage_data;
+      ::decode(usage_data.bytes_sent, bl);
+      ::decode(usage_data.bytes_received, bl);
+      ::decode(usage_data.ops, bl);
+      ::decode(usage_data.successful_ops, bl);
+      usage_map[""] = usage_data;
+    } else {
+      ::decode(usage_map, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -242,10 +278,14 @@ struct rgw_usage_log_entry {
       bucket = e.bucket;
       epoch = e.epoch;
     }
-    bytes_sent += e.bytes_sent;
-    bytes_received += e.bytes_received;
-    ops += e.ops;
-    successful_ops += e.successful_ops;
+    map<string, rgw_usage_data>::const_iterator iter;
+    for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
+      add(iter->first, iter->second);
+    }
+  }
+
+  void add(const string& category, const rgw_usage_data& data) {
+    usage_map[category].aggregate(data);
   }
 };
 WRITE_CLASS_ENCODER(rgw_usage_log_entry)
