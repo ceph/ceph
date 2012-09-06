@@ -1378,6 +1378,7 @@ noinst_HEADERS = \
 	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
+	common/AsyncReserver.h\
 	crush/CrushCompiler.h\
 	crush/CrushTester.h\
         crush/CrushWrapper.h\
@@ -1611,6 +1612,7 @@ noinst_HEADERS = \
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\
 	messages/MOSDPGScan.h\
+        messages/MBackfillReserve.h\
         messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
