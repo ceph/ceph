@@ -146,7 +146,12 @@ ceph_syn_SOURCES = ceph_syn.cc client/SyntheticClient.cc
 ceph_syn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-syn
 
-core: ceph-mon ceph-osd ceph-mds ceph cephfs librados-config ceph-conf monmaptool osdmaptool crushtool ceph-syn
+base: ceph-mon ceph-osd ceph-mds \
+	ceph cephfs \
+	ceph-syn \
+	rados radosgw librados-config \
+	ceph-conf monmaptool osdmaptool crushtool ceph-authtool \
+	init-ceph mkcephfs
 
 
 # fuse targets?
