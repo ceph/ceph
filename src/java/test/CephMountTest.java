@@ -91,6 +91,16 @@ public class CephMountTest {
     return createFile(makePath(), size);
   }
 
+  @Test(expected=FileNotFoundException.class)
+  public void test_mount_dne() throws Exception {
+    CephMount mount2 = new CephMount("admin");
+    String conf_file = System.getProperty("CEPH_CONF_FILE");
+    if (conf_file != null)
+      mount2.conf_read_file(conf_file);
+    mount2.mount("/wlfkjwlekfjwlejfwe");
+    mount2.shutdown();
+  }
+
   /*
    * Test loading of conf file that doesn't exist.
    *
