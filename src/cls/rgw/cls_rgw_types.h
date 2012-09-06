@@ -272,7 +272,7 @@ struct rgw_usage_log_entry {
     DECODE_FINISH(bl);
   }
 
-  void aggregate(const rgw_usage_log_entry& e) {
+  void aggregate(const rgw_usage_log_entry& e, map<string, bool> *categories = NULL) {
     if (owner.empty()) {
       owner = e.owner;
       bucket = e.bucket;
@@ -280,7 +280,18 @@ struct rgw_usage_log_entry {
     }
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
-      add(iter->first, iter->second);
+      if (!categories || !categories->size() || categories->count(iter->first)) {
+        add(iter->first, iter->second);
+      }
+    }
+  }
+
+  void sum(rgw_usage_data& usage, map<string, bool>& categories) const {
+    usage = rgw_usage_data();
+    for (map<string, rgw_usage_data>::const_iterator iter = usage_map.begin(); iter != usage_map.end(); ++iter) {
+      if (!categories.size() || categories.count(iter->first)) {
+        usage.aggregate(iter->second);
+      }
     }
   }
 
