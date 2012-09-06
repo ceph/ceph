@@ -187,6 +187,15 @@ private:
   list<Context*> waitfor_quorum;
   list<Context*> maybe_wait_for_quorum;
 
+  // multi-paxos global version sequencing kludge-o-rama
+  set<int> paxos_recovered;     ///< num paxos machines fully recovered during this election epoch
+public:
+  void recovered_machine(int id);
+  bool is_all_paxos_recovered() {
+    return paxos_recovered.size() == paxos.size();
+  }
+
+private:
   Context *probe_timeout_event;  // for probing and slurping states
 
   struct C_ProbeTimeout : public Context {

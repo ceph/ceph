@@ -215,6 +215,16 @@ Monitor::~Monitor()
   delete mon_caps;
 }
 
+void Monitor::recovered_machine(int id)
+{
+  paxos_recovered.insert(id);
+  if (paxos_recovered.size() == paxos.size()) {
+    dout(10) << "all paxos instances recovered, going writeable" << dendl;
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
+  }
+}
+
 enum {
   l_mon_first = 456000,
   l_mon_last,
@@ -995,6 +1005,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features)
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum
 	   << " features are " << quorum_features
 	   << dendl;
+
+  paxos_recovered.clear();
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
