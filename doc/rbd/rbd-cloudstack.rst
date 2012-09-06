@@ -1,6 +1,7 @@
-===================
+===========================
  RBD and Apache CloudStack
-===================
+===========================
+
 You can use RBD to run instances on in Apache CloudStack.
 
 This can be done by adding a RBD pool as Primary Storage.
@@ -15,7 +16,8 @@ Make sure you meet this requirements before installing the CloudStack Agent on t
 .. important:: To use RBD with CloudStack, you must have a running Ceph cluster!
 
 Limitations
--------------
+===========
+
 Running instances from RBD has a couple of limitations:
 
 * An additional NFS Primary Storage pool is required for running System VM's
@@ -23,13 +25,15 @@ Running instances from RBD has a couple of limitations:
 * Only one monitor can be configured
 
 Add Hypervisor
--------------
+==============
+
 Please follow the official CloudStack documentation how to do this.
 
 There is no special way of adding a Hypervisor when using RBD, nor is any configuration needed on the hypervisor.
 
 Add RBD Primary Storage
--------------
+=======================
+
 Once the hypervisor has been added, log on to the CloudStack UI.
 
 * Infrastructure 
@@ -42,7 +46,8 @@ Once the hypervisor has been added, log on to the CloudStack UI.
 Now you should be able to deploy instances on RBD.
 
 RBD Disk Offering
--------------
+=================
+
 Create a special "Disk Offering" which needs to match the tag 'rbd' so you can make sure the StoragePoolAllocator
 chooses the RBD pool when searching for a suiteable storage pool.
 
