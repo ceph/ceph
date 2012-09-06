@@ -189,8 +189,11 @@ private:
 
   // multi-paxos global version sequencing kludge-o-rama
   set<int> paxos_recovered;     ///< num paxos machines fully recovered during this election epoch
+  version_t global_version;
+
 public:
   void recovered_machine(int id);
+  version_t get_global_paxos_version();
   bool is_all_paxos_recovered() {
     return paxos_recovered.size() == paxos.size();
   }

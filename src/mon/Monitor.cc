@@ -225,6 +225,26 @@ void Monitor::recovered_machine(int id)
   }
 }
 
+version_t Monitor::get_global_paxos_version()
+{
+  // this should only be called when paxos becomes writeable, which is
+  // *after* everything settles after an election.
+  assert(is_all_paxos_recovered());
+
+  if (global_version == 0) {
+    global_version =
+      osdmon()->paxos->get_version() +
+      mdsmon()->paxos->get_version() +
+      monmon()->paxos->get_version() +
+      pgmon()->paxos->get_version() +
+      logmon()->paxos->get_version();
+    dout(10) << "get_global_paxos_version first call this election epoch, starting from " << global_version << dendl;
+  }
+  ++global_version;
+  dout(20) << "get_global_paxos_version " << global_version << dendl;
+  return global_version;
+}
+
 enum {
   l_mon_first = 456000,
   l_mon_last,
@@ -1007,6 +1027,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features)
 	   << dendl;
 
   paxos_recovered.clear();
+  global_version = 0;
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
