@@ -646,6 +646,23 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
+void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry)
+{
+  formatter->open_array_section("categories");
+  map<string, rgw_usage_data>::const_iterator uiter;
+  for (uiter = entry.usage_map.begin(); uiter != entry.usage_map.end(); ++uiter) {
+    const rgw_usage_data& usage = uiter->second;
+    formatter->open_object_section("entry");
+    formatter->dump_string("category", uiter->first);
+    formatter->dump_int("bytes_sent", usage.bytes_sent);
+    formatter->dump_int("bytes_received", usage.bytes_received);
+    formatter->dump_int("ops", usage.ops);
+    formatter->dump_int("successful_ops", usage.successful_ops);
+    formatter->close_section(); // entry
+  }
+  formatter->close_section(); // categories
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -1574,10 +1591,7 @@ next:
           utime_t ut(entry.epoch, 0);
           ut.gmtime(formatter->dump_stream("time"));
           formatter->dump_int("epoch", entry.epoch);
-          formatter->dump_int("bytes_sent", entry.bytes_sent);
-          formatter->dump_int("bytes_received", entry.bytes_received);
-          formatter->dump_int("ops", entry.ops);
-          formatter->dump_int("successful_ops", entry.successful_ops);
+	  dump_usage_categories_info(formatter, entry);
           formatter->close_section(); // bucket
           formatter->flush(cout);
         }
@@ -1600,11 +1614,8 @@ next:
         const rgw_usage_log_entry& entry = siter->second;
         formatter->open_object_section("user");
         formatter->dump_string("user", siter->first);
-        formatter->dump_int("bytes_sent", entry.bytes_sent);
-        formatter->dump_int("bytes_received", entry.bytes_received);
-        formatter->dump_int("ops", entry.ops);
-        formatter->dump_int("successful_ops", entry.successful_ops);
-        formatter->close_section();
+	dump_usage_categories_info(formatter, entry);
+        formatter->close_section(); // user
         formatter->flush(cout);
       }
 

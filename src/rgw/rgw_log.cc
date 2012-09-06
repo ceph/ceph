@@ -162,7 +162,7 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
-static void log_usage(struct req_state *s)
+static void log_usage(struct req_state *s, const string& op_name)
 {
   if (!usage_logger)
     return;
@@ -174,24 +174,28 @@ static void log_usage(struct req_state *s)
   else
     user = s->user.user_id;
 
-  rgw_usage_log_entry entry(user, s->bucket.name, s->bytes_sent, s->bytes_received);
+  rgw_usage_log_entry entry(user, s->bucket.name);
 
-  entry.ops = 1;
+  rgw_usage_data data(s->bytes_sent, s->bytes_received);
+
+  data.ops = 1;
   if (!s->err.is_err())
-    entry.successful_ops = 1;
+    data.successful_ops = 1;
+
+  entry.add(op_name, data);
 
   utime_t ts = ceph_clock_now(s->cct);
 
   usage_logger->insert(ts, entry);
 }
 
-int rgw_log_op(struct req_state *s)
+int rgw_log_op(struct req_state *s, const string& op_name)
 {
   struct rgw_log_entry entry;
   string bucket_id;
 
   if (s->enable_usage_log)
-    log_usage(s);
+    log_usage(s, op_name);
 
   if (!s->enable_ops_log)
     return 0;
