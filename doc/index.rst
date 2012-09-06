@@ -20,13 +20,11 @@ cluster to ensure that the storage hosts are running smoothly.
    start/index
    install/index
    config-cluster/index
-   init/index
+   cluster-ops/index
    cephfs/index
    rbd/rbd
    radosgw/index
    ops/index
-   rec/index
-   control
    api/index
    source/index
    Internals <dev/index>
