@@ -615,17 +615,22 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   dout(10) << "do_op " << *m << (m->may_write() ? " may_write" : "") << dendl;
 
-  if (scrub_block_writes && m->may_write()) {
-    dout(20) << __func__ << ": waiting for scrub" << dendl;
-    waiting_for_active.push_back(op);
-    op->mark_delayed();
-    return;
-  }
-
-  // missing object?
   hobject_t head(m->get_oid(), m->get_object_locator().key,
 		 CEPH_NOSNAP, m->get_pg().ps(),
 		 info.pgid.pool());
+
+  if (scrubber.block_writes && m->may_write()) {
+    // classic (non chunk) scrubs block all writes
+    // chunky scrubs only block writes to a range
+    if (!scrubber.is_chunky || (head >= scrubber.start && head < scrubber.end)) {
+      dout(20) << __func__ << ": waiting for scrub" << dendl;
+      waiting_for_active.push_back(op);
+      op->mark_delayed();
+      return;
+    }
+  }
+
+  // missing object?
   if (is_missing_object(head)) {
     wait_for_missing_object(head, op);
     return;
@@ -1439,7 +1444,7 @@ void ReplicatedPG::snap_trimmer()
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
     entity_inst_t nobody;
-    if (!mode.try_write(nobody) || scrub_block_writes) {
+    if (!mode.try_write(nobody) || scrubber.active) {
       dout(10) << " can't write, requeueing" << dendl;
       queue_snap_trim();
       unlock();
@@ -3403,6 +3408,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
       pending_backfill_updates[soid].stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
   }
 
+  if (scrubber.active && scrubber.is_chunky) {
+    assert(soid < scrubber.start || soid >= scrubber.end);
+    if (soid < scrubber.start)
+      scrub_cstat.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+  }
+
   return result;
 }
 
@@ -3511,12 +3522,20 @@ void ReplicatedPG::op_applied(RepGather *repop)
     assert(info.last_update >= repop->v);
     assert(last_update_applied < repop->v);
     last_update_applied = repop->v;
-    if (last_update_applied == info.last_update && scrub_block_writes) {
+
+    // chunky scrub
+    if (scrubber.active && scrubber.is_chunky) {
+      if (last_update_applied == scrubber.subset_last_update) {
+        osd->scrub_wq.queue(this);
+      }
+
+    // classic scrub
+    } else if (last_update_applied == info.last_update && scrubber.block_writes) {
       dout(10) << "requeueing scrub for cleanup" << dendl;
-      finalizing_scrub = true;
+      scrubber.finalizing = true;
       scrub_gather_replica_maps();
-      ++scrub_waiting_on;
-      scrub_waiting_on_whom.insert(osd->whoami);
+      ++scrubber.waiting_on;
+      scrubber.waiting_on_whom.insert(osd->whoami);
       osd->scrub_wq.queue(this);
     }
   }
@@ -4415,11 +4434,10 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
     assert(info.last_update >= m->version);
     assert(last_update_applied < m->version);
     last_update_applied = m->version;
-    if (finalizing_scrub) {
-      assert(active_rep_scrub);
-      if (last_update_applied == active_rep_scrub->scrub_to) {
-	osd->rep_scrub_wq.queue(active_rep_scrub);
-	active_rep_scrub = 0;
+    if (scrubber.active_rep_scrub) {
+      if (last_update_applied == scrubber.active_rep_scrub->scrub_to) {
+	osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
+	scrubber.active_rep_scrub = 0;
       }
     }
   } else {
@@ -5133,7 +5151,7 @@ void ReplicatedPG::handle_push(OpRequestRef op)
   bool complete = m->recovery_progress.data_complete &&
     m->recovery_progress.omap_complete;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  Context *onreadable = new ObjectStore::C_DeleteTransaction(t);
+  Context *onreadable = new C_OSD_AppliedRecoveredObjectReplica(this, t);
   Context *onreadable_sync = 0;
   submit_push_data(m->recovery_info,
 		   first,
@@ -5442,6 +5460,34 @@ void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, Object
   lock();
   dout(10) << "_applied_recovered_object " << *obc << dendl;
   put_object_context(obc);
+
+  assert(active_pushes >= 1);
+  --active_pushes;
+
+  // requeue an active chunky scrub waiting on recovery ops
+  if (active_pushes == 0 && scrubber.is_chunky_scrub_active()) {
+    osd->scrub_wq.queue(this);
+  }
+
+  unlock();
+  delete t;
+}
+
+void ReplicatedPG::_applied_recovered_object_replica(ObjectStore::Transaction *t)
+{
+  lock();
+  dout(10) << "_applied_recovered_object_replica" << dendl;
+
+  assert(active_pushes >= 1);
+  --active_pushes;
+
+  // requeue an active chunky scrub waiting on recovery ops
+  if (active_pushes == 0 &&
+      scrubber.active_rep_scrub && scrubber.active_rep_scrub->chunky) {
+    osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
+    scrubber.active_rep_scrub = 0;
+  }
+
   unlock();
   delete t;
 }
@@ -5531,6 +5577,10 @@ void ReplicatedPG::trim_pushed_data(
 void ReplicatedPG::sub_op_push(OpRequestRef op)
 {
   op->mark_started();
+
+  // keep track of active pushes for scrub
+  ++active_pushes;
+
   if (is_primary()) {
     handle_pull_response(op);
   } else {
@@ -6129,6 +6179,8 @@ int ReplicatedPG::recover_primary(int max)
 
 	      recover_got(soid, latest->version);
 
+	      ++active_pushes;
+
 	      osd->store->queue_transaction(osr.get(), t,
 					    new C_OSD_AppliedRecoveredObject(this, t, obc),
 					    new C_OSD_CommittedPushedObject(this, OpRequestRef(),
@@ -6593,20 +6645,19 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 // SCRUB
 
 
-int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
+void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {
   dout(10) << "_scrub" << dendl;
 
   coll_t c(info.pgid);
   bool repair = state_test(PG_STATE_REPAIR);
-  const char *mode = repair ? "repair":"scrub";
+  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
   // traverse in reverse order.
   hobject_t head;
   SnapSet snapset;
   vector<snapid_t>::reverse_iterator curclone;
-
-  object_stat_collection_t cstat;
 
   bufferlist last_data;
 
@@ -6624,7 +6675,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       if (p->second.attrs.count(SS_ATTR) == 0) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " no '" << SS_ATTR << "' attr";
-	errors++;
+        ++scrubber.errors;
 	continue;
       }
       bufferlist bl;
@@ -6636,7 +6687,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       if (head != hobject_t()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
-	errors++;
+        ++scrubber.errors;
       }
       
       // what will be next?
@@ -6661,7 +6712,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     }
     if (soid.snap == CEPH_SNAPDIR) {
       string cat;
-      cstat.add(stat, cat);
+      scrub_cstat.add(stat, cat);
       continue;
     }
 
@@ -6669,7 +6720,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     if (p->second.attrs.count(OI_ATTR) == 0) {
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " no '" << OI_ATTR << "' attr";
-      errors++;
+      ++scrubber.errors;
       continue;
     }
     bufferlist bv;
@@ -6680,7 +6731,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " on disk size (" << p->second.size
 			<< ") does not match object info size (" << oi.size << ")";
-      ++errors;
+      ++scrubber.errors;
     }
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
@@ -6690,12 +6741,13 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     //bufferlist data;
     //osd->store->read(c, poid, 0, 0, data);
     //assert(data.length() == p->size);
+    //
 
     if (soid.snap == CEPH_NOSNAP) {
       if (!snapset.head_exists) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=false, but object exists";
-	errors++;
+        ++scrubber.errors;
 	continue;
       }
     } else if (soid.snap) {
@@ -6707,7 +6759,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       if (soid.snap != *curclone) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " expected clone " << *curclone;
-	++errors;
+        ++scrubber.errors;
 	assert(soid.snap == *curclone);
       }
 
@@ -6728,35 +6780,46 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     }
 
     string cat; // fixme
-    cstat.add(stat, cat);
-  }  
+    scrub_cstat.add(stat, cat);
+  }
   
+  dout(10) << "_scrub (" << mode << ") finish" << dendl;
+}
+
+void ReplicatedPG::_scrub_clear_state()
+{
+  scrub_cstat = object_stat_collection_t();
+}
+
+void ReplicatedPG::_scrub_finish()
+{
+  bool repair = state_test(PG_STATE_REPAIR);
+  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+
   dout(10) << mode << " got "
-	   << cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
-	   << cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
-	   << cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
+	   << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
+	   << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
+	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
 	   << dendl;
 
-  if (cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
-      cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
-      cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
+  if (scrub_cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
+      scrub_cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
+      scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
 		      << " stat mismatch, got "
-		      << cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
-		      << cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
-		      << cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
-    errors++;
+		      << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
+		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
+		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
+    ++scrubber.errors;
 
     if (repair) {
-      fixed++;
-      info.stats.stats = cstat;
+      ++scrubber.fixed;
+      info.stats.stats = scrub_cstat;
       update_stats();
       share_pg_info();
     }
   }
-
-  dout(10) << "_scrub (" << mode << ") finish" << dendl;
-  return errors;
 }
 
 /*---SnapTrimmer Logging---*/
@@ -6804,7 +6867,7 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
   } else if (!pg->is_primary() || !pg->is_active() || !pg->is_clean()) {
     dout(10) << "NotTrimming not primary, active, clean" << dendl;
     return discard_event();
-  } else if (pg->scrub_block_writes) {
+  } else if (pg->scrubber.active) {
     dout(10) << "NotTrimming finalizing scrub" << dendl;
     pg->queue_snap_trim();
     return discard_event();
