@@ -418,6 +418,8 @@ std::string pg_state_string(int state)
     oss << "repair+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfill+";
+  if (state & PG_STATE_BACKFILLING)
+    oss << "backfilling+";
   if (state & PG_STATE_INCOMPLETE)
     oss << "incomplete+";
   string ret(oss.str());
