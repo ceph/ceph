@@ -36,7 +36,7 @@ Add your OSD host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity.
 
 .. _Hardware Recommendations: ../../install/hardware-recommendations
-.. _Filesystem Recommendations: ../../configure/file-system-recommendations
+.. _Filesystem Recommendations: ../../config-cluster/file-system-recommendations
 
 Install the Required Software
 -----------------------------
@@ -203,8 +203,8 @@ completes. (Control-c to exit.)
 
 
 .. _Add/Move an OSD: ../crush-map#addosd
-.. _Configure Nodes: ../../config-cluster#confignodes
-.. _Prepare OSD Disks: ../../config-cluster#prepdisks
+.. _Configure Nodes: ../../config-cluster/chef#confignodes
+.. _Prepare OSD Disks: ../../config-cluster/chef#prepdisks
 .. _ceph: ../monitoring
 
 
