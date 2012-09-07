@@ -5101,12 +5101,19 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   state_name = "Started/Primary/Active/WaitRemoteBackfillReserved";
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->cluster_messenger->send_message(
-    new MBackfillReserve(
-      MBackfillReserve::REQUEST,
-      pg->info.pgid,
-      pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
+  Connection *con =
+    pg->osd->cluster_messenger->get_connection(
+      pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
+  if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
+    pg->osd->cluster_messenger->send_message(
+      new MBackfillReserve(
+	MBackfillReserve::REQUEST,
+	pg->info.pgid,
+	pg->get_osdmap()->get_epoch()),
+      pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
+  } else {
+    post_event(RemoteBackfillReserved());
+  }
 }
 
 void PG::RecoveryState::WaitRemoteBackfillReserved::exit()
