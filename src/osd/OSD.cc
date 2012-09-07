@@ -1946,13 +1946,13 @@ void OSD::heartbeat_check()
        p != heartbeat_peers.end();
        p++) {
     dout(25) << "heartbeat_check osd." << p->first
-	     << " first_rx " << p->second.first_tx
+	     << " first_tx " << p->second.first_tx
 	     << " last_tx " << p->second.last_tx
 	     << " last_rx " << p->second.last_rx
 	     << dendl;
     if (p->second.last_rx == utime_t()) {
       if (p->second.last_tx == utime_t() ||
-	  p->second.last_tx > cutoff)
+	  p->second.first_tx > cutoff)
 	continue;  // just started sending recently
       derr << "heartbeat_check: no reply from osd." << p->first
 	   << " ever, first ping sent " << p->second.first_tx
