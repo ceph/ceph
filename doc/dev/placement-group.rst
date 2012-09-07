@@ -129,6 +129,9 @@ User-visible PG States
   the PG are scanned and synchronized, instead of inferring what
   needs to be transferred from the PG logs of recent operations
 
+*backfill-wait*
+  the PG is waiting in line to start backfill
+
 *incomplete*
   a pg is missing a necessary period of history from its
   log.  If you see this state, report a bug, and try to start any
@@ -141,4 +144,3 @@ User-visible PG States
 *remapped*
   the PG is temporarily mapped to a different set of OSDs from what
   CRUSH specified
-
