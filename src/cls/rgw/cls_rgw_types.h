@@ -239,16 +239,21 @@ struct rgw_usage_log_entry {
   string owner;
   string bucket;
   uint64_t epoch;
+  rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
   map<string, rgw_usage_data> usage_map;
 
   rgw_usage_log_entry() {}
   rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(owner, bl);
     ::encode(bucket, bl);
     ::encode(epoch, bl);
+    ::encode(total_usage.bytes_sent, bl);
+    ::encode(total_usage.bytes_received, bl);
+    ::encode(total_usage.ops, bl);
+    ::encode(total_usage.successful_ops, bl);
     ::encode(usage_map, bl);
     ENCODE_FINISH(bl);
   }
@@ -259,13 +264,12 @@ struct rgw_usage_log_entry {
     ::decode(owner, bl);
     ::decode(bucket, bl);
     ::decode(epoch, bl);
+    ::decode(total_usage.bytes_sent, bl);
+    ::decode(total_usage.bytes_received, bl);
+    ::decode(total_usage.ops, bl);
+    ::decode(total_usage.successful_ops, bl);
     if (struct_v < 2) {
-      rgw_usage_data usage_data;
-      ::decode(usage_data.bytes_sent, bl);
-      ::decode(usage_data.bytes_received, bl);
-      ::decode(usage_data.ops, bl);
-      ::decode(usage_data.successful_ops, bl);
-      usage_map[""] = usage_data;
+      usage_map[""] = total_usage;
     } else {
       ::decode(usage_map, bl);
     }
@@ -297,6 +301,7 @@ struct rgw_usage_log_entry {
 
   void add(const string& category, const rgw_usage_data& data) {
     usage_map[category].aggregate(data);
+    total_usage.aggregate(data);
   }
 };
 WRITE_CLASS_ENCODER(rgw_usage_log_entry)
