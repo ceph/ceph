@@ -198,10 +198,7 @@ test_ls
 test_remove
 RBD_CREATE_ARGS=""
 test_others
-# wait for watch to timeout so we can remove old images
-# TODO: remove this once #2476 is fixed
-sleep 30
-RBD_CREATE_ARGS="--new-format"
+RBD_CREATE_ARGS="--format 2"
 test_others
 
 echo OK
