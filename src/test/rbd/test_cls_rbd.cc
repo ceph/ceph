@@ -32,11 +32,6 @@ using ::librbd::cls_client::remove_child;
 using ::librbd::cls_client::get_children;
 using ::librbd::cls_client::get_snapcontext;
 using ::librbd::cls_client::snapshot_list;
-using ::librbd::cls_client::list_locks;
-using ::librbd::cls_client::lock_image_exclusive;
-using ::librbd::cls_client::lock_image_shared;
-using ::librbd::cls_client::unlock_image;
-using ::librbd::cls_client::break_lock;
 using ::librbd::cls_client::copyup;
 using ::librbd::cls_client::get_id;
 using ::librbd::cls_client::set_id;
@@ -360,98 +355,6 @@ TEST(cls_rbd, get_features)
   ASSERT_EQ(0u, features);
 
   ASSERT_EQ(-ENOENT, get_features(&ioctx, "foo", 1, &features));
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
-}
-
-TEST(cls_rbd, image_locking)
-{
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
-
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-
-  string oid = "test_locking_image";
-  uint64_t size = 20 << 30;
-  uint64_t features = 0;
-  uint8_t order = 22;
-  string object_prefix = "foo";
-  string cookies[4];
-  cookies[0] = "cookie0";
-  cookies[1] = "cookie1";
-  cookies[2] = "cookie2";
-  cookies[3] = "cookie3";
-
-  ASSERT_EQ(0, create_image(&ioctx, oid, size, order,
-                            features, object_prefix));
-
-  // test that we can lock
-  ASSERT_EQ(0, lock_image_exclusive(&ioctx, oid, cookies[0]));
-  // and that we can't lock again
-  ASSERT_EQ(-EBUSY, lock_image_exclusive(&ioctx, oid, cookies[1]));
-  // and that unlock works
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[0]));
-  // and that we can do shared locking
-  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[2]));
-  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[3]));
-  // and that you can't exclusive lock with shared lockers
-  ASSERT_EQ(-EBUSY, lock_image_exclusive(&ioctx, oid, cookies[1]));
-  // but that you can after unlocking the shared lockers
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[2]));
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[3]));
-  ASSERT_EQ(0, lock_image_exclusive(&ioctx, oid, cookies[1]));
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[1]));
-
-  // test that we can list locks
-  std::set<std::pair<std::string, std::string> > lockers;
-  bool exclusive;
-  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
-  // and that no locks makes for an empty set
-  int lockers_size = lockers.size();
-  ASSERT_EQ(0, lockers_size);
-
-  // test that two shared lockers compare properly
-  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[2]));
-  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[3]));
-  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
-  ASSERT_FALSE(exclusive);
-  lockers_size = lockers.size();
-  ASSERT_EQ(2, lockers_size);
-  std::set<std::pair<std::string, std::string> >::iterator first, second;
-  second = lockers.begin();
-  first = second++;
-  ASSERT_EQ(0, first->first.compare(second->first));
-  std::string our_entity = first->first; // saved for later
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[2]));
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[3]));
-
-  // and that a single exclusive looks right
-  ASSERT_EQ(0, lock_image_exclusive(&ioctx, oid, cookies[0]));
-  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
-  lockers_size = lockers.size();
-  ASSERT_EQ(1, lockers_size);
-  ASSERT_TRUE(exclusive);
-
-  // and do our best to test lock breaking
-  ASSERT_EQ(0, break_lock(&ioctx, oid, our_entity, cookies[0]));
-  // and that it actually removes the lock
-  ASSERT_EQ(0, list_locks(&ioctx, oid, lockers, exclusive));
-  lockers_size = lockers.size();
-  ASSERT_EQ(0, lockers_size);
-
-  // test that non-existent locks return errors correctly
-  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[1]));
-  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[0]));
-  ASSERT_EQ(-ENOENT, break_lock(&ioctx, oid, our_entity, cookies[0]));
-  // and make sure they still do that when somebody else does hold a lock
-  ASSERT_EQ(0, lock_image_shared(&ioctx, oid, cookies[2]));
-  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[1]));
-  ASSERT_EQ(-ENOENT, unlock_image(&ioctx, oid, cookies[0]));
-  ASSERT_EQ(-ENOENT, break_lock(&ioctx, oid, our_entity, cookies[0]));
-  ASSERT_EQ(0, unlock_image(&ioctx, oid, cookies[2]));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));

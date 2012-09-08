@@ -68,19 +68,8 @@ namespace librbd {
 		      std::vector<uint64_t> *features,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
-    int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-		   std::set<std::pair<std::string, std::string> > &locks,
-		   bool &exclusive);
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data);
-    int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-			     const std::string &cookie);
-    int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-			  const std::string &cookie);
-    int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-		     const std::string &cookie);
-    int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-		   const std::string &locker, const std::string &cookie);
     int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t *protection_status);
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
