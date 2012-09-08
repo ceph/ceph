@@ -33,6 +33,9 @@
                                                 mapped by the kernel
     showmapped                                  show the rbd images mapped
                                                 by the kernel
+    lock list <image-name>                      show locks held on an image
+    lock add <image-name> <id> [--shared <tag>] take a lock called id on an image
+    lock remove <image-name> <id> <locker>      release a lock on an image
   
   <image-name>, <snap-name> are [pool/]name[@snap], or you may specify
   individual pieces of names with -p/--pool, --image, and/or --snap.
@@ -52,3 +55,4 @@
                                  format 2 supports cloning
     --id <username>              rados user (without 'client.' prefix) to authenticate as
     --keyfile <path>             file containing secret key for use with cephx
+    --shared <tag>               take a shared (rather than exclusive) lock
