@@ -82,6 +82,15 @@ Parameters
    to use with the map command.  If not specified, the default keyring
    locations will be searched.
 
+.. option:: --shared tag
+
+   Option for `lock add` that allows multiple clients to lock the
+   same image if they use the same tag. The tag is an arbitrary
+   string. This is useful for situations where an image must
+   be open from more than one client at once, like during
+   live migration of a virtual machine, or for use underneath
+   a clustered filesystem.
+
 
 Commands
 ========
@@ -182,6 +191,22 @@ Commands
 :command:`showmapped`
   Show the rbd images that are mapped via the rbd kernel module.
 
+:command:`lock` list [*image-name*]
+  Show locks held on the image. The first column is the locker
+  to use with the `lock remove` command.
+
+:command:`lock` add [*image-name*] [*lock-id*]
+  Lock an image. The lock-id is an arbitrary name for the user's
+  convenience. By default, this is an exclusive lock, meaning it
+  will fail if the image is already locked. The --shared option
+  changes this behavior. Note that locking does not affect
+  any operation other than adding a lock. It does not
+  protect an image from being deleted.
+
+:command:`lock` remove [*image-name*] [*lock-id*] [*locker*]
+  Release a lock on an image. The lock id and locker are
+  as output by lock ls.
+
 Image name
 ==========
 
@@ -249,6 +274,14 @@ import it as the desired format::
 
        rbd export mypool/myimage@snap /tmp/img
        rbd import --format 2 /tmp/img mypool/myimage2
+
+To lock an image for exclusive use::
+
+       rbd lock add mypool/myimage mylockid
+
+To release a lock::
+
+       rbd lock remove mypool/myimage mylockid client.2485
 
 
 Availability
