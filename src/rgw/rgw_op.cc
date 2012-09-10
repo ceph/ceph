@@ -498,13 +498,17 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     RGWBucketInfo bucket_info;
     int r = rgwstore->get_bucket_info(NULL, bucket_name, bucket_info);
     if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
+      ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
     }
     bucket = bucket_info.bucket;
     string no_obj;
     bucket_policy = &_bucket_policy;
     r = read_policy(s, bucket_info, bucket_policy, bucket, no_obj);
+    if (r < 0) {
+      ldout(s->cct, 0) << "failed to read bucket policy" << dendl;
+      return r;
+    }
   } else {
     bucket = s->bucket;
     bucket_policy = s->bucket_acl;
