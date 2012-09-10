@@ -12,6 +12,7 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/errno.h"
 #include "include/utime.h"
+#include "include/str_list.h"
 
 #include "common/armor.h"
 #include "rgw_user.h"
@@ -94,6 +95,7 @@ void _usage()
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
+  cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
   cerr << "\n";
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
@@ -646,6 +648,25 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
+void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool>& categories)
+{
+  formatter->open_array_section("categories");
+  map<string, rgw_usage_data>::const_iterator uiter;
+  for (uiter = entry.usage_map.begin(); uiter != entry.usage_map.end(); ++uiter) {
+    if (categories.size() && !categories.count(uiter->first))
+      continue;
+    const rgw_usage_data& usage = uiter->second;
+    formatter->open_object_section("entry");
+    formatter->dump_string("category", uiter->first);
+    formatter->dump_int("bytes_sent", usage.bytes_sent);
+    formatter->dump_int("bytes_received", usage.bytes_received);
+    formatter->dump_int("ops", usage.ops);
+    formatter->dump_int("successful_ops", usage.successful_ops);
+    formatter->close_section(); // entry
+  }
+  formatter->close_section(); // categories
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -688,6 +709,7 @@ int main(int argc, char **argv)
   int yes_i_really_mean_it = false;
   int delete_child_objects = false;
   int max_buckets = -1;
+  map<string, bool> categories;
 
   std::string val;
   std::ostringstream errs;
@@ -764,6 +786,14 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
+      string cat_str = val;
+      list<string> cat_list;
+      list<string>::iterator iter;
+      get_str_list(cat_str, cat_list);
+      for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
+	categories[*iter] = true;
+      }
     } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
@@ -1574,15 +1604,12 @@ next:
           utime_t ut(entry.epoch, 0);
           ut.gmtime(formatter->dump_stream("time"));
           formatter->dump_int("epoch", entry.epoch);
-          formatter->dump_int("bytes_sent", entry.bytes_sent);
-          formatter->dump_int("bytes_received", entry.bytes_received);
-          formatter->dump_int("ops", entry.ops);
-          formatter->dump_int("successful_ops", entry.successful_ops);
+	  dump_usage_categories_info(formatter, entry, categories);
           formatter->close_section(); // bucket
           formatter->flush(cout);
         }
 
-        summary_map[ub.user].aggregate(entry);
+        summary_map[ub.user].aggregate(entry, &categories);
       }
     }
     if (show_log_entries) {
@@ -1600,11 +1627,18 @@ next:
         const rgw_usage_log_entry& entry = siter->second;
         formatter->open_object_section("user");
         formatter->dump_string("user", siter->first);
-        formatter->dump_int("bytes_sent", entry.bytes_sent);
-        formatter->dump_int("bytes_received", entry.bytes_received);
-        formatter->dump_int("ops", entry.ops);
-        formatter->dump_int("successful_ops", entry.successful_ops);
-        formatter->close_section();
+	dump_usage_categories_info(formatter, entry, categories);
+	rgw_usage_data total_usage;
+	entry.sum(total_usage, categories);
+        formatter->open_object_section("total");
+        formatter->dump_int("bytes_sent", total_usage.bytes_sent);
+        formatter->dump_int("bytes_received", total_usage.bytes_received);
+        formatter->dump_int("ops", total_usage.ops);
+        formatter->dump_int("successful_ops", total_usage.successful_ops);
+        formatter->close_section(); // total
+
+        formatter->close_section(); // user
+
         formatter->flush(cout);
       }
 
