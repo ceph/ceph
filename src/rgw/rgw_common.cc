@@ -389,12 +389,12 @@ bool verify_bucket_permission(struct req_state *s, int perm)
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
-bool verify_object_permission(struct req_state *s, int perm)
+bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
 {
-  if (!s->object_acl)
+  if (!object_acl)
     return false;
 
-  bool ret = s->object_acl->verify_permission(s->user.user_id, s->perm_mask, perm);
+  bool ret = object_acl->verify_permission(s->user.user_id, s->perm_mask, perm);
   if (ret)
     return true;
 
@@ -414,7 +414,12 @@ bool verify_object_permission(struct req_state *s, int perm)
     return false;
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  return s->bucket_acl->verify_permission(s->user.user_id, swift_perm, swift_perm);
+  return bucket_acl->verify_permission(s->user.user_id, swift_perm, swift_perm);
+}
+
+bool verify_object_permission(struct req_state *s, int perm)
+{
+  return verify_object_permission(s, s->bucket_acl, s->object_acl, perm);
 }
 
 static char hex_to_num(char c)
