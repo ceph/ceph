@@ -1819,7 +1819,7 @@ int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
     else
       write_op.zero(block_ofs, write_len);
     r = ictx->data_ctx.operate(oid, &write_op);
-    if (r < 0)
+    if (r < 0 && r != -ENOENT)
       return r;
     total_write += write_len;
     left -= write_len;
@@ -1939,6 +1939,16 @@ void rados_cb(rados_completion_t c, void *arg)
 {
   AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
   block_completion->finish(rados_aio_get_return_value(c));
+  delete block_completion;
+}
+
+void rados_discard_cb(rados_completion_t c, void *arg)
+{
+  AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
+  int r = rados_aio_get_return_value(c);
+  if (r == -ENOENT)
+    r = 0;
+  block_completion->finish(r);
   delete block_completion;
 }
 
@@ -2107,7 +2117,7 @@ int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
 
     c->add_block_completion(block_completion);
     librados::AioCompletion *rados_completion =
-      Rados::aio_create_completion(block_completion, NULL, rados_cb);
+      Rados::aio_create_completion(block_completion, NULL, rados_discard_cb);
 
     r = ictx->data_ctx.aio_operate(oid, rados_completion, &block_completion->write_op);
     rados_completion->release();
