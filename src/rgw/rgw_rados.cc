@@ -2241,7 +2241,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   std::string oid, key;
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
-  uint64_t len;
+  uint64_t len, read_len;
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   RGWRadosCtx *new_ctx = NULL;
   bool reading_from_head = true;
@@ -2249,6 +2249,10 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
 
   GetObjState *state = *(GetObjState **)handle;
   RGWObjState *astate = NULL;
+
+  bool merge_bl = false;
+  bufferlist *pbl = &bl;
+  bufferlist read_bl;
 
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
@@ -2300,13 +2304,29 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
       goto done_ret;
   }
 
-  if (!ofs && astate && astate->data.length() >= len) {
-    bl = astate->data;
-    goto done;
+  read_len = len;
+
+  if (astate) {
+    if (!ofs && astate->data.length() >= len) {
+      bl = astate->data;
+      goto done;
+    }
+
+    if (ofs < astate->data.length()) {
+      unsigned copy_len = min((uint64_t)astate->data.length(), len);
+      astate->data.copy(ofs, copy_len, bl);
+      read_len -= copy_len;
+      read_ofs += copy_len;
+      if (!read_len)
+	goto done;
+
+      merge_bl = true;
+      pbl = &read_bl;
+    }
   }
 
-  ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << len << dendl;
-  op.read(read_ofs, len, &bl, NULL);
+  ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
+  op.read(read_ofs, read_len, pbl, NULL);
 
   r = state->io_ctx.operate(oid, &op, NULL);
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
@@ -2319,6 +2339,9 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     r = get_obj(NULL, handle, shadow, bl, ofs, end);
     goto done_ret;
   }
+
+  if (merge_bl)
+    bl.append(read_bl);
 
 done:
   if (bl.length() > 0) {
