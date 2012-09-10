@@ -1478,7 +1478,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	m->past_intervals = past_intervals;
 
       if (pi.last_backfill != hobject_t::get_max())
-	state_set(PG_STATE_BACKFILL);
+	state_set(PG_STATE_BACKFILL_WAIT);
       else
 	active++;
 
@@ -1670,7 +1670,7 @@ void PG::all_activated_and_committed()
 
   // make sure CLEAN is marked if we've been clean in this interval
   if (info.last_complete == info.last_update &&
-      !state_test(PG_STATE_BACKFILL) &&
+      !state_test(PG_STATE_BACKFILL_WAIT) &&
       !state_test(PG_STATE_RECOVERING)) {
     mark_clean();
   }
@@ -1733,7 +1733,7 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
   dout(10) << "finish_recovery" << dendl;
   assert(info.last_complete == info.last_update);
 
-  state_clear(PG_STATE_BACKFILL);
+  state_clear(PG_STATE_BACKFILL_WAIT);
   state_clear(PG_STATE_RECOVERING);
 
   // only mark CLEAN if last_epoch_started is already stable.
@@ -5080,7 +5080,7 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
   pg->backfill_reserved = true;
   pg->osd->queue_for_recovery(pg);
-  pg->state_set(PG_STATE_BACKFILLING);
+  pg->state_set(PG_STATE_BACKFILL);
 }
 
 void PG::RecoveryState::Backfilling::exit()
@@ -5090,7 +5090,7 @@ void PG::RecoveryState::Backfilling::exit()
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-  pg->state_clear(PG_STATE_BACKFILLING);
+  pg->state_clear(PG_STATE_BACKFILL);
 }
 
 /*--WaitRemoteBackfillReserved--*/
@@ -5383,7 +5383,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
   int newest_update_osd;
 
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERING);
 
   // if we finished backfill, all acting are active; recheck if
@@ -5470,7 +5470,7 @@ void PG::RecoveryState::Active::exit()
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_DEGRADED);
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_REPLAY);
 }
 
