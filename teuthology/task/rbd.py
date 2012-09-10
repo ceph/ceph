@@ -484,8 +484,10 @@ def xfstests(ctx, config):
             client.0:
                 test_image: 'test_image'
                 test_size: 250
+                test_format: 2
                 scratch_image: 'scratch_image'
                 scratch_size: 250
+                scratch_format: 1
                 fs_type: 'xfs'
                 tests: '1-9 11-15 17 19-21 26-28 31-34 41 45-48'
     """
@@ -515,17 +517,20 @@ def xfstests(ctx, config):
 
         test_image = properties.get('test_image', 'test_image')
         test_size = properties.get('test_size', 1000)
+        test_fmt = properties.get('test_format', 1)
         scratch_image = properties.get('scratch_image', 'scratch_image')
         scratch_size = properties.get('scratch_size', 1000)
+        scratch_fmt = properties.get('scratch_format', 1)
 
         test_image_config = {}
         test_image_config['image_name'] = test_image
         test_image_config['image_size'] = test_size
+        test_image_config['image_format'] = test_fmt
 
         scratch_image_config = {}
         scratch_image_config['image_name'] = scratch_image
         scratch_image_config['image_size'] = scratch_size
-
+        scratch_image_config['image_format'] = scratch_fmt
 
         test_config = {}
         test_config['test_dev'] = \
