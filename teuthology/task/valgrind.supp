@@ -23,6 +23,7 @@
 	dl-lookup.c thing .. Invalid write of size 8
 	Memcheck:Value8
 	fun:do_lookup_x
+	...
 	fun:_dl_lookup_symbol_x
 	...
 }
@@ -30,6 +31,7 @@
 	dl-lookup.c thing .. Invalid write of size 8
 	Memcheck:Addr8
 	fun:do_lookup_x
+	...
 	fun:_dl_lookup_symbol_x
 	...
 }
