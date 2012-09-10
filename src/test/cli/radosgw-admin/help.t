@@ -64,6 +64,7 @@
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
+     --categories=<list>       comma separated list of categories, used in usage show
      --yes-i-really-mean-it    required for certain operations
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
