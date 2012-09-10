@@ -314,6 +314,8 @@ int RGWPutObj_REST_SWIFT::get_params()
 
   policy.create_default(s->user.user_id, s->user.display_name);
 
+  obj_manifest = s->env->get("HTTP_X_OBJECT_MANIFEST");
+
   return RGWPutObj_REST::get_params();
 }
 
