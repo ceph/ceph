@@ -319,6 +319,19 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
   return ret;
 }
 
+int CrushWrapper::get_item_weight(int id)
+{
+  for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
+    crush_bucket *b = crush->buckets[bidx];
+    if (b == NULL)
+      continue;
+    for (unsigned i = 0; i < b->size; i++)
+      if (b->items[i] == id)
+	return crush_get_bucket_item_weight(b, i);
+  }
+  return -ENOENT;
+}
+
 int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 {
   ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
