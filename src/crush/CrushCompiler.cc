@@ -189,6 +189,8 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable choose_local_fallback_tries " << crush.get_choose_local_fallback_tries() << "\n";
   if (crush.get_choose_total_tries() != 19)
     out << "tunable choose_total_tries " << crush.get_choose_total_tries() << "\n";
+  if (crush.get_chooseleaf_descend_once() != 0)
+    out << "tunable chooseleaf_descend_once " << crush.get_chooseleaf_descend_once() << "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -342,6 +344,8 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_choose_local_fallback_tries(val);
   else if (name == "choose_total_tries")
     crush.set_choose_total_tries(val);
+  else if (name == "chooseleaf_descend_once")
+    crush.set_chooseleaf_descend_once(val);
   else {
     err << "tunable " << name << " not recognized" << std::endl;
     return -1;

@@ -118,6 +118,13 @@ public:
     crush->choose_total_tries = n;
   }
 
+  int get_chooseleaf_descend_once() {
+    return crush->chooseleaf_descend_once;
+  }
+  void set_chooseleaf_descend_once(int n) {
+    crush->chooseleaf_descend_once = !!n;
+  }
+
   bool has_nondefault_tunables() const {
     return
       (crush->choose_local_tries != 2 ||

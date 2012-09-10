@@ -188,6 +188,7 @@ int main(int argc, const char **argv)
   int choose_local_tries = -1;
   int choose_local_fallback_tries = -1;
   int choose_total_tries = -1;
+  int chooseleaf_descend_once = -1;
 
   CrushWrapper crush;
 
@@ -248,6 +249,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_withint(args, i, &choose_total_tries, &err,
 				     "--set_choose_total_tries", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &chooseleaf_descend_once, &err,
+				     "--set_chooseleaf_descend_once", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
@@ -666,6 +670,14 @@ int main(int argc, const char **argv)
       return -1;
     }
     crush.set_choose_total_tries(choose_total_tries);
+    modified = true;
+  }
+  if (chooseleaf_descend_once >= 0) {
+    if (!unsafe_tunables) {
+      cerr << scary_tunables_message << std::endl;
+      return -1;
+    }
+    crush.set_chooseleaf_descend_once(chooseleaf_descend_once);
     modified = true;
   }
   if (modified) {
