@@ -45,6 +45,7 @@
 
 #include "include/compat.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -1897,6 +1898,65 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
 	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	     << " at location " << loc << " to crush map";
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+      } while (false);
+    }
+    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "create-or-move") {
+      do {
+	// osd crush create-or-move <id> <initial_weight> [<loc1> [<loc2> ...]]
+	int id = parse_pos_long(m->cmd[3].c_str(), &ss);
+	if (id < 0) {
+	  err = -EINVAL;
+	  goto out;
+	}
+	if (!osdmap.exists(id)) {
+	  err = -ENOENT;
+	  ss << "osd." << m->cmd[3] << " does not exist.  create it before updating the crush map";
+	  goto out;
+	}
+
+	string name = "osd." + stringify(id);
+	float weight = atof(m->cmd[4].c_str());
+	map<string,string> loc;
+	for (unsigned i = 5; i < m->cmd.size(); ++i) {
+	  const char *s = m->cmd[i].c_str();
+	  const char *pos = strchr(s, '=');
+	  if (!pos)
+	    break;
+	  string key(s, 0, pos-s);
+	  string value(pos+1);
+	  if (value.length())
+	    loc[key] = value;
+	  else
+	    loc.erase(key);
+	}
+
+	dout(0) << "create-or-move crush item id " << id << " name '" << name << "' initial_weight " << weight
+		<< " at location " << loc << dendl;
+	bufferlist bl;
+	if (pending_inc.crush.length())
+	  bl = pending_inc.crush;
+	else
+	  osdmap.crush->encode(bl);
+
+	CrushWrapper newcrush;
+	bufferlist::iterator p = bl.begin();
+	newcrush.decode(p);
+
+	err = newcrush.create_or_move_item(g_ceph_context, id, weight, name, loc);
+	if (err == 0) {
+	  ss << "create-or-move updated item id " << id << " name '" << name << "' weight " << weight
+	     << " at location " << loc << " to crush map";
+	  break;
+	}
+	if (err > 0) {
+	  pending_inc.crush.clear();
+	  newcrush.encode(pending_inc.crush);
+	  ss << "create-or-move updating item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  getline(ss, rs);
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
