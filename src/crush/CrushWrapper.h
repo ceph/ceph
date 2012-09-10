@@ -313,6 +313,19 @@ public:
   int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
 
   /**
+   * create or move an item, but do not adjust its weight if it already exists
+   *
+   * @param cct cct
+   * @param item item id
+   * @param weight initial item weight (if we need to create it)
+   * @param name item name
+   * @param loc location (map of type to bucket names)
+   * @return 0 for no change, 1 for successful change, negative on error
+   */
+  int create_or_move_item(CephContext *cct, int item, float weight, string name,
+			  map<string,string>& loc);
+
+  /**
    * remove an item from the map
    *
    * @param cct cct
