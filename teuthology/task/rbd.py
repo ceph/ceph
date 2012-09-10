@@ -25,7 +25,14 @@ def create_image(ctx, config):
             client.0:
                 image_name: testimage
                 image_size: 100
+                image_format: 1
             client.1:
+
+    Image size is expressed as a number of megabytes; default value
+    is 10240.
+
+    Image format value must be either 1 or 2; default value is 1.
+
     """
     assert isinstance(config, dict) or isinstance(config, list), \
         "task create_image only supports a list or dictionary for configuration"
@@ -40,6 +47,7 @@ def create_image(ctx, config):
             properties = {}
         name = properties.get('image_name', default_image_name(role))
         size = properties.get('image_size', 10240)
+        fmt = properties.get('image_format', 1)
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
@@ -53,7 +61,8 @@ def create_image(ctx, config):
                 '-c', '/tmp/cephtest/ceph.conf',
                 '-p', 'rbd',
                 'create',
-                '-s', str(size),
+                '--format', str(fmt),
+                '--size', str(size),
                 name,
                 ],
             )
@@ -564,6 +573,7 @@ def task(ctx, config):
             client.1:
                 image_name: foo
                 image_size: 2048
+                image_format: 2
                 fs_type: xfs
 
     To use default options on all clients::
