@@ -18,6 +18,13 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
+def successful_ops(out):
+    summary = out['summary']
+    if len(summary) == 0:
+        return 0
+    entry = summary[0]
+    return entry['total']['successful_ops']
+
 def rgwadmin(ctx, client, cmd):
     log.info('radosgw-admin: %s' % cmd)
     pre = [
@@ -314,8 +321,8 @@ def task(ctx, config):
     # need to wait for all usage data to get flushed, should take up to 30 seconds
     timestamp = time.time()
     while time.time() - timestamp <= 45:
-        (err, out) = rgwadmin(ctx, client, ['usage', 'show'])
-        if len(out['entries']) > 0:
+        (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--categories', 'delete_obj'])  # last operation we did is delete obj, wait for it to flush
+        if successful_ops(out) > 0:
             break;
         time.sleep(1)
 
@@ -326,17 +333,32 @@ def task(ctx, config):
     assert not err
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
-    for entry in out['summary']:
-        assert entry['successful_ops'] > 0
+    user_summary = out['summary'][0]
+    total = user_summary['total']
+    assert total['successful_ops'] > 0
 
     # TESTCASE 'usage-show2' 'usage' 'show' 'user usage' 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user])
     assert not err
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
-    for entry in out['summary']:
+    user_summary = out['summary'][0]
+    for entry in user_summary['categories']:
         assert entry['successful_ops'] > 0
-        assert entry['user'] == user
+    assert user_summary['user'] == user
+
+    # TESTCASE 'usage-show3' 'usage' 'show' 'user usage categories' 'succeeds'
+    test_categories = ['create_bucket', 'put_obj', 'delete_obj', 'delete_bucket']
+    for cat in test_categories:
+        (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user, '--categories', cat])
+        assert not err
+        assert len(out['summary']) > 0
+        user_summary = out['summary'][0]
+        assert user_summary['user'] == user
+        assert len(user_summary['categories']) == 1
+        entry = user_summary['categories'][0]
+        assert entry['category'] == cat
+        assert entry['successful_ops'] > 0
 
     # TESTCASE 'usage-trim' 'usage' 'trim' 'user usage' 'succeeds, usage removed'
     (err, out) = rgwadmin(ctx, client, ['usage', 'trim', '--uid', user])
