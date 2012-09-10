@@ -17,17 +17,28 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def download(ctx, config):
-    assert isinstance(config, list)
+    assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
-    for client in config:
+    for (client, cconf) in config.items():
+        branch = cconf.get('branch', 'master')
+        sha1 = cconf.get('sha1')
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
+                '-b', branch,
 #                'https://github.com/ceph/s3-tests.git',
                 'git://ceph.com/git/s3-tests.git',
                 '/tmp/cephtest/s3-tests',
                 ],
             )
+        if sha1 is not None:
+            ctx.cluster.only(client).run(
+                args=[
+                    'cd', '/tmp/cephtest/s3-tests',
+                    run.Raw('&&'),
+                    'git', 'reset', '--hard', sha1,
+                    ],
+                )
     try:
         yield
     finally:
@@ -185,6 +196,13 @@ def task(ctx, config):
         config = dict.fromkeys(config)
     clients = config.keys()
 
+    overrides = ctx.config.get('overrides', {})
+    # merge each client section, not the top level.
+    for (client, cconf) in config.iteritems():
+        teuthology.deep_merge(cconf, overrides.get('s3tests', {}))
+
+    log.debug('config is %s', config)
+
     s3tests_conf = {}
     for client in clients:
         s3tests_conf[client] = ConfigObj(
@@ -202,7 +220,7 @@ def task(ctx, config):
             )
 
     with contextutil.nested(
-        lambda: download(ctx=ctx, config=clients),
+        lambda: download(ctx=ctx, config=config),
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 s3tests_conf=s3tests_conf,
