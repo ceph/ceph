@@ -320,6 +320,21 @@ public:
    * @return 0 on success, negative on error
    */
   int remove_item(CephContext *cct, int id);
+
+  /**
+   * get an item's weight
+   *
+   * Will return the weight for the first instance it finds.
+   *
+   * @param cct cct
+   * @param id item id to check
+   * @return weight of item
+   */
+  int get_item_weight(int id);
+  float get_item_weightf(int id) {
+    return (float)get_item_weight(id) / (float)0x10000;
+  }
+
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
