@@ -270,6 +270,22 @@ protected:
     int *exists			///< [out] 1 if the file exists, else 0
     );
 
+  /// do move subdir from from to dest
+  static int move_subdir(
+    LFNIndex &from,             ///< [in] from index
+    LFNIndex &dest,             ///< [in] to index
+    const vector<string> &path, ///< [in] path to split
+    string dir                  ///< [in] path to move
+    );
+
+  /// do move object from from to dest
+  static int move_object(
+    LFNIndex &from,             ///< [in] from index
+    LFNIndex &dest,             ///< [in] to index
+    const vector<string> &path, ///< [in] path to split
+    const pair<string, hobject_t> &obj ///< [in] obj to move
+    );
+
   /**
    * Lists objects in to_list.
    *
