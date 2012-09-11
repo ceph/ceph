@@ -152,18 +152,24 @@ public:
   // item/bucket names
   bool name_exists(const char *s) {
     string name(s);
+    return name_exists(name);
+  }
+  bool name_exists(const string& name) {
     build_rmaps();
     return name_rmap.count(name);
   }
   bool item_exists(int i) {
     return name_map.count(i);
   }
-  int get_item_id(const char *s) {
-    string name(s);
+  int get_item_id(const string& name) {
     build_rmaps();
     if (name_rmap.count(name))
       return name_rmap[name];
     return 0;  /* hrm */
+  }
+  int get_item_id(const char *s) {
+    string name(s);
+    return get_item_id(name);
   }
   const char *get_item_name(int t) const {
     std::map<int,string>::const_iterator p = name_map.find(t);
@@ -173,6 +179,9 @@ public:
   }
   void set_item_name(int i, const char *n) {
     string name(n);
+    set_item_name(i, name);
+  }
+  void set_item_name(int i, const string& name) {
     name_map[i] = name;
     if (have_rmaps)
       name_rmap[name] = i;
