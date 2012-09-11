@@ -262,6 +262,53 @@ int LFNIndex::get_mangled_name(const vector<string> &from,
   return lfn_get_name(from, hoid, mangled_name, 0, exists);
 }
 
+int LFNIndex::move_subdir(
+  LFNIndex &from,
+  LFNIndex &dest,
+  const vector<string> &path,
+  string dir
+  ) {
+  vector<string> sub_path(path.begin(), path.end());
+  sub_path.push_back(dir);
+  string from_path(from.get_full_path_subdir(sub_path));
+  string to_path(dest.get_full_path_subdir(sub_path));
+  int r = ::rename(from_path.c_str(), to_path.c_str());
+  if (r < 0)
+    return -errno;
+  return 0;
+}
+
+int LFNIndex::move_object(
+  LFNIndex &from,
+  LFNIndex &dest,
+  const vector<string> &path,
+  const pair<string, hobject_t> &obj
+  ) {
+  string from_path(from.get_full_path(path, obj.first));
+  string to_path;
+  string to_name;
+  int exists;
+  int r = dest.lfn_get_name(path, obj.second, &to_name, &to_path, &exists);
+  if (r < 0)
+    return r;
+  if (!exists) {
+    r = ::link(from_path.c_str(), to_path.c_str());
+    if (r < 0)
+      return r;
+  }
+  r = dest.lfn_created(path, obj.second, to_name);
+  if (r < 0)
+    return r;
+  r = dest.fsync_dir(path);
+  if (r < 0)
+    return r;
+  r = from.remove_object(path, obj.second);
+  if (r < 0)
+    return r;
+  return from.fsync_dir(path);
+}
+
+
 static int get_hobject_from_oinfo(const char *dir, const char *file, 
 				  hobject_t *o) {
   char path[PATH_MAX];
