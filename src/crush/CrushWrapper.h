@@ -228,8 +228,8 @@ public:
    * @param weight optional pointer to weight of item at that location
    * @return true if item is at specified location
    */
-  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, int *iweight);
-  bool check_item_loc(CephContext *cct, int item, map<string,string>& loc, float *weight) {
+  bool check_item_loc(CephContext *cct, int item, const map<string,string>& loc, int *iweight);
+  bool check_item_loc(CephContext *cct, int item, const map<string,string>& loc, float *weight) {
     int iweight;
     bool ret = check_item_loc(cct, item, loc, &iweight);
     if (weight)
@@ -291,7 +291,7 @@ public:
    * @param loc location (map of type to bucket names)
    * @return 0 for success, negative on error
    */
-  int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+  int insert_item(CephContext *cct, int id, float weight, string name, const map<string,string>& loc);
 
   /**
    * move a bucket in the hierarchy to the given location
@@ -304,7 +304,7 @@ public:
    * @param loc location (map of type to bucket names)
    * @return 0 for success, negative on error
    */
-  int move_bucket(CephContext *cct, int id, map<string,string>& loc);
+  int move_bucket(CephContext *cct, int id, const map<string,string>& loc);
 
   /**
    * add or update an item's position in the map
@@ -319,7 +319,7 @@ public:
    * @param loc location (map of type to bucket names)
    * @return 0 for no change, 1 for successful change, negative on error
    */
-  int update_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+  int update_item(CephContext *cct, int id, float weight, string name, const map<string,string>& loc);
 
   /**
    * create or move an item, but do not adjust its weight if it already exists
@@ -332,7 +332,7 @@ public:
    * @return 0 for no change, 1 for successful change, negative on error
    */
   int create_or_move_item(CephContext *cct, int item, float weight, string name,
-			  map<string,string>& loc);
+			  const map<string,string>& loc);
 
   /**
    * remove an item from the map
