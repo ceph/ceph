@@ -16,6 +16,7 @@ obsync.py: the object synchronizer
 """
 
 from boto.s3.connection import OrdinaryCallingFormat
+from boto.s3.connection import SubdomainCallingFormat
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from optparse import OptionParser
@@ -654,8 +655,15 @@ class S3Store(Store):
                     raise ObsyncPermanentException("logic error: this should be unreachable.")
                 self.bucket = self.conn.create_bucket(bucket_name = self.bucket_name)
             else:
-                raise ObsyncPermanentException("%s: no such bucket as %s" % \
-                    (host, self.bucket_name))
+                # Hrm, try again using Subdomain method.  This works
+                # around PermanentRedirect.
+                self.conn = S3Connection(calling_format=SubdomainCallingFormat(),
+                                         host=self.host, is_secure=is_secure,
+                                         aws_access_key_id=akey, aws_secret_access_key=skey)
+                self.bucket = self.conn.lookup(self.bucket_name)
+                if (self.bucket == None):
+                    raise ObsyncPermanentException("%s: no such bucket as %s" % \
+                                                       (host, self.bucket_name))
 
     def __str__(self):
         return "s3://" + self.host + "/" + self.bucket_name + "/" + self.key_prefix
