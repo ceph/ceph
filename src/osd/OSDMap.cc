@@ -1358,7 +1358,7 @@ void OSDMap::print_osd_line(int cur, ostream& out) const
       out << "up\t";
     else
       out << "down\t";
-    out << (exists(cur) ? get_weightf(cur):0) << "\t";
+    out << std::setprecision(4) << (exists(cur) ? get_weightf(cur) : 0) << "\t";
   }
 }
 
@@ -1377,7 +1377,7 @@ void OSDMap::print_tree(ostream& out) const
       float weight = q.front().weight;
       q.pop_front();
 
-      out << cur << "\t" << weight << "\t";
+      out << cur << "\t" << std::setprecision(4) << weight << "\t";
       for (int k=0; k<depth; k++)
 	out << "\t";
 

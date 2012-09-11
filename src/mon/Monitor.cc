@@ -95,7 +95,7 @@ long parse_pos_long(const char *s, ostream *pss)
 {
   char *e = 0;
   long r = strtol(s, &e, 10);
-  if (e == s || e == 0 || r < 0) {
+  if ((e == s || e == 0 || e != s + strlen(s)) || r < 0) {
     if (pss)
       *pss << "unable to parse positive integer '" << s << "'";
     return -1;

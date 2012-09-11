@@ -45,6 +45,7 @@
 
 #include "include/compat.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -1794,6 +1795,43 @@ bool OSDMonitor::prepare_unset_flag(MMonCommand *m, int flag)
   return true;
 }
 
+int OSDMonitor::parse_osd_id(const char *s, stringstream *pss)
+{
+  // osd.NNN?
+  if (strncmp(s, "osd.", 4) == 0) {
+    s += 4;
+  }
+
+  // NNN?
+  ostringstream ss;
+  long id = parse_pos_long(s, &ss);
+  if (id < 0) {
+    *pss << ss.str();
+    return id;
+  }
+  if (id > 0xffff) {
+    *pss << "osd id " << id << " is too large";
+    return -ERANGE;
+  }
+  return id;
+}
+
+void OSDMonitor::parse_loc_map(const vector<string>& args, int start, map<string,string> *ploc)
+{
+  for (unsigned i = start; i < args.size(); ++i) {
+    const char *s = args[i].c_str();
+    const char *pos = strchr(s, '=');
+    if (!pos)
+      break;
+    string key(s, 0, pos-s);
+    string value(pos+1);
+    if (value.length())
+      (*ploc)[key] = value;
+    else
+      ploc->erase(key);
+  }
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   bool ret = false;
@@ -1845,10 +1883,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
-	// osd crush set <id> <name> <weight> [<loc1> [<loc2> ...]]
-	int id = parse_pos_long(m->cmd[3].c_str(), &ss);
+	// osd crush set <osd-id> [<osd.* name>] <weight> <loc1> [<loc2> ...]
+	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
 	if (id < 0) {
 	  err = -EINVAL;
 	  goto out;
@@ -1859,21 +1897,20 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  goto out;
 	}
 
-	string name = m->cmd[4];
-	float weight = atof(m->cmd[5].c_str());
-	map<string,string> loc;
-	for (unsigned i = 6; i < m->cmd.size(); ++i) {
-	  const char *s = m->cmd[i].c_str();
-	  const char *pos = strchr(s, '=');
-	  if (!pos)
-	    break;
-	  string key(s, 0, pos-s);
-	  string value(pos+1);
-	  if (value.length())
-	    loc[key] = value;
-	  else
-	    loc.erase(key);
+	int argpos = 4;
+	string name;
+	if (m->cmd[argpos].find("osd.") == 0) {
+	  // old annoying usage, explicitly specifying osd.NNN name
+	  name = m->cmd[argpos];
+	  argpos++;
+	} else {
+	  // new usage; infer name
+	  name = "osd." + stringify(id);
 	}
+	float weight = atof(m->cmd[argpos].c_str());
+	argpos++;
+	map<string,string> loc;
+	parse_loc_map(m->cmd, argpos, &loc);
 
 	dout(0) << "adding/updating crush item id " << id << " name '" << name << "' weight " << weight
 		<< " at location " << loc << dendl;
@@ -1904,23 +1941,60 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "create-or-move") {
+      do {
+	// osd crush create-or-move <id> <initial_weight> <loc1> [<loc2> ...]
+	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
+	if (id < 0) {
+	  err = -EINVAL;
+	  goto out;
+	}
+	if (!osdmap.exists(id)) {
+	  err = -ENOENT;
+	  ss << "osd." << m->cmd[3] << " does not exist.  create it before updating the crush map";
+	  goto out;
+	}
+
+	string name = "osd." + stringify(id);
+	float weight = atof(m->cmd[4].c_str());
+	map<string,string> loc;
+	parse_loc_map(m->cmd, 5, &loc);
+
+	dout(0) << "create-or-move crush item id " << id << " name '" << name << "' initial_weight " << weight
+		<< " at location " << loc << dendl;
+	bufferlist bl;
+	if (pending_inc.crush.length())
+	  bl = pending_inc.crush;
+	else
+	  osdmap.crush->encode(bl);
+
+	CrushWrapper newcrush;
+	bufferlist::iterator p = bl.begin();
+	newcrush.decode(p);
+
+	err = newcrush.create_or_move_item(g_ceph_context, id, weight, name, loc);
+	if (err == 0) {
+	  ss << "create-or-move updated item id " << id << " name '" << name << "' weight " << weight
+	     << " at location " << loc << " to crush map";
+	  break;
+	}
+	if (err > 0) {
+	  pending_inc.crush.clear();
+	  newcrush.encode(pending_inc.crush);
+	  ss << "create-or-move updating item id " << id << " name '" << name << "' weight " << weight
+	     << " at location " << loc << " to crush map";
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+      } while (false);
+    }
     else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "move") {
       do {
-	// osd crush move <name> [<loc1> [<loc2> ...]]
+	// osd crush move <name> <loc1> [<loc2> ...]
 	string name = m->cmd[3];
 	map<string,string> loc;
-	for (unsigned i = 4; i < m->cmd.size(); ++i) {
-	  const char *s = m->cmd[i].c_str();
-	  const char *pos = strchr(s, '=');
-	  if (!pos)
-	    break;
-	  string key(s, 0, pos-s);
-	  string value(pos+1);
-	  if (value.length())
-	    loc[key] = value;
-	  else
-	    loc.erase(key);
-	}
+	parse_loc_map(m->cmd, 4, &loc);
 
 	dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
 	bufferlist bl;
