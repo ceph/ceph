@@ -330,9 +330,13 @@ public:
 			 const SequencerPosition& spos,
 			 const hobject_t *hoid=0,
 			 bool in_progress=false);
+  void _set_replay_guard(coll_t cid,
+                         const SequencerPosition& spos,
+                         bool in_progress);
 
   /// close a replay guard opened with in_progress=true
   void _close_replay_guard(int fd, const SequencerPosition& spos);
+  void _close_replay_guard(coll_t cid, const SequencerPosition& spos);
 
   /**
    * check replay guard xattr on given file
@@ -466,6 +470,8 @@ private:
 		   const SequencerPosition &spos);
   int _omap_setheader(coll_t cid, const hobject_t &hoid, const bufferlist &bl,
 		      const SequencerPosition &spos);
+  int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest,
+                        const SequencerPosition &spos);
 
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
