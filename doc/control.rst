@@ -138,10 +138,15 @@ Dump the osd map. Valid formats for -f are "plain" and "json". If no
 Dump the osd map as a tree with one line per osd containing weight
 and state. ::
 
-	$ ceph osd crush set <id> <name> <weight> [<loc1> [<loc2> ...]]
+	$ ceph osd crush set <id> <weight> [<loc1> [<loc2> ...]]
 
 Add or move a new item (osd) with the given id/name/weight at the specified
 location. ::
+
+	$ ceph osd crush create-or-move <id> <weight> [<loc1> [<loc2> ...]]
+
+Add or move a new item (osd) with the given id/name/weight at the specified
+location, but only set the weight on creation. ::
 
 	$ ceph osd crush remove <id>
 
