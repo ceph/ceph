@@ -7825,16 +7825,20 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
    preparation for Matt adding barriers and making other changes. */
 
 int Client::ll_commit_blocks(vinodeno_t vino,
-			     uint64_t offset __attribute__((unused)),
-			     uint64_t length __attribute__((unused)))
+			     uint64_t offset,
+			     uint64_t length)
 {
     Mutex::Locker lock(client_lock);
     BarrierContext *bctx;
     uint64_t ino = vino.ino;
 
-    ldout(cct, 1) << "ll_commit_blocks for " << vino.ino << " from " 
+    ldout(cct, 1) << "ll_commit_blocks for " << vino.ino << " from "
 		  << offset << " to " << length << dendl;
-    
+
+    if (length == 0) {
+      return -EINVAL;
+    }
+
     bctx = this->barriers[ino];
     if (bctx) {
       barrier_interval civ(offset, length);
