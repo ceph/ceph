@@ -2,6 +2,15 @@
  Release Notes
 ===============
 
+v0.53 (not yet released)
+------------------------
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* ceph tool: the second (redundant) osd.NNN argument to 'ceph osd crush set NNN osd.NNN <weight> <loc ...>' is now optional, and both the NNN and osd.NNN forms are now accepted for the first argument.  This makes usage simpler without breaking existing scripts.
+
+
 v0.48.1 "argonaut"
 ------------------
 
