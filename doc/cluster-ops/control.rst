@@ -125,7 +125,7 @@ and state. ::
 Add or move a new item (OSD) with the given id/name/weight at the specified
 location. ::
 
-	ceph osd crush set {id} {name} {weight} [{loc1} [{loc2} ...]]
+	ceph osd crush set {id} {weight} [{loc1} [{loc2} ...]]
 
 Remove an existing item from the CRUSH map. ::
 
