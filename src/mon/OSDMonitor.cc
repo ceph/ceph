@@ -1883,9 +1883,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
-	// osd crush set <osd-id> [<osd.* name>] <weight> [<loc1> [<loc2> ...]]
+	// osd crush set <osd-id> [<osd.* name>] <weight> <loc1> [<loc2> ...]
 	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
 	if (id < 0) {
 	  err = -EINVAL;
@@ -1941,9 +1941,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "create-or-move") {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "create-or-move") {
       do {
-	// osd crush create-or-move <id> <initial_weight> [<loc1> [<loc2> ...]]
+	// osd crush create-or-move <id> <initial_weight> <loc1> [<loc2> ...]
 	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
 	if (id < 0) {
 	  err = -EINVAL;
@@ -1991,7 +1991,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "move") {
       do {
-	// osd crush move <name> [<loc1> [<loc2> ...]]
+	// osd crush move <name> <loc1> [<loc2> ...]
 	string name = m->cmd[3];
 	map<string,string> loc;
 	parse_loc_map(m->cmd, 4, &loc);
