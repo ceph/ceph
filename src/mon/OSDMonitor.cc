@@ -1816,6 +1816,22 @@ int OSDMonitor::parse_osd_id(const char *s, stringstream *pss)
   return id;
 }
 
+void OSDMonitor::parse_loc_map(const vector<string>& args, int start, map<string,string> *ploc)
+{
+  for (unsigned i = start; i < args.size(); ++i) {
+    const char *s = args[i].c_str();
+    const char *pos = strchr(s, '=');
+    if (!pos)
+      break;
+    string key(s, 0, pos-s);
+    string value(pos+1);
+    if (value.length())
+      (*ploc)[key] = value;
+    else
+      ploc->erase(key);
+  }
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   bool ret = false;
@@ -1894,18 +1910,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	float weight = atof(m->cmd[argpos].c_str());
 	argpos++;
 	map<string,string> loc;
-	for (unsigned i = argpos; i < m->cmd.size(); ++i) {
-	  const char *s = m->cmd[i].c_str();
-	  const char *pos = strchr(s, '=');
-	  if (!pos)
-	    break;
-	  string key(s, 0, pos-s);
-	  string value(pos+1);
-	  if (value.length())
-	    loc[key] = value;
-	  else
-	    loc.erase(key);
-	}
+	parse_loc_map(m->cmd, argpos, &loc);
 
 	dout(0) << "adding/updating crush item id " << id << " name '" << name << "' weight " << weight
 		<< " at location " << loc << dendl;
@@ -1953,18 +1958,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	string name = "osd." + stringify(id);
 	float weight = atof(m->cmd[4].c_str());
 	map<string,string> loc;
-	for (unsigned i = 5; i < m->cmd.size(); ++i) {
-	  const char *s = m->cmd[i].c_str();
-	  const char *pos = strchr(s, '=');
-	  if (!pos)
-	    break;
-	  string key(s, 0, pos-s);
-	  string value(pos+1);
-	  if (value.length())
-	    loc[key] = value;
-	  else
-	    loc.erase(key);
-	}
+	parse_loc_map(m->cmd, 5, &loc);
 
 	dout(0) << "create-or-move crush item id " << id << " name '" << name << "' initial_weight " << weight
 		<< " at location " << loc << dendl;
@@ -2000,18 +1994,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	// osd crush move <name> [<loc1> [<loc2> ...]]
 	string name = m->cmd[3];
 	map<string,string> loc;
-	for (unsigned i = 4; i < m->cmd.size(); ++i) {
-	  const char *s = m->cmd[i].c_str();
-	  const char *pos = strchr(s, '=');
-	  if (!pos)
-	    break;
-	  string key(s, 0, pos-s);
-	  string value(pos+1);
-	  if (value.length())
-	    loc[key] = value;
-	  else
-	    loc.erase(key);
-	}
+	parse_loc_map(m->cmd, 4, &loc);
 
 	dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
 	bufferlist bl;
