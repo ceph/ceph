@@ -65,7 +65,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
   return ret;
 }
 
-bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>& loc,
+bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,string>& loc,
 				  int *weight)
 {
   ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
@@ -76,20 +76,21 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, map<string,string>
       continue;
 
     // ignore types that aren't specified in loc
-    if (loc.count(p->second) == 0) {
+    map<string,string>::const_iterator q = loc.find(p->second);
+    if (q == loc.end()) {
       ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
     }
 
-    if (!name_exists(loc[p->second].c_str())) {
-      ldout(cct, 5) << "check_item_loc bucket " << loc[p->second] << " dne" << dendl;
+    if (!name_exists(q->second)) {
+      ldout(cct, 5) << "check_item_loc bucket " << q->second << " dne" << dendl;
       return false;
     }
 
-    int id = get_item_id(loc[p->second].c_str());
+    int id = get_item_id(q->second);
     if (id >= 0) {
-      ldout(cct, 5) << "check_item_loc requested " << loc[p->second] << " for type " << p->second
+      ldout(cct, 5) << "check_item_loc requested " << q->second << " for type " << p->second
 		    << " is a device, not bucket" << dendl;
       return false;
     }
@@ -185,7 +186,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
 
 
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
-			      map<string,string>& loc)  // typename -> bucketname
+			      const map<string,string>& loc)  // typename -> bucketname
 {
 
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
@@ -207,22 +208,23 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       continue;
 
     // skip types that are unspecified
-    if (loc.count(p->second) == 0) {
+    map<string,string>::const_iterator q = loc.find(p->second);
+    if (q == loc.end()) {
       ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
     }
 
-    if (!name_exists(loc[p->second].c_str())) {
-      ldout(cct, 5) << "insert_item creating bucket " << loc[p->second] << dendl;
+    if (!name_exists(q->second)) {
+      ldout(cct, 5) << "insert_item creating bucket " << q->second << dendl;
       int empty = 0;
       cur = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
-      set_item_name(cur, loc[p->second].c_str());
+      set_item_name(cur, q->second);
       continue;
     }
 
     // add to an existing bucket
-    int id = get_item_id(loc[p->second].c_str());
+    int id = get_item_id(q->second);
     if (!bucket_exists(id)) {
       ldout(cct, 1) << "insert_item doesn't have bucket " << id << dendl;
       return -EINVAL;
@@ -258,7 +260,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   return -EINVAL;
 }
 
-int CrushWrapper::move_bucket(CephContext *cct, int id, map<string,string>& loc)
+int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>& loc)
 {
   // sorry this only works for buckets
   if (id >= 0)
@@ -283,7 +285,7 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, map<string,string>& loc)
 }
 
 int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, string name,
-				      map<string,string>& loc)  // typename -> bucketname
+				      const map<string,string>& loc)  // typename -> bucketname
 {
   int ret = 0;
   int old_iweight;
@@ -305,7 +307,7 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
 }
 
 int CrushWrapper::update_item(CephContext *cct, int item, float weight, string name,
-			      map<string,string>& loc)  // typename -> bucketname
+			      const map<string,string>& loc)  // typename -> bucketname
 {
   ldout(cct, 5) << "update_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
