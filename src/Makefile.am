@@ -971,6 +971,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
 	$(srcdir)/upstart/ceph-mon-all-starter.conf \
+	$(srcdir)/upstart/ceph-create-keys.conf \
 	$(srcdir)/upstart/ceph-osd.conf \
 	$(srcdir)/upstart/ceph-hotplug.conf \
 	$(srcdir)/upstart/ceph-mds.conf \
