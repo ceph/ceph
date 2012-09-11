@@ -32,8 +32,5 @@ To get more detail::
 
 .. toctree::
 
- mon
- osd
- mds
  radosgw
 
