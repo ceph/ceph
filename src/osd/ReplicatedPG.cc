@@ -2310,6 +2310,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.op = CEPH_OSD_OP_WRITE;
 	newop.op.extent.offset = oi.size;
 	newop.op.extent.length = op.extent.length;
+	newop.op.extent.truncate_seq = oi.truncate_seq;
         newop.indata = osd_op.indata;
 	do_osd_ops(ctx, nops);
 	osd_op.outdata.claim(newop.outdata);
