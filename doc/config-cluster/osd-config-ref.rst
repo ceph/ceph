@@ -15,7 +15,7 @@
 
 :Description: The path to the OSDs data. You must create the directory. You should mount a data disk at this mount point. We do not recommend changing the default. 
 :Type: String
-:Default: ``/var/lib/chef/osd/$cluster-$id``
+:Default: ``/var/lib/ceph/osd/$cluster-$id``
 
 
 ``osd journal`` 
