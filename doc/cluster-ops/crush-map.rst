@@ -462,3 +462,110 @@ Where:
 :Required: No
 :Example: ``datacenter=dc1, room=room1, row=foo, rack=bar, host=foo-bar-1``
 
+
+Tunables
+========
+
+.. versionadded:: 0.48
+
+There are several magic numbers that were used in the original CRUSH
+implementation that have proven to be poor choices.  To support
+the transition away from them, newer versions of CRUSH (starting with
+the v0.48 argonaut series) allow the values to be adjusted or tuned.
+
+Clusters running recent Ceph releases support using the tunable values
+in the CRUSH maps.  However, older clients and daemons will not correctly interact
+with clusters using the "tuned" CRUSH maps.  To detect this situation,
+there is now a feature bit ``CRUSH_TUNABLES`` (value 0x40000) to
+reflect support for tunables.
+
+If the OSDMap currently used by the ``ceph-mon`` or ``ceph-osd``
+daemon has non-legacy values, it will require the ``CRUSH_TUNABLES``
+feature bit from clients and daemons who connect to it.  This means
+that old clients will not be able to connect.
+
+At some future point in time, newly created clusters will have
+improved default values for the tunables.  This is a matter of waiting
+until the support has been present in the Linux kernel clients long
+enough to make this a painless transition for most users.
+
+Impact of Legacy Values
+-----------------------
+
+The legacy values result in several misbehaviors:
+
+ * For hiearchies with a small number of devices in the leaf buckets,
+   some PGs map to fewer than the desired number of replicas.  This
+   commonly happens for hiearchies with "host" nodes with a small
+   number (1-3) of OSDs nested beneath each one.
+
+ * For large clusters, some small percentages of PGs map to less than
+   the desired number of OSDs.  This is more prevalent when there are
+   several layers of the hierarchy (e.g., row, rack, host, osd).
+
+ * When some OSDs are marked out, the data tends to get redistributed
+   to nearby OSDs instead of across the entire hierarchy.
+
+Which client versions support tunables
+--------------------------------------
+
+ * argonaut series, v0.48.1 or later
+ * v0.49 or later
+ * Linux kernel version v3.5 or later (for the file system and RBD kernel clients)
+
+A few important points
+----------------------
+
+ * Adjusting these values will result in the shift of some PGs between
+   storage nodes.  If the Ceph cluster is already storing a lot of
+   data, be prepared for some fraction of the data to move.
+ * The ``ceph-osd`` and ``ceph-mon`` daemons will start requiring the
+   ``CRUSH_TUNABLES`` feature of new connections as soon as they get
+   the updated map.  However, already-connected clients are
+   effectively grandfathered in, and will misbehave if they do not
+   support the new feature.
+ * If the CRUSH tunables are set to non-legacy values and then later
+   changed back to the defult values, ``ceph-osd`` daemons will not be
+   required to support the feature.  However, the OSD peering process
+   requires examining and understanding old maps.  Therefore, you
+   should not run old (pre-v0.48) versions of the ``ceph-osd`` daemon
+   if the cluster has previosly used non-legacy CRUSH values, even if
+   the latest version of the map has been switched back to using the
+   legacy defaults.
+
+Tuning CRUSH
+------------
+
+If you can ensure that all clients are running recent code, you can
+adjust the tunables by extracting the CRUSH map, modifying the values,
+and reinjecting it into the cluster.
+
+* Extract the latest CRUSH map::
+
+	ceph osd getcrushmap -o /tmp/crush
+
+* Adjust tunables.  These values appear to offer the best behavior
+  for both large and small clusters we tested with.  You will need to
+  additionally specify the ``--enable-unsafe-tunables`` argument to
+  ``crushtool`` for this to work.  Please use this option with
+  extreme care.::
+
+	crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
+
+* Reinject modified map::
+
+	ceph osd setcrushmap -i /tmp/crush.new
+
+Legacy values
+-------------
+
+For reference, the legacy values for the CRUSH tunables can be set
+with::
+
+   crushtool -i /tmp/crush --set-choose-local-tries 2 --set-choose-local-fallback-tries 5 --set-choose-total-tries 19 -o /tmp/crush.legacy
+
+Again, the special ``--enable-unsafe-tunables`` option is required.
+Further, as noted above, be careful running old versions of the
+``ceph-osd`` daemon after reverting to legacy values as the feature
+bit is not perfectly enforced.
+
