@@ -732,6 +732,72 @@ TEST_F(StoreTest, XattrTest) {
   ASSERT_TRUE(bl2 == attrs["attr3"]);
 }
 
+void colsplittest(
+  ObjectStore *store,
+  unsigned num_objects,
+  unsigned common_suffix_size
+  ) {
+  coll_t cid("from");
+  coll_t tid("to");
+  int r = 0;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (uint32_t i = 0; i < 2*num_objects; ++i) {
+      stringstream objname;
+      objname << "obj" << i;
+      t.touch(cid, hobject_t(
+	  objname.str(),
+	  "",
+	  CEPH_NOSNAP,
+	  i<<common_suffix_size,
+	  0));
+    }
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.split_collection(cid, common_suffix_size+1, 0, tid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  vector<hobject_t> objects;
+  r = store->collection_list(cid, objects);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(objects.size(), num_objects);
+  for (vector<hobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    ASSERT_EQ(!(i->hash & (1<<common_suffix_size)), 0u);
+  }
+
+  objects.clear();
+  r = store->collection_list(tid, objects);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(objects.size(), num_objects);
+  for (vector<hobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    ASSERT_EQ(i->hash & (1<<common_suffix_size), 0u);
+  }
+}
+
+TEST_F(StoreTest, ColSplitTest1) {
+  colsplittest(store.get(), 10000, 11);
+}
+TEST_F(StoreTest, ColSplitTest2) {
+  colsplittest(store.get(), 100, 7);
+}
+TEST_F(StoreTest, ColSplitTest3) {
+  colsplittest(store.get(), 100000, 25);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
