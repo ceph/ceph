@@ -1869,8 +1869,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
       do {
-	// osd crush set <id> <name> <weight> [<loc1> [<loc2> ...]]
-	int id = parse_pos_long(m->cmd[3].c_str(), &ss);
+	// osd crush set <osd-id> [<osd.* name>] <weight> [<loc1> [<loc2> ...]]
+	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
 	if (id < 0) {
 	  err = -EINVAL;
 	  goto out;
@@ -1881,10 +1881,20 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  goto out;
 	}
 
-	string name = m->cmd[4];
-	float weight = atof(m->cmd[5].c_str());
+	int argpos = 4;
+	string name;
+	if (m->cmd[argpos].find("osd.") == 0) {
+	  // old annoying usage, explicitly specifying osd.NNN name
+	  name = m->cmd[argpos];
+	  argpos++;
+	} else {
+	  // new usage; infer name
+	  name = "osd." + stringify(id);
+	}
+	float weight = atof(m->cmd[argpos].c_str());
+	argpos++;
 	map<string,string> loc;
-	for (unsigned i = 6; i < m->cmd.size(); ++i) {
+	for (unsigned i = argpos; i < m->cmd.size(); ++i) {
 	  const char *s = m->cmd[i].c_str();
 	  const char *pos = strchr(s, '=');
 	  if (!pos)

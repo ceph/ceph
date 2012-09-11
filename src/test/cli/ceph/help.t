@@ -40,7 +40,7 @@
     ceph osd tell <osd-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'
     ceph osd getcrushmap -o <file>
     ceph osd getmap -o <file>
-    ceph osd crush set <osd-id> <name> <weight> [<loc1> [<loc2> ...]]
+    ceph osd crush set <osd-id> <weight> [<loc1> [<loc2> ...]]
     ceph osd crush move <bucketname> <loc1> [<loc2> ...]
     ceph osd crush create-or-move <osd-id> <initial-weight> [<loc1> [<loc2> ...]]
     ceph osd crush reweight <name> <weight>
