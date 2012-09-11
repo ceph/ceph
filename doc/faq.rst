@@ -3,26 +3,25 @@
 ============================
 
 These questions have been frequently asked on the ceph-devel mailing
-list, the IRC channel, and on the Ceph.com blog.
+list, the IRC channel, and on the `Ceph.com`_ blog.
+
+.. _Ceph.com: http://ceph.com
 
 Is Ceph Production-Quality?
 ===========================
 
-The definition of "production quality" varies depending on who you ask.
-Because it can mean a lot of different things depending on how you want to
-use Ceph, we prefer not to think of it as a binary term.
-
-At this point we support the RADOS object store, radosgw, and rbd because
-we think they are sufficiently stable that we can handle the support
-workload.  There are several organizations running those parts of the
-system in production.  Others wouldn't dream of doing so at this stage.
+Ceph's object store is production ready. Large-scale storage systems (i.e.,
+petabytes of data) use Ceph's block devices and Ceph's RESTful object store
+supporting APIs compatible with Amazon's S3 and OpenStack's Swift. `Inktank`_
+provides commercial support for the Ceph object store, block devices, and 
+RESTful interfaces.
 
 The CephFS POSIX-compliant filesystem is functionally-complete and has
-been evaluated by a large community of users, but has not yet been
-subjected to extensive, methodical testing.
+been evaluated by a large community of users, but is still undergoing
+methodical QA testing. Once Ceph's filesystem passes QA muster, `Inktank`_ 
+will provide commercial support for CephFS in production systems.
 
-We can tell you how we test, and what we support, but in the end it's
-your judgement that matters most!
+.. _Inktank: http://inktank.com
 
 How can I add a question to this list?
 ======================================
