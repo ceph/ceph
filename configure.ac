@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.48.1argonaut], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.48.2argonaut], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 AC_CONFIG_SUBDIRS([src/leveldb])
