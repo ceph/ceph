@@ -22,7 +22,7 @@ Adding a new device (OSD) to the map
 Adding new devices or moving existing devices to new positions in the
 CRUSH hierarchy can be done via the monitor.  The general form is::
 
-  $ ceph osd crush set <id> <name> <weight> [<loc> [<lo2> ...]]
+  $ ceph osd crush set <id> <weight> [<loc> [<lo2> ...]]
 
 where
 
@@ -46,7 +46,7 @@ where
 For example, if the OSD id is ``123``, we want a weight of ``1.0`` and
 the device is on host ``hostfoo`` and rack ``rackbar``::
 
-   $ ceph osd crush set 123 osd.123 1.0 root=default rack=rackbar host=hostfoo
+   $ ceph osd crush set 123 1.0 root=default rack=rackbar host=hostfoo
 
 will add it to the hierarchy, or move it from its previous position.
 (Note: for clusters created prior to v0.52, replace ``root=default``
@@ -57,7 +57,7 @@ does in the default Ceph CRUSH map generated during cluster creation).
 Note that if I later add another device in the same host but specify a
 different pool or rack::
 
-   $ ceph osd crush set 124 osd.124 1.0 root=nondefault rack=weirdrack host=hostfoo
+   $ ceph osd crush set 124 1.0 root=nondefault rack=weirdrack host=hostfoo
 
 the device will still be placed in host ``hostfoo`` at its current
 location (rack ``rackbar`` and pool ``default``).
