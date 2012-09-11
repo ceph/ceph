@@ -398,6 +398,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.num_entries++;
         stats.total_size += cur_change.meta.size;
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
+        header_changed = true;
         bufferlist cur_state_bl;
         ::encode(cur_change, cur_state_bl);
         ret = cls_cxx_map_set_val(hctx, cur_change.name, &cur_state_bl);
