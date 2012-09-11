@@ -6553,7 +6553,8 @@ void ReplicatedPG::push_backfill_object(hobject_t oid, eversion_t v, eversion_t 
 
   backfills_in_flight.insert(oid);
 
-  start_recovery_op(oid);
+  if (!pushing.count(oid))
+    start_recovery_op(oid);
   ObjectContext *obc = get_object_context(oid, OLOC_BLANK, false);
   obc->ondisk_read_lock();
   push_to_replica(obc, oid, peer);
