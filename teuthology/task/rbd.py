@@ -51,9 +51,8 @@ def create_image(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
-        remote.run(
-            args=[
-                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
+        args = [
+            'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
                 '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 '/tmp/cephtest/archive/coverage',
@@ -61,11 +60,14 @@ def create_image(ctx, config):
                 '-c', '/tmp/cephtest/ceph.conf',
                 '-p', 'rbd',
                 'create',
-                '--format', str(fmt),
                 '--size', str(size),
                 name,
-                ],
-            )
+            ]
+        # omit format option if using the default (format 1)
+        # since old versions of don't support it
+        if format != 1:
+            args += ['--format', str(fmt)]
+        remote.run(args=args)
     try:
         yield
     finally:
