@@ -21,7 +21,7 @@ string pool_name;
 /* must be the first test! */
 TEST(cls_rgw, init)
 {
-  string pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name();
   /* create pool */
   ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
@@ -192,7 +192,6 @@ TEST(cls_rgw, index_remove_object)
     index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, ++epoch, obj, meta);
 
     test_stats(ioctx, bucket_oid, 0, i + 1, total_size);
-
   }
 
   int i = NUM_OBJS / 2;
@@ -250,6 +249,110 @@ TEST(cls_rgw, index_remove_object)
   /* verify stats correct */
   total_size -= meta.size;
   test_stats(ioctx, bucket_oid, 0, NUM_OBJS - 1, total_size);
+}
+
+TEST(cls_rgw, index_suggest)
+{
+  string bucket_oid = str_int("bucket", 3);
+
+  OpMgr mgr;
+
+  ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_bucket_init(*op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  uint64_t total_size = 0;
+
+  int epoch = 0;
+
+  int num_objs = 100;
+
+  uint64_t obj_size = 1024;
+
+  /* create multiple objects */
+  for (int i = 0; i < num_objs; i++) {
+    string obj = str_int("obj", i);
+    string tag = str_int("tag", i);
+    string loc = str_int("loc", i);
+
+    index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+
+    test_stats(ioctx, bucket_oid, 0, i, total_size);
+
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = 0;
+    meta.size = obj_size;
+    total_size += meta.size;
+
+    index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, ++epoch, obj, meta);
+
+    test_stats(ioctx, bucket_oid, 0, i + 1, total_size);
+  }
+
+  /* prepare (without completion) some of the objects */
+  for (int i = 0; i < num_objs; i += 2) {
+    string obj = str_int("obj", i);
+    string tag = str_int("tag-prepare", i);
+    string loc = str_int("loc", i);
+
+    index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+
+    test_stats(ioctx, bucket_oid, 0, num_objs, total_size);
+  }
+
+  int actual_num_objs = num_objs;
+  /* remove half of the objects */
+  for (int i = num_objs / 2; i < num_objs; i++) {
+    string obj = str_int("obj", i);
+    string tag = str_int("tag-rm", i);
+    string loc = str_int("loc", i);
+
+    index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+
+    test_stats(ioctx, bucket_oid, 0, actual_num_objs, total_size);
+
+    rgw_bucket_dir_entry_meta meta;
+    index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, ++epoch, obj, meta);
+
+    total_size -= obj_size;
+    actual_num_objs--;
+    test_stats(ioctx, bucket_oid, 0, actual_num_objs, total_size);
+  }
+
+  bufferlist updates;
+
+  for (int i = 0; i < num_objs; i += 2) { 
+    string obj = str_int("obj", i);
+    string tag = str_int("tag-rm", i);
+    string loc = str_int("loc", i);
+
+    rgw_bucket_dir_entry dirent;
+    dirent.name = obj;
+    dirent.locator = loc;
+    dirent.exists = (i < num_objs / 2); // we removed half the objects
+    dirent.meta.size = 1024;
+
+    char suggest_op = (i < num_objs / 2 ? CEPH_RGW_UPDATE : CEPH_RGW_REMOVE);
+    cls_rgw_encode_suggestion(suggest_op, dirent, updates);
+  }
+
+  op = mgr.write_op();
+  cls_rgw_bucket_set_tag_timeout(*op, 1); // short tag timeout
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  sleep(1);
+
+  /* suggest changes! */
+  op = mgr.write_op();
+  cls_rgw_suggest_changes(*op, updates);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  /* suggest changes twice! */
+  op = mgr.write_op();
+  cls_rgw_suggest_changes(*op, updates);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  test_stats(ioctx, bucket_oid, 0, num_objs / 2, total_size);
 }
 
 /* test garbage collection */
@@ -349,9 +452,13 @@ TEST(cls_rgw, gc_set)
 
 TEST(cls_rgw, gc_defer)
 {
+  librados::IoCtx ioctx;
+  librados::Rados rados;
+
+  string gc_pool_name = get_temp_pool_name();
   /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  ASSERT_EQ("", create_one_pool_pp(gc_pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(gc_pool_name.c_str(), ioctx));
 
   string oid = "obj";
   string tag = "mychain";
@@ -412,6 +519,10 @@ TEST(cls_rgw, gc_defer)
   ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, entries, &truncated));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
+
+  /* remove pool */
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(gc_pool_name, rados));
 }
 
 
