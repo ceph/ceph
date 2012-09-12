@@ -2972,6 +2972,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   list_state.epoch = io_ctx.get_last_version();
   list_state.meta.size = object.size;
   list_state.meta.mtime.set_from_double(double(object.mtime));
+  list_state.exists = true;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
   return 0;
 }
