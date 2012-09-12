@@ -2715,7 +2715,7 @@ int RGWRados::process_gc()
 int RGWRados::cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid)
 {
   bufferlist in;
-  op.exec("rgw", "bucket_init_index", in);
+  cls_rgw_bucket_init(op);
   int r = io_ctx.operate(oid, &op);
   return r;
 }

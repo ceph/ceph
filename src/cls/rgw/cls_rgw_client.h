@@ -6,6 +6,8 @@
 #include "cls_rgw_types.h"
 
 /* bucket index */
+void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
+
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, uint8_t op, string& tag,
                                string& name, string& locator);
 
