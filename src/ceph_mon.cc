@@ -217,9 +217,6 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  CompatSet mon_features = get_ceph_mon_feature_compat_set();
-  CompatSet ondisk_features;
-
   MonitorStore store(g_conf->mon_data);
   err = store.mount();
   if (err < 0) {
@@ -239,28 +236,11 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  bufferlist features;
-  store.get_bl_ss(features, COMPAT_SET_LOC, 0);
-  if (features.length() == 0) {
-    cerr << "WARNING: mon fs missing feature list.\n"
-	 << "Assuming it is old-style and introducing one." << std::endl;
-    //we only want the baseline ~v.18 features assumed to be on disk.
-    //If new features are introduced this code needs to disappear or
-    //be made smarter.
-    ondisk_features = get_ceph_mon_feature_compat_set();
-  } else {
-    bufferlist::iterator it = features.begin();
-    ondisk_features.decode(it);
-  }
-  
-  if (!mon_features.writeable(ondisk_features)) {
-    cerr << "monitor executable cannot read disk! Missing features: "
-	 << std::endl;
-    CompatSet diff = mon_features.unsupported(ondisk_features);
-    //NEEDS_COMPATSET_ITER
+  err = Monitor::check_features(&store);
+  if (err < 0) {
+    cerr << "error checking features: " << cpp_strerror(err) << std::endl;
     exit(1);
   }
-
 
   // inject new monmap?
   if (!inject_monmap.empty()) {
