@@ -193,6 +193,7 @@ private:
 
 public:
   void recovered_leader(int id);
+  void recovered_peon(int id);
   version_t get_global_paxos_version();
   bool is_all_paxos_recovered() {
     return paxos_recovered.size() == paxos.size();
