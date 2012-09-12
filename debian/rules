@@ -127,7 +127,7 @@ binary-arch: build install
 
 	dh_compress
 	dh_fixperms
-	dh_makeshlibs -n  # we do the postinst/postrm scripts manually
+	dh_makeshlibs -X/usr/lib/rados-classes # exclude .so files in ceph package
 	dh_python2
 	dh_installdeb
 	dh_shlibdeps
