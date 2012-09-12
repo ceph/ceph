@@ -422,6 +422,8 @@ public:
   Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
 
+  static int check_features(MonitorStore *store);
+
   int init();
   void shutdown();
   void tick();
