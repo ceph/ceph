@@ -20,6 +20,7 @@ CLS_NAME(rgw)
 
 cls_handle_t h_class;
 cls_method_handle_t h_rgw_bucket_init_index;
+cls_method_handle_t h_rgw_bucket_set_tag_timeout;
 cls_method_handle_t h_rgw_bucket_list;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
@@ -120,6 +121,39 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   rgw_bucket_dir dir;
   ::encode(dir.header, header_bl);
+  rc = cls_cxx_map_write_header(hctx, &header_bl);
+  return rc;
+}
+
+int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_tag_timeout_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bucket_set_tag_timeout(): failed to decode request\n");
+    return -EINVAL;
+  }
+
+  bufferlist header_bl;
+  struct rgw_bucket_dir_header header;
+  int rc = cls_cxx_map_read_header(hctx, &header_bl);
+  if (rc < 0)
+    return rc;
+  bufferlist::iterator header_iter = header_bl.begin();
+  try {
+    ::decode(header, header_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode header\n");
+    return -EINVAL;
+  }
+
+  header.tag_timeout = op.tag_timeout;
+
+  header_bl.clear();
+  ::encode(header, header_bl);
   rc = cls_cxx_map_write_header(hctx, &header_bl);
   return rc;
 }
@@ -331,6 +365,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   if (rc < 0)
     return rc;
 
+  uint64_t tag_timeout;
+
   try {
     bufferlist::iterator header_iter = header_bl.begin();
     ::decode(header, header_iter);
@@ -338,6 +374,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to decode header\n");
     return -EINVAL;
   }
+
+  tag_timeout = (header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT);
 
   bufferlist::iterator in_iter = in->begin();
   __u8 op;
@@ -373,7 +411,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
                 cur_disk.pending_map.begin();
       while(iter != cur_disk.pending_map.end()) {
         map<string, struct rgw_bucket_pending_info>::iterator cur_iter=iter++;
-        if (cur_time > (cur_iter->second.timestamp + CEPH_RGW_TAG_TIMEOUT)) {
+        if (cur_time > (cur_iter->second.timestamp + tag_timeout)) {
           cur_disk.pending_map.erase(cur_iter);
         }
       }
@@ -1010,6 +1048,7 @@ void __cls_init()
 
   /* bucket index */
   cls_register_cxx_method(h_class, "bucket_init_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_init_index, &h_rgw_bucket_init_index);
+  cls_register_cxx_method(h_class, "bucket_set_tag_timeout", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
   cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);

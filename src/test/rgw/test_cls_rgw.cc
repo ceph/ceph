@@ -104,7 +104,6 @@ TEST(cls_rgw, index_basic)
 
 #define NUM_OBJS 10
   for (int i = 0; i < NUM_OBJS; i++) {
-    /* add chains */
     string obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
@@ -139,7 +138,6 @@ TEST(cls_rgw, index_multiple_obj_writers)
   string loc = str_int("loc", 0);
   /* multi prepare on a single object */
   for (int i = 0; i < NUM_OBJS; i++) {
-    /* add chains */
     string tag = str_int("tag", i);
 
     index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
@@ -178,7 +176,6 @@ TEST(cls_rgw, index_remove_object)
 
   /* prepare multiple objects */
   for (int i = 0; i < NUM_OBJS; i++) {
-    /* add chains */
     string obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
@@ -254,7 +251,6 @@ TEST(cls_rgw, index_remove_object)
   total_size -= meta.size;
   test_stats(ioctx, bucket_oid, 0, NUM_OBJS - 1, total_size);
 }
-
 
 /* test garbage collection */
 static void create_obj(cls_rgw_obj& obj, int i, int j)

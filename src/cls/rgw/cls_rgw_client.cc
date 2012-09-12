@@ -12,6 +12,14 @@ void cls_rgw_bucket_init(ObjectWriteOperation& o)
   o.exec("rgw", "bucket_init_index", in);
 }
 
+void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeout)
+{
+  bufferlist in;
+  struct rgw_cls_tag_timeout_op call;
+  call.tag_timeout = tag_timeout;
+  ::encode(call, in);
+  o.exec("rgw", "bucket_set_tag_timeout", in);
+}
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
                                string& name, string& locator)
@@ -25,7 +33,6 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
   ::encode(call, in);
   o.exec("rgw", "bucket_prepare_op", in);
 }
-
 
 void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag,
                                 uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta)
@@ -41,6 +48,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag
   ::encode(call, in);
   o.exec("rgw", "bucket_complete_op", in);
 }
+
 
 int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
                     string& filter_prefix, uint32_t num_entries,
