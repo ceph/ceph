@@ -378,12 +378,11 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   tag_timeout = (header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT);
 
   bufferlist::iterator in_iter = in->begin();
-  __u8 op;
-  rgw_bucket_dir_entry cur_change;
-  rgw_bucket_dir_entry cur_disk;
-  bufferlist op_bl;
 
   while (!in_iter.end()) {
+    __u8 op;
+    rgw_bucket_dir_entry cur_change;
+    rgw_bucket_dir_entry cur_disk;
     try {
       ::decode(op, in_iter);
       ::decode(cur_change, in_iter);
