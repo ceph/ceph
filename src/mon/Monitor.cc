@@ -81,16 +81,6 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
 }
 
-CompatSet get_ceph_mon_feature_compat_set()
-{
-  CompatSet::FeatureSet ceph_mon_feature_compat;
-  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
-  CompatSet::FeatureSet ceph_mon_feature_incompat;
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
-  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
-		   ceph_mon_feature_incompat);
-}
-
 long parse_pos_long(const char *s, ostream *pss)
 {
   char *e = 0;
@@ -301,31 +291,53 @@ void Monitor::handle_signal(int signum)
   shutdown();
 }
 
+CompatSet Monitor::get_supported_features()
+{
+  CompatSet::FeatureSet ceph_mon_feature_compat;
+  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
+  CompatSet::FeatureSet ceph_mon_feature_incompat;
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
+  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
+		   ceph_mon_feature_incompat);
+}
+
+CompatSet Monitor::get_legacy_features()
+{
+  CompatSet::FeatureSet ceph_mon_feature_compat;
+  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
+  CompatSet::FeatureSet ceph_mon_feature_incompat;
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
+  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
+		   ceph_mon_feature_incompat);
+}
+
 int Monitor::check_features(MonitorStore *store)
 {
-  CompatSet mon_features = get_ceph_mon_feature_compat_set();
-  CompatSet ondisk_features;
+  CompatSet required = get_supported_features();
+  CompatSet ondisk;
 
   bufferlist features;
   store->get_bl_ss(features, COMPAT_SET_LOC, 0);
   if (features.length() == 0) {
-    cerr << "WARNING: mon fs missing feature list.\n"
-	 << "Assuming it is old-style and introducing one." << std::endl;
+    generic_dout(0) << "WARNING: mon fs missing feature list.\n"
+	    << "Assuming it is old-style and introducing one." << dendl;
     //we only want the baseline ~v.18 features assumed to be on disk.
     //If new features are introduced this code needs to disappear or
     //be made smarter.
-    ondisk_features = get_ceph_mon_feature_compat_set();
+    ondisk = get_legacy_features();
+
+    bufferlist bl;
+    ondisk.encode(bl);
+    store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
   } else {
     bufferlist::iterator it = features.begin();
-    ondisk_features.decode(it);
+    ondisk.decode(it);
   }
-  
-  if (!mon_features.writeable(ondisk_features)) {
-    cerr << "monitor executable cannot read disk! Missing features: "
-	 << std::endl;
-    CompatSet diff = mon_features.unsupported(ondisk_features);
-    //NEEDS_COMPATSET_ITER
-    return -1;
+
+  if (!required.writeable(ondisk)) {
+    CompatSet diff = required.unsupported(ondisk);
+    generic_derr << "ERROR: on disk data includes unsupported features: " << diff << dendl;
+    return -EPERM;
   }
 
   return 0;
@@ -335,12 +347,10 @@ void Monitor::read_features()
 {
   bufferlist bl;
   store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
-  if (bl.length()) {
-    bufferlist::iterator p = bl.begin();
-    ::decode(features, p);
-  } else {
-    features = get_ceph_mon_feature_compat_set();
-  }
+  assert(bl.length());
+
+  bufferlist::iterator p = bl.begin();
+  ::decode(features, p);
   dout(10) << "features " << features << dendl;
 }
 
@@ -2273,7 +2283,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (r < 0)
     return r;
 
-  features = get_ceph_mon_feature_compat_set();
+  features = get_supported_features();
   write_features();
 
   // save monmap, osdmap, keyring.

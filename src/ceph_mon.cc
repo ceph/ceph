@@ -45,8 +45,6 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_mon
 
-extern CompatSet get_ceph_mon_feature_compat_set();
-
 Monitor *mon = NULL;
 
 void handle_mon_signal(int signum)

@@ -41,6 +41,9 @@ struct CompatSet {
       names[f.id] = f.name;
     }
 
+    bool contains(Feature f) const {
+      return names.count(f.id);
+    }
     bool contains(uint64_t f) const {
       return names.count(f);
     }
