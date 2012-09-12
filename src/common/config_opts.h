@@ -143,10 +143,10 @@ OPTION(paxos_max_join_drift, OPT_INT, 10)       // max paxos iterations before w
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
-OPTION(auth_cluster_required, OPT_STR, "")   // required of mon, mds, osd daemons
-OPTION(auth_service_required, OPT_STR, "")   // required by daemons of clients
-OPTION(auth_client_required, OPT_STR, "")    // what clients require of daemons
-OPTION(auth_supported, OPT_STR, "none")          // deprecated; default value for above if they are not defined.
+OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
+OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
+OPTION(auth_client_required, OPT_STR, "")         // what clients require of daemons
+OPTION(auth_supported, OPT_STR, "")               // deprecated; default value for above if they are not defined.
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
