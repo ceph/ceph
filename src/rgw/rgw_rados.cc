@@ -2866,9 +2866,11 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
   }
 
   if (updates.length()) {
+    ObjectWriteOperation o;
+    cls_rgw_suggest_changes(o, updates);
     // we don't care if we lose suggested updates, send them off blindly
     AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_exec(oid, c, "rgw", "dir_suggest_changes", updates, NULL);
+    r = io_ctx.aio_operate(oid, c, &o);
     c->release();
   }
   return m.size();
@@ -2961,8 +2963,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     }
     // encode a suggested removal of that key
     list_state.epoch = io_ctx.get_last_version();
-    suggested_updates.append(CEPH_RGW_REMOVE);
-    ::encode(list_state, suggested_updates);
+    cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
   }
   if (r < 0)
     return r;
@@ -2971,8 +2972,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   list_state.epoch = io_ctx.get_last_version();
   list_state.meta.size = object.size;
   list_state.meta.mtime.set_from_double(double(object.mtime));
-  suggested_updates.append(CEPH_RGW_UPDATE);
-  ::encode(list_state, suggested_updates);
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
   return 0;
 }
 
