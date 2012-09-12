@@ -301,6 +301,35 @@ void Monitor::handle_signal(int signum)
   shutdown();
 }
 
+int Monitor::check_features(MonitorStore *store)
+{
+  CompatSet mon_features = get_ceph_mon_feature_compat_set();
+  CompatSet ondisk_features;
+
+  bufferlist features;
+  store->get_bl_ss(features, COMPAT_SET_LOC, 0);
+  if (features.length() == 0) {
+    cerr << "WARNING: mon fs missing feature list.\n"
+	 << "Assuming it is old-style and introducing one." << std::endl;
+    //we only want the baseline ~v.18 features assumed to be on disk.
+    //If new features are introduced this code needs to disappear or
+    //be made smarter.
+    ondisk_features = get_ceph_mon_feature_compat_set();
+  } else {
+    bufferlist::iterator it = features.begin();
+    ondisk_features.decode(it);
+  }
+  
+  if (!mon_features.writeable(ondisk_features)) {
+    cerr << "monitor executable cannot read disk! Missing features: "
+	 << std::endl;
+    CompatSet diff = mon_features.unsupported(ondisk_features);
+    //NEEDS_COMPATSET_ITER
+    return -1;
+  }
+
+  return 0;
+}
 int Monitor::init()
 {
   lock.Lock();
