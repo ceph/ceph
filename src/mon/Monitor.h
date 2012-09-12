@@ -418,6 +418,9 @@ public:
 
   void extract_save_mon_key(KeyRing& keyring);
 
+  void read_features();
+  void write_features();
+
  public:
   Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();

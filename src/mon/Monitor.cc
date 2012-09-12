@@ -330,6 +330,27 @@ int Monitor::check_features(MonitorStore *store)
 
   return 0;
 }
+
+void Monitor::read_features()
+{
+  bufferlist bl;
+  store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
+  if (bl.length()) {
+    bufferlist::iterator p = bl.begin();
+    ::decode(features, p);
+  } else {
+    features = get_ceph_mon_feature_compat_set();
+  }
+  dout(10) << "features " << features << dendl;
+}
+
+void Monitor::write_features()
+{
+  bufferlist bl;
+  features.encode(bl);
+  store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
+}
+
 int Monitor::init()
 {
   lock.Lock();
@@ -382,17 +403,7 @@ int Monitor::init()
   }
 
   // open compatset
-  {
-    bufferlist bl;
-    store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
-    if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
-      ::decode(features, p);
-    } else {
-      features = get_ceph_mon_feature_compat_set();
-    }
-    dout(10) << "features " << features << dendl;
-  }
+  read_features();
 
   // have we ever joined a quorum?
   has_ever_joined = store->exists_bl_ss("joined");
@@ -2262,10 +2273,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (r < 0)
     return r;
 
-  bufferlist features;
-  CompatSet mon_features = get_ceph_mon_feature_compat_set();
-  mon_features.encode(features);
-  store->put_bl_ss(features, COMPAT_SET_LOC, 0);
+  features = get_ceph_mon_feature_compat_set();
+  write_features();
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
