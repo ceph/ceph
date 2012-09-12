@@ -108,16 +108,6 @@ radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
 implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 
-%package obsync
-Summary:	synchronize data between cloud object storage providers or a local directory
-Group:		Productivity/Networking/Other
-License:	LGPL-2.0
-Requires:	python, python-boto
-%description obsync
-obsync is a tool to synchronize objects between cloud object
-storage providers, such as Amazon S3 (or compatible services), a
-Ceph RADOS cluster, or a local directory.
-
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
@@ -285,7 +275,6 @@ fi
 %{_bindir}/ceph-debugpack
 %{_bindir}/boto_tool
 %{_bindir}/ceph-coverage
-%{_bindir}/obsync
 %{_initrddir}/ceph
 /sbin/mkcephfs
 /sbin/mount.ceph
@@ -311,7 +300,6 @@ fi
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
-%{_mandir}/man1/obsync.1*
 %{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-debugpack.8*

@@ -308,14 +308,6 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
 Description: RESTful bencher that can be used to benchmark
  radosgw performance.
 
-Package: obsync
-Architecture: linux-any
-Depends: ${misc:Depends}, python, python-boto, python-ceph, python-pyxattr, python-lxml
-Description: synchronize data between cloud object storage providers or a local directory
- obsync is a tool to synchronize objects between cloud object
- storage providers, such as Amazon S3 (or compatible services), a
- Ceph RADOS cluster, or a local directory.
-
 Package: python-ceph
 Architecture: linux-any
 Section: python
