@@ -6,6 +6,25 @@
 #include "include/types.h"
 #include "cls/rgw/cls_rgw_types.h"
 
+struct rgw_cls_tag_timeout_op
+{
+  uint64_t tag_timeout;
+
+  rgw_cls_tag_timeout_op() {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(tag_timeout, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(tag_timeout, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_tag_timeout_op)
+
 struct rgw_cls_obj_prepare_op
 {
   uint8_t op;
