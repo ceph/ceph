@@ -457,12 +457,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  LingerOp *op = p->second;
 	  ldout(cct, 10) << " checking linger op " << op->linger_id << dendl;
 	  int r = recalc_linger_op_target(op);
-	  if (skipped_map)
-	    r = RECALC_OP_TARGET_NEED_RESEND;
 	  switch (r) {
 	  case RECALC_OP_TARGET_NO_ACTION:
-	    // do nothing
-	    break;
+	    // resend if skipped map; otherwise do nothing.
+	    if (!skipped_map)
+	      break;
+	    // -- fall-thru --
 	  case RECALC_OP_TARGET_NEED_RESEND:
 	    need_resend_linger.push_back(op);
 	    linger_cancel_map_check(op);
@@ -480,12 +480,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  Op *op = p->second;
 	  ldout(cct, 10) << " checking op " << op->tid << dendl;
 	  int r = recalc_op_target(op);
-	  if (skipped_map)
-	    r = RECALC_OP_TARGET_NEED_RESEND;
 	  switch (r) {
 	  case RECALC_OP_TARGET_NO_ACTION:
-	    // do nothing
-	    break;
+	    // resend if skipped map; otherwise do nothing.
+	    if (!skipped_map)
+	      break;
+	    // -- fall-thru --
 	  case RECALC_OP_TARGET_NEED_RESEND:
 	    need_resend[op->tid] = op;
 	    op_cancel_map_check(op);
