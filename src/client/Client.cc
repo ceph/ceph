@@ -7780,13 +7780,17 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
   int r = 0;
   Context *onack;
   Context *onsafe;
+  if ((length == 0)) {
+    return -EINVAL;
+  }
   if (sync) {
       onack = new C_NoopContext;
       onsafe = new C_SafeCond(&flock, &cond, &done, &r);
   } else {
       onack = new C_SafeCond(&flock, &cond, &done, &r);
-      onsafe = new C_Block_Sync(this, vino.ino,
-				barrier_interval(offset, length));
+      onsafe = new C_Block_Sync(
+	this, vino.ino,
+	barrier_interval(offset, offset + length));
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;
@@ -7820,9 +7824,6 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
       return length;
   }
 }
-
-/* For now, just commit the whole file and ignore the range in
-   preparation for Matt adding barriers and making other changes. */
 
 int Client::ll_commit_blocks(vinodeno_t vino,
 			     uint64_t offset,

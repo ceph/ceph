@@ -21,6 +21,8 @@
 #include <set>
 #include <map>
 #include <boost/intrusive/list.hpp>
+#define BOOST_ICL_USE_STATIC_BOUNDED_INTERVALS
+#include <boost/icl/interval_set.hpp>
 #include <fstream>
 #include <exception>
 
@@ -31,8 +33,6 @@ using std::fstream;
 
 #include <ext/hash_map>
 
-#include "include/interval_set.h"
-
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
@@ -40,7 +40,7 @@ using std::fstream;
 
 class Client;
 
-typedef std::pair<uint64_t,uint64_t> barrier_interval;
+typedef boost::icl::interval<uint64_t>::type barrier_interval;
 
 using namespace std;
 
@@ -80,8 +80,8 @@ public:
 };
 
 typedef boost::intrusive::list< C_Block_Sync,
-				boost::intrusive::member_hook< 
-				  C_Block_Sync, 
+				boost::intrusive::member_hook<
+				  C_Block_Sync,
 				  boost::intrusive::list_member_hook<>,
 				  &C_Block_Sync::intervals_hook >
 				> BlockSyncList;
@@ -90,7 +90,7 @@ class Barrier
 {
 private:
   Cond cond;
-  interval_set<uint64_t> span;
+  boost::icl::interval_set<uint64_t> span;
   BlockSyncList write_list;
 
 public:
@@ -103,8 +103,8 @@ public:
 };
 
 typedef boost::intrusive::list< Barrier,
-				boost::intrusive::member_hook< 
-				  Barrier, 
+				boost::intrusive::member_hook<
+				  Barrier,
 				  boost::intrusive::list_member_hook<>,
 				  &Barrier::active_commits_hook >
 				> BarrierList;
@@ -121,8 +121,8 @@ private:
 
   // commits in progress, with their claimed writes
   BarrierList active_commits;
-  interval_set<uint64_t> active_commit_interval;
-    
+  boost::icl::interval_set<uint64_t> active_commit_interval;
+
 public:
   BarrierContext(Client *c, uint64_t ino);
   void write_nobarrier(C_Block_Sync &cbs);
