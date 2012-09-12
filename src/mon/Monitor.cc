@@ -215,11 +215,19 @@ Monitor::~Monitor()
   delete mon_caps;
 }
 
-void Monitor::recovered_machine(int id)
+void Monitor::recovered_leader(int id)
 {
+  if (paxos_recovered.count(id))
+    return;
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
     dout(10) << "all paxos instances recovered, going writeable" << dendl;
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_active);
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_commit);
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_readable);
     for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
       finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
   }
@@ -597,6 +605,9 @@ void Monitor::reset()
   }
   quorum.clear();
   outside_quorum.clear();
+
+  paxos_recovered.clear();
+  global_version = 0;
 
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->restart();
@@ -1027,9 +1038,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features)
 	   << " features are " << quorum_features
 	   << dendl;
 
-  paxos_recovered.clear();
-  global_version = 0;
-
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
   
@@ -1051,7 +1059,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   quorum_features = 0;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << dendl;
-  
+
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)

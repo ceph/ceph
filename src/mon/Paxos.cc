@@ -337,11 +337,13 @@ void Paxos::handle_last(MMonPaxos *last)
 	extend_lease();
 
 	// wake people up
-	finish_contexts(g_ceph_context, waiting_for_active);
-	finish_contexts(g_ceph_context, waiting_for_readable);
-	//finish_contexts(g_ceph_context, waiting_for_writeable);
-
-	mon->recovered_machine(machine_id);
+	if (mon->is_all_paxos_recovered()) {
+	  finish_contexts(g_ceph_context, waiting_for_active);
+	  finish_contexts(g_ceph_context, waiting_for_readable);
+	  finish_contexts(g_ceph_context, waiting_for_writeable);
+	} else {
+	  mon->recovered_leader(machine_id);
+	}
       }
     }
   } else {
@@ -393,12 +395,14 @@ void Paxos::begin(bufferlist& v, version_t gv)
     commit();
     state = STATE_ACTIVE;
 
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    //finish_contexts(g_ceph_context, waiting_for_writeable);
-
-    mon->recovered_machine(machine_id);
+    if (mon->is_all_paxos_recovered()) {
+      finish_contexts(g_ceph_context, waiting_for_active);
+      finish_contexts(g_ceph_context, waiting_for_commit);
+      finish_contexts(g_ceph_context, waiting_for_readable);
+      finish_contexts(g_ceph_context, waiting_for_writeable);
+    } else {
+      mon->recovered_leader(machine_id);
+    }
 
     return;
   }
@@ -506,13 +510,15 @@ void Paxos::handle_accept(MMonPaxos *accept)
     extend_lease();
 
     // wake people up
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    //finish_contexts(g_ceph_context, waiting_for_writeable);
-
-    mon->recovered_machine(machine_id);
+    if (mon->is_all_paxos_recovered()) {
+      finish_contexts(g_ceph_context, waiting_for_active);
+      finish_contexts(g_ceph_context, waiting_for_commit);
+      finish_contexts(g_ceph_context, waiting_for_readable);
+      finish_contexts(g_ceph_context, waiting_for_writeable);
+    } else {
+      mon->recovered_leader(machine_id);
     }
+  }
   accept->put();
 }
 
@@ -580,7 +586,9 @@ void Paxos::handle_commit(MMonPaxos *commit)
   
   commit->put();
 
-  finish_contexts(g_ceph_context, waiting_for_commit);
+  if (mon->is_all_paxos_recovered())
+    finish_contexts(g_ceph_context, waiting_for_commit);
+  // otherwise, this'll go when they all recover.
 }
 
 void Paxos::extend_lease()
@@ -838,7 +846,7 @@ void Paxos::leader_init()
 
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;
-    mon->recovered_machine(machine_id);
+    mon->recovered_leader(machine_id);
     return;
   }
 
