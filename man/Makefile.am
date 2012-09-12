@@ -24,5 +24,4 @@ dist_man_MANS = \
 	ceph-debugpack.8 \
 	cephfs.8 \
 	ceph-dencoder.8 \
-	ceph-rbdnamer.8 \
-	obsync.1
+	ceph-rbdnamer.8
