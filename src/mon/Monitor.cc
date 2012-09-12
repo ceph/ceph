@@ -212,6 +212,14 @@ void Monitor::recovered_leader(int id)
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
     dout(10) << "all paxos instances recovered, going writeable" << dendl;
+
+    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
+	(quorum_features & CEPH_FEATURE_MON_GV)) {
+      dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
+      features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
+      write_features();
+    }
+
     for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
       finish_contexts(g_ceph_context, (*p)->waiting_for_active);
     for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
@@ -230,6 +238,14 @@ void Monitor::recovered_peon(int id)
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
     dout(10) << "all paxos instances recovered/leased" << dendl;
+
+    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
+	(quorum_features & CEPH_FEATURE_MON_GV)) {
+      dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
+      features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
+      write_features();
+    }
+
   }
 }
 
@@ -297,6 +313,7 @@ CompatSet Monitor::get_supported_features()
   CompatSet::FeatureSet ceph_mon_feature_ro_compat;
   CompatSet::FeatureSet ceph_mon_feature_incompat;
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
 }
