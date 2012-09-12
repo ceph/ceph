@@ -798,7 +798,7 @@ TEST(LibRadosAio, OmapPP) {
 
   {
     boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     map<string, pair<bufferlist, int> > assertions;
     bufferlist val;
     val.append(string("bar"));
@@ -807,7 +807,7 @@ TEST(LibRadosAio, OmapPP) {
     int r;
     op.omap_cmp(assertions, &r);
 
-    ioctx.aio_operate("test_obj", my_completion.get(), &op);
+    ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
     {
       TestAlarm alarm;
       ASSERT_EQ(0, my_completion->wait_for_complete());
