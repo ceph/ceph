@@ -233,6 +233,16 @@ void Monitor::recovered_leader(int id)
   }
 }
 
+void Monitor::recovered_peon(int id)
+{
+  if (paxos_recovered.count(id))
+    return;
+  paxos_recovered.insert(id);
+  if (paxos_recovered.size() == paxos.size()) {
+    dout(10) << "all paxos instances recovered/leased" << dendl;
+  }
+}
+
 version_t Monitor::get_global_paxos_version()
 {
   // this should only be called when paxos becomes writeable, which is
