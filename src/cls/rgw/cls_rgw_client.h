@@ -18,6 +18,10 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, string& oid, string& start_obj,
 
 int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header);
 
+void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
+
+void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& updates);
+
 /* usage logging */
 int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
