@@ -837,7 +837,6 @@ protected:
     vector<int> acting;
     set<int> prior;
     pg_t parent;
-    int split_bits;
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
   double debug_drop_pg_create_probability;
