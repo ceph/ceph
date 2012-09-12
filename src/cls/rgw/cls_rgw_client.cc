@@ -6,6 +6,12 @@
 
 using namespace librados;
 
+void cls_rgw_bucket_init(ObjectWriteOperation& o)
+{
+  bufferlist in;
+  o.exec("rgw", "bucket_init_index", in);
+}
+
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
                                string& name, string& locator)
