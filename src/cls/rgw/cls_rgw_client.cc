@@ -66,6 +66,17 @@ int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
  return r;
 }
 
+void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates)
+{
+  updates.append(op);
+  ::encode(dirent, updates);
+}
+
+void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
+{
+  o.exec("rgw", "dir_suggest_changes", updates);
+}
+
 int cls_rgw_get_dir_header(IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header)
 {
   bufferlist in, out;
