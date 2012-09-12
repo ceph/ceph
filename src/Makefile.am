@@ -937,8 +937,6 @@ $(shell_scripts): %: %.in
 BUILT_SOURCES += init-ceph
 sbin_SCRIPTS += mkcephfs
 
-bin_SCRIPTS += obsync/obsync
-bin_SCRIPTS += obsync/boto_tool
 bin_SCRIPTS += ceph-coverage
 
 CLEANFILES += $(shell_scripts)
@@ -1686,8 +1684,6 @@ noinst_HEADERS = \
         msg/SimpleMessenger.h\
         msg/msg_types.h\
 	objclass/objclass.h\
-	obsync/obsync\
-	obsync/boto_tool\
 	os/btrfs_ioctl.h\
 	os/hobject.h \
 	os/CollectionIndex.h\
