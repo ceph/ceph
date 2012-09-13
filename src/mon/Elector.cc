@@ -262,7 +262,7 @@ void Elector::handle_ack(MMonElection *m)
 
 void Elector::handle_victory(MMonElection *m)
 {
-  dout(5) << "handle_victory from " << m->get_source() << dendl;
+  dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
   int from = m->get_source().num();
 
   assert(from < mon->rank);
@@ -280,7 +280,7 @@ void Elector::handle_victory(MMonElection *m)
   bump_epoch(m->epoch);
   
   // they win
-  mon->lose_election(epoch, m->quorum, from);
+  mon->lose_election(epoch, m->quorum, from, m->quorum_features);
   
   // cancel my timer
   cancel_timer();	
