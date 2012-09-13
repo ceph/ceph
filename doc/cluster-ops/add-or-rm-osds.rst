@@ -96,10 +96,10 @@ hard disks than older hosts in the cluster (i.e., they may have greater weight).
 
 #. Add the new OSD to your ``ceph.conf`` file.
 	
-.. code-block:: ini
-	
-	[osd.123]
-		host = {hostname}
+   .. code-block:: ini
+
+     [osd.123]
+         host = {hostname}
  
 #. From the host where you keep the master copy of the cluster's 
    ``ceph.conf`` file, copy the updated ``ceph.conf`` file to your 
