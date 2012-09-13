@@ -299,6 +299,7 @@ def main():
                     ctx.pid,
                     ctx.pid))
         else:
+            import subprocess
             subprocess.check_call(["kill", "-9", str(ctx.pid)]);
 
     nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all)
