@@ -4588,11 +4588,6 @@ bool PG::must_delay_request(OpRequestRef op)
 void PG::queue_op(OpRequestRef op)
 {
   _qlock.Lock();
-  if (!must_delay_request(op) &&
-      can_discard_request(op)) {
-    _qlock.Unlock();
-    return;
-  }
   op_queue.push_back(op);
   osd->queue_for_op(this);
   _qlock.Unlock();
