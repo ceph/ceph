@@ -5388,41 +5388,9 @@ void OSD::handle_op(OpRequestRef op)
       service.reply_op_error(op, -ENXIO);
     }
     return;
-  } else if (!op_has_sufficient_caps(pg, m)) {
-    pg->unlock();
-    return;
   }
-
 
   enqueue_op(pg, op);
-}
-
-bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
-{
-  Session *session = (Session *)op->get_connection()->get_priv();
-  if (!session) {
-    dout(0) << "op_has_sufficient_caps: no session for op " << *op << dendl;
-    return false;
-  }
-  OSDCap& caps = session->caps;
-  session->put();
-  
-  string key = op->get_object_locator().key;
-  if (key.length() == 0)
-    key = op->get_oid().name;
-
-  bool cap = caps.is_capable(pg->pool.name, pg->pool.auid, key,
-			     op->may_read(), op->may_write(), op->require_exec_caps());
-
-  dout(20) << "op_has_sufficient_caps pool=" << pg->pool.id << " (" << pg->pool.name
-	   << ") owner=" << pg->pool.auid
-	   << " may_read=" << op->may_read()
-	   << " may_write=" << op->may_write()
-	   << " may_exec=" << op->may_exec()
-           << " require_exec_caps=" << op->require_exec_caps()
-	   << " -> " << (cap ? "yes" : "NO")
-	   << dendl;
-  return cap;
 }
 
 void OSD::handle_sub_op(OpRequestRef op)
