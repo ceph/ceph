@@ -731,8 +731,9 @@ protected:
   PGPool _get_pool(int id, OSDMapRef createmap);
 
   bool  _have_pg(pg_t pgid);
-  PG   *_lookup_lock_pg(pg_t pgid);
   PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
+  PG   *_lookup_lock_pg(pg_t pgid);
+  PG   *_lookup_pg(pg_t pgid);
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      pg_t pg, bool no_lockdep_check=false,
 		      bool hold_map_lock=false);
@@ -743,6 +744,7 @@ protected:
 			pg_history_t history,
 			pg_interval_map_t& pi,
 			ObjectStore::Transaction& t);
+  PG   *_lookup_qlock_pg(pg_t pgid);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
 

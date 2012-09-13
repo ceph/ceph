@@ -61,6 +61,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
        const hobject_t& ioid) :
   osd(o), osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
+  _qlock("PG::_qlock"),
   ref(0), deleting(false), dirty_info(false), dirty_log(false),
   info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
@@ -2671,10 +2672,12 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
   dout(15) << " requeue_ops " << ls << dendl;
+  lockq();
   assert(&ls != &op_queue);
   size_t requeue_size = ls.size();
   op_queue.splice(op_queue.begin(), ls, ls.begin(), ls.end());
   for (size_t i = 0; i < requeue_size; ++i) osd->queue_for_op(this);
+  unlockq();
 }
 
 
@@ -4584,12 +4587,15 @@ bool PG::must_delay_request(OpRequestRef op)
 
 void PG::queue_op(OpRequestRef op)
 {
+  _qlock.Lock();
   if (!must_delay_request(op) &&
       can_discard_request(op)) {
+    _qlock.Unlock();
     return;
   }
   op_queue.push_back(op);
   osd->queue_for_op(this);
+  _qlock.Unlock();
 }
 
 void PG::take_waiters()
