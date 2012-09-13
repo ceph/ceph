@@ -216,6 +216,7 @@ void Monitor::recovered_leader(int id)
     if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
 	(quorum_features & CEPH_FEATURE_MON_GV)) {
       require_gv_ondisk();
+      require_gv_onwire();
     }
 
     for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
@@ -240,8 +241,8 @@ void Monitor::recovered_peon(int id)
     if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
 	(quorum_features & CEPH_FEATURE_MON_GV)) {
       require_gv_ondisk();
+      require_gv_onwire();
     }
-
   }
 }
 
@@ -250,6 +251,15 @@ void Monitor::require_gv_ondisk()
   dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
   features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
   write_features();
+}
+
+void Monitor::require_gv_onwire()
+{
+  dout(10) << "require_gv_onwire" << dendl;
+  // require protocol feature bit of my peers
+  Messenger::Policy p = messenger->get_policy(entity_name_t::TYPE_MON);
+  p.features_required |= CEPH_FEATURE_MON_GV;
+  messenger->set_policy(entity_name_t::TYPE_MON, p);
 }
 
 version_t Monitor::get_global_paxos_version()
@@ -381,6 +391,9 @@ void Monitor::read_features()
   bufferlist::iterator p = bl.begin();
   ::decode(features, p);
   dout(10) << "features " << features << dendl;
+
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV))
+    require_gv_onwire();
 }
 
 void Monitor::write_features()
