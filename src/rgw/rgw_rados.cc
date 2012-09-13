@@ -2950,10 +2950,15 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   obj.init(bucket, oid, list_state.locator, ns);
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   io_ctx.locator_set_key(key);
-  int r = io_ctx.stat(oid, &object.size, &object.mtime);
+
+  RGWObjState *astate = NULL;
+  RGWRadosCtx rctx;
+  int r = get_obj_state(&rctx, obj, &astate);
+  if (r < 0)
+    return r;
 
   list_state.pending_map.clear(); // we don't need this and it inflates size
-  if (r == -ENOENT) {
+  if (!astate->exists) {
       /* object doesn't exist right now -- hopefully because it's
        * marked as !exists and got deleted */
     if (list_state.exists) {
@@ -2964,9 +2969,11 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     // encode a suggested removal of that key
     list_state.epoch = io_ctx.get_last_version();
     cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
+    return -ENOENT;
   }
-  if (r < 0)
-    return r;
+
+  object.size = astate->size;
+  object.mtime = astate->mtime;
 
   // encode suggested updates
   list_state.epoch = io_ctx.get_last_version();
