@@ -65,7 +65,7 @@ def create_image(ctx, config):
             ]
         # omit format option if using the default (format 1)
         # since old versions of don't support it
-        if format != 1:
+        if int(fmt) != 1:
             args += ['--format', str(fmt)]
         remote.run(args=args)
     try:
