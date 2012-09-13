@@ -236,8 +236,9 @@ public:
   void start_election();
   void win_standalone_election();
   void win_election(epoch_t epoch, set<int>& q,
-		    unsigned features);         // end election (called by Elector)
-  void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
+		    uint64_t features);         // end election (called by Elector)
+  void lose_election(epoch_t epoch, set<int>& q, int l,
+		     uint64_t features); // end election (called by Elector)
   void finish_election();
 
   void update_logger();
