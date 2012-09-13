@@ -215,9 +215,7 @@ void Monitor::recovered_leader(int id)
 
     if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
 	(quorum_features & CEPH_FEATURE_MON_GV)) {
-      dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
-      features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
-      write_features();
+      require_gv_ondisk();
     }
 
     for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
@@ -241,12 +239,17 @@ void Monitor::recovered_peon(int id)
 
     if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
 	(quorum_features & CEPH_FEATURE_MON_GV)) {
-      dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
-      features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
-      write_features();
+      require_gv_ondisk();
     }
 
   }
+}
+
+void Monitor::require_gv_ondisk()
+{
+  dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
+  features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
+  write_features();
 }
 
 version_t Monitor::get_global_paxos_version()

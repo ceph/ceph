@@ -191,6 +191,8 @@ private:
   set<int> paxos_recovered;     ///< num paxos machines fully recovered during this election epoch
   version_t global_version;
 
+  void require_gv_ondisk();
+
 public:
   void recovered_leader(int id);
   void recovered_peon(int id);
