@@ -48,6 +48,7 @@ void _usage()
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
   cerr << "  bucket rm                  remove bucket\n";
+  cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -83,6 +84,7 @@ void _usage()
   cerr << "   --start-date=<date>\n";
   cerr << "   --end-date=<date>\n";
   cerr << "   --bucket-id=<bucket-id>\n";
+  cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
   cerr << "   --purge-data              when specified, user removal will also purge all the\n";
@@ -133,6 +135,7 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
   OPT_BUCKET_RM,
+  OPT_BUCKET_CHECK,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -269,6 +272,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_BUCKET_STATS;
     if (strcmp(cmd, "rm") == 0)
       return OPT_BUCKET_RM;
+    if (strcmp(cmd, "check") == 0)
+      return OPT_BUCKET_CHECK;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_LOG_LIST;
@@ -498,6 +503,24 @@ static bool validate_access_key(string& key)
   return true;
 }
 
+static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Formatter *formatter)
+{
+  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+
+  formatter->open_object_section("usage");
+  for (iter = stats.begin(); iter != stats.end(); ++iter) {
+    RGWBucketStats& s = iter->second;
+    const char *cat_name = rgw_obj_category_name(iter->first);
+    formatter->open_object_section(cat_name);
+    formatter->dump_int("size_kb", s.num_kb);
+    formatter->dump_int("size_kb_actual", s.num_kb_rounded);
+    formatter->dump_int("num_objects", s.num_objects);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  formatter->close_section();
+}
+
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
@@ -511,7 +534,6 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
   }
-  map<RGWObjCategory, RGWBucketStats>::iterator iter;
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("pool", bucket.pool);
@@ -519,19 +541,9 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
-  formatter->open_object_section("usage");
-  for (iter = stats.begin(); iter != stats.end(); ++iter) {
-    RGWBucketStats& s = iter->second;
-    const char *cat_name = rgw_obj_category_name(iter->first);
-    formatter->open_object_section(cat_name);
-    formatter->dump_int("size_kb", s.num_kb);
-    formatter->dump_int("size_kb_actual", s.num_kb_rounded);
-    formatter->dump_int("num_objects", s.num_objects);
-    formatter->close_section();
-    formatter->flush(cout);
-  }
+  dump_bucket_usage(stats, formatter);
   formatter->close_section();
-  formatter->close_section();
+
   return 0;
 }
 
@@ -708,6 +720,7 @@ int main(int argc, char **argv)
   int purge_keys = false;
   int yes_i_really_mean_it = false;
   int delete_child_objects = false;
+  int fix = false;
   int max_buckets = -1;
   map<string, bool> categories;
 
@@ -803,6 +816,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
     } else {
       ++i;
@@ -1674,6 +1689,35 @@ next:
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
       return 1;
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_CHECK) {
+    map<RGWObjCategory, RGWBucketStats> existing_stats;
+    map<RGWObjCategory, RGWBucketStats> calculated_stats;
+
+    int r = store->bucket_check_index(bucket, &existing_stats, &calculated_stats);
+    if (r < 0) {
+      cerr << "failed to check index err=" << cpp_strerror(-r) << std::endl;
+      return r;
+    }
+
+    formatter->open_object_section("check_result");
+    formatter->open_object_section("existing_header");
+    dump_bucket_usage(existing_stats, formatter);
+    formatter->close_section();
+    formatter->open_object_section("calculated_header");
+    dump_bucket_usage(calculated_stats, formatter);
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
+
+    if (fix) {
+      r = store->bucket_rebuild_index(bucket);
+      if (r < 0) {
+        cerr << "failed to rebuild index err=" << cpp_strerror(-r) << std::endl;
+        return r;
+      }
     }
   }
 

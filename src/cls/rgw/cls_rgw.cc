@@ -22,6 +22,8 @@ cls_handle_t h_class;
 cls_method_handle_t h_rgw_bucket_init_index;
 cls_method_handle_t h_rgw_bucket_set_tag_timeout;
 cls_method_handle_t h_rgw_bucket_list;
+cls_method_handle_t h_rgw_bucket_check_index;
+cls_method_handle_t h_rgw_bucket_rebuild_index;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
@@ -96,6 +98,84 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode(ret, *out);
   return 0;
 }
+
+static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *existing_header, struct rgw_bucket_dir_header *calc_header)
+{
+  bufferlist header_bl;
+  int rc = cls_cxx_map_read_header(hctx, &header_bl);
+  if (rc < 0)
+    return rc;
+  bufferlist::iterator header_iter = header_bl.begin();
+  try {
+    ::decode(*existing_header, header_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode header\n");
+    return -EINVAL;
+  }
+
+  calc_header->tag_timeout = existing_header->tag_timeout;
+
+  bufferlist bl;
+
+  map<string, bufferlist> keys;
+  string start_obj;
+  string filter_prefix;
+
+#define CHECK_CHUNK_SIZE 1000
+  do {
+    rc = cls_cxx_map_get_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys);
+    if (rc < 0)
+      return rc;
+
+    std::map<string, bufferlist>::iterator kiter = keys.begin();
+    for (; kiter != keys.end(); ++kiter) {
+      struct rgw_bucket_dir_entry entry;
+      bufferlist::iterator eiter = kiter->second.begin();
+      try {
+        ::decode(entry, eiter);
+      } catch (buffer::error& err) {
+        CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
+        return -EIO;
+      }
+      struct rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
+      stats.num_entries++;
+      stats.total_size += entry.meta.size;
+      stats.total_size_rounded += get_rounded_size(entry.meta.size);
+
+      start_obj = kiter->first;
+    }
+  } while (keys.size() == CHECK_CHUNK_SIZE);
+
+  return 0;
+}
+
+int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  struct rgw_cls_check_index_ret ret;
+
+  int rc = check_index(hctx, &ret.existing_header, &ret.calculated_header);
+  if (rc < 0)
+    return rc;
+
+  ::encode(ret, *out);
+
+  return 0;
+}
+
+int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  struct rgw_bucket_dir_header existing_header;
+  struct rgw_bucket_dir_header calc_header;
+  int rc = check_index(hctx, &existing_header, &calc_header);
+  if (rc < 0)
+    return rc;
+
+  bufferlist header_bl;
+  ::encode(calc_header, header_bl);
+  rc = cls_cxx_map_write_header(hctx, &header_bl);
+  return rc;
+}
+
 
 int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -1057,6 +1137,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_init_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_init_index, &h_rgw_bucket_init_index);
   cls_register_cxx_method(h_class, "bucket_set_tag_timeout", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
   cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
+  cls_register_cxx_method(h_class, "bucket_check_index", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_check_index, &h_rgw_bucket_check_index);
+  cls_register_cxx_method(h_class, "bucket_rebuild_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);

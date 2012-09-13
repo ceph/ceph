@@ -80,6 +80,41 @@ int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
  return r;
 }
 
+int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
+				  rgw_bucket_dir_header *existing_header,
+				  rgw_bucket_dir_header *calculated_header)
+{
+  bufferlist in, out;
+  int r = io_ctx.exec(oid, "rgw", "bucket_check_index", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_check_index_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  if (existing_header)
+    *existing_header = ret.existing_header;
+  if (calculated_header)
+    *calculated_header = ret.calculated_header;
+
+  return 0;
+}
+
+int cls_rgw_bucket_rebuild_index_op(IoCtx& io_ctx, string& oid)
+{
+  bufferlist in, out;
+  int r = io_ctx.exec(oid, "rgw", "bucket_rebuild_index", in, out);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates)
 {
   updates.append(op);

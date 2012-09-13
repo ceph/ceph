@@ -704,7 +704,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     bucket.marker = buf;
     bucket.bucket_id = bucket.marker;
 
-    string dir_oid =  dir_oid_prefix;
+    string dir_oid = dir_oid_prefix;
     dir_oid.append(bucket.marker);
 
     librados::ObjectWriteOperation op;
@@ -1349,6 +1349,77 @@ int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, r
 
   return ret;
 }
+
+int RGWRados::open_bucket(rgw_bucket& bucket, librados::IoCtx& io_ctx, string& bucket_oid)
+{
+  if (bucket_is_system(bucket))
+    return -EINVAL;
+
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    ldout(cct, 0) << "ERROR: empty marker for bucket operation" << dendl;
+    return -EIO;
+  }
+
+  bucket_oid = dir_oid_prefix;
+  bucket_oid.append(bucket.marker);
+
+  return 0;
+}
+
+static void translate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWBucketStats>& stats)
+{
+  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
+  for (; iter != header.stats.end(); ++iter) {
+    RGWObjCategory category = (RGWObjCategory)iter->first;
+    RGWBucketStats& s = stats[category];
+    struct rgw_bucket_category_stats& header_stats = iter->second;
+    s.category = (RGWObjCategory)iter->first;
+    s.num_kb = ((header_stats.total_size + 1023) / 1024);
+    s.num_kb_rounded = ((header_stats.total_size_rounded + 1023) / 1024);
+    s.num_objects = header_stats.num_entries;
+  }
+}
+
+int RGWRados::bucket_check_index(rgw_bucket& bucket,
+				 map<RGWObjCategory, RGWBucketStats> *existing_stats,
+				 map<RGWObjCategory, RGWBucketStats> *calculated_stats)
+{
+  librados::IoCtx io_ctx;
+  string oid;
+
+  int ret = open_bucket(bucket, io_ctx, oid);
+  if (ret < 0)
+    return ret;
+
+  rgw_bucket_dir_header existing_header;
+  rgw_bucket_dir_header calculated_header;
+
+  ret = cls_rgw_bucket_check_index_op(io_ctx, oid, &existing_header, &calculated_header);
+  if (ret < 0)
+    return ret;
+
+  translate_raw_stats(existing_header, *existing_stats);
+  translate_raw_stats(calculated_header, *calculated_stats);
+
+  return 0;
+}
+
+int RGWRados::bucket_rebuild_index(rgw_bucket& bucket)
+{
+  librados::IoCtx io_ctx;
+  string oid;
+
+  int ret = open_bucket(bucket, io_ctx, oid);
+  if (ret < 0)
+    return ret;
+
+  return cls_rgw_bucket_rebuild_index_op(io_ctx, oid);
+}
+
 
 int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
 {
@@ -2450,16 +2521,8 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
     return r;
 
   stats.clear();
-  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
-  for (; iter != header.stats.end(); ++iter) {
-    RGWObjCategory category = (RGWObjCategory)iter->first;
-    RGWBucketStats& s = stats[category];
-    struct rgw_bucket_category_stats& stats = iter->second;
-    s.category = (RGWObjCategory)iter->first;
-    s.num_kb = ((stats.total_size + 1023) / 1024);
-    s.num_kb_rounded = ((stats.total_size_rounded + 1023) / 1024);
-    s.num_objects = stats.num_entries;
-  }
+
+  translate_raw_stats(header, stats);
 
   return 0;
 }
@@ -2727,21 +2790,12 @@ int RGWRados::cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteO
 int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
                                  string& name, string& locator)
 {
-  if (bucket_is_system(bucket))
-    return 0;
-
-  if (bucket.marker.empty()) {
-    ldout(cct, 0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
-
   librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
+  string oid;
+
+  int r = open_bucket(bucket, io_ctx, oid);
   if (r < 0)
     return r;
-
-  string oid = dir_oid_prefix;
-  oid.append(bucket.marker);
 
   ObjectWriteOperation o;
   cls_rgw_bucket_prepare_op(o, op, tag, name, locator);
@@ -2751,21 +2805,12 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
 
 int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category)
 {
-  if (bucket_is_system(bucket))
-    return 0;
-
-  if (bucket.marker.empty()) {
-    ldout(cct, 0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
-
   librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
+  string oid;
+
+  int r = open_bucket(bucket, io_ctx, oid);
   if (r < 0)
     return r;
-
-  string oid = dir_oid_prefix;
-  oid.append(bucket.marker);
 
   ObjectWriteOperation o;
   rgw_bucket_dir_entry_meta dir_meta;
@@ -2810,17 +2855,10 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
   ldout(cct, 10) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
 
   librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
+  string oid;
+  int r = open_bucket(bucket, io_ctx, oid);
   if (r < 0)
     return r;
-
-  if (bucket.marker.empty()) {
-    ldout(cct, 0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
-
-  string oid = dir_oid_prefix;
-  oid.append(bucket.marker);
 
   struct rgw_bucket_dir dir;
   r = cls_rgw_list_op(io_ctx, oid, start, prefix, num, &dir, is_truncated);
@@ -2992,17 +3030,10 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header)
 {
   librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
+  string oid;
+  int r = open_bucket(bucket, io_ctx, oid);
   if (r < 0)
     return r;
-
-  if (bucket.marker.empty()) {
-    ldout(cct, 0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
-
-  string oid = dir_oid_prefix;
-  oid.append(bucket.marker);
 
   r = cls_rgw_get_dir_header(io_ctx, oid, &header);
   if (r < 0)
