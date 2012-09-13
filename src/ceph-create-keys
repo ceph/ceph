@@ -55,7 +55,6 @@ def get_key(cluster, mon_id):
         path=path,
         pid=os.getpid(),
         )
-    wait_for_quorum(cluster=cluster, mon_id=mon_id)
     while True:
         try:
             with file(tmp, 'w') as f:
@@ -138,6 +137,7 @@ def main():
         level=loglevel,
         )
 
+    wait_for_quorum(cluster=args.cluster, mon_id=args.id)
     get_key(cluster=args.cluster, mon_id=args.id)
 
 
