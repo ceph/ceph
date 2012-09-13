@@ -20,6 +20,11 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, string& oid, string& start_obj,
                     string& filter_prefix, uint32_t num_entries,
                     rgw_bucket_dir *dir, bool *is_truncated);
 
+int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
+				  rgw_bucket_dir_header *existing_header,
+				  rgw_bucket_dir_header *calculated_header);
+int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, string& oid);
+  
 int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
