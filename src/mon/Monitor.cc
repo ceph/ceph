@@ -1083,7 +1083,7 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features) 
+void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features) 
 {
   if (!is_electing())
     reset();
@@ -1109,16 +1109,16 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features)
   finish_election();
 }
 
-void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
+void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
 {
   state = STATE_PEON;
   leader_since = utime_t();
   leader = l;
   quorum = q;
   outside_quorum.clear();
-  quorum_features = 0;
+  quorum_features = features;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
-	   << " quorum is " << quorum << dendl;
+	   << " quorum is " << quorum << " features are " << quorum_features << dendl;
 
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->peon_init();
