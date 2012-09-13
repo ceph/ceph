@@ -1606,6 +1606,9 @@ public:
     return e <= get_osdmap()->get_epoch();
   }
 
+  bool op_has_sufficient_caps(OpRequestRef op);
+
+
   // recovery bits
   void take_waiters();
   void queue_peering_event(CephPeeringEvtRef evt);
