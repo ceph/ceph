@@ -416,22 +416,30 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       }
     }
 
+    CLS_LOG(20, "cur_disk.pending_map.empty()=%d op=%d cur_disk.exists=%d cur_change.pending_map.size()=%d cur_change.exists=%d\n",
+	    cur_disk.pending_map.empty(), (int)op, cur_disk.exists,
+	    cur_change.pending_map.size(), cur_change.exists);
+
     if (cur_disk.pending_map.empty()) {
-      struct rgw_bucket_category_stats& stats =
-          header.stats[cur_disk.meta.category];
       if (cur_disk.exists) {
-        stats.num_entries--;
-        stats.total_size -= cur_disk.meta.size;
-        stats.total_size_rounded -= get_rounded_size(cur_disk.meta.size);
+        struct rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
+        CLS_LOG(10, "total_entries: %d -> %d\n", old_stats.num_entries, old_stats.num_entries - 1);
+        old_stats.num_entries--;
+        old_stats.total_size -= cur_disk.meta.size;
+        old_stats.total_size_rounded -= get_rounded_size(cur_disk.meta.size);
         header_changed = true;
       }
+      struct rgw_bucket_category_stats& stats =
+          header.stats[cur_change.meta.category];
       switch(op) {
       case CEPH_RGW_REMOVE:
+        CLS_LOG(10, "CEPH_RGW_REMOVE name=%s\n", cur_change.name.c_str());
 	ret = cls_cxx_map_remove_key(hctx, cur_change.name);
 	if (ret < 0)
 	  return ret;
         break;
       case CEPH_RGW_UPDATE:
+        CLS_LOG(10, "CEPH_RGW_UPDATE name=%s total_entries: %d -> %d\n", cur_change.name.c_str(), stats.num_entries, stats.num_entries + 1);
         stats.num_entries++;
         stats.total_size += cur_change.meta.size;
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
