@@ -1215,7 +1215,7 @@ int RGWRados::copy_obj(void *ctx,
 
   ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
   if (mtime)
-    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
+    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
 
   finish_get_obj(&handle);
 
@@ -1504,7 +1504,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
   if (s->has_attrs)
     return 0;
 
-  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->attrset, (s->prefetch_data ? &s->data : NULL));
+  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL));
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -2401,7 +2401,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   return r;
 }
 
-int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk)
+int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -2425,6 +2425,10 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   }
   bufferlist outbl;
   r = io_ctx.operate(oid, &op, &outbl);
+
+  if (epoch)
+    *epoch = io_ctx.get_last_version();
+
   if (r < 0)
     return r;
 
@@ -2976,9 +2980,10 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   object.mtime = astate->mtime;
 
   // encode suggested updates
-  list_state.epoch = io_ctx.get_last_version();
+  list_state.epoch = astate->epoch;
   list_state.meta.size = object.size;
   list_state.meta.mtime.set_from_double(double(object.mtime));
+  list_state.meta.category = main_category;
   list_state.exists = true;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
   return 0;
