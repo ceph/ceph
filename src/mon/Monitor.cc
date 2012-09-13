@@ -255,6 +255,15 @@ version_t Monitor::get_global_paxos_version()
   // *after* everything settles after an election.
   assert(is_all_paxos_recovered());
 
+  if ((quorum_features & CEPH_FEATURE_MON_GV) == 0) {
+    // do not sure issuing gv's until the entire quorum supports them.
+    // this way we synchronize the setting of the incompat GV ondisk
+    // feature with actually writing the values to the data store, and
+    // avoid having to worry about hybrid cases.
+    dout(10) << "get_global_paxos_version no-op; quorum does not support the feature" << dendl;
+    return 0;
+  }
+
   if (global_version == 0) {
     global_version =
       osdmon()->paxos->get_version() +
