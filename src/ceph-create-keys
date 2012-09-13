@@ -94,6 +94,57 @@ def get_key(cluster, mon_id):
                 else:
                     raise
 
+def bootstrap_key(cluster, type_, caps):
+    path = '/var/lib/ceph/bootstrap-{type}/{cluster}.keyring'.format(
+        type=type_,
+        cluster=cluster,
+        )
+    if os.path.exists(path):
+        log.info('Key exists already: %s', path)
+        return
+    tmp = '{path}.{pid}.tmp'.format(
+        path=path,
+        pid=os.getpid(),
+        )
+
+    args = [
+        'ceph',
+        '--cluster={cluster}'.format(cluster=cluster),
+        'auth',
+        'get-or-create',
+        'client.bootstrap-{type}'.format(type=type_),
+        ]
+    for subsystem, subcaps in caps.iteritems():
+        args.extend([
+            subsystem,
+            '; '.join(subcaps),
+            ])
+
+    while True:
+        try:
+            with file(tmp, 'w') as f:
+                os.fchmod(f.fileno(), 0600)
+                log.info('Talking to monitor...')
+                returncode = subprocess.call(
+                    args=args,
+                    stdout=f,
+                    )
+            if returncode != 0:
+                log.info('Cannot get or create bootstrap key for %s', type_)
+                time.sleep(1)
+                continue
+
+            os.rename(tmp, path)
+            break
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError as e:
+                if e.errno == errno.ENOENT:
+                    pass
+                else:
+                    raise
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -139,6 +190,18 @@ def main():
 
     wait_for_quorum(cluster=args.cluster, mon_id=args.id)
     get_key(cluster=args.cluster, mon_id=args.id)
+    bootstrap_key(
+        cluster=args.cluster,
+        type_='osd',
+        caps=dict(
+            mon=[
+                'allow command osd create ...',
+                'allow command osd crush set ...',
+                r'allow command auth add * osd allow\ * mon allow\ rwx',
+                'allow command mon getmap',
+                ],
+            ),
+        )
 
 
 if __name__ == '__main__':
