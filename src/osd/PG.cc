@@ -1545,10 +1545,46 @@ void PG::do_pending_flush()
   }
 }
 
+bool PG::op_has_sufficient_caps(OpRequestRef op)
+{
+  // only check MOSDOp
+  if (op->request->get_type() != CEPH_MSG_OSD_OP)
+    return true;
+
+  MOSDOp *req = static_cast<MOSDOp*>(op->request);
+
+  OSD::Session *session = (OSD::Session *)req->get_connection()->get_priv();
+  if (!session) {
+    dout(0) << "op_has_sufficient_caps: no session for op " << *req << dendl;
+    return false;
+  }
+  OSDCap& caps = session->caps;
+  session->put();
+
+  string key = req->get_object_locator().key;
+  if (key.length() == 0)
+    key = req->get_oid().name;
+
+  bool cap = caps.is_capable(pool.name, pool.auid, key,
+			     req->may_read(), req->may_write(), req->require_exec_caps());
+
+  dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
+	   << ") owner=" << pool.auid
+	   << " may_read=" << req->may_read()
+	   << " may_write=" << req->may_write()
+	   << " may_exec=" << req->may_exec()
+           << " require_exec_caps=" << req->require_exec_caps()
+	   << " -> " << (cap ? "yes" : "NO")
+	   << dendl;
+  return cap;
+}
+
 void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
   do_pending_flush();
+  if (!op_has_sufficient_caps(op))
+    return;
   if (must_delay_request(op)) {
     waiting_for_map.push_back(op);
     return;
