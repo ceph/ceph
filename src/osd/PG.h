@@ -335,7 +335,7 @@ protected:
   PGPool pool;
 
   OSDMapRef get_osdmap() const {
-    assert(is_locked());
+    // assert(is_locked());
     assert(osdmap_ref);
     return osdmap_ref;
   }
@@ -348,6 +348,7 @@ protected:
    * put_unlock() when done with the current pointer (_most common_).
    */  
   Mutex _lock;
+  Mutex _qlock;
   Cond _cond;
   atomic_t ref;
 
@@ -355,11 +356,17 @@ public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
   void lock(bool no_lockdep = false);
+  void lockq(bool no_lockdep = false) {
+    _qlock.Lock(no_lockdep);
+  }
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);
     assert(!dirty_log);
     _lock.Unlock();
+  }
+  void unlockq() {
+    _qlock.Unlock();
   }
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
