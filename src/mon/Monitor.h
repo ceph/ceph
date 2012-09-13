@@ -192,6 +192,7 @@ private:
   version_t global_version;
 
   void require_gv_ondisk();
+  void require_gv_onwire();
 
 public:
   void recovered_leader(int id);
