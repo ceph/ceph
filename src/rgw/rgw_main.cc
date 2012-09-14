@@ -317,6 +317,7 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   req->log(s, "executing");
   op->execute();
+  op->complete();
 done:
   rgw_log_op(s, (op ? op->name() : "unknown"));
 
