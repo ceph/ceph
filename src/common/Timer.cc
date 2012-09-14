@@ -45,10 +45,11 @@ public:
 typedef std::multimap < utime_t, Context *> scheduled_map_t;
 typedef std::map < Context*, scheduled_map_t::iterator > event_lookup_map_t;
 
-SafeTimer::SafeTimer(CephContext *cct_, Mutex &l)
+SafeTimer::SafeTimer(CephContext *cct_, Mutex &l, bool safe_callbacks)
   : cct(cct_), lock(l),
+    safe_callbacks(safe_callbacks),
     thread(NULL),
-    stopping(false) 
+    stopping(false)
 {
 }
 
@@ -99,8 +100,12 @@ void SafeTimer::timer_thread()
       schedule.erase(p);
       ldout(cct,10) << "timer_thread executing " << callback << dendl;
       
+      if (!safe_callbacks)
+	lock.Unlock();
       callback->finish(0);
       delete callback;
+      if (!safe_callbacks)
+	lock.Lock();
     }
 
     ldout(cct,20) << "timer_thread going to sleep" << dendl;
