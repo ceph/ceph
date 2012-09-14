@@ -94,6 +94,15 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_t
   object_acl = NULL;
   expect_cont = false;
 
+  bucket_name = NULL;
+  object = NULL;
+
+  header_ended = false;
+  bytes_sent = 0;
+  bytes_received = 0;
+  obj_size = 0;
+  prot_flags = 0;
+
   os_auth_token = NULL;
   os_user = NULL;
   os_groups = NULL;

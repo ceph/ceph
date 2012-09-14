@@ -462,16 +462,6 @@ static int init_entities_from_header(struct req_state *s)
   string req;
   string first;
 
-  s->bucket_name = NULL;
-  s->bucket.clear();
-  s->object = NULL;
-  s->object_str = "";
-
-  s->header_ended = false;
-  s->bytes_sent = 0;
-  s->bytes_received = 0;
-  s->obj_size = 0;
-
   /* this is the default, might change in a few lines */
   s->format = RGW_FORMAT_XML;
   s->formatter = new XMLFormatter(false);
@@ -656,7 +646,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_CONTAINER"),
                                    {NULL, 0} };
 
-static int init_auth_info(struct req_state *s)
+static int init_meta_info(struct req_state *s)
 {
   const char *p;
 
@@ -810,10 +800,28 @@ static int validate_object_name(const char *object)
   return 0;
 }
 
+static http_op op_from_method(const char *method)
+{
+  if (!method)
+    return OP_UNKNOWN;
+  if (strcmp(method, "GET") == 0)
+    return OP_GET;
+  if (strcmp(method, "PUT") == 0)
+    return OP_PUT;
+  if (strcmp(method, "DELETE") == 0)
+    return OP_DELETE;
+  if (strcmp(method, "HEAD") == 0)
+    return OP_HEAD;
+  if (strcmp(method, "POST") == 0)
+    return OP_POST;
+  if (strcmp(method, "COPY") == 0)
+    return OP_COPY;
+
+  return OP_UNKNOWN;
+}
+
 int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 {
-  int ret = 0;
-
   s->fcgx = fcgx;
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
@@ -825,45 +833,22 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
   s->length = s->env->get("CONTENT_LENGTH");
-  s->content_type = s->env->get("CONTENT_TYPE");
-  s->prot_flags = 0;
-
-  if (!s->method)
-    s->op = OP_UNKNOWN;
-  else if (strcmp(s->method, "GET") == 0)
-    s->op = OP_GET;
-  else if (strcmp(s->method, "PUT") == 0)
-    s->op = OP_PUT;
-  else if (strcmp(s->method, "DELETE") == 0)
-    s->op = OP_DELETE;
-  else if (strcmp(s->method, "HEAD") == 0)
-    s->op = OP_HEAD;
-  else if (strcmp(s->method, "POST") == 0)
-    s->op = OP_POST;
-  else if (strcmp(s->method, "COPY") == 0)
-    s->op = OP_COPY;
-  else
-    s->op = OP_UNKNOWN;
-
-  ret = init_entities_from_header(s);
-  if (ret)
-    return ret;
-
-  switch (s->op) {
-  case OP_PUT:
-    if (s->object && !s->args.sub_resource_exists("acl")) {
-      if (s->length && *s->length == '\0')
-        ret = -EINVAL;
-    }
-    if (s->length)
-      s->content_length = atoll(s->length);
-    else
-      s->content_length = 0;
-    break;
-  default:
-    break;
+  if (s->length) {
+    if (*s->length == '\0')
+      return -EINVAL;
+    s->content_length = atoll(s->length);
   }
 
+  s->content_type = s->env->get("CONTENT_TYPE");
+  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
+
+  if (g_conf->rgw_print_continue) {
+    const char *expect = s->env->get("HTTP_EXPECT");
+    s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
+  }
+  s->op = op_from_method(s->method);
+
+  int ret = init_entities_from_header(s);
   if (ret)
     return ret;
 
@@ -873,16 +858,11 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   ret = validate_object_name(s->object_str.c_str());
   if (ret)
     return ret;
+
   dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
 
-  init_auth_info(s);
+  init_meta_info(s);
 
-  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
-
-  if (g_conf->rgw_print_continue) {
-    const char *expect = s->env->get("HTTP_EXPECT");
-    s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
-  }
   return ret;
 }
 
