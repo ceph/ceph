@@ -267,6 +267,12 @@ OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 5)
 
+// Refuse backfills when OSD full ratio is above this value
+OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
+
+// Seconds to wait before retrying refused backfills
+OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
+
 OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")

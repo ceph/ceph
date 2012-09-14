@@ -1228,6 +1228,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       note["backfill"] += p->second;
     if (p->first & PG_STATE_BACKFILL)
       note["backfilling"] += p->second;
+    if (p->first & PG_STATE_BACKFILL_TOOFULL)
+      note["backfill_toofull"] += p->second;
   }
 
   hash_map<pg_t, pg_stat_t> stuck_pgs;
@@ -1277,7 +1279,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			       PG_STATE_RECOVERING |
 			       PG_STATE_INCOMPLETE |
 			       PG_STATE_BACKFILL_WAIT |
-			       PG_STATE_BACKFILL) &&
+			       PG_STATE_BACKFILL |
+			       PG_STATE_BACKFILL_TOOFULL) &&
 	    stuck_pgs.count(p->first) == 0) {
 	  ostringstream ss;
 	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
