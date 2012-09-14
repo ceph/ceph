@@ -244,6 +244,10 @@ public:
   SafeTimer watch_timer;
   Watch *watch;
 
+  // -- Backfill Request Scheduling --
+  Mutex backfill_request_lock;
+  SafeTimer backfill_request_timer;
+
   // -- tids --
   // for ops i issue
   tid_t last_tid;

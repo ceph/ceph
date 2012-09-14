@@ -1046,6 +1046,7 @@ public:
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
+  TrivialEvent(RemoteReservationRejected)
   TrivialEvent(RequestBackfill)
 
   /* Encapsulates PG recovery process */
@@ -1318,10 +1319,13 @@ public:
 
     struct WaitRemoteBackfillReserved : boost::statechart::state< WaitRemoteBackfillReserved, Active >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RemoteBackfillReserved, Backfilling >
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       WaitRemoteBackfillReserved(my_context ctx);
       void exit();
+      boost::statechart::result react(const RemoteBackfillReserved& evt);
+      boost::statechart::result react(const RemoteReservationRejected& evt);
     };
 
     struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
@@ -1371,11 +1375,13 @@ public:
 
     struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::custom_reaction< RemoteBackfillReserved >
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       RepWaitBackfillReserved(my_context ctx);
       void exit();
       boost::statechart::result react(const RemoteBackfillReserved &evt);
+      boost::statechart::result react(const RemoteReservationRejected &evt);
     };
 
     struct RepNotBackfilling : boost::statechart::state< RepNotBackfilling, ReplicaActive>, NamedState {
