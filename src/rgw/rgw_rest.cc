@@ -441,164 +441,6 @@ int RGWDeleteMultiObj_REST::get_params()
   return ret;
 }
 
-static void next_tok(string& str, string& tok, char delim)
-{
-  if (str.size() == 0) {
-    tok = "";
-    return;
-  }
-  tok = str;
-  int pos = str.find(delim);
-  if (pos > 0) {
-    tok = str.substr(0, pos);
-    str = str.substr(pos + 1);
-  } else {
-    str = "";
-  }
-}
-
-static int init_entities_from_header(struct req_state *s)
-{
-  string req;
-  string first;
-
-  /* this is the default, might change in a few lines */
-  s->format = RGW_FORMAT_XML;
-  s->formatter = new XMLFormatter(false);
-
-  int pos;
-  if (g_conf->rgw_dns_name.length() && s->host) {
-    string h(s->host);
-
-    dout(10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
-    pos = h.find(g_conf->rgw_dns_name);
-
-    if (pos > 0 && h[pos - 1] == '.') {
-      string encoded_bucket = h.substr(0, pos-1);
-      s->bucket_name_str = encoded_bucket;
-      s->bucket_name = strdup(s->bucket_name_str.c_str());
-      s->host_bucket = s->bucket_name;
-    } else {
-      s->host_bucket = NULL;
-    }
-  } else
-    s->host_bucket = NULL;
-
-  const char *req_name = s->decoded_uri.c_str();
-  const char *p;
-
-  if (*req_name == '?') {
-    p = req_name;
-  } else {
-    p = s->request_params.c_str();
-  }
-
-  s->args.set(p);
-  s->args.parse();
-
-  if (*req_name != '/')
-    goto done;
-
-  req_name++;
-
-  if (!*req_name)
-    goto done;
-
-  req = req_name;
-
-  pos = req.find('/');
-  if (pos >= 0) {
-    bool cut_url = g_conf->rgw_swift_url_prefix.length();
-    first = req.substr(0, pos);
-    if (first.compare(g_conf->rgw_swift_url_prefix) == 0) {
-      s->prot_flags |= RGW_REST_SWIFT;
-      if (cut_url) {
-        next_tok(req, first, '/');
-      }
-    }
-  } else {
-    if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
-      s->prot_flags |= RGW_REST_SWIFT;
-      delete s->formatter;
-      s->format = 0;
-      s->formatter = new RGWFormatter_Plain;
-      return -ERR_BAD_URL;
-    }
-    first = req;
-  }
-
-  if (s->prot_flags & RGW_REST_SWIFT) {
-    /* verify that the request_uri conforms with what's expected */
-    char buf[g_conf->rgw_swift_url_prefix.length() + 16];
-    int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
-    if (s->decoded_uri[0] != '/' ||
-        s->decoded_uri.compare(0, blen, buf) !=  0) {
-      return -ENOENT;
-    }
-
-    s->format = 0;
-    delete s->formatter;
-    s->formatter = new RGWFormatter_Plain;
-    string format_str = s->args.get("format");
-    if (format_str.compare("xml") == 0) {
-      s->format = RGW_FORMAT_XML;
-      delete s->formatter;
-      s->formatter = new XMLFormatter(false);
-    } else if (format_str.compare("json") == 0) {
-      s->format = RGW_FORMAT_JSON;
-      delete s->formatter;
-      s->formatter = new JSONFormatter(false);
-    }
-  }
-
-  if (s->prot_flags & RGW_REST_SWIFT) {
-    string ver;
-
-    next_tok(req, ver, '/');
-    dout(10) << "ver=" << ver << dendl;
-    s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
-    next_tok(req, first, '/');
-
-    dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
-    if (first.size() == 0)
-      goto done;
-
-    s->bucket_name_str = first;
-    s->bucket_name = strdup(s->bucket_name_str.c_str());
-   
-    if (req.size()) {
-      s->object_str = req;
-      s->object = strdup(s->object_str.c_str());
-    }
-
-    goto done;
-  }
-  if (!s->bucket_name) {
-    s->bucket_name_str = first;
-    s->bucket_name = strdup(s->bucket_name_str.c_str());
-  } else {
-    s->object_str = req_name;
-    s->object = strdup(s->object_str.c_str());
-    goto done;
-  }
-
-  if (g_conf->rgw_swift_auth_entry.size() &&
-      g_conf->rgw_swift_auth_entry.compare(s->bucket_name) == 0)
-    s->prot_flags |= RGW_REST_SWIFT_AUTH;
-
-  if (pos >= 0) {
-    string encoded_obj_str = req.substr(pos+1);
-    s->object_str = encoded_obj_str;
-
-    if (s->object_str.size() > 0) {
-      s->object = strdup(s->object_str.c_str());
-    }
-  }
-done:
-  s->formatter->reset();
-  return 0;
-}
-
 static void line_unfold(const char *line, string& sdest)
 {
   char dest[strlen(line) + 1];
@@ -703,34 +545,11 @@ static int init_meta_info(struct req_state *s)
   return 0;
 }
 
-static bool looks_like_ip_address(const char *bucket)
-{
-  int num_periods = 0;
-  bool expect_period = false;
-  for (const char *b = bucket; *b; ++b) {
-    if (*b == '.') {
-      if (!expect_period)
-	return false;
-      ++num_periods;
-      if (num_periods > 3)
-	return false;
-      expect_period = false;
-    }
-    else if (isdigit(*b)) {
-      expect_period = true;
-    }
-    else {
-      return false;
-    }
-  }
-  return (num_periods == 3);
-}
-
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-static int validate_bucket_name(const char *bucket, int flags)
+int RGWHandler_REST::validate_bucket_name(const string& bucket)
 {
-  int len = strlen(bucket);
+  int len = bucket.size();
   if (len < 3) {
     if (len == 0) {
       // This request doesn't specify a bucket at all
@@ -744,40 +563,6 @@ static int validate_bucket_name(const char *bucket, int flags)
     return -ERR_INVALID_BUCKET_NAME;
   }
 
-  if (flags & RGW_REST_SWIFT) {
-    if (*bucket == '.')
-      return -ERR_INVALID_BUCKET_NAME;
-
-    if (check_utf8(bucket, len))
-      return -ERR_INVALID_UTF8;
-
-    for (int i = 0; i < len; ++i) {
-      if ((unsigned char)bucket[i] == 0xff)
-        return -ERR_INVALID_BUCKET_NAME;
-    }
-
-    return 0;
-  }
-
-  if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
-    // bucket names must start with a number or letter
-    return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  for (const char *s = bucket; *s; ++s) {
-    char c = *s;
-    if (isdigit(c) || (c == '.'))
-      continue;
-    if (isalpha(c))
-      continue;
-    if ((c == '-') || (c == '_'))
-      continue;
-    // Invalid character
-    return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  if (looks_like_ip_address(bucket))
-    return -ERR_INVALID_BUCKET_NAME;
   return 0;
 }
 
@@ -785,15 +570,15 @@ static int validate_bucket_name(const char *bucket, int flags)
 // is at most 1024 bytes long."
 // However, we can still have control characters and other nasties in there.
 // Just as long as they're utf-8 nasties.
-static int validate_object_name(const char *object)
+int RGWHandler_REST::validate_object_name(const string& object)
 {
-  int len = strlen(object);
+  int len = object.size();
   if (len > 1024) {
     // Name too long
     return -ERR_INVALID_OBJECT_NAME;
   }
 
-  if (check_utf8(object, len)) {
+  if (check_utf8(object.c_str(), len)) {
     // Object names must be valid UTF-8.
     return -ERR_INVALID_OBJECT_NAME;
   }
@@ -848,22 +633,9 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   }
   s->op = op_from_method(s->method);
 
-  int ret = init_entities_from_header(s);
-  if (ret)
-    return ret;
-
-  ret = validate_bucket_name(s->bucket_name_str.c_str(), s->prot_flags);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object_str.c_str());
-  if (ret)
-    return ret;
-
-  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
-
   init_meta_info(s);
 
-  return ret;
+  return 0;
 }
 
 int RGWHandler_REST::read_permissions(RGWOp *op_obj)
@@ -936,16 +708,18 @@ RGWOp *RGWHandler_REST::get_op()
 
 RGWRESTMgr::RGWRESTMgr()
 {
-  m_os_handler = new RGWHandler_REST_SWIFT;
-  m_os_auth_handler = new RGWHandler_SWIFT_Auth;
-  m_s3_handler = new RGWHandler_REST_S3;
+  // order is important!
+  protocol_handlers.push_back(new RGWHandler_REST_SWIFT);
+  protocol_handlers.push_back(new RGWHandler_SWIFT_Auth);
+  protocol_handlers.push_back(new RGWHandler_REST_S3);
 }
 
 RGWRESTMgr::~RGWRESTMgr()
 {
-  delete m_os_handler;
-  delete m_os_auth_handler;
-  delete m_s3_handler;
+  vector<RGWHandler *>::iterator iter;
+  for (iter = protocol_handlers.begin(); iter != protocol_handlers.end(); ++iter) {
+    delete *iter;
+  }
 }
 
 RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
@@ -954,15 +728,21 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
   RGWHandler *handler;
 
   *init_error = RGWHandler_REST::preprocess(s, fcgx);
+  if (*init_error < 0)
+    return NULL;
 
-  if (s->prot_flags & RGW_REST_SWIFT)
-    handler = m_os_handler;
-  else if (s->prot_flags & RGW_REST_SWIFT_AUTH)
-    handler = m_os_auth_handler;
-  else
-    handler = m_s3_handler;
+  vector<RGWHandler *>::iterator iter;
+  for (iter = protocol_handlers.begin(); iter != protocol_handlers.end(); ++iter) {
+    handler = *iter;
+    if (handler->filter_request(s))
+      break;
+  }
+  if (iter == protocol_handlers.end())
+    return NULL;
 
-  handler->init(s, fcgx);
+  *init_error = handler->init(s, fcgx);
+  if (*init_error < 0)
+    return NULL;
 
   return handler;
 }

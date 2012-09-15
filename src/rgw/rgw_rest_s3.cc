@@ -733,17 +733,160 @@ RGWOp *RGWHandler_REST_S3::get_post_op()
   return NULL;
 }
 
-int RGWHandler_REST_S3::init(struct req_state *state, FCGX_Request *fcgx)
+int RGWHandler_REST_S3::init_from_header(struct req_state *s)
 {
-  const char *cacl = state->env->get("HTTP_X_AMZ_ACL");
+  string req;
+  string first;
+
+  /* this is the default, might change in a few lines */
+  s->format = RGW_FORMAT_XML;
+  s->formatter = new XMLFormatter(false);
+  s->formatter->reset();
+
+  int pos;
+  if (g_conf->rgw_dns_name.length() && s->host) {
+    string h(s->host);
+
+    dout(10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    pos = h.find(g_conf->rgw_dns_name);
+
+    if (pos > 0 && h[pos - 1] == '.') {
+      string encoded_bucket = h.substr(0, pos-1);
+      s->bucket_name_str = encoded_bucket;
+      s->bucket_name = strdup(s->bucket_name_str.c_str());
+      s->host_bucket = s->bucket_name;
+    } else {
+      s->host_bucket = NULL;
+    }
+  } else
+    s->host_bucket = NULL;
+
+  const char *req_name = s->decoded_uri.c_str();
+  const char *p;
+
+  if (*req_name == '?') {
+    p = req_name;
+  } else {
+    p = s->request_params.c_str();
+  }
+
+  s->args.set(p);
+  s->args.parse();
+
+  if (*req_name != '/')
+    return 0;
+
+  req_name++;
+
+  if (!*req_name)
+    return 0;
+
+  req = req_name;
+  pos = req.find('/');
+  if (pos >= 0) {
+    first = req.substr(0, pos);
+  } else {
+    first = req;
+  }
+
+  if (!s->bucket_name) {
+    s->bucket_name_str = first;
+    s->bucket_name = strdup(s->bucket_name_str.c_str());
+
+    if (pos >= 0) {
+      string encoded_obj_str = req.substr(pos+1);
+      s->object_str = encoded_obj_str;
+
+      if (s->object_str.size() > 0) {
+        s->object = strdup(s->object_str.c_str());
+      }
+    }
+  } else {
+    s->object_str = req_name;
+    s->object = strdup(s->object_str.c_str());
+  }
+  return 0;
+}
+
+static bool looks_like_ip_address(const char *bucket)
+{
+  int num_periods = 0;
+  bool expect_period = false;
+  for (const char *b = bucket; *b; ++b) {
+    if (*b == '.') {
+      if (!expect_period)
+	return false;
+      ++num_periods;
+      if (num_periods > 3)
+	return false;
+      expect_period = false;
+    }
+    else if (isdigit(*b)) {
+      expect_period = true;
+    }
+    else {
+      return false;
+    }
+  }
+  return (num_periods == 3);
+}
+
+int RGWHandler_REST_S3::validate_bucket_name(const string& bucket)
+{
+  int ret = RGWHandler_REST::validate_bucket_name(bucket);
+  if (ret < 0)
+    return ret;
+
+  if (bucket.size() == 0)
+    return 0;
+
+  if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
+    // bucket names must start with a number or letter
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  for (const char *s = bucket.c_str(); *s; ++s) {
+    char c = *s;
+    if (isdigit(c) || (c == '.'))
+      continue;
+    if (isalpha(c))
+      continue;
+    if ((c == '-') || (c == '_'))
+      continue;
+    // Invalid character
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  if (looks_like_ip_address(bucket.c_str()))
+    return -ERR_INVALID_BUCKET_NAME;
+
+  return 0;
+}
+
+int RGWHandler_REST_S3::init(struct req_state *s, FCGX_Request *fcgx)
+{
+  int ret = init_from_header(s);
+  if (ret < 0)
+    return ret;
+
+  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
+
+  ret = validate_bucket_name(s->bucket_name_str);
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object_str);
+  if (ret)
+    return ret;
+
+  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
   if (cacl)
-    state->canned_acl = cacl;
+    s->canned_acl = cacl;
 
-  state->copy_source = state->env->get("HTTP_X_AMZ_COPY_SOURCE");
+  s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
 
-  state->dialect = "s3";
+  s->dialect = "s3";
 
-  return RGWHandler_REST::init(state, fcgx);
+  return RGWHandler_REST::init(s, fcgx);
 }
 
 /*
