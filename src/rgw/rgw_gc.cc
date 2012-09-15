@@ -3,6 +3,7 @@
 #include "rgw_gc.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "auth/Crypto.h"
 
@@ -193,7 +194,9 @@ int RGWGC::process(int index, int max_secs)
 
         ctx->locator_set_key(obj.key);
 	dout(0) << "gc::process: removing " << obj.pool << ":" << obj.oid << dendl;
-        ret = ctx->remove(obj.oid);
+	ObjectWriteOperation op;
+	cls_refcount_put(op, info.tag, true);
+        ret = ctx->operate(obj.oid, &op);
 	if (ret == -ENOENT)
 	  ret = 0;
         if (ret < 0) {
