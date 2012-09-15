@@ -81,13 +81,13 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
   return 0;
 }
 
-bool rgw_verify_os_token(req_state *s)
+bool rgw_verify_swift_token(RGWRados *store, req_state *s)
 {
   if (!s->os_auth_token)
     return false;
 
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
-    int ret = rgw_swift_verify_signed_token(s->cct, s->os_auth_token, s->user);
+    int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token, s->user);
     if (ret < 0)
       return false;
 
@@ -116,7 +116,7 @@ bool rgw_verify_os_token(req_state *s)
 
   dout(10) << "swift user=" << s->os_user << dendl;
 
-  if (rgw_get_user_info_by_swift(swift_user, s->user) < 0) {
+  if (rgw_get_user_info_by_swift(store, swift_user, s->user) < 0) {
     dout(0) << "NOTICE: couldn't map swift user" << dendl;
     return false;
   }

@@ -733,7 +733,7 @@ RGWOp *RGWHandler_REST_S3::get_post_op()
   return NULL;
 }
 
-int RGWHandler_REST_S3::init(struct req_state *state, FCGX_Request *fcgx)
+int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *state, FCGX_Request *fcgx)
 {
   const char *cacl = state->env->get("HTTP_X_AMZ_ACL");
   if (cacl)
@@ -743,7 +743,7 @@ int RGWHandler_REST_S3::init(struct req_state *state, FCGX_Request *fcgx)
 
   state->dialect = "s3";
 
-  return RGWHandler_REST::init(state, fcgx);
+  return RGWHandler_REST::init(store, state, fcgx);
 }
 
 /*
@@ -908,7 +908,7 @@ int RGWHandler_REST_S3::authorize()
   }
 
   /* first get the user info */
-  if (rgw_get_user_info_by_access_key(auth_id, s->user) < 0) {
+  if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
     dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
     return -EPERM;
   }

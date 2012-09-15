@@ -62,7 +62,7 @@ static int encode_token(CephContext *cct, string& swift_user, string& key, buffe
   return ret;
 }
 
-int rgw_swift_verify_signed_token(CephContext *cct, const char *token, RGWUserInfo& info)
+int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info)
 {
   if (strncmp(token, "AUTH_rgwtk", 10) != 0)
     return -EINVAL;
@@ -103,7 +103,7 @@ int rgw_swift_verify_signed_token(CephContext *cct, const char *token, RGWUserIn
     return -EPERM;
   }
 
-  if ((ret = rgw_get_user_info_by_swift(swift_user, info)) < 0)
+  if ((ret = rgw_get_user_info_by_swift(store, swift_user, info)) < 0)
     return ret;
 
   dout(10) << "swift_user=" << swift_user << dendl;
@@ -186,7 +186,7 @@ void RGW_SWIFT_Auth_Get::execute()
 
   user_str = user;
 
-  if ((ret = rgw_get_user_info_by_swift(user_str, info)) < 0)
+  if ((ret = rgw_get_user_info_by_swift(store, user_str, info)) < 0)
     goto done;
 
   siter = info.swift_keys.find(user_str);
@@ -224,11 +224,11 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(struct req_state *state, FCGX_Request *fcgx)
+int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state, FCGX_Request *fcgx)
 {
   state->dialect = "swift-auth";
 
-  return RGWHandler::init(state, fcgx);
+  return RGWHandler::init(store, state, fcgx);
 }
 
 int RGWHandler_SWIFT_Auth::authorize()
@@ -248,7 +248,7 @@ RGWOp *RGWHandler_SWIFT_Auth::get_op()
   }
 
   if (op) {
-    op->init(s, this);
+    op->init(store, s, this);
   }
   return op;
 }

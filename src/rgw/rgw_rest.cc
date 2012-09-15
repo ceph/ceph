@@ -948,7 +948,7 @@ RGWOp *RGWHandler_REST::get_op()
   }
 
   if (op) {
-    op->init(s, this);
+    op->init(store, s, this);
   }
   return op;
 }
@@ -968,7 +968,7 @@ RGWRESTMgr::~RGWRESTMgr()
   delete m_s3_handler;
 }
 
-RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
+RGWHandler *RGWRESTMgr::get_handler(RGWRados *store, struct req_state *s, FCGX_Request *fcgx,
 				    int *init_error)
 {
   RGWHandler *handler;
@@ -982,7 +982,7 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
   else
     handler = m_s3_handler;
 
-  handler->init(s, fcgx);
+  handler->init(store, s, fcgx);
 
   return handler;
 }

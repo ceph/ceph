@@ -5,7 +5,7 @@
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
-extern int rgw_swift_verify_signed_token(CephContext *cct, const char *token, RGWUserInfo& info);
+extern int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info);
 
 class RGW_SWIFT_Auth_Get : public RGWOp {
 public:
@@ -24,7 +24,7 @@ public:
   RGWOp *get_op();
   void put_op(RGWOp *op);
 
-  int init(struct req_state *state, FCGX_Request *fcgx);
+  int init(RGWRados *store, struct req_state *state, FCGX_Request *fcgx);
   int authorize();
   int read_permissions(RGWOp *op) { return 0; }
 
