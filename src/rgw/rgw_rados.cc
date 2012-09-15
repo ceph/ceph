@@ -10,6 +10,7 @@
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/refcount/cls_refcount_client.h"
 
 #include "rgw_tools.h"
 
@@ -927,10 +928,12 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int aui
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
-                  time_t *mtime, map<string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+                  time_t *mtime, map<string, bufferlist>& attrs,
+                  RGWObjCategory category, bool exclusive,
                   map<string, bufferlist>* rmattrs,
                   const bufferlist *data,
-                  RGWObjManifest *manifest)
+                  RGWObjManifest *manifest,
+		  const string *ptag)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -950,7 +953,7 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   RGWObjState *state = NULL;
 
   if (!exclusive) {
-    r = prepare_atomic_for_write(rctx, obj, op, &state, true);
+    r = prepare_atomic_for_write(rctx, obj, op, &state, true, ptag);
     if (r < 0)
       return r;
   } else {
@@ -1007,10 +1010,10 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   if (!op.size())
     return 0;
 
-  string tag;
+  string index_tag;
   uint64_t epoch;
   utime_t ut;
-  r = prepare_update_index(NULL, bucket, obj, tag);
+  r = prepare_update_index(NULL, bucket, obj, index_tag);
   if (r < 0)
     return r;
 
@@ -1026,7 +1029,7 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   }
 
   ut = ceph_clock_now(cct);
-  r = complete_update_index(bucket, obj.object, tag, epoch, size,
+  r = complete_update_index(bucket, obj.object, index_tag, epoch, size,
                             ut, etag, content_type, &acl_bl, category);
   if (r < 0)
     goto done_cancel;
@@ -1041,7 +1044,7 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   return 0;
 
 done_cancel:
-  int ret = complete_update_index_cancel(bucket, obj.object, tag);
+  int ret = complete_update_index_cancel(bucket, obj.object, index_tag);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
   }
@@ -1141,7 +1144,7 @@ int RGWRados::copy_obj(void *ctx,
                RGWObjCategory category,
                struct rgw_err *err)
 {
-  int ret, r;
+  int ret;
   uint64_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
@@ -1164,9 +1167,136 @@ int RGWRados::copy_obj(void *ctx,
   if (ret < 0)
     return ret;
 
+  if (replace_attrs) {
+    attrset = attrs;
+  }
+
+  RGWObjManifest manifest;
+  RGWObjState *astate = NULL;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  ret = get_obj_state(rctx, src_obj, &astate);
+  if (ret < 0)
+    return ret;
+
+  vector<rgw_obj> ref_objs;
+
+  bool copy_data = !astate->has_manifest;
+  bool copy_first = false;
+  if (astate->has_manifest) {
+    if (astate->manifest.objs.size() < 2) {
+      copy_data = true;
+    } else {
+      map<uint64_t, RGWObjManifestPart>::iterator iter = astate->manifest.objs.begin();
+      RGWObjManifestPart part = iter->second;
+      if (part.loc == src_obj) {
+	if (part.size > RGW_MAX_CHUNK_SIZE)  // should never happen
+	  copy_data = true;
+	else
+          copy_first = true;
+      }
+    }
+  }
+
+  if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
+    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, err);
+  }
+
+  map<uint64_t, RGWObjManifestPart>::iterator miter = astate->manifest.objs.begin();
+
+  if (copy_first) // we need to copy first chunk, not increase refcount
+    ++miter;
+
+  RGWObjManifestPart *first_part = &miter->second;
+  string oid, key;
+  rgw_bucket bucket;
+  get_obj_bucket_and_oid_key(first_part->loc, bucket, oid, key);
+  librados::IoCtx io_ctx;
+
+  ret = open_bucket_ctx(bucket, io_ctx);
+  if (ret < 0)
+    return ret;
+
+  bufferlist first_chunk;
+
+  string tag;
+  append_rand_alpha(cct, tag, tag, 32);
+
+  for (; miter != astate->manifest.objs.end(); ++miter) {
+    RGWObjManifestPart& part = miter->second;
+    ObjectWriteOperation op;
+    manifest.objs[miter->first] = part;
+    cls_refcount_get(op, tag, true);
+
+    get_obj_bucket_and_oid_key(part.loc, bucket, oid, key);
+    io_ctx.locator_set_key(key);
+
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0)
+      goto done_ret;
+
+    ref_objs.push_back(part.loc);
+  }
+
+  if (copy_first) {
+    ret = get_obj(ctx, &handle, src_obj, first_chunk, 0, RGW_MAX_CHUNK_SIZE);
+    if (ret < 0)
+      goto done_ret;
+
+    first_part = &manifest.objs[0];
+    first_part->loc = dest_obj;
+    first_part->loc_ofs = 0;
+    first_part->size = first_chunk.length();
+  }
+
+  manifest.obj_size = total_len;
+
+  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest, &tag);
+  if (mtime)
+    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
+
+  return 0;
+
+done_ret:
+  vector<rgw_obj>::iterator riter;
+
+  /* rollback reference */
+  for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
+    ObjectWriteOperation op;
+    cls_refcount_put(op, tag, true);
+
+    get_obj_bucket_and_oid_key(*riter, bucket, oid, key);
+    io_ctx.locator_set_key(key);
+
+    int r = io_ctx.operate(oid, &op);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
+    }
+  }
+  return ret;
+}
+
+
+int RGWRados::copy_obj_data(void *ctx,
+	       void *handle, off_t end,
+               rgw_obj& dest_obj,
+               rgw_obj& src_obj,
+	       time_t *mtime,
+               map<string, bufferlist>& attrs,
+               RGWObjCategory category,
+               struct rgw_err *err)
+{
   bufferlist first_chunk;
   RGWObjManifest manifest;
   RGWObjManifestPart *first_part;
+
+  rgw_obj shadow_obj = dest_obj;
+  string shadow_oid;
+
+  append_rand_alpha(cct, dest_obj.object, shadow_oid, 32);
+  shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
+
+  int ret, r;
+  off_t ofs = 0;
 
   do {
     bufferlist bl;
@@ -1209,11 +1339,7 @@ int RGWRados::copy_obj(void *ctx,
   }
   manifest.obj_size = ofs;
 
-  if (replace_attrs) {
-    attrset = attrs;
-  }
-
-  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
+  ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, false, NULL, &first_chunk, &manifest, NULL);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL);
 
@@ -1221,7 +1347,7 @@ int RGWRados::copy_obj(void *ctx,
 
   return ret;
 done_err:
-  rgwstore->delete_obj(ctx, shadow_obj, false);
+  rgwstore->delete_obj(ctx, shadow_obj);
   finish_get_obj(&handle);
   return r;
 }
@@ -1261,7 +1387,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
   } while (is_truncated);
 
   rgw_obj obj(rgw_root_bucket, bucket.name);
-  r = delete_obj(NULL, obj, true);
+  r = delete_obj(NULL, obj);
   if (r < 0)
     return r;
 
@@ -1389,7 +1515,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
+int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1405,41 +1531,35 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
   ObjectWriteOperation op;
 
   RGWObjState *state;
-  r = prepare_atomic_for_write(rctx, obj, op, &state, false);
+  r = prepare_atomic_for_write(rctx, obj, op, &state, false, NULL);
   if (r < 0)
     return r;
 
   bool ret_not_existed = (state && !state->exists);
 
   string tag;
-  op.remove();
-  if (sync) {
-    r = prepare_update_index(state, bucket, obj, tag);
-    if (r < 0)
-      return r;
-    r = io_ctx.operate(oid, &op);
-    bool removed = (r >= 0);
+  r = prepare_update_index(state, bucket, obj, tag);
+  if (r < 0)
+    return r;
+  cls_refcount_put(op, tag, true);
+  r = io_ctx.operate(oid, &op);
+  bool removed = (r >= 0);
 
-    if ((r >= 0 || r == -ENOENT) && bucket.marker.size()) {
-      uint64_t epoch = io_ctx.get_last_version();
-      r = complete_update_index_del(bucket, obj.object, tag, epoch);
-    } else {
-      int ret = complete_update_index_cancel(bucket, obj.object, tag);
-      if (ret < 0) {
-        ldout(cct, 0) << "ERROR: complete_update_index_cancel returned ret=" << ret << dendl;
-      }
-    }
-    if (removed) {
-      int ret = complete_atomic_overwrite(rctx, state, obj);
-      if (ret < 0) {
-        ldout(cct, 0) << "ERROR: complete_atomic_removal returned ret=" << ret << dendl;
-      }
-      /* other than that, no need to propagate error */
-    }
+  if ((r >= 0 || r == -ENOENT) && bucket.marker.size()) {
+    uint64_t epoch = io_ctx.get_last_version();
+    r = complete_update_index_del(bucket, obj.object, tag, epoch);
   } else {
-    librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_operate(oid, completion, &op);
-    completion->release();
+    int ret = complete_update_index_cancel(bucket, obj.object, tag);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: complete_update_index_cancel returned ret=" << ret << dendl;
+    }
+  }
+  if (removed) {
+    int ret = complete_atomic_overwrite(rctx, state, obj);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: complete_atomic_removal returned ret=" << ret << dendl;
+    }
+    /* other than that, no need to propagate error */
   }
 
   atomic_write_finish(state, r);
@@ -1453,11 +1573,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
   return 0;
 }
 
-int RGWRados::delete_obj(void *ctx, rgw_obj& obj, bool sync)
+int RGWRados::delete_obj(void *ctx, rgw_obj& obj)
 {
   int r;
 
-  r = delete_obj_impl(ctx, obj, sync);
+  r = delete_obj_impl(ctx, obj);
   if (r == -ECANCELED)
     r = 0;
 
@@ -1632,7 +1752,7 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
 
 int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
-			    bool reset_obj)
+			    bool reset_obj, const string *ptag)
 {
   int r = get_obj_state(rctx, obj, pstate);
   if (r < 0)
@@ -1647,7 +1767,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
 
     if (reset_obj) {
       op.create(false);
-      op.remove();
+      op.remove(); // we're not dropping reference here, actually removing object
     }
 
     return 0;
@@ -1705,9 +1825,15 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
   }
 
   string tag;
-  append_rand_alpha(cct, tag, tag, 32);
+  if (ptag) {
+    tag = *ptag;
+  } else {
+    append_rand_alpha(cct, tag, tag, 32);
+  }
   bufferlist bl;
   bl.append(tag.c_str(), tag.size() + 1);
+
+  ldout(cct, 0) << "setting object tag=" << tag << dendl;
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
@@ -1724,7 +1850,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
 
 int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
-			    bool reset_obj)
+			    bool reset_obj, const string *ptag)
 {
   if (!rctx) {
     *pstate = NULL;
@@ -1732,7 +1858,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
   }
 
   int r;
-  r = prepare_atomic_for_write_impl(rctx, obj, op, pstate, reset_obj);
+  r = prepare_atomic_for_write_impl(rctx, obj, op, pstate, reset_obj, ptag);
 
   return r;
 }
@@ -2139,7 +2265,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     }
   }
   RGWObjState *state;
-  r = prepare_atomic_for_write(rctx, dst_obj, op, &state, true);
+  r = prepare_atomic_for_write(rctx, dst_obj, op, &state, true, NULL);
   if (r < 0)
     return r;
 
@@ -3140,7 +3266,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
         break;
       }
-      r = rgwstore->delete_obj(NULL, entry.obj, false);
+      r = rgwstore->delete_obj(NULL, entry.obj);
       if (r < 0 && r != -ENOENT) {
         cerr << "failed to remove obj: " << entry.obj << std::endl;
         complete = false;
@@ -3177,7 +3303,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     rgw_obj obj(bucket, oid);
     cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
     if (purge) {
-      r = delete_obj(NULL, obj, false);
+      r = delete_obj(NULL, obj);
       if (r < 0)
         cerr << "failed to remove obj: " << obj << std::endl;
     }

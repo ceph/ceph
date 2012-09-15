@@ -333,7 +333,8 @@ librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
-       libglobal.la librgw.a librados.la libcls_rgw_client.a libcls_lock_client.a -lcurl -lexpat \
+       libglobal.la librgw.a librados.la libcls_rgw_client.a \
+       libcls_lock_client.a libcls_refcount_client.a -lcurl -lexpat \
        $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = \
@@ -444,7 +445,7 @@ radoslibdir = $(libdir)/rados-classes
 radoslib_LTLIBRARIES = libcls_rbd.la
 
 
-# rbd: rados block device class
+# lock class
 libcls_lock_la_SOURCES = cls/lock/cls_lock.cc
 libcls_lock_la_CFLAGS = ${AM_CFLAGS}
 libcls_lock_la_CXXFLAGS= ${AM_CXXFLAGS}
@@ -452,6 +453,15 @@ libcls_lock_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_lock_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
 radoslib_LTLIBRARIES += libcls_lock.la
+
+# refcount class
+libcls_refcount_la_SOURCES = cls/refcount/cls_refcount.cc
+libcls_refcount_la_CFLAGS = ${AM_CFLAGS}
+libcls_refcount_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_refcount_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_refcount_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_refcount.la
 
 
 if WITH_RADOSGW
@@ -470,6 +480,10 @@ libcls_lock_client_a_SOURCES =  \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc
 noinst_LIBRARIES += libcls_lock_client.a
+
+libcls_refcount_client_a_SOURCES =  \
+	cls/refcount/cls_refcount_client.cc
+noinst_LIBRARIES += libcls_refcount_client.a
 
 libcls_rgw_client_a_SOURCES =  \
 	cls/rgw/cls_rgw_client.cc \
@@ -758,6 +772,12 @@ test_cls_rbd_SOURCES = test/rbd/test_cls_rbd.cc \
 test_cls_rbd_LDADD = librados.la ${UNITTEST_STATIC_LDADD}
 test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_rbd
+
+test_cls_refcount_SOURCES = test/cls_refcount/test_cls_refcount.cc \
+	test/rados-api/test.cc
+test_cls_refcount_LDADD = librados.la libcls_refcount_client.a ${UNITTEST_STATIC_LDADD}
+test_cls_refcount_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cls_refcount
 
 if WITH_RADOSGW
 
@@ -1314,6 +1334,8 @@ noinst_HEADERS = \
 	cls/lock/cls_lock_types.h\
 	cls/lock/cls_lock_ops.h\
 	cls/lock/cls_lock_client.h\
+	cls/refcount/cls_refcount_ops.h\
+	cls/refcount/cls_refcount_client.h\
 	cls/rgw/cls_rgw_client.h\
 	cls/rgw/cls_rgw_ops.h\
 	cls/rgw/cls_rgw_types.h\
