@@ -154,40 +154,24 @@ struct RGWObjState {
 };
 
 struct RGWRadosCtx {
+  RGWRados *store;
   map<rgw_obj, RGWObjState> objs_state;
-  int (*intent_cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
+  int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
   void *user_ctx;
-  RGWObjState *get_state(rgw_obj& obj) {
-    if (obj.object.size()) {
-      return &objs_state[obj];
-    } else {
-      rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
-      return &objs_state[new_obj];
-    }
-  }
-  void set_atomic(rgw_obj& obj) {
-    if (obj.object.size()) {
-      objs_state[obj].is_atomic = true;
-    } else {
-      rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
-      objs_state[new_obj].is_atomic = true;
-    }
-  }
-  void set_prefetch_data(rgw_obj& obj) {
-    if (obj.object.size()) {
-      objs_state[obj].prefetch_data = true;
-    } else {
-      rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
-      objs_state[new_obj].prefetch_data = true;
-    }
-  }
-  void set_intent_cb(int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+
+  RGWRadosCtx(RGWRados *_store) : store(_store) { }
+
+  RGWObjState *get_state(rgw_obj& obj);
+  void set_atomic(rgw_obj& obj);
+  void set_prefetch_data(rgw_obj& obj);
+
+  void set_intent_cb(int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     intent_cb = cb;
   }
 
-  int notify_intent(rgw_obj& obj, RGWIntentEvent intent) {
+  int notify_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent) {
     if (intent_cb) {
-      return intent_cb(user_ctx, obj, intent);
+      return intent_cb(store, user_ctx, obj, intent);
     }
     return 0;
   }
@@ -197,6 +181,55 @@ struct RGWPoolIterCtx {
   librados::IoCtx io_ctx;
   librados::ObjectIterator iter;
 };
+
+struct RGWRadosParams {
+  rgw_bucket domain_root;
+  rgw_bucket control_pool;
+  rgw_bucket gc_pool;
+  rgw_bucket log_pool;
+  rgw_bucket intent_log_pool;
+  rgw_bucket usage_log_pool;
+
+  rgw_bucket user_keys_pool;
+  rgw_bucket user_email_pool;
+  rgw_bucket user_swift_pool;
+  rgw_bucket user_uid_pool;
+
+  int init(CephContext *cct, RGWRados *store);
+  void init_default();
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(domain_root, bl);
+    ::encode(control_pool, bl);
+    ::encode(gc_pool, bl);
+    ::encode(log_pool, bl);
+    ::encode(intent_log_pool, bl);
+    ::encode(usage_log_pool, bl);
+    ::encode(user_keys_pool, bl);
+    ::encode(user_email_pool, bl);
+    ::encode(user_swift_pool, bl);
+    ::encode(user_uid_pool, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+    ::decode(domain_root, bl);
+    ::decode(control_pool, bl);
+    ::decode(gc_pool, bl);
+    ::decode(log_pool, bl);
+    ::decode(intent_log_pool, bl);
+    ::decode(usage_log_pool, bl);
+    ::decode(user_keys_pool, bl);
+    ::decode(user_email_pool, bl);
+    ::decode(user_swift_pool, bl);
+    ::decode(user_uid_pool, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWRadosParams);
   
 class RGWRados
 {
@@ -215,8 +248,6 @@ class RGWRados
     GetObjState() : sent_data(false) {}
   };
 
-  int set_buckets_auid(vector<rgw_bucket>& buckets, uint64_t auid);
-
   Mutex lock;
   SafeTimer *timer;
 
@@ -231,7 +262,6 @@ class RGWRados
 
   RGWGC *gc;
   bool use_gc_thread;
-
 
   int num_watchers;
   RGWWatcher **watchers;
@@ -293,10 +323,17 @@ protected:
   librados::Rados *rados;
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
 
+  bool pools_initialized;
+
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL), num_watchers(0), watchers(NULL), watch_handles(NULL),
+  RGWRados() : lock("rados_timer_lock"), timer(NULL), gc(NULL), use_gc_thread(false),
+               num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
-	       cct(NULL), rados(NULL) {}
+               cct(NULL), rados(NULL),
+               pools_initialized(false) {}
+
+  RGWRadosParams params;
+
   virtual ~RGWRados() {}
 
   void tick();
@@ -311,10 +348,6 @@ public:
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize();
   virtual void finalize();
-
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
-  static void close_storage();
-  static RGWRados *store;
 
   /** set up a bucket listing. handle is filled in. */
   virtual int list_buckets_init(RGWAccessHandle *handle);
@@ -358,18 +391,19 @@ public:
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
+  virtual int create_pool(rgw_bucket& bucket);
+
   /**
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int create_bucket(string& owner, rgw_bucket& bucket,
                             map<std::string,bufferlist>& attrs,
-                            bool system_bucket, bool exclusive = true,
-                            uint64_t auid = 0);
+                            bool exclusive = true);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int remove_bucket_placement(std::string& new_pool);
   virtual int list_placement_set(set<string>& names);
-  virtual int create_pools(vector<string>& names, vector<int>& retcodes, int auid = 0);
+  virtual int create_pools(vector<string>& names, vector<int>& retcodes);
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
@@ -551,7 +585,7 @@ public:
   void pick_control_oid(const string& key, string& notify_oid);
 
   void *create_context(void *user_ctx) {
-    RGWRadosCtx *rctx = new RGWRadosCtx();
+    RGWRadosCtx *rctx = new RGWRadosCtx(this);
     rctx->user_ctx = user_ctx;
     return rctx;
   }
@@ -568,7 +602,7 @@ public:
   }
   // to notify upper layer that we need to do some operation on an object, and it's up to
   // the upper layer to schedule this operation.. e.g., log intent in intent log
-  void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+  void set_intent_cb(void *ctx, int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
     rctx->set_intent_cb(cb);
   }
@@ -668,21 +702,17 @@ public:
 };
 
 class RGWStoreManager {
-  RGWRados *store;
 public:
-  RGWStoreManager(): store(NULL) {}
-  ~RGWStoreManager() {
-    if (store) {
-      RGWRados::close_storage();
-    }
-  }
-  RGWRados *init(CephContext *cct, bool use_gc_thread) {
-    store = RGWRados::init_storage_provider(cct, use_gc_thread);
+  RGWStoreManager() {}
+  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread) {
+    RGWRados *store = init_storage_provider(cct, use_gc_thread);
     return store;
   }
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
+  static void close_storage(RGWRados *store);
+
 };
 
-#define rgwstore RGWRados::store
 
 
 #endif

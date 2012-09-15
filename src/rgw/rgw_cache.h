@@ -135,17 +135,6 @@ public:
   void set_ctx(CephContext *_cct) { cct = _cct; }
 };
 
-static inline void normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj)
-{
-  if (src_obj.size()) {
-    dst_bucket = src_bucket;
-    dst_obj = src_obj;
-  } else {
-    dst_bucket = rgw_root_bucket;
-    dst_obj = src_bucket.name;
-  }
-}
-
 template <class T>
 class RGWCache  : public T
 {
@@ -167,6 +156,7 @@ class RGWCache  : public T
     return string(buf);
   }
 
+  void normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj);
   string normal_name(rgw_obj& obj) {
     return normal_name(obj.bucket, obj.object);
   }
@@ -210,6 +200,17 @@ public:
   int delete_obj(void *ctx, rgw_obj& obj, bool sync);
 };
 
+template <class T>
+void RGWCache<T>::normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj)
+{
+  if (src_obj.size()) {
+    dst_bucket = src_bucket;
+    dst_obj = src_obj;
+  } else {
+    dst_bucket = T::params.domain_root;
+    dst_obj = src_bucket.name;
+  }
+}
 
 template <class T>
 int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)

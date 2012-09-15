@@ -8,8 +8,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
-
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
   const char *p = s->env->get(name);
@@ -79,6 +77,7 @@ string render_log_object_name(const string& format,
 /* usage logger */
 class UsageLogger {
   CephContext *cct;
+  RGWRados *store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
   Mutex lock;
   int32_t num_entries;
@@ -101,7 +100,7 @@ class UsageLogger {
   }
 public:
 
-  UsageLogger(CephContext *_cct) : cct(_cct), lock("UsageLogger"), num_entries(0), timer_lock("UsageLogger::timer_lock"), timer(cct, timer_lock) {
+  UsageLogger(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("UsageLogger"), num_entries(0), timer_lock("UsageLogger::timer_lock"), timer(cct, timer_lock) {
     timer.init();
     Mutex::Locker l(timer_lock);
     set_timer();
@@ -145,15 +144,15 @@ public:
     num_entries = 0;
     lock.Unlock();
 
-    rgwstore->log_usage(old_map);
+    store->log_usage(old_map);
   }
 };
 
 static UsageLogger *usage_logger = NULL;
 
-void rgw_log_usage_init(CephContext *cct)
+void rgw_log_usage_init(CephContext *cct, RGWRados *store)
 {
-  usage_logger = new UsageLogger(cct);
+  usage_logger = new UsageLogger(cct, store);
 }
 
 void rgw_log_usage_finalize()
@@ -189,7 +188,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   usage_logger->insert(ts, entry);
 }
 
-int rgw_log_op(struct req_state *s, const string& op_name)
+int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name)
 {
   struct rgw_log_entry entry;
   string bucket_id;
@@ -268,17 +267,15 @@ int rgw_log_op(struct req_state *s, const string& op_name)
   string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				      s->bucket.bucket_id, entry.bucket.c_str());
 
-  rgw_obj obj(log_bucket, oid);
+  rgw_obj obj(store->params.log_pool, oid);
 
-  int ret = rgwstore->append_async(obj, bl.length(), bl);
+  int ret = store->append_async(obj, bl.length(), bl);
   if (ret == -ENOENT) {
-    string id;
-    map<std::string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(id, log_bucket, attrs, true);
+    ret = store->create_pool(store->params.log_pool);
     if (ret < 0)
       goto done;
     // retry
-    ret = rgwstore->append_async(obj, bl.length(), bl);
+    ret = store->append_async(obj, bl.length(), bl);
   }
 done:
   if (ret < 0)
@@ -287,9 +284,9 @@ done:
   return ret;
 }
 
-int rgw_log_intent(rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc)
+int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc)
 {
-  rgw_bucket intent_log_bucket(RGW_INTENT_LOG_POOL_NAME);
+  rgw_bucket intent_log_bucket(store->params.intent_log_pool);
 
   rgw_intent_log_entry entry;
   entry.obj = obj;
@@ -314,21 +311,19 @@ int rgw_log_intent(rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp
   bufferlist bl;
   ::encode(entry, bl);
 
-  int ret = rgwstore->append_async(log_obj, bl.length(), bl);
+  int ret = store->append_async(log_obj, bl.length(), bl);
   if (ret == -ENOENT) {
-    string id;
-    map<std::string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(id, intent_log_bucket, attrs, true);
+    ret = store->create_pool(intent_log_bucket);
     if (ret < 0)
       goto done;
-    ret = rgwstore->append_async(log_obj, bl.length(), bl);
+    ret = store->append_async(log_obj, bl.length(), bl);
   }
 
 done:
   return ret;
 }
 
-int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
+int rgw_log_intent(RGWRados *store, struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 {
-  return rgw_log_intent(obj, intent, s->time, s->cct->_conf->rgw_intent_log_object_name_utc);
+  return rgw_log_intent(store, obj, intent, s->time, s->cct->_conf->rgw_intent_log_object_name_utc);
 }
