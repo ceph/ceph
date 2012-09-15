@@ -163,12 +163,17 @@ protected:
   virtual RGWOp *get_post_op() = 0;
   virtual RGWOp *get_copy_op() = 0;
 
+  virtual int validate_bucket_name(const string& bucket);
+  virtual int validate_object_name(const string& object);
 public:
+  RGWHandler_REST() {}
+  virtual ~RGWHandler_REST() {}
   int read_permissions(RGWOp *op);
   RGWOp *get_op();
   void put_op(RGWOp *op);
 
   static int preprocess(struct req_state *s, FCGX_Request *fcgx);
+  virtual bool filter_request(struct req_state *s) = 0;
   virtual int authorize() = 0;
 };
 
@@ -177,9 +182,7 @@ class RGWHandler_SWIFT_Auth;
 class RGWHandler_REST_S3;
 
 class RGWRESTMgr {
-  RGWHandler_REST_SWIFT *m_os_handler;
-  RGWHandler_SWIFT_Auth *m_os_auth_handler;
-  RGWHandler_REST_S3 *m_s3_handler;
+  vector<RGWHandler *> protocol_handlers;
 
 public:
   RGWRESTMgr();

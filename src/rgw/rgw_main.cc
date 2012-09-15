@@ -325,7 +325,8 @@ done:
 
   req->log_format(s, "http status=%d", http_ret);
 
-  handler->put_op(op);
+  if (handler)
+    handler->put_op(op);
   rgwstore->destroy_context(s->obj_ctx);
   FCGX_Finish_r(fcgx);
 

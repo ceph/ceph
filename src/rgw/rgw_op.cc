@@ -2031,6 +2031,10 @@ error:
 
 }
 
+RGWHandler::~RGWHandler()
+{
+}
+
 int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;

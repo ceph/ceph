@@ -1,8 +1,10 @@
 
 #include "common/Formatter.h"
+#include "common/utf8.h"
 #include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
+#include "rgw_formats.h"
 
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
@@ -573,11 +575,195 @@ int RGWHandler_REST_SWIFT::authorize()
   return 0;
 }
 
-int RGWHandler_REST_SWIFT::init(struct req_state *state, FCGX_Request *fcgx)
+bool RGWHandler_REST_SWIFT::filter_request(struct req_state *s)
 {
-  state->copy_source = state->env->get("HTTP_X_COPY_FROM");
+  string& uri = s->decoded_uri;
+  size_t len = g_conf->rgw_swift_url_prefix.size();
 
-  state->dialect = "swift";
+  if (uri.size() < len + 1)
+    return false;
 
-  return RGWHandler_REST::init(state, fcgx);
+  if (uri[0] != '/')
+    return false;
+
+  if (uri.substr(1, len) != g_conf->rgw_swift_url_prefix)
+    return false;
+
+  if (uri.size() == len + 1)
+    return true;
+
+  if (uri[len] != '/')
+    return false;
+
+  return true;
+}
+
+int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
+{
+  int ret = RGWHandler_REST::validate_bucket_name(bucket);
+  if (ret < 0)
+    return ret;
+
+  int len = bucket.size();
+
+  if (len == 0)
+    return 0;
+
+  if (bucket[0] == '.')
+    return -ERR_INVALID_BUCKET_NAME;
+
+  if (check_utf8(bucket.c_str(), len))
+    return -ERR_INVALID_UTF8;
+
+  const char *s = bucket.c_str();
+
+  for (int i = 0; i < len; ++i, ++s) {
+    if (*(unsigned char *)s == 0xff)
+      return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  return 0;
+}
+
+static void next_tok(string& str, string& tok, char delim)
+{
+  if (str.size() == 0) {
+    tok = "";
+    return;
+  }
+  tok = str;
+  int pos = str.find(delim);
+  if (pos > 0) {
+    tok = str.substr(0, pos);
+    str = str.substr(pos + 1);
+  } else {
+    str = "";
+  }
+}
+
+int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
+{
+  string req;
+  string first;
+
+  s->prot_flags |= RGW_REST_SWIFT;
+
+  int pos;
+  if (g_conf->rgw_dns_name.length() && s->host) {
+    string h(s->host);
+
+    dout(10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    pos = h.find(g_conf->rgw_dns_name);
+
+    if (pos > 0 && h[pos - 1] == '.') {
+      string encoded_bucket = h.substr(0, pos-1);
+      s->bucket_name_str = encoded_bucket;
+      s->bucket_name = strdup(s->bucket_name_str.c_str());
+      s->host_bucket = s->bucket_name;
+    } else {
+      s->host_bucket = NULL;
+    }
+  } else
+    s->host_bucket = NULL;
+
+  const char *req_name = s->decoded_uri.c_str();
+  const char *p;
+
+  if (*req_name == '?') {
+    p = req_name;
+  } else {
+    p = s->request_params.c_str();
+  }
+
+  s->args.set(p);
+  s->args.parse();
+
+  if (*req_name != '/')
+    return 0;
+
+  req_name++;
+
+  if (!*req_name)
+    return 0;
+
+  req = req_name;
+
+  pos = req.find('/');
+  if (pos >= 0) {
+    bool cut_url = g_conf->rgw_swift_url_prefix.length();
+    first = req.substr(0, pos);
+    if (first.compare(g_conf->rgw_swift_url_prefix) == 0) {
+      if (cut_url) {
+        next_tok(req, first, '/');
+      }
+    }
+  } else {
+    if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
+      s->formatter = new RGWFormatter_Plain;
+      return -ERR_BAD_URL;
+    }
+    first = req;
+  }
+
+  /* verify that the request_uri conforms with what's expected */
+  char buf[g_conf->rgw_swift_url_prefix.length() + 16];
+  int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
+  if (s->decoded_uri[0] != '/' ||
+    s->decoded_uri.compare(0, blen, buf) !=  0) {
+    return -ENOENT;
+  }
+
+  s->formatter = new RGWFormatter_Plain;
+  string format_str = s->args.get("format");
+  if (format_str.compare("xml") == 0) {
+    s->format = RGW_FORMAT_XML;
+    delete s->formatter;
+    s->formatter = new XMLFormatter(false);
+  } else if (format_str.compare("json") == 0) {
+    s->format = RGW_FORMAT_JSON;
+    delete s->formatter;
+    s->formatter = new JSONFormatter(false);
+  }
+  s->formatter->reset();
+
+  string ver;
+
+  next_tok(req, ver, '/');
+  s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
+  next_tok(req, first, '/');
+
+  dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
+  if (first.size() == 0)
+    return 0;
+
+  s->bucket_name_str = first;
+  s->bucket_name = strdup(s->bucket_name_str.c_str());
+   
+  if (req.size()) {
+    s->object_str = req;
+    s->object = strdup(s->object_str.c_str());
+  }
+  return 0;
+}
+
+int RGWHandler_REST_SWIFT::init(struct req_state *s, FCGX_Request *fcgx)
+{
+  int ret = init_from_header(s);
+  if (ret < 0)
+    return ret;
+
+  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
+
+  ret = validate_bucket_name(s->bucket_name_str.c_str());
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object_str.c_str());
+  if (ret)
+    return ret;
+
+  s->copy_source = s->env->get("HTTP_X_COPY_FROM");
+
+  s->dialect = "swift";
+
+  return RGWHandler_REST::init(s, fcgx);
 }

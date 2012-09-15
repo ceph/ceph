@@ -224,6 +224,48 @@ done:
   end_header(s);
 }
 
+bool RGWHandler_SWIFT_Auth::filter_request(struct req_state *s)
+{
+  const string& auth_bucket = g_conf->rgw_swift_auth_entry;
+  string bucket;
+
+  if (auth_bucket.empty())
+    return false;
+
+  int pos;
+  if (g_conf->rgw_dns_name.length() && s->host) {
+    string h(s->host);
+
+    dout(10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    pos = h.find(g_conf->rgw_dns_name);
+
+    if (pos > 0 && h[pos - 1] == '.') {
+      bucket = h.substr(0, pos-1);
+      return (bucket.compare(auth_bucket) == 0);
+    }
+  }
+
+  const char *req_name = s->decoded_uri.c_str();
+
+  if (*req_name != '/')
+    return false;
+
+  req_name++;
+  if (!*req_name)
+    return 0;
+
+  string req = req_name;
+  pos = req.find('/');
+  if (pos >= 0) {
+    bucket = req.substr(0, pos);
+  } else {
+    bucket = req;
+  }
+
+  bucket = req.substr(0, pos);
+  return (bucket.compare(auth_bucket) == 0);
+}
+
 int RGWHandler_SWIFT_Auth::init(struct req_state *state, FCGX_Request *fcgx)
 {
   state->dialect = "swift-auth";
