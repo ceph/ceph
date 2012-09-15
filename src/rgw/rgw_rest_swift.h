@@ -143,9 +143,13 @@ protected:
   RGWOp *get_post_op();
   RGWOp *get_copy_op();
 
+  int init_from_header(struct req_state *s);
 public:
   RGWHandler_REST_SWIFT() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_SWIFT() {}
+
+  bool filter_request(struct req_state *s);
+  int validate_bucket_name(const string& bucket);
 
   int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();

@@ -659,10 +659,13 @@ protected:
   struct req_state *s;
 
   int do_read_permissions(RGWOp *op, bool only_bucket);
+  virtual int validate_bucket_name(const string& bucket) = 0;
+  virtual int validate_object_name(const string& object) = 0;
 public:
   RGWHandler() {}
-  virtual ~RGWHandler() {}
+  virtual ~RGWHandler();
   virtual int init(struct req_state *_s, FCGX_Request *fcgx);
+  virtual bool filter_request(struct req_state *s) = 0;
 
   virtual RGWOp *get_op() = 0;
   virtual void put_op(RGWOp *op) = 0;
