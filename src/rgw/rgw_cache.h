@@ -197,7 +197,7 @@ public:
 
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
-  int delete_obj(void *ctx, rgw_obj& obj, bool sync);
+  int delete_obj(void *ctx, rgw_obj& obj);
 };
 
 template <class T>
@@ -213,13 +213,13 @@ void RGWCache<T>::normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_o
 }
 
 template <class T>
-int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)
+int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.')
-    return T::delete_obj(ctx, obj, sync);
+    return T::delete_obj(ctx, obj);
 
   string name = normal_name(obj);
   cache.remove(name);
@@ -227,7 +227,7 @@ int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)
   ObjectCacheInfo info;
   distribute(name, obj, info, REMOVE_OBJ);
 
-  return T::delete_obj(ctx, obj, sync);
+  return T::delete_obj(ctx, obj);
 }
 
 template <class T>
