@@ -498,14 +498,11 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
   if (orig_pool)
     return;
 
-  if (!orig_img) {
-    *new_pool = strdup("rbd");
+  if (!orig_img)
     return;
-  }
 
   sep = strchr(orig_img, '/');
   if (!sep) {
-    *new_pool= strdup("rbd");
     *new_img = strdup(orig_img);
     goto done_img;
   }
@@ -1261,8 +1258,11 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
 
-  if (opt_cmd == OPT_IMPORT && !destname)
-    destname = imgname_from_path(path);
+  if (opt_cmd == OPT_IMPORT && !destname) {
+    destname = imgname;
+    if (!destname)
+      destname = imgname_from_path(path);
+  }
 
   if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && opt_cmd != OPT_SHOWMAPPED &&
       !imgname) {
