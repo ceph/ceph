@@ -430,8 +430,15 @@ class MonitorDBStore
     db->submit_transaction_sync(dbt);
   }
 
-  MonitorDBStore(const string& path) : db(0) {
+  int open(ostream &out) {
+    return db->open(out);
+  }
 
+  int create_and_open(ostream &out) {
+    return db->create_and_open(out);
+  }
+
+  MonitorDBStore(const string& path) : db(0) {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -440,18 +447,14 @@ class MonitorDBStore
     }
     ostringstream os;
     os << path.substr(0, path.size() - pos) << "/store.db";
-
     string full_path = os.str();
 
     LevelDBStore *db_ptr = new LevelDBStore(full_path);
     if (!db_ptr) {
-      cerr << __func__ << " error initializing level db back storage in "
-	   << full_path << std::endl;
+      std::cout << __func__ << " error initializing level db back storage in "
+		<< full_path << std::endl;
       assert(0 != "MonitorDBStore: error initializing level db back storage");
     }
-    cout << __func__ << " initializing back storage in "
-	 << full_path << std::endl;
-    assert(!db_ptr->init(cerr));
     db.reset(db_ptr);
   }
   MonitorDBStore(LevelDBStore *db_ptr) {
