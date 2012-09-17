@@ -7,8 +7,9 @@ to include a section for RADOS Gateway You must also create an ``rgw.conf``
 file in the ``/etc/apache2/sites-enabled`` directory. The ``rgw.conf`` 
 file configures Apache to interact with FastCGI.
 
+
 Add a RADOS GW Configuration to ``ceph.conf``
----------------------------------------------
+=============================================
 
 Add the RADOS Gateway configuration to your ``ceph.conf`` file.  The RADOS
 Gateway configuration requires you to specify the host name where you installed
@@ -21,18 +22,26 @@ For example::
 		rgw socket path = /tmp/radosgw.sock
 		log file = /var/log/ceph/radosgw.log
 
+
+Deploy ``ceph.conf``
+====================
+
 If you deploy Ceph with ``mkcephfs``, manually redeploy ``ceph.conf`` to the 
 hosts in your cluster. For example:: 
 
 	cd /etc/ceph
 	ssh {host-name} sudo /etc/ceph/ceph.conf < ceph.conf
 
+
+Create a Data Directory
+=======================
+
+
 Create ``rgw.conf``
--------------------
+===================
 
 Create an ``rgw.conf`` file on the host where you installed RADOS Gateway
-under the ``/etc/apache2/sites-enabled`` directory.
-
+under the ``/etc/apache2/sites-available`` directory.
 
 We recommend deploying FastCGI as an external server, because allowing
 Apache to manage FastCGI sometimes introduces high latency. To manage FastCGI 
@@ -104,7 +113,7 @@ log files and to trun off server signatures. ::
 	
 
 Enable the RADOS Gateway Configuration
---------------------------------------
+======================================
 
 Enable the site for ``rgw.conf``. :: 
 
@@ -116,7 +125,7 @@ Disable the default site. ::
 	
 
 Add a RADOS GW Script
----------------------
+=====================
 
 Add a ``s3gw.fcgi`` file (use the same name referenced in the first line 
 of ``rgw.conf``) to ``/var/www``. The contents of the file should include:: 
@@ -130,7 +139,7 @@ Ensure that you apply execute permissions to ``s3gw.fcgi``. ::
 
 
 Generate a Keyring and Key for RADOS Gateway
---------------------------------------------
+============================================
 
 You must create a keyring for the RADOS Gateway. For example:: 
 
@@ -143,15 +152,19 @@ the user with the cluster. Then, add capabilities to the key. For example::
 	sudo ceph-authtool /etc/ceph/keyring.rados.gateway -n client.rados.gateway --gen-key
 	sudo ceph-authtool -n client.rados.gateway --cap osd 'allow rwx' --cap mon 'allow r' /etc/ceph/keyring.rados.gateway
 	
+
 Add to Ceph Keyring Entries 
----------------------------
+===========================
+
 Once you have created a keyring and key for RADOS GW, add it as an entry in
 the Ceph keyring. For example::
 
 	ceph -k /etc/ceph/ceph.keyring auth add client.rados.gateway -i /etc/ceph/keyring.rados.gateway
 	
+
 Restart Services and Start the RADOS Gateway
---------------------------------------------
+============================================
+
 To ensure that all components have reloaded their configurations, 
 we recommend restarting your ``ceph`` and ``apaches`` services. Then, 
 start up the ``radosgw`` service. For example:: 
@@ -160,8 +173,10 @@ start up the ``radosgw`` service. For example::
 	sudo service apache2 restart
 	sudo service radosgw start
 
+
 Create a RADOS Gateway User
----------------------------
+===========================
+
 To use the REST interfaces, first create an initial RADOS Gateway user. 
 The RADOS Gateway user is not the same user as the ``client.rados.gateway``
 user, which identifies the RADOS Gateway as a user of the RADOS cluster.
