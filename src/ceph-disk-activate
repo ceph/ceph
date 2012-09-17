@@ -276,7 +276,9 @@ def upstart_start(
     subprocess.check_call(
         args=[
             'initctl',
-            'start',
+            # use emit, not start, because start would fail if the
+            # instance was already running
+            'emit',
             # since the daemon starting doesn't guarantee much about
             # the service being operational anyway, don't bother
             # waiting for it
