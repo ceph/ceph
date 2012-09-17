@@ -203,6 +203,8 @@ int main(int argc, const char **argv)
 
     // go
     MonitorDBStore store(g_conf->mon_data);
+    assert(!store.create_and_open(cerr));
+
     Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
     int r = mon.mkfs(osdmapbl);
     if (r < 0) {
@@ -215,6 +217,7 @@ int main(int argc, const char **argv)
   }
 
   MonitorDBStore store(g_conf->mon_data);
+  assert(!store.open(std::cerr));
 
   bufferlist magicbl;
   err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);

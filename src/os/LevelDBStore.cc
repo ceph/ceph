@@ -12,10 +12,10 @@
 #include <errno.h>
 using std::string;
 
-int LevelDBStore::init(ostream &out)
+int LevelDBStore::init(ostream &out, bool create_if_missing)
 {
   leveldb::Options options;
-  options.create_if_missing = true;
+  options.create_if_missing = create_if_missing;
   leveldb::DB *_db;
   leveldb::Status status = leveldb::DB::Open(options, path, &_db);
   db.reset(_db);

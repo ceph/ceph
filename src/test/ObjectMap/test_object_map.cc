@@ -519,7 +519,7 @@ public:
 
     cerr << "using path " << strpath << std::endl;;
     LevelDBStore *store = new LevelDBStore(strpath);
-    assert(!store->init(cerr));
+    assert(!store->create_and_open(cerr));
 
     db.reset(new DBObjectMap(store));
     tester.db = db.get();
