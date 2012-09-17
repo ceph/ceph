@@ -6,7 +6,7 @@
 
 To install RADOS Gateway, you must install Apache and FastCGI first. :: 
 
-	sudo apt-get update && sudo apt-get install apache2 libapache2-mod-fastcgi
+	sudo apt-get update && sudo apt-get install -y apache2 libapache2-mod-fastcgi
 	
 .. note:: The Ceph community provides a slightly optimized version of the 
    ``apache2`` and ``fastcgi`` packages. The material difference is that 
@@ -34,4 +34,4 @@ Restart Apache so that the foregoing changes take effect. ::
 	
 Then, install RADOS Gateway. For example:: 
 
-	sudo apt-get install radosgw
+	sudo apt-get install -y --force-yes radosgw
