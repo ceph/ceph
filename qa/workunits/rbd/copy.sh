@@ -148,6 +148,51 @@ test_remove() {
     rbd ls | wc -l | grep "^0$"
 }
 
+test_pool_image_args() {
+    echo "testing pool and image args..."
+    remove_images
+
+    ceph osd pool delete test || true
+    ceph osd pool create test 100
+    truncate -s 1 /tmp/empty
+
+    rbd ls | wc -l | grep 0
+    rbd create -s 1 test1
+    rbd ls | grep -q test1
+    rbd import --image test2 /tmp/empty
+    rbd ls | grep -q test2
+    rbd --dest test3 import /tmp/empty
+    rbd ls | grep -q test3
+    rbd import /tmp/empty foo
+    rbd ls | grep -q foo
+
+    rbd ls test | wc -l | grep 0
+    rbd import /tmp/empty test/test1
+    rbd ls test | grep -q test1
+    rbd -p test import /tmp/empty test2
+    rbd ls test | grep -q test2
+    rbd --image test3 -p test import /tmp/empty
+    rbd ls test | grep -q test3
+    rbd --image test4 -p test import /tmp/empty
+    rbd ls test | grep -q test4
+    rbd --dest test5 -p test import /tmp/empty
+    rbd ls test | grep -q test5
+    rbd --dest test6 --dest-pool test import /tmp/empty
+    rbd ls test | grep -q test6
+    rbd --image test7 --dest-pool test import /tmp/empty
+    rbd ls test | grep -q test7
+    rbd --image test/test8 import /tmp/empty
+    rbd ls test | grep -q test8
+    rbd --dest test/test9 import /tmp/empty
+    rbd ls test | grep -q test9
+    rbd import --pool test /tmp/empty
+    rbd ls test | grep -q empty
+
+    rm -f /tmp/empty
+    ceph osd pool delete test
+}
+
+test_import_args
 test_rename
 test_ls
 test_remove
