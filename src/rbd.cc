@@ -1139,7 +1139,7 @@ int main(int argc, const char **argv)
   }
 
   int r;
-  if (talk_to_cluster) {
+  if (talk_to_cluster && opt_cmd != OPT_IMPORT) {
     r = rados.ioctx_create(poolname, io_ctx);
     if (r < 0) {
       cerr << "error opening pool " << poolname << ": " << cpp_strerror(-r) << std::endl;
