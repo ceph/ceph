@@ -18,10 +18,11 @@
 #include "Mutex.h"
 #include "Cond.h"
 #include "Thread.h"
+#include "common/config_obs.h"
 
 class CephContext;
 
-class ThreadPool {
+class ThreadPool : public md_config_obs_t {
   CephContext *cct;
   string name;
   string lockname;
@@ -44,7 +45,18 @@ class ThreadPool {
     virtual void *_void_dequeue() = 0;
     virtual void _void_process(void *) = 0;
     virtual void _void_process_finish(void *) = 0;
-  };  
+  };
+
+  // track thread pool size changes
+  unsigned _num_threads;
+  string _thread_num_option;
+  const char **_conf_keys;
+
+  const char **get_tracked_conf_keys() const {
+    return _conf_keys;
+  }
+  void handle_conf_change(const struct md_config_t *conf,
+			  const std::set <std::string> &changed);
 
 public:
   template<class T>
@@ -195,33 +207,27 @@ private:
     ThreadPool *pool;
     WorkThread(ThreadPool *p) : pool(p) {}
     void *entry() {
-      pool->worker();
+      pool->worker(this);
       return 0;
     }
   };
   
   set<WorkThread*> _threads;
+  list<WorkThread*> _old_threads;  ///< need to be joined
   int processing;
 
-  void worker();
+  void start_threads();
+  void join_old_threads();
+  void worker(WorkThread *wt);
 
 public:
-  ThreadPool(CephContext *cct_, string nm, int n=1) :
-    cct(cct_), name(nm),
-    lockname(nm + "::lock"),
-    _lock(lockname.c_str()),  // this should be safe due to declaration order
-    _stop(false),
-    _pause(0),
-    _draining(0),
-    last_work_queue(0),
-    processing(0) {
-    set_num_threads(n);
-  }
-  ~ThreadPool() {
-    for (set<WorkThread*>::iterator p = _threads.begin();
-	 p != _threads.end();
-	 p++)
-      delete *p;
+  ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
+  ~ThreadPool();
+
+  /// return number of threads currently running
+  int get_num_threads() {
+    Mutex::Locker l(_lock);
+    return _num_threads;
   }
   
   /// assign a work queue to this thread pool
@@ -237,13 +243,6 @@ public:
       work_queues[i-1] = work_queues[i];
     assert(i == work_queues.size());
     work_queues.resize(i-1);
-  }
-
-  void set_num_threads(unsigned n) {
-    while (_threads.size() < n) {
-      WorkThread *t = new WorkThread(this);
-      _threads.insert(t);
-    }
   }
 
   /// take thread pool lock
