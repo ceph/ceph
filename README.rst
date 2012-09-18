@@ -58,7 +58,7 @@ The format for this configuration is `YAML <http://yaml.org/>`__, a
 structured data format that is still human-readable and editable.
 
 For example, a full config for a test run that sets up a three-machine
-cluster, mounts Ceph via ``cfuse``, and leaves you at an interactive
+cluster, mounts Ceph via ``ceph-fuse``, and leaves you at an interactive
 Python prompt for manual exploration (and enabling you to SSH in to
 the nodes & use the live cluster ad hoc), might look like this::
 
@@ -72,7 +72,7 @@ the nodes & use the live cluster ad hoc), might look like this::
 	  ubuntu@host09.example.com: ssh-rsa third_key
 	tasks:
 	- ceph:
-	- cfuse: [client.0]
+	- ceph-fuse: [client.0]
 	- interactive:
 
 The number of entries under ``roles`` and ``targets`` must match.
@@ -150,7 +150,7 @@ callable named ``task``. It gets the following arguments:
   task access the remote hosts. Tasks can also store their internal
   state here. (TODO beware namespace collisions.)
 - ``config``: the data structure after the colon in the config file,
-  e.g. for the above ``cfuse`` example, it would be a list like
+  e.g. for the above ``ceph-fuse`` example, it would be a list like
   ``["client.0"]``.
 
 Tasks can be simple functions, called once in the order they are
