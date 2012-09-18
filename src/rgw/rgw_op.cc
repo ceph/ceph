@@ -367,7 +367,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 
   if (obj_size != ent.size) {
     // hmm.. something wrong, object not as expected, abort!
-    ldout(s->cct, 0) << "ERROR: expected read size=" << read_size << ", actual read size=" << ent.size << dendl;
+    ldout(s->cct, 0) << "ERROR: expected obj_size=" << obj_size << ", actual read size=" << ent.size << dendl;
     ret = -EIO;
     goto done_err;
   }
