@@ -1,8 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/lock/cls_lock_client.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/rbd_types.h"
 
 #include "cls_rbd_client.h"
 
@@ -22,6 +24,7 @@ namespace librbd {
       ::encode(snap, bl);
       op.exec("rbd", "get_size", bl);
       op.exec("rbd", "get_object_prefix", empty);
+      
 
       bufferlist outbl;
       int r = ioctx->operate(oid, &op, &outbl);
@@ -46,8 +49,10 @@ namespace librbd {
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
-                             std::set<std::pair<std::string, std::string> > *lockers,
+			     map<rados::cls::lock::locker_id_t,
+				 rados::cls::lock::locker_info_t> *lockers,
                              bool *exclusive_lock,
+			     string *lock_tag,
 			     ::SnapContext *snapc,
 			     parent_info *parent)
     {
@@ -68,8 +73,8 @@ namespace librbd {
       op.exec("rbd", "get_size", sizebl);
       op.exec("rbd", "get_features", featuresbl);
       op.exec("rbd", "get_snapcontext", empty);
-      op.exec("rbd", "list_locks", empty);
       op.exec("rbd", "get_parent", parentbl);
+      rados::cls::lock::get_lock_info_start(&op, RBD_LOCK_NAME);
 
       bufferlist outbl;
       int r = ioctx->operate(oid, &op, &outbl);
@@ -87,14 +92,20 @@ namespace librbd {
 	::decode(*incompatible_features, iter);
 	// get_snapcontext
 	::decode(*snapc, iter);
-	// list_locks
-	::decode(*lockers, iter);
-	::decode(*exclusive_lock, iter);
 	// get_parent
 	::decode(parent->spec.pool_id, iter);
 	::decode(parent->spec.image_id, iter);
 	::decode(parent->spec.snap_id, iter);
 	::decode(parent->overlap, iter);
+
+	// get_lock_info
+	ClsLockType lock_type;
+	r = rados::cls::lock::get_lock_info_finish(&iter, lockers, &lock_type,
+						   lock_tag);
+	if (r < 0)
+	  return r;
+
+	*exclusive_lock = (lock_type == LOCK_EXCLUSIVE);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -430,62 +441,10 @@ namespace librbd {
       return 0;
     }
 
-    int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-		   std::set<std::pair<std::string, std::string> > &locks,
-		   bool &exclusive)
-    {
-      bufferlist in, out;
-      int r = ioctx->exec(oid, "rbd", "list_locks", in, out);
-      if (r < 0) {
-	return r;
-      }
-
-      bufferlist::iterator iter = out.begin();
-      try {
-	::decode(locks, iter);
-	::decode(exclusive, iter);
-      } catch (const buffer::error &err) {
-	return -EBADMSG;
-      }
-      return 0;
-    }
-
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data) {
       bufferlist out;
       return ioctx->exec(oid, "rbd", "copyup", data, out);
-    }
-
-    int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-			     const std::string &cookie)
-    {
-      bufferlist in, out;
-      ::encode(cookie, in);
-      return ioctx->exec(oid, "rbd", "lock_exclusive", in, out);
-    }
-
-    int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-			  const std::string &cookie)
-    {
-      bufferlist in, out;
-      ::encode(cookie, in);
-      return ioctx->exec(oid, "rbd", "lock_shared", in, out);
-    }
-
-    int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-		     const std::string &cookie)
-    {
-      bufferlist in, out;
-      ::encode(cookie, in);
-      return ioctx->exec(oid, "rbd", "unlock_image", in, out);
-    }
-    int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-		   const std::string &locker, const std::string &cookie)
-    {
-      bufferlist in, out;
-      ::encode(locker, in);
-      ::encode(cookie, in);
-      return ioctx->exec(oid, "rbd", "break_lock", in, out);
     }
 
     int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,

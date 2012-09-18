@@ -98,6 +98,9 @@ void usage()
 "                                              mapped by the kernel\n"
 "  showmapped                                  show the rbd images mapped\n"
 "                                              by the kernel\n"
+"  lock list <image-name>                      show locks held on an image\n"
+"  lock add <image-name> <id> [--shared <tag>] take a lock called id on an image\n"
+"  lock remove <image-name> <id> <locker>      release a lock on an image\n"
 "\n"
 "<image-name>, <snap-name> are [pool/]name[@snap], or you may specify\n"
 "individual pieces of names with -p/--pool, --image, and/or --snap.\n"
@@ -116,7 +119,8 @@ void usage()
 "                               format 1 is the original format (default)\n"
 "                               format 2 supports cloning\n"
 "  --id <username>              rados user (without 'client.' prefix) to authenticate as\n"
-"  --keyfile <path>             file containing secret key for use with cephx\n";
+"  --keyfile <path>             file containing secret key for use with cephx\n"
+"  --shared <tag>               take a shared (rather than exclusive) lock\n";
 }
 
 static string feature_str(uint64_t features)
@@ -398,6 +402,48 @@ static int do_list_children(librbd::Image &image)
     cout << child_it->first << "/" << child_it->second << std::endl;
   }
   return 0;
+}
+
+static int do_lock_list(librbd::Image& image)
+{
+  list<librbd::locker_t> lockers;
+  bool exclusive;
+  string tag;
+  int r = image.list_lockers(&lockers, &exclusive, &tag);
+  if (r < 0)
+    return r;
+
+  if (lockers.size()) {
+    cout << "There are " << lockers.size()
+	 << (exclusive ? " exclusive" : " shared")
+	 << " lock(s) on this image.\n";
+    if (!exclusive)
+      cout << "Lock tag: " << tag << "\n";
+
+    cout << "\nLocker\tID\tAddress\n";
+    for (list<librbd::locker_t>::const_iterator it = lockers.begin();
+	 it != lockers.end(); ++it) {
+      cout << it->client << "\t"
+	   << it->cookie << "\t"
+	   << it->address << std::endl;
+    }
+  }
+  return 0;
+}
+
+static int do_lock_add(librbd::Image& image, const char *cookie,
+		       const char *tag)
+{
+  if (tag)
+    return image.lock_shared(cookie, tag);
+  else
+    return image.lock_exclusive(cookie);
+}
+
+static int do_lock_remove(librbd::Image& image, const char *client,
+			  const char *cookie)
+{
+  return image.break_lock(client, cookie);
 }
 
 struct ExportContext {
@@ -1003,11 +1049,14 @@ enum {
   OPT_MAP,
   OPT_UNMAP,
   OPT_SHOWMAPPED,
+  OPT_LOCK_LIST,
+  OPT_LOCK_ADD,
+  OPT_LOCK_REMOVE,
 };
 
-static int get_cmd(const char *cmd, bool snapcmd)
+static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
 {
-  if (!snapcmd) {
+  if (!snapcmd && !lockcmd) {
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_LIST;
@@ -1043,17 +1092,17 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_SHOWMAPPED;
     if (strcmp(cmd, "unmap") == 0)
       return OPT_UNMAP;
-  } else {
-    if (strcmp(cmd, "create") == 0||
+  } else if (snapcmd) {
+    if (strcmp(cmd, "create") == 0 ||
         strcmp(cmd, "add") == 0)
       return OPT_SNAP_CREATE;
-    if (strcmp(cmd, "rollback") == 0||
+    if (strcmp(cmd, "rollback") == 0 ||
         strcmp(cmd, "revert") == 0)
       return OPT_SNAP_ROLLBACK;
-    if (strcmp(cmd, "remove") == 0||
+    if (strcmp(cmd, "remove") == 0 ||
         strcmp(cmd, "rm") == 0)
       return OPT_SNAP_REMOVE;
-    if (strcmp(cmd, "ls") == 0||
+    if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_SNAP_LIST;
     if (strcmp(cmd, "purge") == 0)
@@ -1062,6 +1111,15 @@ static int get_cmd(const char *cmd, bool snapcmd)
       return OPT_SNAP_PROTECT;
     if (strcmp(cmd, "unprotect") == 0)
       return OPT_SNAP_UNPROTECT;
+  } else {
+    if (strcmp(cmd, "ls") == 0 ||
+        strcmp(cmd, "list") == 0)
+      return OPT_LOCK_LIST;
+    if (strcmp(cmd, "add") == 0)
+      return OPT_LOCK_ADD;
+    if (strcmp(cmd, "remove") == 0 ||
+	strcmp(cmd, "rm") == 0)
+      return OPT_LOCK_REMOVE;
   }
 
   return OPT_NO_CMD;
@@ -1096,7 +1154,10 @@ int main(int argc, const char **argv)
   bool format_specified = false;
   int format = 1;
   uint64_t features = RBD_FEATURE_LAYERING;
-  const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL, *devpath = NULL;
+  const char *imgname = NULL, *snapname = NULL, *destname = NULL,
+    *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL,
+    *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
+    *lock_tag = NULL;
 
   std::string val;
   std::ostringstream err;
@@ -1146,6 +1207,8 @@ int main(int argc, const char **argv)
       destname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char *)NULL)) {
       imgname = strdup(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--shared", (char *)NULL)) {
+      lock_tag = strdup(val.c_str());
     } else {
       ++i;
     }
@@ -1158,18 +1221,24 @@ int main(int argc, const char **argv)
     cerr << "you must specify a command." << std::endl;
     usage();
     return EXIT_FAILURE;
-  }
-  else if (strcmp(*i, "snap") == 0) {
+  } else if (strcmp(*i, "snap") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
       cerr << "which snap command do you want?" << std::endl;
       usage();
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, true);
-  }
-  else {
-    opt_cmd = get_cmd(*i, false);
+    opt_cmd = get_cmd(*i, true, false);
+  } else if (strcmp(*i, "lock") == 0) {
+    i = args.erase(i);
+    if (i == args.end()) {
+      cerr << "which lock command do you want?" << std::endl;
+      usage();
+      return EXIT_FAILURE;
+    }
+    opt_cmd = get_cmd(*i, false, true);
+  } else {
+    opt_cmd = get_cmd(*i, false, false);
   }
   if (opt_cmd == OPT_NO_CMD) {
     cerr << "error parsing command '" << *i << "'" << std::endl;
@@ -1197,6 +1266,7 @@ int main(int argc, const char **argv)
       case OPT_SNAP_UNPROTECT:
       case OPT_WATCH:
       case OPT_MAP:
+      case OPT_LOCK_LIST:
 	set_conf_param(v, &imgname, NULL);
 	break;
       case OPT_UNMAP:
@@ -1225,7 +1295,27 @@ int main(int argc, const char **argv)
       case OPT_CHILDREN:
 	set_conf_param(v, &imgname, NULL);
 	break;
-      default:
+      case OPT_LOCK_ADD:
+	if (args.size() < 2) {
+	  cerr << "error: not enough arguments to lock add" << std::endl;
+	  return EXIT_FAILURE;
+	}
+	set_conf_param(v, &imgname, NULL);
+	v = *(++i);
+	set_conf_param(v, &lock_cookie, NULL);
+	break;
+      case OPT_LOCK_REMOVE:
+	if (args.size() < 3) {
+	  cerr << "error: not enough arguments to lock remove" << std::endl;
+	  return EXIT_FAILURE;
+	}
+	set_conf_param(v, &imgname, NULL);
+	v = *(++i);
+	set_conf_param(v, &lock_client, NULL);
+	v = *(++i);
+	set_conf_param(v, &lock_cookie, NULL);
+	break;
+    default:
 	assert(0);
 	break;
     }
@@ -1262,6 +1352,20 @@ int main(int argc, const char **argv)
     destname = imgname;
     if (!destname)
       destname = imgname_from_path(path);
+  }
+
+  if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
+    cerr << "error: only the lock add command uses the --shared option"
+	 << std::endl;
+    usage();
+    return EXIT_FAILURE;
+  }
+
+  if ((opt_cmd == OPT_LOCK_ADD || opt_cmd == OPT_LOCK_REMOVE) &&
+      !lock_cookie) {
+    cerr << "error: lock id was not specified" << std::endl;
+    usage();
+    return EXIT_FAILURE;
   }
 
   if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && opt_cmd != OPT_SHOWMAPPED &&
@@ -1358,7 +1462,9 @@ int main(int argc, const char **argv)
        opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_EXPORT ||
        opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
        opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY ||
-       opt_cmd == OPT_FLATTEN || opt_cmd == OPT_CHILDREN)) {
+       opt_cmd == OPT_FLATTEN || opt_cmd == OPT_CHILDREN ||
+       opt_cmd == OPT_LOCK_LIST || opt_cmd == OPT_LOCK_ADD ||
+       opt_cmd == OPT_LOCK_REMOVE)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
@@ -1642,6 +1748,39 @@ int main(int argc, const char **argv)
     r = do_kernel_showmapped();
     if (r < 0) {
       cerr << "showmapped failed: " << cpp_strerror(-r) << std::endl;
+      return EXIT_FAILURE;
+    }
+    break;
+
+  case OPT_LOCK_LIST:
+    r = do_lock_list(image);
+    if (r < 0) {
+      cerr << "listing locks failed: " << cpp_strerror(r) << std::endl;
+      return EXIT_FAILURE;
+    }
+    break;
+
+  case OPT_LOCK_ADD:
+    r = do_lock_add(image, lock_cookie, lock_tag);
+    if (r < 0) {
+      if (r == -EBUSY || r == -EEXIST) {
+	if (lock_tag) {
+	  cerr << "lock is alrady held by someone else with a different tag"
+	       << std::endl;
+	} else {
+	  cerr << "lock is already held by someone else" << std::endl;
+	}
+      } else {
+	cerr << "taking lock failed: " << cpp_strerror(r) << std::endl;
+      }
+      return EXIT_FAILURE;
+    }
+    break;
+
+  case OPT_LOCK_REMOVE:
+    r = do_lock_remove(image, lock_cookie, lock_client);
+    if (r < 0) {
+      cerr << "releasing lock failed: " << cpp_strerror(r) << std::endl;
       return EXIT_FAILURE;
     }
     break;

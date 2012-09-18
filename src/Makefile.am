@@ -370,7 +370,10 @@ librbd_la_SOURCES = \
 	librbd/internal.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/WatchCtx.cc \
-	osdc/ObjectCacher.cc
+	osdc/ObjectCacher.cc \
+	cls/lock/cls_lock_client.cc \
+	cls/lock/cls_lock_types.cc \
+	cls/lock/cls_lock_ops.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
 librbd_la_LIBADD = librados.la
@@ -773,7 +776,10 @@ bin_DEBUGPROGRAMS += test_librbd_fsx
 
 test_cls_rbd_SOURCES = test/rbd/test_cls_rbd.cc \
 	test/rados-api/test.cc \
-	librbd/cls_rbd_client.cc
+	librbd/cls_rbd_client.cc \
+	cls/lock/cls_lock_client.cc \
+	cls/lock/cls_lock_types.cc \
+	cls/lock/cls_lock_ops.cc
 test_cls_rbd_LDADD = librados.la ${UNITTEST_STATIC_LDADD}
 test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_rbd
