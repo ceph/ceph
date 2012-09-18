@@ -18,7 +18,7 @@ For example::
 
 	[client.radosgw.gateway]
 		host = {host-name}
-		keyring = /etc/ceph/keyring.rados.gateway
+		keyring = /etc/ceph/keyring.radosgw.gateway
 		rgw socket path = /tmp/radosgw.sock
 		log file = /var/log/ceph/radosgw.log
 
@@ -155,14 +155,14 @@ Generate a Keyring and Key for RADOS Gateway
 
 You must create a keyring for the RADOS Gateway. For example:: 
 
-	sudo ceph-authtool --create-keyring /etc/ceph/keyring.rados.gateway
-	sudo chmod +r /etc/ceph/keyring.rados.gateway
+	sudo ceph-authtool --create-keyring /etc/ceph/keyring.radosgw.gateway
+	sudo chmod +r /etc/ceph/keyring.radosgw.gateway
 	
 Generate a key so that RADOS Gateway can identify a user name and authenticate 
 the user with the cluster. Then, add capabilities to the key. For example:: 
 
-	sudo ceph-authtool /etc/ceph/keyring.rados.gateway -n client.rados.gateway --gen-key
-	sudo ceph-authtool -n client.rados.gateway --cap osd 'allow rwx' --cap mon 'allow r' /etc/ceph/keyring.rados.gateway
+	sudo ceph-authtool /etc/ceph/keyring.radosgw.gateway -n client.radosgw.gateway --gen-key
+	sudo ceph-authtool -n client.radosgw.gateway --cap osd 'allow rwx' --cap mon 'allow r' /etc/ceph/keyring.radosgw.gateway
 	
 
 Add to Ceph Keyring Entries 
@@ -171,7 +171,7 @@ Add to Ceph Keyring Entries
 Once you have created a keyring and key for RADOS GW, add it as an entry in
 the Ceph keyring. For example::
 
-	ceph -k /etc/ceph/ceph.keyring auth add client.rados.gateway -i /etc/ceph/keyring.rados.gateway
+	ceph -k /etc/ceph/ceph.keyring auth add client.radosgw.gateway -i /etc/ceph/keyring.radosgw.gateway
 	
 
 Restart Services and Start the RADOS Gateway
@@ -183,7 +183,7 @@ start up the ``radosgw`` service. For example::
 
 	sudo service ceph restart
 	sudo service apache2 restart
-	sudo service radosgw start
+	sudo /etc/init.d/radosgw start
 
 
 Create a RADOS Gateway User
