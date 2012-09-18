@@ -36,6 +36,48 @@ class MMonCommand;
 class MPoolSnap;
 class MOSDMap;
 
+/// information about a particular peer's failure reports for one osd
+struct failure_reporter_t {
+  int num_reports;          ///< reports from this reporter
+  utime_t failed_since;     ///< when they think it failed
+
+  failure_reporter_t() : num_reports(0) {}
+  failure_reporter_t(utime_t s) : num_reports(1), failed_since(s) {}
+};
+
+/// information about all failure reports for one osd
+struct failure_info_t {
+  map<int, failure_reporter_t> reporters;  ///< reporter -> # reports
+  utime_t max_failed_since;                ///< most recent failed_since
+  int num_reports;
+
+  failure_info_t() : num_reports(0) {}
+
+  void add_report(int who, utime_t failed_since) {
+    map<int, failure_reporter_t>::iterator p = reporters.find(who);
+    if (p == reporters.end()) {
+      if (max_failed_since == utime_t())
+	max_failed_since = failed_since;
+      else if (max_failed_since < failed_since)
+	max_failed_since = failed_since;
+      reporters[who] = failure_reporter_t(failed_since);
+    } else {
+      p->second.num_reports++;
+    }
+    num_reports++;
+  }
+
+  void cancel_report(int who) {
+    map<int, failure_reporter_t>::iterator p = reporters.find(who);
+    if (p == reporters.end())
+      return;
+    num_reports -= p->second.num_reports;
+    reporters.erase(p);
+    if (reporters.empty())
+      max_failed_since = utime_t();
+  }
+};
+
 class OSDMonitor : public PaxosService {
 public:
   OSDMap osdmap;
@@ -45,7 +87,7 @@ private:
 
   // [leader]
   OSDMap::Incremental pending_inc;
-  multimap<int, pair<int, int> > failed_notes; // <failed_osd, <reporter, #reports> >
+  map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
   map<int,double> osd_weight;
