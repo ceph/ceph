@@ -17,6 +17,7 @@
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
+    bucket check               check bucket index
     object rm                  remove object
     cluster info               show cluster params info
     pool add                   add an existing pool for data placement
@@ -52,6 +53,7 @@
      --start-date=<date>
      --end-date=<date>
      --bucket-id=<bucket-id>
+     --fix                     besides checking bucket index, will also fix it
      --format=<format>         specify output format for certain operations: xml,
                                json
      --purge-data              when specified, user removal will also purge all the
