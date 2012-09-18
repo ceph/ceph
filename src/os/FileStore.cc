@@ -730,7 +730,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   stop(false), sync_thread(this),
   default_osr("default"),
   op_queue_len(0), op_queue_bytes(0), op_finisher(g_ceph_context), next_finish(0),
-  op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads),
+  op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads, "filestore_op_threads"),
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
   flusher_queue_len(0), flusher_thread(this),
