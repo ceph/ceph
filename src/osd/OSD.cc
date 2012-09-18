@@ -4836,7 +4836,6 @@ void OSD::handle_pg_scan(OpRequestRef op)
   assert(pg);
 
   enqueue_op(pg, op);
-  //pg->unlock();
 }
 
 void OSD::handle_pg_backfill(OpRequestRef op)
@@ -4865,7 +4864,6 @@ void OSD::handle_pg_backfill(OpRequestRef op)
   assert(pg);
 
   enqueue_op(pg, op);
-  //pg->unlock();
 }
 
 
@@ -5478,7 +5476,6 @@ bool OSD::op_is_discardable(MOSDOp *op)
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
   dout(15) << *pg << " enqueue_op " << op << " " << *(op->request) << dendl;
-  //assert(pg->is_locked());
   pg->queue_op(op);
 }
 
