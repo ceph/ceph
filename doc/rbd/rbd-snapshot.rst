@@ -11,12 +11,12 @@ the snapshots.
 
 .. important:: To use use RBD snapshots, you must have a running Ceph cluster.
 
-.. important:: Generally, you should stop i/o before snapshotting an image.
-   If the image contains a filesystem, the filesystem should be in a
-   consistent state before snapshotting too.
+.. warning:: Stop i/o before snapshotting an image.
+   If the image contains a filesystem, the filesystem must be in a
+   consistent state before snapshotting.
 
 Create Snapshot
----------------
+===============
 
 To create a snapshot with ``rbd``, specify the ``snap create`` option, 
 the pool name, the image name and the username. If you use ``cephx`` for 
@@ -29,7 +29,7 @@ For example::
 	rbd --name client.admin --pool rbd snap create --snap foo.snapname foo
 
 List Snapshots
---------------
+==============
 
 To list snapshots of an image, specify the pool name, the image name, and
 the username. If you use ``cephx`` for authentication, you must also 
@@ -41,8 +41,9 @@ For example::
 
 	rbd --name client.admin --pool rbd snap ls foo 
 
+
 Rollback Snapshot
------------------
+=================
 
 To rollback a snapshot with ``rbd``, specify the ``snap rollback`` option, 
 the pool name, the image name and the username. If you use ``cephx`` for 
@@ -56,7 +57,8 @@ For example::
 
 
 Delete a Snapshot
------------------
+=================
+
 To delete a snapshot with ``rbd``, specify the ``snap rm`` option, 
 the pool name, the image name and the username. If you use ``cephx`` for 
 authentication, you must also specify a key or a secret file. :: 
