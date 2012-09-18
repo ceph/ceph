@@ -5475,7 +5475,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
  */
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
-  dout(15) << *pg << " enqueue_op " << op << " " << *(op->request) << dendl;
+  dout(15) << "enqueue_op " << op << " " << *(op->request) << dendl;
   pg->queue_op(op);
 }
 
