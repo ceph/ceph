@@ -335,7 +335,7 @@ protected:
   PGPool pool;
 
   OSDMapRef get_osdmap() const {
-    // assert(is_locked());
+    assert(is_locked());
     assert(osdmap_ref);
     return osdmap_ref;
   }
