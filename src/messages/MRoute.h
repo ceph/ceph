@@ -21,15 +21,19 @@
 #include "include/encoding.h"
 
 struct MRoute : public Message {
+
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 2;
+
   uint64_t session_mon_tid;
   Message *msg;
   entity_inst_t dest;
   
-  MRoute() : Message(MSG_ROUTE), msg(NULL) {}
-  MRoute(uint64_t t, Message *m) :
-    Message(MSG_ROUTE), session_mon_tid(t), msg(m) {}
-  MRoute(bufferlist bl, entity_inst_t i) :
-    Message(MSG_ROUTE), session_mon_tid(0), dest(i) {
+  MRoute() : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION), msg(NULL) {}
+  MRoute(uint64_t t, Message *m)
+    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION), session_mon_tid(t), msg(m) {}
+  MRoute(bufferlist bl, entity_inst_t i)
+    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION), session_mon_tid(0), dest(i) {
     bufferlist::iterator p = bl.begin();
     msg = decode_message(NULL, p);
   }
@@ -43,14 +47,29 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(session_mon_tid, p);
     ::decode(dest, p);
-    if (!p.end())
+    if (header.version >= 2) {
+      bool m;
+      ::decode(m, p);
+      if (m)
+	msg = decode_message(NULL, p);
+    } else {
       msg = decode_message(NULL, p);
+    }
   }
   void encode_payload(uint64_t features) {
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
-    if (msg)
+    if (features & CEPH_FEATURE_MON_NULLROUTE) {
+      bool m = msg ? true : false;
+      ::encode(m, payload);
+      if (msg)
+	encode_message(msg, features, payload);
+    } else {
+      header.version = 1;
+      header.compat_version = 1;
+      assert(msg);
       encode_message(msg, features, payload);
+    }
   }
 
   const char *get_type_name() const { return "route"; }
