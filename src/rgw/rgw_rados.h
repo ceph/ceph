@@ -119,6 +119,7 @@ struct RGWObjState {
   bool exists;
   uint64_t size;
   time_t mtime;
+  uint64_t epoch;
   bufferlist obj_tag;
   bool fake_tag;
   RGWObjManifest manifest;
@@ -129,7 +130,7 @@ struct RGWObjState {
   bool prefetch_data;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), fake_tag(false), has_manifest(false), prefetch_data(false) {}
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), epoch(0), fake_tag(false), has_manifest(false), prefetch_data(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -144,6 +145,7 @@ struct RGWObjState {
     has_attrs = false;
     exists = false;
     fake_tag = false;
+    epoch = 0;
     size = 0;
     mtime = 0;
     obj_tag.clear();
@@ -240,6 +242,7 @@ class RGWRados
   int open_gc_pool_ctx();
 
   int open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
+  int open_bucket(rgw_bucket& bucket, librados::IoCtx&  io_ctx, string& bucket_oid);
 
   struct GetObjState {
     librados::IoCtx io_ctx;
@@ -568,7 +571,8 @@ public:
    */
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
+                       uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
   virtual bool supports_omap() { return true; }
   virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
@@ -650,6 +654,11 @@ public:
   int list_gc_objs(int *index, string& marker, uint32_t max, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   int process_gc();
   int defer_gc(void *ctx, rgw_obj& obj);
+
+  int bucket_check_index(rgw_bucket& bucket,
+                         map<RGWObjCategory, RGWBucketStats> *existing_stats,
+                         map<RGWObjCategory, RGWBucketStats> *calculated_stats);
+  int bucket_rebuild_index(rgw_bucket& bucket);
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);

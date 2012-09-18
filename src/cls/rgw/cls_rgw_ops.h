@@ -6,6 +6,25 @@
 #include "include/types.h"
 #include "cls/rgw/cls_rgw_types.h"
 
+struct rgw_cls_tag_timeout_op
+{
+  uint64_t tag_timeout;
+
+  rgw_cls_tag_timeout_op() {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(tag_timeout, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(tag_timeout, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_tag_timeout_op)
+
 struct rgw_cls_obj_prepare_op
 {
   uint8_t op;
@@ -125,6 +144,30 @@ struct rgw_cls_list_ret
   static void generate_test_instances(list<rgw_cls_list_ret*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_ret)
+
+struct rgw_cls_check_index_ret
+{
+  rgw_bucket_dir_header existing_header;
+  rgw_bucket_dir_header calculated_header;
+
+  rgw_cls_check_index_ret() {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(existing_header, bl);
+    ::encode(calculated_header, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(existing_header, bl);
+    ::decode(calculated_header, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_list_ret*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;

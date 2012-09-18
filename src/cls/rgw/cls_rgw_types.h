@@ -161,15 +161,24 @@ WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
 struct rgw_bucket_dir_header {
   map<uint8_t, rgw_bucket_category_stats> stats;
+  uint64_t tag_timeout;
+
+  rgw_bucket_dir_header() : tag_timeout(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     ::encode(stats, bl);
+    ::encode(tag_timeout, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     ::decode(stats, bl);
+    if (struct_v > 2) {
+      ::decode(tag_timeout, bl);
+    } else {
+      tag_timeout = 0;
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
