@@ -684,54 +684,43 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   int reporter = m->get_orig_source().num();
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+
+  // calculate failure time
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t failed_since = now - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
   
   if (m->if_osd_failed()) {
-    int reports = 0;
-    int reporters = 0;
+    // add a report
+    failure_info_t& fi = failure_info[target_osd];
+    fi.add_report(reporter, failed_since);
+    dout(10) << " osd." << target_osd << " has "
+	     << fi.reporters.size() << " reporters and "
+	     << fi.num_reports << " reports" << dendl;
 
-    if (failed_notes.count(target_osd)) {
-      multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
-      while ((i != failed_notes.end()) && (i->first == target_osd)) {
-        if (i->second.first == reporter) {
-          ++i->second.second;
-          dout(10) << "adding new failure report from osd." << reporter
-                   << " on osd." << target_osd << dendl;
-          reporter = -1;
-        }
-        ++reporters;
-        reports += i->second.second;
-        ++i;
-      }
-    }
-    if (reporter != -1) { //didn't get counted yet
-      failed_notes.insert(pair<int, pair<int, int> >
-                          (target_osd, pair<int, int>(reporter, 1)));
-      ++reporters;
-      ++reports;
-      dout(10) << "osd." << reporter
-               << " is adding failure report on osd." << target_osd << dendl;
-    }
-
-    if ((reporters >= g_conf->osd_min_down_reporters) &&
-        (reports >= g_conf->osd_min_down_reports)) {
-      dout(1) << "have enough reports/reporters to mark osd." << target_osd
-              << " as down" << dendl;
+    if (((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
+        (fi.num_reports >= g_conf->osd_min_down_reports)) {
+      dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
       pending_inc.new_state[target_osd] = CEPH_OSD_UP;
       paxos->wait_for_commit(new C_Reported(this, m));
-      //clear out failure reports
-      failed_notes.erase(failed_notes.lower_bound(target_osd),
-                         failed_notes.upper_bound(target_osd));
+      failure_info.erase(target_osd);
       return true;
     }
-  } else { //remove the report
-    multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
-    while ((i != failed_notes.end()) && (i->first == target_osd)
-                                && (i->second.first != reporter))
-      ++i;
-    if ((i == failed_notes.end()) || (i->second.first != reporter))
-      dout(0) << "got an OSD not-failed report from osd." << reporter
-              << " that hasn't reported failure! (or in previous epoch?)" << dendl;
-    else failed_notes.erase(i);
+  } else {
+    // remove the report
+    if (failure_info.count(target_osd)) {
+      failure_info_t& fi = failure_info[target_osd];
+      fi.cancel_report(reporter);
+      if (fi.reporters.empty()) {
+	dout(10) << " removing last failure_info for osd." << target_osd << dendl;
+	failure_info.erase(target_osd);
+      } else {
+	dout(10) << " failure_info for osd." << target_osd << " now "
+		 << fi.reporters.size() << " reporters and "
+		 << fi.num_reports << " reports" << dendl;
+      }
+    } else {
+      dout(10) << " no failure_info for osd." << target_osd << dendl;
+    }
   }
   
   return false;
