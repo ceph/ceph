@@ -74,7 +74,7 @@
 :Required: Yes, for daemon instances.
 :Default: ``localhost``
 
-.. tip:: Do not use ``localhost``. To get your host name, execute ``hostname`` on your command line and use the name of your host (to the first period, not the fully-qualified domain name).
+.. tip:: Do not use ``localhost``. To get your host name, execute ``hostname -s`` on your command line and use the name of your host (to the first period, not the fully-qualified domain name).
 .. important: You should not specify any value for ``host`` when using a third party deployment system that retrieves the host name for you.
 
 
