@@ -25,7 +25,7 @@ the Ceph FS filesystem, and RADOS block devices simultaneously.
 .. toctree::
 	:maxdepth: 1
 
-	RADOS Commands <rados-rbd-cmds>
+	RBD Commands <rados-rbd-cmds>
 	Kernel Objects <rbd-ko>
 	RBD Snapshots <rbd-snapshot>
 	QEMU and RBD <qemu-rbd>
