@@ -121,6 +121,22 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return rc;
 }
 
+static void verify_stats(cls_method_context_t hctx, rgw_bucket_category_stats& stats)
+{
+  if ((int64_t)stats.num_entries < 0) {
+    stats.num_entries = 0;
+    CLS_LOG(0, "WARNING: stats.num_entries < 0, resetting");
+  }
+  if ((int64_t)stats.total_size < 0) {
+    stats.total_size = 0;
+    CLS_LOG(0, "WARNING: stats.total_size < 0, resetting");
+  }
+  if ((int64_t)stats.total_size_rounded < 0) {
+    stats.total_size_rounded = 0;
+    CLS_LOG(0, "WARNING: stats.total_size_rounded < 0, resetting");
+  }
+}
+
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
@@ -271,6 +287,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     stats.num_entries--;
     stats.total_size -= entry.meta.size;
     stats.total_size_rounded -= get_rounded_size(entry.meta.size);
+    verify_stats(hctx, stats);
   }
 
   switch (op.op) {
@@ -382,6 +399,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.num_entries--;
         stats.total_size -= cur_disk.meta.size;
         stats.total_size_rounded -= get_rounded_size(cur_disk.meta.size);
+        verify_stats(hctx, stats);
         header_changed = true;
       }
       switch(op) {
