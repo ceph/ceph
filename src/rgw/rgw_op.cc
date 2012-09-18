@@ -352,7 +352,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 
   map<string, bufferlist> attrs;
 
-  uint64_t obj_size, read_size;
+  uint64_t obj_size;
   void *obj_ctx = store->create_context(s);
   RGWAccessControlPolicy obj_policy(s->cct);
 
@@ -384,7 +384,6 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
-    read_size = cur_end - cur_ofs + 1;
     ret = store->get_obj(obj_ctx, &handle, part, bl, cur_ofs, cur_end);
     if (ret < 0)
       goto done_err;
