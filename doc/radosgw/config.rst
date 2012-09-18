@@ -33,8 +33,20 @@ hosts in your cluster. For example::
 	ssh {host-name} sudo /etc/ceph/ceph.conf < ceph.conf
 
 
-Create a Data Directory
-=======================
+Create Data Directory
+=====================
+
+The ``mkcephfs`` deployment script may not create the default RGW data
+directory.  Create data directories for each instance of a ``radosgw`` daemon (if
+you haven't done so already). The ``host``  variables in the ``ceph.conf`` file
+determine which host runs each instance of a ``radosgw`` daemon. The typical form
+specifes the daemon ``radosgw``, the cluster name and the daemon ID.
+
+	sudo mkdir -p /var/lib/ceph/radosgw/{$cluster}-{$id}
+
+Using the exemplary ``ceph.conf`` settings above, you would execute the following::
+
+	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
 
 
 Create ``rgw.conf``
@@ -190,3 +202,9 @@ For details on RADOS Gateway administration, see `radosgw-admin`_.
 
 .. _radosgw-admin: ../../man/8/radosgw-admin/ 
 
+.. important:: Check the key output. Sometimes ``radosgw-admin``
+   generates a key with an escape (``\``) character, and some clients
+   do not know how to handle escape characters. Remedies include 
+   removing the escape character (``\``), encapsulating the string
+   in quotes, or simply regenerating the key and ensuring that it 
+   does not have an escape character.
