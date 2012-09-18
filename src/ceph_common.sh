@@ -5,7 +5,7 @@ CCONF="$BINDIR/ceph-conf"
 default_conf=$ETCDIR"/ceph.conf"
 conf=$default_conf
 
-hostname=`hostname | cut -d . -f 1`
+hostname=`hostname -s`
 
 verify_conf() {
     # fetch conf?
@@ -35,7 +35,7 @@ check_host() {
     # what host is this daemon assigned to?
     host=`$CCONF -c $conf -n $type.$id host`
     if [ "$host" = "localhost" ]; then
-	echo "$0: use a proper short hostname, not 'localhost', in $conf section $type.$id; skipping entry"
+	echo "$0: use a proper short hostname (hostname -s), not 'localhost', in $conf section $type.$id; skipping entry"
 	return 1
     fi
     ssh=""
