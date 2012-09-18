@@ -55,6 +55,7 @@
 /xattr_bench
 /rest-bench
 /rbd-fuse
+/mon_store_converter
 dev
 mondata
 mnt
