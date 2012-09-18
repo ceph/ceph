@@ -29,8 +29,8 @@
 
 :Description: The size of the journal in megabytes.
 :Type: 32-bit Integer
-:Default: ``0``
-:Recommended: Begin with 10GB. Should approximate twice the product of the expected speed multiplied by ``filestore min sync interval``.
+:Default: ``1024``
+:Recommended: Begin with 1GB. Should at least twice the product of the expected speed multiplied by ``filestore min sync interval``.
 
 
 ``osd max write size`` 
@@ -347,6 +347,17 @@
 :Type: Float
 :Default: Once per day. ``60*60*24`` 
 
+``osd deep scrub interval``
+
+:Description: The interval for "deep" scrubbing (fully reading all data)
+:Type: Float
+:Default: Once per week.  ``60*60*24*7``
+
+``osd deep scrub stride``
+
+:Description: Read siez when doing a deep scrub
+:Type: 32-bit Int
+:Default: 512 KB. ``524288``
 
 ``osd class dir`` 
 

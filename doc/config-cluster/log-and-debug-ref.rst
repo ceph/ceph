@@ -291,3 +291,36 @@ RADOS Gateway
 :Type: Boolean
 :Required: No
 :Default: ``false``
+
+``rgw cluster root pool``
+
+:Description: RADOS pool to store radosgw metadata for this instance
+:Type: String
+:Required: No
+:Default: ``.rgw.root``
+
+``rgw gc max objs``
+
+:Description: Number of objects to collect garbage collection data
+:Type: 32-bit Integer
+:Default: 32
+
+``rgw gc obj min wait``
+
+:Description: Minimum time to wait before object's removal and its processing by the garbage collector
+:Type: 32-bit Integer
+:Default: 2 hours.  ``2*60*60``
+
+``rgw gc processor max time``
+
+:Description: Max time for a single garbage collection process run
+:Type: 32-bit Integer
+:Default: 1 hour.  ``60*60``
+
+``rgw gc processor max period``
+
+:Description: Max time between the beginning of two consecutive garbage collection processes run
+:Type: 32-bit Integer
+:Default: 1 hour.  ``60*60``
+
+
