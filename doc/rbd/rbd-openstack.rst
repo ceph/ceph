@@ -16,19 +16,14 @@ processor. The following diagram depicts the OpenStack/Ceph technology stack.
 .. ditaa::  +---------------------------------------------------+
             |                    OpenStack                      |
             +---------------------------------------------------+            
-            +---------------------------------------------------+
             |                     libvirt                       |
             +---------------------------------------------------+            
-            +---------------------------------------------------+
             |                     QEMU/RBD                      |
-            +---------------------------------------------------+
             +---------------------------------------------------+
             |                      librbd                       |
             +---------------------------------------------------+
-            +---------------------------------------------------+
             |     librados (C, C++, Java, Python, PHP, etc.)    |
-            +---------------------------------------------------+
-            +---------------+ +---------------+ +---------------+
+            +---------------+-+---------------+-+---------------+
             |      OSDs     | |      MDSs     | |    Monitors   |
             +---------------+ +---------------+ +---------------+
 
@@ -50,8 +45,8 @@ See `Create a Pool`_ for detail on specifying the number of placement groups
 for your pool, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pool. 
 
-.. Create a Pool: ../../cluster-ops/pools#createpool
-.. Placement Groups: ../../cluster-ops/placement-groups
+.. _Create a Pool: ../../cluster-ops/pools#createpool
+.. _Placement Groups: ../../cluster-ops/placement-groups
 
 Install Ceph Common on the OpenStack Host
 =========================================
