@@ -315,6 +315,8 @@ fi
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_rgw.so*
 %{_libdir}/rados-classes/libcls_lock.so*
+%{_libdir}/rados-classes/libcls_kvs.so*
+%{_libdir}/rados-classes/libcls_refcount.so*
 /sbin/ceph-disk-activate
 /sbin/ceph-disk-prepare
 /sbin/ceph-create-keys
