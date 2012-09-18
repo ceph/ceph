@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CLS_RBD_CLIENT_H
 #define CEPH_LIBRBD_CLS_RBD_CLIENT_H
 
+#include "cls/lock/cls_lock_types.h"
 #include "common/snap_types.h"
 #include "include/rados.h"
 #include "include/rados/librados.hpp"
@@ -21,8 +22,10 @@ namespace librbd {
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
-			     std::set<std::pair<std::string, std::string> >* lockers,
+			     map<rados::cls::lock::locker_id_t,
+				 rados::cls::lock::locker_info_t> *lockers,
 			     bool *exclusive_lock,
+			     std::string *lock_tag,
 			     ::SnapContext *snapc,
 			     parent_info *parent);
 
@@ -65,19 +68,8 @@ namespace librbd {
 		      std::vector<uint64_t> *features,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
-    int list_locks(librados::IoCtx *ioctx, const std::string &oid,
-		   std::set<std::pair<std::string, std::string> > &locks,
-		   bool &exclusive);
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data);
-    int lock_image_exclusive(librados::IoCtx *ioctx, const std::string &oid,
-			     const std::string &cookie);
-    int lock_image_shared(librados::IoCtx *ioctx, const std::string &oid,
-			  const std::string &cookie);
-    int unlock_image(librados::IoCtx *ioctx, const std::string& oid,
-		     const std::string &cookie);
-    int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-		   const std::string &locker, const std::string &cookie);
     int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t *protection_status);
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,

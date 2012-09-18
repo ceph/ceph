@@ -31,7 +31,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 4
+#define LIBRBD_VER_EXTRA 5
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -157,26 +157,103 @@ int rbd_flatten(rbd_image_t image);
 ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
 			  char *images, size_t *images_len);
 
-/* cooperative locking */
 /**
- * in params:
- * @param lockers_and_cookies: array of char* which will be filled in
- * @param max_entries: the size of the lockers_and_cookies array
- * out params:
- * @param exclusive: non-zero if the lock is an exclusive one. Only
- * meaningfull if there are a non-zero number of lockers.
- * @param lockers_and_cookies: alternating the address of the locker with
- * the locker's cookie.
- * @param max_entries: the number of lockers -- double for the number of
- * spaces required.
+ * @defgroup librbd_h_locking Advisory Locking
+ *
+ * An rbd image may be locking exclusively, or shared, to facilitate
+ * e.g. live migration where the image may be open in two places at once.
+ * These locks are intended to guard against more than one client
+ * writing to an image without coordination. They don't need to
+ * be used for snapshots, since snapshots are read-only.
+ *
+ * Currently locks only guard against locks being acquired.
+ * They do not prevent anything else.
+ *
+ * A locker is identified by the internal rados client id of the
+ * holder and a user-defined cookie. This (client id, cookie) pair
+ * must be unique for each locker.
+ *
+ * A shared lock also has a user-defined tag associated with it. Each
+ * additional shared lock must specify the same tag or lock
+ * acquisition will fail. This can be used by e.g. groups of hosts
+ * using a clustered filesystem on top of an rbd image to make sure
+ * they're accessing the correct image.
+ *
+ * @{
  */
-int rbd_list_lockers(rbd_image_t image, int *exclusive,
-                     char **lockers_and_cookies, int *max_entries);
-int rbd_lock_exclusive(rbd_image_t image, const char *cookie);
-int rbd_lock_shared(rbd_image_t image, const char *cookie);
-int rbd_unlock(rbd_image_t image, const char *cookie);
-int rbd_break_lock(rbd_image_t image, const char *locker, const char *cookie);
+/**
+ * List clients that have locked the image and information about the lock.
+ *
+ * The number of bytes required in each buffer is put in the
+ * corresponding size out parameter. If any of the provided buffers
+ * are too short, -ERANGE is returned after these sizes are filled in.
+ *
+ * @param exclusive where to store whether the lock is exclusive (1) or shared (0)
+ * @param tag where to store the tag associated with the image
+ * @param tag_len number of bytes in tag buffer
+ * @param clients buffer in which locker clients are stored, separated by '\0'
+ * @param clients_len number of bytes in the clients buffer
+ * @param cookies buffer in which locker cookies are stored, separated by '\0'
+ * @param cookies_len number of bytes in the cookies buffer
+ * @param addrs buffer in which locker addresses are stored, separated by '\0'
+ * @param addrs_len number of bytes in the clients buffer
+ * @returns number of lockers on success, negative error code on failure
+ * @returns -ERANGE if any of the buffers are too short
+ */
+ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
+			 char *tag, size_t *tag_len,
+			 char *clients, size_t *clients_len,
+			 char *cookies, size_t *cookies_len,
+			 char *addrs, size_t *addrs_len);
 
+/**
+ * Take an exclusive lock on the image.
+ *
+ * @param image the image to lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+int rbd_lock_exclusive(rbd_image_t image, const char *cookie);
+
+/**
+ * Take a shared lock on the image.
+ *
+ * Other clients may also take a shared lock, as lock as they use the
+ * same tag.
+ *
+ * @param image the image to lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param tag user-defined identifier for this shared use of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+int rbd_lock_shared(rbd_image_t image, const char *cookie, const char *tag);
+
+/**
+ * Release a shared or exclusive lock on the image.
+ *
+ * @param image the image to unlock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ */
+int rbd_unlock(rbd_image_t image, const char *cookie);
+
+/**
+ * Release a shared or exclusive lock that was taken by the specified client.
+ *
+ * @param image the image to unlock
+ * @param client the entity holding the lock (as given by rbd_list_lockers())
+ * @param cookie user-defined identifier for the instance of the lock to break
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ */
+int rbd_break_lock(rbd_image_t image, const char *client, const char *cookie);
+
+/** @} locking */
 
 /* I/O */
 typedef void *rbd_completion_t;

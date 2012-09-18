@@ -148,6 +148,32 @@ test_remove() {
     rbd ls | wc -l | grep "^0$"
 }
 
+test_locking() {
+    echo "testing locking..."
+    remove_images
+
+    rbd create -s 1 test1
+    rbd lock list test1 | wc -l | grep '^0$'
+    rbd lock add test1 id
+    rbd lock list test1 | grep ' 1 '
+    LOCKER=$(rbd lock list test1 | tail -n 1 | cut -f 1)
+    rbd lock remove test1 id $LOCKER
+    rbd lock list test1 | wc -l | grep '^0$'
+
+    rbd lock add test1 id --shared tag
+    rbd lock list test1 | grep ' 1 '
+    rbd lock add test1 id --shared tag
+    rbd lock list test1 | grep ' 2 '
+    rbd lock add test1 id2 --shared tag
+    rbd lock list test1 | grep ' 3 '
+    LOCKER=$(rbd lock list test1 | tail -n 1 | cut -f 1)
+    ID=$(rbd lock list test1 | tail -n 1 | cut -f 2)
+    rbd lock remove test1 $ID $LOCKER
+    # locks don't prevent you from removing an image,
+    # just from taking a lock
+    rbd rm test1
+}
+
 test_pool_image_args() {
     echo "testing pool and image args..."
     remove_images
@@ -198,10 +224,9 @@ test_ls
 test_remove
 RBD_CREATE_ARGS=""
 test_others
-# wait for watch to timeout so we can remove old images
-# TODO: remove this once #2476 is fixed
-sleep 30
-RBD_CREATE_ARGS="--new-format"
+test_locking
+RBD_CREATE_ARGS="--format 2"
 test_others
+test_locking
 
 echo OK
