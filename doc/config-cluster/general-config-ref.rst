@@ -48,7 +48,7 @@
 :Description: The path to the cluster's keyring file. 
 :Type: String
 :Required: No
-:Default: ``/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
+:Default: ``/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
 
 
 ``fsid``
@@ -140,3 +140,9 @@
 :Type: 64-bit Integer
 :Required: No
 :Default: ``0``
+
+``fatal signal handlers``
+
+:Description: If set, we will install signal handlers for SEGV, ABRT, BUS, ILL, FPE, XCPU, XFSZ, SYS signals to generate a useful log message
+:Type: Boolean
+:Default: ``true``
