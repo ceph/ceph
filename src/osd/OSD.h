@@ -825,13 +825,10 @@ protected:
   void send_alive();
 
   // -- failures --
-  set<int> failure_queue;
+  map<int,utime_t> failure_queue;
   map<int,entity_inst_t> failure_pending;
 
 
-  void queue_failure(int n) {
-    failure_queue.insert(n);
-  }
   void send_failures();
   void send_still_alive(epoch_t epoch, entity_inst_t i);
 
