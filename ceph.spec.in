@@ -273,7 +273,6 @@ fi
 %{_bindir}/rados
 %{_bindir}/rbd
 %{_bindir}/ceph-debugpack
-%{_bindir}/boto_tool
 %{_bindir}/ceph-coverage
 %{_initrddir}/ceph
 /sbin/mkcephfs
