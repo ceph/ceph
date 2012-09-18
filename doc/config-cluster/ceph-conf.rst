@@ -198,7 +198,7 @@ minimal settings for  each instance of a daemon. For example:
 		host = hostName
 
 .. important:: The ``host`` setting is the short name of the host (i.e., not 
-   an fqdn). It is **NOT** and IP address either.  Enter ``hostname`` on 
+   an fqdn). It is **NOT** and IP address either.  Enter ``hostname -s`` on 
    the command line to retrieve the name of the host. Also, this setting is 
    **ONLY** for ``mkcephfs`` and manual deployment. It **MUST NOT**
    be used with ``chef`` or ``ceph-deploy``.
