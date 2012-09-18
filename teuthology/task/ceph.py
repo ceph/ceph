@@ -775,7 +775,7 @@ def cluster(ctx, config):
 
         if config.get('tmpfs_journal'):
             log.info('tmpfs journal enabled - unmounting tmpfs at /mnt')
-	    for remote, roles_for_host in osds.remotes.iteritems():
+            for remote, roles_for_host in osds.remotes.iteritems():
                 remote.run(
                     args=[ 'sudo', 'umount', '-f', '/mnt' ],
                     check_status=False,
