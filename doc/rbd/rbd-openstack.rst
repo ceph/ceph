@@ -1,27 +1,61 @@
 ===================
  RBD and OpenStack
 ===================
-You may utilize RBD with OpenStack. To use RBD with OpenStack, you must install
-QEMU, ``libvirt``, and OpenStack first. We recommend using a separate physical
-host for your OpenStack installation. OpenStack recommends a minimum of 
-8GB of RAM and a quad-core processor. If you have not already installed
-OpenStack, install it now. See `Installing OpenStack`_ for details.
+
+You may use Ceph block device images with OpenStack with QEMU and ``libvirt`` as
+the interface. Ceph stripes block device images as objects across the  cluster,
+which means that large Ceph block device images have better  performance than a
+standalone server!
+
+To use RBD with OpenStack, you must install QEMU, ``libvirt``, and OpenStack
+first. We recommend using a separate physical host for your OpenStack
+installation. OpenStack recommends a minimum of  8GB of RAM and a quad-core
+processor. The following diagram depicts the OpenStack/Ceph technology stack.
+
+
+.. ditaa::  +---------------------------------------------------+
+            |                    OpenStack                      |
+            +---------------------------------------------------+            
+            +---------------------------------------------------+
+            |                     libvirt                       |
+            +---------------------------------------------------+            
+            +---------------------------------------------------+
+            |                     QEMU/RBD                      |
+            +---------------------------------------------------+
+            +---------------------------------------------------+
+            |                      librbd                       |
+            +---------------------------------------------------+
+            +---------------------------------------------------+
+            |     librados (C, C++, Java, Python, PHP, etc.)    |
+            +---------------------------------------------------+
+            +---------------+ +---------------+ +---------------+
+            |      OSDs     | |      MDSs     | |    Monitors   |
+            +---------------+ +---------------+ +---------------+
 
 .. _Installing OpenStack: ../../install/openstack
 
 .. important:: To use RBD with OpenStack, you must have a running Ceph cluster.
-.. tip: To get started quickly, turn off cephx authentication. 
+
 
 Create a Pool
--------------
+=============
+
 By default, RBD uses the ``data`` pool. You may use any available RBD pool. 
 We recommend creating a pool for Nova. Ensure your Ceph cluster is running, 
 then create a pool. ::
 
-	sudo rados mkpool nova
+	ceph osd pool create nova
+
+See `Create a Pool`_ for detail on specifying the number of placement groups
+for your pool, and `Placement Groups`_ for details on the number of placement
+groups you should set for your pool. 
+
+.. Create a Pool: ../../cluster-ops/pools#createpool
+.. Placement Groups: ../../cluster-ops/placement-groups
 
 Install Ceph Common on the OpenStack Host
------------------------------------------
+=========================================
+
 OpenStack operates as a Ceph client. You must install Ceph common on the 
 OpenStack host, and copy your Ceph cluster's ``ceph.conf`` file to the 
 ``/etc/ceph`` directory. If you have installed Ceph on the host, Ceph common
@@ -31,8 +65,10 @@ is already included. ::
 	cd /etc/ceph
 	ssh your-openstack-server sudo tee /etc/ceph/ceph.conf <ceph.conf
 
+
 Add the RBD Driver and the Pool Name to ``nova.conf``
------------------------------------------------------
+=====================================================
+
 OpenStack requires a driver to interact with RADOS block devices. You must also
 specify the pool name for the block device. On your OpenStack host, navigate to
 the ``/etc/conf`` directory. Open the ``nova.conf`` file in a text editor using
@@ -41,8 +77,10 @@ sudo privileges and add the following lines to the file::
 	volume_driver=nova.volume.driver.RBDDriver
 	rbd_pool=nova
 
+
 Restart OpenStack	
------------------
+=================
+
 To activate the RBD driver and load the RBD pool name into the configuration,
 you must restart OpenStack. Navigate the directory where you installed 
 OpenStack, and execute the following:: 
