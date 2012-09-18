@@ -35,3 +35,4 @@ in the body of the message.
 
    *
    osd_internals/index*
+   radosgw/index*
