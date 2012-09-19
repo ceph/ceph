@@ -193,12 +193,15 @@ fi
 # lockdep everywhere?
 # export CEPH_ARGS="--lockdep 1"
 
+[ -z "$CEPH_BIN" ] && CEPH_BIN=.
+[ -z "$CEPH_PORT" ] && CEPH_PORT=6789
+
 
 # sudo if btrfs
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ "$start_all" -eq 1 ]; then
-    $SUDO ./init-ceph stop
+    $SUDO $CEPH_BIN/init-ceph stop
 fi
 $SUDO rm -f core*
 
@@ -223,9 +226,6 @@ else
     echo ip $IP
 fi
 echo "ip $IP"
-
-[ -z "$CEPH_BIN" ] && CEPH_BIN=.
-[ -z "$CEPH_PORT" ] && CEPH_PORT=6789
 
 
 
