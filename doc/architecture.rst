@@ -11,8 +11,8 @@ object storage system via ``librados``, and a number of service interfaces
 built on top of ``librados``. These include:
 
 - **Block Devices:** The RADOS Block Device (RBD) service provides
-  resizable, thin-provisioned block devices with snapshotting, 
-  cloning, striping a block device across the cluster for high
+  resizable, thin-provisioned block devices with snapshotting and 
+  cloning. Ceph stripes a block device across the cluster for high
   performance. Ceph supports both kernel objects (KO) and a 
   QEMU hypervisor that uses ``librbd`` directly--avoiding the 
   kernel object overhead for virtualized systems.
@@ -22,7 +22,8 @@ built on top of ``librados``. These include:
   and OpenStack Swift. 
   
 - **Ceph FS**: The Ceph Filesystem (CephFS) service provides 
-  a POSIX compliant filesystem. 
+  a POSIX compliant filesystem usable with ``mount`` or as 
+  a filesytem in user space (FUSE). 
   
 Ceph OSDs store all data--whether it comes through RBD, RGW, or 
 CephFS--as objects in the object storage system. Ceph can run
@@ -61,15 +62,16 @@ performance limitation.
 Another problem for storage systems is the need to manually rebalance data when
 increasing or decreasing the size of a data cluster. Manual rebalancing works
 fine on small scales, but it is a nightmare at larger scales because hardware
-failure becomes an expectation rather than an exception. 
+additions are common and hardware failure becomes an expectation rather than an 
+exception when operating at the petabyte scale and beyond. 
 
 The operational challenges of managing legacy technologies with the burgeoning
 growth in the demand for unstructured storage makes legacy technologies
-inadequate for scaling into petabytes and beyond. Some legacy technologies
-(e.g., SAN) can be considerably more expensive, and  more challenging to
-maintain when compared to using commodity hardware. Ceph  uses commodity
-hardware, becaues it is substantially less expensive to purchase (or to
-replace), and it only requires standard system administration skills to  use it.
+inadequate for scaling into petabytes. Some legacy technologies (e.g., SAN) can
+be considerably more expensive, and  more challenging to maintain when compared
+to using commodity hardware. Ceph  uses commodity hardware, becaues it is
+substantially less expensive to purchase (or to replace), and it only requires
+standard system administration skills to  use it.
 
           
 How Ceph Scales
@@ -94,7 +96,7 @@ The Ceph storage system supports the notion of 'Pools', which are logical
 partitions for storing object data. Pools set ownership/access, the number of
 object replicas, the number of placement groups, and the CRUSH rule set to use.
 Each pool has a number of placement groups that are mapped dynamically to OSDs. 
-When clients store data, Ceph maps the object data to placement groups.
+When clients store data, CRUSH maps the object data to placement groups.
 The following diagram depicts how CRUSH maps objects to placement groups, and
 placement groups to OSDs.
 
@@ -125,7 +127,7 @@ Mapping objects to placement groups instead of directly to OSDs creates a layer
 of indirection between the OSD and the client.  The cluster must be able to grow
 (or shrink) and rebalance data dynamically. If the client "knew" which OSD had
 the data, that would create a tight coupling between the client and the OSD.
-Instead, the CRUSH algorithm maps the data to a placement  group and then maps
+Instead, the CRUSH algorithm maps the data to a placement group and then maps
 the placement group to one or more OSDs. This layer of indirection allows Ceph
 to rebalance dynamically when new OSDs come online. 
 
@@ -138,8 +140,8 @@ to identify the primary primary OSD for the placement group. Clients write data
 to the identified placement group in the primary OSD. Then, the primary OSD with
 its own copy of the CRUSH map identifies the secondary and tertiary OSDs for
 replication purposes, and replicates the data to the appropriate placement
-groups  in the secondary and tertiary OSDs (as many OSDs as additional
-replicas), and  responds to the client once it has  confirmed the data was
+groups in the secondary and tertiary OSDs (as many OSDs as additional
+replicas), and responds to the client once it has confirmed the data was
 stored successfully.
 
 .. ditaa:: +--------+     Write      +--------------+    Replica 1     +----------------+
@@ -184,9 +186,9 @@ Ceph cluster or ``out`` of the Ceph cluster.
            |                |
            +----------------+
 
-In must clustered architectures the primary purpose of cluster membership
+In many clustered architectures, the primary purpose of cluster membership
 is so that a centralized interface knows which hosts it can access. Ceph
-takes it a step further: Cephs nodes are cluster aware. Each node knows 
+takes it a step further: Ceph's nodes are cluster aware. Each node knows 
 about other nodes in the cluster. This enables Ceph's monitor, OSD, and 
 metadata server daemons to interact directly with each other. One major 
 benefit of this approach is that Ceph can utilize the CPU and RAM of its
@@ -200,8 +202,8 @@ Smart OSDs
 
 Ceph OSDs join a cluster and report on their status. At the lowest level, 
 the OSD status is ``up`` or ``down`` reflecting whether or not it is 
-running and able service requests. If an OSD is ``down`` and ``in``
-the cluster, it may indicate the failure of the OSD. 
+running and able to service requests. If an OSD is ``down`` and ``in``
+the cluster, this status may indicate the failure of the OSD. 
 
 With peer awareness, OSDs can communicate with other OSDs and monitors
 to perform tasks. OSDs take client requests to read data from or write
@@ -222,7 +224,7 @@ If the OSD is ``down`` and ``in``, but subsequently taken ``out`` of the
 cluster,  the OSDs receive an update to the cluster map and rebalance the
 placement groups within the cluster automatically.
 
-OSDs store all data as objects in a flat namespace (e.g., no hieararchy of
+OSDs store all data as objects in a flat namespace (e.g., no hierarchy of
 directories). An object has an identifier, binary data, and metadata consisting
 of a set of name/value pairs. The semantics are completely up to the client. For
 example, CephFS uses metadata to store file attributes such as the file owner,
