@@ -218,7 +218,7 @@ test_pool_image_args() {
     ceph osd pool delete test
 }
 
-test_import_args
+test_pool_image_args
 test_rename
 test_ls
 test_remove
