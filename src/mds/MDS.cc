@@ -1413,6 +1413,7 @@ void MDS::reconnect_done()
 void MDS::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << dendl;
+  mdcache->finish_committed_masters();
   mdcache->rejoin_send_rejoins();
 }
 void MDS::rejoin_done()
