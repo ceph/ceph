@@ -313,6 +313,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_client_io.cc \
 	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
+	rgw/rgw_usage.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
@@ -1716,6 +1717,7 @@ noinst_HEADERS = \
 	rgw/rgw_rest_swift.h\
 	rgw/rgw_rest_s3.h\
 	rgw/rgw_tools.h\
+	rgw/rgw_usage.h\
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/common.h\
