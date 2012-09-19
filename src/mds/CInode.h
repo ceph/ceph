@@ -31,7 +31,7 @@
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
-#include "snap.h"
+#include "SnapRealm.h"
 
 #include <list>
 #include <vector>
