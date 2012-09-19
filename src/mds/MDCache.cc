@@ -2163,6 +2163,24 @@ void MDCache::committed_master_slave(metareqid_t r, int from)
 }
 
 
+/*
+ * The mds could crash after receiving all slaves' commit acknowledgement,
+ * but before journalling the ECommitted.
+ */
+void MDCache::finish_committed_masters()
+{
+  map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
+  while (p != uncommitted_masters.end()) {
+    if (p->second.slaves.empty()) {
+      metareqid_t reqid = p->first;
+      dout(10) << "finish_committed_masters " << reqid << dendl;
+      ++p;
+      log_master_commit(reqid);
+    } else {
+      ++p;
+    }
+  }
+}
 
 /*
  * at end of resolve... we must journal a commit|abort for all slave
