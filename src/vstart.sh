@@ -272,9 +272,9 @@ EOF
         auth supported = cephx
 EOF
 			cat <<EOF >> $conf
+        keyring = $keyring_fn
 
 [client]
-        keyring = $keyring_fn
 
 [mds]
 $DAEMONOPTS
