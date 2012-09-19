@@ -24,13 +24,10 @@ cluster to ensure that the storage hosts are running smoothly.
    cephfs/index
    rbd/rbd
    radosgw/index
-   ops/index
    api/index
    source/index
    Internals <dev/index>
    man/index
    architecture
    faq
-   papers
    release-notes
-   appendix/index
