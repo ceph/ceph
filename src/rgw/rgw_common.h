@@ -71,32 +71,6 @@ using ceph::crypto::MD5;
 
 #define RGW_DEFAULT_MAX_BUCKETS 1000
 
-#define CGI_PRINTF(state, format, ...) do { \
-   int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
-   if (state->header_ended) \
-     state->bytes_sent += __ret; \
-   int l = 32, n; \
-   while (1) { \
-     char __buf[l]; \
-     n = snprintf(__buf, sizeof(__buf), format, __VA_ARGS__); \
-     if (n != l) \
-       dout(10) << "--> " << __buf << dendl; \
-       break; \
-     l *= 2; \
-   } \
-} while (0)
-
-#define CGI_PutStr(state, buf, len) do { \
-  FCGX_PutStr(buf, len, state->fcgx->out); \
-  if (state->header_ended) \
-    state->bytes_sent += len; \
-} while (0)
-
-#define CGI_GetStr(state, buf, buf_len, olen) do { \
-  olen = FCGX_GetStr(buf, buf_len, state->fcgx->in); \
-  state->bytes_received += olen; \
-} while (0)
-
 #define STATUS_CREATED           1900
 #define STATUS_ACCEPTED          1901
 #define STATUS_NO_CONTENT        1902
@@ -544,12 +518,13 @@ struct RGWBucketStats
 struct req_state;
 
 struct RGWEnv;
-struct FCGX_Request;
+
+class RGWClientIO;
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
-   FCGX_Request *fcgx;
+   RGWClientIO *cio;
    http_op op;
    bool content_started;
    int format;

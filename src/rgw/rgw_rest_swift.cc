@@ -5,12 +5,7 @@
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
 #include "rgw_formats.h"
-
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #include <sstream>
 
@@ -195,21 +190,21 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
-  CGI_PRINTF(s,"X-Container-Object-Count: %s\n", buf);
+  s->cio->print("X-Container-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
-  CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
+  s->cio->print("X-Container-Bytes-Used: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
-  CGI_PRINTF(s,"X-Container-Bytes-Used-Actual: %s\n", buf);
+  s->cio->print("X-Container-Bytes-Used-Actual: %s\n", buf);
 
   if (!s->object) {
     RGWAccessControlPolicy_SWIFT *swift_policy = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
     string read_acl, write_acl;
     swift_policy->to_str(read_acl, write_acl);
     if (read_acl.size()) {
-      CGI_PRINTF(s, "X-Container-Read: %s\r\n", read_acl.c_str());
+      s->cio->print("X-Container-Read: %s\r\n", read_acl.c_str());
     }
     if (write_acl.size()) {
-      CGI_PRINTF(s, "X-Container-Write: %s\r\n", write_acl.c_str());
+      s->cio->print("X-Container-Write: %s\r\n", write_acl.c_str());
     }
   }
 }
@@ -219,13 +214,13 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
-  CGI_PRINTF(s,"X-Account-Container-Count: %s\n", buf);
+  s->cio->print("X-Account-Container-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
-  CGI_PRINTF(s,"X-Account-Object-Count: %s\n", buf);
+  s->cio->print("X-Account-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
-  CGI_PRINTF(s,"X-Account-Bytes-Used: %s\n", buf);
+  s->cio->print("X-Account-Bytes-Used: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
-  CGI_PRINTF(s,"X-Account-Bytes-Used-Actual: %s\n", buf);
+  s->cio->print("X-Account-Bytes-Used-Actual: %s\n", buf);
 }
 
 void RGWStatAccount_REST_SWIFT::send_response()
@@ -462,7 +457,7 @@ int RGWGetObj_REST_SWIFT::send_response(bufferlist& bl)
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-         CGI_PRINTF(s, "X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
+         s->cio->print("X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }
@@ -483,7 +478,7 @@ int RGWGetObj_REST_SWIFT::send_response(bufferlist& bl)
 
 send_data:
   if (get_data && !orig_ret) {
-    CGI_PutStr(s, bl.c_str(), len);
+    s->cio->write(bl.c_str(), len);
   }
   rgw_flush_formatter_and_reset(s, s->formatter);
 
@@ -746,7 +741,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
   return 0;
 }
 
-int RGWHandler_REST_SWIFT::init(struct req_state *s, FCGX_Request *fcgx)
+int RGWHandler_REST_SWIFT::init(struct req_state *s, RGWClientIO *cio)
 {
   int ret = init_from_header(s);
   if (ret < 0)
@@ -765,5 +760,5 @@ int RGWHandler_REST_SWIFT::init(struct req_state *s, FCGX_Request *fcgx)
 
   s->dialect = "swift";
 
-  return RGWHandler_REST::init(s, fcgx);
+  return RGWHandler_REST::init(s, cio);
 }

@@ -6,11 +6,7 @@
 
 #include "auth/Crypto.h"
 
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -202,8 +198,8 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
-	     swift_prefix.c_str());
+  s->cio->print("X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
+	        swift_prefix.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
@@ -212,8 +208,8 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    CGI_PRINTF(s, "X-Storage-Token: AUTH_rgwtk%s\n", buf);
-    CGI_PRINTF(s, "X-Auth-Token: AUTH_rgwtk%s\n", buf);
+    s->cio->print("X-Storage-Token: AUTH_rgwtk%s\n", buf);
+    s->cio->print("X-Auth-Token: AUTH_rgwtk%s\n", buf);
   }
 
   ret = STATUS_NO_CONTENT;
@@ -266,11 +262,11 @@ bool RGWHandler_SWIFT_Auth::filter_request(struct req_state *s)
   return (bucket.compare(auth_bucket) == 0);
 }
 
-int RGWHandler_SWIFT_Auth::init(struct req_state *state, FCGX_Request *fcgx)
+int RGWHandler_SWIFT_Auth::init(struct req_state *state, RGWClientIO *cio)
 {
   state->dialect = "swift-auth";
 
-  return RGWHandler::init(state, fcgx);
+  return RGWHandler::init(state, cio);
 }
 
 int RGWHandler_SWIFT_Auth::authorize()

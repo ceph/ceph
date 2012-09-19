@@ -10,11 +10,7 @@
 
 #include "common/armor.h"
 
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -88,26 +84,26 @@ int RGWGetObj_REST_S3::send_response(bufferlist& bl)
 	content_type = content_type_str.c_str();
       string val = s->args.get("response-content-language", &exists);
       if (exists)
-        CGI_PRINTF(s, "Content-Language: %s\n", val.c_str());
+        s->cio->print("Content-Language: %s\n", val.c_str());
       val = s->args.get("response-expires", &exists);
       if (exists)
-        CGI_PRINTF(s, "Expires: %s\n", val.c_str());
+        s->cio->print("Expires: %s\n", val.c_str());
       val = s->args.get("response-cache-control", &exists);
       if (exists)
-        CGI_PRINTF(s, "Cache-Control: %s\n", val.c_str());
+        s->cio->print("Cache-Control: %s\n", val.c_str());
       val = s->args.get("response-content-disposition", &exists);
       if (exists)
-        CGI_PRINTF(s, "Content-Disposition: %s\n", val.c_str());
+        s->cio->print("Content-Disposition: %s\n", val.c_str());
       val = s->args.get("response-content-encoding", &exists);
       if (exists)
-        CGI_PRINTF(s, "Content-Encoding: %s\n", val.c_str());
+        s->cio->print("Content-Encoding: %s\n", val.c_str());
     }
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(RGW_ATTR_PREFIX) - 1;
-         CGI_PRINTF(s,"%s: %s\r\n", name, iter->second.c_str());
+         s->cio->print("%s: %s\r\n", name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }
@@ -127,7 +123,7 @@ done:
 
 send_data:
   if (get_data && !orig_ret) {
-    CGI_PutStr(s, bl.c_str(), len);
+    s->cio->write(bl.c_str(), len);
   }
 
   return 0;
@@ -223,9 +219,9 @@ static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
-  CGI_PRINTF(s,"X-RGW-Object-Count: %s\n", buf);
+  s->cio->print("X-RGW-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
-  CGI_PRINTF(s,"X-RGW-Bytes-Used: %s\n", buf);
+  s->cio->print("X-RGW-Bytes-Used: %s\n", buf);
 }
 
 void RGWStatBucket_REST_S3::send_response()
@@ -396,7 +392,7 @@ void RGWGetACLs_REST_S3::send_response()
   dump_errno(s);
   end_header(s, "application/xml");
   dump_start(s);
-  CGI_PutStr(s, acls.c_str(), acls.size());
+  s->cio->write(acls.c_str(), acls.size());
 }
 
 int RGWPutACLs_REST_S3::get_canned_policy(ACLOwner& owner, stringstream& ss)
@@ -863,7 +859,7 @@ int RGWHandler_REST_S3::validate_bucket_name(const string& bucket)
   return 0;
 }
 
-int RGWHandler_REST_S3::init(struct req_state *s, FCGX_Request *fcgx)
+int RGWHandler_REST_S3::init(struct req_state *s, RGWClientIO *cio)
 {
   int ret = init_from_header(s);
   if (ret < 0)
@@ -886,7 +882,7 @@ int RGWHandler_REST_S3::init(struct req_state *s, FCGX_Request *fcgx)
 
   s->dialect = "s3";
 
-  return RGWHandler_REST::init(s, fcgx);
+  return RGWHandler_REST::init(s, cio);
 }
 
 /*

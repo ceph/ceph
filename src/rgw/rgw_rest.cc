@@ -13,17 +13,16 @@
 
 #include "rgw_formats.h"
 
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 static void dump_status(struct req_state *s, const char *status)
 {
-  CGI_PRINTF(s,"Status: %s\n", status);
+  int r = s->cio->print("Status: %s\n", status);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
 }
 
 void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
@@ -32,7 +31,7 @@ void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
   formatter->flush(oss);
   std::string outs(oss.str());
   if (!outs.empty()) {
-    CGI_PutStr(s, outs.c_str(), outs.size());
+    s->cio->write(outs.c_str(), outs.size());
   }
 
   s->formatter->reset();
@@ -44,7 +43,7 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
   formatter->flush(oss);
   std::string outs(oss.str());
   if (!outs.empty()) {
-    CGI_PutStr(s, outs.c_str(), outs.size());
+    s->cio->write(outs.c_str(), outs.size());
   }
 }
 
@@ -93,16 +92,26 @@ void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%lu", (long unsigned int)len);
-  CGI_PRINTF(s, "Content-Length: %s\n", buf);
-  CGI_PRINTF(s, "Accept-Ranges: %s\n", "bytes");
+  int r = s->cio->print("Content-Length: %s\n", buf);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
+  r = s->cio->print("Accept-Ranges: %s\n", "bytes");
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
 }
 
 void dump_etag(struct req_state *s, const char *etag)
 {
+  int r;
   if (s->prot_flags & RGW_REST_SWIFT)
-    CGI_PRINTF(s,"etag: %s\n", etag);
+    r = s->cio->print("etag: %s\n", etag);
   else
-    CGI_PRINTF(s,"ETag: \"%s\"\n", etag);
+    r = s->cio->print("ETag: \"%s\"\n", etag);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
 }
 
 void dump_last_modified(struct req_state *s, time_t t)
@@ -116,7 +125,10 @@ void dump_last_modified(struct req_state *s, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  CGI_PRINTF(s, "Last-Modified: %s\n", timestr);
+  int r = s->cio->print("Last-Modified: %s\n", timestr);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
 }
 
 void dump_time(struct req_state *s, const char *name, time_t *t)
@@ -182,8 +194,11 @@ void end_header(struct req_state *s, const char *content_type)
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   }
-  CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
-  s->header_ended = true;
+  int r = s->cio->print("Content-type: %s\r\n\r\n", content_type);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
+  s->cio->set_account(true);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -199,7 +214,7 @@ void abort_early(struct req_state *s, int err_no)
 void dump_continue(struct req_state *s)
 {
   dump_status(s, "100");
-  FCGX_FFlush(s->fcgx->out);
+  s->cio->flush();
 }
 
 void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
@@ -208,7 +223,10 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
 
   /* dumping range into temp buffer first, as libfcgi will fail to digest %lld */
   snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs, (long long)end, (long long)total);
-  CGI_PRINTF(s,"Content-Range: bytes %s\n", range_buf);
+  int r = s->cio->print("Content-Range: bytes %s\n", range_buf);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
 }
 
 int RGWGetObj_REST::get_params()
@@ -257,7 +275,11 @@ int RGWPutObj_REST::get_data(bufferlist& bl)
   if (cl) {
     bufferptr bp(cl);
 
-    CGI_GetStr(s, bp.c_str(), cl, len);
+    int read_len; /* cio->read() expects int * */
+    int r = s->cio->read(bp.c_str(), cl, &read_len);
+    len = read_len;
+    if (r < 0)
+      return ret;
     bl.append(bp);
   }
 
@@ -282,7 +304,11 @@ int RGWPutACLs_REST::get_params()
        ret = -ENOMEM;
        return ret;
     }
-    CGI_GetStr(s, data, cl, len);
+    int read_len;
+    int r = s->cio->read(data, cl, &read_len);
+    len = read_len;
+    if (r < 0)
+      return r;
     data[len] = '\0';
   } else {
     len = 0;
@@ -312,7 +338,9 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
 
   int read_len = 0, len = 0;
   do {
-    CGI_GetStr(s, data + len, need_to_read, read_len);
+    int r = s->cio->read(data + len, need_to_read, &read_len);
+    if (r < 0)
+      return r;
 
     len += read_len;
 
@@ -359,7 +387,9 @@ int RGWCompleteMultipart_REST::get_params()
        ret = -ENOMEM;
        return ret;
     }
-    CGI_GetStr(s, data, cl, len);
+    ret = s->cio->read(data, cl, &len);
+    if (ret < 0)
+      return ret;
     data[len] = '\0';
   } else {
     const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
@@ -432,7 +462,11 @@ int RGWDeleteMultiObj_REST::get_params()
       ret = -ENOMEM;
       return ret;
     }
-    CGI_GetStr(s, data, cl, len);
+    int read_len;
+    ret = s->cio->read(data, cl, &read_len);
+    len = read_len;
+    if (ret < 0)
+      return ret;
     data[len] = '\0';
   } else {
     return -EINVAL;
@@ -494,7 +528,9 @@ static int init_meta_info(struct req_state *s)
 
   s->x_meta_map.clear();
 
-  for (int i=0; (p = s->fcgx->envp[i]); ++i) {
+  const char **envp = s->cio->envp();
+
+  for (int i=0; (p = envp[i]); ++i) {
     const char *prefix;
     for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
       int len = meta_prefixes[prefix_num].len;
@@ -605,9 +641,9 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
+int RGWHandler_REST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
-  s->fcgx = fcgx;
+  s->cio = cio;
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {
@@ -722,12 +758,12 @@ RGWRESTMgr::~RGWRESTMgr()
   }
 }
 
-RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
+RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, RGWClientIO *cio,
 				    int *init_error)
 {
   RGWHandler *handler;
 
-  *init_error = RGWHandler_REST::preprocess(s, fcgx);
+  *init_error = RGWHandler_REST::preprocess(s, cio);
   if (*init_error < 0)
     return NULL;
 
@@ -740,7 +776,7 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
   if (iter == protocol_handlers.end())
     return NULL;
 
-  *init_error = handler->init(s, fcgx);
+  *init_error = handler->init(s, cio);
   if (*init_error < 0)
     return NULL;
 
