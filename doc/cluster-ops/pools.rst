@@ -58,10 +58,6 @@ To create a pool, execute::
 
 	ceph osd pool create {pool-name} [{pg-num}] [{pgp-num}]
 
-Alternatively, you may also execute the following:: 
-
-	rados mkpool {pool-name} [{pg-num}] [{pgp-num}]	
-
 Where: 
 
 ``{pool-name}``
@@ -101,9 +97,6 @@ To delete a pool, execute::
 
 	ceph osd pool delete {pool-name}
 
-Alternatively, you may also execute the following:: 
-
-	rados rmpool {pool_name}
 	
 If you created your own rulesets and rules for a pool you created,  you should
 consider removing them when you no longer need your pool.  If you created users
@@ -260,4 +253,3 @@ To get the number of object replicas, execute the following::
 Ceph will list the pools, with the ``rep size`` attribute highlighted.
 By default, Ceph creates two replicas of an object for a total of 
 three copies.
-
