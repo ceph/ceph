@@ -679,7 +679,9 @@ void Paxos::handle_lease(MMonPaxos *lease)
   }
 
   state = STATE_ACTIVE;
-  mon->recovered_peon(machine_id);
+
+  if (!mon->is_all_paxos_recovered())
+    mon->recovered_peon(machine_id);
 
   dout(10) << "handle_lease on " << lease->last_committed
 	   << " now " << lease_expire << dendl;

@@ -207,8 +207,7 @@ Monitor::~Monitor()
 
 void Monitor::recovered_leader(int id)
 {
-  if (paxos_recovered.count(id))
-    return;
+  assert(paxos_recovered.count(id) == 0);
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
     dout(10) << "all paxos instances recovered, going writeable" << dendl;
@@ -232,8 +231,7 @@ void Monitor::recovered_leader(int id)
 
 void Monitor::recovered_peon(int id)
 {
-  if (paxos_recovered.count(id))
-    return;
+  assert(paxos_recovered.count(id) == 0);
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
     dout(10) << "all paxos instances recovered/leased" << dendl;
