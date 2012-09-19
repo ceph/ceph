@@ -2740,11 +2740,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	      return true;
 	    } else if (m->cmd[4] == "pg_num") {
-	      if (true) {
-		// ** DISABLE THIS FOR NOW **
-		ss << "pg_num adjustment currently disabled (broken implementation)";
-		// ** DISABLE THIS FOR NOW **
-	      } else
 	      if (n <= p->get_pg_num()) {
 		ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
 	      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
