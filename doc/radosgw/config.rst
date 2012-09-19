@@ -192,12 +192,27 @@ Create a RADOS Gateway User
 To use the REST interfaces, first create an initial RADOS Gateway user. 
 The RADOS Gateway user is not the same user as the ``client.rados.gateway``
 user, which identifies the RADOS Gateway as a user of the RADOS cluster.
-The RADOS Gateway user is a user of the RADOS Gateway.
-
-For example:: 
+The RADOS Gateway user is a user of the RADOS Gateway. ::
 
 	sudo radosgw-admin user create --uid="{username}" --display-name="{Display Name}"
 
+For example:: 	
+	
+  radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
+  { "user_id": "johndoe",
+    "rados_uid": 0,
+    "display_name": "John Doe",
+    "email": "john@example.com",
+    "suspended": 0,
+    "subusers": [],
+    "keys": [
+      { "user": "johndoe",
+        "access_key": "QFAMEDSJP5DEKJO0DDXY",
+        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
+    "swift_keys": []}
+
+Creating a user also creates an ``access_key`` and
+``secret_key`` entry for use with any S3 API-compatible client.	
 For details on RADOS Gateway administration, see `radosgw-admin`_. 
 
 .. _radosgw-admin: ../../man/8/radosgw-admin/ 
@@ -208,3 +223,71 @@ For details on RADOS Gateway administration, see `radosgw-admin`_.
    removing the escape character (``\``), encapsulating the string
    in quotes, or simply regenerating the key and ensuring that it 
    does not have an escape character.
+
+
+
+Enabling Swift Access
+=====================
+
+Allowing access to the object store with Swift (OpenStack Object
+Storage) compatible clients requires an additional step, the creation
+of a subuser and a Swift access key.
+
+::
+
+  sudo radosgw-admin subuser create --uid=johndoe --subuser=johndoe:swift --access=full
+
+.. code-block:: javascript
+
+  { "user_id": "johndoe",
+    "rados_uid": 0,
+    "display_name": "John Doe",
+    "email": "john@example.com",
+    "suspended": 0,
+    "subusers": [
+      { "id": "johndoe:swift",
+        "permissions": "full-control"}],
+    "keys": [
+      { "user": "johndoe",
+        "access_key": "QFAMEDSJP5DEKJO0DDXY",
+        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
+    "swift_keys": []}
+
+::
+
+  sudo radosgw-admin key create --subuser=johndoe:swift --key-type=swift
+
+.. code-block:: javascript
+
+  { "user_id": "johndoe",
+    "rados_uid": 0,
+    "display_name": "John Doe",
+    "email": "john@example.com",
+    "suspended": 0,
+    "subusers": [
+       { "id": "johndoe:swift",
+         "permissions": "full-control"}],
+    "keys": [
+      { "user": "johndoe",
+        "access_key": "QFAMEDSJP5DEKJO0DDXY",
+        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
+    "swift_keys": [
+      { "user": "johndoe:swift",
+        "secret_key": "E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1"}]}
+
+This step enables you to use any Swift client to connect to and use RADOS
+Gateway via the Swift-compatible API. As an example, you might use the ``swift``
+command-line client utility that ships with the OpenStack Object Storage
+packages.
+
+::
+
+  swift -V 1.0 -A http://radosgw.example.com/auth -U johndoe:swift -K E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1 post test  
+  swift -V 1.0 -A http://radosgw.example.com/auth -U johndoe:swift -K E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1 upload test myfile
+
+RGW's ``user:subuser`` tuple maps to the ``tenant:user`` tuple expected by Swift.
+
+.. important:: RGW's Swift authentication service only supports
+   built-in Swift authentication (``-V 1.0``) at this point. There is
+   currently no way to make RGW authenticate users via OpenStack
+   Identity Service (Keystone).
