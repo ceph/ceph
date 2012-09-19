@@ -151,7 +151,7 @@ public:
   bool filter_request(struct req_state *s);
   int validate_bucket_name(const string& bucket);
 
-  int init(struct req_state *state, FCGX_Request *fcgx);
+  int init(struct req_state *state, RGWClientIO *cio);
   int authorize();
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
