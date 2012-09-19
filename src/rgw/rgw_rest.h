@@ -10,6 +10,8 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
                                          ceph::Formatter *formatter);
 
+class RGWClientIO;
+
 class RGWGetObj_REST : public RGWGetObj
 {
 protected:
@@ -172,7 +174,7 @@ public:
   RGWOp *get_op();
   void put_op(RGWOp *op);
 
-  static int preprocess(struct req_state *s, FCGX_Request *fcgx);
+  static int preprocess(struct req_state *s, RGWClientIO *cio);
   virtual bool filter_request(struct req_state *s) = 0;
   virtual int authorize() = 0;
 };
@@ -187,7 +189,7 @@ class RGWRESTMgr {
 public:
   RGWRESTMgr();
   ~RGWRESTMgr();
-  RGWHandler *get_handler(struct req_state *s, FCGX_Request *fcgx,
+  RGWHandler *get_handler(struct req_state *s, RGWClientIO *cio,
 			  int *init_error);
 };
 

@@ -17,6 +17,8 @@
 # include "fcgiapp.h"
 #endif
 
+#include "rgw_fcgi.h"
+
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -248,6 +250,7 @@ void RGWProcess::handle_request(RGWRequest *req)
   RGWRESTMgr rest;
   int ret;
   RGWEnv rgw_env;
+  RGWFCGX client_io(fcgx);
 
   req->log_init();
 
@@ -264,7 +267,7 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   RGWOp *op = NULL;
   int init_error = 0;
-  RGWHandler *handler = rest.get_handler(s, fcgx, &init_error);
+  RGWHandler *handler = rest.get_handler(s, &client_io, &init_error);
   if (init_error != 0) {
     abort_early(s, init_error);
     goto done;

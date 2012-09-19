@@ -19,11 +19,7 @@
 #include "rgw_multi.h"
 #include "rgw_multi_del.h"
 
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2035,16 +2031,18 @@ RGWHandler::~RGWHandler()
 {
 }
 
-int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
+int RGWHandler::init(struct req_state *_s, RGWClientIO *cio)
 {
   s = _s;
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    char *p;
-    for (int i=0; (p = fcgx->envp[i]); ++i) {
+    const char *p;
+    const char **envp = cio->envp();
+    for (int i=0; (p = envp[i]); ++i) {
       ldout(s->cct, 20) << p << dendl;
     }
   }
+
   return 0;
 }
 

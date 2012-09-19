@@ -28,7 +28,7 @@ public:
 
   int validate_bucket_name(const string& bucket) { return 0; }
   int validate_object_name(const string& object) { return 0; }
-  int init(struct req_state *state, FCGX_Request *fcgx);
+  int init(struct req_state *state, RGWClientIO *cio);
   int authorize();
   int read_permissions(RGWOp *op) { return 0; }
 
