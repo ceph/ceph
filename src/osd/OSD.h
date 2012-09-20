@@ -355,7 +355,7 @@ public:
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
 
-  void clear_map_bl_cache_pins();
+  void clear_map_bl_cache_pins(epoch_t e);
 
   void need_heartbeat_peer_update();
 
@@ -770,9 +770,6 @@ private:
   }
   bool get_inc_map_bl(epoch_t e, bufferlist& bl) {
     return service.get_inc_map_bl(e, bl);
-  }
-  void clear_map_bl_cache_pins() {
-    service.clear_map_bl_cache_pins();
   }
 
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
