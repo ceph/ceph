@@ -709,38 +709,6 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   return do_read_permissions(op_obj, only_bucket);
 }
 
-RGWOp *RGWHandler_ObjStore::get_op()
-{
-  RGWOp *op;
-  switch (s->op) {
-   case OP_GET:
-     op = get_retrieve_op(true);
-     break;
-   case OP_PUT:
-     op = get_create_op();
-     break;
-   case OP_DELETE:
-     op = get_delete_op();
-     break;
-   case OP_HEAD:
-     op = get_retrieve_op(false);
-     break;
-   case OP_POST:
-     op = get_post_op();
-     break;
-   case OP_COPY:
-     op = get_copy_op();
-     break;
-   default:
-     return NULL;
-  }
-
-  if (op) {
-    op->init(s, this);
-  }
-  return op;
-}
-
 
 RGWRESTMgr::RGWRESTMgr()
 {
@@ -781,10 +749,5 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, RGWClientIO *cio,
     return NULL;
 
   return handler;
-}
-
-void RGWHandler_ObjStore::put_op(RGWOp *op)
-{
-  delete op;
 }
 
