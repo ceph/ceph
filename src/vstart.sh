@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# abort on failure
+set -e
+
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=1
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
@@ -32,10 +35,15 @@ usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
+usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
+usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
+usage=$usage"\t--smallmds: limit mds cache size\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
+usage=$usage"\t-x disable authx\n"
+usage=$usage"\t-o config\t\t add extra config parameters to mds section\n"
 
 usage_exit() {
 	printf "$usage"
@@ -193,12 +201,15 @@ fi
 # lockdep everywhere?
 # export CEPH_ARGS="--lockdep 1"
 
+[ -z "$CEPH_BIN" ] && CEPH_BIN=.
+[ -z "$CEPH_PORT" ] && CEPH_PORT=6789
+
 
 # sudo if btrfs
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ "$start_all" -eq 1 ]; then
-    $SUDO ./init-ceph stop
+    $SUDO $CEPH_BIN/init-ceph stop
 fi
 $SUDO rm -f core*
 
@@ -223,9 +234,6 @@ else
     echo ip $IP
 fi
 echo "ip $IP"
-
-[ -z "$CEPH_BIN" ] && CEPH_BIN=.
-[ -z "$CEPH_PORT" ] && CEPH_PORT=6789
 
 
 
@@ -347,7 +355,7 @@ EOF
 		    echo $cmd
 		    $cmd
 		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn"
-		    [ "$cephx" -eq 1 ] && cmd="$cmd --keyring=$keyring_fn"
+		    cmd="$cmd --keyring=$keyring_fn"
 		    echo $cmd
 		    $cmd
 		done
