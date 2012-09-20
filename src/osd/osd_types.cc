@@ -1019,6 +1019,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
   f->dump_unsigned("log_size", log_size);
   f->dump_unsigned("ondisk_log_size", ondisk_log_size);
+  f->dump_stream("stats_invalid") << stats_invalid;
   stats.dump(f);
   f->open_array_section("up");
   for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
@@ -1032,7 +1033,7 @@ void pg_stat_t::dump(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(10, 8, bl);
+  ENCODE_START(11, 8, bl);
   ::encode(version, bl);
   ::encode(reported, bl);
   ::encode(state, bl);
@@ -1057,6 +1058,7 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(mapping_epoch, bl);
   ::encode(last_deep_scrub, bl);
   ::encode(last_deep_scrub_stamp, bl);
+  ::encode(stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1125,6 +1127,11 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
         ::decode(last_deep_scrub_stamp, bl);
       }
     }
+  }
+  if (struct_v < 11) {
+    stats_invalid = false;
+  } else {
+    ::decode(stats_invalid, bl);
   }
   DECODE_FINISH(bl);
 }
