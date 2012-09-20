@@ -280,9 +280,9 @@ EOF
         auth supported = cephx
 EOF
 			cat <<EOF >> $conf
-        keyring = $keyring_fn
 
 [client]
+        keyring = $keyring_fn
 
 [mds]
 $DAEMONOPTS
@@ -355,7 +355,7 @@ EOF
 		    echo $cmd
 		    $cmd
 		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn"
-		    [ "$cephx" -eq 1 ] && cmd="$cmd --keyring=$keyring_fn"
+		    cmd="$cmd --keyring=$keyring_fn"
 		    echo $cmd
 		    $cmd
 		done
