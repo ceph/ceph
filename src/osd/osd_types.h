@@ -887,6 +887,7 @@ struct pg_stat_t {
   utime_t last_deep_scrub_stamp;
 
   object_stat_collection_t stats;
+  bool stats_invalid;
 
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
@@ -898,6 +899,7 @@ struct pg_stat_t {
     : state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0), 
+      stats_invalid(false),
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0)
   { }
