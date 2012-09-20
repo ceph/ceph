@@ -104,6 +104,10 @@ OPTION(mon_initial_members, OPT_STR, "")    // list of initial cluster mon ids; 
 OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
+OPTION(mon_osd_laggy_halflife, OPT_INT, 60*60)        // (seconds) how quickly our laggy estimations decay
+OPTION(mon_osd_laggy_weight, OPT_DOUBLE, .3)          // weight for new 'samples's in laggy estimations
+OPTION(mon_osd_adjust_heartbeat_grace, OPT_BOOL, true)    // true if we should scale based on laggy estimations
+OPTION(mon_osd_adjust_down_out_interval, OPT_BOOL, true)  // true if we should scale based on laggy estimations
 OPTION(mon_osd_auto_mark_in, OPT_BOOL, false)         // mark any booting osds 'in'
 OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL, true) // mark booting auto-marked-out osds 'in'
 OPTION(mon_osd_auto_mark_new_in, OPT_BOOL, true)      // mark booting new osds 'in'
