@@ -348,6 +348,7 @@ protected:
    * put_unlock() when done with the current pointer (_most common_).
    */  
   Mutex _lock;
+  Mutex _qlock;
   Cond _cond;
   atomic_t ref;
 
@@ -355,11 +356,17 @@ public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
   void lock(bool no_lockdep = false);
+  void lockq(bool no_lockdep = false) {
+    _qlock.Lock(no_lockdep);
+  }
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);
     assert(!dirty_log);
     _lock.Unlock();
+  }
+  void unlockq() {
+    _qlock.Unlock();
   }
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
@@ -1598,6 +1605,9 @@ public:
   bool require_same_or_newer_map(epoch_t e) {
     return e <= get_osdmap()->get_epoch();
   }
+
+  bool op_has_sufficient_caps(OpRequestRef op);
+
 
   // recovery bits
   void take_waiters();
