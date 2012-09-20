@@ -126,12 +126,55 @@ public:
   void send_response() {}
 };
 
-
 class RGWHandler_ObjStore_SWIFT : public RGWHandler_ObjStore {
+  friend class RGWRESTMgr_SWIFT;
 protected:
-  bool is_acl_op() {
-    return false; // for now
+  virtual bool is_acl_op() {
+    return false;
   }
+
+  static int init_from_header(struct req_state *s);
+public:
+  RGWHandler_ObjStore_SWIFT() {}
+  virtual ~RGWHandler_ObjStore_SWIFT() {}
+
+  int validate_bucket_name(const string& bucket);
+
+  int init(struct req_state *state, RGWClientIO *cio);
+  int authorize();
+
+  RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
+  void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
+};
+
+class RGWHandler_ObjStore_Service_SWIFT : public RGWHandler_ObjStore_SWIFT {
+protected:
+  RGWOp *op_get();
+  RGWOp *op_head();
+public:
+  RGWHandler_ObjStore_Service_SWIFT() {}
+  virtual ~RGWHandler_ObjStore_Service_SWIFT() {}
+};
+
+class RGWHandler_ObjStore_Bucket_SWIFT : public RGWHandler_ObjStore_SWIFT {
+protected:
+  bool is_obj_update_op() {
+    return s->op == OP_POST;
+  }
+
+  RGWOp *get_obj_op(bool get_data);
+  RGWOp *op_get();
+  RGWOp *op_head();
+  RGWOp *op_put();
+  RGWOp *op_delete();
+  RGWOp *op_post();
+public:
+  RGWHandler_ObjStore_Bucket_SWIFT() {}
+  virtual ~RGWHandler_ObjStore_Bucket_SWIFT() {}
+};
+
+class RGWHandler_ObjStore_Obj_SWIFT : public RGWHandler_ObjStore_SWIFT {
+protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
   }
@@ -143,20 +186,20 @@ protected:
   RGWOp *op_delete();
   RGWOp *op_post();
   RGWOp *op_copy();
-
-  int init_from_header(struct req_state *s);
 public:
-  RGWHandler_ObjStore_SWIFT() : RGWHandler_ObjStore() {}
-  virtual ~RGWHandler_ObjStore_SWIFT() {}
+  RGWHandler_ObjStore_Obj_SWIFT() {}
+  virtual ~RGWHandler_ObjStore_Obj_SWIFT() {}
+};
 
-  bool filter_request(struct req_state *s);
-  int validate_bucket_name(const string& bucket);
+class RGWRESTMgr_SWIFT : public RGWRESTMgr {
+public:
+  RGWRESTMgr_SWIFT() {}
+  virtual ~RGWRESTMgr_SWIFT() {}
 
-  int init(struct req_state *state, RGWClientIO *cio);
-  int authorize();
-
-  RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
-  void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
+    return this;
+  }
+  virtual RGWHandler *get_handler(struct req_state *s);
 };
 
 #endif

@@ -126,6 +126,7 @@ class RGWProcess {
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
+  RGWREST rest;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess *process;
@@ -247,7 +248,6 @@ static int call_log_intent(void *ctx, rgw_obj& obj, RGWIntentEvent intent)
 void RGWProcess::handle_request(RGWRequest *req)
 {
   FCGX_Request *fcgx = &req->fcgx;
-  RGWRESTMgr rest;
   int ret;
   RGWEnv rgw_env;
   RGWFCGX client_io(fcgx);
@@ -330,6 +330,7 @@ done:
 
   if (handler)
     handler->put_op(op);
+  rest.put_handler(handler);
   rgwstore->destroy_context(s->obj_ctx);
   FCGX_Finish_r(fcgx);
 

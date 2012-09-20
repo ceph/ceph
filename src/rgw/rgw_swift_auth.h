@@ -2,6 +2,7 @@
 #define CEPH_RGW_SWIFT_AUTH_H
 
 #include "rgw_op.h"
+#include "rgw_rest.h"
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
@@ -23,10 +24,6 @@ public:
   ~RGWHandler_SWIFT_Auth() {}
   RGWOp *op_get();
 
-  bool filter_request(struct req_state *s);
-
-  int validate_bucket_name(const string& bucket) { return 0; }
-  int validate_object_name(const string& object) { return 0; }
   int init(struct req_state *state, RGWClientIO *cio);
   int authorize();
   int read_permissions(RGWOp *op) { return 0; }
@@ -34,5 +31,19 @@ public:
   virtual RGWAccessControlPolicy *alloc_policy() { return NULL; }
   virtual void free_policy(RGWAccessControlPolicy *policy) {}
 };
+
+class RGWRESTMgr_SWIFT_Auth : public RGWRESTMgr {
+public:
+  RGWRESTMgr_SWIFT_Auth() {}
+  virtual ~RGWRESTMgr_SWIFT_Auth() {}
+
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
+    return this;
+  }
+  virtual RGWHandler *get_handler(struct req_state *s) {
+    return new RGWHandler_SWIFT_Auth;
+  }
+};
+
 
 #endif

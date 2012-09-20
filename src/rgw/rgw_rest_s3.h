@@ -163,8 +163,30 @@ public:
   void end_response();
 };
 
-
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
+  friend class RGWRESTMgr_S3;
+protected:
+  static int init_from_header(struct req_state *s);
+public:
+  RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
+  virtual ~RGWHandler_ObjStore_S3() {}
+
+  int validate_bucket_name(const string& bucket);
+
+  virtual int init(struct req_state *state, RGWClientIO *cio);
+  int authorize();
+};
+
+class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {
+protected:
+  RGWOp *op_get();
+  RGWOp *op_head();
+public:
+  RGWHandler_ObjStore_Service_S3() {}
+  virtual ~RGWHandler_ObjStore_Service_S3() {}
+};
+
+class RGWHandler_ObjStore_Bucket_S3 : public RGWHandler_ObjStore_S3 {
 protected:
   bool is_acl_op() {
     return s->args.exists("acl");
@@ -179,18 +201,41 @@ protected:
   RGWOp *op_put();
   RGWOp *op_delete();
   RGWOp *op_post();
-  RGWOp *op_copy() { return NULL; }
-
-  int init_from_header(struct req_state *s);
 public:
-  RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
-  virtual ~RGWHandler_ObjStore_S3() {}
-
-  bool filter_request(struct req_state *state) { return true; }
-  int validate_bucket_name(const string& bucket);
-
-  virtual int init(struct req_state *state, RGWClientIO *cio);
-  int authorize();
+  RGWHandler_ObjStore_Bucket_S3() {}
+  virtual ~RGWHandler_ObjStore_Bucket_S3() {}
 };
+
+class RGWHandler_ObjStore_Obj_S3 : public RGWHandler_ObjStore_S3 {
+protected:
+  bool is_acl_op() {
+    return s->args.exists("acl");
+  }
+  bool is_obj_update_op() {
+    return is_acl_op();
+  }
+  RGWOp *get_obj_op(bool get_data);
+
+  RGWOp *op_get();
+  RGWOp *op_head();
+  RGWOp *op_put();
+  RGWOp *op_delete();
+  RGWOp *op_post();
+public:
+  RGWHandler_ObjStore_Obj_S3() {}
+  virtual ~RGWHandler_ObjStore_Obj_S3() {}
+};
+
+class RGWRESTMgr_S3 : public RGWRESTMgr {
+public:
+  RGWRESTMgr_S3() {}
+  virtual ~RGWRESTMgr_S3() {}
+
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
+    return this;
+  }
+  virtual RGWHandler *get_handler(struct req_state *s);
+};
+
 
 #endif
