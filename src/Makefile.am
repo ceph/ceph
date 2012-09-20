@@ -770,7 +770,7 @@ test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
 
 test_librbd_fsx_SOURCES = test/rbd/fsx.c
-test_librbd_fsx_LDADD =  librbd.la librados.la
+test_librbd_fsx_LDADD =  librbd.la librados.la -lm
 test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += test_librbd_fsx
 
