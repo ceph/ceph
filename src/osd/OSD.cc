@@ -5994,7 +5994,10 @@ void OSD::OpWQ::_process(PGRef pg)
   OpRequestRef op;
   {
     Mutex::Locker l(qlock);
-    assert(pg_for_processing.count(&*pg));
+    if (!pg_for_processing.count(&*pg)) {
+      pg->unlock();
+      return;
+    }
     assert(pg_for_processing[&*pg].size());
     op = pg_for_processing[&*pg].front();
     pg_for_processing[&*pg].pop_front();
@@ -6003,6 +6006,12 @@ void OSD::OpWQ::_process(PGRef pg)
   }
   osd->dequeue_op(pg, op);
   pg->unlock();
+}
+
+
+void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
+{
+  osd->op_wq.dequeue(pg, dequeued);
 }
 
 /*
