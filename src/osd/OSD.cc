@@ -4668,7 +4668,9 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
   delete ctx.query_map;
   do_infos(*ctx.info_map, curmap);
   delete ctx.info_map;
-  if (ctx.transaction->empty() || !pg) {
+  if ((ctx.on_applied->empty() &&
+       ctx.on_safe->empty() &&
+       ctx.transaction->empty()) || !pg) {
     delete ctx.transaction;
     delete ctx.on_applied;
     delete ctx.on_safe;
