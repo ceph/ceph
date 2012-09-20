@@ -245,18 +245,15 @@ void Accepter::stop()
 {
   done = true;
   ldout(msgr->cct,10) << "stop accepter" << dendl;
-  if (listen_sd >= 0) {
-    ::shutdown(listen_sd, SHUT_RDWR);
-  }
+  assert(listen_sd >= 0);
+  ::shutdown(listen_sd, SHUT_RDWR);
 
   // wait for thread to stop before closing the socket, to avoid
   // racing against fd re-use.
   join();
 
-  if (listen_sd >= 0) {
-    ::close(listen_sd);
-    listen_sd = -1;
-  }
+  ::close(listen_sd);
+  listen_sd = -1;
   done = false;
 }
 
