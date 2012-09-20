@@ -7089,6 +7089,11 @@ void ReplicatedPG::_scrub_finish()
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
+  if (info.stats.stats_invalid) {
+    info.stats.stats = scrub_cstat;
+    info.stats.stats_invalid = false;
+  }
+
   dout(10) << mode << " got "
 	   << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 	   << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
