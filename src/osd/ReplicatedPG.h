@@ -930,6 +930,7 @@ protected:
   virtual void _scrub_finish();
   object_stat_collection_t scrub_cstat;
 
+  virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void apply_and_flush_repops(bool requeue);
 
   void calc_trim_to();

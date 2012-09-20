@@ -1948,6 +1948,56 @@ void PG::IndexedLog::split_into(
   index();
 }
 
+static void split_list(
+  list<OpRequestRef> *from,
+  list<OpRequestRef> *to,
+  unsigned match,
+  unsigned bits)
+{
+  for (list<OpRequestRef>::iterator i = from->begin();
+       i != from->end();
+    ) {
+    if (PG::split_request(*i, match, bits)) {
+      to->push_back(*i);
+      from->erase(i++);
+    } else {
+      ++i;
+    }
+  }
+}
+
+static void split_replay_queue(
+  map<eversion_t, OpRequestRef> *from,
+  map<eversion_t, OpRequestRef> *to,
+  unsigned match,
+  unsigned bits)
+{
+  for (map<eversion_t, OpRequestRef>::iterator i = from->begin();
+       i != from->end();
+       ) {
+    if (PG::split_request(i->second, match, bits)) {
+      to->insert(*i);
+      from->erase(i++);
+    } else {
+      ++i;
+    }
+  }
+}
+
+void PG::split_ops(PG *child, unsigned split_bits) {
+  unsigned match = child->info.pgid.m_seed;
+  assert(waiting_for_map.empty());
+  assert(waiting_for_all_missing.empty());
+  assert(waiting_for_missing_object.empty());
+  assert(waiting_for_degraded_object.empty());
+  assert(waiting_for_ack.empty());
+  assert(waiting_for_ondisk.empty());
+  split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
+
+  osd->dequeue_pg(this, &waiting_for_active);
+  split_list(&waiting_for_active, &(child->waiting_for_active), match, split_bits);
+}
+
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
   child->osdmap_ref = osdmap_ref;
@@ -1983,6 +2033,9 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   // History
   child->past_intervals = past_intervals;
+
+  split_ops(child, split_bits);
+  _split_into(child_pgid, child, split_bits);
 }
 
 void PG::defer_recovery()
@@ -4789,6 +4842,24 @@ bool PG::can_discard_request(OpRequestRef op)
     return can_discard_backfill(op);
   }
   return true;
+}
+
+bool PG::split_request(OpRequestRef op, unsigned match, unsigned bits)
+{
+  unsigned mask = ~((~0)<<bits);
+  switch (op->request->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    return (static_cast<MOSDOp*>(op->request)->get_pg().m_seed & mask) == match;
+  case MSG_OSD_SUBOP:
+    return false;
+  case MSG_OSD_SUBOPREPLY:
+    return false;
+  case MSG_OSD_PG_SCAN:
+    return false;
+  case MSG_OSD_PG_BACKFILL:
+    return false;
+  }
+  return false;
 }
 
 bool PG::must_delay_request(OpRequestRef op)

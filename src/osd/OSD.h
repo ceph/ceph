@@ -184,6 +184,8 @@ public:
   ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
   ClassHandler  *&class_handler;
 
+  void dequeue_pg(PG *pg, list<OpRequestRef> *dequeued);
+
   // -- superblock --
   Mutex publish_lock, pre_publish_lock;
   OSDSuperblock superblock;
@@ -644,9 +646,26 @@ private:
 	return op.first == pg;
       }
     };
-    void dequeue(PG *pg) {
+    void dequeue(PG *pg, list<OpRequestRef> *dequeued = 0) {
       lock();
-      pqueue.remove_by_filter(Pred(pg));
+      if (!dequeued) {
+	pqueue.remove_by_filter(Pred(pg));
+	pg_for_processing.erase(pg);
+      } else {
+	list<pair<PGRef, OpRequestRef> > _dequeued;
+	pqueue.remove_by_filter(Pred(pg), &_dequeued);
+	for (list<pair<PGRef, OpRequestRef> >::iterator i = _dequeued.begin();
+	     i != _dequeued.end();
+	     ++i) {
+	  dequeued->push_back(i->second);
+	}
+	if (pg_for_processing.count(pg)) {
+	  dequeued->splice(
+	    dequeued->begin(),
+	    pg_for_processing[pg]);
+	  pg_for_processing.erase(pg);
+	}
+      }
       unlock();
     }
     bool _empty() {
