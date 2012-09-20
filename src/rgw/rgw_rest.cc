@@ -641,39 +641,6 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_ObjStore::preprocess(struct req_state *s, RGWClientIO *cio)
-{
-  s->cio = cio;
-  s->request_uri = s->env->get("REQUEST_URI");
-  int pos = s->request_uri.find('?');
-  if (pos >= 0) {
-    s->request_params = s->request_uri.substr(pos + 1);
-    s->request_uri = s->request_uri.substr(0, pos);
-  }
-  url_decode(s->request_uri, s->decoded_uri);
-  s->method = s->env->get("REQUEST_METHOD");
-  s->host = s->env->get("HTTP_HOST");
-  s->length = s->env->get("CONTENT_LENGTH");
-  if (s->length) {
-    if (*s->length == '\0')
-      return -EINVAL;
-    s->content_length = atoll(s->length);
-  }
-
-  s->content_type = s->env->get("CONTENT_TYPE");
-  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
-
-  if (g_conf->rgw_print_continue) {
-    const char *expect = s->env->get("HTTP_EXPECT");
-    s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
-  }
-  s->op = op_from_method(s->method);
-
-  init_meta_info(s);
-
-  return 0;
-}
-
 int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
 {
   bool only_bucket;
@@ -709,41 +676,100 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   return do_read_permissions(op_obj, only_bucket);
 }
 
-
-RGWRESTMgr::RGWRESTMgr()
+void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
-  // order is important!
-  protocol_handlers.push_back(new RGWHandler_ObjStore_SWIFT);
-  protocol_handlers.push_back(new RGWHandler_SWIFT_Auth);
-  protocol_handlers.push_back(new RGWHandler_ObjStore_S3);
+  if (resource[resource.size() - 1] != '/')
+    resource.append("/");
+
+  resource_mgrs[resource] = mgr;
+  resources_by_size[resource.size()] = resource;
+}
+
+void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
+{
+  delete default_mgr;
+  default_mgr = mgr;
+}
+
+RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
+{
+  if (resources_by_size.empty())
+    return NULL;
+
+  map<size_t, string>::reverse_iterator iter;
+
+  for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
+    string& resource = iter->second;
+    if (uri.compare(0, iter->first, resource) == 0) {
+      string suffix = resource.substr(resource.size() + 1);
+      return resource_mgrs[resource]->get_resource_mgr(s, suffix);
+    }
+  }
+
+  if (default_mgr)
+    return default_mgr;
+
+  return this;
 }
 
 RGWRESTMgr::~RGWRESTMgr()
 {
-  vector<RGWHandler *>::iterator iter;
-  for (iter = protocol_handlers.begin(); iter != protocol_handlers.end(); ++iter) {
-    delete *iter;
+  map<string, RGWRESTMgr *>::iterator iter;
+  for (iter = resource_mgrs.begin(); iter != resource_mgrs.end(); ++iter) {
+    delete iter->second;
   }
+  delete default_mgr;
 }
 
-RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, RGWClientIO *cio,
-				    int *init_error)
+int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
+{
+  s->cio = cio;
+  s->request_uri = s->env->get("REQUEST_URI");
+  int pos = s->request_uri.find('?');
+  if (pos >= 0) {
+    s->request_params = s->request_uri.substr(pos + 1);
+    s->request_uri = s->request_uri.substr(0, pos);
+  }
+  url_decode(s->request_uri, s->decoded_uri);
+  s->method = s->env->get("REQUEST_METHOD");
+  s->host = s->env->get("HTTP_HOST");
+  s->length = s->env->get("CONTENT_LENGTH");
+  if (s->length) {
+    if (*s->length == '\0')
+      return -EINVAL;
+    s->content_length = atoll(s->length);
+  }
+
+  s->content_type = s->env->get("CONTENT_TYPE");
+  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
+
+  if (g_conf->rgw_print_continue) {
+    const char *expect = s->env->get("HTTP_EXPECT");
+    s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
+  }
+  s->op = op_from_method(s->method);
+
+  init_meta_info(s);
+
+  return 0;
+}
+
+RGWHandler *RGWREST::get_handler(struct req_state *s, RGWClientIO *cio,
+				 int *init_error)
 {
   RGWHandler *handler;
 
-  *init_error = RGWHandler_ObjStore::preprocess(s, cio);
+  *init_error = preprocess(s, cio);
   if (*init_error < 0)
     return NULL;
 
-  vector<RGWHandler *>::iterator iter;
-  for (iter = protocol_handlers.begin(); iter != protocol_handlers.end(); ++iter) {
-    handler = *iter;
-    if (handler->filter_request(s))
-      break;
-  }
-  if (iter == protocol_handlers.end())
+  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri);
+  if (!m) {
+    *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
+  }
 
+  handler = m->get_handler(s);
   *init_error = handler->init(s, cio);
   if (*init_error < 0)
     return NULL;
@@ -751,3 +777,8 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, RGWClientIO *cio,
   return handler;
 }
 
+RGWREST::RGWREST() {
+  mgr.register_default_mgr(new RGWRESTMgr_S3);
+  mgr.register_resource("/swift", new RGWRESTMgr_SWIFT);
+  mgr.register_resource("/auth", new RGWRESTMgr_SWIFT_Auth);
+}

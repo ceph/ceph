@@ -155,15 +155,13 @@ public:
 
 class RGWHandler_ObjStore : public RGWHandler {
 protected:
-  virtual bool is_acl_op() = 0;
-  virtual bool is_obj_update_op() = 0;
-
-  virtual RGWOp *op_get() = 0;
-  virtual RGWOp *op_put() = 0;
-  virtual RGWOp *op_delete() = 0;
-  virtual RGWOp *op_head() = 0;
-  virtual RGWOp *op_post() = 0;
-  virtual RGWOp *op_copy() = 0;
+  virtual bool is_obj_update_op() { return false; }
+  virtual RGWOp *op_get() { return NULL; }
+  virtual RGWOp *op_put() { return NULL; }
+  virtual RGWOp *op_delete() { return NULL; }
+  virtual RGWOp *op_head() { return NULL; }
+  virtual RGWOp *op_post() { return NULL; }
+  virtual RGWOp *op_copy() { return NULL; }
 
   virtual int validate_bucket_name(const string& bucket);
   virtual int validate_object_name(const string& object);
@@ -172,8 +170,6 @@ public:
   virtual ~RGWHandler_ObjStore() {}
   int read_permissions(RGWOp *op);
 
-  static int preprocess(struct req_state *s, RGWClientIO *cio);
-  virtual bool filter_request(struct req_state *s) = 0;
   virtual int authorize() = 0;
 };
 
@@ -182,13 +178,34 @@ class RGWHandler_SWIFT_Auth;
 class RGWHandler_ObjStore_S3;
 
 class RGWRESTMgr {
-  vector<RGWHandler *> protocol_handlers;
+protected:
+  map<string, RGWRESTMgr *> resource_mgrs;
+  map<size_t, string> resources_by_size;
+  RGWRESTMgr *default_mgr;
 
 public:
-  RGWRESTMgr();
-  ~RGWRESTMgr();
+  RGWRESTMgr() : default_mgr(NULL) {}
+  virtual ~RGWRESTMgr();
+
+  void register_resource(string resource, RGWRESTMgr *mgr);
+  void register_default_mgr(RGWRESTMgr *mgr);
+
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri);
+  virtual RGWHandler *get_handler(struct req_state *s) { return NULL; }
+  virtual void put_handler(RGWHandler *handler) { delete handler; }
+};
+
+class RGWREST {
+  RGWRESTMgr mgr;
+
+  static int preprocess(struct req_state *s, RGWClientIO *cio);
+public:
+  RGWREST();
   RGWHandler *get_handler(struct req_state *s, RGWClientIO *cio,
 			  int *init_error);
+  void put_handler(RGWHandler *handler) {
+    mgr.put_handler(handler);
+  }
 };
 
 extern void set_req_state_err(struct req_state *s, int err_no);
