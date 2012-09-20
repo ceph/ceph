@@ -790,6 +790,12 @@ test_cls_refcount_LDADD = librados.la libcls_refcount_client.a ${UNITTEST_STATIC
 test_cls_refcount_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_refcount
 
+test_cls_lock_SOURCES = test/rados-api/cls_lock.cc test/rados-api/test.cc
+test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
+test_cls_lock_LDADD =  libcls_lock_client.a librados.la ${UNITTEST_STATIC_LDADD}
+test_cls_lock_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cls_lock
+
 if WITH_RADOSGW
 
 test_cls_rgw_SOURCES = test/rgw/test_cls_rgw.cc \
@@ -829,12 +835,6 @@ test_rados_api_stat_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_stat_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_stat_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_stat
-
-test_rados_api_cls_lock_SOURCES = test/rados-api/cls_lock.cc test/rados-api/test.cc
-test_rados_api_cls_lock_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_cls_lock_LDADD =  libcls_lock_client.a librados.la ${UNITTEST_STATIC_LDADD}
-test_rados_api_cls_lock_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-bin_DEBUGPROGRAMS += test_rados_api_cls_lock
 
 test_rados_api_watch_notify_SOURCES = test/rados-api/watch_notify.cc test/rados-api/test.cc
 test_rados_api_watch_notify_LDFLAGS = ${AM_LDFLAGS}
