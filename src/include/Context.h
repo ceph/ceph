@@ -124,6 +124,7 @@ public:
   void finish(int r) {
     finish_contexts(cct, contexts, r);
   }
+  bool empty() { return contexts.empty(); }
 };
 
 
