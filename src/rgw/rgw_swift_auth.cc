@@ -14,8 +14,6 @@
 
 using namespace ceph::crypto;
 
-static RGW_SWIFT_Auth_Get rgw_swift_auth_get;
-
 static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
 {
   ::encode(swift_user, bl);
@@ -274,24 +272,8 @@ int RGWHandler_SWIFT_Auth::authorize()
   return 0;
 }
 
-RGWOp *RGWHandler_SWIFT_Auth::get_op()
+RGWOp *RGWHandler_SWIFT_Auth::op_get()
 {
-  RGWOp *op;
-  switch (s->op) {
-   case OP_GET:
-     op = &rgw_swift_auth_get;
-     break;
-   default:
-     return NULL;
-  }
-
-  if (op) {
-    op->init(s, this);
-  }
-  return op;
-}
-
-void RGWHandler_SWIFT_Auth::put_op(RGWOp *op)
-{
+  return new RGW_SWIFT_Auth_Get;
 }
 

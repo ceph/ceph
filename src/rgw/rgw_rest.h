@@ -158,12 +158,12 @@ protected:
   virtual bool is_acl_op() = 0;
   virtual bool is_obj_update_op() = 0;
 
-  virtual RGWOp *get_retrieve_obj_op(bool get_data) = 0;
-  virtual RGWOp *get_retrieve_op(bool get_data) = 0;
-  virtual RGWOp *get_create_op() = 0;
-  virtual RGWOp *get_delete_op() = 0;
-  virtual RGWOp *get_post_op() = 0;
-  virtual RGWOp *get_copy_op() = 0;
+  virtual RGWOp *op_get() = 0;
+  virtual RGWOp *op_put() = 0;
+  virtual RGWOp *op_delete() = 0;
+  virtual RGWOp *op_head() = 0;
+  virtual RGWOp *op_post() = 0;
+  virtual RGWOp *op_copy() = 0;
 
   virtual int validate_bucket_name(const string& bucket);
   virtual int validate_object_name(const string& object);
@@ -171,8 +171,6 @@ public:
   RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore() {}
   int read_permissions(RGWOp *op);
-  RGWOp *get_op();
-  void put_op(RGWOp *op);
 
   static int preprocess(struct req_state *s, RGWClientIO *cio);
   virtual bool filter_request(struct req_state *s) = 0;

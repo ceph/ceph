@@ -485,7 +485,7 @@ send_data:
   return 0;
 }
 
-RGWOp *RGWHandler_ObjStore_SWIFT::get_retrieve_obj_op(bool get_data)
+RGWOp *RGWHandler_ObjStore_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_SWIFT;
@@ -505,22 +505,31 @@ RGWOp *RGWHandler_ObjStore_SWIFT::get_retrieve_obj_op(bool get_data)
     return new RGWStatBucket_ObjStore_SWIFT;
 }
 
-RGWOp *RGWHandler_ObjStore_SWIFT::get_retrieve_op(bool get_data)
+RGWOp *RGWHandler_ObjStore_SWIFT::op_get()
 {
   if (s->bucket_name) {
     if (is_acl_op()) {
       return new RGWGetACLs_ObjStore_SWIFT;
     }
-    return get_retrieve_obj_op(get_data);
+    return get_obj_op(true);
   }
 
-  if (get_data)
-    return new RGWListBuckets_ObjStore_SWIFT;
-  else
-    return new RGWStatAccount_ObjStore_SWIFT;
+  return new RGWListBuckets_ObjStore_SWIFT;
 }
 
-RGWOp *RGWHandler_ObjStore_SWIFT::get_create_op()
+RGWOp *RGWHandler_ObjStore_SWIFT::op_head()
+{
+  if (s->bucket_name) {
+    if (is_acl_op()) {
+      return new RGWGetACLs_ObjStore_SWIFT;
+    }
+    return get_obj_op(false);
+  }
+
+  return new RGWStatAccount_ObjStore_SWIFT;
+}
+
+RGWOp *RGWHandler_ObjStore_SWIFT::op_put()
 {
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_SWIFT;
@@ -536,7 +545,7 @@ RGWOp *RGWHandler_ObjStore_SWIFT::get_create_op()
   return NULL;
 }
 
-RGWOp *RGWHandler_ObjStore_SWIFT::get_delete_op()
+RGWOp *RGWHandler_ObjStore_SWIFT::op_delete()
 {
   if (s->object)
     return new RGWDeleteObj_ObjStore_SWIFT;
@@ -546,12 +555,12 @@ RGWOp *RGWHandler_ObjStore_SWIFT::get_delete_op()
   return NULL;
 }
 
-RGWOp *RGWHandler_ObjStore_SWIFT::get_post_op()
+RGWOp *RGWHandler_ObjStore_SWIFT::op_post()
 {
   return new RGWPutMetadata_ObjStore_SWIFT;
 }
 
-RGWOp *RGWHandler_ObjStore_SWIFT::get_copy_op()
+RGWOp *RGWHandler_ObjStore_SWIFT::op_copy()
 {
   if (s->object)
     return new RGWCopyObj_ObjStore_SWIFT;
