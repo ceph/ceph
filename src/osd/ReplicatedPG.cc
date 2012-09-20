@@ -6063,6 +6063,10 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
   unlock();
 }
 
+void ReplicatedPG::_split_into(pg_t child_pgid, PG *child, unsigned split_bits)
+{
+  assert(repop_queue.empty());
+}
 
 /*
  * pg status change notification
