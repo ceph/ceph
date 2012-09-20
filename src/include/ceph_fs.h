@@ -26,8 +26,9 @@
 #define CEPH_MONC_PROTOCOL   15 /* server/client */
 
 
-#define CEPH_INO_ROOT  1
-#define CEPH_INO_CEPH  2        /* hidden .ceph dir */
+#define CEPH_INO_ROOT   1
+#define CEPH_INO_CEPH   2       /* hidden .ceph dir */
+#define CEPH_INO_DOTDOT 3	/* used by ceph fuse for parent (..) */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
 #define CEPH_MAX_MON   31
