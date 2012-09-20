@@ -61,6 +61,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
        const hobject_t& ioid) :
   osd(o), osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
+  _qlock("PG::_qlock"),
   ref(0), deleting(false), dirty_info(false), dirty_log(false),
   info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
@@ -1544,10 +1545,46 @@ void PG::do_pending_flush()
   }
 }
 
+bool PG::op_has_sufficient_caps(OpRequestRef op)
+{
+  // only check MOSDOp
+  if (op->request->get_type() != CEPH_MSG_OSD_OP)
+    return true;
+
+  MOSDOp *req = static_cast<MOSDOp*>(op->request);
+
+  OSD::Session *session = (OSD::Session *)req->get_connection()->get_priv();
+  if (!session) {
+    dout(0) << "op_has_sufficient_caps: no session for op " << *req << dendl;
+    return false;
+  }
+  OSDCap& caps = session->caps;
+  session->put();
+
+  string key = req->get_object_locator().key;
+  if (key.length() == 0)
+    key = req->get_oid().name;
+
+  bool cap = caps.is_capable(pool.name, pool.auid, key,
+			     req->may_read(), req->may_write(), req->require_exec_caps());
+
+  dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
+	   << ") owner=" << pool.auid
+	   << " may_read=" << req->may_read()
+	   << " may_write=" << req->may_write()
+	   << " may_exec=" << req->may_exec()
+           << " require_exec_caps=" << req->require_exec_caps()
+	   << " -> " << (cap ? "yes" : "NO")
+	   << dendl;
+  return cap;
+}
+
 void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
   do_pending_flush();
+  if (!op_has_sufficient_caps(op))
+    return;
   if (must_delay_request(op)) {
     waiting_for_map.push_back(op);
     return;
@@ -2671,10 +2708,12 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
   dout(15) << " requeue_ops " << ls << dendl;
+  lockq();
   assert(&ls != &op_queue);
   size_t requeue_size = ls.size();
   op_queue.splice(op_queue.begin(), ls, ls.begin(), ls.end());
   for (size_t i = 0; i < requeue_size; ++i) osd->queue_for_op(this);
+  unlockq();
 }
 
 
@@ -4584,12 +4623,10 @@ bool PG::must_delay_request(OpRequestRef op)
 
 void PG::queue_op(OpRequestRef op)
 {
-  if (!must_delay_request(op) &&
-      can_discard_request(op)) {
-    return;
-  }
+  _qlock.Lock();
   op_queue.push_back(op);
   osd->queue_for_op(this);
+  _qlock.Unlock();
 }
 
 void PG::take_waiters()

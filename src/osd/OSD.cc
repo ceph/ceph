@@ -1316,6 +1316,16 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
   return pg;
 }
 
+
+PG *OSD::_lookup_pg(pg_t pgid)
+{
+  assert(osd_lock.is_locked());
+  if (!pg_map.count(pgid))
+    return NULL;
+  PG *pg = pg_map[pgid];
+  return pg;
+}
+
 PG *OSD::_lookup_lock_pg_with_map_lock_held(pg_t pgid)
 {
   assert(osd_lock.is_locked());
@@ -2981,7 +2991,9 @@ bool OSD::heartbeat_dispatch(Message *m)
 bool OSD::ms_dispatch(Message *m)
 {
   // lock!
+
   osd_lock.Lock();
+
   while (dispatch_running) {
     dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
     dispatch_cond.Wait(osd_lock);
@@ -2996,6 +3008,7 @@ bool OSD::ms_dispatch(Message *m)
   dispatch_cond.Signal();
 
   osd_lock.Unlock();
+
   return true;
 }
 
@@ -4824,11 +4837,10 @@ void OSD::handle_pg_scan(OpRequestRef op)
     return;
   }
 
-  pg = _lookup_lock_pg(m->pgid);
+  pg = _lookup_pg(m->pgid);
   assert(pg);
 
   enqueue_op(pg, op);
-  pg->unlock();
 }
 
 void OSD::handle_pg_backfill(OpRequestRef op)
@@ -4853,11 +4865,10 @@ void OSD::handle_pg_backfill(OpRequestRef op)
     return;
   }
 
-  pg = _lookup_lock_pg(m->pgid);
+  pg = _lookup_pg(m->pgid);
   assert(pg);
 
   enqueue_op(pg, op);
-  pg->unlock();
 }
 
 
@@ -5302,11 +5313,9 @@ void OSD::handle_op(OpRequestRef op)
     service.reply_op_error(op, -EBLACKLISTED);
     return;
   }
-
   // share our map with sender, if they're old
   _share_map_incoming(m->get_source_inst(), m->get_map_epoch(),
 		      (Session *)m->get_connection()->get_priv());
-
   int r = init_op_flags(m);
   if (r) {
     service.reply_op_error(op, r);
@@ -5335,7 +5344,6 @@ void OSD::handle_op(OpRequestRef op)
       return;
     }
   }
-
   // calc actual pgid
   pg_t pgid = m->get_pg();
   int64_t pool = pgid.pool();
@@ -5344,7 +5352,7 @@ void OSD::handle_op(OpRequestRef op)
     pgid = osdmap->raw_pg_to_pg(pgid);
 
   // get and lock *pg.
-  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
+  PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
   if (!pg) {
     dout(7) << "hit non-existent pg " << pgid << dendl;
 
@@ -5383,42 +5391,9 @@ void OSD::handle_op(OpRequestRef op)
       service.reply_op_error(op, -ENXIO);
     }
     return;
-  } else if (!op_has_sufficient_caps(pg, m)) {
-    pg->unlock();
-    return;
   }
-
 
   enqueue_op(pg, op);
-  pg->unlock();
-}
-
-bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
-{
-  Session *session = (Session *)op->get_connection()->get_priv();
-  if (!session) {
-    dout(0) << "op_has_sufficient_caps: no session for op " << *op << dendl;
-    return false;
-  }
-  OSDCap& caps = session->caps;
-  session->put();
-  
-  string key = op->get_object_locator().key;
-  if (key.length() == 0)
-    key = op->get_oid().name;
-
-  bool cap = caps.is_capable(pg->pool.name, pg->pool.auid, key,
-			     op->may_read(), op->may_write(), op->require_exec_caps());
-
-  dout(20) << "op_has_sufficient_caps pool=" << pg->pool.id << " (" << pg->pool.name
-	   << ") owner=" << pg->pool.auid
-	   << " may_read=" << op->may_read()
-	   << " may_write=" << op->may_write()
-	   << " may_exec=" << op->may_exec()
-           << " require_exec_caps=" << op->require_exec_caps()
-	   << " -> " << (cap ? "yes" : "NO")
-	   << dendl;
-  return cap;
 }
 
 void OSD::handle_sub_op(OpRequestRef op)
@@ -5449,12 +5424,11 @@ void OSD::handle_sub_op(OpRequestRef op)
   _share_map_incoming(m->get_source_inst(), m->map_epoch,
 		      (Session*)m->get_connection()->get_priv());
 
-  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
+  PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
   if (!pg) {
     return;
   }
   enqueue_op(pg, op);
-  pg->unlock();
 }
 
 void OSD::handle_sub_op_reply(OpRequestRef op)
@@ -5482,12 +5456,11 @@ void OSD::handle_sub_op_reply(OpRequestRef op)
   _share_map_incoming(m->get_source_inst(), m->get_map_epoch(),
 		      (Session*)m->get_connection()->get_priv());
 
-  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
+  PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
   if (!pg) {
     return;
   }
   enqueue_op(pg, op);
-  pg->unlock();
 }
 
 bool OSD::op_is_discardable(MOSDOp *op)
@@ -5507,8 +5480,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
  */
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
-  dout(15) << *pg << " enqueue_op " << op << " " << *(op->request) << dendl;
-  assert(pg->is_locked());
+  dout(15) << "enqueue_op " << op << " " << *(op->request) << dendl;
   pg->queue_op(op);
 }
 
@@ -5591,9 +5563,12 @@ void OSD::dequeue_op(PG *pg)
     pg->put();
     return;
   }
+
+  pg->lockq();
   assert(!pg->op_queue.empty());
   op = pg->op_queue.front();
   pg->op_queue.pop_front();
+  pg->unlockq();
     
   dout(10) << "dequeue_op " << op << " " << *op->request << " pg " << *pg << dendl;
 
