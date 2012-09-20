@@ -1957,16 +1957,19 @@ void OSD::heartbeat_check()
       derr << "heartbeat_check: no reply from osd." << p->first
 	   << " ever, first ping sent " << p->second.first_tx
 	   << " (cutoff " << cutoff << ")" << dendl;
+
+      // fail
+      failure_queue[p->first] = p->second.last_tx;
     } else {
       if (p->second.last_rx > cutoff)
 	continue;  // got recent reply
       derr << "heartbeat_check: no reply from osd." << p->first
 	   << " since " << p->second.last_rx
 	   << " (cutoff " << cutoff << ")" << dendl;
-    }
 
-    // fail!
-    queue_failure(p->first);
+      // fail
+      failure_queue[p->first] = p->second.last_rx;
+    }
   }
 }
 
@@ -2393,7 +2396,7 @@ void OSD::_send_boot()
     hbserver_messenger->set_addr_unknowns(hb_addr);
     dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
-  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr, cluster_addr);
+  MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_addr, cluster_addr);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
 	   << ", hb addr " << hb_addr
@@ -2459,10 +2462,12 @@ void OSD::send_failures()
     heartbeat_lock.Lock();
     locked = true;
   }
+  utime_t now = ceph_clock_now(g_ceph_context);
   while (!failure_queue.empty()) {
-    int osd = *failure_queue.begin();
+    int osd = failure_queue.begin()->first;
+    int failed_for = (int)(double)(now - failure_queue.begin()->second);
     entity_inst_t i = osdmap->get_inst(osd);
-    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, osdmap->get_epoch()));
+    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for, osdmap->get_epoch()));
     failure_pending[osd] = i;
     failure_queue.erase(osd);
   }
@@ -2471,7 +2476,7 @@ void OSD::send_failures()
 
 void OSD::send_still_alive(epoch_t epoch, entity_inst_t i)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, epoch);
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch);
   m->is_failed = false;
   monc->send_mon_message(m);
 }
