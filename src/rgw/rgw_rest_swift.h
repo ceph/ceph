@@ -136,12 +136,13 @@ protected:
     return s->op == OP_POST;
   }
 
-  RGWOp *get_retrieve_obj_op(bool get_data);
-  RGWOp *get_retrieve_op(bool get_data);
-  RGWOp *get_create_op();
-  RGWOp *get_delete_op();
-  RGWOp *get_post_op();
-  RGWOp *get_copy_op();
+  RGWOp *get_obj_op(bool get_data);
+  RGWOp *op_get();
+  RGWOp *op_head();
+  RGWOp *op_put();
+  RGWOp *op_delete();
+  RGWOp *op_post();
+  RGWOp *op_copy();
 
   int init_from_header(struct req_state *s);
 public:

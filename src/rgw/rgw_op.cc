@@ -2059,3 +2059,41 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
   return ret;
 }
 
+
+RGWOp *RGWHandler::get_op()
+{
+  RGWOp *op;
+  switch (s->op) {
+   case OP_GET:
+     op = op_get();
+     break;
+   case OP_PUT:
+     op = op_put();
+     break;
+   case OP_DELETE:
+     op = op_delete();
+     break;
+   case OP_HEAD:
+     op = op_head();
+     break;
+   case OP_POST:
+     op = op_post();
+     break;
+   case OP_COPY:
+     op = op_copy();
+     break;
+   default:
+     return NULL;
+  }
+
+  if (op) {
+    op->init(s, this);
+  }
+  return op;
+}
+
+void RGWHandler::put_op(RGWOp *op)
+{
+  delete op;
+}
+

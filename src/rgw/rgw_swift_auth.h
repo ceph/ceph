@@ -21,8 +21,7 @@ class RGWHandler_SWIFT_Auth : public RGWHandler {
 public:
   RGWHandler_SWIFT_Auth() {}
   ~RGWHandler_SWIFT_Auth() {}
-  RGWOp *get_op();
-  void put_op(RGWOp *op);
+  RGWOp *op_get();
 
   bool filter_request(struct req_state *s);
 
