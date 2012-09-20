@@ -4449,7 +4449,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   if (dirp->offset == 0) {
     ldout(cct, 15) << " including ." << dendl;
     assert(diri->dn_set.size() < 2); // can't have multiple hard-links to a dir
-    uint64_t next_off = (!diri->dn_set.empty()) ? 1 : 2;
+    uint64_t next_off = 1;
 
     fill_dirent(&de, ".", S_IFDIR, diri->ino, next_off);
 
@@ -4466,11 +4466,16 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   }
   if (dirp->offset == 1) {
     ldout(cct, 15) << " including .." << dendl;
-    assert(!diri->dn_set.empty());
-    Inode *in = diri->get_first_parent()->inode;
-    fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
+    if (!diri->dn_set.empty()) {
+      Inode* in = diri->get_first_parent()->inode;
+      fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
+      fill_stat(in, &st);
+    } else {
+      /* must be at the root (no parent),
+       * so we add the dotdot with a special inode (3) */
+      fill_dirent(&de, "..", S_IFDIR, CEPH_INO_DOTDOT, 2);
+    }
 
-    fill_stat(in, &st);
 
     client_lock.Unlock();
     int r = cb(p, &de, &st, -1, 2);
@@ -5850,6 +5855,13 @@ int Client::ll_getattr(vinodeno_t vino, struct stat *attr, int uid, int gid)
   ldout(cct, 3) << "ll_getattr " << vino << dendl;
   tout(cct) << "ll_getattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
+
+  /* special case for dotdot (..) */
+  if (vino.ino.val == CEPH_INO_DOTDOT) {
+    attr->st_mode = S_IFDIR | 0755;
+    attr->st_nlink = 2;
+    return 0;
+  }
 
   Inode *in = _ll_get_inode(vino);
   int res;
