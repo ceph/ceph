@@ -38,6 +38,8 @@ Notable changes
 * config: add /etc/ceph/ceph.$name.keyring to default keyring search path
 * ceph.spec: don't package crush headers
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.48.2argonaut.txt>`.
+
 v0.48.1 "argonaut"
 ------------------
 
