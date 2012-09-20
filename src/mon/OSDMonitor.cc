@@ -673,74 +673,135 @@ bool OSDMonitor::can_mark_in(int i)
   return true;
 }
 
+void OSDMonitor::check_failures(utime_t now)
+{
+  for (map<int,failure_info_t>::iterator p = failure_info.begin();
+       p != failure_info.end();
+       ++p) {
+    check_failure(now, p->first, p->second);
+  }
+}
+
+bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
+{
+  utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
+  utime_t max_failed_since = fi.get_failed_since();
+  utime_t failed_for = now - max_failed_since;
+
+  utime_t grace = orig_grace;
+  double my_grace = 0, peer_grace = 0;
+  if (g_conf->mon_osd_adjust_heartbeat_grace) {
+    double halflife = (double)g_conf->mon_osd_laggy_halflife;
+    double decay_k = ::log(.5) / halflife;
+
+    // scale grace period based on historical probability of 'lagginess'
+    // (false positive failures due to slowness).
+    const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
+    double decay = exp((double)failed_for * decay_k);
+    dout(20) << " halflife " << halflife << " decay_k " << decay_k
+	     << " failed_for " << failed_for << " decay " << decay << dendl;
+    my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+    grace += my_grace;
+
+    // consider the peers reporting a failure a proxy for a potential
+    // 'subcluster' over the overall cluster that is similarly
+    // laggy.  this is clearly not true in all cases, but will sometimes
+    // help us localize the grace correction to a subset of the system
+    // (say, a rack with a bad switch) that is unhappy.
+    assert(fi.reporters.size());
+    for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
+	 p != fi.reporters.end();
+	 p++) {
+      const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
+      utime_t elapsed = now - xi.down_stamp;
+      double decay = exp((double)elapsed * decay_k);
+      peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+    }
+    peer_grace /= (double)fi.reporters.size();
+    grace += peer_grace;
+  }
+
+  dout(10) << " osd." << target_osd << " has "
+	   << fi.reporters.size() << " reporters and "
+	   << fi.num_reports << " reports, "
+	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
+	   << dendl;
+
+  if (failed_for >= grace &&
+      ((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
+      (fi.num_reports >= g_conf->osd_min_down_reports)) {
+    dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
+    pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+
+    mon->clog.info() << osdmap.get_inst(target_osd) << " failed ("
+		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
+		     << failed_for << " >= grace " << grace << ")\n";
+
+    list<MOSDFailure*> msgs;
+    fi.take_report_messages(msgs);
+    failure_info.erase(target_osd);
+
+    paxos->wait_for_commit(new C_Reported(this, msgs));
+    return true;
+  }
+  return false;
+}
+
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
   dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
-  mon->clog.info() << m->get_target() << " failed (by "
-		   << m->get_orig_source_inst() << ")\n";
+
+  mon->clog.debug() << m->get_target() << " reported failed by "
+		    << m->get_orig_source_inst() << "\n";
   
   int target_osd = m->get_target().name.num();
   int reporter = m->get_orig_source().num();
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+
+  // calculate failure time
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t failed_since = now - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
   
   if (m->if_osd_failed()) {
-    int reports = 0;
-    int reporters = 0;
+    // add a report
+    failure_info_t& fi = failure_info[target_osd];
+    MOSDFailure *old = fi.add_report(reporter, failed_since, m);
+    if (old)
+      mon->no_reply(old);
 
-    if (failed_notes.count(target_osd)) {
-      multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
-      while ((i != failed_notes.end()) && (i->first == target_osd)) {
-        if (i->second.first == reporter) {
-          ++i->second.second;
-          dout(10) << "adding new failure report from osd." << reporter
-                   << " on osd." << target_osd << dendl;
-          reporter = -1;
-        }
-        ++reporters;
-        reports += i->second.second;
-        ++i;
+    return check_failure(now, target_osd, fi);
+  } else {
+    // remove the report
+    if (failure_info.count(target_osd)) {
+      failure_info_t& fi = failure_info[target_osd];
+      fi.cancel_report(reporter);
+      if (fi.reporters.empty()) {
+	dout(10) << " removing last failure_info for osd." << target_osd << dendl;
+	failure_info.erase(target_osd);
+      } else {
+	dout(10) << " failure_info for osd." << target_osd << " now "
+		 << fi.reporters.size() << " reporters and "
+		 << fi.num_reports << " reports" << dendl;
       }
+    } else {
+      dout(10) << " no failure_info for osd." << target_osd << dendl;
     }
-    if (reporter != -1) { //didn't get counted yet
-      failed_notes.insert(pair<int, pair<int, int> >
-                          (target_osd, pair<int, int>(reporter, 1)));
-      ++reporters;
-      ++reports;
-      dout(10) << "osd." << reporter
-               << " is adding failure report on osd." << target_osd << dendl;
-    }
-
-    if ((reporters >= g_conf->osd_min_down_reporters) &&
-        (reports >= g_conf->osd_min_down_reports)) {
-      dout(1) << "have enough reports/reporters to mark osd." << target_osd
-              << " as down" << dendl;
-      pending_inc.new_state[target_osd] = CEPH_OSD_UP;
-      paxos->wait_for_commit(new C_Reported(this, m));
-      //clear out failure reports
-      failed_notes.erase(failed_notes.lower_bound(target_osd),
-                         failed_notes.upper_bound(target_osd));
-      return true;
-    }
-  } else { //remove the report
-    multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
-    while ((i != failed_notes.end()) && (i->first == target_osd)
-                                && (i->second.first != reporter))
-      ++i;
-    if ((i == failed_notes.end()) || (i->second.first != reporter))
-      dout(0) << "got an OSD not-failed report from osd." << reporter
-              << " that hasn't reported failure! (or in previous epoch?)" << dendl;
-    else failed_notes.erase(i);
+    mon->no_reply(m);
   }
   
   return false;
 }
 
-void OSDMonitor::_reported_failure(MOSDFailure *m)
+void OSDMonitor::_reported_failure(list<MOSDFailure*>& ls)
 {
-  dout(7) << "_reported_failure on " << m->get_target() << ", telling " << m->get_orig_source_inst() << dendl;
-  send_latest(m, m->get_epoch());
+  dout(7) << "_reported_failure telling " << ls << dendl;
+  while (!ls.empty()) {
+    MOSDFailure *m = ls.front();
+    ls.pop_front();
+    send_latest(m, m->get_epoch());
+  }
 }
 
 
@@ -885,6 +946,25 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	       << dendl;
       pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(begin, end);
     }
+
+    osd_xinfo_t xi = osdmap.get_xinfo(from);
+    if (m->boot_epoch == 0) {
+      xi.laggy_probability *= (1.0 - g_conf->mon_osd_laggy_weight);
+      xi.laggy_interval *= (1.0 - g_conf->mon_osd_laggy_weight);
+      dout(10) << " not laggy, new xi " << xi << dendl;
+    } else {
+      if (xi.down_stamp.sec()) {
+	int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
+	xi.laggy_interval =
+	  interval * g_conf->mon_osd_laggy_weight +
+	  xi.laggy_interval * (1.0 - g_conf->mon_osd_laggy_weight);
+      }
+      xi.laggy_probability =
+	g_conf->mon_osd_laggy_weight +
+	xi.laggy_probability * (1.0 - g_conf->mon_osd_laggy_weight);
+      dout(10) << " laggy, now xi " << xi << dendl;
+    }
+    pending_inc.new_xinfo[from] = xi;
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
@@ -1297,10 +1377,12 @@ void OSDMonitor::tick()
   if (!mon->is_leader()) return;
 
   bool do_propose = false;
-
-  // mark down osds out?
   utime_t now = ceph_clock_now(g_ceph_context);
 
+  // mark osds down?
+  check_failures(now);
+
+  // mark down osds out?
 
   /* can_mark_out() checks if we can mark osds as being out. The -1 has no
    * influence at all. The decision is made based on the ratio of "in" osds,
@@ -1318,10 +1400,26 @@ void OSDMonitor::tick()
       if (osdmap.is_down(o) &&
 	  osdmap.is_in(o) &&
 	  can_mark_out(o)) {
+	utime_t orig_grace(g_conf->mon_osd_down_out_interval, 0);
+	utime_t grace = orig_grace;
+	double my_grace = 0.0;
+
+	if (g_conf->mon_osd_adjust_down_out_interval) {
+	  // scale grace period the same way we do the heartbeat grace.
+	  const osd_xinfo_t& xi = osdmap.get_xinfo(o);
+	  double halflife = (double)g_conf->mon_osd_laggy_halflife;
+	  double decay_k = ::log(.5) / halflife;
+	  double decay = exp((double)down * decay_k);
+	  dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
+		   << " down for " << down << " decay " << decay << dendl;
+	  my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+	  grace += my_grace;
+	}
+
 	if (g_conf->mon_osd_down_out_interval > 0 &&
-	    down.sec() >= g_conf->mon_osd_down_out_interval) {
+	    down.sec() >= grace) {
 	  dout(10) << "tick marking osd." << o << " OUT after " << down
-		   << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
+		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
 	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
 
 	  // set the AUTOOUT bit.

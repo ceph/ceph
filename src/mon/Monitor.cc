@@ -1566,6 +1566,26 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
   session->put();
 }
 
+void Monitor::no_reply(PaxosServiceMessage *req)
+{
+  MonSession *session = (MonSession*)req->get_connection()->get_priv();
+  assert(session);
+  if (session->proxy_con) {
+    if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
+      dout(10) << "no_reply to " << req->get_source_inst() << " via mon." << req->session_mon
+	       << " for request " << *req << dendl;
+      messenger->send_message(new MRoute(session->proxy_tid, NULL),
+			      session->proxy_con);
+    } else {
+      dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst() << " via mon." << req->session_mon
+	       << " for request " << *req << dendl;
+    }
+  } else {
+    dout(10) << "no_reply to " << req->get_source_inst() << " " << *req << dendl;
+  }
+  session->put();
+}
+
 void Monitor::handle_route(MRoute *m)
 {
   MonSession *session = (MonSession *)m->get_connection()->get_priv();
@@ -1577,7 +1597,10 @@ void Monitor::handle_route(MRoute *m)
     m->put();
     return;
   }
-  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+  if (m->msg)
+    dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+  else
+    dout(10) << "handle_route null to " << m->dest << dendl;
   
   // look it up
   if (m->session_mon_tid) {
@@ -1585,10 +1608,11 @@ void Monitor::handle_route(MRoute *m)
       RoutedRequest *rr = routed_requests[m->session_mon_tid];
 
       // reset payload, in case encoding is dependent on target features
-      m->msg->clear_payload();
-
-      messenger->send_message(m->msg, rr->session->inst);
-      m->msg = NULL;
+      if (m->msg) {
+	m->msg->clear_payload();
+	messenger->send_message(m->msg, rr->session->inst);
+	m->msg = NULL;
+      }
       routed_requests.erase(m->session_mon_tid);
       rr->session->routed_request_tids.insert(rr->tid);
       delete rr;
@@ -1597,8 +1621,10 @@ void Monitor::handle_route(MRoute *m)
     }
   } else {
     dout(10) << " not a routed request, trying to send anyway" << dendl;
-    messenger->lazy_send_message(m->msg, m->dest);
-    m->msg = NULL;
+    if (m->msg) {
+      messenger->lazy_send_message(m->msg, m->dest);
+      m->msg = NULL;
+    }
   }
   m->put();
   if (session)
