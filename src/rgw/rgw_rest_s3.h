@@ -10,152 +10,152 @@
 
 void rgw_get_errno_s3(struct rgw_html_errors *e, int err_no);
 
-class RGWGetObj_REST_S3 : public RGWGetObj_REST
+class RGWGetObj_ObjStore_S3 : public RGWGetObj_ObjStore
 {
 public:
-  RGWGetObj_REST_S3() {}
-  ~RGWGetObj_REST_S3() {}
+  RGWGetObj_ObjStore_S3() {}
+  ~RGWGetObj_ObjStore_S3() {}
 
   int send_response(bufferlist& bl);
 };
 
-class RGWListBuckets_REST_S3 : public RGWListBuckets_REST {
+class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
 public:
-  RGWListBuckets_REST_S3() {}
-  ~RGWListBuckets_REST_S3() {}
+  RGWListBuckets_ObjStore_S3() {}
+  ~RGWListBuckets_ObjStore_S3() {}
 
   int get_params() { return 0; }
   void send_response();
 };
 
-class RGWListBucket_REST_S3 : public RGWListBucket_REST {
+class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
 public:
-  RGWListBucket_REST_S3() {
+  RGWListBucket_ObjStore_S3() {
     default_max = 1000;
   }
-  ~RGWListBucket_REST_S3() {}
+  ~RGWListBucket_ObjStore_S3() {}
 
   int get_params();
   void send_response();
 };
 
-class RGWStatBucket_REST_S3 : public RGWStatBucket_REST {
+class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
-  RGWStatBucket_REST_S3() {}
-  ~RGWStatBucket_REST_S3() {}
+  RGWStatBucket_ObjStore_S3() {}
+  ~RGWStatBucket_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWCreateBucket_REST_S3 : public RGWCreateBucket_REST {
+class RGWCreateBucket_ObjStore_S3 : public RGWCreateBucket_ObjStore {
 public:
-  RGWCreateBucket_REST_S3() {}
-  ~RGWCreateBucket_REST_S3() {}
+  RGWCreateBucket_ObjStore_S3() {}
+  ~RGWCreateBucket_ObjStore_S3() {}
 
   int get_params();
   void send_response();
 };
 
-class RGWDeleteBucket_REST_S3 : public RGWDeleteBucket_REST {
+class RGWDeleteBucket_ObjStore_S3 : public RGWDeleteBucket_ObjStore {
 public:
-  RGWDeleteBucket_REST_S3() {}
-  ~RGWDeleteBucket_REST_S3() {}
+  RGWDeleteBucket_ObjStore_S3() {}
+  ~RGWDeleteBucket_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWPutObj_REST_S3 : public RGWPutObj_REST {
+class RGWPutObj_ObjStore_S3 : public RGWPutObj_ObjStore {
 public:
-  RGWPutObj_REST_S3() {}
-  ~RGWPutObj_REST_S3() {}
+  RGWPutObj_ObjStore_S3() {}
+  ~RGWPutObj_ObjStore_S3() {}
 
   int get_params();
   void send_response();
 };
 
-class RGWDeleteObj_REST_S3 : public RGWDeleteObj_REST {
+class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
 public:
-  RGWDeleteObj_REST_S3() {}
-  ~RGWDeleteObj_REST_S3() {}
+  RGWDeleteObj_ObjStore_S3() {}
+  ~RGWDeleteObj_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWCopyObj_REST_S3 : public RGWCopyObj_REST {
+class RGWCopyObj_ObjStore_S3 : public RGWCopyObj_ObjStore {
 public:
-  RGWCopyObj_REST_S3() {}
-  ~RGWCopyObj_REST_S3() {}
+  RGWCopyObj_ObjStore_S3() {}
+  ~RGWCopyObj_ObjStore_S3() {}
 
   int init_dest_policy();
   int get_params();
   void send_response();
 };
 
-class RGWGetACLs_REST_S3 : public RGWGetACLs_REST {
+class RGWGetACLs_ObjStore_S3 : public RGWGetACLs_ObjStore {
 public:
-  RGWGetACLs_REST_S3() {}
-  ~RGWGetACLs_REST_S3() {}
+  RGWGetACLs_ObjStore_S3() {}
+  ~RGWGetACLs_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWPutACLs_REST_S3 : public RGWPutACLs_REST {
+class RGWPutACLs_ObjStore_S3 : public RGWPutACLs_ObjStore {
 public:
-  RGWPutACLs_REST_S3() {}
-  ~RGWPutACLs_REST_S3() {}
+  RGWPutACLs_ObjStore_S3() {}
+  ~RGWPutACLs_ObjStore_S3() {}
 
   int get_canned_policy(ACLOwner& owner, stringstream& ss);
   void send_response();
 };
 
 
-class RGWInitMultipart_REST_S3 : public RGWInitMultipart_REST {
+class RGWInitMultipart_ObjStore_S3 : public RGWInitMultipart_ObjStore {
 public:
-  RGWInitMultipart_REST_S3() {}
-  ~RGWInitMultipart_REST_S3() {}
+  RGWInitMultipart_ObjStore_S3() {}
+  ~RGWInitMultipart_ObjStore_S3() {}
 
   int get_params();
   void send_response();
 };
 
-class RGWCompleteMultipart_REST_S3 : public RGWCompleteMultipart_REST {
+class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
 public:
-  RGWCompleteMultipart_REST_S3() {}
-  ~RGWCompleteMultipart_REST_S3() {}
+  RGWCompleteMultipart_ObjStore_S3() {}
+  ~RGWCompleteMultipart_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWAbortMultipart_REST_S3 : public RGWAbortMultipart_REST {
+class RGWAbortMultipart_ObjStore_S3 : public RGWAbortMultipart_ObjStore {
 public:
-  RGWAbortMultipart_REST_S3() {}
-  ~RGWAbortMultipart_REST_S3() {}
+  RGWAbortMultipart_ObjStore_S3() {}
+  ~RGWAbortMultipart_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWListMultipart_REST_S3 : public RGWListMultipart_REST {
+class RGWListMultipart_ObjStore_S3 : public RGWListMultipart_ObjStore {
 public:
-  RGWListMultipart_REST_S3() {}
-  ~RGWListMultipart_REST_S3() {}
+  RGWListMultipart_ObjStore_S3() {}
+  ~RGWListMultipart_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWListBucketMultiparts_REST_S3 : public RGWListBucketMultiparts_REST {
+class RGWListBucketMultiparts_ObjStore_S3 : public RGWListBucketMultiparts_ObjStore {
 public:
-  RGWListBucketMultiparts_REST_S3() {
+  RGWListBucketMultiparts_ObjStore_S3() {
     default_max = 1000;
   }
-  ~RGWListBucketMultiparts_REST_S3() {}
+  ~RGWListBucketMultiparts_ObjStore_S3() {}
 
   void send_response();
 };
 
-class RGWDeleteMultiObj_REST_S3 : public RGWDeleteMultiObj_REST {
+class RGWDeleteMultiObj_ObjStore_S3 : public RGWDeleteMultiObj_ObjStore {
 public:
-  RGWDeleteMultiObj_REST_S3() {}
-  ~RGWDeleteMultiObj_REST_S3() {}
+  RGWDeleteMultiObj_ObjStore_S3() {}
+  ~RGWDeleteMultiObj_ObjStore_S3() {}
 
   void send_status();
   void begin_response();
@@ -164,7 +164,7 @@ public:
 };
 
 
-class RGWHandler_REST_S3 : public RGWHandler_REST {
+class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
 protected:
   bool is_acl_op() {
     return s->args.exists("acl");
@@ -181,8 +181,8 @@ protected:
 
   int init_from_header(struct req_state *s);
 public:
-  RGWHandler_REST_S3() : RGWHandler_REST() {}
-  virtual ~RGWHandler_REST_S3() {}
+  RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
+  virtual ~RGWHandler_ObjStore_S3() {}
 
   bool filter_request(struct req_state *state) { return true; }
   int validate_bucket_name(const string& bucket);
