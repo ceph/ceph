@@ -1532,6 +1532,7 @@ void OSD::build_past_intervals_parallel()
 							    pg->info.history.last_epoch_clean,
 							    cur_map, last_map,
 							    pg->info.pgid.pool(),
+	                                                    pg->info.pgid,
 							    &pg->past_intervals,
 							    &debug);
       if (new_interval) {

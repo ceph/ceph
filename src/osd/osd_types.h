@@ -1144,6 +1144,7 @@ struct pg_interval_t {
     std::tr1::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
     std::tr1::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     int64_t poolid,                             ///< [in] pool for pg
+    pg_t pgid,                                  ///< [in] pgid for pg
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );

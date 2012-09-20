@@ -1478,14 +1478,17 @@ bool pg_interval_t::check_new_interval(
   OSDMapRef osdmap,
   OSDMapRef lastmap,
   int64_t pool_id,
+  pg_t pgid,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
   // remember past interval
   if (new_acting != old_acting || new_up != old_up ||
       (!(lastmap->get_pools().count(pool_id))) ||
-      lastmap->get_pools().find(pool_id)->second.min_size !=
-      osdmap->get_pools().find(pool_id)->second.min_size) {
+      (lastmap->get_pools().find(pool_id)->second.min_size !=
+       osdmap->get_pools().find(pool_id)->second.min_size)  ||
+      pgid.is_split(lastmap->get_pg_num(pgid.pool()),
+        osdmap->get_pg_num(pgid.pool()), 0)) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
