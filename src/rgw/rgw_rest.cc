@@ -229,7 +229,7 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
   }
 }
 
-int RGWGetObj_REST::get_params()
+int RGWGetObj_ObjStore::get_params()
 {
   range_str = s->env->get("HTTP_RANGE");
   if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
@@ -241,7 +241,7 @@ int RGWGetObj_REST::get_params()
 }
 
 
-int RGWPutObj_REST::verify_params()
+int RGWPutObj_ObjStore::verify_params()
 {
   if (s->length) {
     off_t len = atoll(s->length);
@@ -253,14 +253,14 @@ int RGWPutObj_REST::verify_params()
   return 0;
 }
 
-int RGWPutObj_REST::get_params()
+int RGWPutObj_ObjStore::get_params()
 {
   supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
 
-int RGWPutObj_REST::get_data(bufferlist& bl)
+int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 {
   size_t cl;
   if (s->length) {
@@ -293,7 +293,7 @@ int RGWPutObj_REST::get_data(bufferlist& bl)
   return len;
 }
 
-int RGWPutACLs_REST::get_params()
+int RGWPutACLs_ObjStore::get_params()
 {
   size_t cl = 0;
   if (s->length)
@@ -317,7 +317,7 @@ int RGWPutACLs_REST::get_params()
   return ret;
 }
 
-int RGWInitMultipart_REST::get_params()
+int RGWInitMultipart_ObjStore::get_params()
 {
   if (!s->args.exists("uploads")) {
     ret = -ENOTSUP;
@@ -369,7 +369,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
   return 0;
 }
 
-int RGWCompleteMultipart_REST::get_params()
+int RGWCompleteMultipart_ObjStore::get_params()
 {
   upload_id = s->args.get("uploadId");
 
@@ -404,7 +404,7 @@ int RGWCompleteMultipart_REST::get_params()
   return ret;
 }
 
-int RGWListMultipart_REST::get_params()
+int RGWListMultipart_ObjStore::get_params()
 {
   upload_id = s->args.get("uploadId");
 
@@ -422,7 +422,7 @@ int RGWListMultipart_REST::get_params()
   return ret;
 }
 
-int RGWListBucketMultiparts_REST::get_params()
+int RGWListBucketMultiparts_ObjStore::get_params()
 {
   delimiter = s->args.get("delimiter");
   prefix = s->args.get("prefix");
@@ -440,7 +440,7 @@ int RGWListBucketMultiparts_REST::get_params()
   return 0;
 }
 
-int RGWDeleteMultiObj_REST::get_params()
+int RGWDeleteMultiObj_ObjStore::get_params()
 {
   bucket_name = s->bucket_name;
 
@@ -583,7 +583,7 @@ static int init_meta_info(struct req_state *s)
 
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-int RGWHandler_REST::validate_bucket_name(const string& bucket)
+int RGWHandler_ObjStore::validate_bucket_name(const string& bucket)
 {
   int len = bucket.size();
   if (len < 3) {
@@ -606,7 +606,7 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
 // is at most 1024 bytes long."
 // However, we can still have control characters and other nasties in there.
 // Just as long as they're utf-8 nasties.
-int RGWHandler_REST::validate_object_name(const string& object)
+int RGWHandler_ObjStore::validate_object_name(const string& object)
 {
   int len = object.size();
   if (len > 1024) {
@@ -641,7 +641,7 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_REST::preprocess(struct req_state *s, RGWClientIO *cio)
+int RGWHandler_ObjStore::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   s->cio = cio;
   s->request_uri = s->env->get("REQUEST_URI");
@@ -674,7 +674,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, RGWClientIO *cio)
   return 0;
 }
 
-int RGWHandler_REST::read_permissions(RGWOp *op_obj)
+int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
 {
   bool only_bucket;
 
@@ -709,7 +709,7 @@ int RGWHandler_REST::read_permissions(RGWOp *op_obj)
   return do_read_permissions(op_obj, only_bucket);
 }
 
-RGWOp *RGWHandler_REST::get_op()
+RGWOp *RGWHandler_ObjStore::get_op()
 {
   RGWOp *op;
   switch (s->op) {
@@ -745,9 +745,9 @@ RGWOp *RGWHandler_REST::get_op()
 RGWRESTMgr::RGWRESTMgr()
 {
   // order is important!
-  protocol_handlers.push_back(new RGWHandler_REST_SWIFT);
+  protocol_handlers.push_back(new RGWHandler_ObjStore_SWIFT);
   protocol_handlers.push_back(new RGWHandler_SWIFT_Auth);
-  protocol_handlers.push_back(new RGWHandler_REST_S3);
+  protocol_handlers.push_back(new RGWHandler_ObjStore_S3);
 }
 
 RGWRESTMgr::~RGWRESTMgr()
@@ -763,7 +763,7 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, RGWClientIO *cio,
 {
   RGWHandler *handler;
 
-  *init_error = RGWHandler_REST::preprocess(s, cio);
+  *init_error = RGWHandler_ObjStore::preprocess(s, cio);
   if (*init_error < 0)
     return NULL;
 
@@ -783,7 +783,7 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, RGWClientIO *cio,
   return handler;
 }
 
-void RGWHandler_REST::put_op(RGWOp *op)
+void RGWHandler_ObjStore::put_op(RGWOp *op)
 {
   delete op;
 }
