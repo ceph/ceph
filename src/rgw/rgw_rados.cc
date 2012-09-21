@@ -2306,6 +2306,9 @@ done_err:
 int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                                    rgw_obj& obj, string& tag)
 {
+  if (bucket_is_system(bucket))
+    return 0;
+
   if (state && state->obj_tag.length()) {
     int len = state->obj_tag.length();
     char buf[len + 1];
@@ -2324,7 +2327,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
 int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category)
 {
-  if (bucket.marker.empty())
+  if (bucket_is_system(bucket))
     return 0;
 
   RGWObjEnt ent;
