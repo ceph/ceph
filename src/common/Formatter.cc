@@ -366,6 +366,7 @@ void XMLFormatter::finish_pending_string()
     m_ss << escape_xml_str(m_pending_string.str().c_str())
          << "</" << m_pending_string_name << ">";
     m_pending_string_name.clear();
+    m_pending_string.str(std::string());
     if (m_pretty) {
       m_ss << "\n";
     }
