@@ -5190,6 +5190,9 @@ void ReplicatedPG::handle_push(OpRequestRef op)
 		      onreadable_sync);
   assert(r == 0);
 
+  osd->logger->inc(l_osd_push_in);
+  osd->logger->inc(l_osd_push_inb, m->ops[0].indata.length());
+
   MOSDSubOpReply *reply = new MOSDSubOpReply(
     m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   assert(entity_name_t::TYPE_OSD == m->get_connection()->peer_type);
