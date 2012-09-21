@@ -777,8 +777,3 @@ RGWHandler *RGWREST::get_handler(struct req_state *s, RGWClientIO *cio,
   return handler;
 }
 
-RGWREST::RGWREST() {
-  mgr.register_default_mgr(new RGWRESTMgr_S3);
-  mgr.register_resource("/swift", new RGWRESTMgr_SWIFT);
-  mgr.register_resource("/auth", new RGWRESTMgr_SWIFT_Auth);
-}

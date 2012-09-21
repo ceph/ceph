@@ -200,11 +200,21 @@ class RGWREST {
 
   static int preprocess(struct req_state *s, RGWClientIO *cio);
 public:
-  RGWREST();
+  RGWREST() {}
   RGWHandler *get_handler(struct req_state *s, RGWClientIO *cio,
 			  int *init_error);
   void put_handler(RGWHandler *handler) {
     mgr.put_handler(handler);
+  }
+
+  void register_resource(string resource, RGWRESTMgr *m, bool register_empty = false) {
+    if (!register_empty && resource.empty())
+      return;
+
+    mgr.register_resource(resource, m);
+  }
+  void register_default_mgr(RGWRESTMgr *m) {
+    mgr.register_default_mgr(m);
   }
 };
 
