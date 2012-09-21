@@ -1,10 +1,5 @@
-from cStringIO import StringIO
-
 import contextlib
 import logging
-import os
-import re
-import yaml
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -20,7 +15,7 @@ def setup(ctx, config):
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     for remote, roles_for_host in osds.remotes.iteritems():
         log.info('Creating %s on %s' % (log_dir,remote.name))
-        proc = remote.run(
+        remote.run(
             args=['mkdir', '-p', '-m0755', '--', log_dir],
             wait=False,
             )
@@ -32,7 +27,6 @@ def execute(ctx, config):
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = ctx.disk_config.remote_to_roles_to_dev[remote]
-        roles_to_journals = ctx.disk_config.remote_to_roles_to_journals[remote]
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             if roles_to_devs.get(id_):
                 dev = roles_to_devs[id_]

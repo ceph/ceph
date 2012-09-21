@@ -249,7 +249,7 @@ def task(ctx, config):
     # the 5th should fail.
     failed = False
     try:
-        bucket5 = connection.create_bucket(bucket_name + '5')
+        connection.create_bucket(bucket_name + '5')
     except:
         failed = True
     assert failed

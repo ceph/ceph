@@ -1,7 +1,6 @@
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
-import time
 
 
 log = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 import argparse
 import yaml
-import subprocess
 
 def parse_args():
     from teuthology.run import config_file

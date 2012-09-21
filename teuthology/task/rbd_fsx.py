@@ -1,7 +1,6 @@
 import contextlib
 import logging
 
-from ..orchestra import run
 from teuthology.parallel import parallel
 
 log = logging.getLogger(__name__)

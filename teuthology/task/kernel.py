@@ -289,7 +289,7 @@ def enable_disable_kdb(ctx, config):
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         if enable:
             log.info('Enabling kdb on {role}...'.format(role=role))
-            proc = role_remote.run(
+            role_remote.run(
                 args=[
                     'echo', 'ttyS1',
                     run.Raw('|'),
@@ -297,7 +297,7 @@ def enable_disable_kdb(ctx, config):
                     ])
         else:
             log.info('Disabling kdb on {role}...'.format(role=role))
-            proc = role_remote.run(
+            role_remote.run(
                 args=[
                     'echo', '',
                     run.Raw('|'),

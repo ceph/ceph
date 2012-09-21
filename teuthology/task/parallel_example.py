@@ -1,6 +1,5 @@
 import contextlib
 import logging
-import yaml
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -40,7 +39,7 @@ def task(ctx, config):
 
     """Take car of some yaml parsing here"""
     if config is not None and not isinstance(config, list) and not isinstance(config, dict):
-        assert(false), "task parallel_example only supports a list or dictionary for configuration"
+        assert(False), "task parallel_example only supports a list or dictionary for configuration"
     if config is None:
         config = ['client.{id}'.format(id=id_)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')] 

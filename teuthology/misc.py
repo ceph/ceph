@@ -11,7 +11,6 @@ import urllib2
 import urlparse
 import yaml
 import json
-import subprocess
 
 from teuthology import safepath
 from .orchestra import run
