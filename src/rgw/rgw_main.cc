@@ -35,6 +35,8 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
+#include "rgw_rest_admin.h"
+#include "rgw_rest_usage.h"
 #include "rgw_swift_auth.h"
 #include "rgw_swift.h"
 #include "rgw_log.h"
@@ -452,6 +454,10 @@ int main(int argc, const char **argv)
   rest.register_default_mgr(new RGWRESTMgr_S3);
   rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
   rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
+
+  RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
+  admin_resource->register_resource("/usage", new RGWRESTMgr_Usage);
+  rest.register_resource("/admin", admin_resource);
 
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size, &rest);
   process.run();
