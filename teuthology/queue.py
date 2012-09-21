@@ -38,6 +38,11 @@ describe. One job is run at a time.
         help='path in which to store logs',
         required=True,
         )
+    parser.add_argument(
+        '-t', '--tube',
+        help='which beanstalk tube to read jobs from',
+        required=True,
+        )
 
     ctx = parser.parse_args()
 
@@ -62,7 +67,7 @@ describe. One job is run at a time.
     read_config(ctx)
 
     beanstalk = connect(ctx)
-    beanstalk.watch('teuthology')
+    beanstalk.watch(ctx.tube)
     beanstalk.ignore('default')
 
     while True:

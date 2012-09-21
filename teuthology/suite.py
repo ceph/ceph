@@ -66,6 +66,11 @@ combination, and will override anything in the suite.
         help='number of times to run/queue each job'
         )
     parser.add_argument(
+        '-b', '--branch',
+        default='master',
+        help='which branch of teuthology to use',
+        )
+    parser.add_argument(
         'config',
         metavar='CONFFILE',
         nargs='*',
@@ -87,6 +92,7 @@ combination, and will override anything in the suite.
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
         '--name', args.name,
         '--num', str(args.num),
+        '--branch', args.branch,
         ]
     if args.verbose:
         base_arg.append('-v')

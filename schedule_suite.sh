@@ -69,9 +69,16 @@ fi
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor"
 
+if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null ; then
+    teuthology_branch=$ceph
+else
+    echo "branch $ceph not in teuthology.git; will use master for teuthology"
+    teuthology_branch='master'
+fi
+
 ~/src/teuthology/virtualenv/bin/teuthology-suite -v $fn \
     --collections ~/src/ceph-qa-suite/suites/$suite/* \
     --email $email \
     --timeout 21600 \
-    --name $name
-
+    --name $name \
+    --branch $teuthology_branch

@@ -228,6 +228,11 @@ def schedule():
         default=False,
         help='be more verbose',
         )
+    parser.add_argument(
+        '-b', '--branch',
+        default='master',
+        help='which branch of teuthology to use',
+        )
 
     ctx = parser.parse_args()
     if not ctx.last_in_suite:
@@ -242,7 +247,10 @@ def schedule():
     import teuthology.queue
     beanstalk = teuthology.queue.connect(ctx)
 
-    beanstalk.use('teuthology')
+    tube = 'teuthology'
+    if ctx.branch != 'master':
+        tube += '-' + ctx.branch
+    beanstalk.use(tube)
 
     if ctx.delete:
         for jobid in ctx.delete:
