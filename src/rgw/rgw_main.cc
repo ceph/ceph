@@ -33,6 +33,9 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_rest_s3.h"
+#include "rgw_rest_swift.h"
+#include "rgw_swift_auth.h"
 #include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -126,7 +129,7 @@ class RGWProcess {
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
-  RGWREST rest;
+  RGWREST *rest;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess *process;
@@ -181,9 +184,10 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, int num_threads)
+  RGWProcess(CephContext *cct, int num_threads, RGWREST *_rest)
     : m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
+      rest(_rest),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}
@@ -267,7 +271,7 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   RGWOp *op = NULL;
   int init_error = 0;
-  RGWHandler *handler = rest.get_handler(s, &client_io, &init_error);
+  RGWHandler *handler = rest->get_handler(s, &client_io, &init_error);
   if (init_error != 0) {
     abort_early(s, init_error);
     goto done;
@@ -330,7 +334,7 @@ done:
 
   if (handler)
     handler->put_op(op);
-  rest.put_handler(handler);
+  rest->put_handler(handler);
   rgwstore->destroy_context(s->obj_ctx);
   FCGX_Finish_r(fcgx);
 
@@ -443,7 +447,13 @@ int main(int argc, const char **argv)
 
   rgw_log_usage_init(g_ceph_context);
 
-  RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
+  RGWREST rest;
+
+  rest.register_default_mgr(new RGWRESTMgr_S3);
+  rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
+  rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
+
+  RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size, &rest);
   process.run();
 
   rgw_log_usage_finalize();
