@@ -1569,7 +1569,10 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
 void Monitor::no_reply(PaxosServiceMessage *req)
 {
   MonSession *session = (MonSession*)req->get_connection()->get_priv();
-  assert(session);
+  if (!session) {
+    dout(2) << "no_reply no session, dropping non-reply to " << req << " " << *req << dendl;
+    return;
+  }
   if (session->proxy_con) {
     if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
       dout(10) << "no_reply to " << req->get_source_inst() << " via mon." << req->session_mon
