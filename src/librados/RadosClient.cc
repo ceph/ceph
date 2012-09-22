@@ -71,7 +71,9 @@ librados::RadosClient::RadosClient(CephContext *cct_)
 {
 }
 
-int64_t librados::RadosClient::lookup_pool(const char *name) {
+int64_t librados::RadosClient::lookup_pool(const char *name)
+{
+  Mutex::Locker l(lock);
   int64_t ret = osdmap.lookup_pg_pool_name(name);
   if (ret < 0)
     return -ENOENT;
@@ -80,6 +82,7 @@ int64_t librados::RadosClient::lookup_pool(const char *name) {
 
 const char *librados::RadosClient::get_pool_name(int64_t pool_id)
 {
+  Mutex::Locker l(lock);
   return osdmap.get_pool_name(pool_id);
 }
 
