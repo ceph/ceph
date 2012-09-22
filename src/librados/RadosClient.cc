@@ -234,13 +234,10 @@ void librados::RadosClient::shutdown()
 
 uint64_t librados::RadosClient::get_instance_id()
 {
-  lock.Lock();
-  if (state == DISCONNECTED) {
-    lock.Unlock();
+  Mutex::Locker l(lock);
+  if (state == DISCONNECTED)
     return 0;
-  }
   uint64_t id = monclient.get_global_id();
-  lock.Unlock();
   return id;
 }
 
@@ -267,9 +264,9 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 
 bool librados::RadosClient::ms_dispatch(Message *m)
 {
+  Mutex::Locker l(lock);
   bool ret;
 
-  lock.Lock();
   if (state == DISCONNECTED) {
     ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
     m->put();
@@ -277,7 +274,6 @@ bool librados::RadosClient::ms_dispatch(Message *m)
   } else {
     ret = _dispatch(m);
   }
-  lock.Unlock();
   return ret;
 }
 
