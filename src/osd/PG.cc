@@ -1583,8 +1583,10 @@ void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
   do_pending_flush();
-  if (!op_has_sufficient_caps(op))
+  if (!op_has_sufficient_caps(op)) {
+    osd->reply_op_error(op, -EPERM);
     return;
+  }
   if (must_delay_request(op)) {
     waiting_for_map.push_back(op);
     return;
