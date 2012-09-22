@@ -255,6 +255,11 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   dout(10) << "_session_logged " << session->inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
 
+  if (piv) {
+    mds->inotable->apply_release_ids(inos);
+    assert(mds->inotable->get_version() == piv);
+  }
+
   // apply
   if (session->get_state_seq() != state_seq) {
     dout(10) << " journaled state_seq " << state_seq << " != current " << session->get_state_seq()
@@ -280,11 +285,6 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       dn->remove_client_lease(r, mds->locker);
     }
     
-    if (piv) {
-      mds->inotable->apply_release_ids(inos);
-      assert(mds->inotable->get_version() == piv);
-    }
-
     if (session->is_closing()) {
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
@@ -473,8 +473,12 @@ void Server::journal_close_session(Session *session, int state)
   version_t pv = ++mds->sessionmap.projected;
   version_t piv = 0;
 
-  interval_set<inodeno_t> both = session->prealloc_inos;
+  // release alloc and pending-alloc inos for this session
+  // and wipe out session state, in case the session close aborts for some reason
+  interval_set<inodeno_t> both;
+  both.swap(session->prealloc_inos);
   both.insert(session->pending_prealloc_inos);
+  session->pending_prealloc_inos.clear();
   if (both.size()) {
     mds->inotable->project_release_ids(both);
     piv = mds->inotable->get_projected_version();
