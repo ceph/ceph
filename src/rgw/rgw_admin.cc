@@ -1535,9 +1535,11 @@ next:
     parse_date(start_date, &start_epoch);
     parse_date(end_date, &end_epoch);
 
+    RGWStreamFlusher f(formatter, cout);
+
     int ret = RGWUsage::show(rgwstore, user_id, start_epoch, end_epoch,
 			     show_log_entries, show_log_sum, &categories,
-			     formatter);
+			     f);
     if (ret < 0) {
       cerr << "ERROR: failed to show usage" << std::endl;
       return 1;

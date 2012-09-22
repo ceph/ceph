@@ -5,7 +5,7 @@
 #include "rgw_rest_s3.h"
 
 
-class RGWHandler_Usage : public RGWHandler_ObjStore_S3 {
+class RGWHandler_Usage : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
 //  RGWOp *op_delete();
@@ -27,9 +27,6 @@ public:
   virtual ~RGWRESTMgr_Usage() {}
 
   RGWHandler *get_handler(struct req_state *s) {
-    int ret = RGWHandler_ObjStore_S3::init_from_header(s);
-    if (ret < 0)
-      return NULL;
     return new RGWHandler_Usage;
   }
 };

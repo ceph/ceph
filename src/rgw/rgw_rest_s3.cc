@@ -1041,7 +1041,7 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
-int RGWHandler_ObjStore_S3::authorize()
+int RGW_Auth_S3::authorize(struct req_state *s)
 {
   bool qsr = false;
   string auth_id;
@@ -1142,6 +1142,15 @@ int RGWHandler_ObjStore_S3::authorize()
     return -EPERM;
 
   return  0;
+}
+
+int RGWHandler_Auth_S3::init(struct req_state *state, RGWClientIO *cio)
+{
+  int ret = RGWHandler_ObjStore_S3::init_from_header(state);
+  if (ret < 0)
+    return ret;
+
+  return RGWHandler_ObjStore::init(state, cio);
 }
 
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)

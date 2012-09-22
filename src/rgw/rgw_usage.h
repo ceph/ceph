@@ -5,6 +5,7 @@
 #include <map>
 
 #include "common/Formatter.h"
+#include "rgw_formats.h"
 
 class RGWRados;
 
@@ -15,7 +16,7 @@ public:
   static int show(RGWRados *store, std::string& uid, uint64_t start_epoch,
 	          uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
 		  std::map<std::string, bool> *categories,
-	          ceph::Formatter *formatter);
+	          RGWFormatterFlusher& flusher);
 
   static int trim(RGWRados *store, std::string& uid, uint64_t start_epoch,
 	          uint64_t end_epoch);
