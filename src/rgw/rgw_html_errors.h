@@ -56,7 +56,7 @@ const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
 
-static const struct rgw_html_errors *search_err(int err_no, const struct rgw_html_errors *errs, int len)
+static inline const struct rgw_html_errors *search_err(int err_no, const struct rgw_html_errors *errs, int len)
 {
   for (int i = 0; i < len; ++i, ++errs) {
     if (err_no == errs->err_no)

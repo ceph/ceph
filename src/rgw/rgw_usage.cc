@@ -4,6 +4,7 @@
 
 #include "rgw_rados.h"
 #include "rgw_usage.h"
+#include "rgw_formats.h"
 
 using namespace std;
 
@@ -30,15 +31,18 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
 int RGWUsage::show(RGWRados *store, string& uid, uint64_t start_epoch,
 		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
 		   map<string, bool> *categories,
-		   ceph::Formatter *formatter)
+		   RGWFormatterFlusher& flusher)
 {
   uint32_t max_entries = 1000;
 
   bool is_truncated = true;
 
   RGWUsageIter usage_iter;
+  Formatter *formatter = flusher.get_formatter();
 
   map<rgw_user_bucket, rgw_usage_log_entry> usage;
+
+  flusher.start(0);
 
   formatter->open_object_section("usage");
   if (show_log_entries) {
@@ -84,7 +88,7 @@ int RGWUsage::show(RGWRados *store, string& uid, uint64_t start_epoch,
         formatter->dump_int("epoch", entry.epoch);
         dump_usage_categories_info(formatter, entry, categories);
         formatter->close_section(); // bucket
-        formatter->flush(cout);
+        flusher.flush();
       }
 
       summary_map[ub.user].aggregate(entry, categories);
@@ -117,14 +121,14 @@ int RGWUsage::show(RGWRados *store, string& uid, uint64_t start_epoch,
 
       formatter->close_section(); // user
 
-      formatter->flush(cout);
+      flusher.flush();
     }
 
     formatter->close_section(); // summary
   }
 
   formatter->close_section(); // usage
-  formatter->flush(cout);
+  flusher.flush();
 
   return 0;
 }

@@ -240,6 +240,19 @@ int RGWGetObj_ObjStore::get_params()
   return 0;
 }
 
+void RGWRESTFlusher::do_start(int ret)
+{
+  set_req_state_err(s, ret); /* no going back from here */
+  dump_errno(s);
+  dump_start(s);
+  end_header(s);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWRESTFlusher::do_flush()
+{
+  rgw_flush_formatter(s, s->formatter);
+}
 
 int RGWPutObj_ObjStore::verify_params()
 {
@@ -473,6 +486,17 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   }
 
   return ret;
+}
+
+
+void RGWRESTOp::send_response()
+{
+  if (!flusher.did_start()) {
+    set_req_state_err(s, http_ret);
+    dump_errno(s);
+    end_header(s);
+  }
+  flusher.flush();
 }
 
 static void line_unfold(const char *line, string& sdest)

@@ -3,12 +3,29 @@
 #define TIME_BUF_SIZE 128
 
 #include "rgw_op.h"
+#include "rgw_formats.h"
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
 					 ceph::Formatter *formatter);
 
 extern void rgw_flush_formatter(struct req_state *s,
                                          ceph::Formatter *formatter);
+
+
+class RGWRESTFlusher : public RGWFormatterFlusher {
+  struct req_state *s;
+protected:
+  virtual void do_flush();
+  virtual void do_start(int ret);
+public:
+  RGWRESTFlusher(struct req_state *_s) : RGWFormatterFlusher(_s->formatter), s(_s) {}
+  RGWRESTFlusher() : RGWFormatterFlusher(NULL), s(NULL) {}
+
+  void init(struct req_state *_s) {
+    s = _s;
+    set_formatter(s->formatter);
+  }
+};
 
 class RGWClientIO;
 
@@ -151,6 +168,19 @@ public:
   ~RGWDeleteMultiObj_ObjStore() {}
 
   int get_params();
+};
+
+class RGWRESTOp : public RGWOp {
+protected:
+  int http_ret;
+  RGWRESTFlusher flusher;
+public:
+  RGWRESTOp() : http_ret(0) {}
+  virtual void init(struct req_state *s, RGWHandler *dialect_handler) {
+    RGWOp::init(s, dialect_handler);
+    flusher.init(s);
+  }
+  virtual void send_response();
 };
 
 class RGWHandler_ObjStore : public RGWHandler {

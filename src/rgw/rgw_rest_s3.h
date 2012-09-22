@@ -163,6 +163,26 @@ public:
   void end_response();
 };
 
+class RGW_Auth_S3 {
+public:
+  static int authorize(struct req_state *s);
+};
+
+class RGWHandler_Auth_S3 : public RGWHandler_ObjStore {
+  friend class RGWRESTMgr_S3;
+public:
+  RGWHandler_Auth_S3() : RGWHandler_ObjStore() {}
+  virtual ~RGWHandler_Auth_S3() {}
+
+  virtual int validate_bucket_name(const string& bucket) { return 0; }
+  virtual int validate_object_name(const string& bucket) { return 0; }
+
+  virtual int init(struct req_state *state, RGWClientIO *cio);
+  virtual int authorize() {
+    return RGW_Auth_S3::authorize(s);
+  }
+};
+
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
   friend class RGWRESTMgr_S3;
 public:
@@ -174,7 +194,9 @@ public:
   int validate_bucket_name(const string& bucket);
 
   virtual int init(struct req_state *state, RGWClientIO *cio);
-  int authorize();
+  virtual int authorize() {
+    return RGW_Auth_S3::authorize(s);
+  }
 };
 
 class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {
