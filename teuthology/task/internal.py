@@ -356,7 +356,7 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'INFO: possible recursive locking detected', # FIXME see #3040
                     run.Raw('|'),
-                    'grep', '-v', 'INFO: lock held when returning to user space', # REMOVE ME when btrfs sb_internal crap is fixed
+                    'grep', '-v', 'BUG: lock held when returning to user space', # REMOVE ME when btrfs sb_internal crap is fixed
                     run.Raw('|'),
                     'head', '-n', '1',
                     ],
