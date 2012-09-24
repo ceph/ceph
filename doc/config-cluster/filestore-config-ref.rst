@@ -2,9 +2,12 @@
  Filestore Config Reference
 ============================
 
+``filestore``
 
-Extended Attributes
-===================
+:Description: IGNORE FOR NOW
+:Type: Boolean
+:Required: No
+:Default: ``false``
 
 
 ``filestore debug omap check``
@@ -13,6 +16,10 @@ Extended Attributes
 :Type: Boolean
 :Required: No
 :Default: ``0``
+
+
+Extended Attributes
+===================
 
 
 ``filestore xattr use omap``
@@ -28,7 +35,7 @@ Extended Attributes
 :Description: The maximum size of an inlined XATTR in bytes. 
 :Type: Unsigned 32-bit Integer
 :Required: No
-:Default: 512
+:Default: ``512``
 
 
 ``filestore max inline xattrs``
@@ -70,11 +77,10 @@ efficient synchronization.
 Flusher
 =======
 
-The filestore flusher forces data from large writes to be written out
-using ``sync file range``
-before the sync in order to (hopefully) reduce the cost of the
-eventual sync. In practice,
-disabling 'filestore flusher' seems to improve performance in some cases.
+The filestore flusher forces data from large writes to be written out using
+``sync file range`` before the sync in order to (hopefully) reduce the cost of
+the eventual sync. In practice, disabling 'filestore flusher' seems to improve
+performance in some cases.
 
 
 ``filestore flusher``
@@ -205,30 +211,99 @@ Extent Mapping
 :Default: ``false``
 
 
-OPTION(filestore_fiemap_threshold, OPT_INT, 4096)
+
+``filestore fiemap threshold``
+
+:Description: 
+:Type: Integer
+:Required: No
+:Default: ``4096``
 
 
+Journal
+=======
 
 
+``filestore journal parallel``
 
-//Todo:
-
-
-``filestore``
-
-:Description: IGNORE FOR NOW
+:Description: 
 :Type: Boolean
 :Required: No
 :Default: ``false``
 
 
-OPTION(filestore_journal_parallel, OPT_BOOL, false)
-OPTION(filestore_journal_writeahead, OPT_BOOL, false)
-OPTION(filestore_journal_trailing, OPT_BOOL, false)
-OPTION(filestore_merge_threshold, OPT_INT, 10)
-OPTION(filestore_split_multiple, OPT_INT, 2)
-OPTION(filestore_update_to, OPT_INT, 1000)
-OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
-OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
-OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
-OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
+``filestore journal writeahead``
+
+:Description:
+:Type: Boolean
+:Required: No
+:Default: ``false``
+
+
+``filestore journal trailing``
+
+:Description:
+:Type: Boolean
+:Required: No
+:Default: ``false``
+
+
+Misc
+====
+
+
+``filestore merge threshold``
+
+:Description: 
+:Type: Integer
+:Required: No
+:Default: ``10``
+
+
+``filestore split multiple``
+
+:Description: 
+:Type: Integer
+:Required: No
+:Default: ``2``
+
+
+``filestore update to``
+
+:Description: 
+:Type: Integer
+:Required: No
+:Default: ``1000``
+
+
+``filestore blackhole``
+
+:Description: Drop any new transactions on the floor.
+:Type: Boolean
+:Required: No
+:Default: ``false``
+
+
+``filestore dump file``
+
+:Description: File onto which store transaction dumps?
+:Type: Boolean
+:Required: No
+:Default: ``false``
+
+
+``filestore kill at``
+
+:Description: inject a failure at the n'th opportunity
+:Type: String
+:Required: No
+:Default: ``false``
+
+
+``filestore fail eio``
+
+:Description: Fail/Crash on eio.
+:Type: Boolean
+:Required: No
+:Default: ``true``
+
