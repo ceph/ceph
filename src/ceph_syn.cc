@@ -101,6 +101,7 @@ int main(int argc, const char **argv, char *envp[])
   for (int i = 0; i < g_conf->num_client; ++i) {
     // wait for messenger to finish
     delete mclients[i];
+    messengers[i]->shutdown();
     messengers[i]->wait();
     delete messengers[i];
   }

@@ -141,7 +141,12 @@ public:
     rank.start_rank();
     
     client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1)), &monmap);
-    client->init();
+    r = client->init();
+    if (r < 0) {
+      cerr << "ldceph init: client init failed " << r << std::endl;
+      delete client;
+    }
+
     r = client->mount();
     if (r < 0) {
       // failure

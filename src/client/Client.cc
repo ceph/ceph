@@ -286,7 +286,6 @@ int Client::init()
     client_lock.Unlock();
     objectcacher->stop();
     monclient->shutdown();
-    messenger->shutdown();
     return r;
   }
 
@@ -325,7 +324,6 @@ void Client::shutdown()
   objecter->shutdown();
   client_lock.Unlock();
   monclient->shutdown();
-  messenger->shutdown();
 
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
