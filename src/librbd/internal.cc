@@ -378,6 +378,7 @@ namespace librbd {
       if (images.size()) {
 	last_read = images.rbegin()->first;
       }
+      r = images.size();
     } while (r == max_read);
 
     return 0;
