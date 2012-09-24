@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <uuid/uuid.h>
+#include <unistd.h>
 }
 
 struct uuid_d {
