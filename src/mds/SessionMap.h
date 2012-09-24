@@ -248,7 +248,7 @@ public:
 
   bool is_any_state(int state) {
     map<int,xlist<Session*>* >::iterator p = by_state.find(state);
-    if (p == by_state.end())
+    if (p == by_state.end() || p->second->empty())
       return false;
     return true;
   }
