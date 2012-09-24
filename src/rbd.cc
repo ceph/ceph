@@ -869,6 +869,7 @@ static int read_file(const char *filename, char *buf, size_t bufsize)
     int r = safe_read(fd, buf, bufsize);
     if (r < 0) {
       cerr << "Warning: could not read " << filename << ": " << cpp_strerror(-r) << std::endl;
+      close(fd);
       return r;
     }
 
