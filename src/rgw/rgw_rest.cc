@@ -605,6 +605,37 @@ static int init_meta_info(struct req_state *s)
   return 0;
 }
 
+int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_type, bool configurable)
+{
+  s->format = default_type;
+  if (configurable) {
+    string format_str = s->args.get("format");
+    if (format_str.compare("xml") == 0) {
+      s->format = RGW_FORMAT_XML;
+    } else if (format_str.compare("json") == 0) {
+      s->format = RGW_FORMAT_JSON;
+    }
+  }
+
+  switch (s->format) {
+    case RGW_FORMAT_PLAIN:
+      s->formatter = new RGWFormatter_Plain;
+      break;
+    case RGW_FORMAT_XML:
+      s->formatter = new XMLFormatter(false);
+      break;
+    case RGW_FORMAT_JSON:
+      s->formatter = new JSONFormatter(false);
+      break;
+    default:
+      return -EINVAL;
+
+  };
+  s->formatter->reset();
+
+  return 0;
+}
+
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
 int RGWHandler_ObjStore::validate_bucket_name(const string& bucket)

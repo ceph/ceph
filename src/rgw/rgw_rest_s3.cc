@@ -766,15 +766,10 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
     return new RGWInitMultipart_ObjStore_S3;
 }
 
-int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s)
+int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_formatter, bool configurable_format)
 {
   string req;
   string first;
-
-  /* this is the default, might change in a few lines */
-  s->format = RGW_FORMAT_XML;
-  s->formatter = new XMLFormatter(false);
-  s->formatter->reset();
 
   int pos;
   if (g_conf->rgw_dns_name.length() && s->host) {
@@ -805,6 +800,11 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s)
 
   s->args.set(p);
   s->args.parse();
+
+  /* must be called after the args parsing */
+  int ret = allocate_formatter(s, default_formatter, configurable_format);
+  if (ret < 0)
+    return ret;
 
   if (*req_name != '/')
     return 0;
@@ -1146,7 +1146,7 @@ int RGW_Auth_S3::authorize(struct req_state *s)
 
 int RGWHandler_Auth_S3::init(struct req_state *state, RGWClientIO *cio)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(state);
+  int ret = RGWHandler_ObjStore_S3::init_from_header(state, RGW_FORMAT_JSON, true);
   if (ret < 0)
     return ret;
 
@@ -1155,7 +1155,7 @@ int RGWHandler_Auth_S3::init(struct req_state *state, RGWClientIO *cio)
 
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s);
+  int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
