@@ -212,6 +212,40 @@ int parse_time(const char *time_str, time_t *time)
   return 0;
 }
 
+int parse_date(string& date, uint64_t *epoch, string *out_date, string *out_time)
+{
+  struct tm tm;
+
+  memset(&tm, 0, sizeof(tm));
+
+  const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
+  if (p) {
+    if (*p == ' ') {
+      p++;
+      if (!strptime(p, " %H:%M:%S", &tm))
+	return -EINVAL;
+    }
+  } else {
+    return -EINVAL;
+  }
+  time_t t = timegm(&tm);
+  if (epoch)
+    *epoch = (uint64_t)t;
+
+  if (out_date) {
+    char buf[32];
+    strftime(buf, sizeof(buf), "%F", &tm);
+    *out_date = buf;
+  }
+  if (out_time) {
+    char buf[32];
+    strftime(buf, sizeof(buf), "%T", &tm);
+    *out_time = buf;
+  }
+
+  return 0;
+}
+
 /*
  * calculate the sha1 value of a given msg and key
  */
@@ -361,7 +395,7 @@ int XMLArgs::parse()
   return 0;
 }
 
-string& XMLArgs::get(string& name, bool *exists)
+string& XMLArgs::get(const string& name, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
