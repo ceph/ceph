@@ -16,4 +16,4 @@ For example::
    mandatory when you have Ceph authentication running. See `Authentication`_
    for details.
    
-   .. _Authentication: ../../config-cluster/authentication/
+   .. _Authentication: ../../cluster-ops/authentication/
