@@ -634,6 +634,10 @@ protected:
 
   // pg waiters
   bool flushed;
+
+  // Ops waiting on backfill_pos to change
+  list<OpRequestRef> waiting_for_backfill_pos;
+
   list<OpRequestRef> waiting_for_map;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
