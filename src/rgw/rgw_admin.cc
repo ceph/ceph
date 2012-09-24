@@ -541,37 +541,6 @@ enum ObjectKeyType {
   KEY_TYPE_S3,
 };
 
-static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL)
-{
-  struct tm tm;
-
-  memset(&tm, 0, sizeof(tm));
-
-  const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
-  if (p) {
-    if (*p == ' ') {
-      p++;
-      strptime(p, " %H:%M:%S", &tm);
-    }
-  } else {
-    return;
-  }
-  time_t t = timegm(&tm);
-  if (epoch)
-    *epoch = (uint64_t)t;
-
-  if (out_date) {
-    char buf[32];
-    strftime(buf, sizeof(buf), "%F", &tm);
-    *out_date = buf;
-  }
-  if (out_time) {
-    char buf[32];
-    strftime(buf, sizeof(buf), "%T", &tm);
-    *out_time = buf;
-  }
-}
-
 static int remove_object(rgw_bucket& bucket, std::string& object)
 {
   int ret = -EINVAL;
@@ -1238,8 +1207,12 @@ int main(int argc, char **argv)
       return usage();
     }
     string parsed_date, parsed_time;
-    parse_date(date, NULL, &parsed_date, &parsed_time);
-    int r = store->remove_temp_objects(parsed_date, parsed_time);
+    int r = parse_date(date, NULL, &parsed_date, &parsed_time);
+    if (r < 0) {
+      cerr << "failure parsing date: " << cpp_strerror(r) << std::endl;
+      return 1;
+    }
+    r = store->remove_temp_objects(parsed_date, parsed_time);
     if (r < 0) {
       cerr << "failure removing temp objects: " << cpp_strerror(r) << std::endl;
       return 1;
@@ -1532,12 +1505,20 @@ next:
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
 
-    parse_date(start_date, &start_epoch);
-    parse_date(end_date, &end_epoch);
+    int ret = parse_date(start_date, &start_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse start date" << std::endl;
+      return 1;
+    }
+    ret = parse_date(end_date, &end_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse end date" << std::endl;
+      return 1;
+    }
 
     RGWStreamFlusher f(formatter, cout);
 
-    int ret = RGWUsage::show(rgwstore, user_id, start_epoch, end_epoch,
+    ret = RGWUsage::show(rgwstore, user_id, start_epoch, end_epoch,
 			     show_log_entries, show_log_sum, &categories,
 			     f);
     if (ret < 0) {
@@ -1555,10 +1536,18 @@ next:
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
 
-    parse_date(start_date, &start_epoch);
-    parse_date(end_date, &end_epoch);
+    int ret = parse_date(start_date, &start_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse start date" << std::endl;
+      return 1;
+    }
+    ret = parse_date(end_date, &end_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse end date" << std::endl;
+      return 1;
+    }
 
-    int ret = RGWUsage::trim(rgwstore, user_id, start_epoch, end_epoch);
+    ret = RGWUsage::trim(rgwstore, user_id, start_epoch, end_epoch);
     if (ret < 0) {
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;

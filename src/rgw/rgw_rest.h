@@ -11,6 +11,16 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
                                          ceph::Formatter *formatter);
 
+class RESTArgs {
+public:
+  static int get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed = NULL);
+  static int get_uint64(struct req_state *s, const string& name, uint64_t def_val, uint64_t *val, bool *existed = NULL);
+  static int get_int64(struct req_state *s, const string& name, int64_t def_val, int64_t *val, bool *existed = NULL);
+  static int get_time(struct req_state *s, const string& name, const utime_t& def_val, utime_t *val, bool *existed = NULL);
+  static int get_epoch(struct req_state *s, const string& name, uint64_t def_val, uint64_t *epoch, bool *existed = NULL);
+  static int get_bool(struct req_state *s, const string& name, bool def_val, bool *val, bool *existed = NULL);
+};
+
 
 class RGWRESTFlusher : public RGWFormatterFlusher {
   struct req_state *s;

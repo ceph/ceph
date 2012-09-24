@@ -2,10 +2,10 @@
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
 
-class RGWOp_Usage : public RGWRESTOp {
+class RGWOp_Usage_Get : public RGWRESTOp {
 
 public:
-  RGWOp_Usage() {}
+  RGWOp_Usage_Get() {}
 
   int verify_permission() { return 0; }
   void execute();
@@ -13,14 +13,26 @@ public:
   virtual const char *name() { return "get_usage"; }
 };
 
-void RGWOp_Usage::execute() {
+void RGWOp_Usage_Get::execute() {
   map<std::string, bool> categories;
-  http_ret = RGWUsage::show(rgwstore, s->user.user_id, 0, (uint64_t)-1, true, true, &categories, flusher);
+
+  string uid;
+  uint64_t start, end;
+  bool show_entries;
+  bool show_summary;
+
+  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_epoch(s, "start", 0, &start);
+  RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
+  RESTArgs::get_bool(s, "show-entries", true, &show_entries);
+  RESTArgs::get_bool(s, "show-summary", true, &show_summary);
+
+  http_ret = RGWUsage::show(rgwstore, uid, start, end, show_entries, show_summary, &categories, flusher);
 }
 
 RGWOp *RGWHandler_Usage::op_get()
 {
-  return new RGWOp_Usage;
+  return new RGWOp_Usage_Get;
 };
 
 

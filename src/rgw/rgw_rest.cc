@@ -240,6 +240,149 @@ int RGWGetObj_ObjStore::get_params()
   return 0;
 }
 
+int RESTArgs::get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed)
+{
+  bool exists;
+  *val = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  return 0;
+}
+
+int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_val, uint64_t *val, bool *existed)
+{
+  bool exists;
+  string sval = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  char *end;
+
+  *val = (uint64_t)strtoull(sval.c_str(), &end, 10);
+  if (*val == ULLONG_MAX)
+    return -EINVAL;
+
+  if (*end)
+    return -EINVAL;
+
+  return 0;
+}
+
+int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val, int64_t *val, bool *existed)
+{
+  bool exists;
+  string sval = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  char *end;
+
+  *val = (int64_t)strtoll(sval.c_str(), &end, 10);
+  if (*val == LLONG_MAX)
+    return -EINVAL;
+
+  if (*end)
+    return -EINVAL;
+
+  return 0;
+}
+
+int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& def_val, utime_t *val, bool *existed)
+{
+  bool exists;
+  string sval = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  uint64_t epoch;
+
+  int r = parse_date(sval, &epoch);
+  if (r < 0)
+    return r;
+
+  *val = utime_t(epoch, 0);
+
+  return 0;
+}
+
+int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_val, uint64_t *epoch, bool *existed)
+{
+  bool exists;
+  string date = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *epoch = def_val;
+    return 0;
+  }
+
+  int r = parse_date(date, epoch);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RESTArgs::get_bool(struct req_state *s, const string& name, bool def_val, bool *val, bool *existed)
+{
+  bool exists;
+  string sval = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  const char *str = sval.c_str();
+
+  if (sval.empty() ||
+      strcasecmp(str, "true") == 0 ||
+      sval.compare("1") == 0) {
+    *val = true;
+    return 0;
+  }
+
+  if (strcasecmp(str, "false") != 0 &&
+      sval.compare("0") != 0) {
+    *val = def_val;
+    return -EINVAL;
+  }
+
+  *val = false;
+  return 0;
+}
+
+
 void RGWRESTFlusher::do_start(int ret)
 {
   set_req_state_err(s, ret); /* no going back from here */
