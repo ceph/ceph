@@ -17,7 +17,10 @@
 
 namespace librbd {
 
-  AioRequest::AioRequest() {}
+  AioRequest::AioRequest() :
+    m_ictx(NULL), m_image_ofs(0), m_block_ofs(0), m_len(0),
+    m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
+    m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t image_ofs, size_t len,
 			 librados::snap_t snap_id,
@@ -95,7 +98,8 @@ namespace librbd {
     return r;
   }
 
-  AbstractWrite::AbstractWrite() {}
+  AbstractWrite::AbstractWrite() :
+    m_state(LIBRBD_AIO_WRITE_FINAL), m_has_parent(false) {}
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
 			       uint64_t image_ofs, size_t len,
 			       librados::snap_t snap_id, Context *completion,
