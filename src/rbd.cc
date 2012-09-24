@@ -1375,6 +1375,12 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
 
+  if (opt_cmd == OPT_UNMAP && !devpath) {
+    cerr << "error: device path was not specified" << std::endl;
+    usage();
+    return EXIT_FAILURE;
+  }
+
   // do this unconditionally so we can parse pool/image@snapshot into
   // the relevant parts
   set_pool_image_name(poolname, imgname, (char **)&poolname,
