@@ -318,9 +318,15 @@ string SyntheticClient::get_sarg(int seq)
 int SyntheticClient::run()
 { 
   dout(15) << "initing" << dendl;
-  client->init();
+  int err = client->init();
+  if (err < 0) {
+    char buf[80];
+    dout(0) << "failed to initialize: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
+    return -1;
+  }
+
   dout(15) << "mounting" << dendl;
-  int err = client->mount("");
+  err = client->mount("");
   if (err < 0) {
     char buf[80];
     dout(0) << "failed to mount: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
