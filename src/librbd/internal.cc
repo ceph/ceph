@@ -111,7 +111,7 @@ namespace librbd {
     info.size = ictx->get_image_size(ictx->snap_id);
     ictx->snap_lock.Unlock();
     ictx->md_lock.Unlock();
-    info.obj_size = 1 << obj_order;
+    info.obj_size = 1ULL << obj_order;
     info.num_objs = howmany(info.size, get_block_size(obj_order));
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
@@ -140,26 +140,26 @@ namespace librbd {
     iss.ignore(object_prefix.length() + 1);
     uint64_t num, offset;
     iss >> std::hex >> num;
-    offset = num * (1 << order);
+    offset = num * (1ULL << order);
     return offset;
   }
 
   uint64_t get_max_block(uint64_t size, uint8_t obj_order)
   {
-    uint64_t block_size = 1 << obj_order;
+    uint64_t block_size = 1ULL << obj_order;
     uint64_t numseg = (size + block_size - 1) >> obj_order;
     return numseg;
   }
 
   uint64_t get_block_ofs(uint8_t order, uint64_t ofs)
   {
-    uint64_t block_size = 1 << order;
+    uint64_t block_size = 1ULL << order;
     return ofs & (block_size - 1);
   }
 
   uint64_t get_block_size(uint8_t order)
   {
-    return 1 << order;
+    return 1ULL << order;
   }
 
   uint64_t get_block_num(uint8_t order, uint64_t ofs)
