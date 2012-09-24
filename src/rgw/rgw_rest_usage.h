@@ -8,7 +8,7 @@
 class RGWHandler_Usage : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
-//  RGWOp *op_delete();
+  RGWOp *op_delete();
 public:
   RGWHandler_Usage() {}
   virtual ~RGWHandler_Usage() {}
