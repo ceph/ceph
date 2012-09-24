@@ -185,6 +185,21 @@ void OSDService::pg_stat_queue_dequeue(PG *pg)
   osd->pg_stat_queue_dequeue(pg);
 }
 
+void OSDService::shutdown()
+{
+  watch_lock.Lock();
+  watch_timer.shutdown();
+  watch_lock.Unlock();
+
+  delete watch;
+}
+
+void OSDService::init()
+{
+  watch_timer.init();
+  watch = new Watch();
+}
+
 ObjectStore *OSD::create_object_store(const std::string &dev, const std::string &jdev)
 {
   struct stat st;
@@ -798,8 +813,6 @@ int OSD::init()
   Mutex::Locker lock(osd_lock);
 
   timer.init();
-  service.watch_timer.init();
-  service.watch = new Watch();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -833,7 +846,6 @@ int OSD::init()
     if (r < 0)
       return r;
   }
-  service.publish_superblock(superblock);
 
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
@@ -845,8 +857,6 @@ int OSD::init()
     return -EINVAL;
   }
   osdmap = get_map(superblock.current_epoch);
-  service.publish_map(osdmap);
-
   check_osdmap_features();
 
   bind_epoch = osdmap->get_epoch();
@@ -922,6 +932,9 @@ int OSD::init()
                                          "show slowest recent ops");
   assert(r == 0);
 
+  service.init();
+  service.publish_map(osdmap);
+  service.publish_superblock(superblock);
   return 0;
 }
 
@@ -1016,6 +1029,7 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
+  service.shutdown();
   g_ceph_context->_conf->set_val("debug_osd", "100");
   g_ceph_context->_conf->set_val("debug_journal", "100");
   g_ceph_context->_conf->set_val("debug_filestore", "100");
@@ -1027,10 +1041,6 @@ int OSD::shutdown()
   state = STATE_STOPPING;
 
   timer.shutdown();
-
-  service.watch_lock.Lock();
-  service.watch_timer.shutdown();
-  service.watch_lock.Unlock();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
@@ -1132,8 +1142,6 @@ int OSD::shutdown()
   hbserver_messenger->shutdown();
 
   monc->shutdown();
-
-  delete service.watch;
 
   osd_lock.Unlock();
   return r;
