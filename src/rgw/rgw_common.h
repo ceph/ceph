@@ -61,6 +61,7 @@ using ceph::crypto::MD5;
 #define RGW_MAX_PENDING_CHUNKS  16
 #define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
 
+#define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
 
