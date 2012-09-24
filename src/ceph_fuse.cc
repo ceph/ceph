@@ -130,14 +130,22 @@ int main(int argc, const char **argv, const char *envp[]) {
       g_ceph_context->_log->start();
 
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
-    messenger->start();
+    int r = messenger->start();
+    if (r < 0) {
+      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      goto out_messenger_start_failed;
+    }
 
     // start client
-    client->init();
+    r = client->init();
+    if (r < 0) {
+      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      goto out_init_failed;
+    }
     
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    int r = client->mount(g_conf->client_mountpoint.c_str());
+    r = client->mount(g_conf->client_mountpoint.c_str());
     if (r < 0) {
       cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_shutdown;
@@ -152,11 +160,12 @@ int main(int argc, const char **argv, const char *envp[]) {
     
   out_shutdown:
     client->shutdown();
-    delete client;
-    
+  out_init_failed:
     // wait for messenger to finish
     messenger->wait();
-
+  out_messenger_start_failed:
+    delete client;
+    
     if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
       static int foo = 0;
