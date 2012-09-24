@@ -38,6 +38,7 @@ namespace librbd {
       wctx(NULL),
       refresh_seq(0),
       last_refresh(0),
+      last_header_version(0),
       md_lock("librbd::ImageCtx::md_lock"),
       cache_lock("librbd::ImageCtx::cache_lock"),
       snap_lock("librbd::ImageCtx::snap_lock"),
@@ -460,7 +461,20 @@ namespace librbd {
   int ImageCtx::register_watch() {
     assert(!wctx);
     wctx = new WatchCtx(this);
-    return md_ctx.watch(header_oid, 0, &(wctx->cookie), wctx);
+
+    int r = 0;
+    do {
+      md_lock.Lock();
+      if (r == -ERANGE)
+	ictx_refresh(this);
+      uint64_t last_read = last_header_version;
+      md_lock.Unlock();
+
+      md_ctx.set_assert_version(last_read);
+      r = md_ctx.watch(header_oid, 0, &(wctx->cookie), wctx);
+      ldout(cct, 20) << "watching header object returned " << r << dendl;
+    } while (r == -ERANGE);
+    return r;
   }
 
   void ImageCtx::unregister_watch() {
