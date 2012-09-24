@@ -1483,6 +1483,9 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   std::list<std::string> pools;
   client->pool_list(pools);
 
+  if (!buf)
+    return -EINVAL;
+
   char *b = buf;
   if (b)
     memset(b, 0, len);
