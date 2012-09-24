@@ -1039,6 +1039,8 @@ public:
   bool is_missing_object(const hobject_t& oid);
   void wait_for_missing_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
+  void wait_for_backfill_pos(OpRequestRef op);
+  void release_waiting_for_backfill_pos();
 
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
