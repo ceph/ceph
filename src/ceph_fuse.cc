@@ -162,6 +162,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     client->shutdown();
   out_init_failed:
     // wait for messenger to finish
+    messenger->shutdown();
     messenger->wait();
   out_messenger_start_failed:
     delete client;

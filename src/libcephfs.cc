@@ -118,6 +118,7 @@ public:
       client = NULL;
     }
     if (messenger) {
+      messenger->shutdown();
       messenger->wait();
       delete messenger;
       messenger = NULL;
