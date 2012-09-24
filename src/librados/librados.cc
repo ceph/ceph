@@ -1113,11 +1113,13 @@ int librados::Rados::conf_set(const char *option, const char *value)
 
 int librados::Rados::conf_get(const char *option, std::string &val)
 {
-  char *str;
+  char *str = NULL;
   md_config_t *conf = client->cct->_conf;
   int ret = conf->get_val(option, &str, -1);
-  if (ret)
+  if (ret) {
+    free(str);
     return ret;
+  }
   val = str;
   free(str);
   return 0;
