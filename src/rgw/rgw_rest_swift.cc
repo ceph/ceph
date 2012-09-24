@@ -720,18 +720,9 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
     return -ENOENT;
   }
 
-  s->formatter = new RGWFormatter_Plain;
-  string format_str = s->args.get("format");
-  if (format_str.compare("xml") == 0) {
-    s->format = RGW_FORMAT_XML;
-    delete s->formatter;
-    s->formatter = new XMLFormatter(false);
-  } else if (format_str.compare("json") == 0) {
-    s->format = RGW_FORMAT_JSON;
-    delete s->formatter;
-    s->formatter = new JSONFormatter(false);
-  }
-  s->formatter->reset();
+  int ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
+  if (ret < 0)
+    return ret;
 
   string ver;
 

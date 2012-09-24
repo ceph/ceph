@@ -186,7 +186,7 @@ public:
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
   friend class RGWRESTMgr_S3;
 public:
-  static int init_from_header(struct req_state *s);
+  static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
   RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore_S3() {}
