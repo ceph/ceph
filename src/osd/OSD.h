@@ -315,6 +315,9 @@ public:
   void pg_stat_queue_enqueue(PG *pg);
   void pg_stat_queue_dequeue(PG *pg);
 
+  void init();
+  void shutdown();
+
   OSDService(OSD *osd);
 };
 class OSD : public Dispatcher {
