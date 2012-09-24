@@ -50,6 +50,8 @@ namespace librbd {
     md_ctx.dup(p);
     data_ctx.dup(p);
 
+    memset(&header, 0, sizeof(header));
+
     string pname = string("librbd-") + id + string("-") +
       data_ctx.get_pool_name() + string("/") + name;
     if (snap) {
