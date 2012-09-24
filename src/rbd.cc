@@ -589,6 +589,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   if (r < 0) {
     r = -errno;
     cerr << "stat error " << path << std::endl;
+    close(fd);
     return r;
   }
   if (stat_buf.st_size)
@@ -598,6 +599,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     r = get_block_device_size(fd, &size);
     if (r < 0) {
       cerr << "unable to get size of file/block device: " << cpp_strerror(r) << std::endl;
+      close(fd);
       return r;
     }
   }
@@ -607,12 +609,14 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   r = do_create(rbd, io_ctx, imgname, size, order, format, features);
   if (r < 0) {
     cerr << "image creation failed" << std::endl;
+    close(fd);
     return r;
   }
   librbd::Image image;
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     cerr << "failed to open image" << std::endl;
+    close(fd);
     return r;
   }
   fsync(fd); /* flush it first, otherwise extents information might not have been flushed yet */
@@ -626,6 +630,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
     if (!fiemap) {
       cerr << "Failed to allocate fiemap, not enough memory." << std::endl;
+      close(fd);
       return -ENOMEM;
     }
     fiemap->fm_start = 0;
@@ -720,6 +725,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   else
     pc.finish();
   free(fiemap);
+  close(fd);
 
   return r;
 }
