@@ -140,12 +140,6 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 	peer_missing[peer].missing.count(soid))
       return true;
 
-    // If soid == backfill_pos, we may implicitly write to
-    // the largest snap of soid for make_writeable.
-    if (peer == backfill_target &&
-	backfill_pos == soid)
-      return true;
-
     // Object is degraded if after last_backfill AND
     // we have are backfilling it
     if (peer == backfill_target &&
@@ -185,6 +179,16 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   }
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed();
+}
+
+void ReplicatedPG::wait_for_backfill_pos(OpRequestRef op)
+{
+  waiting_for_backfill_pos.push_back(op);
+}
+
+void ReplicatedPG::release_waiting_for_backfill_pos()
+{
+  requeue_ops(waiting_for_backfill_pos);
 }
 
 bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
@@ -1193,6 +1197,7 @@ void ReplicatedPG::do_scan(OpRequestRef op)
 
       backfill_pos = backfill_info.begin > peer_backfill_info.begin ?
 	peer_backfill_info.begin : backfill_info.begin;
+      release_waiting_for_backfill_pos();
       dout(10) << " backfill_pos now " << backfill_pos << dendl;
 
       assert(waiting_on_backfill);
@@ -5912,6 +5917,7 @@ void ReplicatedPG::on_change()
   context_registry_on_change();
 
   // requeue object waiters
+  requeue_ops(waiting_for_backfill_pos);
   requeue_object_waiters(waiting_for_missing_object);
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
@@ -6535,6 +6541,7 @@ int ReplicatedPG::recover_backfill(int max)
     push_backfill_object(i->first, i->second.first, i->second.second, backfill_target);
   }
 
+  release_waiting_for_backfill_pos();
   dout(5) << "backfill_pos is " << backfill_pos << " and pinfo.last_backfill is "
 	  << pinfo.last_backfill << dendl;
   for (set<hobject_t>::iterator i = backfills_in_flight.begin();
