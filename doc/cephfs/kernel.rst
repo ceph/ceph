@@ -31,4 +31,4 @@ To unmount the Ceph file system, you may use the ``umount`` command. For example
 See `mount.ceph`_ for details.
 
 .. _mount.ceph: ../../man/8/mount.ceph/
-.. _Authentication: ../../config-cluster/authentication/
+.. _Authentication: ../../cluster-ops/authentication/
