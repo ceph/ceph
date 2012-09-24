@@ -268,7 +268,7 @@ void Client::dump_cache()
 
 int Client::init() 
 {
-  Mutex::Locker lock(client_lock);
+  client_lock.Lock();
   assert(!initialized);
 
   timer.init();
@@ -279,8 +279,15 @@ int Client::init()
   messenger->add_dispatcher_head(this);
 
   int r = monclient->init();
-  if (r < 0)
+  if (r < 0) {
+    // need to do cleanup because we're in an intermediate init state
+    timer.shutdown();
+    client_lock.Unlock();
+    objectcacher->stop();
+    monclient->shutdown();
+    messenger->shutdown();
     return r;
+  }
 
   objecter->init();
 
@@ -300,6 +307,7 @@ int Client::init()
   cct->get_perfcounters_collection()->add(logger);
 
   initialized = true;
+  client_lock.Unlock();
   return r;
 }
 
