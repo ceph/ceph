@@ -1,6 +1,7 @@
 =================
  Welcome to Ceph
 =================
+
 Ceph uniquely delivers **object, block, and file storage in one unified
 system**. Ceph is highly reliable, easy to manage, and free. The power of Ceph
 can transform your company’s IT infrastructure and your ability to manage vast
