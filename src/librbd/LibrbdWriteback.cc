@@ -46,7 +46,7 @@ namespace librbd {
   class C_Read : public Context {
   public:
     C_Read(Context *real_context, bufferlist *pbl)
-      : m_ctx(real_context), m_out_bl(pbl) {}
+      : m_ctx(real_context), m_req(NULL), m_out_bl(pbl) {}
     virtual ~C_Read() {}
     virtual void finish(int r) {
       if (r >= 0)
