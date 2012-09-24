@@ -1497,6 +1497,7 @@ reprotect_and_return_err:
 	    lderr(cct) << "Error reading header: " << cpp_strerror(r) << dendl;
 	    return r;
 	  }
+	  ictx->last_header_version = ictx->md_ctx.get_last_version();
 	  r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
 					    &snap_names, &snap_sizes, &new_snapc);
 	  if (r < 0) {
@@ -1533,6 +1534,7 @@ reprotect_and_return_err:
 			 << dendl;
 	      return r;
 	    }
+	    ictx->last_header_version = ictx->md_ctx.get_last_version();
 
 	    uint64_t unsupported = incompatible_features & ~RBD_FEATURES_ALL;
 	    if (unsupported) {
