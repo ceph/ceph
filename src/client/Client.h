@@ -43,6 +43,8 @@ using namespace __gnu_cxx;
 #include "common/Mutex.h"
 #include "common/Timer.h"
 
+#include "common/compiler_extensions.h"
+
 #include "osdc/ObjectCacher.h"
 
 class MDSMap;
@@ -371,7 +373,7 @@ protected:
 
   inodeno_t get_root_ino();
 
-  int init();
+  int init()  WARN_UNUSED_RESULT;
   void shutdown();
 
   // messaging

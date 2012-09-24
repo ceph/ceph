@@ -23,7 +23,8 @@
 // GCC
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #else
-// some other compiler
+// some other compiler - just make it a no-op
+#define WARN_UNUSED_RESULT
 #endif
 
 #endif
