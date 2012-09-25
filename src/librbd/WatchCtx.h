@@ -21,7 +21,8 @@ namespace librbd {
     uint64_t cookie;
     WatchCtx(ImageCtx *ctx) : ictx(ctx),
 			      valid(true),
-			      lock("librbd::WatchCtx") {}
+			      lock("librbd::WatchCtx"),
+			      cookie(0) {}
     virtual ~WatchCtx() {}
     void invalidate();
     virtual void notify(uint8_t opcode, uint64_t ver, ceph::bufferlist& bl);
