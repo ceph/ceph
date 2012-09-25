@@ -1325,6 +1325,7 @@ main(int argc, char **argv)
 			if (monitorend == 0)
 				monitorend = -1; /* aka infinity */
 			debug = 1;
+			break;
 		case 'n':
 			sizechecks = 0;
 			break;
