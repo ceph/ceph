@@ -21,7 +21,8 @@ namespace librbd {
   typedef enum {
     AIO_TYPE_READ = 0,
     AIO_TYPE_WRITE,
-    AIO_TYPE_DISCARD
+    AIO_TYPE_DISCARD,
+    AIO_TYPE_NONE,
   } aio_type_t;
 
   /**
@@ -54,7 +55,8 @@ namespace librbd {
     AioCompletion() : lock("AioCompletion::lock", true),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL), pending_count(1),
-		      ref(1), released(false) { 
+		      ref(1), released(false), ictx(NULL),
+		      aio_type(AIO_TYPE_NONE) {
     }
     ~AioCompletion() {
     }
@@ -104,7 +106,9 @@ namespace librbd {
 	ictx->perfcounter->finc(l_librbd_aio_wr_latency, elapsed); break;
       case AIO_TYPE_DISCARD:
 	ictx->perfcounter->finc(l_librbd_aio_discard_latency, elapsed); break;
-      default: break;
+      default:
+	lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
+	break;
       }
       done = true;
       cond.Signal();
@@ -152,7 +156,7 @@ namespace librbd {
   class C_AioRead : public Context {
   public:
     C_AioRead(CephContext *cct, AioCompletion *completion, char *out_buf)
-      : m_cct(cct), m_completion(completion), m_out_buf(out_buf) {}
+      : m_cct(cct), m_completion(completion), m_req(NULL), m_out_buf(out_buf) {}
     virtual ~C_AioRead() {}
     virtual void finish(int r);
     void set_req(AioRead *req) {
