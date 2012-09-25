@@ -39,6 +39,8 @@ void _usage()
   cerr << "  user rm                    remove user\n";
   cerr << "  user suspend               suspend a user\n";
   cerr << "  user enable                reenable user after suspension\n";
+  cerr << "  caps add                   add user capabilities\n";
+  cerr << "  caps rm                    remove user capabilities\n";
   cerr << "  subuser create             create a new subuser\n" ;
   cerr << "  subuser modify             modify subuser\n";
   cerr << "  subuser rm                 remove subuser\n";
@@ -97,6 +99,7 @@ void _usage()
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
   cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
+  cerr << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
   cerr << "\n";
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
@@ -147,6 +150,8 @@ enum {
   OPT_OBJECT_RM,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
+  OPT_CAPS_ADD,
+  OPT_CAPS_RM,
 };
 
 static uint32_t str_to_perm(const char *str)
@@ -220,6 +225,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "temp") == 0 ||
+      strcmp(cmd, "caps") == 0 ||
       strcmp(cmd, "gc") == 0) {
     *need_more = true;
     return 0;
@@ -285,6 +291,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "temp") == 0) {
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
+  } else if (strcmp(prev_cmd, "caps") == 0) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_CAPS_ADD;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_CAPS_RM;
   } else if (strcmp(prev_cmd, "pool") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_POOL_ADD;
@@ -382,6 +393,8 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
     formatter->close_section();
   }
   formatter->close_section();
+
+  info.caps.dump(formatter);
 
   formatter->close_section();
   formatter->flush(cout);
@@ -661,6 +674,7 @@ int main(int argc, char **argv)
   int delete_child_objects = false;
   int max_buckets = -1;
   map<string, bool> categories;
+  string caps;
 
   std::string val;
   std::ostringstream errs;
@@ -755,6 +769,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
+      caps = val;
     } else {
       ++i;
     }
@@ -819,7 +835,8 @@ int main(int argc, char **argv)
 
   user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
-                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
+                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM ||
+		    opt_cmd == OPT_CAPS_ADD || opt_cmd == OPT_CAPS_RM);
 
   RGWStoreManager store_manager;
   store = store_manager.init(g_ceph_context, false);
@@ -970,6 +987,8 @@ int main(int argc, char **argv)
   case OPT_SUBUSER_CREATE:
   case OPT_SUBUSER_MODIFY:
   case OPT_KEY_CREATE:
+  case OPT_CAPS_ADD:
+  case OPT_CAPS_RM:
     if (!user_id.empty())
       info.user_id = user_id;
     if (max_buckets >= 0)
@@ -999,6 +1018,18 @@ int main(int argc, char **argv)
       else
         cerr << "access key modification requires both access key and secret key" << std::endl;
       return 1;
+    } else if (opt_cmd == OPT_CAPS_ADD) {
+      err = info.caps.add_from_string(caps);
+      if (err < 0) {
+        cerr << "failed to add caps, err=" << cpp_strerror(-err) << std::endl;
+	return 1;
+      }
+    } else if (opt_cmd == OPT_CAPS_RM) {
+      err = info.caps.remove_from_string(caps);
+      if (err < 0) {
+        cerr << "failed to remove caps, err=" << cpp_strerror(-err) << std::endl;
+	return 1;
+      }
     }
     if (!display_name.empty())
       info.display_name = display_name;
