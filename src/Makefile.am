@@ -1229,6 +1229,7 @@ libcommon_files = \
 	auth/Crypto.cc \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
+	common/DecayCounter.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
 	common/PrebufferedStreambuf.cc \
