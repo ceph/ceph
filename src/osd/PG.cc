@@ -1344,7 +1344,6 @@ void PG::activate(ObjectStore::Transaction& t,
   if (role == 0) {    // primary state
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
-    assert(info.last_complete >= log.tail);
   }
   last_update_applied = info.last_update;
 
@@ -5381,7 +5380,6 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
   pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
 		logevt.msg->info, logevt.msg->log, logevt.from);
 
-  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
   return discard_event();
@@ -5461,7 +5459,6 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 		  msg->info, msg->log, logevt.from);
   }
 
-  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
   post_event(Activate(logevt.msg->get_epoch()));
@@ -5481,7 +5478,6 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   }
   
   assert(infoevt.info.last_update == pg->info.last_update);
-  assert(pg->log.tail <= pg->info.last_complete);
   assert(pg->log.head == pg->info.last_update);
 
   post_event(Activate(infoevt.msg_epoch));
