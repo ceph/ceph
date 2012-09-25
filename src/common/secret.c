@@ -38,6 +38,7 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
   len = safe_read(fd, secret, max_len);
   if (len <= 0) {
     perror("unable to read secret from file");
+    close(fd);
     return -1;
   }
   end = secret;
