@@ -966,6 +966,7 @@ static int get_rbd_seq(int major_num, string &seq)
   if (!dent) {
     r = -errno;
     cerr << "Error reading " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    closedir(device_dir);
     return r;
   }
 
@@ -986,11 +987,13 @@ static int get_rbd_seq(int major_num, string &seq)
     int cur_major = atoi(major);
     if (cur_major == major_num) {
       seq = string(dent->d_name);
+      closedir(device_dir);
       return 0;
     }
 
   } while ((dent = readdir(device_dir)));
 
+  closedir(device_dir);
   return -ENOENT;
 }
 
