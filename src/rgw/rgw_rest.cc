@@ -440,7 +440,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     len = read_len;
     if (r < 0)
       return ret;
-    bl.append(bp);
+    bl.append(bp, 0, len);
   }
 
   if ((uint64_t)ofs + len > RGW_MAX_PUT_SIZE) {
