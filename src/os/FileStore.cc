@@ -1106,12 +1106,15 @@ int FileStore::mkfs()
 	if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
 	  ret = -errno;
 	  if (ret != -EEXIST) {
+	    TEMP_FAILURE_RETRY(::close(fd));  
+	    TEMP_FAILURE_RETRY(::close(volargs.fd));
 	    derr << "mkfs: failed to create " << volargs.name << ": "
 		 << cpp_strerror(ret) << dendl;
 	    goto close_fsid_fd;
 	  }
 	}
 	if (::fchmod(volargs.fd, 0755)) {
+	  TEMP_FAILURE_RETRY(::close(fd));  
 	  TEMP_FAILURE_RETRY(::close(volargs.fd));
 	  ret = -errno;
 	  derr << "mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
