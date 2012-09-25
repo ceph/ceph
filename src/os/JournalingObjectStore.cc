@@ -37,10 +37,12 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     fs_op_seq = g_conf->journal_replay_from - 1;
   }
 
+  journal_lock.Lock();
   op_seq = fs_op_seq;
   committed_seq = fs_op_seq;
   committing_seq = fs_op_seq;
   applied_seq = fs_op_seq;
+  journal_lock.Unlock();
 
   if (!journal)
     return 0;
