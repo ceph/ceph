@@ -65,6 +65,10 @@ using ceph::crypto::MD5;
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
 
+#define RGW_CAP_READ            0x1
+#define RGW_CAP_WRITE           0x2
+#define RGW_CAP_ALL             (RGW_CAP_READ | RGW_CAP_WRITE)
+
 #define RGW_REST_SWIFT          0x1
 #define RGW_REST_SWIFT_AUTH     0x2
 
@@ -309,6 +313,33 @@ struct RGWSubUser {
 };
 WRITE_CLASS_ENCODER(RGWSubUser);
 
+class RGWUserCaps
+{
+  map<string, uint32_t> caps;
+
+  int get_cap(const string& cap, string& type, uint32_t *perm);
+  int parse_cap_perm(const string& str, uint32_t *perm);
+  int add_cap(const string& cap);
+  int remove_cap(const string& cap);
+public:
+  int add_from_string(const string& str);
+  int remove_from_string(const string& str);
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(1, 1, bl);
+     ::encode(caps, bl);
+     ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(caps, bl);
+     DECODE_FINISH(bl);
+  }
+  bool check_cap(const string& cap, uint32_t perm);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWUserCaps);
+
 
 struct RGWUserInfo
 {
@@ -321,11 +352,12 @@ struct RGWUserInfo
   map<string, RGWSubUser> subusers;
   __u8 suspended;
   uint32_t max_buckets;
+  RGWUserCaps caps;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(10, 9, bl);
+     ENCODE_START(11, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -355,10 +387,11 @@ struct RGWUserInfo
      ::encode(suspended, bl);
      ::encode(swift_keys, bl);
      ::encode(max_buckets, bl);
+     ::encode(caps, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(10, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(11, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -396,6 +429,9 @@ struct RGWUserInfo
       ::decode(max_buckets, bl);
     } else {
       max_buckets = RGW_DEFAULT_MAX_BUCKETS;
+    }
+    if (struct_v >= 11) {
+      ::decode(caps, bl);
     }
     DECODE_FINISH(bl);
   }
