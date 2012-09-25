@@ -550,23 +550,22 @@ int DBObjectMap::get_header(const hobject_t &hoid,
 int DBObjectMap::_get_header(Header header,
 			     bufferlist *bl)
 {
-  int r = 0;
   map<string, bufferlist> out;
-  while (r == 0) {
+  while (true) {
     out.clear();
     set<string> to_get;
     to_get.insert(USER_HEADER_KEY);
     int r = db->get(sys_prefix(header), to_get, &out);
     if (r == 0 && out.size())
       break;
+    if (r < 0)
+      return r;
     Header current(header);
     if (!current->parent)
       break;
     header = lookup_parent(current);
   }
 
-  if (r < 0)
-    return r;
   if (out.size())
     bl->swap(out.begin()->second);
   return 0;
