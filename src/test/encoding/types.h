@@ -8,6 +8,9 @@ TYPE(filepath)
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
 
+#include "common/DecayCounter.h"
+TYPE(DecayCounter)
+
 #include "common/LogEntry.h"
 TYPE(LogEntryKey)
 TYPE(LogEntry)
