@@ -16,9 +16,6 @@ public:
   int read_permissions(RGWOp*) {
     return 0;
   }
-  int authorize() {
-    return 0;
-  }
 };
 
 class RGWRESTMgr_Usage : public RGWRESTMgr {

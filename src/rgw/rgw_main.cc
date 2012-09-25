@@ -27,6 +27,7 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -451,13 +452,29 @@ int main(int argc, const char **argv)
 
   RGWREST rest;
 
-  rest.register_default_mgr(new RGWRESTMgr_S3);
-  rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
-  rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
+  list<string> apis;
 
-  RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
-  admin_resource->register_resource("/usage", new RGWRESTMgr_Usage);
-  rest.register_resource("/admin", admin_resource);
+  get_str_list(g_conf->rgw_enable_apis, apis);
+
+  map<string, bool> apis_map;
+  for (list<string>::iterator li = apis.begin(); li != apis.end(); ++li) {
+    apis_map[*li] = true;
+  }
+
+  if (apis_map.count("s3") > 0)
+    rest.register_default_mgr(new RGWRESTMgr_S3);
+
+  if (apis_map.count("swift") > 0)
+    rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
+
+  if (apis_map.count("swift_auth") > 0)
+    rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
+
+  if (apis_map.count("admin") > 0) {
+    RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
+    admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
+    rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
+  }
 
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size, &rest);
   process.run();
