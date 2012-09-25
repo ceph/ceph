@@ -1165,8 +1165,8 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
 	   << dn << ")" << dendl;
   int released = 0;
   if (dn->dir)
-    encode_inode_release(dn->dir->parent_inode, req,
-			 mds, drop, unless, 1);
+    released = encode_inode_release(dn->dir->parent_inode, req,
+				    mds, drop, unless, 1);
   if (released && dn->lease_mds == mds) {
     ldout(cct, 25) << "preemptively releasing dn to mds" << dendl;
     MClientRequest::Release& rel = req->cap_releases.back();
