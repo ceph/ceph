@@ -642,6 +642,11 @@ void RGWRESTOp::send_response()
   flusher.flush();
 }
 
+int RGWRESTOp::verify_permission()
+{
+  return check_caps(s->user.caps);
+}
+
 static void line_unfold(const char *line, string& sdest)
 {
   char dest[strlen(line) + 1];
@@ -876,8 +881,10 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
-  resource_mgrs[resource] = mgr;
-  resources_by_size[resource.size()] = resource;
+  string r = "/";
+  r.append(resource);
+  resource_mgrs[r] = mgr;
+  resources_by_size.insert(pair<size_t, string>(r.size(), r));
 }
 
 void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
@@ -891,7 +898,7 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
   if (resources_by_size.empty())
     return this;
 
-  map<size_t, string>::reverse_iterator iter;
+  multimap<size_t, string>::reverse_iterator iter;
 
   for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
     string& resource = iter->second;

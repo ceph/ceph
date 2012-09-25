@@ -2,12 +2,16 @@
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 class RGWOp_Usage_Get : public RGWRESTOp {
 
 public:
   RGWOp_Usage_Get() {}
 
-  int verify_permission() { return 0; }
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("usage", RGW_CAP_READ);
+  }
   void execute();
 
   virtual const char *name() { return "get_usage"; }
@@ -35,7 +39,9 @@ class RGWOp_Usage_Delete : public RGWRESTOp {
 public:
   RGWOp_Usage_Delete() {}
 
-  int verify_permission() { return 0; }
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("usage", RGW_CAP_WRITE);
+  }
   void execute();
 
   virtual const char *name() { return "trim_usage"; }

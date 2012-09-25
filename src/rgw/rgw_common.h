@@ -335,7 +335,7 @@ public:
      ::decode(caps, bl);
      DECODE_FINISH(bl);
   }
-  bool check_cap(const string& cap, uint32_t perm);
+  int check_cap(const string& cap, uint32_t perm);
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWUserCaps);
