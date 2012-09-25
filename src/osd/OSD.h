@@ -832,7 +832,7 @@ protected:
 
 
   void send_failures();
-  void send_still_alive(epoch_t epoch, entity_inst_t i);
+  void send_still_alive(epoch_t epoch, const entity_inst_t &i);
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;

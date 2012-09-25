@@ -2484,7 +2484,7 @@ void OSD::send_failures()
   if (locked) heartbeat_lock.Unlock();
 }
 
-void OSD::send_still_alive(epoch_t epoch, entity_inst_t i)
+void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 {
   MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch);
   m->is_failed = false;
