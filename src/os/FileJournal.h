@@ -303,6 +303,7 @@ private:
     write_pos(0), read_pos(0),
 #ifdef HAVE_LIBAIO
     aio_lock("FileJournal::aio_lock"),
+    aio_ctx(0),
     aio_num(0), aio_bytes(0),
 #endif
     last_committed_seq(0), 
