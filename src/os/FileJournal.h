@@ -187,6 +187,7 @@ private:
     aio_info(bufferlist& b, uint64_t o, uint64_t s)
       : iov(NULL), done(false), off(o), len(b.length()), seq(s) {
       bl.claim(b);
+      memset((void*)&iocb, 0, sizeof(iocb));
     }
     ~aio_info() {
       delete[] iov;
