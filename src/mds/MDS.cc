@@ -1229,10 +1229,10 @@ void MDS::starting_done()
   assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
 
+  mdcache->open_root();
+
   // start new segment
   mdlog->start_new_segment(0);
-
-  mdcache->open_root();
 }
 
 
