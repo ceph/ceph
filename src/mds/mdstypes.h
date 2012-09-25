@@ -1095,22 +1095,10 @@ public:
 
   MDSCacheObjectInfo() : ino(0) {}
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(ino, bl);
-    ::encode(dirfrag, bl);
-    ::encode(dname, bl);
-    ::encode(snapid, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
-    ::decode(ino, p);
-    ::decode(dirfrag, p);
-    ::decode(dname, p);
-    ::decode(snapid, p);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<MDSCacheObjectInfo*>& ls);
 };
 
 inline bool operator==(const MDSCacheObjectInfo& l, const MDSCacheObjectInfo& r) {
