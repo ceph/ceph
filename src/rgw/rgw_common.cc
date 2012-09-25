@@ -686,12 +686,15 @@ void RGWUserCaps::dump(Formatter *f) const
   f->close_section();
 }
 
-bool RGWUserCaps::check_cap(const string& cap, uint32_t perm)
+int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
 {
   map<string, uint32_t>::iterator iter = caps.find(cap);
-  if (iter == caps.end())
-    return false;
 
-  return (iter->second & perm) == perm;
+  if ((iter == caps.end()) ||
+      (iter->second & perm) != perm) {
+    return -EPERM;
+  }
+
+  return 0;
 }
 

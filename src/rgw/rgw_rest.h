@@ -191,6 +191,8 @@ public:
     flusher.init(s);
   }
   virtual void send_response();
+  virtual int check_caps(RGWUserCaps& caps) { return -EPERM; } /* should to be implemented! */
+  virtual int verify_permission();
 };
 
 class RGWHandler_ObjStore : public RGWHandler {
@@ -222,7 +224,7 @@ class RGWHandler_ObjStore_S3;
 class RGWRESTMgr {
 protected:
   map<string, RGWRESTMgr *> resource_mgrs;
-  map<size_t, string> resources_by_size;
+  multimap<size_t, string> resources_by_size;
   RGWRESTMgr *default_mgr;
 
 public:
