@@ -1019,9 +1019,9 @@ public:
     if (!ofs) {
       first_chunk.claim(bl);
       *phandle = NULL;
+      obj_len = (uint64_t)first_chunk.length();
       return 0;
     }
-    assert (ofs >= RGW_MAX_CHUNK_SIZE);
     int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
 
     return r;
