@@ -194,6 +194,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
   *fd = open(argv[1], O_RDONLY);
   if (*fd < 0) {
     cerr << "error opening path: " << strerror(*fd) << endl;
+    return 1;
   }
 
   if (!strcmp(argv[2], "show_layout")) {
@@ -275,7 +276,13 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
     i += 2;
   }
 
-  fstat (*fd, &stat_field);
+  int r = fstat (*fd, &stat_field);
+  if (r < 0) {
+    int err = errno;
+    cerr << "error doing stat file: " << cpp_strerror(errno) << endl;
+    return 1;
+  }
+
   if (S_ISREG(stat_field.st_mode)) { // open read-write to set layout
     close(*fd);
     *fd = open(argv[1], O_RDWR);
