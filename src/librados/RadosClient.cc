@@ -71,7 +71,9 @@ librados::RadosClient::RadosClient(CephContext *cct_)
 {
 }
 
-int64_t librados::RadosClient::lookup_pool(const char *name) {
+int64_t librados::RadosClient::lookup_pool(const char *name)
+{
+  Mutex::Locker l(lock);
   int64_t ret = osdmap.lookup_pg_pool_name(name);
   if (ret < 0)
     return -ENOENT;
@@ -80,6 +82,7 @@ int64_t librados::RadosClient::lookup_pool(const char *name) {
 
 const char *librados::RadosClient::get_pool_name(int64_t pool_id)
 {
+  Mutex::Locker l(lock);
   return osdmap.get_pool_name(pool_id);
 }
 
@@ -231,13 +234,10 @@ void librados::RadosClient::shutdown()
 
 uint64_t librados::RadosClient::get_instance_id()
 {
-  lock.Lock();
-  if (state == DISCONNECTED) {
-    lock.Unlock();
+  Mutex::Locker l(lock);
+  if (state == DISCONNECTED)
     return 0;
-  }
   uint64_t id = monclient.get_global_id();
-  lock.Unlock();
   return id;
 }
 
@@ -264,9 +264,9 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 
 bool librados::RadosClient::ms_dispatch(Message *m)
 {
+  Mutex::Locker l(lock);
   bool ret;
 
-  lock.Lock();
   if (state == DISCONNECTED) {
     ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
     m->put();
@@ -274,7 +274,6 @@ bool librados::RadosClient::ms_dispatch(Message *m)
   } else {
     ret = _dispatch(m);
   }
-  lock.Unlock();
   return ret;
 }
 
