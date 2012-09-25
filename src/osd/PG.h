@@ -783,6 +783,7 @@ public:
   struct Scrubber {
     Scrubber() :
       reserved(false), reserve_failed(false),
+      epoch_start(0),
       block_writes(false), active(false), waiting_on(0),
       errors(0), fixed(0), active_rep_scrub(0),
       finalizing(false), is_chunky(false), state(INACTIVE),
