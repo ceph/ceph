@@ -144,6 +144,8 @@ To remove a snapshot of a pool, execute::
 
 .. note: Version ``0.48`` Argonaut and above.	
 
+.. _setpoolvalues:
+
 Set Pool Values
 ===============
 
