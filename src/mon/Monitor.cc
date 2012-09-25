@@ -281,6 +281,7 @@ version_t Monitor::get_global_paxos_version()
       mdsmon()->paxos->get_version() +
       monmon()->paxos->get_version() +
       pgmon()->paxos->get_version() +
+      authmon()->paxos->get_version() +
       logmon()->paxos->get_version();
     dout(10) << "get_global_paxos_version first call this election epoch, starting from " << global_version << dendl;
   }
