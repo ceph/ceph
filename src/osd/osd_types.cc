@@ -2271,7 +2271,7 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(soid, bl);
     ::decode(oloc, bl);
     if (struct_v == 6) {
-      hobject_t hoid(soid.oid, oloc.key, soid.snap, hoid.hash, 0);
+      hobject_t hoid(soid.oid, oloc.key, soid.snap, soid.hash, 0);
       soid = hoid;
     }
   }
