@@ -884,7 +884,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
 
 int Client::choose_target_mds(MetaRequest *req) 
 {
-  int mds = 0;
+  int mds = -1;
   __u32 hash = 0;
   bool is_hash = false;
 
