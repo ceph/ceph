@@ -90,7 +90,7 @@ class filepath {
    * if we are fed a relative path as a string, either set ino=0 (strictly
    * relative) or 1 (absolute).  throw out any leading '/'.
    */
-  filepath(const char *s) {
+  filepath(const char *s) : encoded(false) {
     set_path(s);
   }
   void set_path(const char *s) {
