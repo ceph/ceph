@@ -1294,7 +1294,8 @@ struct C_PG_ActivateCommitted : public Context {
   PG *pg;
   epoch_t epoch;
   entity_inst_t primary;
-  C_PG_ActivateCommitted(PG *p, epoch_t e, entity_inst_t pi) : pg(p), epoch(e), primary(pi) {}
+  C_PG_ActivateCommitted(PG *p, epoch_t e, const entity_inst_t &pi)
+    : pg(p), epoch(e), primary(pi) {}
   void finish(int r) {
     pg->_activate_committed(epoch, primary);
   }
