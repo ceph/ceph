@@ -91,6 +91,7 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_t
   enable_usage_log = env->conf->enable_usage_log;
   content_started = false;
   format = 0;
+  formatter = NULL;
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
