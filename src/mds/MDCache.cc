@@ -565,6 +565,7 @@ void MDCache::open_root()
   }
   CDir *mydir = myin->get_or_open_dirfrag(this, frag_t());
   assert(mydir);
+  adjust_subtree_auth(mydir, mds->whoami);
 
   populate_mydir();
 }
