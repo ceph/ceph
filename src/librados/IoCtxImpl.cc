@@ -744,9 +744,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
-  C_aio_sparse_read_Ack *onack = new C_aio_sparse_read_Ack(c);
-  onack->m = m;
-  onack->data_bl = data_bl;
+  C_aio_sparse_read_Ack *onack = new C_aio_sparse_read_Ack(c, data_bl, m);
   eversion_t ver;
 
   c->io = this;
@@ -1566,8 +1564,10 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
 
 /////////////////////// C_aio_sparse_read_Ack //////////////////////////
 
-librados::IoCtxImpl::C_aio_sparse_read_Ack::C_aio_sparse_read_Ack(AioCompletionImpl *_c)
-  : c(_c)
+librados::IoCtxImpl::C_aio_sparse_read_Ack::C_aio_sparse_read_Ack(AioCompletionImpl *_c,
+								  bufferlist *data,
+								  std::map<uint64_t, uint64_t> *extents)
+  : c(_c), data_bl(data), m(extents)
 {
   c->get();
 }

@@ -148,8 +148,10 @@ struct librados::IoCtxImpl {
   struct C_aio_sparse_read_Ack : public Context {
     AioCompletionImpl *c;
     bufferlist *data_bl;
-    std::map<uint64_t,uint64_t> *m;
-    C_aio_sparse_read_Ack(AioCompletionImpl *_c);
+    std::map<uint64_t, uint64_t> *m;
+    C_aio_sparse_read_Ack(AioCompletionImpl *_c,
+			  bufferlist *data,
+			  std::map<uint64_t, uint64_t> *extents);
     void finish(int r);
   };
 
@@ -204,8 +206,6 @@ namespace librados {
 struct WatchContext : public RefCountedWaitObject {
   IoCtxImpl *io_ctx_impl;
   const object_t oid;
-  uint64_t cookie;
-  uint64_t ver;
   librados::WatchCtx *ctx;
   uint64_t linger_id;
 
