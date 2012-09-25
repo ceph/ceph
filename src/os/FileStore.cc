@@ -1014,9 +1014,27 @@ int FileStore::mkfs()
     //  check fsid, and compare st_dev to see if it's a subvolume.
     struct stat basest;
     struct statfs basefs, currentfs;
-    ::fstat(basedir_fd, &basest);
-    ::fstatfs(basedir_fd, &basefs);
-    ::statfs(current_fn.c_str(), &currentfs);
+    ret = ::fstat(basedir_fd, &basest);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs cannot fstat basedir "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    ret = ::fstatfs(basedir_fd, &basefs);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs cannot fstatfs basedir "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    ret = ::statfs(current_fn.c_str(), &currentfs);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs cannot statsf basedir "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
     if (basefs.f_type == BTRFS_SUPER_MAGIC &&
 	currentfs.f_type == BTRFS_SUPER_MAGIC &&
 	basest.st_dev != st.st_dev) {
