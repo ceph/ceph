@@ -438,7 +438,7 @@ static char hex_to_num(char c)
 bool url_decode(string& src_str, string& dest_str)
 {
   const char *src = src_str.c_str();
-  char dest[src_str.size()];
+  char dest[src_str.size() + 1];
   int pos = 0;
   char c;
 
