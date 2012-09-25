@@ -204,6 +204,10 @@ void end_header(struct req_state *s, const char *content_type)
 
 void abort_early(struct req_state *s, int err_no)
 {
+  if (!s->formatter) {
+    s->formatter = new JSONFormatter;
+    s->format = RGW_FORMAT_JSON;
+  }
   set_req_state_err(s, err_no);
   dump_errno(s);
   end_header(s);
