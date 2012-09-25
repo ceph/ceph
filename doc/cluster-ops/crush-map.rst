@@ -53,8 +53,34 @@ with a failed host are in a degraded state.
 
 .. _Inktank: http://www.inktank.com
 
+
+Editing a CRUSH Map
+===================
+
+To edit an existing CRUSH map:
+
+#. `Get the CRUSH Map`_.
+#. `Decompile`_ the CRUSH Map.
+#. Edit at least one of `Devices`_, `Buckets`_ and `Rules`_.
+#. `Recompile`_ the CRUSH Map.
+#. `Set the CRUSH Map`_.
+
+To activate CRUSH Map rules for a specific pool, identify the common ruleset number for those rules and specify that ruleset number
+for the pool. See `Set Pool Values`_ for details. 
+
+.. _Get the CRUSH Map: #getcrushmap
+.. _Decompile: #decompilecrushmap
+.. _Devices: #crushmapdevices
+.. _Buckets: #crushmapbuckets
+.. _Rules: #crushmaprules
+.. _Recompile: #compilecrushmap
+.. _Set the CRUSH Map: #setcrushmap
+.. _Set Pool Values: ../pools#setpoolvalues
+
+.. _getcrushmap:
+
 Get a CRUSH Map
-===============
+---------------
 
 To get the CRUSH Map for your cluster, execute the following:: 
 
@@ -63,8 +89,10 @@ To get the CRUSH Map for your cluster, execute the following::
 Ceph will output (-o) a compiled CRUSH Map to the filename you specified. Since 
 the CRUSH Map is in a compiled form, you must decompile it first before you can edit it. 
 
+.. _decompilecrushmap:
+
 Decompile a CRUSH Map
-=====================
+---------------------
 
 To decompile a CRUSH Map, execute the following:: 
 
@@ -74,8 +102,10 @@ Ceph will decompile (-d) the compiled CRUSH map and output (-o) it to the
 filename you specified.
 
 
+.. _compilecrushmap:
+
 Compile a CRUSH Map
-===================
+-------------------
 
 To compile a CRUSH Map, execute the following:: 
 
@@ -84,8 +114,10 @@ To compile a CRUSH Map, execute the following::
 Ceph will store a compiled CRUSH map to the filename you specified. 
 
 
+.. _setcrushmap:
+
 Set a CRUSH Map
-===============
+---------------
 
 To set the CRUSH Map for your cluster, execute the following:: 
 
@@ -95,8 +127,21 @@ Ceph will input the compiled CRUSH Map of the filename you specified as the CRUS
 for the cluster.
 
 
+
+CRUSH Map Parameters
+====================
+
+There are three main sections to a CRUSH Map. 
+
+#. Devices consist of any object storage device--i.e., the hard disk corresponding to a ``ceph-osd`` daemon.
+#. Buckets consist of a hierarchical aggregation of storage locations (e.g., racks, rows, hosts, etc.) and their assigned weights.
+#. Rules consist of the manner of selecting buckets 
+
+
+.. _crushmapdevices:
+
 CRUSH Map Devices
-=================
+-----------------
 
 To map placement groups to OSDs, a CRUSH Map requires a list of OSD devices 
 (i.e., the name of the OSD daemon). The list of devices appears first in the 
@@ -116,8 +161,10 @@ For example::
 As a general rule, an OSD daemon maps to a single disk or to a RAID. 
 
 
+.. _crushmapbuckets:
+
 CRUSH Map Buckets
-=================
+-----------------
 
 CRUSH maps support the notion of 'buckets', which may be thought of as nodes that
 aggregate other buckets into a hierarchy of physical locations, where OSD devices
@@ -247,10 +294,10 @@ physical locations like a datacenter, a room, a rack and a row. ::
 		item dc-2 weight 60.00
 	}
 
-
+.. _crushmaprules:
 
 CRUSH Map Rules
-===============
+---------------
 
 CRUSH maps support the notion of 'CRUSH rules', which are the rules that
 determine data placement for a pool. For large clusters, you will likely create
@@ -280,15 +327,18 @@ A rule takes the following form::
 
 ``ruleset``
 
-:Description: A means of classifying a rule as belonging to a set of rules.
+:Description: A means of classifying a rule as belonging to a set of rules. Activated by `setting the ruleset in a pool`_. 
 :Purpose: A component of the rule mask.
 :Type: Integer
 :Required: Yes
 :Default: 0
 
+.. _setting the ruleset in a pool: ../pools#setpoolvalues
+
+
 ``type``
 
-:Description: Describes a rule for an OSD for either a hard disk or a RAID.
+:Description: Describes a rule for either a hard disk (replicated) or a RAID.
 :Purpose: A component of the rule mask. 
 :Type: String
 :Required: Yes
@@ -322,7 +372,7 @@ A rule takes the following form::
 
 ``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type. If  ``num <= 0``, it represents the number of replicas.  
+:Description: Selects the number of buckets of the given type. Where ``N`` is the number of options available, if ``{num} > 0 && < N``, choose that many buckets; if ``{num} < 0``, it means ``N - {num}``; and, if ``{num} == 0``, choose ``N`` buckets (all available).
 :Purpose: A component of the rule.
 :Prerequisite: Follows ``step take`` or ``step choose``.  
 :Example: ``step choose firstn 1 type row``  
@@ -330,10 +380,12 @@ A rule takes the following form::
 
 ``step emit`` 
 
-:Description: 
+:Description: Outputs the current value and empties the stack. Typically used at the end of a rule, but may also be used to from different trees in the same rule.
 :Purpose: A component of the rule.
 :Prerequisite: Follows ``step choose``.
 :Example: ``step emit``
+
+.. important:: To activate one or more rules with a common ruleset number to a pool, set the ruleset number to the pool.
 
 
 .. _addosd:
@@ -418,6 +470,7 @@ Where:
 :Type: Double
 :Required: Yes
 :Example: ``2.0``
+
 
 .. _removeosd:
 
