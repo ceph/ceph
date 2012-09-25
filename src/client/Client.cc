@@ -5905,7 +5905,9 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
 }
 
@@ -5913,7 +5915,9 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
 }
 
@@ -5921,7 +5925,9 @@ int Client::listxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
 }
 
@@ -5929,7 +5935,9 @@ int Client::llistxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
 }
 
@@ -5937,7 +5945,9 @@ int Client::removexattr(const char *path, const char *name)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_removexattr(ceph_inode, name, getuid(), getgid());
 }
 
@@ -5945,7 +5955,9 @@ int Client::lremovexattr(const char *path, const char *name)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_removexattr(ceph_inode, name, getuid(), getgid());
 }
 
@@ -5953,7 +5965,9 @@ int Client::setxattr(const char *path, const char *name, const void *value, size
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
 }
 
@@ -5961,7 +5975,9 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
 }
 
