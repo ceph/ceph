@@ -1353,6 +1353,7 @@ int FileStore::_detect_fs()
       *_dout << "Got error " + cpp_strerror(ret) + ". ";
     *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
 	   << "file system with the 'user_xattr' option." << dendl;
+    TEMP_FAILURE_RETRY(::close(tmpfd));
     return -ENOTSUP;
   }
 
@@ -1385,13 +1386,17 @@ int FileStore::_detect_fs()
     return -errno;
 
   int r = _test_fiemap();
-  if (r < 0)
+  if (r < 0) {
+    TEMP_FAILURE_RETRY(::close(fd));
     return -r;
+  }
 
   struct statfs st;
   r = ::fstatfs(fd, &st);
-  if (r < 0)
+  if (r < 0) {
+    TEMP_FAILURE_RETRY(::close(fd));
     return -errno;
+  }
   blk_size = st.f_bsize;
 
 #if defined(__linux__)
