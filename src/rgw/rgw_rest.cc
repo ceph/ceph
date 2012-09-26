@@ -938,9 +938,25 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     s->request_params = s->request_uri.substr(pos + 1);
     s->request_uri = s->request_uri.substr(0, pos);
   }
+  s->host = s->env->get("HTTP_HOST");
+  if (g_conf->rgw_dns_name.length() && s->host) {
+    string h(s->host);
+
+    ldout(s->cct, 10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    pos = h.find(g_conf->rgw_dns_name);
+
+    if (pos > 0 && h[pos - 1] == '.') {
+      string encoded_bucket = "/";
+      encoded_bucket.append(h.substr(0, pos-1));
+      if (s->request_uri[0] != '/')
+	encoded_bucket.append("/'");
+      encoded_bucket.append(s->request_uri);
+      s->request_uri = encoded_bucket;
+    }
+  }
+
   url_decode(s->request_uri, s->decoded_uri);
   s->method = s->env->get("REQUEST_METHOD");
-  s->host = s->env->get("HTTP_HOST");
   s->length = s->env->get("CONTENT_LENGTH");
   if (s->length) {
     if (*s->length == '\0')

@@ -117,10 +117,6 @@ struct RGWRequest
     if (s->method && req_str.size() == 0) {
       req_str = s->method;
       req_str.append(" ");
-      if (s->host_bucket) {
-        req_str.append(s->host_bucket);
-        req_str.append("/");
-      }
       req_str.append(s->request_uri);
     }
     utime_t t = ceph_clock_now(g_ceph_context) - ts;
