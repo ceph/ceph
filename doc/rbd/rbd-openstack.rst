@@ -53,7 +53,7 @@ Install Ceph Common on the OpenStack Host
 
 OpenStack operates as a Ceph client. You must install Ceph common on the 
 OpenStack host, and copy your Ceph cluster's ``ceph.conf`` file to the 
-``/etc/ceph`` directory. If you have installed Ceph on the host, Ceph common
+``/etc/ceph`` directory. If you have installed Ceph on the host, ceph-common
 is already included. :: 
 
 	sudo apt-get install ceph-common
@@ -66,14 +66,14 @@ Add the RBD Driver and the Pool Name to ``nova.conf``
 
 OpenStack requires a driver to interact with RADOS block devices. You must also
 specify the pool name for the block device. On your OpenStack host, navigate to
-the ``/etc/conf`` directory. Open the ``nova.conf`` file in a text editor using
+the ``/etc/nova`` directory. Open the ``nova.conf`` file in a text editor using
 sudo privileges and add the following lines to the file::
 
 	volume_driver=nova.volume.driver.RBDDriver
 	rbd_pool=nova
 
 
-Restart OpenStack	
+Restart OpenStack
 =================
 
 To activate the RBD driver and load the RBD pool name into the configuration,
