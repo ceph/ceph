@@ -726,7 +726,7 @@ RGWOp *RGWHandler_REST_S3::get_post_op()
     else
       return new RGWInitMultipart_REST_S3;
   }
-  else if ( s->request_params == "delete" ) {
+  else if (s->args.sub_resource_exists("delete")) {
     return new RGWDeleteMultiObj_REST_S3;
   }
 
