@@ -1872,6 +1872,12 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   if (mdr->done_locking)
     return mdr->in[n];
 
+  if (!no_lookup && 0 == refpath.depth()) {
+    // refpath can't be empty for lookup but it can for
+    // getattr (we do getattr with empty refpath for mount of '/')
+    reply_request(mdr, -EINVAL);
+    return 0;
+  }
 
   // traverse
   int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
