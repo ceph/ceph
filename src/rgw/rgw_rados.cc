@@ -1127,6 +1127,9 @@ int RGWRados::copy_obj(void *ctx,
   manifest.obj_size = ofs;
 
   if (replace_attrs) {
+    if (!attrs[RGW_ATTR_ETAG].length())
+      attrs[RGW_ATTR_ETAG] = attrset[RGW_ATTR_ETAG];
+
     attrset = attrs;
   }
 
