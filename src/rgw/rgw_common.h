@@ -590,8 +590,6 @@ struct req_state {
    const char *bucket_name;
    const char *object;
 
-   const char *host_bucket;
-
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;

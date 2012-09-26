@@ -115,7 +115,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_t
   bucket_name = NULL;
   has_bad_meta = false;
   method = NULL;
-  host_bucket = NULL;
 }
 
 req_state::~req_state() {
