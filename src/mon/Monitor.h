@@ -187,6 +187,22 @@ private:
   list<Context*> waitfor_quorum;
   list<Context*> maybe_wait_for_quorum;
 
+  // multi-paxos global version sequencing kludge-o-rama
+  set<int> paxos_recovered;     ///< num paxos machines fully recovered during this election epoch
+  version_t global_version;
+
+  void require_gv_ondisk();
+  void require_gv_onwire();
+
+public:
+  void recovered_leader(int id);
+  void recovered_peon(int id);
+  version_t get_global_paxos_version();
+  bool is_all_paxos_recovered() {
+    return paxos_recovered.size() == paxos.size();
+  }
+
+private:
   Context *probe_timeout_event;  // for probing and slurping states
 
   struct C_ProbeTimeout : public Context {
@@ -223,8 +239,9 @@ public:
   void start_election();
   void win_standalone_election();
   void win_election(epoch_t epoch, set<int>& q,
-		    unsigned features);         // end election (called by Elector)
-  void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
+		    uint64_t features);         // end election (called by Elector)
+  void lose_election(epoch_t epoch, set<int>& q, int l,
+		     uint64_t features); // end election (called by Elector)
   void finish_election();
 
   void update_logger();
@@ -406,9 +423,17 @@ public:
 
   void extract_save_mon_key(KeyRing& keyring);
 
+  // features
+  static CompatSet get_supported_features();
+  static CompatSet get_legacy_features();
+  void read_features();
+  void write_features();
+
  public:
   Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
+
+  static int check_features(MonitorStore *store);
 
   int init();
   void shutdown();
@@ -443,6 +468,7 @@ private:
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
+#define CEPH_MON_FEATURE_INCOMPAT_GV CompatSet::Feature (2, "global version sequencing (v0.52)")
 
 long parse_pos_long(const char *s, ostream *pss = NULL);
 

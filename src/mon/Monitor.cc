@@ -81,16 +81,6 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
 }
 
-CompatSet get_ceph_mon_feature_compat_set()
-{
-  CompatSet::FeatureSet ceph_mon_feature_compat;
-  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
-  CompatSet::FeatureSet ceph_mon_feature_incompat;
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
-  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
-		   ceph_mon_feature_incompat);
-}
-
 long parse_pos_long(const char *s, ostream *pss)
 {
   char *e = 0;
@@ -215,6 +205,91 @@ Monitor::~Monitor()
   delete mon_caps;
 }
 
+void Monitor::recovered_leader(int id)
+{
+  assert(paxos_recovered.count(id) == 0);
+  paxos_recovered.insert(id);
+  if (paxos_recovered.size() == paxos.size()) {
+    dout(10) << "all paxos instances recovered, going writeable" << dendl;
+
+    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
+	(quorum_features & CEPH_FEATURE_MON_GV)) {
+      require_gv_ondisk();
+      require_gv_onwire();
+    }
+
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_active);
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_commit);
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_readable);
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+      finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
+  }
+}
+
+void Monitor::recovered_peon(int id)
+{
+  assert(paxos_recovered.count(id) == 0);
+  paxos_recovered.insert(id);
+  if (paxos_recovered.size() == paxos.size()) {
+    dout(10) << "all paxos instances recovered/leased" << dendl;
+
+    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
+	(quorum_features & CEPH_FEATURE_MON_GV)) {
+      require_gv_ondisk();
+      require_gv_onwire();
+    }
+  }
+}
+
+void Monitor::require_gv_ondisk()
+{
+  dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
+  features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
+  write_features();
+}
+
+void Monitor::require_gv_onwire()
+{
+  dout(10) << "require_gv_onwire" << dendl;
+  // require protocol feature bit of my peers
+  Messenger::Policy p = messenger->get_policy(entity_name_t::TYPE_MON);
+  p.features_required |= CEPH_FEATURE_MON_GV;
+  messenger->set_policy(entity_name_t::TYPE_MON, p);
+}
+
+version_t Monitor::get_global_paxos_version()
+{
+  // this should only be called when paxos becomes writeable, which is
+  // *after* everything settles after an election.
+  assert(is_all_paxos_recovered());
+
+  if ((quorum_features & CEPH_FEATURE_MON_GV) == 0) {
+    // do not sure issuing gv's until the entire quorum supports them.
+    // this way we synchronize the setting of the incompat GV ondisk
+    // feature with actually writing the values to the data store, and
+    // avoid having to worry about hybrid cases.
+    dout(10) << "get_global_paxos_version no-op; quorum does not support the feature" << dendl;
+    return 0;
+  }
+
+  if (global_version == 0) {
+    global_version =
+      osdmon()->paxos->get_version() +
+      mdsmon()->paxos->get_version() +
+      monmon()->paxos->get_version() +
+      pgmon()->paxos->get_version() +
+      authmon()->paxos->get_version() +
+      logmon()->paxos->get_version();
+    dout(10) << "get_global_paxos_version first call this election epoch, starting from " << global_version << dendl;
+  }
+  ++global_version;
+  dout(20) << "get_global_paxos_version " << global_version << dendl;
+  return global_version;
+}
+
 enum {
   l_mon_first = 456000,
   l_mon_last,
@@ -251,6 +326,80 @@ void Monitor::handle_signal(int signum)
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got Signal " << sys_siglist[signum] << " ***" << dendl;
   shutdown();
+}
+
+CompatSet Monitor::get_supported_features()
+{
+  CompatSet::FeatureSet ceph_mon_feature_compat;
+  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
+  CompatSet::FeatureSet ceph_mon_feature_incompat;
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
+  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
+		   ceph_mon_feature_incompat);
+}
+
+CompatSet Monitor::get_legacy_features()
+{
+  CompatSet::FeatureSet ceph_mon_feature_compat;
+  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
+  CompatSet::FeatureSet ceph_mon_feature_incompat;
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
+  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
+		   ceph_mon_feature_incompat);
+}
+
+int Monitor::check_features(MonitorStore *store)
+{
+  CompatSet required = get_supported_features();
+  CompatSet ondisk;
+
+  bufferlist features;
+  store->get_bl_ss(features, COMPAT_SET_LOC, 0);
+  if (features.length() == 0) {
+    generic_dout(0) << "WARNING: mon fs missing feature list.\n"
+	    << "Assuming it is old-style and introducing one." << dendl;
+    //we only want the baseline ~v.18 features assumed to be on disk.
+    //If new features are introduced this code needs to disappear or
+    //be made smarter.
+    ondisk = get_legacy_features();
+
+    bufferlist bl;
+    ondisk.encode(bl);
+    store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
+  } else {
+    bufferlist::iterator it = features.begin();
+    ondisk.decode(it);
+  }
+
+  if (!required.writeable(ondisk)) {
+    CompatSet diff = required.unsupported(ondisk);
+    generic_derr << "ERROR: on disk data includes unsupported features: " << diff << dendl;
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+void Monitor::read_features()
+{
+  bufferlist bl;
+  store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
+  assert(bl.length());
+
+  bufferlist::iterator p = bl.begin();
+  ::decode(features, p);
+  dout(10) << "features " << features << dendl;
+
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV))
+    require_gv_onwire();
+}
+
+void Monitor::write_features()
+{
+  bufferlist bl;
+  features.encode(bl);
+  store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
 }
 
 int Monitor::init()
@@ -305,17 +454,7 @@ int Monitor::init()
   }
 
   // open compatset
-  {
-    bufferlist bl;
-    store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
-    if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
-      ::decode(features, p);
-    } else {
-      features = get_ceph_mon_feature_compat_set();
-    }
-    dout(10) << "features " << features << dendl;
-  }
+  read_features();
 
   // have we ever joined a quorum?
   has_ever_joined = store->exists_bl_ss("joined");
@@ -567,6 +706,9 @@ void Monitor::reset()
   }
   quorum.clear();
   outside_quorum.clear();
+
+  paxos_recovered.clear();
+  global_version = 0;
 
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->restart();
@@ -867,6 +1009,7 @@ MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
   int len = 0;
   for (; v <= pax->get_version(); v++) {
     len += store->get_bl_sn(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    r->gv[m->machine_name][v] = store->get_global_version(m->machine_name.c_str(), v);
     for (list<string>::iterator p = pax->extra_state_dirs.begin();
          p != pax->extra_state_dirs.end();
          ++p) {
@@ -925,7 +1068,7 @@ void Monitor::handle_probe_data(MMonProbe *m)
     for (map<string, map<version_t, bufferlist> >::iterator p = m->paxos_values.begin();
 	 p != m->paxos_values.end();
 	 ++p) {
-      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
+      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end(), &m->gv[p->first]);
     }
 
     pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
@@ -981,7 +1124,7 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features) 
+void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features) 
 {
   if (!is_electing())
     reset();
@@ -1007,17 +1150,17 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, unsigned features)
   finish_election();
 }
 
-void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
+void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
 {
   state = STATE_PEON;
   leader_since = utime_t();
   leader = l;
   quorum = q;
   outside_quorum.clear();
-  quorum_features = 0;
+  quorum_features = features;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
-	   << " quorum is " << quorum << dendl;
-  
+	   << " quorum is " << quorum << " features are " << quorum_features << dendl;
+
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -2210,10 +2353,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (r < 0)
     return r;
 
-  bufferlist features;
-  CompatSet mon_features = get_ceph_mon_feature_compat_set();
-  mon_features.encode(features);
-  store->put_bl_ss(features, COMPAT_SET_LOC, 0);
+  features = get_supported_features();
+  write_features();
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
