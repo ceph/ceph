@@ -854,11 +854,11 @@ test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
-test_libcephfs_readdir_SOURCES = test/libcephfs/readdir_r_cb.cc
-test_libcephfs_readdir_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
-test_libcephfs_readdir_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
-test_libcephfs_readdir_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
-bin_DEBUGPROGRAMS += test_libcephfs_readdir
+test_libcephfs_SOURCES = test/libcephfs/test.cc test/libcephfs/readdir_r_cb.cc
+test_libcephfs_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+test_libcephfs_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
+test_libcephfs_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_libcephfs
 
 test_filestore_SOURCES = test/filestore/store_test.cc
 test_filestore_LDFLAGS = ${AM_LDFLAGS}
