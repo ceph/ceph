@@ -101,7 +101,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 // -------------
 
 dir_result_t::dir_result_t(Inode *in)
-  : inode(in), offset(0), next_offset(2),
+  : inode(in), offset(0), this_offset(2), next_offset(2),
     release_count(0), start_shared_gen(0),
     buffer(0) { 
   inode->get();
@@ -114,6 +114,7 @@ dir_result_t::dir_result_t(Inode *in)
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
+    ino_invalidate_cb_handle(NULL),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),
@@ -780,8 +781,10 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
   p = reply->get_extra_bl().begin();
   if (!p.end()) {
     // snapdir?
-    if (request->head.op == CEPH_MDS_OP_LSSNAP)
+    if (request->head.op == CEPH_MDS_OP_LSSNAP) {
+      assert(in);
       in = open_snapdir(in);
+    }
 
     // only open dir if we're actually adding stuff to it!
     Dir *dir = in->open_dir();
@@ -892,7 +895,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
 
 int Client::choose_target_mds(MetaRequest *req) 
 {
-  int mds = 0;
+  int mds = -1;
   __u32 hash = 0;
   bool is_hash = false;
 
@@ -1173,8 +1176,8 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
 	   << dn << ")" << dendl;
   int released = 0;
   if (dn->dir)
-    encode_inode_release(dn->dir->parent_inode, req,
-			 mds, drop, unless, 1);
+    released = encode_inode_release(dn->dir->parent_inode, req,
+				    mds, drop, unless, 1);
   if (released && dn->lease_mds == mds) {
     ldout(cct, 25) << "preemptively releasing dn to mds" << dendl;
     MClientRequest::Release& rel = req->cap_releases.back();
@@ -1272,6 +1275,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_STALE:
+    assert(mds_session);
     mds_session->was_stale = true;
     renew_caps(from);
     break;
@@ -1333,7 +1337,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
       request->inode->make_nosnap_relative_path(request->path);
     else if (request->dentry) {
       if (request->dentry->inode)
-	request->inode->make_nosnap_relative_path(request->path);
+	request->dentry->inode->make_nosnap_relative_path(request->path);
       else if (request->dentry->dir) {
 	request->dentry->dir->parent_inode->make_nosnap_relative_path(request->path);
 	request->path.push_dentry(request->dentry->name);
@@ -4297,6 +4301,9 @@ void Client::_readdir_drop_dirp_buffer(dir_result_t *dirp)
 
 int Client::_readdir_get_frag(dir_result_t *dirp)
 {
+  assert(dirp);
+  assert(dirp->inode);
+
   // get the current frag.
   frag_t fg = dirp->frag();
   
@@ -5913,7 +5920,9 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
 }
 
@@ -5921,7 +5930,9 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
 }
 
@@ -5929,7 +5940,9 @@ int Client::listxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
 }
 
@@ -5937,7 +5950,9 @@ int Client::llistxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
 }
 
@@ -5945,7 +5960,9 @@ int Client::removexattr(const char *path, const char *name)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_removexattr(ceph_inode, name, getuid(), getgid());
 }
 
@@ -5953,7 +5970,9 @@ int Client::lremovexattr(const char *path, const char *name)
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_removexattr(ceph_inode, name, getuid(), getgid());
 }
 
@@ -5961,7 +5980,9 @@ int Client::setxattr(const char *path, const char *name, const void *value, size
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, true);
+  int r = Client::path_walk(path, &ceph_inode, true);
+  if (r < 0)
+    return r;
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
 }
 
@@ -5969,7 +5990,9 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
 {
   Mutex::Locker lock(client_lock);
   Inode *ceph_inode;
-  Client::path_walk(path, &ceph_inode, false);
+  int r = Client::path_walk(path, &ceph_inode, false);
+  if (r < 0)
+    return r;
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
 }
 
