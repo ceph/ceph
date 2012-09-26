@@ -185,6 +185,16 @@ public:
   virtual const char *name() { return "list_bucket"; }
 };
 
+class RGWGetBucketLogging : public RGWOp {
+public:
+  RGWGetBucketLogging() {}
+  int verify_permission();
+  void execute() {}
+
+  virtual void send_response() = 0;
+  virtual const char *name() { return "get_bucket_logging"; }
+};
+
 class RGWStatBucket : public RGWOp {
 protected:
   int ret;
