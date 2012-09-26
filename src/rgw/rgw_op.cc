@@ -759,6 +759,14 @@ void RGWListBucket::execute()
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, &is_truncated, NULL);
 }
 
+int RGWGetBucketLogging::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
 int RGWCreateBucket::verify_permission()
 {
   if (!rgw_user_is_authenticated(s->user))

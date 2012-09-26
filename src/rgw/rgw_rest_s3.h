@@ -39,6 +39,14 @@ public:
   void send_response();
 };
 
+class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {
+public:
+  RGWGetBucketLogging_ObjStore_S3() {}
+  ~RGWGetBucketLogging_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_S3() {}

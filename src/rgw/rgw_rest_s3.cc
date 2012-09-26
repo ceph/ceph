@@ -215,6 +215,18 @@ void RGWListBucket_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetBucketLogging_ObjStore_S3::send_response()
+{
+  dump_errno(s);
+  end_header(s, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("BucketLoggingStatus",
+					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
@@ -667,6 +679,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
 {
+  if (s->args.sub_resource_exists("logging"))
+    return new RGWGetBucketLogging_ObjStore_S3;
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->args.exists("uploadId")) {
@@ -687,6 +701,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
 {
+  if (s->args.sub_resource_exists("logging"))
+    return NULL;
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   }
