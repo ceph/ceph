@@ -1230,6 +1230,9 @@ int RGWRados::copy_obj(void *ctx,
     return ret;
 
   if (replace_attrs) {
+    if (!attrs[RGW_ATTR_ETAG].length())
+      attrs[RGW_ATTR_ETAG] = attrset[RGW_ATTR_ETAG];
+
     attrset = attrs;
   }
 
