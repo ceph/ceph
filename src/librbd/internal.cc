@@ -1,12 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
-#include <inttypes.h>
+#include <limits.h>
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/lock/cls_lock_client.h"
+#include "include/inttypes.h"
 #include "include/stringify.h"
 
 #include "librbd/AioCompletion.h"
