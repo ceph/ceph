@@ -1328,7 +1328,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
       request->inode->make_nosnap_relative_path(request->path);
     else if (request->dentry) {
       if (request->dentry->inode)
-	request->inode->make_nosnap_relative_path(request->path);
+	request->dentry->inode->make_nosnap_relative_path(request->path);
       else if (request->dentry->dir) {
 	request->dentry->dir->parent_inode->make_nosnap_relative_path(request->path);
 	request->path.push_dentry(request->dentry->name);
