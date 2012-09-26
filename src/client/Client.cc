@@ -772,8 +772,10 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
   p = reply->get_extra_bl().begin();
   if (!p.end()) {
     // snapdir?
-    if (request->head.op == CEPH_MDS_OP_LSSNAP)
+    if (request->head.op == CEPH_MDS_OP_LSSNAP) {
+      assert(in);
       in = open_snapdir(in);
+    }
 
     // only open dir if we're actually adding stuff to it!
     Dir *dir = in->open_dir();
@@ -1264,6 +1266,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_STALE:
+    assert(mds_session);
     mds_session->was_stale = true;
     renew_caps(from);
     break;
@@ -4289,6 +4292,9 @@ void Client::_readdir_drop_dirp_buffer(dir_result_t *dirp)
 
 int Client::_readdir_get_frag(dir_result_t *dirp)
 {
+  assert(dirp);
+  assert(dirp->inode);
+
   // get the current frag.
   frag_t fg = dirp->frag();
   
