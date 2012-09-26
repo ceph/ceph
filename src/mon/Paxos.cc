@@ -151,6 +151,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
     dout(10) << " sharing our accepted but uncommitted value for " 
 	     << last_committed+1 << " (" << bl.length() << " bytes)" << dendl;
     last->values[last_committed+1] = bl;
+    last->gv[last_committed+1] = mon->store->get_global_version(machine_name, last_committed+1);
     last->uncommitted_pn = accepted_pn;
   }
 
@@ -184,6 +185,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
   for ( ; v <= last_committed; v++) {
     if (mon->store->exists_bl_sn(machine_name, v)) {
       mon->store->get_bl_sn(m->values[v], machine_name, v);
+      m->gv[v] = mon->store->get_global_version(machine_name, v);
       dout(10) << " sharing " << v << " (" 
 	       << m->values[v].length() << " bytes)" << dendl;
    }
@@ -243,7 +245,7 @@ void Paxos::store_state(MMonPaxos *m)
     dout(10) << "store_state [" << start->first << ".." 
 	     << last_committed << "]" << dendl;
 
-    mon->store->put_bl_sn_map(machine_name, start, end);
+    mon->store->put_bl_sn_map(machine_name, start, end, &m->gv);
     mon->store->put_int(last_committed, machine_name, "last_committed");
     mon->store->put_int(first_committed, machine_name, "first_committed");
   }
@@ -285,11 +287,13 @@ void Paxos::handle_last(MMonPaxos *last)
 	     << num_last << " peons" << dendl;
 
     // did this person send back an accepted but uncommitted value?
+    version_t uncommitted_gv = 0;
     if (last->uncommitted_pn &&
 	last->uncommitted_pn > uncommitted_pn) {
       uncommitted_v = last->last_committed+1;
       uncommitted_pn = last->uncommitted_pn;
       uncommitted_value = last->values[uncommitted_v];
+      uncommitted_gv = last->gv[uncommitted_v];
       dout(10) << "we learned an uncommitted value for " << uncommitted_v 
 	       << " pn " << uncommitted_pn
 	       << " " << uncommitted_value.length() << " bytes"
@@ -326,16 +330,20 @@ void Paxos::handle_last(MMonPaxos *last)
       if (uncommitted_v == last_committed+1 &&
 	  uncommitted_value.length()) {
 	dout(10) << "that's everyone.  begin on old learned value" << dendl;
-	begin(uncommitted_value);
+	begin(uncommitted_value, uncommitted_gv);
       } else {
 	// active!
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
 	// wake people up
-	finish_contexts(g_ceph_context, waiting_for_active);
-	finish_contexts(g_ceph_context, waiting_for_readable);
-	finish_contexts(g_ceph_context, waiting_for_writeable);
+	if (mon->is_all_paxos_recovered()) {
+	  finish_contexts(g_ceph_context, waiting_for_active);
+	  finish_contexts(g_ceph_context, waiting_for_readable);
+	  finish_contexts(g_ceph_context, waiting_for_writeable);
+	} else {
+	  mon->recovered_leader(machine_id);
+	}
       }
     }
   } else {
@@ -356,10 +364,11 @@ void Paxos::collect_timeout()
 
 
 // leader
-void Paxos::begin(bufferlist& v)
+void Paxos::begin(bufferlist& v, version_t gv)
 {
   dout(10) << "begin for " << last_committed+1 << " " 
 	   << v.length() << " bytes"
+	   << " gv " << gv
 	   << dendl;
 
   assert(mon->is_leader());
@@ -378,15 +387,23 @@ void Paxos::begin(bufferlist& v)
   accepted.insert(mon->rank);
   new_value = v;
   mon->store->put_bl_sn(new_value, machine_name, last_committed+1);
+  if (gv > 0)
+    mon->store->put_global_version(machine_name, last_committed+1, gv);
 
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
     commit();
     state = STATE_ACTIVE;
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
+
+    if (mon->is_all_paxos_recovered()) {
+      finish_contexts(g_ceph_context, waiting_for_active);
+      finish_contexts(g_ceph_context, waiting_for_commit);
+      finish_contexts(g_ceph_context, waiting_for_readable);
+      finish_contexts(g_ceph_context, waiting_for_writeable);
+    } else {
+      mon->recovered_leader(machine_id);
+    }
+
     return;
   }
 
@@ -400,6 +417,7 @@ void Paxos::begin(bufferlist& v)
     MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN,
 				     machine_id, ceph_clock_now(g_ceph_context));
     begin->values[last_committed+1] = new_value;
+    begin->gv[last_committed+1] = gv;
     begin->last_committed = last_committed;
     begin->pn = accepted_pn;
     
@@ -431,8 +449,10 @@ void Paxos::handle_begin(MMonPaxos *begin)
 
   // yes.
   version_t v = last_committed+1;
-  dout(10) << "accepting value for " << v << " pn " << accepted_pn << dendl;
+  dout(10) << "accepting value for " << v << " pn " << accepted_pn << " gv " << begin->gv[v] << dendl;
   mon->store->put_bl_sn(begin->values[v], machine_name, v);
+  if (begin->gv.count(v) && begin->gv[v] > 0)
+    mon->store->put_global_version(machine_name, v, begin->gv[v]);
   
   // reply
   MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT,
@@ -488,12 +508,16 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // yay!
     state = STATE_ACTIVE;
     extend_lease();
-  
+
     // wake people up
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
+    if (mon->is_all_paxos_recovered()) {
+      finish_contexts(g_ceph_context, waiting_for_active);
+      finish_contexts(g_ceph_context, waiting_for_commit);
+      finish_contexts(g_ceph_context, waiting_for_readable);
+      finish_contexts(g_ceph_context, waiting_for_writeable);
+    } else {
+      mon->recovered_leader(machine_id);
+    }
   }
   accept->put();
 }
@@ -535,9 +559,10 @@ void Paxos::commit()
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT,
 				      machine_id, ceph_clock_now(g_ceph_context));
     commit->values[last_committed] = new_value;
+    commit->gv[last_committed] = mon->store->get_global_version(machine_name, last_committed);
     commit->pn = accepted_pn;
     commit->last_committed = last_committed;
-    
+
     mon->messenger->send_message(commit, mon->monmap->get_inst(*p));
   }
 
@@ -561,7 +586,9 @@ void Paxos::handle_commit(MMonPaxos *commit)
   
   commit->put();
 
-  finish_contexts(g_ceph_context, waiting_for_commit);
+  if (mon->is_all_paxos_recovered())
+    finish_contexts(g_ceph_context, waiting_for_commit);
+  // otherwise, this'll go when they all recover.
 }
 
 void Paxos::extend_lease()
@@ -652,7 +679,10 @@ void Paxos::handle_lease(MMonPaxos *lease)
   }
 
   state = STATE_ACTIVE;
-  
+
+  if (!mon->is_all_paxos_recovered())
+    mon->recovered_peon(machine_id);
+
   dout(10) << "handle_lease on " << lease->last_committed
 	   << " now " << lease_expire << dendl;
 
@@ -818,9 +848,11 @@ void Paxos::leader_init()
   new_value.clear();
 
   if (mon->get_quorum().size() == 1) {
-    state = STATE_ACTIVE;			    
+    state = STATE_ACTIVE;
+    mon->recovered_leader(machine_id);
     return;
-  } 
+  }
+
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
@@ -947,6 +979,12 @@ version_t Paxos::read_current(bufferlist &bl)
 
 bool Paxos::is_writeable()
 {
+  // do not allow new paxos writes until all paxos machines have
+  // recovered.  this ensures that the global versions we choose at
+  // proposal time are sanely ordered.
+  if (!mon->is_all_paxos_recovered())
+    return false;
+
   if (mon->get_quorum().size() == 1) return true;
   return
     mon->is_leader() &&
@@ -974,11 +1012,13 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
   // cancel lease renewal and timeout events.
   cancel_events();
 
+  version_t global_version = mon->get_global_paxos_version();
+
   // ok!
-  dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes" << dendl;
+  dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes, gv " << global_version << dendl;
   if (oncommit)
     waiting_for_commit.push_back(oncommit);
-  begin(bl);
+  begin(bl, global_version);
   
   return true;
 }
