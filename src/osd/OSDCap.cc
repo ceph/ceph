@@ -154,7 +154,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
     unquoted_word %= +(alnum | '_' | '-');
     str %= quoted_string | unquoted_word;
 
-    // match := [pool <poolname> | uid <123>] [object_prefix <prefix>]
+    // match := [pool <poolname> | auid <123>] [object_prefix <prefix>]
     pool_name %= -(lit("pool") >> str);
     object_prefix %= -(lit("object_prefix") >> str);
     match = ( (lit("auid") >> int_ >> object_prefix)   [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
