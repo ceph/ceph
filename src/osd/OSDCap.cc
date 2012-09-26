@@ -206,6 +206,9 @@ bool OSDCap::parse(const string& str, ostream *err)
   if (r && iter == end)
     return true;
 
+  // Make sure no grants are kept after parsing failed!
+  grants.clear();
+
   if (err)
     *err << "osdcap parse failed, stopped at '" << std::string(iter, end)
 	 << "' of '" << str << "'\n";
