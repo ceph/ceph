@@ -204,6 +204,22 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   }
 }
 
+// kludge to associate a global version number with each per-machine paxos state
+version_t MonitorStore::get_global_version(const char *a, version_t b)
+{
+  char fn[1024], fn2[1024];
+  snprintf(fn, sizeof(fn), "%s_gv", a);
+  snprintf(fn2, sizeof(fn2), "%llu", (long long unsigned)b);
+  return get_int(fn, fn2);
+}
+
+void MonitorStore::put_global_version(const char *a, version_t b, version_t gv)
+{
+  char fn[1024], fn2[1024];
+  snprintf(fn, sizeof(fn), "%s_gv", a);
+  snprintf(fn2, sizeof(fn2), "%llu", (long long unsigned)b);
+  put_int(gv, fn, fn2);
+}
 
 // ----------------------------------------
 // buffers
@@ -239,6 +255,14 @@ int MonitorStore::erase_ss(const char *a, const char *b)
     strcpy(fn, dr);
   }
   int r = ::unlink(fn);
+
+  if (b) {
+    // wipe out _gv file too, if any.  this is sloppy, but will work.
+    char gvf[1024];
+    snprintf(gvf, sizeof(gvf), "%s/%s_gv/%s", dir.c_str(), a, b);
+    ::unlink(gvf);  // ignore error; it may not be there.
+  }
+
   ::rmdir(dr);  // sloppy attempt to clean up empty dirs
   return r;
 }
@@ -351,7 +375,8 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
 
 int MonitorStore::put_bl_sn_map(const char *a,
 				map<version_t,bufferlist>::iterator start,
-				map<version_t,bufferlist>::iterator end)
+				map<version_t,bufferlist>::iterator end,
+				map<version_t,version_t> *gvmap)
 {
   version_t first = start->first;
   map<version_t,bufferlist>::iterator lastp = end;
@@ -367,6 +392,8 @@ int MonitorStore::put_bl_sn_map(const char *a,
       int err = put_bl_sn(p->second, a, p->first);
       if (err < 0)
 	return err;
+      if (gvmap && gvmap->count(p->first) && (*gvmap)[p->first] > 0)
+	put_global_version(a, p->first, (*gvmap)[p->first]);
     }
     return 0;
   }
@@ -393,6 +420,12 @@ int MonitorStore::put_bl_sn_map(const char *a,
     ::close(fd);
     if (err < 0)
       return -errno;
+
+    // this doesn't try to be efficient.. too bad for you!  it may also
+    // extend beyond commmitted, but that's okay; we only look at these
+    // if the actual state files exist too.
+    if (gvmap && gvmap->count(p->first) && (*gvmap)[p->first])
+      put_global_version(a, p->first, (*gvmap)[p->first]);
   }
 
   // sync them all

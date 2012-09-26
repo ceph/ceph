@@ -21,7 +21,8 @@
 
 class MMonElection : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
 public:
   static const int OP_PROPOSE = 1;
@@ -43,12 +44,12 @@ public:
   epoch_t epoch;
   bufferlist monmap_bl;
   set<int> quorum;
+  uint64_t quorum_features;
   
-  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION) { }
-  MMonElection(int o, epoch_t e, MonMap *m) : 
-    Message(MSG_MON_ELECTION, HEAD_VERSION), 
-    fsid(m->fsid), op(o), epoch(e) {
-
+  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonElection(int o, epoch_t e, MonMap *m)
+    : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+      fsid(m->fsid), op(o), epoch(e), quorum_features(0) {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
@@ -76,6 +77,7 @@ public:
     ::encode(epoch, payload);
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
+    ::encode(quorum_features, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -87,6 +89,10 @@ public:
     ::decode(epoch, p);
     ::decode(monmap_bl, p);
     ::decode(quorum, p);
+    if (header.version >= 3)
+      ::decode(quorum_features, p);
+    else
+      quorum_features = 0;
   }
   
 };
