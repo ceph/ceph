@@ -655,24 +655,6 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   s->prot_flags |= RGW_REST_SWIFT;
 
-  int pos;
-  if (g_conf->rgw_dns_name.length() && s->host) {
-    string h(s->host);
-
-    dout(10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
-    pos = h.find(g_conf->rgw_dns_name);
-
-    if (pos > 0 && h[pos - 1] == '.') {
-      string encoded_bucket = h.substr(0, pos-1);
-      s->bucket_name_str = encoded_bucket;
-      s->bucket_name = strdup(s->bucket_name_str.c_str());
-      s->host_bucket = s->bucket_name;
-    } else {
-      s->host_bucket = NULL;
-    }
-  } else
-    s->host_bucket = NULL;
-
   const char *req_name = s->decoded_uri.c_str();
   const char *p;
 
@@ -695,7 +677,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   req = req_name;
 
-  pos = req.find('/');
+  int pos = req.find('/');
   if (pos >= 0) {
     bool cut_url = g_conf->rgw_swift_url_prefix.length();
     first = req.substr(0, pos);
