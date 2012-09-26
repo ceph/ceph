@@ -101,7 +101,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 // -------------
 
 dir_result_t::dir_result_t(Inode *in)
-  : inode(in), offset(0), next_offset(2),
+  : inode(in), offset(0), this_offset(2), next_offset(2),
     release_count(0), start_shared_gen(0),
     buffer(0) { 
   inode->get();
@@ -114,6 +114,7 @@ dir_result_t::dir_result_t(Inode *in)
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
+    ino_invalidate_cb_handle(NULL),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),

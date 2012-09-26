@@ -29,7 +29,7 @@ struct Cap {
   __u32 mseq;  // migration seq
   __u32 gen;
 
-  Cap() : session(NULL), inode(NULL), cap_item(this), issued(0),
+  Cap() : session(NULL), inode(NULL), cap_item(this), cap_id(0), issued(0),
 	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
 };
 
@@ -188,7 +188,8 @@ class Inode {
 
   Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout)
     : cct(cct_), ino(vino.ino), snapid(vino.snapid),
-      rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(1), truncate_size(-1),
+      rdev(0), mode(0), uid(0), gid(0), nlink(0), dir_layout({0}), layout({0}),
+      size(0), truncate_seq(1), truncate_size(-1),
       time_warp_seq(0), max_size(0), version(0), xattr_version(0),
       flags(0),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
