@@ -1872,13 +1872,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   if (mdr->done_locking)
     return mdr->in[n];
 
-  if (!no_lookup && 0 == refpath.depth()) {
-    // refpath can't be empty for lookup but it can for
-    // getattr (we do getattr with empty refpath for mount of '/')
-    reply_request(mdr, -EINVAL);
-    return 0;
-  }
-
   // traverse
   int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
   if (r > 0)
@@ -2101,6 +2094,14 @@ void Server::handle_client_getattr(MDRequest *mdr, bool is_lookup)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  if (req->get_filepath().depth() == 0 && is_lookup) {
+    // refpath can't be empty for lookup but it can for
+    // getattr (we do getattr with empty refpath for mount of '/')
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
   CInode *ref = rdlock_path_pin_ref(mdr, 0, rdlocks, false, false, NULL, !is_lookup);
   if (!ref) return;
 
