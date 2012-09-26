@@ -91,7 +91,7 @@ hard disks than older hosts in the cluster (i.e., they may have greater weight).
    ``ceph.conf`` file. :: 
 
 	ssh {admin-host}
-	cd /etc/chef
+	cd /etc/ceph
 	vim ceph.conf
 
 #. Add the new OSD to your ``ceph.conf`` file.
