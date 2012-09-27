@@ -1,0 +1,7 @@
+tasks:
+- ceph:
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - rbd/watch_correct_version.sh
