@@ -26,7 +26,7 @@ using std::vector;
 
 ostream& operator<<(ostream& out, rwxa_t p)
 { 
-  if (p & OSD_CAP_ANY)
+  if (p == OSD_CAP_ANY)
     return out << "*";
 
   if (p & OSD_CAP_R)
@@ -40,20 +40,11 @@ ostream& operator<<(ostream& out, rwxa_t p)
 
 ostream& operator<<(ostream& out, const OSDCapSpec& s)
 {
-  if (s.allow & OSD_CAP_ANY)
-    return out << "*";
-  if (s.allow) {
-    if (s.allow & OSD_CAP_R)
-      out << 'r';
-    if (s.allow & OSD_CAP_W)
-      out << 'w';
-    if (s.allow & OSD_CAP_X)
-      out << 'x';
-    return out;
-  }
+  if (s.allow)
+    return out << s.allow;
   if (s.class_name.length())
     return out << "class '" << s.class_name << "' '" << s.class_allow << "'";
-  return out << s.allow;
+  return out;
 }
 
 ostream& operator<<(ostream& out, const OSDCapMatch& m)
@@ -154,7 +145,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
     unquoted_word %= +(alnum | '_' | '-');
     str %= quoted_string | unquoted_word;
 
-    // match := [pool <poolname> | uid <123>] [object_prefix <prefix>]
+    // match := [pool <poolname> | auid <123>] [object_prefix <prefix>]
     pool_name %= -(lit("pool") >> str);
     object_prefix %= -(lit("object_prefix") >> str);
     match = ( (lit("auid") >> int_ >> object_prefix)   [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
@@ -205,6 +196,9 @@ bool OSDCap::parse(const string& str, ostream *err)
   bool r = qi::phrase_parse(iter, end, g, ascii::space, *this);
   if (r && iter == end)
     return true;
+
+  // Make sure no grants are kept after parsing failed!
+  grants.clear();
 
   if (err)
     *err << "osdcap parse failed, stopped at '" << std::string(iter, end)
