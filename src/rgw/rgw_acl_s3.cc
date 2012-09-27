@@ -300,6 +300,9 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   RGWAccessControlList_S3 *s3acl =
       (RGWAccessControlList_S3 *)find_first("AccessControlList");
+  if (!s3acl)
+    return false;
+
   acl = *s3acl;
 
   ACLOwner *owner_p = (ACLOwner_S3 *)find_first("Owner");
