@@ -12,6 +12,9 @@
  *
  */
 
+#include <iostream>
+
+#include "include/stringify.h"
 #include "osd/OSDCap.h"
 
 #include "gtest/gtest.h"
@@ -93,8 +96,35 @@ TEST(OSDCap, AllowAll) {
   OSDCap cap;
   ASSERT_FALSE(cap.allow_all());
 
-  bool r = cap.parse("allow *", NULL);
-  ASSERT_TRUE(r);
+  ASSERT_TRUE(cap.parse("allow r", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow w", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow x", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow rwx", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow rw", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow rx", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow wx", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap.grants.clear();
+
+  ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.allow_all());
   ASSERT_TRUE(cap.is_capable("foo", 0, "asdf", true, true, true));
 }
@@ -157,3 +187,44 @@ TEST(OSDCap, ObjectPoolAndPrefix) {
   ASSERT_FALSE(cap.is_capable("baz", 0, "fo", true, true, true));
 }
 
+TEST(OSDCap, OutputParsed)
+{
+  struct CapsTest {
+    const char *input;
+    const char *output;
+  };
+  CapsTest test_values[] = {
+    {"allow *",
+     "osdcap[grant(*)]"},
+    {"allow r",
+     "osdcap[grant(r)]"},
+    {"allow rx",
+     "osdcap[grant(rx)]"},
+    {"allow rwx",
+     "osdcap[grant(rwx)]"},
+    {"allow rwx pool images",
+     "osdcap[grant(pool images rwx)]"},
+    {"allow r pool images",
+     "osdcap[grant(pool images r)]"},
+    {"allow pool images rwx",
+     "osdcap[grant(pool images rwx)]"},
+    {"allow pool images r",
+     "osdcap[grant(pool images r)]"},
+    {"allow pool images w",
+     "osdcap[grant(pool images w)]"},
+    {"allow pool images x",
+     "osdcap[grant(pool images x)]"},
+    {"allow pool images r; allow pool rbd rwx",
+     "osdcap[grant(pool images r),grant(pool rbd rwx)]"},
+    {"allow pool images r, allow pool rbd rwx",
+     "osdcap[grant(pool images r),grant(pool rbd rwx)]"}
+  };
+
+  size_t num_tests = sizeof(test_values) / sizeof(*test_values);
+  for (size_t i = 0; i < num_tests; ++i) {
+    OSDCap cap;
+    std::cout << "Testing input '" << test_values[i].input << "'" << std::endl;
+    ASSERT_TRUE(cap.parse(test_values[i].input));
+    ASSERT_EQ(test_values[i].output, stringify(cap));
+  }
+}
