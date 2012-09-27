@@ -332,7 +332,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   const char *req_src = s->copy_source;
-  if (!req_src || !req_src)
+  if (!req_src)
     return -EINVAL;
 
   ret = parse_copy_location(req_src, src_bucket_name, src_object);
