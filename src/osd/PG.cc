@@ -1586,14 +1586,19 @@ void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
   do_pending_flush();
-  if (!op_has_sufficient_caps(op))
+
+  if (!op_has_sufficient_caps(op)) {
+    osd->reply_op_error(op, -EPERM);
     return;
+  }
   if (must_delay_request(op)) {
     waiting_for_map.push_back(op);
     return;
-  } else if (can_discard_request(op)) {
+  }
+  if (can_discard_request(op)) {
     return;
-  } else if (!flushed) {
+  }
+  if (!flushed) {
     waiting_for_active.push_back(op);
     return;
   }
