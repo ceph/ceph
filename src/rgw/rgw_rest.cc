@@ -162,6 +162,55 @@ void dump_etag(struct req_state *s, const char *etag)
   }
 }
 
+void dump_pair(struct req_state *s, const char *key, const char *value)
+{
+  if ( (strlen(key) > 0) && (strlen(value) > 0))
+    s->cio->print("%s: %s\n", key, value);
+}
+
+void dump_bucket_from_state(struct req_state *s)
+{
+  if (!s->bucket_name_str.empty())
+    s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+}
+
+void dump_object_from_state(struct req_state *s)
+{
+  if (!s->object_str.empty())
+    s->cio->print("Key: \"%s\"\n", s->object_str.c_str());
+}
+
+void dump_uri_from_state(struct req_state *s)
+{
+  if (strcmp(s->request_uri.c_str(), "/") == 0) {
+
+    string location = "http://";
+    location += s->env->get("SERVER_NAME");
+    if (!location.empty()) {
+      location += "/";
+      if (!s->bucket_name_str.empty()) {
+        location += s->bucket_name_str;
+        location += "/";
+        if (!s->object_str.empty()) {
+          location += s->object_str;
+          s->cio->print("Location: %s\n", location.c_str());
+        }
+      }
+    }
+  }
+  else {
+    s->cio->print("Location: \"%s\"\n", s->request_uri.c_str());
+  }
+}
+
+void dump_redirect(struct req_state *s, const char *url)
+{
+  if (strlen(url) > 0) {
+    dump_errno(s, 301);
+    s->cio->print("Location: %s\n", url);
+  }
+}
+
 void dump_last_modified(struct req_state *s, time_t t)
 {
 
@@ -497,6 +546,61 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
   if (!ofs)
     supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
+
+  return len;
+}
+
+int RGWPostObj_ObjStore::verify_params()
+{
+  /*  check that we have enough memory to store the object
+  note that this test isn't exact and may fail unintentionally
+  for large requests is */
+  if ((unsigned long long)content_length > RGW_MAX_PUT_SIZE)
+    return -ERR_TOO_LARGE;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore::get_data(bufferlist& bl)
+{
+  size_t cl = 0;
+  
+  // try and prevent a partial read of the boundary
+  if (content_length - ofs > RGW_MAX_CHUNK_SIZE)
+    cl = RGW_MAX_CHUNK_SIZE;
+  else if (content_length - ofs > 0)
+    cl = (content_length - ofs);
+  else  
+    cl = RGW_MAX_CHUNK_SIZE;
+
+  bufferptr bp(cl);
+  int r = s->cio->read(bp.c_str(), cl, &len);
+  if (r < 0)
+    return r;
+
+  // resize our buffer pointer to avoid appending garbage
+  bp.set_length(len);
+
+  /* if we are at the boundary there will be two leading
+    newlines that we don't want */
+  int start = len - boundary.size() -2;
+  if (start > 0) {
+    // read in what might be a boundary
+    string test_boundary;
+    for (int i = start; i < len -2 && i > 0 ; i++) {
+      test_boundary += bp.c_str()[i];
+    }
+
+    if (strcmp(test_boundary.c_str(), boundary.c_str()) == 0 ) {
+      // kill off bothersome newlines
+      bp.set_length(start-2);
+      data_read = true;
+    }
+  }
+
+  len = bp.length();
+  bl.append(bp);
+
 
   return len;
 }

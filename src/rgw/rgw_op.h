@@ -10,6 +10,7 @@
 #define CEPH_RGW_OP_H
 
 #include <string>
+#include <map>
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -22,6 +23,8 @@ struct req_state;
 class RGWHandler;
 
 void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
+int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, bool prefetch_data);
+
 
 /**
  * Provide the base class for all ops.
@@ -300,6 +303,50 @@ public:
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_obj"; }
+};
+
+class RGWPostObj : public RGWOp {
+
+  friend class RGWPutObjProcessor;
+
+protected:
+  int ret;
+  int len;
+  off_t ofs;
+  const char *supplied_md5_b64;
+  const char *supplied_etag;
+  string etag;
+  string boundary;
+  bool data_pending;
+  RGWAccessControlPolicy policy;
+  map<string, string> form_param;
+
+public:
+  RGWPostObj() {}
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+    ret = 0;
+    len = 0;
+    ofs = 0;
+    supplied_md5_b64 = NULL;
+    supplied_etag = NULL;
+    etag = "";
+    boundary = "";
+    data_pending = false;
+    policy.set_ctx(s->cct);
+  }
+
+  int verify_permission();
+  void execute();
+
+  RGWPutObjProcessor *select_processor();
+  void dispose_processor(RGWPutObjProcessor *processor);
+
+  virtual int get_params() = 0;
+  virtual int get_data(bufferlist& bl) = 0;
+  virtual void send_response() = 0;
+  virtual const char *name() { return "post_obj"; }
 };
 
 class RGWPutMetadata : public RGWOp {
