@@ -140,7 +140,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       string single_content_type = iter->content_type;
       if (iter->content_type.size()) {
         // content type might hold multiple values, just dump the last one
-        size_t pos = iter->content_type.rfind(',');
+        ssize_t pos = iter->content_type.rfind(',');
         if (pos > 0) {
           ++pos;
           while (single_content_type[pos] == ' ')
