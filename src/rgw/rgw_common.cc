@@ -85,7 +85,9 @@ is_err() const
 }
 
 
-req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
+req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN), 
+                                                            os_auth_token(NULL),
+                                                            os_user(NULL), os_groups(NULL), env(e)
 {
   enable_ops_log = env->conf->enable_ops_log;
   enable_usage_log = env->conf->enable_usage_log;
@@ -114,7 +116,12 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_t
   object = NULL;
   bucket_name = NULL;
   has_bad_meta = false;
+  host = NULL;
   method = NULL;
+  length = NULL;
+  content_type = NULL;
+  copy_source = NULL;
+  http_auth = NULL;
 }
 
 req_state::~req_state() {
