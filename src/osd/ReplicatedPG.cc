@@ -240,7 +240,12 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
   string type;
   PGLSFilter *filter;
 
-  ::decode(type, iter);
+  try {
+    ::decode(type, iter);
+  }
+  catch (buffer::error& e) {
+    return -EINVAL;
+  }
 
   if (type.compare("parent") == 0) {
     filter = new PGLSParentFilter(iter);
@@ -958,6 +963,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   if (result >= 0)
     ctx->reply->set_version(ctx->reply_version);
+  else if (result == -ENOENT)
+    ctx->reply->set_version(info.last_update);
 
   // read or error?
   if (ctx->op_t.empty() || result < 0) {
@@ -1954,7 +1961,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         case CEPH_OSD_CMPXATTR_MODE_U64:
 	  {
 	    uint64_t u64val;
-	    ::decode(u64val, bp);
+	    try {
+	      ::decode(u64val, bp);
+	    }
+	    catch (buffer::error& e) {
+	      result = -EINVAL;
+	      goto fail;
+	    }
 	    dout(10) << "CEPH_OSD_OP_CMPXATTR name=" << name << " val=" << u64val
 		     << " op=" << (int)op.xattr.cmp_op << " mode=" << (int)op.xattr.cmp_mode << dendl;
 	    result = do_xattr_cmp_u64(op.xattr.cmp_op, u64val, xattr);
@@ -2147,7 +2160,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (osd_op.indata.length()) {
 	    bufferlist::iterator p = osd_op.indata.begin();
 	    string category;
-	    ::decode(category, p);
+	    try {
+	      ::decode(category, p);
+	    }
+	    catch (buffer::error& e) {
+	      result = -EINVAL;
+	      goto fail;
+	    }
 	    if (category.size()) {
 	      if (obs.exists) {
 		if (obs.oi.category != category)
@@ -2436,8 +2455,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	while (!bp.end() && !result) {
 	  __u8 op;
 	  string key;
-	  ::decode(op, bp);
-	  ::decode(key, bp);
+	  try {
+	    ::decode(op, bp);
+	    ::decode(key, bp);
+	  }
+	  catch (buffer::error& e) {
+	    result = -EINVAL;
+	    goto fail;
+	  }
 
 	  dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
 	  
@@ -2468,7 +2493,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	  if (op == CEPH_OSD_TMAP_SET) {
 	    bufferlist val;
-	    ::decode(val, bp);
+	    try {
+	      ::decode(val, bp);
+	    }
+	    catch (buffer::error& e) {
+	      result = -EINVAL;
+	      goto fail;
+	    }
 	    ::encode(key, newkeydata);
 	    ::encode(val, newkeydata);
 	    dout(20) << "   set " << key << " " << val.length() << dendl;
@@ -2479,7 +2510,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      break;
 	    }
 	    bufferlist val;
-	    ::decode(val, bp);
+	    try {
+	      ::decode(val, bp);
+	    }
+	    catch (buffer::error& e) {
+	      result = -EINVAL;
+	      goto fail;
+	    }
 	    ::encode(key, newkeydata);
 	    ::encode(val, newkeydata);
 	    dout(20) << "   create " << key << " " << val.length() << dendl;
@@ -2545,8 +2582,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	string start_after;
 	uint64_t max_return;
-	::decode(start_after, bp);
-	::decode(max_return, bp);
+	try {
+	  ::decode(start_after, bp);
+	  ::decode(max_return, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
 	set<string> out_set;
 
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
@@ -2590,9 +2633,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	string start_after;
 	uint64_t max_return;
 	string filter_prefix;
-	::decode(start_after, bp);
-	::decode(max_return, bp);
-	::decode(filter_prefix, bp);
+	try {
+	  ::decode(start_after, bp);
+	  ::decode(max_return, bp);
+	  ::decode(filter_prefix, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
 	map<string, bufferlist> out_set;
 
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
@@ -2656,7 +2705,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       {
 	set<string> keys_to_get;
-	::decode(keys_to_get, bp);
+	try {
+	  ::decode(keys_to_get, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
 	map<string, bufferlist> out;
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
 	  dout(20) << "CEPH_OSD_OP_OMAPGET: "
@@ -2689,7 +2744,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	map<string, pair<bufferlist, int> > assertions;
-	::decode(assertions, bp);
+	try {
+	  ::decode(assertions, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
 	
 	map<string, bufferlist> out;
 	set<string> to_get;
@@ -2750,7 +2811,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t.touch(coll, soid);
 	map<string, bufferlist> to_set;
-	::decode(to_set, bp);
+	try {
+	  ::decode(to_set, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
 	dout(20) << "setting vals: " << dendl;
 	for (map<string, bufferlist>::iterator i = to_set.begin();
 	     i != to_set.end();
@@ -2797,7 +2864,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t.touch(coll, soid);
 	set<string> to_rm;
-	::decode(to_rm, bp);
+	try {
+	  ::decode(to_rm, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
 	t.omap_rmkeys(coll, soid, to_rm);
       }
       break;
@@ -2810,6 +2883,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     ctx->bytes_read += osd_op.outdata.length();
 
+  fail:
     if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
       result = 0;
 
