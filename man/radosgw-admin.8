@@ -1,4 +1,4 @@
-.TH "RADOSGW-ADMIN" "8" "February 17, 2012" "dev" "Ceph"
+.TH "RADOSGW-ADMIN" "8" "September 27, 2012" "dev" "Ceph"
 .SH NAME
 radosgw-admin \- rados REST gateway user administration utility
 .
@@ -28,7 +28,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructeredText.
+.\" Man page generated from reStructuredText.
 .
 .SH SYNOPSIS
 .nf
@@ -51,10 +51,20 @@ Create a new user
 Modify a user
 .TP
 .B \fBuser info\fP
-Display information of a user
+Display information of a user, and any potentially available
+subusers and keys
 .TP
 .B \fBuser rm\fP
 Remove a user
+.TP
+.B \fBsubuser create\fP
+Create a new subuser (primarily useful for clients using the Swift API)
+.TP
+.B \fBsubuser modify\fP
+Modify a subuser
+.TP
+.B \fBsubuser rm\fP
+Remove a subuser
 .TP
 .B \fBbucket list\fP
 List all buckets
@@ -62,11 +72,38 @@ List all buckets
 .B \fBbucket unlink\fP
 Remove a bucket
 .TP
+.B :command:\(aqbucket rm\(aq
+Remove a bucket
+.TP
+.B :command:\(aqobject rm\(aq
+Remove an object
+.TP
+.B \fBkey create\fP
+Create an access key
+.TP
+.B \fBkey rm\fP
+Remove an access key
+.TP
+.B :command:\(aqpool add\(aq
+Add an existing pool for data placement
+.TP
+.B \fBpool rm\fP
+Remove an existing pool from data placement set
+.TP
+.B \fBpools list\fP
+List placement active set
+.TP
 .B \fBpolicy\fP
 Display bucket/object policy
 .TP
 .B \fBlog show\fP
 Show the log of a bucket (with a specified date)
+.TP
+.B \fBusage show\fP
+Show the usage information (with optional user and date range)
+.TP
+.B \fBusage trim\fP
+Trim usage information (with optional user and date range)
 .UNINDENT
 .SH OPTIONS
 .INDENT 0.0
@@ -84,12 +121,12 @@ Connect to specified monitor (instead of looking through ceph.conf).
 .INDENT 0.0
 .TP
 .B \-\-uid=uid
-The S3 user/access key.
+The radosgw user ID.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-secret=secret
-The S3 secret.
+The secret associated with a given key.
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -114,22 +151,37 @@ Specify the object name.
 .INDENT 0.0
 .TP
 .B \-\-date=yyyy\-mm\-dd
-The date need for some commands
+The date needed for some commands
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-os\-user=group:name
-The OpenStack user (only needed for use with OpenStack)
+.B \-\-start\-date=yyyy\-mm\-dd
+The start date needed for some commands
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-os\-secret=key
-The OpenStack key
+.B \-\-end\-date=yyyy\-mm\-dd
+The end date needed for some commands
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-auth\-uid=auid
 The librados auid
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-purge\-data
+Remove user data before user removal
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-purge\-objects
+Remove all objects before bucket removal
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-lazy\-remove
+Defer removal of object tail
 .UNINDENT
 .SH EXAMPLES
 .sp
@@ -137,10 +189,18 @@ Generate a new user:
 .sp
 .nf
 .ft C
-$ radosgw\-admin user gen \-\-display\-name="johnny rotten" \-\-email=johnny@rotten.com
-User ID: CHBQFRTG26I8DGJDGQLW
-Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
-Display Name: johnny rotten
+$ radosgw\-admin user create \-\-display\-name="johnny rotten" \-\-uid=johnny
+{ "user_id": "johnny",
+  "rados_uid": 0,
+  "display_name": "johnny rotten",
+  "email": "",
+  "suspended": 0,
+  "subusers": [],
+  "keys": [
+        { "user": "johnny",
+          "access_key": "TCICW53D9BQ2VGC46I44",
+          "secret_key": "tfm9aHMI8X76L3UdgE+ZQaJag1vJQmE6HDb5Lbrz"}],
+  "swift_keys": []}
 .ft P
 .fi
 .sp
@@ -148,7 +208,15 @@ Remove a user:
 .sp
 .nf
 .ft C
-$ radosgw\-admin user rm \-\-uid=CHBQFRTG26I8DGJDGQLW
+$ radosgw\-admin user rm \-\-uid=johnny
+.ft P
+.fi
+.sp
+Remove a user and all associated buckets with their contents:
+.sp
+.nf
+.ft C
+$ radosgw\-admin user rm \-\-uid=johnny \-\-purge\-data
 .ft P
 .fi
 .sp
@@ -160,23 +228,47 @@ $ radosgw\-admin bucket unlink \-\-bucket=foo
 .ft P
 .fi
 .sp
-Show the logs of a bucket from April 1st 2011:
+Show the logs of a bucket from April 1st, 2012:
 .sp
 .nf
 .ft C
-$ radosgw\-admin log show \-\-bucket=foo \-\-date=2011=04\-01
+$ radosgw\-admin log show \-\-bucket=foo \-\-date=2012=04\-01
+.ft P
+.fi
+.sp
+Show usage information for user from March 1st to (but not including) April 1st, 2012:
+.sp
+.nf
+.ft C
+$ radosgw\-admin usage show \-\-uid=johnny \e
+                \-\-start\-date=2012\-03\-01 \-\-end\-date=2012\-04\-01
+.ft P
+.fi
+.sp
+Show only summary of usage information for all users:
+.sp
+.nf
+.ft C
+$ radosgw\-admin usage show \-\-show\-log\-entries=false
+.ft P
+.fi
+.sp
+Trim usage information for user until March 1st, 2012:
+.sp
+.nf
+.ft C
+$ radosgw\-admin usage trim \-\-uid=johnny \-\-end\-date=2012\-04\-01
 .ft P
 .fi
 .SH AVAILABILITY
 .sp
 \fBradosgw\-admin\fP is part of the Ceph distributed file system.  Please
-refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
+refer to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO
 .sp
 \fBceph\fP(8)
 .SH COPYRIGHT
-2011, New Dream Network
+2012, Inktank Storage, Inc.
 .\" Generated by docutils manpage writer.
-.\" 
 .
