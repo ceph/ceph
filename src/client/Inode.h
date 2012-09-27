@@ -188,7 +188,7 @@ class Inode {
 
   Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout)
     : cct(cct_), ino(vino.ino), snapid(vino.snapid),
-      rdev(0), mode(0), uid(0), gid(0), nlink(0), dir_layout({0}), layout({0}),
+      rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
       time_warp_seq(0), max_size(0), version(0), xattr_version(0),
       flags(0),
@@ -203,6 +203,8 @@ class Inode {
       _ref(0), ll_ref(0), 
       dir(0), dn_set()
   {
+    memset(&dir_layout, 0, sizeof(dir_layout));
+    memset(&layout, 0, sizeof(layout));
     memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
   }
   ~Inode() { }
