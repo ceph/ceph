@@ -425,8 +425,9 @@ done:
 void AuthMonitor::auth_usage(stringstream& ss)
 {
   ss << "error: usage:" << std::endl;
-  ss << "              auth <add | del> <name> <--in-file=filename>" << std::endl;
-  ss << "              auth <list>" << std::endl;
+  ss << "              auth (add | del | get-or-create | get-or-create-key | caps) <name> <--in-file=filename>" << std::endl;
+  ss << "              auth (export | get | get-key | print-key) <name>" << std::endl;
+  ss << "              auth list" << std::endl;
 }
 
 bool AuthMonitor::preprocess_command(MMonCommand *m)
