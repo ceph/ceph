@@ -1348,6 +1348,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
     for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
       if (*p == last)
 	break;
+    assert(p != snapset.clones.end());
     object_stat_sum_t delta;
     if (p != snapset.clones.begin()) {
       // not the oldest... merge overlap into next older clone

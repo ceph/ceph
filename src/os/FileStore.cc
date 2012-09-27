@@ -1014,9 +1014,27 @@ int FileStore::mkfs()
     //  check fsid, and compare st_dev to see if it's a subvolume.
     struct stat basest;
     struct statfs basefs, currentfs;
-    ::fstat(basedir_fd, &basest);
-    ::fstatfs(basedir_fd, &basefs);
-    ::statfs(current_fn.c_str(), &currentfs);
+    ret = ::fstat(basedir_fd, &basest);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs cannot fstat basedir "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    ret = ::fstatfs(basedir_fd, &basefs);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs cannot fstatfs basedir "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
+    ret = ::statfs(current_fn.c_str(), &currentfs);
+    if (ret < 0) {
+      ret = -errno;
+      derr << "mkfs cannot statsf basedir "
+	   << cpp_strerror(ret) << dendl;
+      goto close_fsid_fd;
+    }
     if (basefs.f_type == BTRFS_SUPER_MAGIC &&
 	currentfs.f_type == BTRFS_SUPER_MAGIC &&
 	basest.st_dev != st.st_dev) {
@@ -1088,12 +1106,15 @@ int FileStore::mkfs()
 	if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, (unsigned long int)&volargs)) {
 	  ret = -errno;
 	  if (ret != -EEXIST) {
+	    TEMP_FAILURE_RETRY(::close(fd));  
+	    TEMP_FAILURE_RETRY(::close(volargs.fd));
 	    derr << "mkfs: failed to create " << volargs.name << ": "
 		 << cpp_strerror(ret) << dendl;
 	    goto close_fsid_fd;
 	  }
 	}
 	if (::fchmod(volargs.fd, 0755)) {
+	  TEMP_FAILURE_RETRY(::close(fd));  
 	  TEMP_FAILURE_RETRY(::close(volargs.fd));
 	  ret = -errno;
 	  derr << "mkfs: failed to chmod " << basedir << "/" << volargs.name << " to 0755: "
@@ -1266,10 +1287,17 @@ int FileStore::_test_fiemap()
     // write a large extent
     char buf[len];
     memset(buf, 1, sizeof(buf));
-    ::lseek(fd, off, SEEK_SET);
-    int r = safe_write(fd, buf, sizeof(buf));
+    int r = ::lseek(fd, off, SEEK_SET);
+    if (r < 0) {
+      r = -errno;
+      derr << "_test_fiemap failed to lseek " << fn << ": " << cpp_strerror(r) << dendl;
+      TEMP_FAILURE_RETRY(::close(fd));
+      return r;
+    }
+    r = safe_write(fd, buf, sizeof(buf));
     if (r < 0) {
       derr << "_test_fiemap failed to write to " << fn << ": " << cpp_strerror(r) << dendl;
+      TEMP_FAILURE_RETRY(::close(fd));
       return r;
     }
   }
@@ -1325,6 +1353,7 @@ int FileStore::_detect_fs()
       *_dout << "Got error " + cpp_strerror(ret) + ". ";
     *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
 	   << "file system with the 'user_xattr' option." << dendl;
+    TEMP_FAILURE_RETRY(::close(tmpfd));
     return -ENOTSUP;
   }
 
@@ -1357,13 +1386,17 @@ int FileStore::_detect_fs()
     return -errno;
 
   int r = _test_fiemap();
-  if (r < 0)
+  if (r < 0) {
+    TEMP_FAILURE_RETRY(::close(fd));
     return -r;
+  }
 
   struct statfs st;
   r = ::fstatfs(fd, &st);
-  if (r < 0)
+  if (r < 0) {
+    TEMP_FAILURE_RETRY(::close(fd));
     return -errno;
+  }
   blk_size = st.f_bsize;
 
 #if defined(__linux__)
@@ -1930,6 +1963,7 @@ int FileStore::mount()
       derr << "FileStore::mount: failed to create current/nosnap" << dendl;
       goto close_current_fd;
     }
+    TEMP_FAILURE_RETRY(::close(r));
   } else {
     // clear nosnap marker, if present.
     ::unlink(nosnapfn);
@@ -1939,6 +1973,7 @@ int FileStore::mount()
     LevelDBStore *omap_store = new LevelDBStore(omap_dir);
     stringstream err;
     if (omap_store->init(err)) {
+      delete omap_store;
       derr << "Error initializing leveldb: " << err.str() << dendl;
       ret = -1;
       goto close_current_fd;
@@ -1946,6 +1981,7 @@ int FileStore::mount()
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
     ret = dbomap->init(do_update);
     if (ret < 0) {
+      delete dbomap;
       derr << "Error initializing DBObjectMap: " << ret << dendl;
       goto close_current_fd;
     }
@@ -1953,6 +1989,7 @@ int FileStore::mount()
 
     if (g_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
       derr << err2.str() << dendl;;
+      delete dbomap;
       ret = -EINVAL;
       goto close_current_fd;
     }

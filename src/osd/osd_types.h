@@ -1168,7 +1168,7 @@ struct pg_query_t {
   pg_history_t history;
   epoch_t epoch_sent;
 
-  pg_query_t() : type(-1) {}
+  pg_query_t() : type(-1), epoch_sent(0) {}
   pg_query_t(int t, const pg_history_t& h,
 	     epoch_t epoch_sent)
     : type(t), history(h),

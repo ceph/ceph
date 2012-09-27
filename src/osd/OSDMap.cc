@@ -1438,7 +1438,11 @@ void OSDMap::print_osd_line(int cur, ostream& out) const
       out << "up\t";
     else
       out << "down\t";
-    out << std::setprecision(4) << (exists(cur) ? get_weightf(cur) : 0) << "\t";
+    std::streamsize p = out.precision();
+    out << std::setprecision(4) 
+	<< (exists(cur) ? get_weightf(cur) : 0)
+	<< std::setprecision(p)
+	<< "\t";
   }
 }
 
