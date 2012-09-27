@@ -49,10 +49,10 @@ Data Storage
 Plan your data storage configuration carefully, because there are significant
 opportunities for performance improvement by incurring the added cost of using
 solid state drives, and there are significant  cost-per-gigabyte considerations
-with hard disk drives. Metadata servers and monitors  don't use a lot of storage
-space. A metadata server requires approximately 1MB  of storage space per daemon
-instance. A  monitor requires approximately 10GB of  storage space per daemon
-instance. One opportunity for performance improvement  is to use solid-state
+with hard disk drives. Metadata servers and monitors don't use a lot of storage
+space. A metadata server requires approximately 1MB of storage space per daemon
+instance. A  monitor requires approximately 10GB of storage space per daemon
+instance. One opportunity for performance improvement is to use solid-state
 drives to reduce random access time and read latency while accelerating
 throughput. Solid state drives cost more than 10x as much per gigabyte when
 compared to a hard disk, but they often exhibit access times that are at least
@@ -65,9 +65,9 @@ gigabyte, because larger drives may have a significant impact on the
 cost-per-gigabyte. For example, a 1 terabyte hard disk priced at $75.00 has a
 cost  of $0.07 per gigabyte (i.e., $75 / 1024 = 0.0732). By contrast, a 3
 terabyte hard  disk priced at $150.00 has a cost of $0.05 per gigabyte (i.e.,
-$150 / 3072 = 0.0488).  In the foregoing example, using the 1 terabyte disks
+$150 / 3072 = 0.0488). In the foregoing example, using the 1 terabyte disks
 would generally increase the cost per gigabyte by 40%--rendering your cluster
-substantially less cost efficient.  For OSD hosts, we recommend using an OS disk
+substantially less cost efficient. For OSD hosts, we recommend using an OS disk
 for the operating system and software, and one disk for each OSD daemon you run
 on the host. While solid state drives are cost prohibitive for object storage,
 OSDs may see a performance improvement by storing an OSD's journal on a solid
@@ -85,7 +85,7 @@ Networks
 
 We recommend that each host have at least two 1Gbps network interface
 controllers (NICs). Since most commodity hard disk drives have a throughput of
-approximately 100MB/sec., your NICs should be able to handle the traffic for
+approximately 100MB/second, your NICs should be able to handle the traffic for
 the OSD disks on your host. We recommend a minimum of two NICs to account for a
 public (front-side) network and a cluster (back-side) network. A cluster network
 (preferably not connected to the internet) handles the additional load for data
@@ -98,17 +98,26 @@ the  replication times would be 20 minutes and 1 hour respectively. In a
 petabyte-scale cluster, failure of an OSD disk should be an expectation, not an
 exception. System administrators will appreciate PGs recovering from a
 ``degraded`` state to an ``active + clean`` state as rapidly as possible, with
-price / performance tradeoffs taken into consideration. Top-of-rack routers for
-each network need to  be able to communicate with spine routers that have even
-faster throughput--e.g.,  40Gbps to 100Gbps. Some experts suggest using a third
-NIC per host for a management  network (e.g., hypervisor SSH access, VM image
-uploads, management sockets, etc.),  and potentially a fourth NIC per host to
-handle VM traffic between between the cluster  and compute stacks (e.g.,
-OpenStack, CloudStack, etc.). Running three or four  logical networks may seem
-like overkill, but each traffic path represents a  potential capacity,
-throughput and/or performance bottleneck that you should  carefully consider
-before deploying a large scale data cluster.
+price / performance tradeoffs taken into consideration. Additionally, some
+deployment tools  (e.g., Dell's Crowbar) deploy with five different networks,
+but employ VLANs to make hardware and network cabling more manageable. VLANs
+using 802.1q protocol require VLAN-capable NICs and Switches. The added hardware
+expense may be offset by the operational cost savings for network setup and
+maintenance. When using VLANs to handle VM traffic between between the cluster
+and compute stacks (e.g., OpenStack, CloudStack, etc.), it is also worth
+considering using 10G Ethernet. Top-of-rack routers for each network also need
+to be able to communicate with spine routers that have even faster
+throughput--e.g.,  40Gbps to 100Gbps.
 
+Your server hardware should have a Baseboard Management Controller (BMC).
+Administration and deployment tools may also use BMCs extensively, so consider
+the cost/benefit tradeoff of an out-of-band network for administration.
+Hypervisor SSH access, VM image uploads, OS image installs, management sockets,
+etc. can impose significant loads on a network.  Running three networks may seem
+like overkill, but each traffic path represents a potential capacity, throughput
+and/or performance bottleneck that you should carefully consider before
+deploying a large scale data cluster.
+ 
 
 Failure Domains
 ===============
@@ -185,7 +194,7 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 |                +----------------+------------------------------------+
 |                | OSD Network    |  2x 1GB Ethernet NICs              |
 |                +----------------+------------------------------------+
-|                | NIC Mgmt.      |  2x 1GB Ethernet NICs              |
+|                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
 +----------------+----------------+------------------------------------+
 | Dell PE R515   | Processor      |  1x hex-core Opteron CPU           |
 |                +----------------+------------------------------------+
@@ -199,6 +208,5 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 |                +----------------+------------------------------------+
 |                | OSD Network    |  2x 1GB Ethernet NICs              |
 |                +----------------+------------------------------------+
-|                | NIC Mgmt.      |  2x 1GB Ethernet NICs              |
+|                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
 +----------------+----------------+------------------------------------+
-
