@@ -1221,6 +1221,12 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 						 get_osdmap()->get_epoch(), m->query_epoch,
 						 info.pgid);
       osd->cluster_messenger->send_message(reply, m->get_connection());
+      queue_peering_event(
+	CephPeeringEvtRef(
+	  new CephPeeringEvt(
+	    get_osdmap()->get_epoch(),
+	    get_osdmap()->get_epoch(),
+	    Backfilled())));
     }
     // fall-thru
 
@@ -6069,6 +6075,19 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
       dout(10) << "deferring backfill due to NOBACKFILL" << dendl;
       deferred_backfill = true;
+    } else if (!backfill_reserved) {
+      dout(10) << "deferring backfill due to !backfill_reserved" << dendl;
+      if (!backfill_reserving) {
+	dout(10) << "queueing RequestBackfill" << dendl;
+	backfill_reserving = true;
+	queue_peering_event(
+	  CephPeeringEvtRef(
+	    new CephPeeringEvt(
+	      get_osdmap()->get_epoch(),
+	      get_osdmap()->get_epoch(),
+	      RequestBackfill())));
+      }
+      deferred_backfill = true;
     } else {
       started += recover_backfill(max - started);
     }
@@ -6095,6 +6114,12 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
     return started;
   }
 
+  queue_peering_event(
+    CephPeeringEvtRef(
+      new CephPeeringEvt(
+	get_osdmap()->get_epoch(),
+	get_osdmap()->get_epoch(),
+	Backfilled())));
   handle_recovery_complete(prctx);
 
   return 0;

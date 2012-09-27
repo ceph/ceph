@@ -27,6 +27,7 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MBackfillReserve.h"
 
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
@@ -75,6 +76,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   last_peering_reset(0),
   heartbeat_peer_lock("PG::heartbeat_peer_lock"),
   backfill_target(-1),
+  backfill_reserved(0),
+  backfill_reserving(0),
   pg_stats_lock("PG::pg_stats_lock"),
   pg_stats_valid(false),
   osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
@@ -1476,7 +1479,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	m->past_intervals = past_intervals;
 
       if (pi.last_backfill != hobject_t::get_max())
-	state_set(PG_STATE_BACKFILL);
+	state_set(PG_STATE_BACKFILL_WAIT);
       else
 	active++;
 
@@ -1704,7 +1707,8 @@ void PG::all_activated_and_committed()
 
   // make sure CLEAN is marked if we've been clean in this interval
   if (info.last_complete == info.last_update &&
-      !state_test(PG_STATE_BACKFILL) &&
+      !state_test(PG_STATE_BACKFILL_TOOFULL) &&
+      !state_test(PG_STATE_BACKFILL_WAIT) &&
       !state_test(PG_STATE_RECOVERING)) {
     mark_clean();
   }
@@ -1767,7 +1771,8 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
   dout(10) << "finish_recovery" << dendl;
   assert(info.last_complete == info.last_update);
 
-  state_clear(PG_STATE_BACKFILL);
+  state_clear(PG_STATE_BACKFILL_TOOFULL);
+  state_clear(PG_STATE_BACKFILL_WAIT);
   state_clear(PG_STATE_RECOVERING);
 
   // only mark CLEAN if last_epoch_started is already stable.
@@ -5105,6 +5110,215 @@ void PG::RecoveryState::Peering::exit()
   pg->clear_probe_targets();
 }
 
+/*------Backfilling-------*/
+PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/Backfilling";
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->backfill_reserved = true;
+  pg->osd->queue_for_recovery(pg);
+  pg->state_set(PG_STATE_BACKFILL);
+}
+
+void PG::RecoveryState::Backfilling::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->backfill_reserved = false;
+  pg->backfill_reserving = false;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->state_clear(PG_STATE_BACKFILL);
+}
+
+template <class EVT>
+struct QueuePeeringEvt : Context {
+  boost::intrusive_ptr<PG> pg;
+  epoch_t epoch;
+  EVT evt;
+  QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
+    pg(pg), epoch(epoch), evt(evt) {}
+  void finish(int r) {
+    pg->lock();
+    pg->queue_peering_event(PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  epoch,
+	  epoch,
+	  evt)));
+    pg->unlock();
+  }
+};
+
+/*--WaitRemoteBackfillReserved--*/
+
+PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/WaitRemoteBackfillReserved";
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  Connection *con =
+    pg->osd->cluster_messenger->get_connection(
+      pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
+  if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
+    pg->osd->cluster_messenger->send_message(
+      new MBackfillReserve(
+	MBackfillReserve::REQUEST,
+	pg->info.pgid,
+	pg->get_osdmap()->get_epoch()),
+      pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
+  } else {
+    post_event(RemoteBackfillReserved());
+  }
+}
+
+void PG::RecoveryState::WaitRemoteBackfillReserved::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+boost::statechart::result
+PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
+  return transit<Backfilling>();
+}
+
+boost::statechart::result
+PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->state_clear(PG_STATE_BACKFILL_WAIT);
+  pg->state_set(PG_STATE_BACKFILL_TOOFULL);
+
+  Mutex::Locker lock(pg->osd->backfill_request_lock);
+  pg->osd->backfill_request_timer.add_event_after(
+    g_conf->osd_backfill_retry_interval,
+    new QueuePeeringEvt<RequestBackfill>(
+      pg, pg->get_osdmap()->get_epoch(),
+      RequestBackfill()));
+
+  return transit<NotBackfilling>();
+}
+
+/*--WaitLocalBackfillReserved--*/
+PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/WaitLocalBackfillReserved";
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.request_reservation(
+    pg->info.pgid,
+    new QueuePeeringEvt<LocalBackfillReserved>(
+      pg, pg->get_osdmap()->get_epoch(),
+      LocalBackfillReserved()));
+}
+
+void PG::RecoveryState::WaitLocalBackfillReserved::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+/*----NotBackfilling------*/
+PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/NotBackfilling";
+  context< RecoveryMachine >().log_enter(state_name);
+}
+
+void PG::RecoveryState::NotBackfilling::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+/*---RepNotBackfilling----*/
+PG::RecoveryState::RepNotBackfilling::RepNotBackfilling(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/RepNotBackfilling";
+  context< RecoveryMachine >().log_enter(state_name);
+}
+
+void PG::RecoveryState::RepNotBackfilling::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+/*-RepWaitBackfillReserved*/
+PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/RepWaitBackfillReserved";
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  int64_t kb      = pg->osd->osd->osd_stat.kb,
+          kb_used = pg->osd->osd->osd_stat.kb_used;
+  int64_t max = kb * g_conf->osd_backfill_full_ratio;
+  if (kb_used >= max) {
+    dout(10) << "backfill reservation rejected: kb used >= max: "
+             << kb_used << " >= " << max << dendl;
+    post_event(RemoteReservationRejected());
+  } else {
+    pg->osd->remote_reserver.request_reservation(
+      pg->info.pgid,
+      new QueuePeeringEvt<RemoteBackfillReserved>(
+        pg, pg->get_osdmap()->get_epoch(),
+        RemoteBackfillReserved()));
+  }
+}
+
+void PG::RecoveryState::RepWaitBackfillReserved::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+boost::statechart::result
+PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->cluster_messenger->send_message(
+    new MBackfillReserve(
+      MBackfillReserve::GRANT,
+      pg->info.pgid,
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_cluster_inst(pg->acting[0]));
+  return transit<RepBackfilling>();
+}
+
+boost::statechart::result
+PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejected &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->cluster_messenger->send_message(
+    new MBackfillReserve(
+      MBackfillReserve::REJECT,
+      pg->info.pgid,
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_cluster_inst(pg->acting[0]));
+  return transit<RepNotBackfilling>();
+}
+
+/*---RepBackfilling-------*/
+PG::RecoveryState::RepBackfilling::RepBackfilling(my_context ctx)
+  : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/RepBackfilling";
+  context< RecoveryMachine >().log_enter(state_name);
+}
+
+void PG::RecoveryState::RepBackfilling::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+}
+
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx)
@@ -5113,6 +5327,8 @@ PG::RecoveryState::Active::Active(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
+  assert(!pg->backfill_reserving);
+  assert(!pg->backfill_reserved);
   assert(pg->is_primary());
   dout(10) << "In Active, about to call activate" << dendl;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
@@ -5254,7 +5470,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const RecoveryComplet
 
   int newest_update_osd;
 
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
+  pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERING);
 
   // if we finished backfill, all acting are active; recheck if
@@ -5336,9 +5553,13 @@ void PG::RecoveryState::Active::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
+  pg->backfill_reserved = false;
+  pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_DEGRADED);
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
+  pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_REPLAY);
 }
 
@@ -5423,6 +5644,8 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QuerySta
 void PG::RecoveryState::ReplicaActive::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
 }
 
 /*-------Stray---*/

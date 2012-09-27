@@ -26,6 +26,7 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/LogClient.h"
+#include "common/AsyncReserver.h"
 
 #include "os/ObjectStore.h"
 #include "OSDCap.h"
@@ -243,6 +244,10 @@ public:
   SafeTimer watch_timer;
   Watch *watch;
 
+  // -- Backfill Request Scheduling --
+  Mutex backfill_request_lock;
+  SafeTimer backfill_request_timer;
+
   // -- tids --
   // for ops i issue
   tid_t last_tid;
@@ -254,6 +259,11 @@ public:
     tid_lock.Unlock();
     return t;
   }
+
+  // -- backfill_reservation --
+  Finisher reserver_finisher;
+  AsyncReserver<pg_t> local_reserver;
+  AsyncReserver<pg_t> remote_reserver;
 
   // -- pg_temp --
   Mutex pg_temp_lock;
@@ -314,6 +324,9 @@ public:
 
   void pg_stat_queue_enqueue(PG *pg);
   void pg_stat_queue_dequeue(PG *pg);
+
+  void init();
+  void shutdown();
 
   OSDService(OSD *osd);
 };
@@ -900,6 +913,7 @@ protected:
   void handle_pg_scan(OpRequestRef op);
 
   void handle_pg_backfill(OpRequestRef op);
+  void handle_pg_backfill_reserve(OpRequestRef op);
 
   void handle_pg_remove(OpRequestRef op);
   void _remove_pg(PG *pg);

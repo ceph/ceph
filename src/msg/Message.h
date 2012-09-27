@@ -93,6 +93,8 @@
 #define MSG_COMMAND            97
 #define MSG_COMMAND_REPLY      98
 
+#define MSG_OSD_BACKFILL_RESERVE 99
+
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor

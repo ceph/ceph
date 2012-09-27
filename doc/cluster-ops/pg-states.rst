@@ -49,6 +49,9 @@ map is ``active + clean``.
   instead of inferring what contents need to be synchronized from the logs of
   recent operations. *Backfill* is a special case of recovery.
 
+*Wait-backfill*
+  The placement group is waiting in line to start backfill.
+
 *Incomplete*
   Ceph detects that a placement group is missing a necessary period of history 
   from its log.  If you see this state, report a bug, and try to start any
