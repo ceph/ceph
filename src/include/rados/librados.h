@@ -1490,6 +1490,8 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  *
  * @note BUG: watch timeout should be configurable
  * @note BUG: librados should provide a way for watchers to notice connection resets
+ * @note BUG: the ver parameter does not work, and -ERANGE will never be returned
+ *            (http://www.tracker.newdream.net/issues/2592)
  *
  * @param io the pool the object is in
  * @param o the object to watch
