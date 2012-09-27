@@ -50,7 +50,7 @@ struct OSDCapSpec {
   OSDCapSpec(std::string n, std::string a) : allow(0), class_name(n), class_allow(a) {}
 
   bool allow_all() const {
-    return allow & OSD_CAP_ANY;
+    return allow == OSD_CAP_ANY;
   }
 };
 
