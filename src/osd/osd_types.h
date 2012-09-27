@@ -560,11 +560,13 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
 #define PG_STATE_RECOVERING   (1<<14) // pg is recovering/migrating objects
-#define PG_STATE_BACKFILL     (1<<15) // [active] backfilling pg content
+#define PG_STATE_BACKFILL_WAIT     (1<<15) // [active] reserving backfill
 #define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
 #define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
 #define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
 #define PG_STATE_DEEP_SCRUB   (1<<19) // deep scrub: check CRC32 on files
+#define PG_STATE_BACKFILL  (1<<20) // [active] backfilling pg content
+#define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
 
 std::string pg_state_string(int state);
 

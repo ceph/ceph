@@ -44,6 +44,7 @@ using namespace std;
 
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MBackfillReserve.h"
 
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
@@ -322,6 +323,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_COMMAND_REPLY:
     m = new MCommandReply;
+    break;
+  case MSG_OSD_BACKFILL_RESERVE:
+    m = new MBackfillReserve;
     break;
 
   case MSG_ROUTE:
