@@ -1023,7 +1023,8 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker,
         return ret;
 
       if (max_entries && (i >= max_entries)) {
-        *truncated = true;
+        if (truncated)
+          *truncated = true;
         key_iter = key;
         return 0;
       }
