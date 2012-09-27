@@ -265,7 +265,7 @@ WRITE_CLASS_ENCODER(rgw_cls_usage_log_trim_op)
 struct cls_rgw_gc_set_entry_op {
   uint32_t expiration_secs;
   cls_rgw_gc_obj_info info;
-  cls_rgw_gc_set_entry_op() {}
+  cls_rgw_gc_set_entry_op() : expiration_secs(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -286,7 +286,7 @@ WRITE_CLASS_ENCODER(cls_rgw_gc_set_entry_op)
 struct cls_rgw_gc_defer_entry_op {
   uint32_t expiration_secs;
   string tag;
-  cls_rgw_gc_defer_entry_op() {}
+  cls_rgw_gc_defer_entry_op() : expiration_secs(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -308,7 +308,7 @@ struct cls_rgw_gc_list_op {
   string marker;
   uint32_t max;
 
-  cls_rgw_gc_list_op() {}
+  cls_rgw_gc_list_op() : max(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -330,7 +330,7 @@ struct cls_rgw_gc_list_ret {
   list<cls_rgw_gc_obj_info> entries;
   bool truncated;
 
-  cls_rgw_gc_list_ret() {}
+  cls_rgw_gc_list_ret() : truncated(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
