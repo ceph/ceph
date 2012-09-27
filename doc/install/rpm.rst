@@ -29,20 +29,20 @@ security warning::
 
 Packages are currently built for the Centos6 and Fedora 17 platforms.
 
-The repository package installs the repo details on your local system for yum or up2date to use.::
+The repository package installs the repo details on your local system for yum or up2date to use.
 
-For Centos6:
+For CentOS6:
 
-    su -c 'rpm -Uvh http://ceph.come/el6/x86_64/ceph-release-1-0.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/el6/x86_64/ceph-release-1-0.noarch.rpm'
 
 For Fedora17: 
 
-    su -c 'rpm -Uvh http://ceph.come/fc17/x86_64/ceph-release-1-0.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/fc17/x86_64/ceph-release-1-0.noarch.rpm'
 
 Installing Packages
 -------------------
 
-Once you have added either release or development packages to yum, 
-you should update APT's database and install Ceph::
+Once you have added either release or development packages to yum, you
+can install Ceph::
 
 	sudo yum install ceph
