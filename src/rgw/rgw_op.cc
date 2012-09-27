@@ -1184,7 +1184,8 @@ void RGWPutObj::execute()
   }
 
   if (supplied_etag) {
-    strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5));
+    strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
+    supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
   processor = select_processor();
