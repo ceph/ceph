@@ -251,8 +251,8 @@ struct rgw_usage_log_entry {
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
   map<string, rgw_usage_data> usage_map;
 
-  rgw_usage_log_entry() {}
-  rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b) {}
+  rgw_usage_log_entry() : epoch(0) {}
+  rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b), epoch(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
