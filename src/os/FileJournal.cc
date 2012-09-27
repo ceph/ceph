@@ -323,13 +323,17 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     uint64_t i = 0;
     for (; (i + write_size) <= (unsigned)max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
-      if (ret < 0)
+      if (ret < 0) {
+	delete [] buf;
 	return -errno;
+      }
     }
     if (i < (unsigned)max_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
-      if (ret < 0)
+      if (ret < 0) {
+	delete [] buf;
 	return -errno;
+      }
     }
     delete [] buf;
   }
@@ -423,7 +427,7 @@ int FileJournal::create()
     goto free_buf;
   }
 
-  needed_space = g_conf->osd_max_write_size << 20;
+  needed_space = ((int64_t)g_conf->osd_max_write_size) << 20;
   needed_space += (2 * sizeof(entry_header_t)) + get_top();
   if (header.max_size - header.start < needed_space) {
     derr << "FileJournal::create: OSD journal is not large enough to hold "
@@ -942,8 +946,13 @@ int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
   align_bl(pos, bl);
 
-  ::lseek64(fd, pos, SEEK_SET);
-  int ret = bl.write_fd(fd);
+  int ret = ::lseek64(fd, pos, SEEK_SET);
+  if (ret) {
+    ret = -errno;
+    derr << "FileJournal::write_bl : lseek64 failed " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+  ret = bl.write_fd(fd);
   if (ret) {
     derr << "FileJournal::write_bl : write_fd failed: " << cpp_strerror(ret) << dendl;
     return ret;
