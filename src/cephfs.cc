@@ -279,7 +279,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
   int r = fstat (*fd, &stat_field);
   if (r < 0) {
     int err = errno;
-    cerr << "error doing stat file: " << cpp_strerror(errno) << endl;
+    cerr << "error doing stat file: " << cpp_strerror(err) << endl;
     return 1;
   }
 
