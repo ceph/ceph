@@ -26,7 +26,7 @@ using std::vector;
 
 ostream& operator<<(ostream& out, rwxa_t p)
 { 
-  if (p & OSD_CAP_ANY)
+  if (p == OSD_CAP_ANY)
     return out << "*";
 
   if (p & OSD_CAP_R)
@@ -40,20 +40,11 @@ ostream& operator<<(ostream& out, rwxa_t p)
 
 ostream& operator<<(ostream& out, const OSDCapSpec& s)
 {
-  if (s.allow & OSD_CAP_ANY)
-    return out << "*";
-  if (s.allow) {
-    if (s.allow & OSD_CAP_R)
-      out << 'r';
-    if (s.allow & OSD_CAP_W)
-      out << 'w';
-    if (s.allow & OSD_CAP_X)
-      out << 'x';
-    return out;
-  }
+  if (s.allow)
+    return out << s.allow;
   if (s.class_name.length())
     return out << "class '" << s.class_name << "' '" << s.class_allow << "'";
-  return out << s.allow;
+  return out;
 }
 
 ostream& operator<<(ostream& out, const OSDCapMatch& m)
