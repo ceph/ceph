@@ -945,9 +945,10 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
   align_bl(pos, bl);
+  int ret;
 
-  int ret = ::lseek64(fd, pos, SEEK_SET);
-  if (ret) {
+  off64_t spos = ::lseek64(fd, pos, SEEK_SET);
+  if (spos < 0) {
     ret = -errno;
     derr << "FileJournal::write_bl : lseek64 failed " << cpp_strerror(ret) << dendl;
     return ret;
