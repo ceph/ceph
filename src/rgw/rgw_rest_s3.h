@@ -81,6 +81,16 @@ public:
   void send_response();
 };
 
+class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
+public:
+  RGWPostObj_ObjStore_S3() {}
+  ~RGWPostObj_ObjStore_S3() {}
+
+  int get_params();
+  void send_response();
+  int get_form_head();
+};
+
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
 public:
   RGWDeleteObj_ObjStore_S3() {}
