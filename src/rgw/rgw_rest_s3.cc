@@ -622,17 +622,17 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<string,int>& resu
       s->formatter->dump_string("Key", result.first);
       s->formatter->close_section();
     } else if (result.first < 0) {
-      struct rgw_html_errors *r = new rgw_html_errors;
+      struct rgw_html_errors r;
       int err_no;
 
       s->formatter->open_object_section("Error");
 
       err_no = -(result.second);
-      rgw_get_errno_s3(r, err_no);
+      rgw_get_errno_s3(&r, err_no);
 
       s->formatter->dump_string("Key", result.first);
-      s->formatter->dump_int("Code", r->http_ret);
-      s->formatter->dump_string("Message", r->s3_code);
+      s->formatter->dump_int("Code", r.http_ret);
+      s->formatter->dump_string("Message", r.s3_code);
       s->formatter->close_section();
     }
 
