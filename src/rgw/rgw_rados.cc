@@ -471,7 +471,11 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
       return r;
     state->pos += r;
     bufferlist old;
-    old.substr_of(state->bl, off, state->bl.length() - off);
+    try {
+      old.substr_of(state->bl, off, state->bl.length() - off);
+    } catch (buffer::error& err) {
+      return -EINVAL;
+    }
     state->bl.clear();
     state->bl.claim(old);
     state->bl.claim_append(more);
