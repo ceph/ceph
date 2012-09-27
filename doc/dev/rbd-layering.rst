@@ -49,7 +49,7 @@ that there are no children left:
     $ rbd rm pool2/child2
     $ rbd snap rm pool/image@snap
     Cannot remove a protected snapshot: pool/image@snap
-    $ rbd unprotect pool/image@snap
+    $ rbd snap unprotect pool/image@snap
 
 Then the snapshot can be deleted like normal:
 ::

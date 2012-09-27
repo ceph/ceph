@@ -75,15 +75,17 @@ superuser permissions for the given subsystem.
 For example::
 
 	# can read, write, and execute objects
-        osd = "allow rwx [pool=foo[,bar]]|[uid=baz[,bay]]"
+        osd = "allow rwx"
 
 	# can access mds server
         mds = "allow"
 
-        # can modify cluster state (i.e., is a server daemon)
-	mon = "allow rwx"
+	# can modify cluster state (i.e., is a server daemon)
+        mon = "allow rwx"
 
 A librados user restricted to a single pool might look like::
+
+        mon = "allow r"
 
         osd = "allow rw pool foo"
 
@@ -91,9 +93,33 @@ A client mounting the file system with minimal permissions would need caps like:
 
         mds = "allow"
 
-        osd = "allow rw pool=data"
+        osd = "allow rw pool data"
 
         mon = "allow r"
+
+
+OSD Capabilities
+================
+
+In general, an osd capability follows the grammar::
+
+        osdcap  := grant[,grant...]
+        grant   := allow (match capspec | capspec match)
+        match   := [pool <poolname>]
+        capspec := * | [r][w][x]
+
+The capspec determines what kind of operations the entity can perform::
+
+    r = read access to objects
+    w = write access to objects
+    x = able to run class methods on objects
+    * = equivalent to rwx
+
+The match criteria restrict a grant based on the pool being accessed.
+Grants are additive if the client fulfills the match condition. For
+example, if a client has the osd capabilities: "allow r, allow w pool
+foo, allow x pool bar", then it has rw access to pool foo, rx access
+to pool bar, and r access to all other pools.
 
 
 Caps file format

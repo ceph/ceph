@@ -2,15 +2,23 @@
  RBD Cache Config Settings
 ===========================
 
+With the kernel rbd driver, the Linux page cache can be used to
+improve performance. The userspace implementation, librbd, cannot take
+advantage of the page cache, so it includes its own in-memory caching,
+called RBD caching.
+
 RBD caching behaves just like well-behaved hard disk caching.  When the OS sends
 a barrier or a flush request, all dirty data is written to the OSDs. This means
 that using write-back caching is just as safe as using a well-behaved physical
-hard disk with a VMS that properly sends flushes (i.e. Linux kernel >= 2.6.32).
+hard disk with a VM that properly sends flushes (i.e. Linux kernel >= 2.6.32).
+
+The cache is LRU, and in write-back mode it can coalesce contiguous
+requests for better throughput.
 
 .. versionadded:: 0.46
 
 Ceph supports write-back caching for RBD. To enable it, add  ``rbd cache =
-true`` to the ``[global]`` section of your ``ceph.conf`` file. By default
+true`` to the ``[client]`` section of your ``ceph.conf`` file. By default
 ``librbd`` does not perform any caching. Writes and reads go directly to the
 storage cluster, and writes return only when the data is on disk on all
 replicas. With caching enabled, writes return immediately, unless there are more
@@ -19,16 +27,17 @@ writeback and blocks until enough bytes are flushed.
 
 .. versionadded:: 0.47
 
-Ceph supports write-through caching for RBD. You can set the size of the 
-cache, and you can set targets and limits to switch from write-back
-caching to write through caching. To enable write-through mode, set ``rbd cache max dirty`` to 0. This means
-writes return only when the data is on disk on all replicas, but reads
-may come from the cache. The cache is in memory on the client, and each RBD image has its own.
-Since the cache is local to the client, there's no coherency if there are
-others accesing the image. Running GFS or OCFS will not work with caching 
-enabled.
+Ceph supports write-through caching for RBD. You can set the size of
+the cache, and you can set targets and limits to switch from
+write-back caching to write through caching. To enable write-through
+mode, set ``rbd cache max dirty`` to 0. This means writes return only
+when the data is on disk on all replicas, but reads may come from the
+cache. The cache is in memory on the client, and each RBD image has
+its own.  Since the cache is local to the client, there's no coherency
+if there are others accesing the image. Running GFS or OCFS on top of
+RBD will not work with caching enabled.
 
-The ``ceph.conf`` file settings for RBD should be set in the ``[global]``
+The ``ceph.conf`` file settings for RBD should be set in the ``[client]``
 section of your configuration file. The settings include: 
 
 
