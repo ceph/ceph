@@ -33,6 +33,7 @@ class SafeTimer
   CephContext *cct;
   Mutex& lock;
   Cond cond;
+  bool safe_callbacks;
 
   friend class SafeTimerThread;
   SafeTimerThread *thread;
@@ -47,7 +48,17 @@ class SafeTimer
   void dump(const char *caller = 0) const;
 
 public:
-  SafeTimer(CephContext *cct, Mutex &l);
+  /* Safe callbacks determines whether callbacks are called with the lock
+   * held.
+   *
+   * safe_callbacks = true (default option) guarantees that a cancelled
+   * event's callback will never be called.
+   *
+   * Under some circumstances, holding the lock can cause lock cycles.
+   * If you are able to relax requirements on cancelled callbacks, then
+   * setting safe_callbacks = false eliminates the lock cycle issue.
+   * */
+  SafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
   ~SafeTimer();
 
   /* Call with the event_lock UNLOCKED.

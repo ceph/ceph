@@ -619,6 +619,8 @@ protected:
   BackfillInterval backfill_info;
   BackfillInterval peer_backfill_info;
   int backfill_target;
+  bool backfill_reserved;
+  bool backfill_reserving;
 
   friend class OSD;
 
@@ -1036,48 +1038,24 @@ public:
       *out << "Activate from " << query_epoch << std::endl;
     }
   };
-  struct Initialize : boost::statechart::event< Initialize > {
-    Initialize() : boost::statechart::event< Initialize >() {}
-    void print(std::ostream *out) const {
-      *out << "Initialize" << std::endl;
-    }
+#define TrivialEvent(T) struct T : boost::statechart::event< T > { \
+    T() : boost::statechart::event< T >() {}			   \
+    void print(std::ostream *out) const {			   \
+      *out << #T << std::endl;					   \
+    }								   \
   };
-  struct Load : boost::statechart::event< Load > {
-    Load() : boost::statechart::event< Load >() {}
-    void print(std::ostream *out) const {
-      *out << "Load" << std::endl;
-    }
-  };
-  struct GotInfo : boost::statechart::event< GotInfo > {
-    GotInfo() : boost::statechart::event< GotInfo >() {}
-    void print(std::ostream *out) const {
-      *out << "GotInfo" << std::endl;
-    }
-  };
-  struct NeedUpThru : boost::statechart::event< NeedUpThru > {
-    NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
-    void print(std::ostream *out) const {
-      *out << "NeedUpThru" << std::endl;
-    }
-  };
-  struct CheckRepops : boost::statechart::event< CheckRepops > {
-    CheckRepops() : boost::statechart::event< CheckRepops >() {};
-    void print(std::ostream *out) const {
-      *out << "CheckRepops" << std::endl;
-    }
-  };
-  struct NullEvt : boost::statechart::event< NullEvt > {
-    NullEvt() : boost::statechart::event< NullEvt >() {};
-    void print(std::ostream *out) const {
-      *out << "NullEvt" << std::endl;
-    }
-  };
-  struct FlushedEvt : boost::statechart::event< FlushedEvt > {
-    FlushedEvt() : boost::statechart::event< FlushedEvt >() {};
-    void print(std::ostream *out) const {
-      *out << "FlushedEvt" << std::endl;
-    }
-  };
+  TrivialEvent(Initialize)
+  TrivialEvent(Load)
+  TrivialEvent(GotInfo)
+  TrivialEvent(NeedUpThru)
+  TrivialEvent(CheckRepops)
+  TrivialEvent(NullEvt)
+  TrivialEvent(FlushedEvt)
+  TrivialEvent(Backfilled)
+  TrivialEvent(LocalBackfillReserved)
+  TrivialEvent(RemoteBackfillReserved)
+  TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(RequestBackfill)
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
@@ -1312,7 +1290,8 @@ public:
       boost::statechart::result react(const AdvMap &advmap);
     };
 
-    struct Active : boost::statechart::state< Active, Primary >, NamedState {
+    struct NotBackfilling;
+    struct Active : boost::statechart::state< Active, Primary, NotBackfilling >, NamedState {
       Active(my_context ctx);
       void exit();
 
@@ -1323,7 +1302,8 @@ public:
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< RecoveryComplete >
+	boost::statechart::custom_reaction< RecoveryComplete >,
+	boost::statechart::custom_reaction< Backfilled >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -1331,10 +1311,49 @@ public:
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
       boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const Backfilled&) {
+	return discard_event();
+      }
       boost::statechart::result react(const RecoveryComplete&);
     };
 
-    struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
+    struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< Backfilled, NotBackfilling >
+	> reactions;
+      Backfilling(my_context ctx);
+      void exit();
+    };
+
+    struct WaitRemoteBackfillReserved : boost::statechart::state< WaitRemoteBackfillReserved, Active >, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
+	> reactions;
+      WaitRemoteBackfillReserved(my_context ctx);
+      void exit();
+      boost::statechart::result react(const RemoteBackfillReserved& evt);
+      boost::statechart::result react(const RemoteReservationRejected& evt);
+    };
+
+    struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >
+	> reactions;
+      WaitLocalBackfillReserved(my_context ctx);
+      void exit();
+    };
+
+    struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>
+	> reactions;
+      NotBackfilling(my_context ctx);
+      void exit();
+    };
+
+    struct RepNotBackfilling;
+    struct ReplicaActive : boost::statechart::state< ReplicaActive, Started, RepNotBackfilling >, NamedState {
       ReplicaActive(my_context ctx);
       void exit();
 
@@ -1352,6 +1371,33 @@ public:
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
       boost::statechart::result react(const Activate&);
+    };
+
+    struct RepBackfilling : boost::statechart::state< RepBackfilling, ReplicaActive >, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< Backfilled, RepNotBackfilling >
+	> reactions;
+      RepBackfilling(my_context ctx);
+      void exit();
+    };
+
+    struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
+	> reactions;
+      RepWaitBackfillReserved(my_context ctx);
+      void exit();
+      boost::statechart::result react(const RemoteBackfillReserved &evt);
+      boost::statechart::result react(const RemoteReservationRejected &evt);
+    };
+
+    struct RepNotBackfilling : boost::statechart::state< RepNotBackfilling, ReplicaActive>, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< RequestBackfill, RepWaitBackfillReserved >
+	> reactions;
+      RepNotBackfilling(my_context ctx);
+      void exit();
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {

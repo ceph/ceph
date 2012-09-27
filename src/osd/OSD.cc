@@ -71,6 +71,7 @@
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGMissing.h"
+#include "messages/MBackfillReserve.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -161,8 +162,13 @@ OSDService::OSDService(OSD *osd) :
   watch_lock("OSD::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   watch(NULL),
+  backfill_request_lock("OSD::backfill_request_lock"),
+  backfill_request_timer(g_ceph_context, backfill_request_lock, false),
   last_tid(0),
   tid_lock("OSDService::tid_lock"),
+  reserver_finisher(g_ceph_context),
+  local_reserver(&reserver_finisher, g_conf->osd_max_backfills),
+  remote_reserver(&reserver_finisher, g_conf->osd_max_backfills),
   pg_temp_lock("OSDService::pg_temp_lock"),
   map_cache_lock("OSDService::map_lock"),
   map_cache(g_conf->osd_map_cache_size),
@@ -183,6 +189,23 @@ void OSDService::pg_stat_queue_enqueue(PG *pg)
 void OSDService::pg_stat_queue_dequeue(PG *pg)
 {
   osd->pg_stat_queue_dequeue(pg);
+}
+
+void OSDService::shutdown()
+{
+  reserver_finisher.stop();
+  watch_lock.Lock();
+  watch_timer.shutdown();
+  watch_lock.Unlock();
+
+  delete watch;
+}
+
+void OSDService::init()
+{
+  reserver_finisher.start();
+  watch_timer.init();
+  watch = new Watch();
 }
 
 ObjectStore *OSD::create_object_store(const std::string &dev, const std::string &jdev)
@@ -798,8 +821,7 @@ int OSD::init()
   Mutex::Locker lock(osd_lock);
 
   timer.init();
-  service.watch_timer.init();
-  service.watch = new Watch();
+  service.backfill_request_timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -833,7 +855,6 @@ int OSD::init()
     if (r < 0)
       return r;
   }
-  service.publish_superblock(superblock);
 
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
@@ -845,8 +866,6 @@ int OSD::init()
     return -EINVAL;
   }
   osdmap = get_map(superblock.current_epoch);
-  service.publish_map(osdmap);
-
   check_osdmap_features();
 
   bind_epoch = osdmap->get_epoch();
@@ -922,6 +941,9 @@ int OSD::init()
                                          "show slowest recent ops");
   assert(r == 0);
 
+  service.init();
+  service.publish_map(osdmap);
+  service.publish_superblock(superblock);
   return 0;
 }
 
@@ -1016,6 +1038,7 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
+  service.shutdown();
   g_ceph_context->_conf->set_val("debug_osd", "100");
   g_ceph_context->_conf->set_val("debug_journal", "100");
   g_ceph_context->_conf->set_val("debug_filestore", "100");
@@ -1028,9 +1051,9 @@ int OSD::shutdown()
 
   timer.shutdown();
 
-  service.watch_lock.Lock();
-  service.watch_timer.shutdown();
-  service.watch_lock.Unlock();
+  service.backfill_request_lock.Lock();
+  service.backfill_request_timer.shutdown();
+  service.backfill_request_lock.Unlock();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
@@ -1132,8 +1155,6 @@ int OSD::shutdown()
   hbserver_messenger->shutdown();
 
   monc->shutdown();
-
-  delete service.watch;
 
   osd_lock.Unlock();
   return r;
@@ -3157,6 +3178,10 @@ void OSD::dispatch_op(OpRequestRef op)
     handle_pg_backfill(op);
     break;
 
+  case MSG_OSD_BACKFILL_RESERVE:
+    handle_pg_backfill_reserve(op);
+    break;
+
     // client ops
   case CEPH_MSG_OSD_OP:
     handle_op(op);
@@ -4871,6 +4896,49 @@ void OSD::handle_pg_backfill(OpRequestRef op)
   enqueue_op(pg, op);
 }
 
+void OSD::handle_pg_backfill_reserve(OpRequestRef op)
+{
+  MBackfillReserve *m = static_cast<MBackfillReserve*>(op->request);
+  assert(m->get_header().type == MSG_OSD_BACKFILL_RESERVE);
+
+  if (!require_osd_peer(op))
+    return;
+  if (!require_same_or_newer_map(op, m->query_epoch))
+    return;
+
+  PG *pg = 0;
+  if (!_have_pg(m->pgid))
+    return;
+
+  pg = _lookup_lock_pg(m->pgid);
+  assert(pg);
+
+  if (m->type == MBackfillReserve::REQUEST) {
+    pg->queue_peering_event(
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->query_epoch,
+	  m->query_epoch,
+	  PG::RequestBackfill())));
+  } else if (m->type == MBackfillReserve::GRANT) {
+    pg->queue_peering_event(
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->query_epoch,
+	  m->query_epoch,
+	  PG::RemoteBackfillReserved())));
+  } else if (m->type == MBackfillReserve::REJECT) {
+    pg->queue_peering_event(
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->query_epoch,
+	  m->query_epoch,
+	  PG::RemoteReservationRejected())));
+  } else {
+    assert(0);
+  }
+  pg->unlock();
+}
 
 /** PGQuery
  * from primary to replica | stray
