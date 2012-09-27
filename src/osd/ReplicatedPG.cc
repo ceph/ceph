@@ -307,7 +307,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     int unfound = missing.num_missing() - missing_loc.size();
     if (!unfound) {
       ss << "pg has no unfound objects";
-      return -ENOENT;
+      return 0;  // make command idempotent
     }
 
     if (!all_unfound_are_queried_or_lost(get_osdmap())) {
