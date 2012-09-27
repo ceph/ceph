@@ -1,3 +1,9 @@
+ceph (0.52-1) precise; urgency=low
+
+  * New upstream release
+
+ -- Ubuntu <gary.lowell@inktank.com>  Thu, 27 Sep 2012 16:16:52 +0000
+
 ceph (0.51-1) experimental; urgency=low
 
   * New upstream release 
