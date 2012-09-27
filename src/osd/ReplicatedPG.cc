@@ -3576,10 +3576,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
   dout(10) << "op_applied " << *repop << dendl;
   if (repop->ctx->op)
     repop->ctx->op->mark_event("op_applied");
-
-  // discard my reference to the buffer
-  if (repop->ctx->op)
-    repop->ctx->op->request->clear_data();
   
   repop->applying = false;
   repop->applied = true;
