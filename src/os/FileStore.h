@@ -187,6 +187,7 @@ private:
 
     OpSequencer()
       : qlock("FileStore::OpSequencer::qlock", false, false),
+	parent(0),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
     ~OpSequencer() {
       assert(q.empty());
