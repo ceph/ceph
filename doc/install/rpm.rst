@@ -33,11 +33,11 @@ The repository package installs the repo details on your local system for yum or
 
 For CentOS6:
 
-    su -c 'rpm -Uvh http://ceph.com/rpms/el6/x86_64/ceph-release-1-0.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/rpms/el6/x86_64/ceph-release-1-0.el6.noarch.rpm'
 
 For Fedora17: 
 
-    su -c 'rpm -Uvh http://ceph.com/rpms/fc17/x86_64/ceph-release-1-0.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/rpms/fc17/x86_64/ceph-release-1-0.fc17.noarch.rpm'
 
 Installing Packages
 -------------------
