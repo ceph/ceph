@@ -95,7 +95,7 @@ Pool specific commands
 
 :command:`bench` *seconds* *mode* [ -b *objsize* ] [ -t *threads* ]
   Benchmark for seconds. The mode can be write or read. The default
-  object size is 4 KB, and the default number of simulated threads
+  object size is 4 MB, and the default number of simulated threads
   (parallel writes) is 16.
 
 :command:`listomapkeys` *name*
