@@ -135,6 +135,7 @@ endif
 
 # user tools
 cephfs_SOURCES = cephfs.cc
+cephfs_LDADD = libcommon.la
 bin_PROGRAMS += cephfs
 
 librados_config_SOURCES = librados-config.cc
