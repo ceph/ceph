@@ -82,9 +82,9 @@ int pidfile_remove(void)
   char buf[32];
   memset(buf, 0, sizeof(buf));
   ssize_t res = safe_read(fd, buf, sizeof(buf));
+  TEMP_FAILURE_RETRY(::close(fd));
   if (res < 0)
     return res;
-  TEMP_FAILURE_RETRY(::close(fd));
   int a = atoi(buf);
   if (a != getpid())
     return -EDOM;
