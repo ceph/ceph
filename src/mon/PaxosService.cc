@@ -126,6 +126,10 @@ void PaxosService::propose_pending()
   MonitorDBStore::Transaction t;
   bufferlist bl;
 
+  update_trim();
+  if (should_stash_full())
+    encode_full(&t);
+
   if (should_trim()) {
     encode_trim(&t);
     set_trim_to(0);
@@ -148,7 +152,16 @@ void PaxosService::propose_pending()
   paxos->propose_new_value(bl, new C_Committed(this));
 }
 
-
+bool PaxosService::should_stash_full()
+{
+  version_t latest_full = get_version_latest_full();
+  /* @note The first member of the condition is moot and it is here just for
+   *	   clarity's sake. The second member would end up returing true
+   *	   nonetheless because, in that event,
+   *	      latest_full == get_trim_to() == 0.
+   */
+  return (!latest_full || (latest_full <= get_trim_to()));
+}
 
 void PaxosService::restart()
 {

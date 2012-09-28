@@ -134,6 +134,7 @@ private:
   uint64_t assign_global_id(MAuth *m, bool should_increase_max);
   // propose pending update to peers
   void encode_pending(MonitorDBStore::Transaction *t);
+  virtual void encode_full(MonitorDBStore::Transaction *t);
   void update_trim();
 
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
