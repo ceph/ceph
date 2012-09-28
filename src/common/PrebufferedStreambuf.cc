@@ -20,7 +20,7 @@ PrebufferedStreambuf::int_type PrebufferedStreambuf::overflow(int_type c)
     m_overflow.resize(old_len * 2);
   }
   m_overflow[old_len] = c;
-  this->setp(&m_overflow[old_len + 1], &*m_overflow.end());
+  this->setp(&m_overflow[old_len + 1], &*m_overflow.begin() + m_overflow.size());
   return std::char_traits<char>::not_eof(c);
 }
 
