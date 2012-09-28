@@ -326,6 +326,7 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
       *out << opt->name << " = " << buf << std::endl;
     if (f)
       f->dump_string(opt->name, buf);
+    free(buf);
   }
 }
 
