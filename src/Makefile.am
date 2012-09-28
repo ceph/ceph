@@ -746,9 +746,9 @@ unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_daemon_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_daemon_config
 
-unittest_osd_osdcap_SOURCES = test/osd/osdcap.cc
+unittest_osd_osdcap_SOURCES = test/osd/osdcap.cc osd/OSDCap.cc
 unittest_osd_osdcap_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
-unittest_osd_osdcap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA} libosd.a
+unittest_osd_osdcap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_osd_osdcap_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_osd_osdcap
 
