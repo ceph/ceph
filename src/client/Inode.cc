@@ -107,6 +107,9 @@ void Inode::get_cap_ref(int cap)
 
 bool Inode::put_cap_ref(int cap)
 {
+  // if cap is always a single bit (which it seems to be)
+  // all this logic is equivalent to:
+  // if (--cap_refs[c]) return false; else return true;
   bool last = false;
   int n = 0;
   while (cap) {
