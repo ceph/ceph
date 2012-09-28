@@ -490,8 +490,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
 }
 
 int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid) {
-  data.finished = 0;
-
   lock_cond lc(&lock);
   std::string name[concurrentios];
   std::string newName;
@@ -518,12 +516,14 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     contents[i] = new bufferlist();
   }
 
+  lock.Lock();
+  data.finished = 0;
+  data.start_time = ceph_clock_now(g_ceph_context);
+  lock.Unlock();
+
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
 
-  lock.Lock();
-  data.start_time = ceph_clock_now(g_ceph_context);
-  lock.Unlock();
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
   for (int i = 0; i < concurrentios; ++i) {
