@@ -309,7 +309,7 @@ public:
   uint64_t get_expire_pos() const { return expire_pos; }
   uint64_t get_trimmed_pos() const { return trimmed_pos; }
 
-  uint64_t get_layout_period() const { return layout.fl_stripe_count * layout.fl_object_size; }
+  uint64_t get_layout_period() const { return (uint64_t)layout.fl_stripe_count * (uint64_t)layout.fl_object_size; }
   ceph_file_layout& get_layout() { return layout; }
 
   // write
