@@ -33,8 +33,14 @@ ostream& operator<<(ostream& out, rwxa_t p)
     out << "r";
   if (p & OSD_CAP_W)
     out << "w";
-  if (p & OSD_CAP_X)
+  if ((p & OSD_CAP_X) == OSD_CAP_X) {
     out << "x";
+  } else {
+    if (p & OSD_CAP_CLS_R)
+      out << " class-read";
+    if (p & OSD_CAP_CLS_W)
+      out << " class-write";
+  }
   return out;
 }
 
@@ -105,11 +111,15 @@ bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid, const string
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p) {
     if (p->match.is_match(pool_name, pool_auid, object)) {
       allow |= p->spec.allow;
-      if (op_may_read && !(allow & OSD_CAP_R))
+      rwxa_t cap_read = OSD_CAP_R;
+      rwxa_t cap_write = OSD_CAP_W;
+      if (op_may_exec) {
+	cap_read = OSD_CAP_CLS_R;
+	cap_write = OSD_CAP_CLS_W;
+      }
+      if (op_may_read && !(allow & cap_read))
 	continue;
-      if (op_may_write && !(allow & OSD_CAP_W))
-	continue;
-      if (op_may_exec && !(allow & OSD_CAP_X))
+      if (op_may_write && !(allow & cap_write))
 	continue;
       return true;
     }
@@ -155,7 +165,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     match = ( (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
 	      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
 
-    // rwxa := * | [r][w][x]
+    // rwxa := * | [r][w][x] [class-read] [class-write]
     rwxa =
       (spaces >> lit("*")[_val = OSD_CAP_ANY]) |
       ( eps[_val = 0] >>
@@ -163,7 +173,9 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 	 spaces >>
 	 ( lit('r')[_val |= OSD_CAP_R] ||
 	   lit('w')[_val |= OSD_CAP_W] ||
-	   lit('x')[_val |= OSD_CAP_X] )));
+	   lit('x')[_val |= OSD_CAP_X] )) ||
+	( (spaces >> lit("class-read")[_val |= OSD_CAP_CLS_R]) ||
+	  (spaces >> lit("class-write")[_val |= OSD_CAP_CLS_W]) ));
 
     // capspec := * | rwx | class <name> [classcap]
     capspec =
