@@ -1429,6 +1429,7 @@ noinst_HEADERS = \
 	common/LogClient.h\
 	common/LogEntry.h\
 	common/WorkQueue.h\
+	common/PrioritizedQueue.h\
 	common/ceph_argparse.h\
 	common/ceph_context.h\
 	common/xattr.h\
