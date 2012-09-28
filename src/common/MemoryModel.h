@@ -29,6 +29,10 @@ public:
     
     int heap, malloc, mmap;
 
+    snap() : peak(0), size(0), hwm(0), rss(0), data(0), lib(0),
+	     heap(0), malloc(0), mmap(0)
+    {}
+
     int get_total() { return size; }
     int get_rss() { return rss; }
     int get_heap() { return heap; }
