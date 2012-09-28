@@ -168,6 +168,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
   if (r < 0) {
     r = errno;
+    TEMP_FAILURE_RETRY(::close(sock_fd));
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
