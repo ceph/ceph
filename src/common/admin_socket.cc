@@ -105,7 +105,9 @@ AdminSocket::AdminSocket(CephContext *cct)
     m_sock_fd(-1),
     m_shutdown_rd_fd(-1),
     m_shutdown_wr_fd(-1),
-    m_lock("AdminSocket::m_lock")
+    m_lock("AdminSocket::m_lock"),
+    m_version_hook(NULL),
+    m_help_hook(NULL)
 {
 }
 
@@ -331,7 +333,7 @@ bool AdminSocket::do_accept()
   }
 
   bufferlist out;
-  if (p == match.end()) {
+  if (p == m_hooks.end()) {
     lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
     string args;
