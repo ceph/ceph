@@ -113,10 +113,13 @@ void *ObjBencher::status_printer(void *_bencher) {
 	   << setw(10) << "last lat"
 	   << setw(10) << "avg lat" << std::endl;
     }
-    bandwidth = (double)(data.finished - previous_writes)
-      * (data.trans_size)
-      / (1024*1024)
-      / cycleSinceChange;
+    if (cycleSinceChange)
+      bandwidth = (double)(data.finished - previous_writes)
+	* (data.trans_size)
+	/ (1024*1024)
+	/ cycleSinceChange;
+    else
+      bandwidth = 0;
 
     if (!isnan(bandwidth)) {
       if (bandwidth > data.idata.max_bandwidth)
