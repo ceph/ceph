@@ -134,11 +134,6 @@ static void send_command(CephToolCtx *ctx)
   if (!ctx->concise)
     *ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
 
-  MCommand *m = new MCommand(ctx->mc.monmap.fsid);
-  m->cmd = pending_cmd;
-  m->set_data(pending_bl);
-  m->set_tid(++pending_tid);
-
   if (pending_tell_pgid) {
     // pick target osd
     vector<int> osds;
@@ -172,9 +167,13 @@ static void send_command(CephToolCtx *ctx)
       reply_rc = -ESRCH;
       reply = true;
     } else {
-
       if (!ctx->concise)
 	*ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
+
+      MCommand *m = new MCommand(ctx->mc.monmap.fsid);
+      m->cmd = pending_cmd;
+      m->set_data(pending_bl);
+      m->set_tid(++pending_tid);
 
       command_con = messenger->get_connection(osdmap->get_inst(n));
       messenger->send_message(m, command_con);
