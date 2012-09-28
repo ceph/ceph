@@ -113,7 +113,9 @@ class ObjectCacher {
       ref(0),
       ob(o),
       last_write_tid(0),
-      error(0) {}
+      error(0) {
+      ex.start = ex.length = 0;
+    }
   
     // extent
     loff_t start() const { return ex.start; }
