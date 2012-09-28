@@ -196,14 +196,20 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
   for (p = pending_log.begin(); p != pending_log.end(); p++)
     p->second.encode(bl);
 
+  put_version(t, version, bl);
+  put_last_committed(t, version);
+}
+
+void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
+{
+  dout(10) << __func__ << " log v " << summary.version << dendl;
+  assert(get_version() == summary.version);
+
   bufferlist summary_bl;
   ::encode(summary, summary_bl);
 
-  put_version(t, version, bl);
-  put_last_committed(t, version);
-
-  put_version_full(t, version, summary_bl);
-  put_version_latest_full(t, version);
+  put_version_full(t, summary.version, summary_bl);
+  put_version_latest_full(t, summary.version);
 }
 
 void LogMonitor::update_trim()

@@ -138,6 +138,7 @@ private:
   void update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(MonitorDBStore::Transaction *t);
+  virtual void encode_full(MonitorDBStore::Transaction *t);
   void on_active();
 
   void update_msgr_features();

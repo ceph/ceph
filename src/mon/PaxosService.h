@@ -622,7 +622,27 @@ public:
   /**
    * @}
    */
-
+  /**
+   * @defgroup PaxosService_h_Stash_Full
+   * @{
+   */
+  bool should_stash_full();
+  /**
+   * Encode a full version on @p t
+   *
+   * @note We force every service to implement this function, since we strongly
+   *	   desire the encoding of full versions.
+   * @note Services that do not trim their state, will be bound to only create
+   *	   one full version. Full version stashing is determined/controled by
+   *	   trimming: we stash a version each time a trim is bound to erase the
+   *	   latest full version.
+   *
+   * @param t Transaction on which the full version shall be encoded.
+   */
+  virtual void encode_full(MonitorDBStore::Transaction *t) = 0;
+  /**
+   * @}
+   */
 
   /**
    * Cancel events.

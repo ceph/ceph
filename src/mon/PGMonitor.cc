@@ -259,14 +259,20 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
   bufferlist bl;
   pending_inc.encode(bl, mon->get_quorum_features());
 
+  put_version(t, version, bl);
+  put_last_committed(t, version);
+}
+
+void PGMonitor::encode_full(MonitorDBStore::Transaction *t)
+{
+  dout(10) << __func__ << " pgmap v " << pg_map.version << dendl;
+  assert(get_version() == pg_map.version);
+
   bufferlist full_bl;
   pg_map.encode(full_bl, mon->get_quorum_features());
 
-  put_version(t, version, bl);
-  put_last_committed(t, version);
-
-  put_version_full(t, version, full_bl);
-  put_version_latest_full(t, version);
+  put_version_full(t, pg_map.version, full_bl);
+  put_version_latest_full(t, pg_map.version);
 }
 
 void PGMonitor::update_trim()
