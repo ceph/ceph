@@ -3217,14 +3217,47 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     return -ENOENT;
   }
 
+  string etag;
+  string content_type;
+  ACLOwner owner;
+
   object.size = astate->size;
   object.mtime = astate->mtime;
+
+  map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
+  if (iter != astate->attrset.end()) {
+    etag = iter->second.c_str();
+  }
+  iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
+  if (iter != astate->attrset.end()) {
+    content_type = iter->second.c_str();
+  }
+  iter = astate->attrset.find(RGW_ATTR_ACL);
+  if (iter != astate->attrset.end()) {
+    r = decode_policy(iter->second, &owner);
+    if (r < 0) {
+      dout(0) << "WARNING: could not decode policy for object: " << obj << dendl;
+    }
+  }
+
+  object.etag = etag;
+  object.content_type = content_type;
+  object.owner = owner.get_id();
+  object.owner_display_name = owner.get_display_name();
 
   // encode suggested updates
   list_state.epoch = astate->epoch;
   list_state.meta.size = object.size;
   list_state.meta.mtime.set_from_double(double(object.mtime));
   list_state.meta.category = main_category;
+  list_state.meta.etag = etag;
+  list_state.meta.content_type = content_type;
+  if (astate->obj_tag.length() > 0)
+    list_state.meta.tag = astate->obj_tag.c_str();
+  list_state.meta.owner = owner.get_id();
+  list_state.meta.owner_display_name = owner.get_display_name();
+
+
   list_state.exists = true;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
   return 0;
