@@ -60,7 +60,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     unsigned len;
     atomic_t nref;
 
-    raw(unsigned l) : len(l), nref(0)
+    raw(unsigned l) : data(NULL), len(l), nref(0)
     { }
     raw(char *c, unsigned l) : data(c), len(l), nref(0)
     { }
