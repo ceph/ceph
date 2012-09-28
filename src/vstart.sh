@@ -17,7 +17,7 @@ start_mon=0
 start_mds=0
 start_osd=0
 start_rgw=0
-localhost=0
+ip=""
 nodaemon=0
 smallmds=0
 overwrite_conf=1
@@ -36,6 +36,7 @@ usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
+usage=$usage"\t-i <ip>: bind to specific ip\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
@@ -59,7 +60,12 @@ case $1 in
 	    standby=1
 	    ;;
     -l | --localhost )
-	    localhost=1
+	    ip="127.0.0.1"
+	    ;;
+    -i )
+	    [ -z "$2" ] && usage_exit
+	    ip="$2"
+	    shift
 	    ;;
     -r )
 	    start_rgw=1
@@ -222,8 +228,8 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 # figure machine's ip
 HOSTNAME=`hostname`
-if [ "$localhost" -eq 1 ]; then
-    IP="127.0.0.1"
+if [ -n "$ip" ]; then
+    IP="$ip"
 else
     echo hostname $HOSTNAME
     RAW_IP=`hostname --ip-address`
