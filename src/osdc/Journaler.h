@@ -74,7 +74,9 @@ public:
 
     Header(const char *m="") :
       trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0),
-      magic(m) { }
+      magic(m) {
+      memset(&layout, 0, sizeof(layout));
+    }
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
