@@ -255,6 +255,7 @@ public:
     on_readable(0), on_write_error(NULL),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
+    memset(&layout, 0, sizeof(layout));
   }
 
   void reset() {
