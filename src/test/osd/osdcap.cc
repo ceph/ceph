@@ -45,6 +45,13 @@ const char *parse_good[] = {
   "allow pool foo rwx ;allow pool bar r",
   "allow pool foo rwx; allow pool bar r",
   "allow pool data rw, allow pool rbd rwx, allow pool images class rbd foo",
+  "allow class-read",
+  "allow class-write",
+  "allow class-read class-write",
+  "allow r class-read pool foo",
+  "allow rw class-read class-write pool foo",
+  "allow r class-read pool foo",
+  "allow pool bar rwx; allow pool baz r class-read",
   "allow class foo",
   "allow class clsname \"clsthingidon'tunderstand\"",
   "  allow rwx pool foo; allow r pool bar  ",
@@ -60,8 +67,8 @@ TEST(OSDCap, ParseGood) {
   for (int i=0; parse_good[i]; i++) {
     string str = parse_good[i];
     OSDCap cap;
-    bool r = cap.parse(str, &cout);
-    ASSERT_TRUE(r);
+    std::cout << "Testing good input: '" << str << "'" << std::endl;
+    ASSERT_TRUE(cap.parse(str, &cout));
   }
 }
 
@@ -87,8 +94,8 @@ TEST(OSDCap, ParseBad) {
   for (int i=0; parse_bad[i]; i++) {
     string str = parse_bad[i];
     OSDCap cap;
-    bool r = cap.parse(str, &cout);
-    ASSERT_FALSE(r);
+    std::cout << "Testing bad input: '" << str << "'" << std::endl;
+    ASSERT_FALSE(cap.parse(str, &cout));
   }
 }
 
@@ -187,6 +194,193 @@ TEST(OSDCap, ObjectPoolAndPrefix) {
   ASSERT_FALSE(cap.is_capable("baz", 0, "fo", true, true, true));
 }
 
+TEST(OSDCap, BasicR) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow r", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicW) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow w", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, false));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicX) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow x", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, true));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicRW) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rw", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, false));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+}
+
+TEST(OSDCap, BasicRX) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rx", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, true));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicWX) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow wx", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, true));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicRWX) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rwx", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicRWClassRClassW) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rw class-read class-write", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, ClassR) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow class-read", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, ClassW) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow class-write", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, ClassRW) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow class-read class-write", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, true, true));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, BasicRClassR) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow r class-read", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+}
+
+TEST(OSDCap, PoolClassR) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow pool bar r class-read, allow pool foo rwx", NULL));
+
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", false, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("bar", 0, "foo", true, false, false));
+
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("bar", 0, "foo", true, true, false));
+
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", false, false, true));
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", true, false, true));
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", true, false, false));
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", false, true, true));
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", true, true, true));
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", false, true, false));
+  ASSERT_TRUE(cap.is_capable("foo", 0, "foo", true, true, false));
+
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", false, false, true));
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", true, false, true));
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", true, false, false));
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", false, true, true));
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", true, true, true));
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", false, true, false));
+  ASSERT_FALSE(cap.is_capable("baz", 0, "foo", true, true, false));
+}
+
 TEST(OSDCap, OutputParsed)
 {
   struct CapsTest {
@@ -202,6 +396,12 @@ TEST(OSDCap, OutputParsed)
      "osdcap[grant(rx)]"},
     {"allow rwx",
      "osdcap[grant(rwx)]"},
+    {"allow rw class-read class-write",
+     "osdcap[grant(rwx)]"},
+    {"allow rw class-read",
+     "osdcap[grant(rw class-read)]"},
+    {"allow rw class-write",
+     "osdcap[grant(rw class-write)]"},
     {"allow rwx pool images",
      "osdcap[grant(pool images rwx)]"},
     {"allow r pool images",

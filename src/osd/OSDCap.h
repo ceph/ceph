@@ -32,10 +32,12 @@ using std::ostream;
 
 #include "include/types.h"
 
-static const __u8 OSD_CAP_R = 0x01;      // read
-static const __u8 OSD_CAP_W = 0x02;      // write
-static const __u8 OSD_CAP_X = 0x04;      // (class) execute
-static const __u8 OSD_CAP_ANY = 0xff;    // *
+static const __u8 OSD_CAP_R     = (1 << 1);      // read
+static const __u8 OSD_CAP_W     = (1 << 2);      // write
+static const __u8 OSD_CAP_CLS_R = (1 << 3);      // class read
+static const __u8 OSD_CAP_CLS_W = (1 << 4);      // class write
+static const __u8 OSD_CAP_X     = (OSD_CAP_CLS_R | OSD_CAP_CLS_W); // execute
+static const __u8 OSD_CAP_ANY   = 0xff;          // *
 
 typedef __u8 rwxa_t;
 
