@@ -2357,16 +2357,12 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
 
 // flush dirty data (from objectcache)
 
-void Client::_release(Inode *in, bool checkafter)
+void Client::_release(Inode *in)
 {
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
 
     _invalidate_inode_cache(in);
-
-    if (checkafter)
-      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
-    else 
-      in->put_cap_ref(CEPH_CAP_FILE_CACHE);
+    in->put_cap_ref(CEPH_CAP_FILE_CACHE);
   }
 }
 
@@ -3205,7 +3201,7 @@ void Client::handle_cap_grant(Inode *in, int mds, Cap *cap, MClientCaps *m)
     cap->issued = new_caps;
 
     if ((~cap->issued & old_caps) & CEPH_CAP_FILE_CACHE)
-      _release(in, false);
+      _release(in);
     
     if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER) &&
 	!_flush(in)) {
