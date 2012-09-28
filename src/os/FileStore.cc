@@ -4590,11 +4590,14 @@ int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
   hobject_t next = start;
 
   while (!done) {
+    vector<hobject_t> next_objects;
     r = collection_list_partial(c, next,
                                 get_ideal_list_min(), get_ideal_list_max(),
-                                seq, ls, &next);
+                                seq, &next_objects, &next);
     if (r < 0)
       return r;
+
+    ls->insert(ls->end(), next_objects.begin(), next_objects.end());
 
     // special case for empty collection
     if (ls->size() == 0) {
