@@ -242,10 +242,15 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
   for (unsigned i = 0; i < weight.size(); i++)
     total_weight += weight[i];
 
+  if (total_weight == 0 ||
+      crush.get_max_devices() == 0)
+    return -EINVAL;
+
   // compute each device's proportional weight
   vector<float> proportional_weights( weight.size() );
-  for (unsigned i = 0; i < weight.size(); i++)
+  for (unsigned i = 0; i < weight.size(); i++) {
     proportional_weights[i] = (float) weight[i] / (float) total_weight;
+  }
 
   // determine the real maximum number of devices to return
   int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
