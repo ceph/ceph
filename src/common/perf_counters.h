@@ -139,15 +139,11 @@ public:
   void clear();
   void write_json_to_buf(ceph::bufferlist& bl, bool schema);
 private:
-  bool init(const std::string &uri);
-  void shutdown();
-
   CephContext *m_cct;
 
   /** Protects m_loggers */
   mutable Mutex m_lock;
 
-  int m_shutdown_fd;
   perf_counters_set_t m_loggers;
 
   friend class PerfCountersCollectionTest;
