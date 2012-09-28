@@ -1262,6 +1262,8 @@ int buffer::list::write_fd(int fd) const
 
 void buffer::list::hexdump(std::ostream &out) const
 {
+  std::ios_base::fmtflags original_flags = out.flags();
+
   out.setf(std::ios::right);
   out.fill('0');
 
@@ -1287,7 +1289,8 @@ void buffer::list::hexdump(std::ostream &out) const
     }
     out << std::dec << std::endl;
   }
-  out.unsetf(std::ios::right);
+
+  out.flags(original_flags);
 }
 
 std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
