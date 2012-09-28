@@ -55,7 +55,8 @@ static void netmask_ipv6(const struct in6_addr *addr,
     prefix_len = 128;
 
   memcpy(out->s6_addr, addr->s6_addr, prefix_len/8);
-  out->s6_addr[prefix_len/8] = addr->s6_addr[prefix_len/8] & ~( 0xFF >> (prefix_len % 8) );
+  if (prefix_len < 128)
+    out->s6_addr[prefix_len/8] = addr->s6_addr[prefix_len/8] & ~( 0xFF >> (prefix_len % 8) );
   if (prefix_len/8 < 15)
     memset(out->s6_addr+prefix_len/8+1, 0, 16-prefix_len/8-1);
 }
