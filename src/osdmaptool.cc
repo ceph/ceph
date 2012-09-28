@@ -135,7 +135,11 @@ int main(int argc, const char **argv)
       f << fn << "/" << i;
       bufferlist bl;
       string error, s = f.str();
-      bl.read_file(s.c_str(), &error);
+      int r = bl.read_file(s.c_str(), &error);
+      if (r < 0) {
+	cerr << "unable to read " << s << ": " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
       cout << s << " got " << bl.length() << " bytes" << std::endl;
       OSDMap *o = new OSDMap;
       o->decode(bl);
