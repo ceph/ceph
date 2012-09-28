@@ -27,7 +27,7 @@ class MMonJoin : public PaxosServiceMessage {
   entity_addr_t addr;
 
   MMonJoin() : PaxosServiceMessage(MSG_MON_JOIN, 0) {}
-  MMonJoin(uuid_d &f, string n, entity_addr_t a)
+  MMonJoin(uuid_d &f, string n, const entity_addr_t& a)
     : PaxosServiceMessage(MSG_MON_JOIN, 0),
       fsid(f), name(n), addr(a)
   { }
