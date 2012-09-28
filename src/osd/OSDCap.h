@@ -13,9 +13,11 @@
  * OSDCaps: Hold the capabilities associated with a single authenticated 
  * user key. These are specified by text strings of the form
  * "allow r" (which allows reading anything on the OSD)
- * "allow rwx auid foo[,bar,baz]" (which allows full access to listed auids)
- *  "allow rwx pool foo[,bar,baz]" (which allows full access to listed pools)
+ * "allow rwx auid foo" (which allows full access to listed auids)
+ *  "allow rwx pool foo" (which allows full access to listed pools)
  * "allow *" (which allows full access to EVERYTHING)
+ *
+ * The full grammar is documented in the parser in OSDCap.cc.
  *
  * The OSD assumes that anyone with * caps is an admin and has full
  * message permissions. This means that only the monitor and the OSDs
