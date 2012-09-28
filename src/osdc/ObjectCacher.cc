@@ -309,7 +309,8 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
             assert(p->second == final);
             split(final, cur+max);
           }
-        } else if (p->first == cur) {
+        } else {
+	  assert(p->first == cur);
           if (p->second->length() <= max) {
             // whole bufferhead, piece of cake.
           } else {
