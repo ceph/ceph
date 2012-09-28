@@ -331,7 +331,7 @@ bool AdminSocket::do_accept()
   }
 
   bufferlist out;
-  if (match.size() == 0) {
+  if (p == match.end()) {
     lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
     string args;
