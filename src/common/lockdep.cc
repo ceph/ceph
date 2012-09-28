@@ -176,6 +176,7 @@ int lockdep_will_lock(const char *name, int id)
 	*_dout << "\npreviously locked at\n";
 	p->second->print(*_dout);
       }
+      delete bt;
       *_dout << dendl;
       assert(0);
     }
