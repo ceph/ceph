@@ -448,7 +448,7 @@ class ObjectCacher {
   public:
     tid_t tid;
     C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s, uint64_t l) :
-      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
+      oc(c), poolid(_poolid), oid(o), start(s), length(l), tid(0) {}
     void finish(int r) {
       oc->bh_write_commit(poolid, oid, start, length, tid, r);
     }
@@ -460,7 +460,7 @@ class ObjectCacher {
     int64_t poolid;
     list<sobject_t> oids;
     tid_t tid;
-    C_LockAck(ObjectCacher *c, int64_t _poolid, sobject_t o) : oc(c), poolid(_poolid) {
+    C_LockAck(ObjectCacher *c, int64_t _poolid, sobject_t o) : oc(c), poolid(_poolid), tid(0) {
       oids.push_back(o);
     }
     void finish(int r) {
