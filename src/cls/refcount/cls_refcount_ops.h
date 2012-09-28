@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_REFCOUNT_OPS_H
 #define CEPH_CLS_REFCOUNT_OPS_H
 
@@ -9,7 +12,7 @@ struct cls_refcount_get_op {
   string tag;
   bool implicit_ref;
 
-  cls_refcount_get_op() {}
+  cls_refcount_get_op() : implicit_ref(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -32,7 +35,7 @@ struct cls_refcount_put_op {
   bool implicit_ref; // assume wildcard reference for
                           // objects without a set ref
 
-  cls_refcount_put_op() {}
+  cls_refcount_put_op() : implicit_ref(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -73,7 +76,7 @@ struct cls_refcount_read_op {
   bool implicit_ref; // assume wildcard reference for
                           // objects without a set ref
 
-  cls_refcount_read_op() {}
+  cls_refcount_read_op() : implicit_ref(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
