@@ -925,6 +925,11 @@ test_keyvaluedb_iterators_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGL
 test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_keyvaluedb_iterators
 
+test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
+test_cfuse_cache_invalidate_LDFLAGS = ${AM_LDFLAGS}
+test_cfuse_cache_invalidate_LDADD =
+test_cfuse_cache_invalidate_CXXFLAGS = ${AM_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_cfuse_cache_invalidate
 
 # shell scripts
 editpaths = sed \
