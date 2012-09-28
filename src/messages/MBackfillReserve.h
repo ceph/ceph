@@ -29,15 +29,16 @@ public:
     REJECT = 2,
   };
   int type;
+
+  MBackfillReserve()
+    : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+      query_epoch(0), type(-1) {}
   MBackfillReserve(int type,
-		      pg_t pgid,
-		      epoch_t query_epoch)
+		   pg_t pgid,
+		   epoch_t query_epoch)
     : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type) {}
-
-  MBackfillReserve() :
-    Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION) {}
 
   const char *get_type_name() const {
     return "MBackfillReserve";
