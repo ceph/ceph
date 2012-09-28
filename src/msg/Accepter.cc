@@ -37,7 +37,7 @@
  * Accepter
  */
 
-int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
+int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
 {
   const md_config_t *conf = msgr->cct->_conf;
   // bind to a socket
@@ -87,9 +87,9 @@ int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
     if (rc < 0) {
       char buf[80];
-      ldout(msgr->cct,0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      ldout(msgr->cct,0) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      cerr << "accepter.bind unable to bind to " << listen_addr.ss_addr()
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
     }
@@ -105,10 +105,10 @@ int Accepter::bind(entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
     }
     if (rc < 0) {
       char buf[80];
-      ldout(msgr->cct,0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      ldout(msgr->cct,0) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      cerr << "accepter.bind unable to bind to " << listen_addr.ss_addr()
 	   << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
