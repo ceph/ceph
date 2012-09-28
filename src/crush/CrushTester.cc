@@ -430,9 +430,11 @@ int CrushTester::test()
 
       // get the total weight of the system
       int total_weight = 0;
-
       for (unsigned i = 0; i < per.size(); i++)
         total_weight += weight[i];
+
+      if (total_weight == 0)
+	continue;
 
       // compute the expected number of objects stored per device in the absence of weighting
       float expected_objects = min(nr, get_maximum_affected_by_rule(r)) * num_objects;
