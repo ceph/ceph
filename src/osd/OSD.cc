@@ -5616,7 +5616,7 @@ void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
   unsigned priority = item.second->request->get_priority();
   unsigned cost = item.second->request->get_data().length();
   if (priority >= CEPH_MSG_PRIO_LOW)
-    pqueue.enqueue_immediate(
+    pqueue.enqueue_strict(
       item.second->request->get_source_inst(),
       priority, item);
   else
@@ -5637,8 +5637,8 @@ void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
   }
   unsigned priority = item.second->request->get_priority();
   unsigned cost = item.second->request->get_data().length();
-  if (priority >= CEPH_MSG_PRIO_HIGH)
-    pqueue.enqueue_immediate_front(
+  if (priority >= CEPH_MSG_PRIO_LOW)
+    pqueue.enqueue_strict_front(
       item.second->request->get_source_inst(),
       priority, item);
   else
