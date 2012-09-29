@@ -72,7 +72,7 @@ int Filer::probe(inodeno_t ino,
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
-  uint64_t period = layout->fl_stripe_count * layout->fl_object_size;
+  uint64_t period = (uint64_t)layout->fl_stripe_count * (uint64_t)layout->fl_object_size;
   
   // start with 1+ periods.
   probe->probing_len = period;
@@ -194,7 +194,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
     // keep probing!
     ldout(cct, 10) << "_probed probing further" << dendl;
 
-    uint64_t period = probe->layout.fl_stripe_count * probe->layout.fl_object_size;
+    uint64_t period = (uint64_t)probe->layout.fl_stripe_count * (uint64_t)probe->layout.fl_object_size;
     if (probe->fwd) {
       probe->probing_off += probe->probing_len;
       assert(probe->probing_off % period == 0);

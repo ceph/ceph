@@ -179,7 +179,7 @@ public:
    * @return 0 on success, or -1 if the SimpleMessenger is already running, or
    * -errno if an error is returned from a system call.
    */
-  int bind(entity_addr_t bind_addr);
+  int bind(const entity_addr_t& bind_addr);
   /**
    * This function performs a full restart of the SimpleMessenger. It
    * calls mark_down_all() and binds to a new port. (If avoid_port

@@ -132,6 +132,7 @@ public:
   // output
   ostream& gmtime(ostream& out) const {
     out.setf(std::ios::right);
+    char oldfill = out.fill();
     out.fill('0');
     if (sec() < ((time_t)(60*60*24*365*10))) {
       // raw seconds.  this looks like a relative time.
@@ -152,12 +153,14 @@ public:
       out << "." << std::setw(6) << usec();
       out << "Z";
     }
+    out.fill(oldfill);
     out.unsetf(std::ios::right);
     return out;
   }
 
   ostream& localtime(ostream& out) const {
     out.setf(std::ios::right);
+    char oldfill = out.fill();
     out.fill('0');
     if (sec() < ((time_t)(60*60*24*365*10))) {
       // raw seconds.  this looks like a relative time.
@@ -178,6 +181,7 @@ public:
       out << "." << std::setw(6) << usec();
       //out << '_' << bdt.tm_zone;
     }
+    out.fill(oldfill);
     out.unsetf(std::ios::right);
     return out;
   }

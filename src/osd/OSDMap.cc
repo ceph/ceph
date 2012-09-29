@@ -1461,7 +1461,10 @@ void OSDMap::print_tree(ostream& out) const
       float weight = q.front().weight;
       q.pop_front();
 
-      out << cur << "\t" << std::setprecision(4) << weight << "\t";
+      out << cur << "\t";
+      int oldprecision = out.precision();
+      out << std::setprecision(4) << weight << std::setprecision(oldprecision) << "\t";
+
       for (int k=0; k<depth; k++)
 	out << "\t";
 
