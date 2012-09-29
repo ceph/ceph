@@ -175,6 +175,10 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   num_snap_items = num_snap_null = 0;
   num_dirty = 0;
 
+  num_dentries_nested = 0;
+  num_dentries_auth_subtree = 0;
+  num_dentries_auth_subtree_nested = 0;
+
   state = STATE_INITIAL;
 
   memset(&fnode, 0, sizeof(fnode));
