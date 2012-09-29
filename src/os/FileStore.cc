@@ -1353,6 +1353,7 @@ int FileStore::_detect_fs()
       *_dout << "Got error " + cpp_strerror(ret) + ". ";
     *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
 	   << "file system with the 'user_xattr' option." << dendl;
+    ::unlink(fn);
     TEMP_FAILURE_RETRY(::close(tmpfd));
     return -ENOTSUP;
   }
@@ -1367,6 +1368,8 @@ int FileStore::_detect_fs()
   if (ret == -ENOSPC) {
     if (!g_conf->filestore_xattr_use_omap) {
       derr << "limited size xattrs -- enable filestore_xattr_use_omap" << dendl;
+      ::unlink(fn);
+      TEMP_FAILURE_RETRY(::close(tmpfd));
       return -ENOTSUP;
     } else {
       derr << "limited size xattrs -- filestore_xattr_use_omap enabled" << dendl;
