@@ -30,6 +30,7 @@
   OBJECT STORAGE DEVICE (OSD) COMMANDS
     ceph osd dump [--format=json]
     ceph osd tree
+    ceph osd map <pool-name> <object-name>
     ceph osd down <osd-id>
     ceph osd in <osd-id>
     ceph osd out <osd-id>
