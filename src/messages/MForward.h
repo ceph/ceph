@@ -36,7 +36,7 @@ struct MForward : public Message {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
   }
-  MForward(uint64_t t, PaxosServiceMessage *m, MonCaps caps) :
+  MForward(uint64_t t, PaxosServiceMessage *m, const MonCaps& caps) :
     Message(MSG_FORWARD), tid(t), msg(m), client_caps(caps) {
     client = m->get_source_inst();
   }
