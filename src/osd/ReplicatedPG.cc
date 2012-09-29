@@ -4955,7 +4955,7 @@ void ReplicatedPG::push_start(
 }
 
 int ReplicatedPG::send_pull(int peer,
-			    ObjectRecoveryInfo recovery_info,
+			    const ObjectRecoveryInfo& recovery_info,
 			    ObjectRecoveryProgress progress)
 {
   // send op
@@ -5075,7 +5075,7 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
   write_info(*t);
 }
 
-ObjectRecoveryInfo ReplicatedPG::recalc_subsets(ObjectRecoveryInfo recovery_info)
+ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recovery_info)
 {
   if (!recovery_info.soid.snap || recovery_info.soid.snap >= CEPH_NOSNAP)
     return recovery_info;
@@ -5273,7 +5273,7 @@ void ReplicatedPG::handle_push(OpRequestRef op)
 }
 
 int ReplicatedPG::send_push(int peer,
-			    ObjectRecoveryInfo recovery_info,
+			    const ObjectRecoveryInfo& recovery_info,
 			    ObjectRecoveryProgress progress,
 			    ObjectRecoveryProgress *out_progress)
 {
