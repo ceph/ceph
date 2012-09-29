@@ -556,8 +556,10 @@ public:
   }
 
   CDir* get_dirfrag(dirfrag_t df) {
-    if (!have_inode(df.ino)) return NULL;
-    return get_inode(df.ino)->get_dirfrag(df.frag);
+    CInode *in = get_inode(df.ino);
+    if (!in)
+      return NULL;
+    return in->get_dirfrag(df.frag);
   }
   CDir* get_force_dirfrag(dirfrag_t df) {
     CInode *diri = get_inode(df.ino);
