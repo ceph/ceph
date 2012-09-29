@@ -2048,10 +2048,8 @@ void OSD::heartbeat()
   dout(30) << "heartbeat check" << dendl;
   heartbeat_check();
 
-  if (logger) {
-    logger->set(l_osd_hb_to, heartbeat_peers.size());
-    logger->set(l_osd_hb_from, 0);
-  }
+  logger->set(l_osd_hb_to, heartbeat_peers.size());
+  logger->set(l_osd_hb_from, 0);
   
   // hmm.. am i all alone?
   dout(30) << "heartbeat lonely?" << dendl;
@@ -3511,12 +3509,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  << ", src has [" << m->oldest_map << "," << m->newest_map << "]"
 	  << dendl;
 
-  if (logger) {
-    logger->inc(l_osd_map);
-    logger->inc(l_osd_mape, last - first + 1);
-    if (first <= osdmap->get_epoch())
-      logger->inc(l_osd_mape_dup, osdmap->get_epoch() - first + 1);
-  }
+  logger->inc(l_osd_map);
+  logger->inc(l_osd_mape, last - first + 1);
+  if (first <= osdmap->get_epoch())
+    logger->inc(l_osd_mape_dup, osdmap->get_epoch() - first + 1);
 
   // make sure there is something new, here, before we bother flushing the queues and such
   if (last <= osdmap->get_epoch()) {
