@@ -384,7 +384,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   }
 
   try {
-    uint64_t auid;
+    uint64_t auid = 0;
     if (start) {
       // new session
 
