@@ -474,6 +474,7 @@ private:
     item_dirty_dirfrag_nest(this), 
     item_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
+    auth_pin_freeze_allowance(0),
     nested_anchors(0),
     pop(ceph_clock_now(g_ceph_context)),
     versionlock(this, &versionlock_type),
