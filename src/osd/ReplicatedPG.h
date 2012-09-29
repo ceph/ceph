@@ -616,7 +616,7 @@ protected:
   };
   map<hobject_t, PullInfo> pulling;
 
-  ObjectRecoveryInfo recalc_subsets(ObjectRecoveryInfo recovery_info);
+  ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
 			       bufferlist data_received,
@@ -625,11 +625,11 @@ protected:
   void handle_pull_response(OpRequestRef op);
   void handle_push(OpRequestRef op);
   int send_push(int peer,
-		ObjectRecoveryInfo recovery_info,
+		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress,
 		ObjectRecoveryProgress *out_progress = 0);
   int send_pull(int peer,
-		ObjectRecoveryInfo recovery_info,
+		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress);
   void submit_push_data(const ObjectRecoveryInfo &recovery_info,
 			bool first,
