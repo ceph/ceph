@@ -204,8 +204,13 @@ public:
 public:
   MDSMap() 
     : epoch(0), flags(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
-      cas_pg_pool(-1), metadata_pg_pool(0) {
-  }
+      session_timeout(0),
+      session_autoclose(0),
+      max_file_size(0),
+      cas_pg_pool(-1),
+      metadata_pg_pool(0),
+      max_mds(0)
+  { }
 
   utime_t get_session_timeout() {
     return utime_t(session_timeout,0);
