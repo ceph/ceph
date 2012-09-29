@@ -181,7 +181,7 @@ MDS::~MDS() {
     logger = 0;
   }
   if (mlogger) {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
+    g_ceph_context->get_perfcounters_collection()->remove(mlogger);
     delete mlogger;
     mlogger = 0;
   }
