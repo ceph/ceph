@@ -31,7 +31,7 @@ class MOSDFailure : public PaxosServiceMessage {
   int32_t failed_for;  // known to be failed since at least this long
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
-  MOSDFailure(const uuid_d &fs, entity_inst_t f, int duration, epoch_t e)
+  MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)
     : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
       fsid(fs), target_osd(f), is_failed(true), epoch(e), failed_for(duration) { }
 private:

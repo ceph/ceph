@@ -74,7 +74,9 @@ public:
 
     Header(const char *m="") :
       trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0),
-      magic(m) { }
+      magic(m) {
+      memset(&layout, 0, sizeof(layout));
+    }
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
@@ -253,6 +255,7 @@ public:
     on_readable(0), on_write_error(NULL),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
+    memset(&layout, 0, sizeof(layout));
   }
 
   void reset() {
@@ -309,7 +312,7 @@ public:
   uint64_t get_expire_pos() const { return expire_pos; }
   uint64_t get_trimmed_pos() const { return trimmed_pos; }
 
-  uint64_t get_layout_period() const { return layout.fl_stripe_count * layout.fl_object_size; }
+  uint64_t get_layout_period() const { return (uint64_t)layout.fl_stripe_count * (uint64_t)layout.fl_object_size; }
   ceph_file_layout& get_layout() { return layout; }
 
   // write
