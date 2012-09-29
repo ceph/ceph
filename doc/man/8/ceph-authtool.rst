@@ -105,15 +105,18 @@ In general, an osd capability follows the grammar::
 
         osdcap  := grant[,grant...]
         grant   := allow (match capspec | capspec match)
-        match   := [pool <poolname>]
-        capspec := * | [r][w][x]
+        match   := [pool[=]<poolname>]
+        capspec := * | [r][w][x] [class-read] [class-write]
 
 The capspec determines what kind of operations the entity can perform::
 
-    r = read access to objects
-    w = write access to objects
-    x = able to run class methods on objects
-    * = equivalent to rwx
+    r           = read access to objects
+    w           = write access to objects
+    x           = can call any class method (same as class-read class-write)
+    class-read  = can call class methods that are reads
+    class-write = can call class methods that are writes
+    *           = equivalent to rwx, plus the ability to run osd admin commands,
+                  i.e. ceph osd tell ...
 
 The match criteria restrict a grant based on the pool being accessed.
 Grants are additive if the client fulfills the match condition. For
