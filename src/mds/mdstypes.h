@@ -1398,9 +1398,10 @@ protected:
     while (it != ref_set.end()) {
       out << " " << pin_name(*it);
       int last = *it;
-      int c = 1;
+      int c = 0;
       do {
 	it++;
+	c++;
       } while (it != ref_set.end() && *it == last);
       if (c > 1)
 	out << "*" << c;
