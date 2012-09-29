@@ -1779,14 +1779,14 @@ void CInode::finish_scatter_gather_update(int type)
       //assert(pi->rstat.rfiles >= 0);
       if (pi->rstat.rfiles < 0) {
 	clog.error() << "rfiles underflow " << pi->rstat.rfiles
-	  << " on " << *this << "\n";
+		     << " on " << *this << "\n";
 	pi->rstat.rfiles = 0;
       }
 
       //assert(pi->rstat.rsubdirs >= 0);
       if (pi->rstat.rsubdirs < 0) {
-	clog.error() << "rsubdirs underflow " << pi->rstat.rfiles
-	  << " on " << *this << "\n";
+	clog.error() << "rsubdirs underflow " << pi->rstat.rsubdirs
+		     << " on " << *this << "\n";
 	pi->rstat.rsubdirs = 0;
       }
     }
