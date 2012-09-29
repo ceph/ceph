@@ -50,10 +50,15 @@ public:
    */
   Dumper(Messenger *messenger_, MonClient *monc_) :
     Dispatcher(messenger_->cct),
+    objecter(NULL),
+    journaler(NULL),
+    osdmap(NULL),
     messenger(messenger_),
     monc(monc_),
-    lock("Dumper::lock"), timer(g_ceph_context, lock)
-  {}
+    lock("Dumper::lock"),
+    timer(g_ceph_context, lock),
+    rank(-1)
+  { }
 
   virtual ~Dumper();
 
