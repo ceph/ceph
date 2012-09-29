@@ -3896,8 +3896,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
   repop_map[repop->rep_tid] = repop;
   repop->get();
 
-  if (osd->logger)
-    osd->logger->set(l_osd_op_wip, repop_map.size());
+  osd->logger->set(l_osd_op_wip, repop_map.size());
 
   return repop;
 }
@@ -3907,8 +3906,7 @@ void ReplicatedPG::remove_repop(RepGather *repop)
   repop_map.erase(repop->rep_tid);
   repop->put();
 
-  if (osd->logger)
-    osd->logger->set(l_osd_op_wip, repop_map.size());
+  osd->logger->set(l_osd_op_wip, repop_map.size());
 }
 
 void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
