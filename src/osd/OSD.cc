@@ -5613,8 +5613,15 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
 
 void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 {
-  pqueue.enqueue(item.second->request->get_source_inst(),
-		 1, 1, item);
+  unsigned priority = item.second->request->get_priority();
+  unsigned cost = item.second->request->get_data().length();
+  if (priority >= CEPH_MSG_PRIO_LOW)
+    pqueue.enqueue_immediate(
+      item.second->request->get_source_inst(),
+      priority, item);
+  else
+    pqueue.enqueue(item.second->request->get_source_inst(),
+      priority, cost, item);
   osd->logger->set(l_osd_opq, pqueue.length());
 }
 
@@ -5628,8 +5635,15 @@ void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
       pg_for_processing[&*(item.first)].pop_back();
     }
   }
-  pqueue.enqueue_front(item.second->request->get_source_inst(),
-		       1, 1, item);
+  unsigned priority = item.second->request->get_priority();
+  unsigned cost = item.second->request->get_data().length();
+  if (priority >= CEPH_MSG_PRIO_HIGH)
+    pqueue.enqueue_immediate_front(
+      item.second->request->get_source_inst(),
+      priority, item);
+  else
+    pqueue.enqueue_front(item.second->request->get_source_inst(),
+      priority, cost, item);
   osd->logger->set(l_osd_opq, pqueue.length());
 }
 
