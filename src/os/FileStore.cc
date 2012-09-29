@@ -3208,11 +3208,13 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   if (actual < 0) {
     r = -errno;
     dout(0) << "write lseek64 to " << offset << " failed: " << cpp_strerror(r) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
     goto out;
   }
   if (actual != (int64_t)offset) {
     dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
     r = -EIO;
+    TEMP_FAILURE_RETRY(::close(fd));
     goto out;
   }
 
