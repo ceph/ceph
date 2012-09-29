@@ -260,8 +260,7 @@ void CDentry::make_path(string& s, inodeno_t tobase)
 void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
 {
   // start with parent dir inode
-  if (dir)
-    dir->inode->make_anchor_trace(trace);
+  dir->inode->make_anchor_trace(trace);
 
   // add this inode (in my dirfrag) to the end
   trace.push_back(Anchor(in->ino(), dir->ino(), get_hash(), 0, 0));
