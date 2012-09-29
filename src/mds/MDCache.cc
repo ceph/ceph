@@ -7602,7 +7602,7 @@ class C_MDC_AnchorPrepared : public Context {
   bool add;
 public:
   version_t atid;
-  C_MDC_AnchorPrepared(MDCache *c, CInode *i, bool a) : cache(c), in(i), add(a) {}
+  C_MDC_AnchorPrepared(MDCache *c, CInode *i, bool a) : cache(c), in(i), add(a), atid(0) {}
   void finish(int r) {
     cache->_anchor_prepared(in, atid, add);
   }
