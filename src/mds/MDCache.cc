@@ -8127,7 +8127,7 @@ void MDCache::purge_stray(CDentry *dn)
     dout(10) << "purge_stray dir ... implement me!" << dendl;  // FIXME XXX
     _purge_stray_purged(dn);
   } else if (in->is_file()) {
-    uint64_t period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
+    uint64_t period = (uint64_t)in->inode.layout.fl_object_size * (uint64_t)in->inode.layout.fl_stripe_count;
     uint64_t cur_max_size = in->inode.get_max_size();
     uint64_t to = MAX(in->inode.size, cur_max_size);
     if (to && period) {
