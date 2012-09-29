@@ -5666,7 +5666,7 @@ int OSD::init_op_flags(MOSDOp *op)
   vector<OSDOp>::iterator iter;
 
   // did client explicitly set either bit?
-  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE|CEPH_OSD_FLAG_EXEC|CEPH_OSD_FLAG_EXEC_PUBLIC);
+  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE|CEPH_OSD_FLAG_EXEC);
 
   // implicitly set bits based on op codes, called methods.
   for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
@@ -5687,7 +5687,7 @@ int OSD::init_op_flags(MOSDOp *op)
     case CEPH_OSD_OP_CALL:
       {
 	bufferlist::iterator bp = iter->indata.begin();
-	int is_write, is_read, is_public;
+	int is_write, is_read;
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);
 	bp.copy(iter->op.cls.method_len, mname);
@@ -5699,7 +5699,6 @@ int OSD::init_op_flags(MOSDOp *op)
 	int flags = cls->get_method_flags(mname.c_str());
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
-        is_public = flags & CLS_METHOD_PUBLIC;
 
 	dout(10) << "class " << cname << " method " << mname
 		<< " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
@@ -5707,10 +5706,7 @@ int OSD::init_op_flags(MOSDOp *op)
 	  op->rmw_flags |= CEPH_OSD_FLAG_READ;
 	if (is_write)
 	  op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
-        if (is_public)
-	  op->rmw_flags |= CEPH_OSD_FLAG_EXEC_PUBLIC;
-        else
-	  op->rmw_flags |= CEPH_OSD_FLAG_EXEC;
+	op->rmw_flags |= CEPH_OSD_FLAG_EXEC;
 	break;
       }
       

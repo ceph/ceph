@@ -318,7 +318,7 @@ enum {
 	CEPH_OSD_FLAG_PARALLELEXEC =   0x0200,  /* execute op in parallel */
 	CEPH_OSD_FLAG_PGOP =           0x0400,  /* pg op, no object */
 	CEPH_OSD_FLAG_EXEC =           0x0800,  /* op may exec */
-	CEPH_OSD_FLAG_EXEC_PUBLIC =    0x1000,  /* op may exec (public) */
+	CEPH_OSD_FLAG_EXEC_PUBLIC =    0x1000,  /* DEPRECATED op may exec (public) */
 	CEPH_OSD_FLAG_LOCALIZE_READS = 0x2000,  /* read from nearby replica, if any */
 	CEPH_OSD_FLAG_RWORDERED =      0x4000,  /* order wrt concurrent reads */
 };

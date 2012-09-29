@@ -1888,107 +1888,107 @@ void __cls_init()
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  create, &h_create);
   cls_register_cxx_method(h_class, "get_features",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_features, &h_get_features);
   cls_register_cxx_method(h_class, "get_size",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_size, &h_get_size);
   cls_register_cxx_method(h_class, "set_size",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_size, &h_set_size);
   cls_register_cxx_method(h_class, "get_snapcontext",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_snapcontext, &h_get_snapcontext);
   cls_register_cxx_method(h_class, "get_object_prefix",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_object_prefix, &h_get_object_prefix);
   cls_register_cxx_method(h_class, "get_snapshot_name",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_snapshot_name, &h_get_snapshot_name);
   cls_register_cxx_method(h_class, "snapshot_add",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_add, &h_snapshot_add);
   cls_register_cxx_method(h_class, "snapshot_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_remove, &h_snapshot_remove);
   cls_register_cxx_method(h_class, "get_all_features",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_all_features, &h_get_all_features);
   cls_register_cxx_method(h_class, "copyup",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  copyup, &h_copyup);
   cls_register_cxx_method(h_class, "get_parent",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_parent, &h_get_parent);
   cls_register_cxx_method(h_class, "set_parent",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_parent, &h_set_parent);
   cls_register_cxx_method(h_class, "remove_parent",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  remove_parent, &h_remove_parent);
   cls_register_cxx_method(h_class, "set_protection_status",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_protection_status, &h_set_protection_status);
   cls_register_cxx_method(h_class, "get_protection_status",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_protection_status, &h_get_protection_status);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  add_child, &h_add_child);
   cls_register_cxx_method(h_class, "remove_child",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  remove_child, &h_remove_child);
   cls_register_cxx_method(h_class, "get_children",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  get_children, &h_get_children);
 
   /* methods for the rbd_id.$image_name objects */
   cls_register_cxx_method(h_class, "get_id",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  get_id, &h_get_id);
   cls_register_cxx_method(h_class, "set_id",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_id, &h_set_id);
 
   /* methods for the rbd_directory object */
   cls_register_cxx_method(h_class, "dir_get_id",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  dir_get_id, &h_dir_get_id);
   cls_register_cxx_method(h_class, "dir_get_name",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  dir_get_name, &h_dir_get_name);
   cls_register_cxx_method(h_class, "dir_list",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  dir_list, &h_dir_list);
   cls_register_cxx_method(h_class, "dir_add_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_add_image, &h_dir_add_image);
   cls_register_cxx_method(h_class, "dir_remove_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_remove_image, &h_dir_remove_image);
   cls_register_cxx_method(h_class, "dir_rename_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_rename_image, &h_dir_rename_image);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
-			  CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD,
 			  old_snapshots_list, &h_old_snapshots_list);
   cls_register_cxx_method(h_class, "snap_add",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  old_snapshot_add, &h_old_snapshot_add);
   cls_register_cxx_method(h_class, "snap_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  old_snapshot_remove, &h_old_snapshot_remove);
 
   /* assign a unique block id for rbd blocks */
   cls_register_cxx_method(h_class, "assign_bid",
-			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  rbd_assign_bid, &h_assign_bid);
 
   return;
