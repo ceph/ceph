@@ -42,6 +42,7 @@ using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
 #include "common/Timer.h"
+#include "common/Finisher.h"
 
 #include "common/compiler_extensions.h"
 
@@ -198,6 +199,8 @@ class Client : public Dispatcher {
   client_ino_callback_t ino_invalidate_cb;
   void *ino_invalidate_cb_handle;
 
+  Finisher async_ino_invalidator;
+
   Context *tick_event;
   utime_t last_cap_renew;
   void renew_caps();
@@ -318,6 +321,7 @@ protected:
   void close_dir(Dir *dir);
 
   friend class C_Client_PutInode; // calls put_inode()
+  friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -420,8 +424,10 @@ protected:
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
-  void _invalidate_inode_cache(Inode *in);
-  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
+  void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
+  void _invalidate_inode_cache(Inode *in, bool keep_caps);
+  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps);
+  void _async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _release(Inode *in);
   bool _flush(Inode *in);
   void _flushed(Inode *in);
