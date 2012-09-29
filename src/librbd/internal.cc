@@ -142,7 +142,7 @@ namespace librbd {
     uint64_t num, offset;
     iss >> std::hex >> num;
     uint64_t block_size = 1ULL << order;
-    assert(num > (ULLONG_MAX / block_size));
+    assert(num <= (ULLONG_MAX / block_size));
     offset = num * block_size;
     return offset;
   }
