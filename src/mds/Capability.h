@@ -237,6 +237,7 @@ public:
     _wanted(0),
     _pending(0), _issued(0),
     last_sent(0),
+    last_issue(0),
     mseq(0),
     suppress(0), stale(false),
     client_follows(0), client_xattr_version(0),
