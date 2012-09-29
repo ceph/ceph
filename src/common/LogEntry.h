@@ -43,7 +43,7 @@ struct LogEntryKey {
   utime_t stamp;
   uint64_t seq;
 
-  LogEntryKey() {}
+  LogEntryKey() : seq(0) {}
   LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
 
   void encode(bufferlist& bl) const;

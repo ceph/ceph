@@ -5,7 +5,7 @@
 #include <sstream>
 
 template<typename T>
-inline std::string stringify(T a) {
+inline std::string stringify(const T& a) {
   std::stringstream ss;
   ss << a;
   return ss.str();

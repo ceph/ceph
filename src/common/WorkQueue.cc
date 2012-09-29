@@ -107,8 +107,8 @@ void ThreadPool::worker(WorkThread *wt)
 	if (item) {
 	  processing++;
 	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item << dendl;
-	  _lock.Unlock();
 	  cct->get_heartbeat_map()->reset_timeout(hb, wq->timeout_interval, wq->suicide_interval);
+	  _lock.Unlock();
 	  wq->_void_process(item);
 	  _lock.Lock();
 	  wq->_void_process_finish(item);

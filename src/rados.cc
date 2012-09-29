@@ -341,12 +341,17 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   uint64_t offset = 0;
   while (count != 0) {
     count = read(fd, buf, op_size);
+    if (count < 0) {
+      ret = -errno;
+      cerr << "error reading input file " << infile << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
     if (count == 0) {
       if (!offset) {
-	int ret = io_ctx.create(oid, true);
+	ret = io_ctx.create(oid, true);
 	if (ret < 0) {
 	  cerr << "WARNING: could not create object: " << oid << std::endl;
-	  return 1;
+	  goto out;
 	}
       }
       continue;
@@ -359,13 +364,14 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
     indata.clear();
 
     if (ret < 0) {
-      close(fd);
-      return ret;
+      goto out;
     }
     offset += count;
   }
-  close(fd);
-  return 0;
+  ret = 0;
+ out:
+  TEMP_FAILURE_RETRY(close(fd));
+  return ret;
 }
 
 class RadosWatchCtx : public librados::WatchCtx {

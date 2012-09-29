@@ -24,7 +24,9 @@ struct Entry {
   PrebufferedStreambuf m_streambuf;
 
   Entry()
-    : m_next(NULL), m_streambuf(m_static_buf, sizeof(m_static_buf))
+    : m_thread(0), m_prio(0), m_subsys(0),
+      m_next(NULL),
+      m_streambuf(m_static_buf, sizeof(m_static_buf))
   {}
   Entry(utime_t s, pthread_t t, short pr, short sub,
 	const char *msg = NULL)

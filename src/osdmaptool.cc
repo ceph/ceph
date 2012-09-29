@@ -135,7 +135,11 @@ int main(int argc, const char **argv)
       f << fn << "/" << i;
       bufferlist bl;
       string error, s = f.str();
-      bl.read_file(s.c_str(), &error);
+      int r = bl.read_file(s.c_str(), &error);
+      if (r < 0) {
+	cerr << "unable to read " << s << ": " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
       cout << s << " got " << bl.length() << " bytes" << std::endl;
       OSDMap *o = new OSDMap;
       o->decode(bl);
@@ -253,7 +257,7 @@ int main(int argc, const char **argv)
   }  
   if (!test_map_pg.empty()) {
     pg_t pgid;
-    if (pgid.parse(test_map_pg.c_str()) < 0) {
+    if (!pgid.parse(test_map_pg.c_str())) {
       cerr << me << ": failed to parse pg '" << test_map_pg
 	   << "', r = " << r << std::endl;
       usage();

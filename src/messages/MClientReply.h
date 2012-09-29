@@ -51,6 +51,9 @@ struct LeaseStat {
   __u16 mask;
   __u32 duration_ms;  
   __u32 seq;
+
+  LeaseStat() : mask(0), duration_ms(0), seq(0) {}
+
   void encode(bufferlist &bl) const {
     ::encode(mask, bl);
     ::encode(duration_ms, bl);

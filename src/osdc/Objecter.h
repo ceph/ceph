@@ -1056,22 +1056,23 @@ private:
   /**
    * set up initial ops in the op vector, and allocate a final op slot.
    *
-   * The caller is responsible for filling in the final op.
+   * The caller is responsible for filling in the final ops_count ops.
    *
    * @param ops op vector
-   * @param ops_count number of initial ops
+   * @param ops_count number of final ops the caller will fill in
    * @param extra_ops pointer to [array of] initial op[s]
    * @return index of final op (for caller to fill in)
    */
   int init_ops(vector<OSDOp>& ops, int ops_count, ObjectOperation *extra_ops) {
     int i;
+    int extra = 0;
 
     if (extra_ops)
-      ops_count += extra_ops->ops.size();
+      extra = extra_ops->ops.size();
 
-    ops.resize(ops_count);
+    ops.resize(ops_count + extra);
 
-    for (i=0; i<ops_count - 1; i++) {
+    for (i=0; i<extra; i++) {
       ops[i] = extra_ops->ops[i];
     }
 

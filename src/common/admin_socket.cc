@@ -105,7 +105,9 @@ AdminSocket::AdminSocket(CephContext *cct)
     m_sock_fd(-1),
     m_shutdown_rd_fd(-1),
     m_shutdown_wr_fd(-1),
-    m_lock("AdminSocket::m_lock")
+    m_lock("AdminSocket::m_lock"),
+    m_version_hook(NULL),
+    m_help_hook(NULL)
 {
 }
 
@@ -163,7 +165,14 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	<< "failed to create socket: " << cpp_strerror(err);
     return oss.str();
   }
-  fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
+  int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
+  if (r < 0) {
+    r = errno;
+    TEMP_FAILURE_RETRY(::close(sock_fd));
+    ostringstream oss;
+    oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
+    return oss.str();
+  }
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
@@ -325,7 +334,7 @@ bool AdminSocket::do_accept()
   }
 
   bufferlist out;
-  if (match.size() == 0) {
+  if (p == m_hooks.end()) {
     lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
     string args;

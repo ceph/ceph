@@ -244,7 +244,7 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
 
 
 
-int SimpleMessenger::bind(entity_addr_t bind_addr)
+int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 {
   lock.Lock();
   if (started) {

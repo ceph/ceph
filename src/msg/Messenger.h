@@ -314,7 +314,7 @@ public:
    * @return 0 on success, or -1 on error, or -errno if
    * we can be more specific about the failure.
    */
-  virtual int bind(entity_addr_t bind_addr) = 0;
+  virtual int bind(const entity_addr_t& bind_addr) = 0;
   /**
    * This is an optional function for implementations
    * to override. For those implementations that do
