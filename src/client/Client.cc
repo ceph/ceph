@@ -107,14 +107,13 @@ dir_result_t::dir_result_t(Inode *in)
   inode->get();
 }
 
-
-
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
+    async_ino_invalidator(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),
@@ -315,6 +314,11 @@ void Client::shutdown()
 {
   ldout(cct, 1) << "shutdown" << dendl;
 
+  if (ino_invalidate_cb) {
+    async_ino_invalidator.wait_for_empty();
+    async_ino_invalidator.stop();
+  }
+
   objectcacher->stop();  // outside of client_lock! this does a join.
 
   client_lock.Lock();
@@ -407,7 +411,7 @@ void Client::update_inode_file_bits(Inode *in,
 
       // truncate cached file data
       if (prior_size > size) {
-	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size);
+	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size, true);
       }
     }
   }
@@ -1914,27 +1918,31 @@ void Client::get_cap_ref(Inode *in, int cap)
 
 void Client::put_cap_ref(Inode *in, int cap)
 {
-  if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
-    if ((cap & CEPH_CAP_FILE_WR) &&
-	in->cap_snaps.size() &&
-	in->cap_snaps.rbegin()->second->writing) {
-      ldout(cct, 10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
-      in->cap_snaps.rbegin()->second->writing = 0;
-      finish_cap_snap(in, in->cap_snaps.rbegin()->second, in->caps_used());
-      signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
-    }
-    if (cap & CEPH_CAP_FILE_BUFFER) {
-      bool last = (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0);
-      for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin();
-	   p != in->cap_snaps.end();
-	   p++)
-	p->second->dirty_data = 0;
-      check_caps(in, false);
-      signal_cond_list(in->waitfor_commit);
-      if (last) {
+  bool last = in->put_cap_ref(cap);
+  if (last) {
+    if (in->snapid == CEPH_NOSNAP) {
+      if ((cap & CEPH_CAP_FILE_WR) &&
+	  in->cap_snaps.size() &&
+	  in->cap_snaps.rbegin()->second->writing) {
+	ldout(cct, 10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
+	in->cap_snaps.rbegin()->second->writing = 0;
+	finish_cap_snap(in, in->cap_snaps.rbegin()->second, in->caps_used());
+	signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
+      }
+      if (cap & CEPH_CAP_FILE_BUFFER) {
+	for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin();
+	    p != in->cap_snaps.end();
+	    p++)
+	  p->second->dirty_data = 0;
+	check_caps(in, false);
+	signal_cond_list(in->waitfor_commit);
 	ldout(cct, 5) << "put_cap_ref dropped last FILE_BUFFER ref on " << *in << dendl;
 	put_inode(in);
       }
+    }
+    if (cap & CEPH_CAP_FILE_CACHE) {
+      check_caps(in, false);
+      ldout(cct, 5) << "put_cap_ref dropped last FILE_CACHE ref on " << *in << dendl;
     }
   }
 }
@@ -2328,41 +2336,75 @@ void Client::wake_inode_waiters(int mds_num)
 }
 
 
+// flush dirty data (from objectcache)
 
-void Client::_invalidate_inode_cache(Inode *in)
+class C_Client_CacheInvalidate : public Context  {
+private:
+  Client *client;
+  Inode *inode;
+  int64_t offset, length;
+  bool keep_caps;
+public:
+  C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len, bool keep) :
+			   client(c), inode(in), offset(off), length(len), keep_caps(keep) {
+    inode->get();
+  }
+  void finish(int r) {
+    client->_async_invalidate(inode, offset, length, keep_caps);
+  }
+};
+
+void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps) {
+
+    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
+
+    client_lock.Lock();
+    if (!keep_caps) {
+      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+    }
+    put_inode(in);
+    client_lock.Unlock();
+}
+
+void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps) {
+
+  if (ino_invalidate_cb)
+    // we queue the invalidate, which calls the callback and decrements the ref
+    async_ino_invalidator.queue(new C_Client_CacheInvalidate(this, in, off, len, keep_caps));
+  else if (!keep_caps)
+    // if not set, we just decrement the cap ref here
+    in->put_cap_ref(CEPH_CAP_FILE_CACHE);
+}
+
+void Client::_invalidate_inode_cache(Inode *in, bool keep_caps)
 {
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << dendl;
 
+  // invalidate our userspace inode cache
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
-  
-  if (ino_invalidate_cb)
-    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), 0, 0);
+
+  _schedule_invalidate_callback(in, 0, 0, keep_caps);
 }
 
-void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
+void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps)
 {
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
 
+  // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
     Filer::file_to_extents(cct, in->ino, &in->layout, off, len, ls);
     objectcacher->discard_set(&in->oset, ls);
   }
-  
-  if (ino_invalidate_cb)
-    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
+
+  _schedule_invalidate_callback(in, off, len, keep_caps);
 }
-
-
-// flush dirty data (from objectcache)
 
 void Client::_release(Inode *in)
 {
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
-
-    _invalidate_inode_cache(in);
-    in->put_cap_ref(CEPH_CAP_FILE_CACHE);
+    _invalidate_inode_cache(in, false);
   }
 }
 
@@ -2411,7 +2453,7 @@ void Client::_flushed(Inode *in)
 
   // release clean pages too, if we dont hold RDCACHE reference
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
-    _invalidate_inode_cache(in);
+    _invalidate_inode_cache(in, true);
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -5631,6 +5673,7 @@ void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handl
   Mutex::Locker l(client_lock);
   ino_invalidate_cb = cb;
   ino_invalidate_cb_handle = handle;
+  async_ino_invalidator.start();
 }
 
 int Client::_sync_fs()
