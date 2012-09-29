@@ -1685,9 +1685,9 @@ reprotect_and_return_err:
 
   struct CopyProgressCtx {
     CopyProgressCtx(ProgressContext &p)
-      : prog_ctx(p)
-    {
-    }
+      : destictx(NULL), src_size(0), prog_ctx(p)
+    { }
+
     ImageCtx *destictx;
     uint64_t src_size;
     ProgressContext &prog_ctx;
