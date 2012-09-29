@@ -73,6 +73,7 @@ static void usage()
   cout << "OBJECT STORAGE DEVICE (OSD) COMMANDS\n";
   cout << "  ceph osd dump [--format=json]\n";
   cout << "  ceph osd tree\n";
+  cout << "  ceph osd map <pool-name> <object-name>\n";
   cout << "  ceph osd down <osd-id>\n";
   cout << "  ceph osd in <osd-id>\n";
   cout << "  ceph osd out <osd-id>\n";
