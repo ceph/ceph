@@ -365,6 +365,18 @@ OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stallin
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 300)     // to adjust various transactions that batch smaller items
+
+/**
+ * osd_client_op_priority and osd_recovery_op_priority adjust the relative
+ * priority of client io vs recovery io.
+ *
+ * osd_client_op_priority/osd_recovery_op_priority determines the ratio of
+ * available io between client and recovery.  Each option may be set between
+ * 1..63.
+ */
+OPTION(osd_client_op_priority, OPT_INT, 63)
+OPTION(osd_recovery_op_priority, OPT_INT, 30)
+
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 // Use omap for xattrs for attrs over
