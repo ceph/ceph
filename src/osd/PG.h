@@ -510,6 +510,7 @@ public:
   };
 
 
+
 protected:
 
   /*
@@ -1138,13 +1139,6 @@ public:
     friend class RecoveryMachine;
 
     /* States */
-    struct NamedState {
-      const char *state_name;
-      utime_t enter_time;
-      const char *get_state_name() { return state_name; }
-      NamedState() : state_name(NULL), enter_time(ceph_clock_now(g_ceph_context)) {}
-      virtual ~NamedState() {}
-    };
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       Crashed(my_context ctx);
