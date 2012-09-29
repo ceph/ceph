@@ -122,6 +122,10 @@ and state. ::
 
 	ceph osd tree [--format {format}]
 
+Find out where a specific object is or would be stored in the system::
+
+        ceph osd map <pool-name> <object-name>
+
 Add or move a new item (OSD) with the given id/name/weight at the specified
 location. ::
 
