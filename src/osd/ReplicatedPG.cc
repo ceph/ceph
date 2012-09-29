@@ -3207,6 +3207,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   if (ctx->watch_connect || ctx->watch_disconnect ||
       !ctx->notifies.empty() || !ctx->notify_acks.empty()) {
     OSD::Session *session = (OSD::Session *)ctx->op->request->get_connection()->get_priv();
+    assert(session);
     ObjectContext *obc = ctx->obc;
     object_info_t& oi = ctx->new_obs.oi;
     hobject_t& soid = oi.soid;
