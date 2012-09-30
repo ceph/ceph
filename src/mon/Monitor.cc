@@ -232,8 +232,13 @@ void Monitor::recovered_leader(int id)
 
 void Monitor::recovered_peon(int id)
 {
+  // unlike recovered_leader(), recovered_peon() can get called
+  // multiple times, because it is triggered by a paxos lease message,
+  // and the leader may send multiples of those out for a given paxos
+  // machine while it is waiting for another instance to recover.
+  if (paxos_recovered.count(id))
+    return;
   dout(10) << "recovered_peon " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
-  assert(paxos_recovered.count(id) == 0);
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
     dout(10) << "all paxos instances recovered/leased" << dendl;
