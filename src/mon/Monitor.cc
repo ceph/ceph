@@ -207,6 +207,7 @@ Monitor::~Monitor()
 
 void Monitor::recovered_leader(int id)
 {
+  dout(10) << "recovered_leader " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
   assert(paxos_recovered.count(id) == 0);
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
@@ -231,6 +232,7 @@ void Monitor::recovered_leader(int id)
 
 void Monitor::recovered_peon(int id)
 {
+  dout(10) << "recovered_peon " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
   assert(paxos_recovered.count(id) == 0);
   paxos_recovered.insert(id);
   if (paxos_recovered.size() == paxos.size()) {
