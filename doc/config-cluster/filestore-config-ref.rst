@@ -21,6 +21,12 @@
 Extended Attributes
 ===================
 
+Extended Attributes (XATTRs) are an imporant aspect in your configuration. 
+Some file systems have limits on the number of bytes stored in XATTRS. 
+Additionally, in some cases, the filesystem may not be as fast as an alternative
+method of storing XATTRs. The following settings may help improve performance
+by using a method of storing XATTRs that is extrinsic to the underlying filesystem.
+
 
 ``filestore xattr use omap``
 
@@ -32,7 +38,7 @@ Extended Attributes
 
 ``filestore max inline xattr size``
 
-:Description: The maximum size of an inlined XATTR in bytes. 
+:Description: The maximimum size of an XATTR stored in the filesystem (i.e., XFS, btrfs, ext4, etc.) per object. Should not be larger than the filesytem can handle.
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``512``
@@ -40,7 +46,7 @@ Extended Attributes
 
 ``filestore max inline xattrs``
 
-:Description: 
+:Description: The maximum number of XATTRs stored in the fileystem per object.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``2``
@@ -117,10 +123,11 @@ performance in some cases.
 Queue
 =====
 
+The following settings provide limits on the size of filestore queue.
 
 ``filestore queue max ops``
 
-:Description: Defines the maximum number of in progress operations the file store accepts before blocking on queing new operations. 
+:Description: Defines the maximum number of in progress operations the file store accepts before blocking on queuing new operations. 
 :Type: Integer
 :Required: No. Minimal impact on performance.
 :Default: ``500``
@@ -197,28 +204,6 @@ B-Tree Filesystem
 :Type: Boolean
 :Required: No. Only used for ``btrfs``.
 :Default: ``true``
-
-
-Extent Mapping
-==============
-
-
-``filestore fiemap``
-
-:Description: Allows an OSD to determine which bits of a file have been written. For efficient sparse reads. 
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-
-``filestore fiemap threshold``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: ``4096``
-
 
 Journal
 =======
