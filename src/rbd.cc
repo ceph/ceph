@@ -255,16 +255,21 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag)
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, uint64_t size, int *order,
-		     int format, uint64_t features)
+		     int format, uint64_t features,
+		     uint64_t stripe_unit, uint64_t stripe_count)
 {
   int r;
-  if (features == 0)
-    features = RBD_FEATURES_ALL;
 
   if (format == 1)
     r = rbd.create(io_ctx, imgname, size, order);
-  else
-    r = rbd.create2(io_ctx, imgname, size, features, order);
+  else {
+    if (features == 0) {
+      features = RBD_FEATURE_LAYERING;
+      if (stripe_unit != (1ull << *order) && stripe_count != 1)
+	features |= RBD_FEATURE_STRIPINGV2;
+    }
+    r = rbd.create3(io_ctx, imgname, size, features, order, stripe_unit, stripe_count);
+  }
   if (r < 0)
     return r;
   return 0;
@@ -701,7 +706,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   assert(imgname);
 
-  r = do_create(rbd, io_ctx, imgname, size, order, format, features);
+  r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0);
   if (r < 0) {
     cerr << "rbd: image creation failed" << std::endl;
     close(fd);
@@ -1293,6 +1298,7 @@ int main(int argc, const char **argv)
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
     *lock_tag = NULL;
   bool lflag = false;
+  long long stripe_unit = 0, stripe_count = 0;
 
   std::string val;
   std::ostringstream err;
@@ -1333,6 +1339,8 @@ int main(int argc, const char **argv)
       size = sizell << 20;   // bytes to MB
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
+    } else if (ceph_argparse_withlonglong(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
+    } else if (ceph_argparse_withlonglong(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
     } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
@@ -1639,7 +1647,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	   << std::endl;
       return EXIT_FAILURE;
     }
-    r = do_create(rbd, io_ctx, imgname, size, &order, format, features);
+    if ((stripe_unit && !stripe_count) || (!stripe_unit && stripe_count)) {
+      cerr << "must specify both (or neither) of stripe-unit and stripe-count" << std::endl;
+      usage();
+      return EXIT_FAILURE;
+    }
+    r = do_create(rbd, io_ctx, imgname, size, &order, format, features, stripe_unit, stripe_count);
     if (r < 0) {
       cerr << "rbd: create error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
