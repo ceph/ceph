@@ -555,54 +555,14 @@ int RGWPostObj_ObjStore::verify_params()
   /*  check that we have enough memory to store the object
   note that this test isn't exact and may fail unintentionally
   for large requests is */
-  if ((unsigned long long)content_length > RGW_MAX_PUT_SIZE)
-    return -ERR_TOO_LARGE;
-
-  return 0;
-}
-
-int RGWPostObj_ObjStore::get_data(bufferlist& bl)
-{
-  size_t cl = 0;
-  
-  // try and prevent a partial read of the boundary
-  if (content_length - ofs > RGW_MAX_CHUNK_SIZE)
-    cl = RGW_MAX_CHUNK_SIZE;
-  else if (content_length - ofs > 0)
-    cl = (content_length - ofs);
-  else  
-    cl = RGW_MAX_CHUNK_SIZE;
-
-  bufferptr bp(cl);
-  int r = s->cio->read(bp.c_str(), cl, &len);
-  if (r < 0)
-    return r;
-
-  // resize our buffer pointer to avoid appending garbage
-  bp.set_length(len);
-
-  /* if we are at the boundary there will be two leading
-    newlines that we don't want */
-  int start = len - boundary.size() -2;
-  if (start > 0) {
-    // read in what might be a boundary
-    string test_boundary;
-    for (int i = start; i < len -2 && i > 0 ; i++) {
-      test_boundary += bp.c_str()[i];
-    }
-
-    if (strcmp(test_boundary.c_str(), boundary.c_str()) == 0 ) {
-      // kill off bothersome newlines
-      bp.set_length(start-2);
-      data_read = true;
+  if (s->length) {
+    off_t len = atoll(s->length);
+    if (len > (off_t)RGW_MAX_PUT_SIZE) {
+      return -ERR_TOO_LARGE;
     }
   }
 
-  len = bp.length();
-  bl.append(bp);
-
-
-  return len;
+  return 0;
 }
 
 int RGWPutACLs_ObjStore::get_params()
@@ -1021,8 +981,10 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
       break;
     }
     /* is it a 'create bucket' request? */
-    if (s->object_str.size() == 0)
+    if ((s->op == OP_PUT) && s->object_str.size() == 0)
       return 0;
+    only_bucket = true;
+    break;
   case OP_DELETE:
     only_bucket = true;
     break;
