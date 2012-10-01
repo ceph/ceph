@@ -3865,6 +3865,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 		    << " missing " << *k << std::endl;
       }
     }
+    assert(auth != maps.end());
     if (cur_missing.size()) {
       missing[*k] = cur_missing;
     }
