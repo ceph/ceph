@@ -232,6 +232,18 @@ namespace librbd {
     return librbd::get_features(ictx, features);
   }
 
+  uint64_t Image::get_stripe_unit() const
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return ictx->get_stripe_unit();
+  }
+
+  uint64_t Image::get_stripe_count() const
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return ictx->get_stripe_count();
+  }
+
   int Image::overlap(uint64_t *overlap)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -626,6 +638,20 @@ extern "C" int rbd_get_features(rbd_image_t image, uint64_t *features)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::get_features(ictx, features);
+}
+
+extern "C" int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  *stripe_unit = ictx->get_stripe_unit();
+  return 0;
+}
+
+extern "C" int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  *stripe_count = ictx->get_stripe_count();
+  return 0;
 }
 
 extern "C" int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
