@@ -670,12 +670,15 @@ reprotect_and_return_err:
   }
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     bool old_format, uint64_t features, int *order)
+	     bool old_format, uint64_t features, int *order,
+	     uint64_t stripe_unit, uint64_t stripe_count)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
 		   << " features = " << features << " order = " << *order
+		   << " stripe_unit = " << stripe_unit
+		   << " stripe_count = " << stripe_count
 		   << dendl;
 
 
@@ -704,7 +707,24 @@ reprotect_and_return_err:
     if (!*order)
       *order = RBD_DEFAULT_OBJ_ORDER;
 
+    // normalize for default striping
+    if (stripe_unit == (1ull << *order) && stripe_count == 1) {
+      stripe_unit = 0;
+      stripe_count = 0;
+    }
+    if ((stripe_unit || stripe_count) &&
+	(features & RBD_FEATURE_STRIPINGV2) == 0)
+      return -EINVAL;
+    if ((stripe_unit && !stripe_count) ||
+	(!stripe_unit && stripe_count))
+      return -EINVAL;
+
     if (old_format) {
+      if (stripe_unit && stripe_unit != (1ull << *order))
+	return -EINVAL;
+      if (stripe_count && stripe_count != 1)
+	return -EINVAL;
+
       ldout(cct, 2) << "adding rbd image to directory..." << dendl;
       r = tmap_set(io_ctx, imgname);
       if (r < 0) {
@@ -753,6 +773,11 @@ reprotect_and_return_err:
       oss << RBD_DATA_PREFIX << id;
       r = cls_client::create_image(&io_ctx, header_name(id), size, *order,
 				   features, oss.str());
+      if (r == 0 &&
+	  (stripe_unit || stripe_count) &&
+	  (stripe_count != 1 || stripe_unit != (1ull<<*order))) {
+	r = cls_client::set_stripe_unit_count(&io_ctx, header_name(id), stripe_unit, stripe_count);
+      }
     }
 
     if (r < 0) {
@@ -843,7 +868,7 @@ reprotect_and_return_err:
     if (!order)
       order = p_imctx->order;
 
-    r = create(c_ioctx, c_name, size, false, features, &order);
+    r = create(c_ioctx, c_name, size, false, features, &order, p_imctx->stripe_unit, p_imctx->stripe_count);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
@@ -1717,7 +1742,7 @@ reprotect_and_return_err:
 
     int order = ictx->order;
     r = create(dest_md_ctx, destname, src_size, ictx->old_format,
-	       ictx->features, &order);
+	       ictx->features, &order, ictx->stripe_unit, ictx->stripe_count);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;

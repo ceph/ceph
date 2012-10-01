@@ -102,13 +102,20 @@ namespace librbd {
 
   int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
   {
-    return librbd::create(io_ctx, name, size, true, 0, order);
+    return librbd::create(io_ctx, name, size, true, 0, order, 0, 0);
   }
 
   int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
 		   uint64_t features, int *order)
   {
-    return librbd::create(io_ctx, name, size, false, features, order);
+    return librbd::create(io_ctx, name, size, false, features, order, 0, 0);
+  }
+
+  int RBD::create3(IoCtx& io_ctx, const char *name, uint64_t size,
+		   uint64_t features, int *order, uint64_t stripe_unit,
+		   uint64_t stripe_count)
+  {
+    return librbd::create(io_ctx, name, size, false, features, order, stripe_unit, stripe_count);
   }
 
   int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
@@ -468,7 +475,7 @@ extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int 
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::create(io_ctx, name, size, true, 0, order);
+  return librbd::create(io_ctx, name, size, true, 0, order, 0, 0);
 }
 
 extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
@@ -477,7 +484,17 @@ extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::create(io_ctx, name, size, false, features, order);
+  return librbd::create(io_ctx, name, size, false, features, order, 0, 0);
+}
+
+extern "C" int rbd_create3(rados_ioctx_t p, const char *name,
+			   uint64_t size, uint64_t features,
+			   int *order,
+			   uint64_t stripe_unit, uint64_t stripe_count)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::create(io_ctx, name, size, false, features, order, stripe_unit, stripe_count);
 }
 
 extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
