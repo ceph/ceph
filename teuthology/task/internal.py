@@ -358,6 +358,8 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'BUG: lock held when returning to user space', # REMOVE ME when btrfs sb_internal crap is fixed
                     run.Raw('|'),
+                    'grep', '-v', 'INFO: possible circular locking dependency detected',  # FIXME remove when xfs stops being noisy and lame.
+                    run.Raw('|'),
                     'head', '-n', '1',
                     ],
                 stdout=StringIO(),
