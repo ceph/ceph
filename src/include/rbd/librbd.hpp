@@ -76,6 +76,9 @@ public:
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
+  int create3(IoCtx& io_ctx, const char *name, uint64_t size,
+	      uint64_t features, int *order,
+	      uint64_t stripe_unit, uint64_t stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	       int *c_order);

@@ -70,6 +70,9 @@ int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order);
+int rbd_create3(rados_ioctx_t io, const char *name, uint64_t size,
+		uint64_t features, int *order,
+		uint64_t stripe_unit, uint64_t stripe_count);
 int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
 	      const char *p_snapname, rados_ioctx_t c_ioctx,
 	      const char *c_name, uint64_t features, int *c_order);
