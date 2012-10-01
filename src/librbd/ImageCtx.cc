@@ -136,6 +136,11 @@ namespace librbd {
       header_oid = old_header_name(name);
     }
 
+    if (stripe_unit == 0 || stripe_count == 0) {
+      stripe_unit = 1ull << order;
+      stripe_count = 1;
+    }
+
     return 0;
   }
 
