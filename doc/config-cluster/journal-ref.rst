@@ -1,37 +1,55 @@
-=========
- Journal 
-=========
+==========================
+ Journal Config Reference
+==========================
 
-Journal
-=======
+Ceph OSDs use a journal for two reasons: speed and consistency.  
+
+- **Speed:** The journal enables the OSD to commit small writes quickly. 
+  Ceph writes small, random i/o to the journal sequentially, which tends to
+  speed up bursty workloads by allowing the backing filesystem more time to 
+  coalesce writes. The OSD journal, however, can lead to spiky performance 
+  with short spurts of high-speed writes followed by periods without any
+  write progress as the filesystem catches up to the journal.
+
+- **Consistency:** Ceph OSDs requires a filesystem interface that guarantees
+  atomic compound operations. Ceph OSDs write a description of the operation
+  to the journal and apply the operation to the filesystem. This enables 
+  atomic updates to an object (for example, placement group metadata). Every 
+  few seconds--between ``filestore max sync interval`` and
+  ``filestore min sync interval``--the OSD stops writes and synchronizes the
+  journal with the filesystem, allowing OSDs to trim operations from the
+  journal and reuse the space. On failure, OSDs replay the journal starting
+  after the last synchronization operation.
+
+Ceph OSDs support the following journal settings: 
 
 ``journal dio``
 
-:Description: 
+:Description: Enables direct i/o to the journal. Requires ``journal block align`` set to ``true``.
 :Type: Boolean
-:Required: No
+:Required: Yes when using ``aio``.
 :Default: ``true``
 
 
 ``journal aio``
 
-:Description: 
+:Description: Enables using ``libaio`` for asynchronous writes to the journal. Requires ``journal dio`` set to ``true``.
 :Type: Boolean 
-:Required: No
+:Required: No.
 :Default: ``false``
 
 
 ``journal block align``
 
-:Description: 
+:Description: Block aligns writes. Required for ``dio`` and ``aio``.
 :Type: Boolean
-:Required: No
+:Required: Yes when using ``dio`` and ``aio``.
 :Default: ``true``
 
 
 ``journal max write bytes``
 
-:Description: 
+:Description: The maximum number of bytes the journal will write at any one time.
 :Type: Integer
 :Required: No
 :Default: ``10 << 20``
@@ -39,7 +57,7 @@ Journal
 
 ``journal max write entries``
 
-:Description: 
+:Description: The maximum number of entries the journal will write at any one time.
 :Type: Integer
 :Required: No
 :Default: ``100``
@@ -47,7 +65,7 @@ Journal
 
 ``journal queue max ops``
 
-:Description: 
+:Description: The maximum number of operations allowed in the queue at any one time.
 :Type: Integer
 :Required: No
 :Default: ``500``
@@ -55,7 +73,7 @@ Journal
 
 ``journal queue max bytes``
 
-:Description: 
+:Description: The maximum number of bytes allowed in the queue at any one time.
 :Type: Integer
 :Required: No
 :Default: ``10 << 20``
@@ -69,67 +87,9 @@ Journal
 :Default: ``64 << 10``
 
 
-``journal replay from``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: ``0``
-
-
 ``journal zero on create``
 
-:Description: 
+:Description: Causes the file store to overwrite the entire journal with ``0``'s during ``mkfs``.
 :Type: Boolean
 :Required: No
 :Default: ``false``
-
-
-Journaler
-=========
-
-``journaler allow split entries``
-
-:Description: 
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``journaler write ahead interval``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: ``15``
-
-
-``journaler prefetch periods``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: ``10``
-
-
-``journal prezero periods``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: ``10``
-
-``journaler batch interval``
-
-:Description: Maximum additional latency in seconds we incur artificially. 
-:Type: Double
-:Required: No
-:Default: ``.001``
-
-
-``journaler batch max``
-
-:Description: Maximum bytes we'll delay flushing. 
-:Type: 64-bit Unsigned Integer 
-:Required: No
-:Default: ``0``
