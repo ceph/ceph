@@ -111,6 +111,10 @@ public:
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
 
+  /* striping */
+  uint64_t get_stripe_unit() const;
+  uint64_t get_stripe_count() const;
+
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
   /**
