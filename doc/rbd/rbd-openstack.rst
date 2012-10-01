@@ -22,7 +22,7 @@ processor. The following diagram depicts the OpenStack/Ceph technology stack.
             +---------------------------------------------------+
             |                      librbd                       |
             +---------------------------------------------------+
-            |     librados (C, C++, Java, Python, PHP, etc.)    |
+            |                     librados                      |
             +------------------------+-+------------------------+
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
