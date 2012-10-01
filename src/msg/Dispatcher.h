@@ -106,7 +106,7 @@ public:
    */
   virtual bool ms_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid) { return false; };
+				    bool& isvalid, CryptoKey& session_key) { return false; };
   /**
    * @} //Authentication
    */
