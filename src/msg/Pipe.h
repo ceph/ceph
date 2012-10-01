@@ -17,6 +17,8 @@
 
 #include "msg_types.h"
 #include "Messenger.h"
+#include "auth/AuthSessionHandler.h"
+
 
 class SimpleMessenger;
 class IncomingQueue;
@@ -99,6 +101,10 @@ class DispatchQueue;
     
     Mutex pipe_lock;
     int state;
+
+    // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
+
+    AuthSessionHandler *session_security;
 
   protected:
     friend class SimpleMessenger;
