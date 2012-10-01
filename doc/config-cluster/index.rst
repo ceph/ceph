@@ -47,6 +47,7 @@ To optimize the performance of your cluster, refer to the following:
 	Monitor Settings <mon-config-ref>
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
+	Journal Settings <journal-ref>
 	Metadata Server Settings <mds-config-ref>
 	RBD Settings <rbd-config-ref>
 	Log / Debug Settings <log-and-debug-ref>	
