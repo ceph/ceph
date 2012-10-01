@@ -54,6 +54,14 @@ static int get_random_bytes(int len, bufferlist& bl)
   return 0;
 }
 
+uint64_t get_random(uint64_t min_val, uint64_t max_val)
+{
+  uint64_t r;
+  get_random_bytes((char *)&r, sizeof(r));
+  r = min_val + r % (max_val - min_val + 1);
+  return r;
+}
+
 // ---------------------------------------------------
 
 int CryptoNone::create(bufferptr& secret)

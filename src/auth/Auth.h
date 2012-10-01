@@ -134,6 +134,7 @@ WRITE_CLASS_ENCODER(AuthTicket)
 struct AuthAuthorizer {
   __u32 protocol;
   bufferlist bl;
+  CryptoKey session_key;
 
   AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
