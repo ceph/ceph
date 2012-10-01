@@ -53,7 +53,6 @@ TEST(LibCephFS, Open_empty_component) {
   ASSERT_LT(0, fd);
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
-  ASSERT_EQ(0, ceph_closedir(cmount, dirp));
   ceph_shutdown(cmount);
 }
 
