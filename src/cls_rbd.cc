@@ -1102,6 +1102,8 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
     for (set<string>::const_iterator it = keys.begin();
 	 it != keys.end(); ++it) {
+      if ((*it).find(RBD_SNAP_KEY_PREFIX) != 0)
+	break;
       snapid_t snap_id = snap_id_from_key(*it);
       snap_ids.push_back(snap_id);
     }
