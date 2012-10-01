@@ -113,7 +113,6 @@ public:
   ~RGWPostObj_ObjStore() {}
 
   virtual int verify_params();
-  int get_data(bufferlist& bl);
 };
 
 class RGWPutMetadata_ObjStore : public RGWPutMetadata
