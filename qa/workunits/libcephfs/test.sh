@@ -1,5 +1,5 @@
 #!/bin/sh -e
 
-test_libcephfs_readdir
+test_libcephfs
 
 exit 0
