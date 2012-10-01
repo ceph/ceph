@@ -25,7 +25,7 @@ const char *parse_good[] = {
   "allow rwx",
   "allow r pool foo ",
   "allow r pool=foo",
-  " allow wx pool taco",
+  "allow wx pool taco",
   "allow pool foo r",
   "allow pool taco wx",
   "allow wx pool taco object_prefix obj",
@@ -44,10 +44,6 @@ const char *parse_good[] = {
   "allow pool foo rwx ; allow pool bar r",
   "allow pool foo rwx ;allow pool bar r",
   "allow pool foo rwx; allow pool bar r",
-  "  allow rwx pool foo; allow r pool bar  ",
-  "  allow   rwx   pool foo; allow r pool bar  ",
-  "  allow pool foo rwx; allow pool bar r  ",
-  "  allow     pool foo rwx; allow pool bar r  ",
   "allow pool data rw, allow pool rbd rwx, allow pool images class rbd foo",
   "allow class foo",
   "allow class clsname \"clsthingidon'tunderstand\"",
@@ -64,6 +60,13 @@ TEST(OSDCap, ParseGood) {
 }
 
 const char *parse_bad[] = {
+  "  allow rwx pool foo; allow r pool bar  ",
+  "  allow   rwx   pool foo; allow r pool bar  ",
+  "  allow pool foo rwx; allow pool bar r  ",
+  "  allow     pool foo rwx; allow pool bar r  ",
+  " allow wx pool taco",
+  "allow r poolfoo",
+  "allow r w",
   "ALLOW r",
   "allow rwx,",
   "allow rwx x",
