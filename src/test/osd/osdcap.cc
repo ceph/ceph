@@ -51,11 +51,6 @@ const char *parse_good[] = {
   "allow pool data rw, allow pool rbd rwx, allow pool images class rbd foo",
   "allow class foo",
   "allow class clsname \"clsthingidon'tunderstand\"",
-
-
-  //  "allow  rw pool data, allow rwx pool rbd, allow pool images class rbd foo",
-  //"allow class foo",
-  //"allow class clsname \"clsthingidon'tunderstand\"",
   0
 };
 
