@@ -123,6 +123,16 @@ osd = "allow rw pool foo"
 .ft P
 .fi
 .sp
+A client using rbd with read access to one pool and read/write access to another:
+.sp
+.nf
+.ft C
+mon = "allow r"
+
+osd = "allow pool templates r class\-read, allow pool vms rwx"
+.ft P
+.fi
+.sp
 A client mounting the file system with minimal permissions would need caps like:
 .sp
 .nf

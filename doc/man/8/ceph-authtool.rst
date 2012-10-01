@@ -89,6 +89,12 @@ A librados user restricted to a single pool might look like::
 
         osd = "allow rw pool foo"
 
+A client using rbd with read access to one pool and read/write access to another::
+
+        mon = "allow r"
+
+        osd = "allow pool templates r class-read, allow pool vms rwx"
+
 A client mounting the file system with minimal permissions would need caps like::
 
         mds = "allow"
