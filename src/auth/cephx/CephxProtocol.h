@@ -275,7 +275,6 @@ private:
   CephContext *cct;
 public:
   uint64_t nonce;
-  CryptoKey session_key;
 
   CephXAuthorizer(CephContext *cct_)
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
