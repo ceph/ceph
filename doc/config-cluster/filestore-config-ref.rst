@@ -2,12 +2,6 @@
  Filestore Config Reference
 ============================
 
-``filestore``
-
-:Description: IGNORE FOR NOW
-:Type: Boolean
-:Required: No
-:Default: ``false``
 
 
 ``filestore debug omap check``
