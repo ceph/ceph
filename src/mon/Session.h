@@ -55,7 +55,7 @@ struct MonSession : public RefCountedObject {
   Connection *proxy_con;
   uint64_t proxy_tid;
 
-  MonSession(entity_inst_t i, Connection *c) :
+  MonSession(const entity_inst_t& i, Connection *c) :
     con(c->get()), inst(i), closed(false), item(this),
     global_id(0), notified_global_id(0), auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
@@ -101,7 +101,7 @@ struct MonSessionMap {
     s->put();
   }
 
-  MonSession *new_session(entity_inst_t i, Connection *c) {
+  MonSession *new_session(const entity_inst_t& i, Connection *c) {
     MonSession *s = new MonSession(i, c);
     sessions.push_back(&s->item);
     if (i.name.is_osd())
