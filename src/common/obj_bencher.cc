@@ -300,6 +300,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
        << data.object_size << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
+  bufferlist* newContents = 0;
 
   std::string prefix = generate_object_prefix();
   out(cout) << "Object prefix: " << prefix << std::endl;
@@ -349,7 +350,6 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
 
   //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
-  bufferlist* newContents;
 
   //don't need locking for reads because other thread doesn't write
 
@@ -417,6 +417,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     delete contents[slot];
     name[slot] = newName;
     contents[slot] = newContents;
+    newContents = 0;
   }
 
   while (data.finished < data.started) {
@@ -486,6 +487,7 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   data.done = 1;
   lock.Unlock();
   pthread_join(print_thread, NULL);
+  delete newContents;
   return -5;
 }
 
