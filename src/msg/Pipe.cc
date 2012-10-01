@@ -25,6 +25,14 @@
 #include "common/debug.h"
 #include "common/errno.h"
 
+// Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
+
+#include "auth/Crypto.h"
+#include "auth/cephx/CephxProtocol.h"
+#include "auth/AuthSessionHandler.h"
+
+// Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
+#define SEQ_MASK  0x7fffffff 
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
@@ -58,12 +66,29 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     close_on_empty(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
+    int seq_error;
   if (con) {
     connection_state = con->get();
     connection_state->reset_pipe(this);
+    // Create random starting sequence numbers for security purposes.  PLR
+    seq_error = get_random_bytes((char *) &out_seq,sizeof(out_seq));
+    if (seq_error < 0) {
+      lsubdout(msgr->cct,ms,15) << "Could not get random bytes to set seq number; setting seq number to 0. (1)" << dendl;
+      throw "Pipe(): get_random_bytes failed.";
+    }
+    out_seq &= SEQ_MASK;
+    lsubdout(msgr->cct, ms, 15) << "set random seq number to " << out_seq << dendl;
   } else {
     connection_state = new Connection();
     connection_state->pipe = get();
+    // Create random starting sequence numbers for security purposes.  PLR
+    seq_error = get_random_bytes((char *) &out_seq,sizeof(out_seq));
+    if (seq_error < 0) {
+      lsubdout(msgr->cct,ms,15) << "Could not get random bytes to set seq number; setting seq number to 0. (2)" << dendl;
+      throw "Pipe(): get_random_bytes failed.";
+    }
+    out_seq &= SEQ_MASK;
+    lsubdout(msgr->cct, ms, 15) << "set random seq number to " << out_seq << dendl;
   }
   msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
@@ -226,6 +251,7 @@ int Pipe::accept()
   bool authorizer_valid;
   uint64_t feat_missing;
   bool replaced = false;
+  CryptoKey session_key;
 
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
@@ -284,14 +310,31 @@ int Pipe::accept()
       goto reply;
     }
     
+    // If the server supports signing session messages, and it is configured to require the client
+    // to sign, and the client can't sign, bail out.  PLR
+
+    if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) && msgr->cct->_conf->cephx_require_signatures 
+      && !(connect.features & CEPH_FEATURE_MSG_AUTH)) {
+      ldout(msgr->cct,1) << "Client can't sign messages." << dendl;
+      reply.tag = CEPH_MSGR_TAG_FEATURES;
+      msgr->lock.Unlock();
+      goto reply;
+    }
+
     msgr->lock.Unlock();
     if (msgr->verify_authorizer(connection_state, peer_type,
-				connect.authorizer_protocol, authorizer, authorizer_reply, authorizer_valid) &&
+				connect.authorizer_protocol, authorizer, authorizer_reply, authorizer_valid, session_key) &&
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
+      session_security = NULL;
       goto reply;
     }
+
+    // We've verified the authorizer for this pipe, so set up the session security structure.  PLR
+
+    session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key);
+
     msgr->lock.Lock();
     if (msgr->dispatch_queue.stop)
       goto shutting_down;
@@ -841,6 +884,15 @@ int Pipe::connect()
 	goto fail_locked;
       }
 
+    // If the client supports signing session messages, and it is configured to require the server
+    // to sign, and the server can't sign, bail out.  PLR
+
+      if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) && msgr->cct->_conf->cephx_require_signatures 
+          && !(reply.features & CEPH_FEATURE_MSG_AUTH)) {
+        ldout(msgr->cct,1) << "Server can't sign messages." << dendl;
+        goto fail_locked;
+      }
+
       if (reply.tag == CEPH_MSGR_TAG_SEQ) {
         ldout(msgr->cct,10) << "got CEPH_MSGR_TAG_SEQ, reading acked_seq and writing in_seq" << dendl;
         uint64_t newly_acked_seq = 0;
@@ -866,6 +918,17 @@ int Pipe::connect()
       ldout(msgr->cct,10) << "connect success " << connect_seq << ", lossy = " << policy.lossy
 	       << ", features " << connection_state->get_features() << dendl;
       
+
+      // If we have an authorizer, get a new AuthSessionHandler to deal with ongoing security of the
+      // connection.  PLR
+
+      if (authorizer != NULL) {
+        session_security = get_auth_session_handler(msgr->cct, authorizer->protocol, authorizer->session_key);
+      }  else {
+        // We have no authorizer, so we shouldn't be applying security to messages in this pipe.  PLR
+	session_security = NULL;
+      }
+
       msgr->dispatch_queue.queue_connect(connection_state);
       
       if (!reader_running) {
@@ -1044,15 +1107,21 @@ void Pipe::fault(bool onread)
 
 void Pipe::was_session_reset()
 {
-  assert(pipe_lock.is_locked());
+  int seq_error;
+   assert(pipe_lock.is_locked());
 
   ldout(msgr->cct,10) << "was_session_reset" << dendl;
   in_q->discard_queue();
   discard_out_queue();
 
   msgr->dispatch_queue.queue_remote_reset(connection_state);
-
-  out_seq = 0;
+// Set out_seq to a random value, so CRC won't be predictable PLR
+  seq_error = get_random_bytes((char *)&out_seq,sizeof(out_seq));
+  if (seq_error < 0) {
+    lsubdout(msgr->cct,ms,15) << "Could not get random bytes to set seq number for session reset; setting seq number to 0." << dendl;
+    throw "was_session_reset(): get_random_bytes failed.";
+  }
+  out_seq &= SEQ_MASK;
   in_seq = 0;
   connect_seq = 0;
 }
@@ -1517,6 +1586,20 @@ int Pipe::read_message(Message **pm)
     goto out_dethrottle;
   }
 
+  //
+  //  Check the signature if one should be present.  A zero return indicates success. PLR
+  //
+
+  if (session_security == NULL ) {
+    ldout(msgr->cct, 10) << "No session security set" << dendl;
+  } else {
+    if (session_security->check_message_signature(message)){
+      ldout(msgr->cct, 0) << "Signature check failed" << dendl;
+      ret = -EINVAL;
+      goto out_dethrottle;
+    } 
+  }
+
   message->set_throttler(policy.throttler);
 
   // store reservation size in message, so we don't get confused
@@ -1651,6 +1734,20 @@ int Pipe::write_message(Message *m)
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;
   m->calc_header_crc();
 
+  // Now that we have all the crcs calculated, handle the digital signature for the message, if the 
+  // pipe has session security set up.  Some session security options do not actually calculate and 
+  // check the signature, but they should handle the calls to sign_message and check_signature.  PLR
+
+  if (session_security == NULL) {
+    ldout(msgr->cct, 20) << "Pipe: write_message:  session security NULL for this pipe." << dendl;
+  } else {
+    if (session_security->sign_message(m)) {
+      ldout(msgr->cct, 20) << "Failed to put signature in client message (seq # " << header.seq << "): sig = " << footer.sig << dendl;
+    } else {
+      ldout(msgr->cct, 20) << "Put signature in client message (seq # " << header.seq << "): sig = " << footer.sig << dendl;
+    }
+  }
+
   bufferlist blist = m->get_payload();
   blist.append(m->get_middle());
   blist.append(m->get_data());
@@ -1739,11 +1836,24 @@ int Pipe::write_message(Message *m)
   }
   assert(left == 0);
 
-  // send footer
-  msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
-  msglen += sizeof(footer);
-  msg.msg_iovlen++;
+  // send footer; if receiver doesn't support signatures, use the old footer format
+
+  ceph_msg_footer_old old_footer;
+  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
+    msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
+    msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
+    msglen += sizeof(footer);
+    msg.msg_iovlen++;
+  } else {
+    old_footer.front_crc = footer.front_crc;   
+    old_footer.middle_crc = footer.middle_crc;   
+    old_footer.data_crc = footer.data_crc;   
+    old_footer.flags = footer.flags;   
+    msgvec[msg.msg_iovlen].iov_base = (char*)&old_footer;
+    msgvec[msg.msg_iovlen].iov_len = sizeof(old_footer);
+    msglen += sizeof(old_footer);
+    msg.msg_iovlen++;
+  }
 
   // send
   if (do_sendmsg(&msg, msglen))
