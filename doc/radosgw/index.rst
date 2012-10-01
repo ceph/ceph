@@ -11,12 +11,26 @@ supports two interfaces:
 
 #. **Swift-compatible:** Provides block storage functionality with an interface
    that is compatible with a large subset of the OpenStack Swift API.
-
+   
 RADOS Gateway is a FastCGI module for interacting with ``librados``. Since it
 provides interfaces compatible with OpenStack Swift and Amazon S3, RADOS Gateway
 has its own user management. RADOS Gateway can store data in the same RADOS
 cluster used to store data from Ceph FS clients or RADOS block devices.
-Each interface (S3 or Swift) provides its own namespace.
+The S3 and Swift APIs share a common namespace, so you may write data with 
+one API and retrieve it with the other. 
+
+.. ditaa::  +------------------------+ +------------------------+
+            |   S3 compatible API    | |  Swift compatible API  |
+            +------------------------+-+------------------------+
+            |                     radosgw                       |
+            +---------------------------------------------------+
+            |     librados (C, C++, Java, Python, PHP, etc.)    |
+            +------------------------+-+------------------------+
+            |          OSDs          | |        Monitors        |
+            +------------------------+ +------------------------+   
+
+.. note:: RADOS Gateway does **NOT** use the CephFS metadata server.
+
 
 .. toctree::
 	:maxdepth: 1
