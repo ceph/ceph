@@ -100,12 +100,21 @@ class Filer {
    * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
    * ranges in objects on (primary) osds)
    */
-  static void file_to_extents(CephContext *cct, inodeno_t ino,
+  static void file_to_extents(CephContext *cct, const char *object_format,
 			      ceph_file_layout *layout,
 			      uint64_t offset, uint64_t len,
 			      vector<ObjectExtent>& extents);
 
+  static void file_to_extents(CephContext *cct, inodeno_t ino,
+			      ceph_file_layout *layout,
+			      uint64_t offset, uint64_t len,
+			      vector<ObjectExtent>& extents) {
+    // generate prefix/format
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%llx.%%08llx", (long long unsigned)ino);
 
+    file_to_extents(cct, buf, layout, offset, len, extents);
+  }
   
 
   /*** async file interface.  scatter/gather as needed. ***/

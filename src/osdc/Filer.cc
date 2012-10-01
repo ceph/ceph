@@ -309,14 +309,14 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 #undef dout_prefix
 #define dout_prefix *_dout << "filer "
 
-void Filer::file_to_extents(CephContext *cct, inodeno_t ino,
+void Filer::file_to_extents(CephContext *cct, const char *object_format,
 			    ceph_file_layout *layout,
 			    uint64_t offset, uint64_t len,
 			    vector<ObjectExtent>& extents)
 {
   ldout(cct, 10) << "file_to_extents " << offset << "~" << len 
-           << " on " << hex << ino << dec
-           << dendl;
+		 << " format " << object_format
+		 << dendl;
   assert(len > 0);
 
   /* we want only one extent per object!
@@ -343,8 +343,11 @@ void Filer::file_to_extents(CephContext *cct, inodeno_t ino,
     uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
     
     // find oid, extent
+    char buf[strlen(object_format) + 32];
+    snprintf(buf, sizeof(buf), object_format, (long long unsigned)objectno);
+    object_t oid = buf;
+
     ObjectExtent *ex = 0;
-    object_t oid = file_object_t(ino, objectno);
     if (object_extents.count(oid)) 
       ex = &object_extents[oid];
     else {
