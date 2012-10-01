@@ -318,6 +318,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   uint8_t old_format;
   uint64_t overlap, features;
   bool snap_protected;
+
   int r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
@@ -351,7 +352,6 @@ static int do_show_info(const char *imgname, librbd::Image& image,
        << std::endl
        << "\tformat: " << (old_format ? "1" : "2")
        << std::endl;
-
   if (!old_format) {
     cout << "\tfeatures: " << feature_str(features) << std::endl;
   }
@@ -369,6 +369,12 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     cout << "\tparent: " << parent_pool << "/" << parent_name
 	 << "@" << parent_snapname << std::endl;
     cout << "\toverlap: " << prettybyte_t(overlap) << std::endl;
+  }
+
+  // striping info, if feature is set
+  if (features & RBD_FEATURE_STRIPINGV2) {
+    cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit()) << std::endl
+	 << "\tstripe count: " << prettybyte_t(image.get_stripe_count()) << std::endl;
   }
   return 0;
 }
