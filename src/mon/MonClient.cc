@@ -459,7 +459,7 @@ void MonClient::_pick_new_mon()
     cur_con->put();
   }
   cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
-
+	
   ldout(cct, 10) << "_pick_new_mon picked mon." << cur_mon << " con " << cur_con
 		 << " addr " << cur_con->get_peer_addr()
 		 << dendl;
