@@ -1583,7 +1583,8 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
 #ifdef DARWIN
     ::lseek(fd, pos, SEEK_SET);
 #else
-    ::lseek64(fd, pos, SEEK_SET);
+    int64_t actual = ::lseek64(fd, pos, SEEK_SET);
+    assert(actual == pos);
 #endif
     
     bufferptr bp = buffer::create(len);
