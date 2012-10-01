@@ -3429,8 +3429,20 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 {
   dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
-  ::lseek64(from, srcoff, SEEK_SET);
-  ::lseek64(to, dstoff, SEEK_SET);
+  int64_t actual;
+
+  actual = ::lseek64(from, srcoff, SEEK_SET);
+  if (actual != (int64_t)srcoff) {
+    r = errno;
+    derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  actual = ::lseek64(to, dstoff, SEEK_SET);
+  if (actual != (int64_t)srcoff) {
+    r = errno;
+    derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
+    return r;
+  }
   
   loff_t pos = srcoff;
   loff_t end = srcoff + len;
