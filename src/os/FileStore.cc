@@ -3695,7 +3695,12 @@ void FileStore::sync_entry()
 
 	  // wait for commit
 	  dout(20) << " waiting for transid " << async_args.transid << " to complete" << dendl;
-	  ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &async_args.transid);
+	  r = ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &async_args.transid);
+	  if (r < 0) {
+	    int err = errno;
+	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
+	    assert(0 == "wait_sync got error");
+	  }
 	  dout(20) << " done waiting for transid " << async_args.transid << " to complete" << dendl;
 
 	} else {
