@@ -242,6 +242,16 @@ namespace librbd {
     return -ENOENT;
   }
 
+  uint64_t ImageCtx::get_stripe_unit() const
+  {
+    return stripe_unit;
+  }
+
+  uint64_t ImageCtx::get_stripe_count() const
+  {
+    return stripe_count;
+  }
+
   int ImageCtx::is_snap_protected(string in_snap_name, bool *is_protected) const
   {
     assert(snap_lock.is_locked());

@@ -100,6 +100,8 @@ namespace librbd {
     int get_parent_spec(snapid_t snap_id, parent_spec *pspec);
     int get_snap_size(std::string in_snap_name, uint64_t *out_size) const;
     int is_snap_protected(string in_snap_name, bool *is_protected) const;
+    uint64_t get_stripe_unit() const;
+    uint64_t get_stripe_count() const;
     void add_snap(std::string in_snap_name, librados::snap_t id,
 		  uint64_t in_size, uint64_t features,
 		  parent_info parent, uint8_t protection_status);
