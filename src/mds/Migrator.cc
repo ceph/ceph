@@ -640,7 +640,8 @@ void Migrator::export_dir(CDir *dir, int dest)
     return;
   }
 
-  if (!dir->inode->is_base() && dir->inode->get_parent_dir()->get_inode()->is_stray()) {
+  if (!dir->inode->is_base() &&
+      dir->inode->get_parent_dir()->ino() == MDS_INO_MDSDIR(mds->get_nodeid())) {
     dout(7) << "i won't export anything in stray" << dendl;
     return;
   }
