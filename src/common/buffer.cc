@@ -826,6 +826,14 @@ void buffer::list::rebuild_page_aligned()
     bl.last_p = bl.begin();
   }
 
+  void buffer::list::claim_prepend(list& bl)
+  {
+    // steal the other guy's buffers
+    _len += bl._len;
+    _buffers.splice( _buffers.begin(), bl._buffers );
+    bl._len = 0;
+    bl.last_p = bl.begin();
+  }
 
   void buffer::list::copy(unsigned off, unsigned len, char *dest) const
   {
