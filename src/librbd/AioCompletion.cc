@@ -44,7 +44,7 @@ namespace librbd {
 		       << " len=" << m_req->length() << dendl;
       r = handle_sparse_read(m_cct, m_req->data(), m_req->offset(),
 			     m_req->ext_map(), 0, m_req->length(),
-			     simple_read_cb, m_out_buf);
+			     m_out_buf);
     }
     m_completion->complete_request(m_cct, r);
   }

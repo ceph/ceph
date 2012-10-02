@@ -2239,10 +2239,8 @@ reprotect_and_return_err:
 			     const map<uint64_t, uint64_t> &data_map,
 			     uint64_t buf_ofs,   // offset into buffer
 			     size_t buf_len,     // length in buffer (not size of buffer!)
-			     int (*cb)(uint64_t, size_t, const char *, void *),
-			     void *arg)
+			     char *dest_buf)
   {
-    int r;
     uint64_t bl_ofs = 0;
     size_t buf_left = buf_len;
 
@@ -2260,10 +2258,8 @@ reprotect_and_return_err:
       if (extent_ofs > block_ofs) {
 	uint64_t gap = extent_ofs - block_ofs;
 	ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << gap << dendl;
-	r = cb(buf_ofs, gap, NULL, arg);
-	if (r < 0) {
-	  return r;
-	}
+	memset(dest_buf + buf_ofs, 0, gap);
+
 	buf_ofs += gap;
 	buf_left -= gap;
 	block_ofs = extent_ofs;
@@ -2280,10 +2276,8 @@ reprotect_and_return_err:
       /* data */
       ldout(cct, 10) << "<2>copying " << buf_ofs << "~" << extent_len
 		     << " from ofs=" << bl_ofs << dendl;
-      r = cb(buf_ofs, extent_len, data_bl.c_str() + bl_ofs, arg);
-      if (r < 0) {
-	return r;
-      }
+      memcpy(dest_buf + buf_ofs, data_bl.c_str() + bl_ofs, extent_len);
+
       bl_ofs += extent_len;
       buf_ofs += extent_len;
       assert(buf_left >= extent_len);
@@ -2294,10 +2288,7 @@ reprotect_and_return_err:
     /* last hole */
     if (buf_left > 0) {
       ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
-      r = cb(buf_ofs, buf_left, NULL, arg);
-      if (r < 0) {
-	return r;
-      }
+      memset(dest_buf + buf_ofs, 0, buf_left);
     }
 
     return buf_len;
