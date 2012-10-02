@@ -143,6 +143,64 @@ class Filer {
       }
     }
 
+    /**
+     * add sparse read into results
+     *
+     * @param bl buffer
+     * @param bl_map map of which logical source extents this covers
+     * @param bl_off logical buffer offset (e.g., first bl_map key if the buffer is not sparse)
+     * @param buffer_extents output buffer extents the data maps to
+     */
+    void add_partial_sparse_result(bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
+				   uint64_t bl_off,
+				   const vector<pair<uint64_t,uint64_t> >& buffer_extents) {
+      map<uint64_t, uint64_t>::const_iterator s = bl_map.begin();
+      for (vector<pair<uint64_t,uint64_t> >::const_iterator p = buffer_extents.begin();
+	   p != buffer_extents.end();
+	   ++p) {
+	uint64_t tofs = p->first;
+	uint64_t tlen = p->second;
+	while (tlen > 0) {
+	  if (s == bl_map.end()) {
+	    pair<bufferlist, uint64_t>& r = partial[tofs];
+	    r.second = tlen;
+	    break;
+	  }
+
+	  // skip zero-length extent
+	  if (s->second == 0) {
+	    s++;
+	    continue;
+	  }
+
+	  if (s->first > bl_off) {
+	    // gap in sparse read result
+	    pair<bufferlist, uint64_t>& r = partial[tofs];
+	    size_t gap = s->first - bl_off;
+	    r.second = gap;
+	    bl_off += gap;
+	    tofs += gap;
+	    tlen -= gap;
+	  }
+
+	  assert(s->first <= bl_off);
+	  size_t left = (s->first + s->second) - bl_off;
+	  size_t actual = MIN(left, tlen);
+
+	  pair<bufferlist, uint64_t>& r = partial[tofs];
+	  bl.splice(0, actual, &r.first);
+	  r.second = actual;
+	  bl_off += actual;
+	  tofs += actual;
+	  tlen -= actual;
+
+	  if (actual == left)
+	    s++;
+	}
+	bl_off += p->second;
+      }
+    }
+
     void assemble_result(bufferlist& bl, bool zero_tail) {
       // go backwards, so that we can efficiently discard zeros
       map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
