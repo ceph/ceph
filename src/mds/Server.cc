@@ -1983,7 +1983,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   }
 
   CInode *diri = dir->get_inode();
-  if (diri->is_system() && !diri->is_root()) {
+  if (!mdr->reqid.name.is_mds() && diri->is_system() && !diri->is_root()) {
     reply_request(mdr, -EROFS);
     return 0;
   }
@@ -5126,10 +5126,12 @@ void Server::handle_client_rename(MDRequest *mdr)
     pdn = pdn->get_dir()->inode->parent;
   }
 
-  // is this a stray reintegration or merge? (sanity checks!)
+  // is this a stray migration, reintegration or merge? (sanity checks!)
   if (mdr->reqid.name.is_mds() &&
-      (!destdnl->is_remote() ||
-       destdnl->get_remote_ino() != srci->ino())) {
+      !(MDS_INO_IS_STRAY(srcpath.get_ino()) &&
+	MDS_INO_IS_STRAY(destpath.get_ino())) &&
+      !(destdnl->is_remote() &&
+	destdnl->get_remote_ino() == srci->ino())) {
     reply_request(mdr, -EINVAL);  // actually, this won't reply, but whatev.
     return;
   }
