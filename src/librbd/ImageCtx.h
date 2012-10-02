@@ -78,6 +78,8 @@ namespace librbd {
     ImageCtx *parent;
     uint64_t stripe_unit, stripe_count;
 
+    ceph_file_layout layout;
+
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;

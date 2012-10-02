@@ -141,6 +141,12 @@ namespace librbd {
       stripe_count = 1;
     }
 
+    // initialize layout
+    memset(&layout, 0, sizeof(layout));
+    layout.fl_stripe_unit = stripe_unit;
+    layout.fl_stripe_count = stripe_count;
+    layout.fl_object_size = 1ull << order;
+    layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
     return 0;
   }
 
