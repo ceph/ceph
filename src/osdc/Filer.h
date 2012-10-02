@@ -103,7 +103,8 @@ class Filer {
   static void file_to_extents(CephContext *cct, const char *object_format,
 			      ceph_file_layout *layout,
 			      uint64_t offset, uint64_t len,
-			      vector<ObjectExtent>& extents);
+			      vector<ObjectExtent>& extents,
+			      uint64_t buffer_offset=0);
 
   static void file_to_extents(CephContext *cct, inodeno_t ino,
 			      ceph_file_layout *layout,

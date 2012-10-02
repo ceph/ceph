@@ -312,7 +312,8 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 void Filer::file_to_extents(CephContext *cct, const char *object_format,
 			    ceph_file_layout *layout,
 			    uint64_t offset, uint64_t len,
-			    vector<ObjectExtent>& extents)
+			    vector<ObjectExtent>& extents,
+			    uint64_t buffer_offset)
 {
   ldout(cct, 10) << "file_to_extents " << offset << "~" << len 
 		 << " format " << object_format
@@ -379,7 +380,7 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
       ex->offset = x_offset;
       ex->length = x_len;
     }
-    ex->buffer_extents.push_back(make_pair(cur-offset, x_len));
+    ex->buffer_extents.push_back(make_pair(cur - offset + buffer_offset, x_len));
         
     ldout(cct, 15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
     //ldout(cct, 0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
