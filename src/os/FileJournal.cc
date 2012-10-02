@@ -1581,11 +1581,11 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
       len = olen;                         // rest
     
 #ifdef DARWIN
-    ::lseek(fd, pos, SEEK_SET);
+    int64_t actual = ::lseek(fd, pos, SEEK_SET);
 #else
     int64_t actual = ::lseek64(fd, pos, SEEK_SET);
-    assert(actual == pos);
 #endif
+    assert(actual == pos);
     
     bufferptr bp = buffer::create(len);
     int r = safe_read_exact(fd, bp.c_str(), len);
