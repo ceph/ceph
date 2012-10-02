@@ -2479,7 +2479,7 @@ reprotect_and_return_err:
       uint64_t write_len = min(block_size - block_ofs, left);
 
       if (ictx->object_cacher) {
-	v.push_back(ObjectExtent(oid, block_ofs, write_len));
+	v.push_back(ObjectExtent(oid, 0, block_ofs, write_len));
 	v.back().oloc.pool = ictx->data_ctx.get_id();
       }
 

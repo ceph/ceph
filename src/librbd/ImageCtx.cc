@@ -403,7 +403,7 @@ namespace librbd {
     snap_lock.Lock();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.Unlock();
-    ObjectExtent extent(o, off, len);
+    ObjectExtent extent(o, 0 /* a lie */, off, len);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents[0] = len;
     rd->extents.push_back(extent);
@@ -420,7 +420,7 @@ namespace librbd {
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
     snap_lock.Unlock();
-    ObjectExtent extent(o, off, len);
+    ObjectExtent extent(o, 0, off, len);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents[0] = len;
     wr->extents.push_back(extent);
