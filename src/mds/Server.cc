@@ -5838,16 +5838,16 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       if (mdr->more()->cap_imports.count(destdnl->get_inode())) {
 	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(), srcdn->authority().first, 
 							 mdr->more()->cap_imports[destdnl->get_inode()]);
-	/* hack: add an auth pin for each xlock we hold. These were
-	 * remote xlocks previously but now they're local and
-	 * we're going to try and unpin when we xlock_finish. */
-	for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
-	    i !=  mdr->xlocks.end();
-	    ++i)
-	  if ((*i)->get_parent() == destdnl->get_inode() &&
-	      !(*i)->is_locallock())
-	    mds->locker->xlock_import(*i, mdr);
       }
+      /* hack: add an auth pin for each xlock we hold. These were
+       * remote xlocks previously but now they're local and
+       * we're going to try and unpin when we xlock_finish. */
+      for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
+	  i !=  mdr->xlocks.end();
+	  ++i)
+	if ((*i)->get_parent() == destdnl->get_inode() &&
+	    !(*i)->is_locallock())
+	  mds->locker->xlock_import(*i, mdr);
       
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
