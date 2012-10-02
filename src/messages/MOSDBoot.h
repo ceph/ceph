@@ -23,6 +23,7 @@
 class MOSDBoot : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
  public:
   OSDSuperblock sb;
@@ -31,12 +32,12 @@ class MOSDBoot : public PaxosServiceMessage {
   epoch_t boot_epoch;  // last epoch this daemon was added to the map (if any)
 
   MOSDBoot()
-    : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION),
+    : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
       boot_epoch(0)
   { }
   MOSDBoot(OSDSuperblock& s, epoch_t be, const entity_addr_t& hb_addr_ref,
            const entity_addr_t& cluster_addr_ref)
-    : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION),
+    : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION, COMPAT_VERSION),
       sb(s),
       hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref),
       boot_epoch(be)
