@@ -436,6 +436,7 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
+  void insert_readdir_results(MetaRequest *request, int mds, Inode *diri);
   Inode* insert_trace(MetaRequest *request, int mds);
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,

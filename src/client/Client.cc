@@ -676,118 +676,30 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   */
 }
 
-
-/** insert_trace
- *
- * insert a trace from a MDS reply into the cache.
+/*
+ * insert results from readdir or lssnap into the metadata cache.
  */
-Inode* Client::insert_trace(MetaRequest *request, int mds)
-{
+void Client::insert_readdir_results(MetaRequest *request, int mds, Inode *diri) {
+
   MClientReply *reply = request->reply;
-
-  ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds." << mds 
-	   << " is_target=" << (int)reply->head.is_target
-	   << " is_dentry=" << (int)reply->head.is_dentry
-	   << dendl;
-
-  bufferlist::iterator p = reply->get_trace_bl().begin();
-  if (p.end()) {
-    ldout(cct, 10) << "insert_trace -- no trace" << dendl;
-    return NULL;
-  }
-
   Connection *con = request->reply->get_connection();
   int features = con->get_features();
-  ldout(cct, 10) << " features 0x" << hex << features << dec << dendl;
 
-  // snap trace
-  if (reply->snapbl.length())
-    update_snap_trace(reply->snapbl);
-
-  ldout(cct, 10) << " hrm " 
-	   << " is_target=" << (int)reply->head.is_target
-	   << " is_dentry=" << (int)reply->head.is_dentry
-	   << dendl;
-
-  InodeStat dirst;
-  DirStat dst;
-  string dname;
-  LeaseStat dlease;
-  InodeStat ist;
-
-  if (reply->head.is_dentry) {
-    dirst.decode(p, features);
-    dst.decode(p);
-    ::decode(dname, p);
-    ::decode(dlease, p);
-  }
-
-  Inode *in = 0;
-  if (reply->head.is_target) {
-    ist.decode(p, features);
-    in = add_update_inode(&ist, request->sent_stamp, mds);
-  }
-
-  if (reply->head.is_dentry) {
-    Inode *diri = add_update_inode(&dirst, request->sent_stamp, mds);
-    update_dir_dist(diri, &dst);  // dir stat info is attached to ..
-
-    if (in) {
-      Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true,
-                          ((request->head.op == CEPH_MDS_OP_RENAME) ?
-                                        request->old_dentry : NULL));
-    } else {
-      Dentry *dn = NULL;
-      if (diri->dir && diri->dir->dentries.count(dname)) {
-	dn = diri->dir->dentries[dname];
-	if (dn->inode)
-	  unlink(dn, false);
-      }
-    }
-  } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
-	     reply->head.op == CEPH_MDS_OP_MKSNAP) {
-    ldout(cct, 10) << " faking snap lookup weirdness" << dendl;
-    // fake it for snap lookup
-    vinodeno_t vino = ist.vino;
-    vino.snapid = CEPH_SNAPDIR;
-    assert(inode_map.count(vino));
-    Inode *diri = inode_map[vino];
-    
-    string dname = request->path.last_dentry();
-    
-    LeaseStat dlease;
-    dlease.duration_ms = 0;
-
-    if (in) {
-      Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true);
-    } else {
-      Dentry *dn = NULL;
-      if (diri->dir && diri->dir->dentries.count(dname)) {
-	dn = diri->dir->dentries[dname];
-	if (dn->inode)
-	  unlink(dn, false);
-      }
-    }
-  }
-
-  // insert readdir results too
   assert(request->readdir_result.empty());
 
-  // the rest?
-  p = reply->get_extra_bl().begin();
+  // the extra buffer list is only set for readdir and lssnap replies
+  bufferlist::iterator p = reply->get_extra_bl().begin();
   if (!p.end()) {
     // snapdir?
     if (request->head.op == CEPH_MDS_OP_LSSNAP) {
-      assert(in);
-      in = open_snapdir(in);
+      assert(diri);
+      diri = open_snapdir(diri);
     }
 
     // only open dir if we're actually adding stuff to it!
-    Dir *dir = in->open_dir();
+    Dir *dir = diri->open_dir();
     assert(dir);
-    
+
     // dirstat
     DirStat dst(p);
     __u32 numdn;
@@ -795,7 +707,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
     ::decode(numdn, p);
     ::decode(end, p);
     ::decode(complete, p);
-    
+
     ldout(cct, 10) << "insert_trace " << numdn << " readdir items, end=" << (int)end
 		   << ", offset " << request->readdir_offset
 		   << ", readdir_start " << request->readdir_start << dendl;
@@ -806,7 +718,6 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
     map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
 
     frag_t fg = request->readdir_frag;
-    Inode *diri = in;
 
     string dname;
     LeaseStat dlease;
@@ -866,7 +777,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
       ldout(cct, 15) << "insert_trace  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
     request->readdir_last_name = dname;
-    
+
     // remove trailing names
     if (end) {
       while (pd != dir->dentry_map.end()) {
@@ -876,7 +787,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
 	  Dentry *dn = pd->second;
 	  pd++;
 	  unlink(dn, true);
-	} else 
+	} else
 	  pd++;
       }
     }
@@ -884,7 +795,109 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
     if (dir->is_empty())
       close_dir(dir);
   }
-  
+}
+
+/** insert_trace
+ *
+ * insert a trace from a MDS reply into the cache.
+ */
+Inode* Client::insert_trace(MetaRequest *request, int mds)
+{
+  MClientReply *reply = request->reply;
+
+  ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds." << mds 
+	   << " is_target=" << (int)reply->head.is_target
+	   << " is_dentry=" << (int)reply->head.is_dentry
+	   << dendl;
+
+  bufferlist::iterator p = reply->get_trace_bl().begin();
+  if (p.end()) {
+    ldout(cct, 10) << "insert_trace -- no trace" << dendl;
+    return NULL;
+  }
+
+  Connection *con = request->reply->get_connection();
+  int features = con->get_features();
+  ldout(cct, 10) << " features 0x" << hex << features << dec << dendl;
+
+  // snap trace
+  if (reply->snapbl.length())
+    update_snap_trace(reply->snapbl);
+
+  ldout(cct, 10) << " hrm " 
+	   << " is_target=" << (int)reply->head.is_target
+	   << " is_dentry=" << (int)reply->head.is_dentry
+	   << dendl;
+
+  InodeStat dirst;
+  DirStat dst;
+  string dname;
+  LeaseStat dlease;
+  InodeStat ist;
+
+  if (reply->head.is_dentry) {
+    dirst.decode(p, features);
+    dst.decode(p);
+    ::decode(dname, p);
+    ::decode(dlease, p);
+  }
+
+  Inode *in = 0;
+  if (reply->head.is_target) {
+    ist.decode(p, features);
+
+    in = add_update_inode(&ist, request->sent_stamp, mds);
+  }
+
+  if (reply->head.is_dentry) {
+    Inode *diri = add_update_inode(&dirst, request->sent_stamp, mds);
+    update_dir_dist(diri, &dst);  // dir stat info is attached to ..
+
+    if (in) {
+      Dir *dir = diri->open_dir();
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true,
+                          ((request->head.op == CEPH_MDS_OP_RENAME) ?
+                                        request->old_dentry : NULL));
+    } else {
+      Dentry *dn = NULL;
+      if (diri->dir && diri->dir->dentries.count(dname)) {
+	dn = diri->dir->dentries[dname];
+	if (dn->inode)
+	  unlink(dn, false);
+      }
+    }
+  } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
+	     reply->head.op == CEPH_MDS_OP_MKSNAP) {
+    ldout(cct, 10) << " faking snap lookup weirdness" << dendl;
+    // fake it for snap lookup
+    vinodeno_t vino = ist.vino;
+    vino.snapid = CEPH_SNAPDIR;
+    assert(inode_map.count(vino));
+    Inode *diri = inode_map[vino];
+    
+    string dname = request->path.last_dentry();
+    
+    LeaseStat dlease;
+    dlease.duration_ms = 0;
+
+    if (in) {
+      Dir *dir = diri->open_dir();
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true);
+    } else {
+      Dentry *dn = NULL;
+      if (diri->dir && diri->dir->dentries.count(dname)) {
+	dn = diri->dir->dentries[dname];
+	if (dn->inode)
+	  unlink(dn, false);
+      }
+    }
+  }
+
+  if (in && (reply->head.op == CEPH_MDS_OP_READDIR ||
+	     reply->head.op == CEPH_MDS_OP_LSSNAP)) {
+    insert_readdir_results(request, mds, in);
+  }
+
   request->target = in;
   return in;
 }
