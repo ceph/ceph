@@ -145,18 +145,22 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     unquoted_word %= +(alnum | '_' | '-');
     str %= quoted_string | unquoted_word;
 
+    spaces = +lit(' ');
+
     // match := [pool[=]<poolname> | auid <123>] [object_prefix <prefix>]
-    pool_name %= -(lit(" pool") >> (lit('=') | lit(' ')) >> str);
-    object_prefix %= -(lit(" object_prefix ") >> str);
-    match = ( (lit(" auid ") >> int_ >> object_prefix)[_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
+    pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
+    auid %= (spaces >> lit("auid") >> spaces >> int_);
+    object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
+
+    match = ( (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
 	      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
 
     // rwxa := * | [r][w][x]
     rwxa =
-      lit(" *")[_val = OSD_CAP_ANY] |
+      (spaces >> lit("*")[_val = OSD_CAP_ANY]) |
       ( eps[_val = 0] >>
 	(
-	 lit(' ') >>
+	 spaces >>
 	 ( lit('r')[_val |= OSD_CAP_R] ||
 	   lit('w')[_val |= OSD_CAP_W] ||
 	   lit('x')[_val |= OSD_CAP_X] )));
@@ -164,21 +168,24 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     // capspec := * | rwx | class <name> [classcap]
     capspec =
       rwxa                                            [_val = phoenix::construct<OSDCapSpec>(_1)] |
-      ( lit(" class ") >> ((str >> lit(' ') >> str)   [_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
+      ( spaces >> lit("class") >> spaces >> ((str >> spaces >> str)   [_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
 			 str                          [_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
 
     // grant := allow match capspec
-    grant = lit("allow") >> ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
-			     (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
-
+    grant = (*lit(' ') >> lit("allow") >>
+	     ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
+	      (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]) >>
+	     *lit(' '));
     // osdcap := grant [grant ...]
     grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
     osdcap = grants  [_val = phoenix::construct<OSDCap>(_1)]; 
   }
+  qi::rule<Iterator> spaces;
   qi::rule<Iterator, unsigned()> rwxa;
   qi::rule<Iterator, string()> quoted_string;
   qi::rule<Iterator, string()> unquoted_word;
   qi::rule<Iterator, string()> str;
+  qi::rule<Iterator, int()> auid;
   qi::rule<Iterator, OSDCapSpec()> capspec;
   qi::rule<Iterator, string()> pool_name;
   qi::rule<Iterator, string()> object_prefix;
