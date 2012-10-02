@@ -211,7 +211,7 @@ void DispatchQueue::entry()
       }
 
       Connection *con = NULL;
-      if ((long)m < DispatchQueue::D_NUM_CODES) {
+      if ((unsigned long)m < DispatchQueue::D_NUM_CODES) {
 	assert(inq == &local_queue);
 	con = con_q.front();
 	con_q.pop_front();
@@ -226,16 +226,16 @@ void DispatchQueue::entry()
       if (dequeued)
 	inq->put();
 
-      if ((long)m == DispatchQueue::D_BAD_REMOTE_RESET) {
+      if ((unsigned long)m == DispatchQueue::D_BAD_REMOTE_RESET) {
 	msgr->ms_deliver_handle_remote_reset(con);
 	con->put();
-      } else if ((long)m == DispatchQueue::D_CONNECT) {
+      } else if ((unsigned long)m == DispatchQueue::D_CONNECT) {
 	msgr->ms_deliver_handle_connect(con);
 	con->put();
-      } else if ((long)m == DispatchQueue::D_ACCEPT) {
+      } else if ((unsigned long)m == DispatchQueue::D_ACCEPT) {
 	msgr->ms_deliver_handle_accept(con);
 	con->put();
-      } else if ((long)m == DispatchQueue::D_BAD_RESET) {
+      } else if ((unsigned long)m == DispatchQueue::D_BAD_RESET) {
 	msgr->ms_deliver_handle_reset(con);
 	con->put();
       } else {
