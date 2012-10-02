@@ -315,6 +315,37 @@ def detect_fstype(
     return fstype
 
 
+def get_conf(cluster, variable):
+    try:
+        p = subprocess.Popen(
+            args=[
+                'ceph-conf',
+                '--cluster={cluster}'.format(
+                    cluster=cluster,
+                    ),
+                '--name=osd.',
+                '--lookup',
+                variable,
+                ],
+            stdout=subprocess.PIPE,
+            close_fds=True,
+            )
+    except OSError as e:
+        raise ActivateError('error executing ceph-conf', e)
+    (out, _err) = p.communicate()
+    ret = p.wait()
+    if ret == 1:
+        # config entry not found
+        return None
+    elif ret != 0:
+        raise ActivateError('getting variable from configuration failed')
+    value = out.split('\n', 1)[0]
+    # don't differentiate between "var=" and no var set
+    if not value:
+        return None
+    return value
+
+
 MOUNT_OPTIONS = dict(
     ext4='user_xattr',
     )
@@ -323,9 +354,11 @@ MOUNT_OPTIONS = dict(
 def mount(
     dev,
     fstype,
+    options,
     ):
     # pick best-of-breed mount options based on fs type
-    options = MOUNT_OPTIONS.get(fstype, '')
+    if options is None:
+        options = MOUNT_OPTIONS.get(fstype, '')
 
     # mount
     path = tempfile.mkdtemp(
@@ -384,7 +417,16 @@ def activate(
                 e,
                 )
 
-        path = mount(dev=path, fstype=fstype)
+        mount_options = get_conf(
+            # TODO always using mount options from cluster=ceph for
+            # now; see http://tracker.newdream.net/issues/3253
+            cluster='ceph',
+            variable='osd_fs_mount_options_{fstype}'.format(
+                fstype=fstype,
+                ),
+            )
+
+        path = mount(dev=path, fstype=fstype, options=mount_options)
 
     try:
         check_osd_magic(path)
