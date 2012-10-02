@@ -320,13 +320,13 @@ def task(ctx, config):
 
     # need to wait for all usage data to get flushed, should take up to 30 seconds
     timestamp = time.time()
-    while time.time() - timestamp <= 45:
+    while time.time() - timestamp <= (20 * 60):      # wait up to 20 minutes
         (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--categories', 'delete_obj'])  # last operation we did is delete obj, wait for it to flush
         if successful_ops(out) > 0:
             break;
         time.sleep(1)
 
-    assert time.time() - timestamp <= 45
+    assert time.time() - timestamp <= (20 * 60)
 
     # TESTCASE 'usage-show' 'usage' 'show' 'all usage' 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['usage', 'show'])
