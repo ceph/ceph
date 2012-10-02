@@ -322,17 +322,9 @@ MOUNT_OPTIONS = dict(
 
 def mount(
     dev,
+    fstype,
     ):
     # pick best-of-breed mount options based on fs type
-    try:
-        fstype = detect_fstype(dev)
-    except (subprocess.CalledProcessError,
-            TruncatedLineError,
-            TooManyLinesError) as e:
-        raise FilesystemTypeError(
-            'device {dev}'.format(dev=dev),
-            e,
-            )
     options = MOUNT_OPTIONS.get(fstype, '')
 
     # mount
@@ -382,7 +374,17 @@ def activate(
     ):
 
     if do_mount:
-        path = mount(dev=path)
+        try:
+            fstype = detect_fstype(dev=path)
+        except (subprocess.CalledProcessError,
+                TruncatedLineError,
+                TooManyLinesError) as e:
+            raise FilesystemTypeError(
+                'device {dev}'.format(dev=path),
+                e,
+                )
+
+        path = mount(dev=path, fstype=fstype)
 
     try:
         check_osd_magic(path)
