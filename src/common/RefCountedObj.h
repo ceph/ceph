@@ -15,6 +15,8 @@
 #ifndef CEPH_REFCOUNTEDOBJ_H
 #define CEPH_REFCOUNTEDOBJ_H
  
+#include "common/Mutex.h"
+#include "common/Cond.h"
 #include "include/atomic.h"
 
 
@@ -116,5 +118,7 @@ struct RefCountedWaitObject {
   }
 };
 
+void intrusive_ptr_add_ref(RefCountedObject *p);
+void intrusive_ptr_release(RefCountedObject *p);
 
 #endif

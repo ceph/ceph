@@ -152,16 +152,6 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
-void intrusive_ptr_add_ref(Message *p)
-{
-  p->get();
-}
-
-void intrusive_ptr_release(Message *p)
-{
-  p->put();
-}
-
 void Message::encode(uint64_t features, bool datacrc)
 {
   // encode and copy out of *m
