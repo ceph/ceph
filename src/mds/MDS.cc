@@ -1716,9 +1716,9 @@ bool MDS::handle_deferrable_message(Message *m)
     switch (m->get_type()) {
       // SERVER
     case CEPH_MSG_CLIENT_SESSION:
-    case CEPH_MSG_CLIENT_REQUEST:
     case CEPH_MSG_CLIENT_RECONNECT:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_CLIENT);
+    case CEPH_MSG_CLIENT_REQUEST:
       server->dispatch(m);
       break;
     case MSG_MDS_SLAVE_REQUEST:
