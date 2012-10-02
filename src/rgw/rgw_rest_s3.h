@@ -81,14 +81,51 @@ public:
   void send_response();
 };
 
+struct post_part_field {
+  string val;
+  map<string, string> params;
+};
+
+struct post_form_part {
+  string name;
+  string content_type;
+  map<string, struct post_part_field> fields;
+  bufferlist data;
+};
+
+struct ltstr_nocase
+{
+  bool operator()(const string& s1, const string& s2) const
+  {
+    return strcasecmp(s1.c_str(), s2.c_str()) < 0;
+  }
+};
+
 class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
+  string boundary;
+  bufferlist in_data;
+  map<string, post_form_part, const ltstr_nocase> parts;  
+
+  int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
+                         bool *reached_boundary,
+			 bool *done);
+
+  int read_line(bufferlist& bl, uint64_t max,
+                bool *reached_boundary, bool *done);
+
+  int read_data(bufferlist& bl, uint64_t max, bool *reached_boundary, bool *done);
+
+  int read_form_part_header(struct post_form_part *part,
+                            bool *done);
+  bool part_str(const string& name, string *val);
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() {}
 
   int get_params();
+  int complete_get_params();
   void send_response();
-  int get_form_head();
+  int get_data(bufferlist& bl);
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
