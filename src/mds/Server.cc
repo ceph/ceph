@@ -6395,8 +6395,11 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     le->commit.add_null_dentry(straydn, true);
   }
 
-  if (in->is_dir())
+  if (in->is_dir()) {
+    dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
+    le->commit.renamed_dirino = in->ino();
     mdcache->project_subtree_rename(in, destdir, srcdir);
+  }
   
   mdlog->submit_entry(le, new C_MDS_LoggedRenameRollback(this, mut, mdr,
 							 srcdnl->get_inode(), destdir));
