@@ -8341,8 +8341,8 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
     discover_info_t& d = _create_discover(from);
     d.ino = want_ino;
     _send_discover(d);
-    waiting_for_base_ino[from][want_ino].push_back(onfinish);
   }
+  waiting_for_base_ino[from][want_ino].push_back(onfinish);
 }
 
 
