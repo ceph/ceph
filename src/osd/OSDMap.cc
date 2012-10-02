@@ -1428,27 +1428,50 @@ void OSDMap::print(ostream& out) const
   // ignore pg_swap_primary
 }
 
-void OSDMap::print_osd_line(int cur, ostream& out) const
+void OSDMap::print_osd_line(int cur, ostream *out, Formatter *f) const
 {
-  out << "osd." << cur << "\t";
-  if (!exists(cur))
-    out << "DNE\t\t";
-  else {
-    if (is_up(cur))
-      out << "up\t";
-    else
-      out << "down\t";
-    std::streamsize p = out.precision();
-    out << std::setprecision(4) 
-	<< (exists(cur) ? get_weightf(cur) : 0)
-	<< std::setprecision(p)
-	<< "\t";
+  if (f) {
+    f->dump_unsigned("id", cur);
+    f->dump_stream("name") << "osd." << cur;
+    f->dump_unsigned("exists", (int)exists(cur));
+    f->dump_string("type", crush->get_type_name(0));
+    f->dump_int("type_id", 0);
+  }
+  if (out)
+    *out << "osd." << cur << "\t";
+  if (!exists(cur)) {
+    *out << "DNE\t\t";
+  } else {
+    if (is_up(cur)) {
+      if (out)
+	*out << "up\t";
+      if (f)
+	f->dump_string("status", "up");
+    } else {
+      if (out)
+	*out << "down\t";
+      if (f)
+	f->dump_string("status", "down");
+    }
+    if (out) {
+      std::streamsize p = out->precision();
+      *out << std::setprecision(4)
+	   << (exists(cur) ? get_weightf(cur) : 0)
+	   << std::setprecision(p)
+	   << "\t";
+    }
+    if (f) {
+      f->dump_float("reweight", get_weightf(cur));
+    }
   }
 }
 
-void OSDMap::print_tree(ostream& out) const
+void OSDMap::print_tree(ostream *out, Formatter *f) const
 {
-  out << "# id\tweight\ttype name\tup/down\treweight\n";
+  if (out)
+    *out << "# id\tweight\ttype name\tup/down\treweight\n";
+  if (f)
+    f->open_array_section("nodes");
   set<int> touched;
   set<int> roots;
   crush->find_roots(roots);
@@ -1461,29 +1484,63 @@ void OSDMap::print_tree(ostream& out) const
       float weight = q.front().weight;
       q.pop_front();
 
-      out << cur << "\t";
-      int oldprecision = out.precision();
-      out << std::setprecision(4) << weight << std::setprecision(oldprecision) << "\t";
+      if (out) {
+	*out << cur << "\t";
+	int oldprecision = out->precision();
+	*out << std::setprecision(4) << weight << std::setprecision(oldprecision) << "\t";
 
-      for (int k=0; k<depth; k++)
-	out << "\t";
-
+	for (int k=0; k<depth; k++)
+	  *out << "\t";
+      }
+      if (f) {
+	f->open_object_section("item");
+      }
       if (cur >= 0) {
-	print_osd_line(cur, out);
-	out << "\n";
+	print_osd_line(cur, out, f);
+	if (out)
+	  *out << "\n";
+	if (f) {
+	  f->close_section();
+	}
 	touched.insert(cur);
+      }
+      if (f) {
+	f->dump_float("crush_weight", weight);
+	f->dump_unsigned("depth", depth);
+      }
+      if (cur >= 0) {
 	continue;
       }
 
-      int type = crush->get_bucket_type(cur);
-      out << crush->get_type_name(type) << " " << crush->get_item_name(cur) << "\n";
-
       // queue bucket contents...
+      int type = crush->get_bucket_type(cur);
       int s = crush->get_bucket_size(cur);
-      for (int k=s-1; k>=0; k--)
-	q.push_front(qi(crush->get_bucket_item(cur, k), depth+1,
-			(float)crush->get_bucket_item_weight(cur, k) / (float)0x10000));
+      if (f) {
+	f->dump_int("id", cur);
+	f->dump_string("name", crush->get_item_name(cur));
+	f->dump_string("type", crush->get_type_name(type));
+	f->dump_int("type_id", type);
+	f->open_array_section("children");
+      }
+      for (int k=s-1; k>=0; k--) {
+	int item = crush->get_bucket_item(cur, k);
+	q.push_front(qi(item, depth+1, (float)crush->get_bucket_item_weight(cur, k) / (float)0x10000));
+	f->dump_int("child", item);
+      }
+      if (f)
+	f->close_section();
+
+      if (out)
+	*out << crush->get_type_name(type) << " " << crush->get_item_name(cur) << "\n";
+      if (f) {
+	f->close_section();
+      }
+
     }
+  }
+  if (f) {
+    f->close_section();
+    f->open_array_section("stray");
   }
 
   set<int> stray;
@@ -1492,14 +1549,22 @@ void OSDMap::print_tree(ostream& out) const
       stray.insert(i);
 
   if (!stray.empty()) {
-    out << "\n";
+    if (out)
+      *out << "\n";
+    if (f)
+      f->open_object_section("osd");
     for (set<int>::iterator p = stray.begin(); p != stray.end(); ++p) {
-      out << *p << "\t0\t";
-      print_osd_line(*p, out);
-      out << "\n";
+      if (out)
+	*out << *p << "\t0\t";
+      print_osd_line(*p, out, f);
+      if (out)
+	*out << "\n";
     }
+    if (f)
+      f->close_section();
   }
-
+  if (f)
+    f->close_section();
 }
 
 void OSDMap::print_summary(ostream& out) const

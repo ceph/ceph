@@ -315,7 +315,7 @@ int main(int argc, const char **argv)
   if (print_json)
     osdmap.dump_json(cout);
   if (tree) 
-    osdmap.print_tree(cout);
+    osdmap.print_tree(&cout, NULL);
 
   if (modified) {
     bl.clear();
