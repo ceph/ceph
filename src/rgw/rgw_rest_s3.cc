@@ -361,10 +361,302 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s);
 }
 
-int RGWPostObj_ObjStore_S3::get_form_head()
+string trim_whitespace(const string& src)
 {
-  char *buf;
-  size_t pos;
+  if (src.empty()) {
+    return string();
+  }
+
+  int start = 0;
+  for (; start != (int)src.size(); start++) {
+    if (!isspace(src[start]))
+      break;
+  }
+
+  int end = src.size() - 1;
+  if (end <= start) {
+    return string();
+  }
+
+  for (; end > start; end--) {
+    if (!isspace(src[end]))
+      break;
+  }
+
+  return src.substr(start, end - start + 1);
+}
+
+string trim_quotes(const string& val)
+{
+  string s = trim_whitespace(val);
+  if (s.size() < 2)
+    return s;
+
+  int start = 0;
+  int end = s.size() - 1;
+  int quotes_count = 0;
+
+  if (s[start] == '"') {
+    start++;
+    quotes_count++;
+  }
+  if (s[end] == '"') {
+    end--;
+    quotes_count++;
+  }
+  if (quotes_count == 2) {
+    return s.substr(start, end - start + 1);
+  }
+  return s;
+}
+
+/*
+ * parses params in the format: 'first; param1=foo; param2=bar'
+ */
+static void parse_params(const string& params_str, string& first, map<string, string>& params)
+{
+  int pos = params_str.find(';');
+  if (pos < 0) {
+    first = trim_whitespace(params_str);
+    return;
+  }
+
+  first = trim_whitespace(params_str.substr(0, pos));
+
+  pos++;
+
+  while (pos < (int)params_str.size()) {
+    ssize_t end = params_str.find(';', pos);
+    if (end < 0)
+      end = params_str.size();
+
+    string param = params_str.substr(pos, end - pos);
+
+    int eqpos = param.find('=');
+    if (eqpos > 0) {
+      string param_name = trim_whitespace(param.substr(0, eqpos));
+      string val = trim_quotes(param.substr(eqpos + 1));
+      params[param_name] = val;
+    } else {
+      params[trim_whitespace(param)] = "";
+    }
+
+    pos = end + 1;
+  }
+}
+
+static int parse_part_field(const string& line, string& field_name, struct post_part_field& field)
+{
+  int pos = line.find(':');
+  if (pos < 0)
+    return -EINVAL;
+
+  field_name = line.substr(0, pos);
+  if (pos >= (int)line.size() - 1)
+    return 0;
+
+  parse_params(line.substr(pos + 1), field.val, field.params);
+
+  return 0;
+}
+
+bool is_crlf(const char *s)
+{
+  return (*s == '\r' && *(s + 1) == '\n');
+}
+
+/*
+ * find the index of the boundary, if exists, or optionally the next end of line
+ * also returns how many bytes to skip
+ */
+static int index_of(bufferlist& bl, int max_len, const string& str, bool check_crlf,
+                    bool *reached_boundary, int *skip)
+{
+  *reached_boundary = false;
+  *skip = 0;
+
+  if (str.size() < 2) // we assume boundary is at least 2 chars (makes it easier with crlf checks)
+    return -EINVAL;
+
+  if (bl.length() < str.size())
+    return -1;
+
+  const char *buf = bl.c_str();
+  const char *s = str.c_str();
+
+  if (max_len > (int)bl.length())
+    max_len = bl.length();
+
+  int i;
+  for (i = 0; i < max_len; i++, buf++) {
+    if (check_crlf &&
+        i >= 1 &&
+        is_crlf(buf - 1)) {
+        return i + 1; // skip the crlf
+    }
+    if ((i < max_len - (int)str.size() + 1) &&
+        (buf[0] == s[0] && buf[1] == s[1]) &&
+        (strncmp(buf, s, str.size()) == 0)) {
+      *reached_boundary = true;
+      *skip = str.size();
+
+      /* oh, great, now we need to swallow the preceding crlf
+       * if exists
+       */
+      if ((i >= 2) &&
+        is_crlf(buf - 2)) {
+        i -= 2;
+        *skip += 2;
+      }
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max, bool check_crlf,
+                                               bool *reached_boundary, bool *done)
+{
+  uint64_t cl = max + 2 + boundary.size();
+
+  if (max > in_data.length()) {
+    uint64_t need_to_read = cl - in_data.length();
+
+    bufferptr bp(need_to_read);
+
+    int read_len;
+    s->cio->read(bp.c_str(), need_to_read, &read_len);
+
+    in_data.append(bp, 0, read_len);
+  }
+
+  *done = false;
+  int skip;
+  int index = index_of(in_data, cl, boundary, check_crlf, reached_boundary, &skip);
+  if (index >= 0)
+    max = index;
+
+  if (max > in_data.length())
+    max = in_data.length();
+
+  bl.substr_of(in_data, 0, max);
+
+  bufferlist new_read_data;
+
+  /*
+   * now we need to skip boundary for next time, also skip any crlf, or
+   * check to see if it's the last final boundary (marked with "--" at the end
+   */
+  if (*reached_boundary) {
+    int left = in_data.length() - max;
+    if (left < skip + 2) {
+      int need = skip + 2 - left;
+      bufferptr boundary_bp(need);
+      int actual;
+      s->cio->read(boundary_bp.c_str(), need, &actual);
+      in_data.append(boundary_bp);
+    }
+    max += skip; // skip boundary for next time
+    if (in_data.length() >= max + 2) {
+      const char *data = in_data.c_str();
+      if (is_crlf(data + max)) {
+	max += 2;
+      } else {
+        if (*(data + max) == '-' &&
+            *(data + max + 1) == '-') {
+          *done = true;
+	  max += 2;
+	}
+      }
+    }
+  }
+
+  new_read_data.substr_of(in_data, max, in_data.length() - max);
+  in_data = new_read_data;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::read_line(bufferlist& bl, uint64_t max,
+				  bool *reached_boundary, bool *done)
+{
+  return read_with_boundary(bl, max, true, reached_boundary, done);
+}
+
+int RGWPostObj_ObjStore_S3::read_data(bufferlist& bl, uint64_t max,
+				  bool *reached_boundary, bool *done)
+{
+  return read_with_boundary(bl, max, false, reached_boundary, done);
+}
+
+
+int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
+                                              bool *done)
+{
+  bufferlist bl;
+  bool reached_boundary;
+  int r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+  if (r < 0)
+    return r;
+
+  if (*done) {
+    return 0;
+  }
+
+  if (reached_boundary) { // skip the first boundary
+    r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+    if (r < 0)
+      return r;
+    if (*done)
+      return 0;
+  }
+
+  while (true) {
+  /*
+   * iterate through fields
+   */
+    string line = trim_whitespace(string(bl.c_str(), bl.length()));
+
+    if (line.empty())
+      break;
+
+    struct post_part_field field;
+
+    string field_name;
+    r = parse_part_field(line, field_name, field);
+    if (r < 0)
+      return r;
+
+    part->fields[field_name] = field;
+
+    if (field_name.compare("Content-Disposition") == 0) {
+      part->name = field.params["name"];
+    }
+
+    if (reached_boundary)
+      break;
+
+    r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+  }
+
+  return 0;
+}
+
+bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
+{
+  map<string, struct post_form_part>::iterator iter = parts.find(name);
+  if (iter == parts.end())
+    return false;
+
+  bufferlist& data = iter->second.data;
+  string str = string(data.c_str(), data.length());
+  *val = trim_whitespace(str);
+  return true;
+}
+
+int RGWPostObj_ObjStore_S3::get_params()
+{
   string temp_line;
   string param;
   string old_param;
@@ -372,180 +664,148 @@ int RGWPostObj_ObjStore_S3::get_form_head()
 
   string whitespaces (" \t\f\v\n\r");
 
-  content_length = s->env->get_int("CONTENT_LENGTH", 0);
-  if (content_length == 0)
-    return -ENODATA;
-
-  size_t start_receive = s->bytes_received;
-  
   // get the part boundary
-  string content_string = s->env->get("CONTENT_TYPE");
-  pos = content_string.find("boundary=");
-  if (pos == string::npos)
+  string req_content_type_str = s->env->get("CONTENT_TYPE");
+  string req_content_type;
+  map<string, string> params;
+
+  parse_params(req_content_type_str, req_content_type, params);
+
+  if (req_content_type.compare("multipart/form-data") != 0)
     return -EINVAL;
 
-  // create the boundary which marks the end of the request
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    ldout(s->cct, 20) << "request content_type_str=" << req_content_type_str << dendl;
+    ldout(s->cct, 20) << "request content_type params:" << dendl;
+    map<string, string>::iterator iter;
+    for (iter = params.begin(); iter != params.end(); ++iter) {
+      ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
+    }
+  }
+
+  map<string, string>::iterator iter = params.find("boundary");
+  if (iter == params.end())
+    return -EINVAL;
+
+  // create the boundary
   boundary = "--";
-  boundary += content_string.substr(pos+9);
-  boundary += "--";
+  boundary.append(iter->second);
 
-  // each part in the form begins with
-  string part_header = "Content-Disposition: form-data; name=";
-
-  // quite possibly overkill on the size
-  buf = (char *)malloc(RGW_MAX_CHUNK_SIZE + 1);
-
+  bool done;
   do {
-    // read a single line, exciting no?
-    CGI_GetLine(s, buf, RGW_MAX_CHUNK_SIZE);
-    temp_line = buf;
-
-    pos = temp_line.find(part_header);
-
-    if (pos != string::npos) {
-      // find the key contained in this part
-      pos = temp_line.find("name=");
-      param = temp_line.substr(pos+5);
-      old_param = param;
-
-      // trim the key a little bit
-      param.erase(0,1);
-      param.erase(param.find("\""));
-
-      // make sure to stop before reading actual data
-      if (strncmp(param.c_str(), "file",4) == 0) {
-        data_pending = true;
-
-        // look for a supplied filename
-        pos = old_param.find("filename=");
-
-        if (pos != string::npos) {
-          string temp_name = old_param.substr(pos+10);
-
-          // clean up the trailing quotation mark
-          temp_name.erase(temp_name.find("\""));
-          supplied_filename = temp_name;
+    struct post_form_part part;
+    int r = read_form_part_header(&part, &done);
+    if (r < 0)
+      return r;
+    
+    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+      ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
+      ldout(s->cct, 20) << "params:" << dendl;
+      map<string, struct post_part_field>::iterator piter;
+      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
+        ldout(s->cct, 20) << "name=" << piter->first << dendl;
+        ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
+        map<string, string>& params = piter->second.params;
+        for (iter = params.begin(); iter != params.end(); ++iter) {
+          ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
         }
-
-        // check if a key has actually been read correctly
-        pos = form_param["key"].find_last_not_of(whitespaces);
-          if (pos == string::npos)
-            form_param["key"] = supplied_filename;
-
-        // read the next two lines which don't actually contain the data
-        CGI_GetLine(s, buf, RGW_MAX_CHUNK_SIZE);
-        param_value = buf;
-
-        pos = param_value.find("Content-Type:");
-        if (pos != string::npos) {
-          param_value = param_value.substr(pos + 14);
-
-          // get rid of any trailing whitespace
-          pos = param_value.find_last_not_of(whitespaces);
-          if (pos != string::npos)
-            param_value.erase(pos+1);
-
-          form_param["Content-Type"] = param_value;
-        }
-
-        // this line will be blank
-        CGI_GetLine(s, buf, RGW_MAX_CHUNK_SIZE);
-
-        break;
-      }
-
-      // read out a boring blank line
-      CGI_GetLine(s, buf, RGW_MAX_CHUNK_SIZE);
-
-      // now read the line we actually want
-      CGI_GetLine(s, buf, RGW_MAX_CHUNK_SIZE);
-      param_value = buf;
-
-      // get rid of any trailing whitespace
-      pos = param_value.find_last_not_of(whitespaces);
-      if (pos != string::npos)
-        param_value.erase(pos+1);
-
-      if (!param.empty() && !param_value.empty()) {
-        // store the parameter, value combination
-        form_param[param] = param_value;
       }
     }
-    else {
-      /* we may have read to the end of the request without coming across a file part
-      if so we want to error out because no one likes infinite loops */
-      pos = temp_line.find(boundary);
-      if (pos != string::npos && !data_pending) {
-        free(buf);
-        return -ENODATA; //maybe there is a better error condition to use?
-      }
+
+    if (done) /* unexpected here */
+      return -EINVAL;
+
+    if (part.name.compare("file") == 0) { /* beginning of data transfer */
+      parts[part.name] = part;
+      data_pending = true;
+      break;
     }
-  } while (!data_pending);
 
-  header_length += (s->bytes_received - start_receive);
-  content_length -= header_length;
+    bool boundary;
+    r = read_data(part.data, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+    if (!boundary) {
+      return -EINVAL;
+    }
+    parts[part.name] = part;
+  } while (!done);
 
-  free(buf);
+  if (!part_str("key", &s->object_str))
+    return -EINVAL;
+
+  string canned_acl;
+  part_str("acl", &canned_acl);
+  
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  ldout(s->cct, 20) << "canned_acl=" << canned_acl << dendl;
+  if (!s3policy.create_canned(s->user.user_id, "", canned_acl))
+    return -EINVAL;
+
+  policy = s3policy;
+
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::get_params()
+int RGWPostObj_ObjStore_S3::complete_get_params()
 {
-  // now get the beginning of the request, up until one line before the actual data
-  get_form_head();
+  bool done;
+  do {
+    struct post_form_part part;
+    int r = read_form_part_header(&part, &done);
+    if (r < 0)
+      return r;
+    
+    bufferlist part_data;
+    bool boundary;
+    r = read_data(part.data, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+    if (!boundary) {
+      return -EINVAL;
+    }
 
-  string test_string;
+    parts[part.name] = part;
+  } while (!done);
 
-  if (s->bucket_name_str.size() > 0 )
-    test_string = s->bucket_name;
+  return 0;
+}
 
-  // build policies for the specified bucket and load them into the state
-  if (s->bucket_name_str.size() == 0) {
-    if (form_param.count("bucket"))
-      s->bucket_name_str = form_param["bucket"];
+int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+{
+  bool boundary;
+  bool done;
 
-    ret = rgw_build_policies(store, s, true, false);
-    if (ret < 0) {
-      ldout(s->cct, 0) << "ERROR building policy, status: " << ret << dendl;
-      return ret;
+  int r = read_data(bl, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+  if (r < 0)
+    return r;
+
+  if (boundary) {
+    data_pending = false;
+
+    if (!done) {  /* reached end of data, let's drain the rest of the params */
+      r = complete_get_params();
+      if (r < 0)
+        return r;
     }
   }
 
-  if (form_param.count("key")) {
-    s->object_str = form_param["key"];
-  } else {
-    ret = -EINVAL; // could possibly use a better error condition
-  }
-
-  // if we don't have an access policy build a policy for an anonymous user
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
-  if (!form_param.count("Policy")) {
-    if (form_param.count("acl")) {
-      bool r = s3policy.create_canned(s->user.user_id, "", form_param["acl"]);
-      if (!r)
-        return -EINVAL;
-
-      policy = s3policy;
-    }
-  }
-
-  return ret;
+  return bl.length();
 }
 
 void RGWPostObj_ObjStore_S3::send_response()
 {
-  if (ret < 0)
-    set_req_state_err(s, ret);
+  set_req_state_err(s, ret);
+  if (ret < 0) {
+    end_header(s, "text/plain");
+    return;
+  }
 
-  if (form_param.count("success_action_redirect")) {
-    const string& success_action_redirect = form_param["success_action_redirect"];
+  if (parts.count("success_action_redirect") && ret == 0) {
+    string success_action_redirect;
+    part_str("success_action_redirect", &success_action_redirect);
     if (check_utf8(success_action_redirect.c_str(), success_action_redirect.size())) {
       dump_redirect(s, form_param["success_action_redirect"].c_str());
       end_header(s, "text/plain");
       return;
     }
-  }
-  else if (form_param.count("success_action_status") && ret == 0) {
+  } else if (parts.count("success_action_status") && ret == 0) {
     string status_string = form_param["success_action_status"];
     int status_int;
     if ( !(istringstream(status_string) >> status_int) )
@@ -558,12 +818,13 @@ void RGWPostObj_ObjStore_S3::send_response()
     if (ret < 0)
       return;
   }
-
-  end_header(s, "text/plain");
+#if 0
   dump_common_s3_headers(s, etag.c_str(), 0, "close");
   dump_bucket_from_state(s);
   dump_object_from_state(s);
   dump_uri_from_state(s);
+#endif
+  end_header(s, "text/plain");
 }
 
 
