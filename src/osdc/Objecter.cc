@@ -1875,7 +1875,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
       r.add_partial_result(*bit, eit->buffer_extents);
     }
     bl->clear();
-    r.assemble_result(*bl);
+    r.assemble_result(*bl, false);
   } else {
     ldout(cct, 15) << "  only one frag" << dendl;
     bl->claim(resultbl[0]);

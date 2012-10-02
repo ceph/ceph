@@ -143,7 +143,7 @@ class Filer {
       }
     }
 
-    void assemble_result(bufferlist& bl) {
+    void assemble_result(bufferlist& bl, bool zero_tail) {
       // go backwards, so that we can efficiently discard zeros
       map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
       if (p == partial.rend())
@@ -157,7 +157,7 @@ class Filer {
 
 	size_t len = p->second.first.length();
 	if (len < p->second.second) {
-	  if (bl.length()) {
+	  if (zero_tail || bl.length()) {
 	    bufferptr bp(p->second.second - p->second.first.length());
 	    bp.zero();
 	    bl.push_front(bp);
