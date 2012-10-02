@@ -185,8 +185,7 @@ namespace librbd {
 			     const std::map<uint64_t, uint64_t> &data_map,
 			     uint64_t buf_ofs,
 			     size_t buf_len,
-			     int (*cb)(uint64_t, size_t, const char *, void *),
-			     void *arg);
+			     char *dest_buf);
 
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
