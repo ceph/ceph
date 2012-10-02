@@ -70,6 +70,23 @@ int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order);
+/**
+ * create new rbd image
+ *
+ * The stripe_unit must be a factor of the object size (1 << order).
+ * The stripe_count can be one (no intra-object striping) or greater
+ * than one.  The RBD_FEATURE_STRIPINGV2 must be specified if the
+ * stripe_unit != the object size and the stripe_count is != 1.
+ *
+ * @param io ioctx
+ * @param name image name
+ * @param size image size in bytes
+ * @param features initial feature bits
+ * @param order object/block size, as a power of two (object size == 1 << order)
+ * @param stripe_unit stripe unit size, in bytes.
+ * @param stripe_count number of objects to stripe over before looping
+ * @return 0 on success, or negative error code
+ */
 int rbd_create3(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order,
 		uint64_t stripe_unit, uint64_t stripe_count);
