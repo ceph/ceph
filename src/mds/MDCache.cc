@@ -5412,6 +5412,17 @@ bool MDCache::trim(int max)
       ++i)
     lru.lru_insert_mid(*i);
 
+  // trim non-auth, non-bound subtrees
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();) {
+    CDir *dir = p->first;
+    p++;
+    if (!dir->is_auth() && !dir->get_inode()->is_auth()) {
+      if (dir->get_num_ref() == 1)  // subtree pin
+	trim_dirfrag(dir, 0, expiremap);
+    }
+  }
+
   // trim root?
   if (max == 0 && root) {
     list<CDir*> ls;
