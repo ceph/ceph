@@ -1677,10 +1677,23 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  }
 	} else if (cmd == "tree") {
 	  stringstream ds;
-	  p->print_tree(ds);
-	  rdata.append(ds);
-	  ss << "dumped osdmap tree epoch " << p->get_epoch();
-	  r = 0;
+	  if (format == "json") {
+	    JSONFormatter jf(true);
+	    jf.open_object_section("tree");
+	    p->print_tree(NULL, &jf);
+	    jf.close_section();
+	    jf.flush(ds);
+	    r = 0;
+	  } else if (format == "plain") {
+	    p->print_tree(&ds, NULL);
+	    r = 0;
+	  } else {
+	    ss << "unrecognized format '" << format << "'";
+	    r = -EINVAL;
+	  }
+	  if (r == 0) {
+	    rdata.append(ds);
+	  }
 	} else if (cmd == "getmap") {
 	  p->encode(rdata);
 	  ss << "got osdmap epoch " << p->get_epoch();

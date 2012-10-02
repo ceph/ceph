@@ -545,11 +545,11 @@ public:
 
 
 private:
-  void print_osd_line(int cur, ostream& out) const;
+  void print_osd_line(int cur, ostream *out, Formatter *f) const;
 public:
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
-  void print_tree(ostream& out) const;
+  void print_tree(ostream *out, Formatter *f) const;
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
