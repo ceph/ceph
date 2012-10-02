@@ -1007,18 +1007,12 @@ void Pipe::discard_out_queue()
   ldout(msgr->cct,10) << "discard_queue" << dendl;
 
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
-    if (*p < (void *) DispatchQueue::D_NUM_CODES) {
-      continue; // skip non-Message dispatch codes
-    }
     ldout(msgr->cct,20) << "  discard " << *p << dendl;
     (*p)->put();
   }
   sent.clear();
   for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
-      if (*r < (void *) DispatchQueue::D_NUM_CODES) {
-        continue; // skip non-Message dispatch codes
-      }
       ldout(msgr->cct,20) << "  discard " << *r << dendl;
       (*r)->put();
     }
