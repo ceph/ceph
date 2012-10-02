@@ -3743,7 +3743,12 @@ void FileStore::sync_entry()
 	if (btrfs) {
 	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
 	  // do a full btrfs commit
-	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
+	  int r = ::ioctl(op_fd, BTRFS_IOC_SYNC);
+	  if (r < 0) {
+	    r = -errno;
+	    derr << "sync_entry btrfs IOC_SYNC got " << cpp_strerror(r) << dendl;
+	    assert(0 == "btrfs sync ioctl returned error");
+	  }
 	} else
         if (m_filestore_fsync_flushes_journal_data) {
 	  dout(15) << "sync_entry doing fsync on " << current_op_seq_fn << dendl;
