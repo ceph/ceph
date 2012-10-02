@@ -3132,6 +3132,11 @@ void MDCache::recalc_auth_bits()
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
+
+    CInode *inode = p->first->get_inode();
+    if (inode->is_mdsdir() && inode->ino() != MDS_INO_MDSDIR(mds->get_nodeid()))
+      inode->state_clear(CInode::STATE_AUTH);
+
     list<CDir*> dfq;  // dirfrag queue
     dfq.push_back(p->first);
 
