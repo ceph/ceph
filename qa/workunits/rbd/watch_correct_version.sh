@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 resize_image() {
-    for i in $(seq 1 100)
+    for i in $(seq 1 1000)
     do
         rbd resize --size $i test
     done
@@ -12,7 +12,7 @@ rbd rm test || true
 rbd create -s 1 --order 25 test
 resize_image &
 
-for i in $(seq 1 100)
+for i in $(seq 1 1000)
 do
     rbd export test test.exported --debug-rbd 20 2>export.log
     rm -f test.exported
