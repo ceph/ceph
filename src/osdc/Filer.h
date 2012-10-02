@@ -124,6 +124,56 @@ class Filer {
 			     uint64_t objectno, uint64_t off, uint64_t len,
 			     vector<pair<uint64_t, uint64_t> >& extents);
 
+  /*
+   * helper to assemble a striped result
+   */
+  class StripedReadResult {
+    map<uint64_t, pair<bufferlist, uint64_t> > partial;  // offset -> (data, intended length)
+
+  public:
+    void add_partial_result(bufferlist& bl,
+			    const vector<pair<uint64_t,uint64_t> >& buffer_extents) {
+      for (vector<pair<uint64_t,uint64_t> >::const_iterator p = buffer_extents.begin();
+	   p != buffer_extents.end();
+	   ++p) {
+	pair<bufferlist, uint64_t>& r = partial[p->first];
+	size_t actual = MIN(bl.length(), p->second);
+	bl.splice(0, actual, &r.first);
+	r.second = p->second;
+      }
+    }
+
+    void assemble_result(bufferlist& bl) {
+      // go backwards, so that we can efficiently discard zeros
+      map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
+      if (p == partial.rend())
+	return;
+
+      uint64_t end = p->first + p->second.second;
+      while (p != partial.rend()) {
+	// sanity check
+	assert(p->first == end - p->second.second);
+	end = p->first;
+
+	size_t len = p->second.first.length();
+	if (len < p->second.second) {
+	  if (bl.length()) {
+	    bufferptr bp(p->second.second - p->second.first.length());
+	    bp.zero();
+	    bl.push_front(bp);
+	    bl.claim_prepend(p->second.first);
+	  } else {
+	    bl.claim_prepend(p->second.first);
+	  }
+	} else {
+	  bl.claim_prepend(p->second.first);
+	}
+	p++;
+      }
+      partial.clear();
+    }
+  };
+
 
   /*** async file interface.  scatter/gather as needed. ***/
 
