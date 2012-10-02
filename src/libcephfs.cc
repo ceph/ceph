@@ -233,6 +233,7 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
 extern "C" void ceph_shutdown(struct ceph_mount_info *cmount)
 {
   cmount->shutdown();
+  delete cmount;
 }
 
 extern "C" int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path)
