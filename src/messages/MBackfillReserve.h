@@ -53,6 +53,9 @@ public:
     case GRANT:
       out << "GRANT "; 
       break;
+    case REJECT:
+      out << "REJECT ";
+      break;
     }
     out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
     return;
