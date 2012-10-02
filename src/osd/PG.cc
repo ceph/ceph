@@ -5254,7 +5254,7 @@ void PG::RecoveryState::NotBackfilling::exit()
 PG::RecoveryState::RepNotBackfilling::RepNotBackfilling(my_context ctx)
   : my_base(ctx)
 {
-  state_name = "Started/Primary/Active/RepNotBackfilling";
+  state_name = "Started/ReplicaActive/RepNotBackfilling";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
@@ -5267,7 +5267,7 @@ void PG::RecoveryState::RepNotBackfilling::exit()
 PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
   : my_base(ctx)
 {
-  state_name = "Started/Primary/Active/RepWaitBackfillReserved";
+  state_name = "Started/ReplicaActive/RepWaitBackfillReserved";
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
 
@@ -5322,7 +5322,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejecte
 PG::RecoveryState::RepBackfilling::RepBackfilling(my_context ctx)
   : my_base(ctx)
 {
-  state_name = "Started/Primary/Active/RepBackfilling";
+  state_name = "Started/ReplicaActive/RepBackfilling";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
