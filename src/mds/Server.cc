@@ -4577,7 +4577,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
     // project snaprealm, too
-    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
+    if (in->snaprealm || follows + 1 > dn->first)
+      in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 
     le->metablob.add_primary_dentry(straydn, true, in);
   } else {
@@ -5247,11 +5248,16 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // moving between snaprealms?
-  if (srcdnl->is_primary() && !srci->snaprealm &&
-      srci->find_snaprealm() != destdn->get_dir()->inode->find_snaprealm()) {
-    dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
-    mds->mdcache->snaprealm_create(mdr, srci);
-    return;
+  if (srcdnl->is_primary() && srci->is_multiversion() && !srci->snaprealm) {
+    SnapRealm *srcrealm = srci->find_snaprealm();
+    SnapRealm *destrealm = destdn->get_dir()->inode->find_snaprealm();
+    if (srcrealm != destrealm &&
+	(srcrealm->get_newest_seq() + 1 > srcdn->first ||
+	 destrealm->get_newest_seq() + 1 > srcdn->first)) {
+      dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
+      mds->mdcache->snaprealm_create(mdr, srci);
+      return;
+    }
   }
 
   assert(g_conf->mds_kill_rename_at != 1);
@@ -5650,6 +5656,7 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (destdn->is_auth())
     mdcache->predirty_journal_parents(mdr, metablob, srci, destdn->get_dir(), flags, 1);
 
+  SnapRealm *src_realm = srci->find_snaprealm();
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
   snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
 
@@ -5659,7 +5666,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdnl->is_primary()) {
       if (destdn->is_auth()) {
 	// project snaprealm, too
-	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
+	if (oldin->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first)
+	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
 	metablob->add_primary_dentry(straydn, true, oldin);
       }
@@ -5703,7 +5711,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
-    if (destdn->is_auth() && srci->snaprealm)
+    if (destdn->is_auth() &&
+        (srci->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first))
       srci->project_past_snaprealm_parent(dest_realm);
     
     if (destdn->is_auth() && !destdnl->is_null())
