@@ -55,7 +55,7 @@ def write_one_line(parent, name, text):
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 
-def get_fsid(cluster):
+def get_conf(cluster, variable):
     try:
         p = subprocess.Popen(
             args=[
@@ -65,7 +65,7 @@ def get_fsid(cluster):
                     ),
                 '--name=osd.',
                 '--lookup',
-                'fsid',
+                variable,
                 ],
             stdout=subprocess.PIPE,
             close_fds=True,
@@ -74,16 +74,41 @@ def get_fsid(cluster):
         raise PrepareError('error executing ceph-conf', e)
     (out, _err) = p.communicate()
     ret = p.wait()
-    if ret != 0:
-        raise PrepareError('getting cluster uuid from configuration failed')
-    fsid = out.split('\n', 1)[0]
-    if not fsid:
+    if ret == 1:
+        # config entry not found
         return None
+    elif ret != 0:
+        raise PrepareError('getting variable from configuration failed')
+    value = out.split('\n', 1)[0]
+    # don't differentiate between "var=" and no var set
+    if not value:
+        return None
+    return value
+
+
+def get_fsid(cluster):
+    fsid = get_conf(cluster=cluster, variable='fsid')
+    if fsid is None:
+        raise PrepareError('getting cluster uuid from configuration failed')
     return fsid
 
 
+# TODO depend on xfsprogs?
+# TODO switch default to xfs once xfsprogs is guaranteed.
+# TODO depend on btrfs-tools?
+DEFAULT_FS_TYPE = 'ext4'
+
 MOUNT_OPTIONS = dict(
     ext4='user_xattr',
+    )
+
+MKFS_ARGS = dict(
+    xfs=[
+        # xfs insists on not overwriting previous fs; even if we wipe
+        # partition table, we often recreate it exactly the same way,
+        # so we'll see ghosts of filesystems past
+        '-f',
+        ],
     )
 
 
@@ -138,6 +163,7 @@ def unmount(
 
 def prepare(
     disk,
+    fstype,
     cluster_uuid,
     ):
     """
@@ -166,18 +192,18 @@ def prepare(
     except subprocess.CalledProcessError as e:
         raise PrepareError(e)
 
-    # TODO make fstype configurable; both ceph.conf and command line
-    fstype = 'ext4'
     dev = '{disk}1'.format(disk=disk)
+    args = [
+        'mkfs',
+        '--type={fstype}'.format(fstype=fstype),
+        ]
+    args.extend(MKFS_ARGS.get(fstype, []))
+    args.extend([
+            '--',
+            dev,
+            ])
     try:
-        subprocess.check_call(
-            args=[
-                'mkfs',
-                '--type={fstype}'.format(fstype=fstype),
-                '--',
-                dev,
-                ],
-            )
+        subprocess.check_call(args=args)
     except subprocess.CalledProcessError as e:
         raise PrepareError(e)
 
@@ -211,6 +237,10 @@ def parse_args():
         help='cluster uuid to assign this disk to',
         )
     parser.add_argument(
+        '--fs-type',
+        help='file system type to use (e.g. "ext4")',
+        )
+    parser.add_argument(
         'disk',
         metavar='DISK',
         help='path to OSD data disk block device',
@@ -242,8 +272,17 @@ def main():
                 raise PrepareError(
                     'must have fsid in config or pass --cluster--uuid=',
                     )
+
+        if args.fs_type is None:
+            args.fs_type = get_conf(
+                cluster=args.cluster,
+                variable='osd_fs_type',
+                )
+            if args.fs_type is None:
+                args.fs_type = DEFAULT_FS_TYPE
         prepare(
             disk=args.disk,
+            fstype=args.fs_type,
             cluster_uuid=args.cluster_uuid,
             )
     except PrepareError as e:
