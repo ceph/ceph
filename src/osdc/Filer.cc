@@ -353,6 +353,7 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
     else {
       ex = &object_extents[oid];
       ex->oid = oid;
+      ex->objectno = objectno;
       ex->oloc = OSDMap::file_to_object_locator(*layout);
     }
     
