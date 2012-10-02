@@ -7473,7 +7473,8 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 void MDCache::dispatch_request(MDRequest *mdr)
 {
   if (mdr->client_request) {
-    if (!mdr->item_session_request.is_on_list()) {
+    if (!mdr->reqid.name.is_mds() &&
+	!mdr->item_session_request.is_on_list()) {
       dout(10) << "request " << *mdr << " is canceled" << dendl;
       return;
     }
