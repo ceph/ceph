@@ -574,6 +574,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_DEEP_SCRUB   (1<<19) // deep scrub: check CRC32 on files
 #define PG_STATE_BACKFILL  (1<<20) // [active] backfilling pg content
 #define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
+#define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
 
 std::string pg_state_string(int state);
 
