@@ -187,27 +187,47 @@ namespace librbd {
   {
     assert(ictx->md_lock.is_locked());
     CephContext *cct = (CephContext *)ictx->data_ctx.cct();
-    uint64_t bsize = get_block_size(ictx->order);
-    uint64_t numseg = get_max_block(ictx->size, ictx->order);
-    uint64_t start = get_block_num(ictx->order, newsize);
 
-    uint64_t block_ofs = get_block_ofs(ictx->order, newsize);
-    if (block_ofs) {
-      ldout(cct, 2) << "trim_image object " << numseg << " truncate to "
-		    << block_ofs << dendl;
-      string oid = get_block_oid(ictx->object_prefix, start, ictx->old_format);
-      librados::ObjectWriteOperation write_op;
-      write_op.truncate(block_ofs);
-      ictx->data_ctx.operate(oid, &write_op);
-      start++;
-    }
-    if (start < numseg) {
-      ldout(cct, 2) << "trim_image objects " << start << " to "
-		    << (numseg - 1) << dendl;
-      for (uint64_t i = start; i < numseg; ++i) {
-	string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    // first object we can delete free and clear
+    uint64_t size = ictx->get_size();
+    uint64_t period = ictx->get_stripe_period();
+    uint64_t num_period = ((newsize + period - 1) / period);
+    uint64_t delete_off = MIN(num_period * period, size);
+    uint64_t delete_start = num_period * ictx->get_stripe_count();
+    uint64_t num_objects = ictx->get_num_objects();
+    uint64_t object_size = ictx->get_object_size();
+
+    ldout(cct, 10) << "trim_image " << size << " -> " << newsize
+		   << " periods " << num_period
+		   << " discard to offset " << delete_off
+		   << " delete objects " << delete_start << " to " << (num_objects-1)
+		   << dendl;
+
+    if (delete_start < num_objects) {
+      ldout(cct, 2) << "trim_image objects " << delete_start << " to "
+		    << (num_objects - 1) << dendl;
+      for (uint64_t i = delete_start; i < num_objects; ++i) {
+	string oid = ictx->get_object_name(i);
 	ictx->data_ctx.remove(oid);
-	prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
+	prog_ctx.update_progress((i - delete_start) * object_size,
+				 (num_objects - delete_start) * object_size);
+      }
+    }
+
+    // discard the weird boundary, if any
+    if (delete_off > newsize) {
+      vector<ObjectExtent> extents;
+      Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, newsize, delete_off - newsize, extents);
+
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+	ldout(ictx->cct, 20) << " ex " << *p << dendl;
+	if (p->offset == 0) {
+	  ictx->data_ctx.remove(p->oid.name);
+	} else {
+	  librados::ObjectWriteOperation op;
+	  op.truncate(p->offset);
+	  ictx->data_ctx.operate(p->oid.name, &op);
+	}
       }
     }
   }
