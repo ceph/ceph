@@ -99,15 +99,23 @@ def get_fsid(cluster):
 DEFAULT_FS_TYPE = 'ext4'
 
 MOUNT_OPTIONS = dict(
-    ext4='user_xattr',
+    btrfs='noatime,user_subvol_rm_allowed',
+    ext4='noatime,user_xattr',
+    xfs='noatime',
     )
 
 MKFS_ARGS = dict(
+    btrfs=[
+        '-m', 'single',
+        '-l', '32768',
+        '-n', '32768',
+        ],
     xfs=[
         # xfs insists on not overwriting previous fs; even if we wipe
         # partition table, we often recreate it exactly the same way,
         # so we'll see ghosts of filesystems past
         '-f',
+        '-i', 'size=2048',
         ],
     )
 

@@ -347,11 +347,13 @@ def get_conf(cluster, variable):
 
 
 MOUNT_OPTIONS = dict(
-    # this is default ever since linux 2.6.39 / 3.0, but we'll delay a
-    # moment before removing it fully because we did have some issues
-    # with ext4 before the xatts-in-leveldb work, and it seemed that
-    # user_xattr helped
-    ext4='user_xattr',
+    btrfs='noatime,user_subvol_rm_allowed',
+    # user_xattr is default ever since linux 2.6.39 / 3.0, but we'll
+    # delay a moment before removing it fully because we did have some
+    # issues with ext4 before the xatts-in-leveldb work, and it seemed
+    # that user_xattr helped
+    ext4='noatime,user_xattr',
+    xfs='noatime',
     )
 
 
