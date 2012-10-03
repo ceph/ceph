@@ -1983,7 +1983,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   }
 
   CInode *diri = dir->get_inode();
-  if (diri->is_system() && !diri->is_root()) {
+  if (!mdr->reqid.name.is_mds() && diri->is_system() && !diri->is_root()) {
     reply_request(mdr, -EROFS);
     return 0;
   }
@@ -4577,7 +4577,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
     // project snaprealm, too
-    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
+    if (in->snaprealm || follows + 1 > dn->first)
+      in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 
     le->metablob.add_primary_dentry(straydn, true, in);
   } else {
@@ -5065,7 +5066,8 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // src+dest traces _must_ share a common ancestor for locking to prevent orphans
   if (destpath.get_ino() != srcpath.get_ino() &&
-      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok!
+      !(req->get_source().is_mds() &&
+	MDS_INO_IS_MDSDIR(srcpath.get_ino()))) {  // <-- mds 'rename' out of stray dir is ok!
     // do traces share a dentry?
     CDentry *common = 0;
     for (unsigned i=0; i < srctrace.size(); i++) {
@@ -5126,10 +5128,12 @@ void Server::handle_client_rename(MDRequest *mdr)
     pdn = pdn->get_dir()->inode->parent;
   }
 
-  // is this a stray reintegration or merge? (sanity checks!)
+  // is this a stray migration, reintegration or merge? (sanity checks!)
   if (mdr->reqid.name.is_mds() &&
-      (!destdnl->is_remote() ||
-       destdnl->get_remote_ino() != srci->ino())) {
+      !(MDS_INO_IS_STRAY(srcpath.get_ino()) &&
+	MDS_INO_IS_STRAY(destpath.get_ino())) &&
+      !(destdnl->is_remote() &&
+	destdnl->get_remote_ino() == srci->ino())) {
     reply_request(mdr, -EINVAL);  // actually, this won't reply, but whatev.
     return;
   }
@@ -5245,11 +5249,16 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // moving between snaprealms?
-  if (srcdnl->is_primary() && !srci->snaprealm &&
-      srci->find_snaprealm() != destdn->get_dir()->inode->find_snaprealm()) {
-    dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
-    mds->mdcache->snaprealm_create(mdr, srci);
-    return;
+  if (srcdnl->is_primary() && srci->is_multiversion() && !srci->snaprealm) {
+    SnapRealm *srcrealm = srci->find_snaprealm();
+    SnapRealm *destrealm = destdn->get_dir()->inode->find_snaprealm();
+    if (srcrealm != destrealm &&
+	(srcrealm->get_newest_seq() + 1 > srcdn->first ||
+	 destrealm->get_newest_seq() + 1 > srcdn->first)) {
+      dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
+      mds->mdcache->snaprealm_create(mdr, srci);
+      return;
+    }
   }
 
   assert(g_conf->mds_kill_rename_at != 1);
@@ -5648,6 +5657,7 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (destdn->is_auth())
     mdcache->predirty_journal_parents(mdr, metablob, srci, destdn->get_dir(), flags, 1);
 
+  SnapRealm *src_realm = srci->find_snaprealm();
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
   snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
 
@@ -5657,7 +5667,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdnl->is_primary()) {
       if (destdn->is_auth()) {
 	// project snaprealm, too
-	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
+	if (oldin->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first)
+	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
 	metablob->add_primary_dentry(straydn, true, oldin);
       }
@@ -5701,7 +5712,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
-    if (destdn->is_auth() && srci->snaprealm)
+    if (destdn->is_auth() &&
+        (srci->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first))
       srci->project_past_snaprealm_parent(dest_realm);
     
     if (destdn->is_auth() && !destdnl->is_null())
@@ -5836,16 +5848,16 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       if (mdr->more()->cap_imports.count(destdnl->get_inode())) {
 	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(), srcdn->authority().first, 
 							 mdr->more()->cap_imports[destdnl->get_inode()]);
-	/* hack: add an auth pin for each xlock we hold. These were
-	 * remote xlocks previously but now they're local and
-	 * we're going to try and unpin when we xlock_finish. */
-	for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
-	    i !=  mdr->xlocks.end();
-	    ++i)
-	  if ((*i)->get_parent() == destdnl->get_inode() &&
-	      !(*i)->is_locallock())
-	    mds->locker->xlock_import(*i, mdr);
       }
+      /* hack: add an auth pin for each xlock we hold. These were
+       * remote xlocks previously but now they're local and
+       * we're going to try and unpin when we xlock_finish. */
+      for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
+	  i !=  mdr->xlocks.end();
+	  ++i)
+	if ((*i)->get_parent() == destdnl->get_inode() &&
+	    !(*i)->is_locallock())
+	  mds->locker->xlock_import(*i, mdr);
       
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
@@ -6393,8 +6405,11 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     le->commit.add_null_dentry(straydn, true);
   }
 
-  if (in->is_dir())
+  if (in->is_dir()) {
+    dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
+    le->commit.renamed_dirino = in->ino();
     mdcache->project_subtree_rename(in, destdir, srcdir);
+  }
   
   mdlog->submit_entry(le, new C_MDS_LoggedRenameRollback(this, mut, mdr,
 							 srcdnl->get_inode(), destdir));
