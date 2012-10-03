@@ -354,12 +354,12 @@ namespace librbd {
 		     ProgressContext& prog_ctx)
   {
     assert(ictx->md_lock.is_locked());
-    uint64_t numseg = get_max_block(ictx->size, ictx->order);
-    uint64_t bsize = get_block_size(ictx->order);
+    uint64_t numseg = ictx->get_num_objects();
+    uint64_t bsize = ictx->get_object_size();
 
     for (uint64_t i = 0; i < numseg; i++) {
       int r;
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+      string oid = ictx->get_object_name(i);
       r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snap_id);
       ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to "
 			   << snap_id << " returned " << r << dendl;
