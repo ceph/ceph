@@ -392,6 +392,8 @@ std::string pg_state_string(int state)
     oss << "active+";
   if (state & PG_STATE_CLEAN)
     oss << "clean+";
+  if (state & PG_STATE_RECOVERY_WAIT)
+    oss << "recovery_wait+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
   if (state & PG_STATE_DOWN)

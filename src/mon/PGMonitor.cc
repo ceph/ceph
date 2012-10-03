@@ -1223,6 +1223,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       note["splitting"] += p->second;
     if (p->first & PG_STATE_RECOVERING)
       note["recovering"] += p->second;
+    if (p->first & PG_STATE_RECOVERY_WAIT)
+      note["recovery_wait"] += p->second;
     if (p->first & PG_STATE_INCOMPLETE)
       note["incomplete"] += p->second;
     if (p->first & PG_STATE_BACKFILL_WAIT)
@@ -1278,6 +1280,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			       PG_STATE_REPAIR |
 			       PG_STATE_SPLITTING |
 			       PG_STATE_RECOVERING |
+			       PG_STATE_RECOVERY_WAIT |
 			       PG_STATE_INCOMPLETE |
 			       PG_STATE_BACKFILL_WAIT |
 			       PG_STATE_BACKFILL |
