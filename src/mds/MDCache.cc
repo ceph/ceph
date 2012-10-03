@@ -8306,16 +8306,20 @@ void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 
 void MDCache::migrate_stray(CDentry *dn, int to)
 {
-  CInode *fromino = dn->dir->get_inode();
-  dout(10) << "migrate_stray from mds" 
-	   << MDS_INO_STRAY_OWNER(fromino->inode.ino) << " to mds." << to 
-	   << " " << *dn << " " << *dn->get_projected_linkage()->get_inode() << dendl;
+  CInode *in = dn->get_linkage()->get_inode();
+  assert(in);
+  CInode *diri = dn->dir->get_inode();
+  assert(diri->is_stray());
+  dout(10) << "migrate_stray from mds." << MDS_INO_STRAY_OWNER(diri->inode.ino)
+	   << " to mds." << to
+	   << " " << *dn << " " << *in << dendl;
 
   // rename it to another mds.
-  string dname;
-  dn->get_projected_linkage()->get_inode()->name_stray_dentry(dname);
+  filepath src;
+  dn->make_path(src);
 
-  filepath src(dname, fromino->inode.ino);
+  string dname;
+  in->name_stray_dentry(dname);
   filepath dst(dname, MDS_INO_STRAY(to, 0));
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
