@@ -995,7 +995,8 @@ void MDSMonitor::tick()
 {
   // make sure mds's are still alive
   // ...if i am an active leader
-  if (!paxos->is_active()) return;
+  if (!paxos->is_active() ||
+      !mon->is_all_paxos_recovered()) return;
 
   update_from_paxos();
   dout(10) << mdsmap << dendl;
@@ -1254,7 +1255,8 @@ void MDSMonitor::do_stop()
 {
   // hrm...
   if (!mon->is_leader() ||
-      !paxos->is_active()) {
+      !paxos->is_active() ||
+      !mon->is_all_paxos_recovered()) {
     dout(0) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
     return;
   }

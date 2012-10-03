@@ -67,7 +67,8 @@ void AuthMonitor::check_rotate()
 
 void AuthMonitor::tick() 
 {
-  if (!paxos->is_active()) return;
+  if (!paxos->is_active() ||
+      !mon->is_all_paxos_recovered()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
