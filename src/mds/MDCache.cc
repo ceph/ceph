@@ -3132,6 +3132,11 @@ void MDCache::recalc_auth_bits()
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
+
+    CInode *inode = p->first->get_inode();
+    if (inode->is_mdsdir() && inode->ino() != MDS_INO_MDSDIR(mds->get_nodeid()))
+      inode->state_clear(CInode::STATE_AUTH);
+
     list<CDir*> dfq;  // dirfrag queue
     dfq.push_back(p->first);
 
@@ -5412,6 +5417,17 @@ bool MDCache::trim(int max)
       ++i)
     lru.lru_insert_mid(*i);
 
+  // trim non-auth, non-bound subtrees
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();) {
+    CDir *dir = p->first;
+    p++;
+    if (!dir->is_auth() && !dir->get_inode()->is_auth()) {
+      if (dir->get_num_ref() == 1)  // subtree pin
+	trim_dirfrag(dir, 0, expiremap);
+    }
+  }
+
   // trim root?
   if (max == 0 && root) {
     list<CDir*> ls;
@@ -7225,8 +7241,9 @@ void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
 void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
 {
   set<int> all, active;
-  mds->mdsmap->get_active_mds_set(active);
   mds->mdsmap->get_mds_set(all);
+  mds->mdsmap->get_active_mds_set(active);
+  mds->mdsmap->get_mds_set(active, MDSMap::STATE_STOPPING);
 
   dout(10) << "_do_find_ino_peer " << fip.tid << " " << fip.ino
 	   << " active " << active << " all " << all
@@ -7473,7 +7490,8 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 void MDCache::dispatch_request(MDRequest *mdr)
 {
   if (mdr->client_request) {
-    if (!mdr->item_session_request.is_on_list()) {
+    if (!mdr->reqid.name.is_mds() &&
+	!mdr->item_session_request.is_on_list()) {
       dout(10) << "request " << *mdr << " is canceled" << dendl;
       return;
     }
@@ -8288,16 +8306,20 @@ void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 
 void MDCache::migrate_stray(CDentry *dn, int to)
 {
-  CInode *fromino = dn->dir->get_inode();
-  dout(10) << "migrate_stray from mds" 
-	   << MDS_INO_STRAY_OWNER(fromino->inode.ino) << " to mds." << to 
-	   << " " << *dn << " " << *dn->get_projected_linkage()->get_inode() << dendl;
+  CInode *in = dn->get_linkage()->get_inode();
+  assert(in);
+  CInode *diri = dn->dir->get_inode();
+  assert(diri->is_stray());
+  dout(10) << "migrate_stray from mds." << MDS_INO_STRAY_OWNER(diri->inode.ino)
+	   << " to mds." << to
+	   << " " << *dn << " " << *in << dendl;
 
   // rename it to another mds.
-  string dname;
-  dn->get_projected_linkage()->get_inode()->name_stray_dentry(dname);
+  filepath src;
+  dn->make_path(src);
 
-  filepath src(dname, fromino->inode.ino);
+  string dname;
+  in->name_stray_dentry(dname);
   filepath dst(dname, MDS_INO_STRAY(to, 0));
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
@@ -8339,8 +8361,8 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
     discover_info_t& d = _create_discover(from);
     d.ino = want_ino;
     _send_discover(d);
-    waiting_for_base_ino[from][want_ino].push_back(onfinish);
   }
+  waiting_for_base_ino[from][want_ino].push_back(onfinish);
 }
 
 

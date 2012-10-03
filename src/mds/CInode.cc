@@ -386,8 +386,10 @@ void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
 
   if (newparent != oldparent) {
     snapid_t oldparentseq = oldparent->get_newest_seq();
-    new_snap->past_parents[oldparentseq].ino = oldparent->inode->ino();
-    new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
+    if (oldparentseq + 1 > new_snap->current_parent_since) {
+      new_snap->past_parents[oldparentseq].ino = oldparent->inode->ino();
+      new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
+    }
     new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
   }
 }
