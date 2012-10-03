@@ -5066,7 +5066,8 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // src+dest traces _must_ share a common ancestor for locking to prevent orphans
   if (destpath.get_ino() != srcpath.get_ino() &&
-      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok!
+      !(req->get_source().is_mds() &&
+	MDS_INO_IS_MDSDIR(srcpath.get_ino()))) {  // <-- mds 'rename' out of stray dir is ok!
     // do traces share a dentry?
     CDentry *common = 0;
     for (unsigned i=0; i < srctrace.size(); i++) {
