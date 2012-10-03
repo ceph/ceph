@@ -256,6 +256,16 @@ namespace librbd {
     return -ENOENT;
   }
 
+  uint64_t ImageCtx::get_size() const
+  {
+    return size;
+  }
+
+  uint64_t ImageCtx::get_object_size() const
+  {
+    return 1ull << order;
+  }
+
   uint64_t ImageCtx::get_stripe_unit() const
   {
     return stripe_unit;
@@ -264,6 +274,18 @@ namespace librbd {
   uint64_t ImageCtx::get_stripe_count() const
   {
     return stripe_count;
+  }
+
+  uint64_t ImageCtx::get_stripe_period() const
+  {
+    return stripe_count * (1ull << order);
+  }
+
+  uint64_t ImageCtx::get_num_objects() const
+  {
+    uint64_t period = get_stripe_period();
+    uint64_t num_periods = (size + period - 1) / period;
+    return num_periods * stripe_count;
   }
 
   int ImageCtx::is_snap_protected(string in_snap_name, bool *is_protected) const
