@@ -2186,6 +2186,31 @@ reprotect_and_return_err:
     return read_iterate(ictx, ofs, len, simple_read_cb, buf);
   }
 
+  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf)
+  {
+    Mutex mylock("IoCtxImpl::write::mylock");
+    Cond cond;
+    bool done;
+    int ret;
+
+    Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
+    AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
+    int r = aio_read(ictx, image_extents, buf, c);
+    if (r < 0) {
+      c->release();
+      delete ctx;
+      return r;
+    }
+
+    mylock.Lock();
+    while (!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+
+    c->release();
+    return ret;
+  }
+
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   {
     utime_t start_time, elapsed;
