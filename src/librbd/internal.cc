@@ -1876,25 +1876,6 @@ reprotect_and_return_err:
     delete ictx;
   }
 
-  // copy a parent block from buf to the child ictx(offset, len)
-  int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
-		   const char *buf)
-  {
-    uint64_t blksize = get_block_size(ictx->order);
-
-    // len > blksize invalid, block-misaligned offset invalid
-    if ((len > blksize) || (get_block_ofs(ictx->order, offset) != 0))
-      return -EINVAL;
-
-    bufferlist bl;
-    string oid = get_block_oid(ictx->object_prefix,
-			       get_block_num(ictx->order, offset),
-			       ictx->old_format);
-
-    bl.append(buf, len);
-    return cls_client::copyup(&ictx->data_ctx, oid, bl);
-  }
-
   // test if an entire buf is zero in 8-byte chunks
   static bool buf_is_zero(char *buf, size_t len)
   {
@@ -1928,6 +1909,7 @@ reprotect_and_return_err:
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
     Mutex::Locker l3(ictx->parent_lock);
+
     // can't flatten a non-clone
     if (ictx->parent_md.spec.pool_id == -1) {
       lderr(ictx->cct) << "image has no parent" << dendl;
@@ -1941,27 +1923,41 @@ reprotect_and_return_err:
     assert(ictx->parent != NULL);
     assert(ictx->parent_md.overlap <= ictx->size);
 
+    uint64_t object_size = ictx->get_object_size();
+    uint64_t period = ictx->get_stripe_period();
     uint64_t overlap = ictx->parent_md.overlap;
-    uint64_t cblksize = get_block_size(ictx->order);
-    char *buf = new char[cblksize];
+    uint64_t overlap_periods = (overlap + period - 1) / period;
+    uint64_t overlap_objects = overlap_periods * ictx->get_stripe_count();
 
-    size_t ofs = 0;
-    while (ofs < overlap) {
-      prog_ctx.update_progress(ofs, overlap);
-      size_t readsize = min(overlap - ofs, cblksize);
-      if ((r = read(ictx->parent, ofs, readsize, buf)) < 0) {
+    char *buf = new char[object_size];
+
+    for (uint64_t ono = 0; ono < overlap_objects; ono++) {
+      prog_ctx.update_progress(ono, overlap_objects);
+
+      // map child object onto the parent
+      vector<pair<uint64_t,uint64_t> > objectx;
+      Filer::extent_to_file(ictx->cct, &ictx->layout,
+			    ono, 0, object_size,
+			    objectx);
+      uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
+      assert(object_overlap <= object_size);
+
+      if ((r = read(ictx->parent, objectx, buf)) < 0) {
 	lderr(ictx->cct) << "reading from parent failed" << dendl;
 	goto err;
       }
 
       // for actual amount read, if data is all zero, don't bother with block
       if (!buf_is_zero(buf, r)) {
-	if ((r = copyup_block(ictx, ofs, r, buf)) < 0) {
+	bufferlist bl;
+	string oid = ictx->get_object_name(ono);
+	bl.append(buf, r);
+	r = cls_client::copyup(&ictx->data_ctx, oid, bl);
+	if (r < 0) {
 	  lderr(ictx->cct) << "failed to copy block to child" << dendl;
 	  goto err;
 	}
       }
-      ofs += cblksize;
     }
 
     // remove parent from this (base) image
