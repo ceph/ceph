@@ -366,7 +366,7 @@ class Image(object):
 
             * ``parent_name``  (str) - deprecated
 
-            * see also :method:``format`` and :method:``features``
+            See also :meth:`format` and :meth:`features`.
 
         """
         info = rbd_image_info_t()
