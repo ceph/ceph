@@ -1145,7 +1145,7 @@ reprotect_and_return_err:
 	return r;
       }
       if (parent_spec.pool_id == -1)
-	return 0;
+	return -ENOENT;
     }
     if (parent_pool_name) {
       Rados rados(ictx->md_ctx);
@@ -1154,6 +1154,7 @@ reprotect_and_return_err:
       if (r < 0) {
 	lderr(ictx->cct) << "error looking up pool name" << cpp_strerror(r)
 			 << dendl;
+	return r;
       }
     }
 
