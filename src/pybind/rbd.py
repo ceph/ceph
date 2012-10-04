@@ -651,12 +651,14 @@ written." % (self.name, ret, length))
         List clients that have locked the image and information
         about the lock.
 
-        :returns: dict - contains keys tag, exclusive, and lockers
-                  tag - the tag associated with the lock
-                        (every additional locker must use the same tag)
-                  exclusive - boolean indicating whether the lock is
-                              exclusive or shared
-                  lockers - a list of (client, cookie, address) tuples
+        :returns: dict - contains the following keys:
+
+                  * ``tag`` - the tag associated with the lock (every
+                    additional locker must use the same tag)
+                  * ``exclusive`` - boolean indicating whether the
+                     lock is exclusive or shared
+                  * ``lockers`` - a list of (client, cookie, address)
+                    tuples
         """
         clients_size = c_size_t(512)
         cookies_size = c_size_t(512)
