@@ -50,11 +50,11 @@ Checkout the submodules (only needed to prevent errors in recursive make)::
 
 Edit configure.ac and change version number::
 
-    DEBEMAIL user@host dch -v 0.xx-1 
+    DEBEMAIL user@host dch -v 0.xx-1
 
 Commit the changes::
 
-    git commit -a 
+    git commit -a
 
 Tag the release::
 
@@ -95,7 +95,7 @@ rpm and indexes.::
     mkdir /tmp/debian-repo
     mkdir /tmp/debian-repo/conf
     ../ceph-build/gen_reprepro_conf.sh debian-testing main \
-             	 `cat ceph-build/deb_dists`
+		 `cat ceph-build/deb_dists`
     ../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo main
 
 9.  Push repos to ceph.org
