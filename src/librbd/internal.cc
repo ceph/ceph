@@ -133,14 +133,21 @@ namespace librbd {
     return oss.str();
   }
 
-  uint64_t offset_of_object(const string &oid, const string &object_prefix,
-			    uint8_t order)
+  uint64_t oid_to_object_no(const string& oid, const string& object_prefix)
   {
     istringstream iss(oid);
     // skip object prefix and separator
     iss.ignore(object_prefix.length() + 1);
-    uint64_t num, offset;
+    uint64_t num;
     iss >> std::hex >> num;
+    return num;
+  }
+
+  uint64_t offset_of_object(const string &oid, const string &object_prefix,
+			    uint8_t order)
+  {
+    uint64_t num, offset;
+    num = oid_to_object_no(oid, object_prefix);
     offset = num * (1ULL << order);
     return offset;
   }
@@ -1546,6 +1553,7 @@ reprotect_and_return_err:
 	  ictx->order = ictx->header.options.order;
 	  ictx->size = ictx->header.image_size;
 	  ictx->object_prefix = ictx->header.block_name;
+	  ictx->init_layout();
 	} else {
 	  do {
 	    uint64_t incompatible_features;
@@ -2360,58 +2368,65 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    size_t total_write = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
-    ictx->snap_lock.Lock();
-    snapid_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->parent_lock.Lock();
-    int64_t parent_pool_id = ictx->get_parent_pool_id(ictx->snap_id);
-    uint64_t overlap = 0;
-    ictx->get_parent_overlap(ictx->snap_id, &overlap);
-    ictx->parent_lock.Unlock();
-    ictx->snap_lock.Unlock();
-    uint64_t left = len;
-
     r = check_io(ictx, off, len);
     if (r < 0)
       return r;
 
+    ictx->snap_lock.Lock();
+    snapid_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
+    ictx->parent_lock.Lock();
+    uint64_t overlap = 0;
+    ictx->get_parent_overlap(ictx->snap_id, &overlap);
+    ictx->parent_lock.Unlock();
+    ictx->snap_lock.Unlock();
+
     if (snap_id != CEPH_NOSNAP)
       return -EROFS;
 
+    ldout(cct, 20) << "  parent overlap " << overlap << dendl;
+
+    // map
+    vector<ObjectExtent> extents;
+    Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+
+    size_t total_write = 0;
+
     c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-      ldout(cct, 20) << "oid = '" << oid << "' i = " << i << dendl;
-      uint64_t total_off = off + total_write;
-      uint64_t block_ofs = get_block_ofs(ictx->order, total_off);
-      uint64_t write_len = min(block_size - block_ofs, left);
+    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
+		     << " from " << p->buffer_extents << dendl;
 
+      // assemble extent
       bufferlist bl;
-      bl.append(buf + total_write, write_len);
+      for (vector<pair<uint64_t,uint64_t> >::iterator q = p->buffer_extents.begin();
+	   q != p->buffer_extents.end();
+	   ++q) {
+	bl.append(buf + q->first, q->second);
+      }
+
       if (ictx->object_cacher) {
 	// may block
-	ictx->write_to_cache(oid, bl, write_len, block_ofs);
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset);
       } else {
+	// reverse map this object extent onto the parent
+	vector<pair<uint64_t,uint64_t> > objectx;
+	Filer::extent_to_file(ictx->cct, &ictx->layout,
+			      p->objectno, 0, ictx->layout.fl_object_size,
+			      objectx);
+	uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
+
 	C_AioWrite *req_comp = new C_AioWrite(cct, c);
-	bool parent_exists = has_parent(parent_pool_id, total_off - block_ofs, overlap);
-	ldout(ictx->cct, 20) << "has_parent(pool=" << parent_pool_id
-			     << ", off=" << total_off
-			     << ", overlap=" << overlap << ") = "
-			     << parent_exists << dendl;
-	AioWrite *req = new AioWrite(ictx, oid, total_off, bl, snapc, snap_id,
-				     parent_exists, req_comp);
+	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
+				     objectx, object_overlap,
+				     bl, snapc, snap_id, req_comp);
 	c->add_request();
 	r = req->send();
 	if (r < 0)
 	  goto done;
       }
-      total_write += write_len;
-      left -= write_len;
+      total_write += bl.length();
     }
   done:
     c->finish_adding_requests();
@@ -2437,69 +2452,63 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    // TODO: check for snap
-    size_t total_write = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
-    ictx->snap_lock.Lock();
-    snapid_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->parent_lock.Lock();
-    int64_t parent_pool_id = ictx->get_parent_pool_id(ictx->snap_id);
-    uint64_t overlap = 0;
-    ictx->get_parent_overlap(ictx->snap_id, &overlap);
-    ictx->parent_lock.Unlock();
-    ictx->snap_lock.Unlock();
-    uint64_t left = len;
-
     r = check_io(ictx, off, len);
     if (r < 0)
       return r;
 
-    vector<ObjectExtent> v;
-    if (ictx->object_cacher)
-      v.reserve(end_block - start_block + 1);
+    // TODO: check for snap
+    ictx->snap_lock.Lock();
+    snapid_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
+    ictx->parent_lock.Lock();
+    uint64_t overlap = 0;
+    ictx->get_parent_overlap(ictx->snap_id, &overlap);
+    ictx->parent_lock.Unlock();
+    ictx->snap_lock.Unlock();
+
+    // map
+    vector<ObjectExtent> extents;
+    Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
 
     c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-      uint64_t total_off = off + total_write;
-      uint64_t block_ofs = get_block_ofs(ictx->order, total_off);;
-      uint64_t write_len = min(block_size - block_ofs, left);
-
-      if (ictx->object_cacher) {
-	v.push_back(ObjectExtent(oid, 0, block_ofs, write_len));
-	v.back().oloc.pool = ictx->data_ctx.get_id();
-      }
-
+    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
+		     << " from " << p->buffer_extents << dendl;
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       AbstractWrite *req;
       c->add_request();
 
-      bool parent_exists = has_parent(parent_pool_id, total_off - block_ofs, overlap);
-      if (block_ofs == 0 && write_len == block_size) {
-	req = new AioRemove(ictx, oid, total_off, snapc, snap_id,
-			    parent_exists, req_comp);
-      } else if (block_ofs + write_len == block_size) {
-	req = new AioTruncate(ictx, oid, total_off, snapc, snap_id,
-			      parent_exists, req_comp);
+      // reverse map this object extent onto the parent
+      vector<pair<uint64_t,uint64_t> > objectx;
+      uint64_t object_overlap = 0;
+      if (off < overlap) {   // we might overlap...
+	Filer::extent_to_file(ictx->cct, &ictx->layout,
+			      p->objectno, 0, ictx->layout.fl_object_size,
+			      objectx);
+	object_overlap = ictx->prune_parent_extents(objectx, overlap);
+      }
+
+      if (p->offset == 0 && p->length == ictx->layout.fl_object_size) {
+	req = new AioRemove(ictx, p->oid.name, p->objectno, objectx, object_overlap,
+			    snapc, snap_id, req_comp);
+      } else if (p->offset + p->length == ictx->layout.fl_object_size) {
+	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, objectx, object_overlap,
+			      snapc, snap_id, req_comp);
       } else {
-	req = new AioZero(ictx, oid, total_off, write_len, snapc, snap_id,
-			  parent_exists, req_comp);
+	req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
+			  objectx, object_overlap,
+			  snapc, snap_id, req_comp);
       }
 
       r = req->send();
       if (r < 0)
 	goto done;
-      total_write += write_len;
-      left -= write_len;
     }
     r = 0;
   done:
     if (ictx->object_cacher)
-      ictx->object_cacher->discard_set(ictx->object_set, v);
+      ictx->object_cacher->discard_set(ictx->object_set, extents);
 
     c->finish_adding_requests();
     c->put();
@@ -2522,50 +2531,71 @@ reprotect_and_return_err:
 	       char *buf,
 	       AioCompletion *c)
   {
-    ldout(ictx->cct, 20) << "aio_read " << ictx << " off = " << off << " len = "
-			 << len << dendl;
+    vector<pair<uint64_t,uint64_t> > image_extents(1);
+    image_extents[0] = make_pair(off, len);
+    return aio_read(ictx, image_extents, buf, c);
+  }
+
+  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	       char *buf,
+	       AioCompletion *c)
+  {
+    ldout(ictx->cct, 20) << "aio_read " << ictx << " " << image_extents << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
-    if (r < 0)
-      return r;
-
-    int64_t ret;
-    int total_read = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
     ictx->snap_lock.Lock();
     snap_t snap_id = ictx->snap_id;
     ictx->snap_lock.Unlock();
-    uint64_t left = len;
+
+    // map
+    vector<ObjectExtent> extents;
+
+    uint64_t buffer_ofs = 0;
+    for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
+	 p != image_extents.end();
+	 ++p) {
+      r = check_io(ictx, p->first, p->second);
+      if (r < 0)
+	return r;
+      
+      Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+			     p->first, p->second, extents, buffer_ofs);
+      buffer_ofs += p->second;
+    }
+
+    int64_t ret;
+
+    c->read_buf = buf;
+    c->read_buf_len = buffer_ofs;
 
     c->get();
     c->init_time(ictx, AIO_TYPE_READ);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-      uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
-      uint64_t read_len = min(block_size - block_ofs, left);
+    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      ldout(ictx->cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
+			   << " from " << p->buffer_extents << dendl;
 
-      C_AioRead *req_comp = new C_AioRead(ictx->cct, c, buf + total_read);
-      AioRead *req = new AioRead(ictx, oid, off + total_read,
-				 read_len, snap_id, true, req_comp);
+      C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
+      AioRead *req = new AioRead(ictx, p->oid.name, 
+				 p->objectno, p->offset, p->length,
+				 p->buffer_extents,
+				 snap_id, true, req_comp);
       req_comp->set_req(req);
       c->add_request();
 
       if (ictx->object_cacher) {
-	req->ext_map()[block_ofs] = read_len;
 	// cache has already handled possible reading from parent, so
 	// this AioRead is just used to pass data to the
 	// AioCompletion. The AioRead isn't being used as a
 	// completion, so wrap the completion in a C_CacheRead to
 	// delete it
 	C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
-	ictx->aio_read_from_cache(oid, &req->data(),
-				  read_len, block_ofs, cache_comp);
+	req->m_ext_map[p->offset] = p->length;
+	ictx->aio_read_from_cache(p->oid, &req->data(),
+				  p->length, p->offset,
+				  cache_comp);
       } else {
 	r = req->send();
 	if (r < 0 && r == -ENOENT)
@@ -2575,17 +2605,14 @@ reprotect_and_return_err:
 	  goto done;
 	}
       }
-
-      total_read += read_len;
-      left -= read_len;
     }
-    ret = total_read;
+    ret = buffer_ofs;
   done:
     c->finish_adding_requests();
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_rd);
-    ictx->perfcounter->inc(l_librbd_aio_rd_bytes, len);
+    ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
 
     return ret;
   }

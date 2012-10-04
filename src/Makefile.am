@@ -372,6 +372,7 @@ librbd_la_SOURCES = \
 	librbd/LibrbdWriteback.cc \
 	librbd/WatchCtx.cc \
 	osdc/ObjectCacher.cc \
+	osdc/Filer.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc

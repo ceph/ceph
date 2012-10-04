@@ -93,6 +93,7 @@ namespace librbd {
              const char *snap, IoCtx& p);
     ~ImageCtx();
     int init();
+    void init_layout();
     void perf_start(std::string name);
     void perf_stop();
     int snap_set(std::string in_snap_name);
@@ -126,6 +127,9 @@ namespace librbd {
     void unregister_watch();
     size_t parent_io_len(uint64_t offset, size_t length,
 			 librados::snap_t in_snap_id);
+    uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
+				  uint64_t overlap);
+
   };
 }
 
