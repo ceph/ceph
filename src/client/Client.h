@@ -680,7 +680,7 @@ public:
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
 
-  // expose osdmap 
+  // expose osdmap
   int get_local_osd();
   int get_pool_replication(int64_t pool);
   int64_t get_pool_id(const char *pool_name);
@@ -698,14 +698,18 @@ public:
   int get_caps_issued(const char *path);
 
   // low-level interface
-  int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr,
+		int uid = -1, int gid = -1);
   int ll_walk(const char* name, struct stat *attr);
   bool ll_forget(vinodeno_t vino, int count);
   Inode *_ll_get_inode(vinodeno_t vino);
   int ll_getattr(vinodeno_t vino, struct stat *st, int uid = -1, int gid = -1);
-  int ll_setattr(vinodeno_t vino, struct stat *st, int mask, int uid = -1, int gid = -1);
-  int ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
-  int ll_setxattr(vinodeno_t vino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
+  int ll_setattr(vinodeno_t vino, struct stat *st, int mask, int uid = -1,
+		 int gid = -1);
+  int ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t size,
+		  int uid=-1, int gid=-1);
+  int ll_setxattr(vinodeno_t vino, const char *name, const void *value,
+		  size_t size, int flags, int uid=-1, int gid=-1);
   int ll_removexattr(vinodeno_t vino, const char *name, int uid=-1, int gid=-1);
   int ll_listxattr(vinodeno_t vino, char *list, size_t size, int uid=-1, int gid=-1);
   int ll_listxattr_chunks(vinodeno_t vino, char *names, size_t size,
@@ -713,7 +717,16 @@ public:
   uint32_t ll_stripe_unit(vinodeno_t vino);
   uint32_t ll_file_layout(vinodeno_t vino, ceph_file_layout *layout);
   uint64_t ll_snap_seq(vinodeno_t vino);
-  int ll_get_stripe_osd(vinodeno_t vino, uint64_t blockno, ceph_file_layout* layout);
+  uint32_t ll_hold_rw(vinodeno_t vino,
+		      bool write,
+		      void(*cb)(vinodeno_t, bool, void*),
+		      void *opaque,
+		      uint64_t* serial,
+		      uint64_t* max_fs);
+  void ll_return_rw(vinodeno_t vino,
+		    uint64_t serial);
+  int ll_get_stripe_osd(vinodeno_t vino, uint64_t blockno,
+			ceph_file_layout* layout);
   uint64_t ll_get_internal_offset(vinodeno_t vino, uint64_t blockno);
   int ll_num_osds(void);
   int ll_osdaddr(int osd, uint32_t *addr);

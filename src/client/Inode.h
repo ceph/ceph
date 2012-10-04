@@ -58,7 +58,7 @@ struct CapSnap {
   xlist<CapSnap*>::item flushing_item;
 
   CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0), 
+    : in(i), issued(0), dirty(0),
       size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
       writing(false), dirty_data(false), flush_tid(0),
       flushing_item(this)
@@ -89,7 +89,7 @@ class Inode {
   gid_t      gid;
 
   // nlink
-  int32_t    nlink;  
+  int32_t    nlink;
 
   // file (data access)
   ceph_dir_layout dir_layout;
@@ -106,7 +106,7 @@ class Inode {
   // dirfrag, recursive accountin
   frag_info_t dirstat;
   nest_info_t rstat;
- 
+
   // special stuff
   version_t version;           // auth only
   version_t xattr_version;
@@ -176,15 +176,15 @@ class Inode {
   void make_long_path(filepath& p);
   void make_nosnap_relative_path(filepath& p);
 
-  void get() { 
-    _ref++; 
+  void get() {
+    _ref++;
     lsubdout(cct, mds, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-		   << " now " << _ref << dendl;
+                           << " now " << _ref << dendl;
   }
-  int put(int n=1) { 
-    _ref -= n; 
+  int put(int n=1) {
+    _ref -= n;
     lsubdout(cct, mds, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-		   << " now " << _ref << dendl;
+                           << " now " << _ref << dendl;
     assert(_ref >= 0);
     return _ref;
   }
@@ -214,8 +214,7 @@ class Inode {
       snaprealm(0), snaprealm_item(this), snapdir_parent(0),
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), 
-      dir(0), dn_set()
+      _ref(0), ll_ref(0), dir(0), dn_set(), revoke_serial(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
@@ -257,6 +256,29 @@ class Inode {
   Dir *open_dir();
 
   void dump(Formatter *f) const;
+
+  struct revoke_notifier {
+    bool write;
+    void(*cb)(vinodeno_t, bool, void*);
+    void *opaque;
+
+    revoke_notifier(bool write_,
+                    void(*cb_)(vinodeno_t, bool, void*),
+                    void* opaque_)
+    : write(write_),
+      cb(cb_),
+      opaque(opaque_)
+    { }
+  };
+
+  map<uint64_t,revoke_notifier*> revoke_notifiers;
+  uint64_t revoke_serial;
+  void add_revoke_notifier(bool write,
+                           void(*cb)(vinodeno_t, bool, void*),
+                           void *opaque,
+                           uint64_t *serial);
+  bool remove_revoke_notifier(uint64_t serial);
+  void recall_rw_caps(bool write);
 };
 
 ostream& operator<<(ostream &out, Inode &in);

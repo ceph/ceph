@@ -21,6 +21,7 @@
 #include <sys/statvfs.h>
 #include <sys/socket.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // FreeBSD compatibility
 #ifdef __FreeBSD__
@@ -1139,6 +1140,19 @@ int ceph_ll_connectable_x(struct ceph_mount_info *cmount,
 int ceph_ll_connectable_m(struct ceph_mount_info *cmount,
 			  vinodeno_t* vino, uint64_t parent_ino,
 			  uint32_t parent_hash);
+
+uint32_t ceph_ll_hold_rw(struct ceph_mount_info *cmount,
+			 vinodeno_t vino,
+			 bool write,
+			 void(*cb)(vinodeno_t, bool, void*),
+			 void *opaque,
+			 uint64_t* serial,
+			 uint64_t* max_fs);
+
+void ceph_ll_return_rw(struct ceph_mount_info *cmount,
+		       vinodeno_t vino,
+		       uint64_t serial);
+
 #ifdef __cplusplus
 }
 #endif
