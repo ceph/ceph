@@ -1,7 +1,8 @@
   $ rbd --help
   usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...
   where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:
-    (ls | list) [pool-name]                     list rbd images
+    (ls | list) [-l | --long ] [pool-name] list rbd images
+                                                (-l includes snapshots/clones)
     info <image-name>                           show information about image size,
                                                 striping, etc.
     create [--order <bits>] --size <MB> <name>  create an empty image
