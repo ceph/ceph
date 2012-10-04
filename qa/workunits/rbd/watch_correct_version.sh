@@ -27,4 +27,5 @@ done
 rbd rm test
 
 echo "No race detected"
-exit 1
+echo OK
+exit 0
