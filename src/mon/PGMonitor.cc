@@ -116,7 +116,8 @@ void PGMonitor::update_logger()
 
 void PGMonitor::tick() 
 {
-  if (!paxos->is_active()) return;
+  if (!paxos->is_active() ||
+      !mon->is_all_paxos_recovered()) return;
 
   update_from_paxos();
   handle_osd_timeouts();
