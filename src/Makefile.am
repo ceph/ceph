@@ -411,7 +411,7 @@ radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += scratchtool scratchtoolpp radosacl
 
-rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
+rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c common/TextTable.cc
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = libglobal.la librbd.la librados.la $(PTHREAD_LIBS) -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 if LINUX

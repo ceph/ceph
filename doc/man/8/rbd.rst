@@ -97,8 +97,10 @@ Commands
 
 .. TODO rst "option" directive seems to require --foo style options, parsing breaks on subcommands.. the args show up as bold too
 
-:command:`ls` [*pool-name*]
-  Will list all rbd images listed in the rbd_directory object.
+:command:`ls` [-l | --long] [pool-name]
+  Will list all rbd images listed in the rbd_directory object.  With
+  -l, also show snapshots, and use longer-format output including
+  size, parent (if clone), format, etc.
 
 :command:`info` [*image-name*]
   Will dump information (such as size and order) about a specific rbd image.
