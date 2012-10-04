@@ -765,6 +765,12 @@ unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_ipaddr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ipaddr
 
+unittest_texttable_SOURCES = test/test_texttable.cc common/TextTable.cc 
+unittest_texttable_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+unittest_texttable_LDADD = librados.la ${UNITTEST_LDADD}
+unittest_texttable_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_texttable
+
 test_librbd_SOURCES = test/test_librbd.cc test/rados-api/test.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -1395,6 +1401,7 @@ noinst_HEADERS = \
 	common/PrebufferedStreambuf.h\
         common/RWLock.h\
         common/Semaphore.h\
+	common/TextTable.h\
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
