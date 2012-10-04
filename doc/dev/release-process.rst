@@ -16,12 +16,14 @@ Prior to building, it's necessary to update the pbuilder seed tarballs::
 2. Setup keyring for signing packages
 =====================================
 
+::
+
     export GNUPGHOME=<path to keyring dir>
 
     # verify it's accessible
     gpg --list-keys
 
-The release key should be present:
+The release key should be present::
 
   pub   4096R/17ED316D 2012-05-20
   uid                  Ceph Release Key <sage@newdream.net>
@@ -87,6 +89,8 @@ rpm and indexes.::
 
 8. Create debian repo
 =====================
+
+::
 
     mkdir /tmp/debian-repo
     mkdir /tmp/debian-repo/conf
