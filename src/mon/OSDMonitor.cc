@@ -1596,6 +1596,10 @@ void OSDMonitor::dump_info(Formatter *f)
   f->open_object_section("osdmap");
   osdmap.dump(f);
   f->close_section();
+
+  f->open_object_section("crushmap");
+  osdmap.crush->dump(f);
+  f->close_section();
 }
 
 bool OSDMonitor::preprocess_command(MMonCommand *m)
