@@ -13,7 +13,7 @@ function get_device_dir {
 	local POOL=$1
 	local IMAGE=$2
 	local SNAP=$3
-	rbd showmapped | tail -n +2 | egrep "\s+$POOL\s+$IMAGE\s+$SNAP\s+" | cut -f 1
+	rbd showmapped | tail -n +2 | egrep "\s+$POOL\s+$IMAGE\s+$SNAP\s+" | awk '{print $1;}'
 }
 
 function clean_up {
