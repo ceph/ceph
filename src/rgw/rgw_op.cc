@@ -1313,7 +1313,6 @@ void RGWPostObj::execute()
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   bufferlist bl, aclbl;
-  map<string, bufferlist> attrs;
   int len;
 
   ret = verify_params();
@@ -1371,10 +1370,10 @@ void RGWPostObj::execute()
   attrs[RGW_ATTR_ETAG] = bl;
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  if (form_param.count("Content-Type")) {
-    bl.clear();
-    bl.append(form_param["Content-Type"].c_str(), form_param["Content-Type"].size() + 1);
-    attrs[RGW_ATTR_CONTENT_TYPE] = bl;
+  if (content_type.size()) {
+    bufferlist ct_bl;
+    ct_bl.append(content_type.c_str(), content_type.size() + 1);
+    attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
   }
 
   ret = processor->complete(etag, attrs);
