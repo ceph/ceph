@@ -493,13 +493,16 @@ static int do_lock_list(librbd::Image& image)
     if (!exclusive)
       cout << "Lock tag: " << tag << "\n";
 
-    cout << "\nLocker\tID\tAddress\n";
+    TextTable tbl;
+    tbl.define_column("Locker", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("Address", TextTable::LEFT, TextTable::LEFT);
+
     for (list<librbd::locker_t>::const_iterator it = lockers.begin();
 	 it != lockers.end(); ++it) {
-      cout << it->client << "\t"
-	   << it->cookie << "\t"
-	   << it->address << std::endl;
+      tbl << it->client << it->cookie << it->address << TextTable::endrow;
     }
+    cout << tbl;
   }
   return 0;
 }
@@ -965,6 +968,7 @@ void do_closedir(DIR *dp)
 static int do_kernel_showmapped()
 {
   int r;
+  bool have_output = false;
   const char *devices_path = "/sys/bus/rbd/devices";
   std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), do_closedir);
   if (!device_dir.get()) {
@@ -981,7 +985,12 @@ static int do_kernel_showmapped()
     return r;
   }
 
-  cout << "id\tpool\timage\tsnap\tdevice" << std::endl;
+  TextTable tbl;
+  tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
 
   do {
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
@@ -1016,9 +1025,12 @@ static int do_kernel_showmapped()
       continue;
     }
 
-    cout << dent->d_name << "\t" << pool << "\t" << name << "\t" << snap << "\t" << dev << std::endl;
+    tbl << dent->d_name << pool << name << snap << dev << TextTable::endrow;
+    have_output = true;
 
   } while ((dent = readdir(device_dir.get())));
+  if (have_output)
+    cout << tbl;
 
   return 0;
 }
