@@ -22,6 +22,7 @@
 #include "global/global_init.h"
 #include "common/safe_io.h"
 #include "common/secret.h"
+#include "include/stringify.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/byteorder.h"
@@ -44,6 +45,7 @@
 #include <sys/ioctl.h>
 
 #include "include/rbd_types.h"
+#include "common/TextTable.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
@@ -66,7 +68,8 @@ void usage()
   cout << 
 "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-"  (ls | list) [pool-name]                     list rbd images\n"
+"  (ls | list) [-l | --long ] [pool-name] list rbd images\n"
+"                                              (-l includes snapshots/clones)\n"
 "  info <image-name>                           show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] --size <MB> <name>  create an empty image\n"
@@ -138,7 +141,7 @@ struct MyProgressContext : public librbd::ProgressContext {
 
   MyProgressContext(const char *o) : operation(o), last_pc(0) {
   }
-  
+
   int update_progress(uint64_t offset, uint64_t total) {
     int pc = total ? (offset * 100ull / total) : 0;
     if (pc != last_pc) {
@@ -158,15 +161,78 @@ struct MyProgressContext : public librbd::ProgressContext {
   }
 };
 
-static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
+static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag)
 {
   std::vector<string> names;
   int r = rbd.list(io_ctx, names);
-  if (r < 0)
+  if (r < 0 || (names.size() == 0))
     return r;
 
-  for (std::vector<string>::const_iterator i = names.begin(); i != names.end(); i++)
-    cout << *i << std::endl;
+  if (!lflag) {
+    for (std::vector<string>::const_iterator i = names.begin();
+       i != names.end(); ++i) {
+      cout << *i << std::endl;
+    }
+    return 0;
+  }
+
+  TextTable tbl;
+  tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("TYPE", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+  tbl.define_column("PARENT", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("FORMAT", TextTable::RIGHT, TextTable::RIGHT);
+
+  string pool, image, snap, parent;
+
+  for (std::vector<string>::const_iterator i = names.begin();
+       i != names.end(); ++i) {
+    librbd::image_info_t info;
+    librbd::Image im;
+
+    rbd.open(io_ctx, im, i->c_str());
+
+    // handle second-nth trips through loop
+    parent.clear();
+    r = im.parent_info(&pool, &image, &snap);
+    if (r < 0 && r != -ENOENT)
+      return r;
+
+    if (r != -ENOENT)
+      parent = pool + "/" + image + "@" + snap;
+
+    if (im.stat(info, sizeof(info)) < 0)
+      return -EINVAL;
+
+    uint8_t old_format;
+    im.old_format(&old_format);
+
+    tbl << *i
+	<< ((parent.length()) ? "clone" : "image")
+	<< stringify(prettybyte_t(info.size))
+	<< parent
+	<< ((old_format) ? '1' : '2')
+	<< TextTable::endrow;
+
+    vector<librbd::snap_info_t> snaplist;
+    if (im.snap_list(snaplist) >= 0 && !snaplist.empty()) {
+      for (std::vector<librbd::snap_info_t>::iterator s = snaplist.begin();
+           s != snaplist.end(); ++s) {
+	parent.clear();
+	im.snap_set(s->name.c_str());
+	if (im.parent_info(&pool, &image, &snap) >= 0) {
+	  parent = pool + "/" + image + "@" + snap;
+	}
+        tbl << *i + "@" + s->name
+            << "snap"
+	    << stringify(prettybyte_t(s->size))
+	    << parent
+	    << ((old_format) ? '1' : '2')
+	    << TextTable::endrow;
+      }
+    }
+  }
+  cout << tbl;
   return 0;
 }
 
@@ -175,7 +241,7 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     int format, uint64_t features)
 {
   int r;
-  if (features == 0) 
+  if (features == 0)
     features = RBD_FEATURES_ALL;
 
   if (format == 1)
@@ -188,7 +254,7 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 }
 
 static int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
-		    const char *p_name, const char *p_snapname, 
+		    const char *p_name, const char *p_snapname,
 		    librados::IoCtx &c_ioctx, const char *c_name,
 		    uint64_t features, int *c_order)
 {
@@ -274,7 +340,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
 	 << std::endl;
   }
 
-  // parent info, if present 
+  // parent info, if present
   if ((image.parent_info(&parent_pool, &parent_name, &parent_snapname) == 0) &&
       parent_name.length() > 0) {
 
@@ -313,13 +379,20 @@ static int do_list_snaps(librbd::Image& image)
 {
   std::vector<librbd::snap_info_t> snaps;
   int r = image.snap_list(snaps);
-  if (r < 0)
+  if (r < 0 || snaps.empty())
     return r;
 
-  cout << "ID\tNAME\t\tSIZE" << std::endl;
-  for (std::vector<librbd::snap_info_t>::iterator i = snaps.begin(); i != snaps.end(); ++i) {
-    cout << i->id << '\t' << i->name << '\t' << i->size << std::endl;
+  TextTable t;
+  t.define_column("SNAPID", TextTable::RIGHT, TextTable::RIGHT);
+  t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+  t.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+
+  for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
+       s != snaps.end(); ++s) {
+    t << s->id << s->name << stringify(prettybyte_t(s->size))
+      << TextTable::endrow;
   }
+  cout << t;
   return 0;
 }
 
@@ -664,7 +737,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       extent++;
       if (extent == fiemap->fm_mapped_extents)
         break;
-      
+
     } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
 
     //cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
@@ -1168,6 +1241,7 @@ int main(int argc, const char **argv)
     *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL,
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
     *lock_tag = NULL;
+  bool lflag = false;
 
   std::string val;
   std::ostringstream err;
@@ -1206,6 +1280,8 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       size = sizell << 20;   // bytes to MB
+    } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
+      lflag = true;
     } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -1508,7 +1584,7 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_LIST:
-    r = do_list(rbd, io_ctx);
+    r = do_list(rbd, io_ctx, lflag);
     if (r < 0) {
       switch (r) {
       case -ENOENT:

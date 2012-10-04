@@ -1,4 +1,4 @@
-.TH "RBD" "8" "September 27, 2012" "dev" "Ceph"
+.TH "RBD" "8" "October 03, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -124,8 +124,10 @@ a clustered filesystem.
 .SH COMMANDS
 .INDENT 0.0
 .TP
-.B \fBls\fP [\fIpool\-name\fP]
-Will list all rbd images listed in the rbd_directory object.
+.B \fBls\fP [\-l | \-\-long] [pool\-name]
+Will list all rbd images listed in the rbd_directory object.  With
+\-l, also show snapshots, and use longer\-format output including
+size, parent (if clone), format, etc.
 .TP
 .B \fBinfo\fP [\fIimage\-name\fP]
 Will dump information (such as size and order) about a specific rbd image.
