@@ -669,6 +669,15 @@ int RGWPostObj_ObjStore_S3::get_params()
   string req_content_type;
   map<string, string> params;
 
+  if (s->expect_cont) {
+    /* ok, here it really gets ugly. With POST, the params are embedded in the
+     * request body, so we need to continue before being able to actually look
+     * at them. This diverts from the usual request flow.
+     */
+    dump_continue(s);
+    s->expect_cont = false;
+  }
+
   parse_params(req_content_type_str, req_content_type, params);
 
   if (req_content_type.compare("multipart/form-data") != 0)
@@ -813,12 +822,8 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
 void RGWPostObj_ObjStore_S3::send_response()
 {
   set_req_state_err(s, ret);
-  if (ret < 0) {
-    end_header(s, "text/plain");
-    return;
-  }
 
-  if (parts.count("success_action_redirect") && ret == 0) {
+  if (ret == 0 && parts.count("success_action_redirect")) {
     string success_action_redirect;
     part_str("success_action_redirect", &success_action_redirect);
     if (check_utf8(success_action_redirect.c_str(), success_action_redirect.size())) {
@@ -826,7 +831,7 @@ void RGWPostObj_ObjStore_S3::send_response()
       end_header(s, "text/plain");
       return;
     }
-  } else if (parts.count("success_action_status") && ret == 0) {
+  } else if (ret == 0 && parts.count("success_action_status")) {
     string status_string = form_param["success_action_status"];
     int status_int;
     if ( !(istringstream(status_string) >> status_int) )
@@ -835,16 +840,16 @@ void RGWPostObj_ObjStore_S3::send_response()
     dump_errno(s, status_int);
   } else {
     dump_errno(s);
-    if (ret < 0)
-      return;
   }
+  end_header(s);
+  if (ret < 0)
+    return;
 #if 0
   dump_common_s3_headers(s, etag.c_str(), 0, "close");
   dump_bucket_from_state(s);
   dump_object_from_state(s);
   dump_uri_from_state(s);
 #endif
-  end_header(s, "text/plain");
 }
 
 
