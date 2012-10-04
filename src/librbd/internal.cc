@@ -2099,16 +2099,14 @@ reprotect_and_return_err:
       return r;
 
     int64_t total_read = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
+    uint64_t period = ictx->get_stripe_period();
     uint64_t left = len;
 
     start_time = ceph_clock_now(ictx->cct);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      uint64_t total_off = off + total_read;
-      uint64_t block_ofs = get_block_ofs(ictx->order, total_off);
-      uint64_t read_len = min(block_size - block_ofs, left);
+    while (left > 0) {
+      uint64_t period_off = off - (off % period);
+      uint64_t read_len = min(period_off + period - off, left);
+
       buffer::ptr bp(read_len);
       bufferlist bl;
       bl.append(bp);
@@ -2120,7 +2118,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, total_off, read_len, bl.c_str(), c);
+      r = aio_read(ictx, off, read_len, bl.c_str(), c);
       if (r < 0) {
 	c->release();
 	delete ctx;
@@ -2142,6 +2140,7 @@ reprotect_and_return_err:
 
       total_read += ret;
       left -= ret;
+      off += ret;
     }
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
