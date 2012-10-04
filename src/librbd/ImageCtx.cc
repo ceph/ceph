@@ -45,7 +45,9 @@ namespace librbd {
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
       old_format(true),
-      order(0), size(0), features(0),	id(image_id), parent(NULL),
+      order(0), size(0), features(0),
+      format_string(NULL),
+      id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
   {
@@ -92,6 +94,7 @@ namespace librbd {
       delete object_set;
       object_set = NULL;
     }
+    delete format_string;
   }
 
   int ImageCtx::init() {
@@ -153,9 +156,21 @@ namespace librbd {
     layout.fl_object_size = 1ull << order;
     layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
 
+    delete format_string;
+    size_t len = object_prefix.length() + 16;
+    format_string = new char[len];
+    if (old_format) {
+      snprintf(format_string, len, "%s.%%012llx", object_prefix.c_str());
+    } else {
+      snprintf(format_string, len, "%s.%%016llx", object_prefix.c_str());
+    }
+
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
 		   << " stripe_count " << stripe_count
-		   << " object_size " << layout.fl_object_size << dendl;
+		   << " object_size " << layout.fl_object_size
+		   << " prefix " << object_prefix
+		   << " format " << format_string
+		   << dendl;
   }
 
   void ImageCtx::perf_start(string name) {
@@ -264,6 +279,12 @@ namespace librbd {
   uint64_t ImageCtx::get_object_size() const
   {
     return 1ull << order;
+  }
+
+  string ImageCtx::get_object_name(uint64_t num) const {
+    char buf[object_prefix.length() + 32];
+    snprintf(buf, sizeof(buf), format_string, num);
+    return string(buf);
   }
 
   uint64_t ImageCtx::get_stripe_unit() const
