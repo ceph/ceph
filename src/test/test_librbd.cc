@@ -1022,6 +1022,12 @@ TEST(LibRBD, TestClone)
   // can't clone a non-snapshot, expect failure
   EXPECT_NE(0, rbd_clone(ioctx, "parent", NULL, ioctx, "child", features, &order));
 
+  // verify that there is no parent info on "parent"
+  char ppool[1], pname[1], psnapname[1];
+  ASSERT_EQ(-ENOENT, rbd_get_parent_info(parent, ppool, sizeof(ppool),
+	    pname, sizeof(pname), psnapname, sizeof(psnapname)));
+  printf("parent has no parent info\n");
+
   // create a snapshot, reopen as the parent we're interested in
   ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
   printf("made snapshot \"parent@parent_snap\"\n");
