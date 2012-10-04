@@ -123,16 +123,6 @@ namespace librbd {
     info.parent_name[0] = '\0';
   }
 
-  string get_block_oid(const string &object_prefix, uint64_t num,
-		       bool old_format)
-  {
-    ostringstream oss;
-    int width = old_format ? 12 : 16;
-    oss << object_prefix << "."
-	<< std::hex << std::setw(width) << std::setfill('0') << num;
-    return oss.str();
-  }
-
   uint64_t oid_to_object_no(const string& oid, const string& object_prefix)
   {
     istringstream iss(oid);
