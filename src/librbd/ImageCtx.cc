@@ -132,22 +132,30 @@ namespace librbd {
 		   << cpp_strerror(r) << dendl;
 	return r;
       }
+
+      init_layout();
     } else {
       header_oid = old_header_name(name);
     }
-
+    return 0;
+  }
+  
+  void ImageCtx::init_layout()
+  {
     if (stripe_unit == 0 || stripe_count == 0) {
       stripe_unit = 1ull << order;
       stripe_count = 1;
     }
 
-    // initialize layout
     memset(&layout, 0, sizeof(layout));
     layout.fl_stripe_unit = stripe_unit;
     layout.fl_stripe_count = stripe_count;
     layout.fl_object_size = 1ull << order;
     layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
-    return 0;
+
+    ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
+		   << " stripe_count " << stripe_count
+		   << " object_size " << layout.fl_object_size << dendl;
   }
 
   void ImageCtx::perf_start(string name) {
@@ -534,4 +542,26 @@ namespace librbd {
 		   << parent_len << dendl;
     return parent_len;
   }
+
+  uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
+					  uint64_t overlap)
+  {
+    // drop extents completely beyond the overlap
+    while (!objectx.empty() && objectx.back().first >= overlap)
+      objectx.pop_back();
+
+    // trim final overlapping extent
+    if (!objectx.empty() && objectx.back().first + objectx.back().second > overlap)
+      objectx.back().second = overlap - objectx.back().first;
+
+    uint64_t len = 0;
+    for (vector<pair<uint64_t,uint64_t> >::iterator p = objectx.begin();
+	 p != objectx.end();
+	 ++p)
+      len += p->second;
+    ldout(cct, 10) << "prune_parent_extents image overlap " << overlap
+		   << ", object overlap " << len
+		   << " from image extents " << objectx << dendl;
+    return len;
+ }
 }

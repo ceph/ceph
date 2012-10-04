@@ -154,6 +154,7 @@ namespace librbd {
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
   std::string get_block_oid(const std::string &object_prefix, uint64_t num,
 			    bool old_format);
+  uint64_t oid_to_object_no(const string& oid, const string& object_prefix);
   uint64_t offset_of_object(const string &oid, const string &object_prefix,
 			    uint8_t order);
   uint64_t get_max_block(uint64_t size, uint8_t obj_order);
@@ -176,6 +177,9 @@ namespace librbd {
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
                char *buf, AioCompletion *c);
+  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	       char *buf,
+	       AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
 
