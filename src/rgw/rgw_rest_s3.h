@@ -95,7 +95,7 @@ struct post_form_part {
 
 struct ltstr_nocase
 {
-  bool operator()(const string& s1, const string& s2) const
+  bool operator()(const string& s1, const string& s2)
   {
     return strcasecmp(s1.c_str(), s2.c_str()) < 0;
   }
