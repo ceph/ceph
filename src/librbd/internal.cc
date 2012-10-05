@@ -2079,9 +2079,7 @@ reprotect_and_return_err:
       uint64_t period_off = off - (off % period);
       uint64_t read_len = min(period_off + period - off, left);
 
-      buffer::ptr bp(read_len);
       bufferlist bl;
-      bl.append(bp);
 
       Mutex mylock("IoCtxImpl::write::mylock");
       Cond cond;
@@ -2090,7 +2088,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, off, read_len, bl.c_str(), NULL, c);
+      r = aio_read(ictx, off, read_len, NULL, &bl, c);
       if (r < 0) {
 	c->release();
 	delete ctx;
