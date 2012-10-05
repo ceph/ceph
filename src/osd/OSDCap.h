@@ -13,9 +13,11 @@
  * OSDCaps: Hold the capabilities associated with a single authenticated 
  * user key. These are specified by text strings of the form
  * "allow r" (which allows reading anything on the OSD)
- * "allow rwx auid foo[,bar,baz]" (which allows full access to listed auids)
- *  "allow rwx pool foo[,bar,baz]" (which allows full access to listed pools)
+ * "allow rwx auid foo" (which allows full access to listed auids)
+ *  "allow rwx pool foo" (which allows full access to listed pools)
  * "allow *" (which allows full access to EVERYTHING)
+ *
+ * The full grammar is documented in the parser in OSDCap.cc.
  *
  * The OSD assumes that anyone with * caps is an admin and has full
  * message permissions. This means that only the monitor and the OSDs
@@ -30,10 +32,12 @@ using std::ostream;
 
 #include "include/types.h"
 
-static const __u8 OSD_CAP_R = 0x01;      // read
-static const __u8 OSD_CAP_W = 0x02;      // write
-static const __u8 OSD_CAP_X = 0x04;      // (class) execute
-static const __u8 OSD_CAP_ANY = 0xff;    // *
+static const __u8 OSD_CAP_R     = (1 << 1);      // read
+static const __u8 OSD_CAP_W     = (1 << 2);      // write
+static const __u8 OSD_CAP_CLS_R = (1 << 3);      // class read
+static const __u8 OSD_CAP_CLS_W = (1 << 4);      // class write
+static const __u8 OSD_CAP_X     = (OSD_CAP_CLS_R | OSD_CAP_CLS_W); // execute
+static const __u8 OSD_CAP_ANY   = 0xff;          // *
 
 typedef __u8 rwxa_t;
 
@@ -116,11 +120,15 @@ struct OSDCap {
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
-   * @param op_may_exec whether the operation needs to execute a class
+   * @param op_may_class_read whether the operation needs to call a
+   *                          read class method
+   * @param op_may_class_write whether the operation needs to call a
+   *                          write class method
    * @return true if the operation is allowed, false otherwise
    */
-  bool is_capable(const string& pool_name, int64_t pool_auid, const string& object,
-		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
+  bool is_capable(const string& pool_name, int64_t pool_auid,
+		  const string& object, bool op_may_read, bool op_may_write,
+		  bool op_may_class_read, bool op_may_class_write) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 

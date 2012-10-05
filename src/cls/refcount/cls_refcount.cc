@@ -233,10 +233,10 @@ void __cls_init()
   cls_register("refcount", &h_class);
 
   /* refcount */
-  cls_register_cxx_method(h_class, "get", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, cls_rc_refcount_get, &h_refcount_get);
-  cls_register_cxx_method(h_class, "put", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, cls_rc_refcount_put, &h_refcount_put);
-  cls_register_cxx_method(h_class, "set", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, cls_rc_refcount_set, &h_refcount_set);
-  cls_register_cxx_method(h_class, "read", CLS_METHOD_RD | CLS_METHOD_PUBLIC, cls_rc_refcount_read, &h_refcount_read);
+  cls_register_cxx_method(h_class, "get", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_refcount_get, &h_refcount_get);
+  cls_register_cxx_method(h_class, "put", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_refcount_put, &h_refcount_put);
+  cls_register_cxx_method(h_class, "set", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_refcount_set, &h_refcount_set);
+  cls_register_cxx_method(h_class, "read", CLS_METHOD_RD, cls_rc_refcount_read, &h_refcount_read);
 
   return;
 }
