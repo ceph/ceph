@@ -2,6 +2,12 @@ roles:
 - [mon.a, mds.a, osd.0, client.0, osd.1]
 tasks:
 - ceph:
+    conf:
+      client:
+        debug ms: 1
+      osd:
+        debug ms: 1
+        debug objclass : 20
 - rgw:
     client.0:
 - radosgw-admin:
