@@ -74,6 +74,10 @@ namespace librbd {
 			      snapid_t snap_id, uint8_t *protection_status);
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t protection_status);
+    int get_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t *stripe_unit, uint64_t *stripe_count);
+    int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t stripe_unit, uint64_t stripe_count);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
