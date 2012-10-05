@@ -38,6 +38,7 @@ namespace librbd {
 	// that we avoid shuffling pointers and copying zeros around.
 	bufferlist bl;
 	destriper.assemble_result(bl, true);
+
 	if (read_buf) {
 	  assert(bl.length() == read_buf_len);
 	  bl.copy(0, read_buf_len, read_buf);
@@ -63,6 +64,12 @@ namespace librbd {
       ldout(m_cct, 10) << " got " << m_req->m_ext_map
 		       << " for " << m_req->m_buffer_extents
 		       << " bl " << m_req->data().length() << dendl;
+      // reads from the parent don't populate the m_ext_map and the overlap
+      // may not be the full buffer.  compensate here by filling in m_ext_map
+      // with the read extent when it is empty.
+      if (m_req->m_ext_map.empty())
+	m_req->m_ext_map[m_req->m_object_off] = m_req->data().length();
+
       m_completion->destriper.add_partial_sparse_result(m_req->data(),
 							m_req->m_ext_map, m_req->m_object_off,
 							m_req->m_buffer_extents);
