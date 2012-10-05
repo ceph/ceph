@@ -38,15 +38,12 @@ protected:
   list<uint64_t> ops_submitting;
   list<Cond*> ops_apply_blocked;
 
-  bool replaying, force_commit;
+  bool replaying;
 
 protected:
   void journal_start();
   void journal_stop();
   int journal_replay(uint64_t fs_op_seq);
-
-  virtual void trigger_commit(uint64_t op_seq) = 0;
-  void _trigger_commit(uint64_t op_seq);
 
   // --
   uint64_t op_submit_start();
@@ -82,7 +79,7 @@ public:
 			    journal(NULL), finisher(g_ceph_context),
 			    journal_lock("JournalingObjectStore::journal_lock"),
 			    com_lock("JournalingObjectStore::com_lock"),
-			    replaying(false), force_commit(false) { }
+			    replaying(false) {}
   
 };
 

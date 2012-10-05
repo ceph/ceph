@@ -205,7 +205,7 @@ bool JournalingObjectStore::commit_start()
   dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
   assert(open_ops == 0);
 
-  if (applied_seq == committed_seq && !force_commit) {
+  if (applied_seq == committed_seq) {
     dout(10) << "commit_start nothing to do" << dendl;
     blocked = false;
     if (!ops_apply_blocked.empty())
@@ -214,7 +214,6 @@ bool JournalingObjectStore::commit_start()
     goto out;
   }
 
-  force_commit = false;
 
   com_lock.Lock();
   // we can _only_ read applied_seq here because open_ops == 0 (we've
