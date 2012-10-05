@@ -132,17 +132,7 @@ class Filer {
 
   public:
     void add_partial_result(bufferlist& bl,
-			    const vector<pair<uint64_t,uint64_t> >& buffer_extents) {
-      for (vector<pair<uint64_t,uint64_t> >::const_iterator p = buffer_extents.begin();
-	   p != buffer_extents.end();
-	   ++p) {
-	pair<bufferlist, uint64_t>& r = partial[p->first];
-	size_t actual = MIN(bl.length(), p->second);
-	bl.splice(0, actual, &r.first);
-	r.second = p->second;
-      }
-    }
-
+			    const vector<pair<uint64_t,uint64_t> >& buffer_extents);
     /**
      * add sparse read into results
      *
@@ -153,85 +143,10 @@ class Filer {
      */
     void add_partial_sparse_result(bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
 				   uint64_t bl_off,
-				   const vector<pair<uint64_t,uint64_t> >& buffer_extents) {
-      map<uint64_t, uint64_t>::const_iterator s = bl_map.begin();
-      for (vector<pair<uint64_t,uint64_t> >::const_iterator p = buffer_extents.begin();
-	   p != buffer_extents.end();
-	   ++p) {
-	uint64_t tofs = p->first;
-	uint64_t tlen = p->second;
-	while (tlen > 0) {
-	  if (s == bl_map.end()) {
-	    pair<bufferlist, uint64_t>& r = partial[tofs];
-	    r.second = tlen;
-	    break;
-	  }
+				   const vector<pair<uint64_t,uint64_t> >& buffer_extents);
 
-	  // skip zero-length extent
-	  if (s->second == 0) {
-	    s++;
-	    continue;
-	  }
-
-	  if (s->first > bl_off) {
-	    // gap in sparse read result
-	    pair<bufferlist, uint64_t>& r = partial[tofs];
-	    size_t gap = s->first - bl_off;
-	    r.second = gap;
-	    bl_off += gap;
-	    tofs += gap;
-	    tlen -= gap;
-	  }
-
-	  assert(s->first <= bl_off);
-	  size_t left = (s->first + s->second) - bl_off;
-	  size_t actual = MIN(left, tlen);
-
-	  pair<bufferlist, uint64_t>& r = partial[tofs];
-	  bl.splice(0, actual, &r.first);
-	  r.second = actual;
-	  bl_off += actual;
-	  tofs += actual;
-	  tlen -= actual;
-
-	  if (actual == left)
-	    s++;
-	}
-	bl_off += p->second;
-      }
-    }
-
-    void assemble_result(bufferlist& bl, bool zero_tail) {
-      // go backwards, so that we can efficiently discard zeros
-      map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
-      if (p == partial.rend())
-	return;
-
-      uint64_t end = p->first + p->second.second;
-      while (p != partial.rend()) {
-	// sanity check
-	assert(p->first == end - p->second.second);
-	end = p->first;
-
-	size_t len = p->second.first.length();
-	if (len < p->second.second) {
-	  if (zero_tail || bl.length()) {
-	    bufferptr bp(p->second.second - p->second.first.length());
-	    bp.zero();
-	    bl.push_front(bp);
-	    bl.claim_prepend(p->second.first);
-	  } else {
-	    bl.claim_prepend(p->second.first);
-	  }
-	} else {
-	  bl.claim_prepend(p->second.first);
-	}
-	p++;
-      }
-      partial.clear();
-    }
+    void assemble_result(bufferlist& bl, bool zero_tail);
   };
-
 
   /*** async file interface.  scatter/gather as needed. ***/
 
