@@ -54,7 +54,7 @@ namespace librbd {
     assert(m_ictx->parent_lock.is_locked());
 
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
-    aio_read(m_ictx->parent, image_extents, m_read_data.c_str(),
+    aio_read(m_ictx->parent, image_extents, m_read_data.c_str(), NULL,
 	     m_parent_completion);
   }
 
