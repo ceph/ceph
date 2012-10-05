@@ -20,14 +20,14 @@
 
 ``osd journal`` 
 
-:Description: The path to the OSD's journal.You must create the directory. You may mount a separate disk here to separate journal data from OSD data.
+:Description: The path to the OSD's journal. This may be a path to a file or a block device (such as a partition of an SSD). If it is a file, you must create the directory to contain it.
 :Type: String
 :Default: ``/var/lib/ceph/osd/$cluster-$id/journal``
 
 
 ``osd journal size`` 
 
-:Description: The size of the journal in megabytes.
+:Description: The size of the journal in megabytes. If this is 0, and the journal is a block device, the entire block device is used.
 :Type: 32-bit Integer
 :Default: ``1024``
 :Recommended: Begin with 1GB. Should at least twice the product of the expected speed multiplied by ``filestore min sync interval``.
