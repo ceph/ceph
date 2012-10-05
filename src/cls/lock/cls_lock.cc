@@ -443,19 +443,19 @@ void __cls_init()
 
   cls_register("lock", &h_class);
   cls_register_cxx_method(h_class, "lock",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          CLS_METHOD_RD | CLS_METHOD_WR,
                           lock_op, &h_lock_op);
   cls_register_cxx_method(h_class, "unlock",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          CLS_METHOD_RD | CLS_METHOD_WR,
                           unlock_op, &h_unlock_op);
   cls_register_cxx_method(h_class, "break_lock",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC,
+                          CLS_METHOD_RD | CLS_METHOD_WR,
                           break_lock, &h_break_lock);
   cls_register_cxx_method(h_class, "get_info",
-                          CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+                          CLS_METHOD_RD,
                           get_info, &h_get_info);
   cls_register_cxx_method(h_class, "list_locks",
-                          CLS_METHOD_RD | CLS_METHOD_PUBLIC,
+                          CLS_METHOD_RD,
                           list_locks, &h_list_locks);
 
   return;

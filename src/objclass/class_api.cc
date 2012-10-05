@@ -49,6 +49,8 @@ int cls_register_method(cls_handle_t hclass, const char *method,
                         int flags,
                         cls_method_call_t class_call, cls_method_handle_t *handle)
 {
+  if (!(flags & (CLS_METHOD_RD | CLS_METHOD_WR)))
+    return -EINVAL;
   ClassHandler::ClassData *cls = (ClassHandler::ClassData *)hclass;
   cls_method_handle_t hmethod =(cls_method_handle_t)cls->register_method(method, flags, class_call);
   if (handle)

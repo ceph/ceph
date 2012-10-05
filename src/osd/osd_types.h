@@ -143,7 +143,14 @@ inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 }
 
 
-
+// Internal OSD op flags - set by the OSD based on the op types
+enum {
+  CEPH_OSD_RMW_FLAG_READ        = (1 << 1),
+  CEPH_OSD_RMW_FLAG_WRITE       = (1 << 2),
+  CEPH_OSD_RMW_FLAG_CLASS_READ  = (1 << 3),
+  CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
+  CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
+};
 
 
 // pg stuff
