@@ -150,6 +150,24 @@ public:
   int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+
+  /**
+   * read async from image
+   *
+   * The target bufferlist is populated with references to buffers
+   * that contain the data for the given extent of the image.
+   *
+   * NOTE: If caching is enabled, the bufferlist will directly
+   * reference buffers in the cache to avoid an unnecessary data copy.
+   * As a result, if the user intends to modify the buffer contents
+   * directly, they should make a copy first (unconditionally, or when
+   * the reference count on ther underlying buffer is more than 1).
+   *
+   * @param off offset in image
+   * @param len length of read
+   * @param bl bufferlist to read into
+   * @param c aio completion to notify when read is complete
+   */
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
