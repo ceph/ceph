@@ -54,6 +54,23 @@ def write_one_line(parent, name, text):
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
+JOURNAL_UUID = '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
+
+
+# TODO depend on python2.7
+def _check_output(*args, **kwargs):
+    process = subprocess.Popen(
+        stdout=subprocess.PIPE,
+        *args, **kwargs)
+    out, _ = process.communicate()
+    ret = process.wait()
+    if ret:
+        cmd = kwargs.get("args")
+        if cmd is None:
+            cmd = args[0]
+        raise subprocess.CalledProcessError(ret, cmd, output=out)
+    return out
+
 
 def get_conf(cluster, variable):
     try:
@@ -83,6 +100,36 @@ def get_conf(cluster, variable):
     # don't differentiate between "var=" and no var set
     if not value:
         return None
+    return value
+
+
+def get_conf_with_default(cluster, variable):
+    """
+    Get a config value that is known to the C++ code.
+
+    This will fail if called on variables that are not defined in
+    common config options.
+    """
+    try:
+        out = _check_output(
+            args=[
+                'ceph-osd',
+                '--cluster={cluster}'.format(
+                    cluster=cluster,
+                    ),
+                '--show-config-value={variable}'.format(
+                    variable=variable,
+                    ),
+                ],
+            close_fds=True,
+            )
+    except subprocess.CalledProcessError as e:
+        raise PrepareError(
+            'getting variable from configuration failed',
+            e,
+            )
+
+    value = out.split('\n', 1)[0]
     return value
 
 
@@ -168,8 +215,48 @@ def unmount(
     os.rmdir(path)
 
 
+def get_free_partition_index(dev):
+    try:
+        lines = _check_output(
+            args=[
+                'parted',
+                '--machine',
+                '--',
+                dev,
+                'print',
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        raise PrepareError('cannot read partition index', e)
+
+    if not lines:
+        raise PrepareError('parted failed to output anything')
+    lines = lines.splitlines(True)
+
+    if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
+        raise PrepareError('weird parted units', lines[0])
+    del lines[0]
+
+    if not lines[0].startswith('/dev/'):
+        raise PrepareError('weird parted disk entry', lines[0])
+    del lines[0]
+
+    seen = set()
+    for line in lines:
+        idx, _ = line.split(':', 1)
+        idx = int(idx)
+        seen.add(idx)
+
+    num = 1
+    while num in seen:
+        num += 1
+    return num
+
+
 def prepare(
     disk,
+    journal,
+    journal_size,
     fstype,
     mkfs_args,
     mount_options,
@@ -184,15 +271,78 @@ def prepare(
     WARNING: This will unconditionally overwrite anything given to
     it.
     """
-    osd_uuid = str(uuid.uuid4())
 
     try:
+        # this kills the crab
         subprocess.check_call(
             args=[
                 'sgdisk',
                 '--zap-all',
                 '--clear',
                 '--mbrtogpt',
+                '--',
+                disk,
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        raise PrepareError(e)
+
+    osd_uuid = str(uuid.uuid4())
+
+    # store the partition uuid iff using external journal
+    journal_uuid = None
+
+    if journal is not None:
+        journal_uuid = str(uuid.uuid4())
+
+        if journal == disk:
+            # we're sharing the disk between osd data and journal;
+            # make journal be partition number 2, so it's pretty; put
+            # journal at end of free space so partitioning tools don't
+            # reorder them suddenly
+            num = 2
+            journal_part = '{num}:-{size}M:0'.format(
+                num=num,
+                size=journal_size,
+                )
+        else:
+            # sgdisk has no way for me to say "whatever is the next
+            # free index number" when setting type guids etc, so we
+            # need to awkwardly look up the next free number, and then
+            # fix that in the call -- and hope nobody races with us;
+            # then again nothing guards the partition table from races
+            # anyway
+            num = get_free_partition_index(dev=journal)
+            journal_part = '{num}:0:{size}M'.format(
+                num=num,
+                size=journal_size,
+                )
+
+        try:
+            subprocess.check_call(
+                args=[
+                    'sgdisk',
+                    '--new={part}'.format(part=journal_part),
+                    '--change-name={num}:ceph journal'.format(num=num),
+                    '--partition-guid={num}:{journal_uuid}'.format(
+                        num=num,
+                        journal_uuid=journal_uuid,
+                        ),
+                    '--typecode={num}:{uuid}'.format(
+                        num=num,
+                        uuid=JOURNAL_UUID,
+                        ),
+                    '--',
+                    journal,
+                    ],
+                )
+        except subprocess.CalledProcessError as e:
+            raise PrepareError(e)
+
+    try:
+        subprocess.check_call(
+            args=[
+                'sgdisk',
                 '--largest-new=1',
                 '--change-name=1:ceph data',
                 '--partition-guid=1:{osd_uuid}'.format(
@@ -226,6 +376,14 @@ def prepare(
 
     path = mount(dev=dev, fstype=fstype, options=mount_options)
     try:
+        if journal_uuid is not None:
+            # we're using an external journal; point to it here
+            os.symlink(
+                '/dev/disk/by-partuuid/{journal_uuid}'.format(
+                    journal_uuid=journal_uuid,
+                    ),
+                os.path.join(path, 'journal'),
+                )
         write_one_line(path, 'ceph_fsid', cluster_uuid)
         write_one_line(path, 'fsid', osd_uuid)
         write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
@@ -272,6 +430,13 @@ def parse_args():
         'disk',
         metavar='DISK',
         help='path to OSD data disk block device',
+        )
+    parser.add_argument(
+        'journal',
+        metavar='JOURNAL',
+        nargs='?',
+        help=('path to OSD journal disk block device;'
+              + ' leave out to store journal in file'),
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -323,8 +488,16 @@ def main():
                 ),
             )
 
+        journal_size = get_conf_with_default(
+            cluster=args.cluster,
+            variable='osd_journal_size',
+            )
+        journal_size = int(journal_size)
+
         prepare(
             disk=args.disk,
+            journal=args.journal,
+            journal_size=journal_size,
             fstype=args.fs_type,
             mkfs_args=mkfs_args,
             mount_options=mount_options,
