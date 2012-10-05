@@ -5665,23 +5665,23 @@ int OSD::init_op_flags(MOSDOp *op)
 {
   vector<OSDOp>::iterator iter;
 
-  // did client explicitly set either bit?
-  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE|CEPH_OSD_FLAG_EXEC);
+  // client flags have no bearing on whether an op is a read, write, etc.
+  op->rmw_flags = 0;
 
-  // implicitly set bits based on op codes, called methods.
+  // set bits based on op codes, called methods.
   for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
-    if (iter->op.op & CEPH_OSD_OP_MODE_WR)
-      op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
-    if (iter->op.op & CEPH_OSD_OP_MODE_RD)
-      op->rmw_flags |= CEPH_OSD_FLAG_READ;
+    if (ceph_osd_op_mode_modify(iter->op.op))
+      op->set_write();
+    if (ceph_osd_op_mode_read(iter->op.op))
+      op->set_read();
 
     // set READ flag if there are src_oids
     if (iter->soid.oid.name.length())
-      op->rmw_flags |= CEPH_OSD_FLAG_READ;
+      op->set_read();
 
     // set PGOP flag if there are PG ops
     if (ceph_osd_op_type_pg(iter->op.op))
-      op->rmw_flags |= CEPH_OSD_FLAG_PGOP;
+      op->set_pg_op();
 
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
@@ -5703,13 +5703,11 @@ int OSD::init_op_flags(MOSDOp *op)
 	dout(10) << "class " << cname << " method " << mname
 		<< " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
 	if (is_read)
-	  op->rmw_flags |= CEPH_OSD_FLAG_READ;
+	  op->set_class_read();
 	if (is_write)
-	  op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
-	op->rmw_flags |= CEPH_OSD_FLAG_EXEC;
+	  op->set_class_write();
 	break;
       }
-      
     default:
       break;
     }

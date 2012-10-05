@@ -120,11 +120,15 @@ struct OSDCap {
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
-   * @param op_may_exec whether the operation needs to execute a class
+   * @param op_may_class_read whether the operation needs to call a
+   *                          read class method
+   * @param op_may_class_write whether the operation needs to call a
+   *                          write class method
    * @return true if the operation is allowed, false otherwise
    */
-  bool is_capable(const string& pool_name, int64_t pool_auid, const string& object,
-		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
+  bool is_capable(const string& pool_name, int64_t pool_auid,
+		  const string& object, bool op_may_read, bool op_may_write,
+		  bool op_may_class_read, bool op_may_class_write) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 
