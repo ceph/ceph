@@ -265,6 +265,14 @@ int main(int argc, const char **argv)
     exit(0);
   }
   
+  if (get_journal_fsid) {
+    uuid_d fsid;
+    int r = OSD::peek_journal_fsid(g_conf->osd_journal, fsid);
+    if (r == 0)
+      cout << fsid << std::endl;
+    exit(r);
+  }
+
   string magic;
   uuid_d cluster_fsid, osd_fsid;
   int w;
@@ -296,13 +304,6 @@ int main(int argc, const char **argv)
   if (get_osd_fsid) {
     cout << osd_fsid << std::endl;
     exit(0);
-  }
-  if (get_journal_fsid) {
-    uuid_d fsid;
-    int r = OSD::peek_journal_fsid(g_conf->osd_journal, fsid);
-    if (r == 0)
-      cout << fsid << std::endl;
-    exit(r);
   }
 
   pick_addresses(g_ceph_context);
