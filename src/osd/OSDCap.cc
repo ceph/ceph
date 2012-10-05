@@ -104,22 +104,20 @@ void OSDCap::set_allow_all()
   grants.push_back(OSDCapGrant(OSDCapMatch(), OSDCapSpec(OSD_CAP_ANY)));
 }
 
-bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid, const string& object,
-			bool op_may_read, bool op_may_write, bool op_may_exec) const
+bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid,
+			const string& object, bool op_may_read,
+			bool op_may_write, bool op_may_class_read,
+			bool op_may_class_write) const
 {
   rwxa_t allow = 0;
-  for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p) {
+  for (vector<OSDCapGrant>::const_iterator p = grants.begin();
+       p != grants.end(); ++p) {
     if (p->match.is_match(pool_name, pool_auid, object)) {
       allow |= p->spec.allow;
-      rwxa_t cap_read = OSD_CAP_R;
-      rwxa_t cap_write = OSD_CAP_W;
-      if (op_may_exec) {
-	cap_read = OSD_CAP_CLS_R;
-	cap_write = OSD_CAP_CLS_W;
-      }
-      if (op_may_read && !(allow & cap_read))
-	continue;
-      if (op_may_write && !(allow & cap_write))
+      if ((op_may_read && !(allow & OSD_CAP_R)) ||
+	  (op_may_write && !(allow & OSD_CAP_W)) ||
+	  (op_may_class_read && !(allow & OSD_CAP_CLS_R)) ||
+	  (op_may_class_write && !(allow & OSD_CAP_CLS_W)))
 	continue;
       return true;
     }
