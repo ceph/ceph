@@ -487,9 +487,10 @@ static int do_lock_list(librbd::Image& image)
     return r;
 
   if (lockers.size()) {
-    cout << "There are " << lockers.size()
+    bool one = (lockers.size() == 1);
+    cout << "There " << (one ? "is " : "are ") << lockers.size()
 	 << (exclusive ? " exclusive" : " shared")
-	 << " lock(s) on this image.\n";
+	 << " lock" << (one ? "" : "s") << " on this image.\n";
     if (!exclusive)
       cout << "Lock tag: " << tag << "\n";
 
