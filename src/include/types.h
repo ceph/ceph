@@ -378,6 +378,29 @@ inline ostream& operator<<(ostream& out, const prettybyte_t& b)
   return out << b.v << " bytes";
 }
 
+struct si_t {
+  uint64_t v;
+  si_t(uint64_t _v) : v(_v) {}
+};
+
+inline ostream& operator<<(ostream& out, const si_t& b)
+{
+  uint64_t bump_after = 100;
+  if (b.v > bump_after << 60)
+    return out << (b.v >> 60) << "E";
+  if (b.v > bump_after << 50)
+    return out << (b.v >> 50) << "P";
+  if (b.v > bump_after << 40)
+    return out << (b.v >> 40) << "T";
+  if (b.v > bump_after << 30)
+    return out << (b.v >> 30) << "G";
+  if (b.v > bump_after << 20)
+    return out << (b.v >> 20) << "M";
+  if (b.v > bump_after << 10)
+    return out << (b.v >> 10) << "K";
+  return out;
+}
+
 struct kb_t {
   uint64_t v;
   kb_t(uint64_t _v) : v(_v) {}
