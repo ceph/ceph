@@ -1289,9 +1289,22 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_STALE:
-    assert(mds_session);
-    mds_session->was_stale = true;
-    renew_caps(from);
+    /* check that if we don't have a valid mds_session for this mds,
+     * we're still waiting for the open session reply */
+    if (mds_session) {
+      renew_caps(from);
+    } else {
+      if (waiting_for_session.count(from) != 0) {
+	ldout(cct, 10) << "handle_client_session " << *m
+		       << " still waiting for open session reply" << dendl;
+	// don't signal waiters, just return
+	m->put();
+	return;
+      } else {
+	// how can we get a stale mds without an open or pending session?
+	assert(mds_session);
+      }
+    }
     break;
 
   case CEPH_SESSION_RECALL_STATE:
