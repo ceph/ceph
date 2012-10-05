@@ -432,7 +432,7 @@ namespace librbd {
     bl.push_back(ptr);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
-    return librbd::aio_read(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
+    return librbd::aio_read(ictx, off, len, bl.c_str(), NULL, (librbd::AioCompletion *)c->pc);
   }
 
   int Image::flush()
@@ -973,7 +973,7 @@ extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  return librbd::aio_read(ictx, off, len, buf,
+  return librbd::aio_read(ictx, off, len, buf, NULL,
 			  (librbd::AioCompletion *)comp->pc);
 }
 

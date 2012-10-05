@@ -55,6 +55,7 @@ namespace librbd {
     aio_type_t aio_type;
 
     Filer::StripedReadResult destriper;
+    bufferlist *read_bl;
     char *read_buf;
     size_t read_buf_len;
 
@@ -63,7 +64,7 @@ namespace librbd {
 		      complete_arg(NULL), rbd_comp(NULL), pending_count(1),
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
-		      read_buf(NULL), read_buf_len(0) {
+		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
     }
     ~AioCompletion() {
     }
