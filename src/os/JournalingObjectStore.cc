@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
 #include "JournalingObjectStore.h"
 
@@ -261,20 +262,22 @@ void JournalingObjectStore::commit_finish()
   }
 }
 
-void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
-						     Context *onjournal, TrackedOpRef osd_op)
+void JournalingObjectStore::_op_journal_transactions(
+  list<ObjectStore::Transaction*>& tls, uint64_t op,
+  Context *onjournal, TrackedOpRef osd_op)
 {
   assert(journal_lock.is_locked());
   dout(10) << "op_journal_transactions " << op << " " << tls << dendl;
-    
+
   if (journal && journal->is_writeable()) {
     bufferlist tbl;
     unsigned data_len = 0;
     int data_align = -1; // -1 indicates that we don't care about the alignment
-    for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++) {
+    for (list<ObjectStore::Transaction*>::iterator p = tls.begin();
+	 p != tls.end(); p++) {
       ObjectStore::Transaction *t = *p;
       if (t->get_data_length() > data_len &&
-	  (int)t->get_data_length() >= g_conf->journal_align_min_size) {
+	(int)t->get_data_length() >= g_conf->journal_align_min_size) {
 	data_len = t->get_data_length();
 	data_align = (t->get_data_alignment() - tbl.length()) & ~CEPH_PAGE_MASK;
       }
