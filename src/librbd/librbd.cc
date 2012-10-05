@@ -428,11 +428,9 @@ namespace librbd {
 		      RBD::AioCompletion *c)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    bufferptr ptr(len);
-    bl.push_back(ptr);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
-    return librbd::aio_read(ictx, off, len, bl.c_str(), NULL, (librbd::AioCompletion *)c->pc);
+    return librbd::aio_read(ictx, off, len, NULL, &bl, (librbd::AioCompletion *)c->pc);
   }
 
   int Image::flush()
