@@ -178,10 +178,11 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag)
 
   TextTable tbl;
   tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-  tbl.define_column("TYPE", TextTable::LEFT, TextTable::LEFT);
   tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
   tbl.define_column("PARENT", TextTable::LEFT, TextTable::LEFT);
-  tbl.define_column("FORMAT", TextTable::RIGHT, TextTable::RIGHT);
+  tbl.define_column("FMT", TextTable::RIGHT, TextTable::RIGHT);
+  tbl.define_column("PROT", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("LOCK", TextTable::LEFT, TextTable::LEFT);
 
   string pool, image, snap, parent;
 
@@ -207,27 +208,43 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag)
     uint8_t old_format;
     im.old_format(&old_format);
 
+    list<librbd::locker_t> lockers;
+    bool exclusive;
+    r = im.list_lockers(&lockers, &exclusive, NULL);
+    if (r < 0)
+      return r;
+    string lockstr;
+    if (lockers.size()) {
+      lockstr = (exclusive) ? "excl" : "shr";
+    }
+
     tbl << *i
-	<< ((parent.length()) ? "clone" : "image")
-	<< stringify(prettybyte_t(info.size))
+	<< stringify(si_t(info.size))
 	<< parent
 	<< ((old_format) ? '1' : '2')
+	<< ""				// protect doesn't apply to images
+	<< lockstr
 	<< TextTable::endrow;
 
     vector<librbd::snap_info_t> snaplist;
     if (im.snap_list(snaplist) >= 0 && !snaplist.empty()) {
       for (std::vector<librbd::snap_info_t>::iterator s = snaplist.begin();
            s != snaplist.end(); ++s) {
+	bool is_protected;
 	parent.clear();
 	im.snap_set(s->name.c_str());
+        r = im.snap_is_protected(s->name.c_str(), &is_protected);
+	if (r < 0)
+	  return r;
 	if (im.parent_info(&pool, &image, &snap) >= 0) {
 	  parent = pool + "/" + image + "@" + snap;
 	}
         tbl << *i + "@" + s->name
-            << "snap"
-	    << stringify(prettybyte_t(s->size))
+	    << stringify(si_t(s->size))
 	    << parent
 	    << ((old_format) ? '1' : '2')
+	    << (is_protected ? "yes" : "")
+	    << "" 			// locks don't apply to snaps
 	    << TextTable::endrow;
       }
     }
